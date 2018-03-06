@@ -1,211 +1,314 @@
-From: snitzer@sourceware.org <snitzer@sourceware.org>
-Date: 5 Jan 2010 21:07:32 -0000
-Subject: LVM2 lib/locking/locking.c lib/metadata/lv_man ...
-Message-ID: <20100105210732.24591.qmail@sourceware.org>
+From: Zdenek Kabelac <zkabelac@sourceware.org>
+Date: Tue, 6 Mar 2018 09:46:35 -0500
+Subject: master - tests: component activation
+Message-ID: <201803061446.w26EkZeF027174@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	snitzer at sourceware.org	2010-01-05 21:07:31
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=b05caca77e3df828d69d13ef52f43cc1531d6481
+Commit:        b05caca77e3df828d69d13ef52f43cc1531d6481
+Parent:        eb3597acb3af2e6f21893b2e3bdfa84f2ca301b1
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Fri Mar 2 15:07:25 2018 +0100
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Tue Mar 6 15:42:49 2018 +0100
 
-Modified files:
-	lib/locking    : locking.c 
-	lib/metadata   : lv_manip.c mirror.c 
-	tools          : lvchange.c lvconvert.c lvresize.c pvmove.c 
-	                 toollib.c 
+tests: component activation
 
-Log message:
-	Add missing 'stack;' for all suspend_lv and resume_lv callers.
-	
-	Signed-off-by: Mike Snitzer <snitzer@redhat.com>
+---
+ test/shell/component-cache.sh  |   92 ++++++++++++++++++++++++++++++++++++++++
+ test/shell/component-mirror.sh |   70 ++++++++++++++++++++++++++++++
+ test/shell/component-raid.sh   |   50 ++++++++++++++++++++++
+ test/shell/component-thin.sh   |   49 +++++++++++++++++++++
+ 4 files changed, 261 insertions(+), 0 deletions(-)
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/locking/locking.c.diff?cvsroot=lvm2&r1=1.69&r2=1.70
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/lv_manip.c.diff?cvsroot=lvm2&r1=1.190&r2=1.191
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/mirror.c.diff?cvsroot=lvm2&r1=1.101&r2=1.102
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/lvchange.c.diff?cvsroot=lvm2&r1=1.114&r2=1.115
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/lvconvert.c.diff?cvsroot=lvm2&r1=1.98&r2=1.99
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/lvresize.c.diff?cvsroot=lvm2&r1=1.117&r2=1.118
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/pvmove.c.diff?cvsroot=lvm2&r1=1.70&r2=1.71
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/toollib.c.diff?cvsroot=lvm2&r1=1.180&r2=1.181
-
---- LVM2/lib/locking/locking.c	2009/12/16 19:22:12	1.69
-+++ LVM2/lib/locking/locking.c	2010/01/05 21:07:31	1.70
-@@ -454,7 +454,8 @@
- 	struct lv_list *lvl;
- 
- 	dm_list_iterate_items(lvl, lvs)
--		resume_lv(cmd, lvl->lv);
-+		if (!resume_lv(cmd, lvl->lv))
-+			stack;
- 
- 	return 1;
- }
-@@ -470,7 +471,8 @@
- 			log_error("Failed to suspend %s", lvl->lv->name);
- 			dm_list_uniterate(lvh, lvs, &lvl->list) {
- 				lvl = dm_list_item(lvh, struct lv_list);
--				resume_lv(cmd, lvl->lv);
-+				if (!resume_lv(cmd, lvl->lv))
-+					stack;
- 			}
- 
- 			return 0;
---- LVM2/lib/metadata/lv_manip.c	2010/01/05 15:58:11	1.190
-+++ LVM2/lib/metadata/lv_manip.c	2010/01/05 21:07:31	1.191
-@@ -1828,7 +1828,8 @@
- 	 * (resume of snapshot resumes origin too)
- 	 */
- 	dm_list_iterate_back_items(lvlp, &lvs_changed)
--		resume_lv(cmd, lvlp->lv);
-+		if (!resume_lv(cmd, lvlp->lv))
-+			stack;
- out:
- 	backup(vg);
- 	return r;
---- LVM2/lib/metadata/mirror.c	2009/12/17 15:59:53	1.101
-+++ LVM2/lib/metadata/mirror.c	2010/01/05 21:07:31	1.102
-@@ -615,8 +615,9 @@
- 		log_error("Problem suspending temporary LV %s", temp_layer_lv->name);
- 
- 	if (!vg_commit(mirrored_seg->lv->vg)) {
--		resume_lv(mirrored_seg->lv->vg->cmd, mirrored_seg->lv);
--		return 0;
-+		if (!resume_lv(mirrored_seg->lv->vg->cmd, mirrored_seg->lv))
-+			stack;
-+		return_0;
- 	}
- 
- 	log_very_verbose("Updating \"%s\" in kernel", mirrored_seg->lv->name);
---- LVM2/tools/lvchange.c	2010/01/05 20:56:52	1.114
-+++ LVM2/tools/lvchange.c	2010/01/05 21:07:31	1.115
-@@ -64,7 +64,8 @@
- 	}
- 
- 	if (!vg_commit(lv->vg)) {
--		resume_lv(cmd, lv);
-+		if (!resume_lv(cmd, lv))
-+			stack;
- 		goto_out;
- 	}
- 
-@@ -402,7 +403,8 @@
- 	}
- 
- 	if (!vg_commit(lv->vg)) {
--		resume_lv(cmd, lv);
-+		if (!resume_lv(cmd, lv))
-+			stack;
- 		goto_out;
- 	}
- 
---- LVM2/tools/lvconvert.c	2009/11/27 14:35:39	1.98
-+++ LVM2/tools/lvconvert.c	2010/01/05 21:07:31	1.99
-@@ -796,7 +796,8 @@
- 	}
- 
- 	if (!vg_commit(lv->vg)) {
--		resume_lv(cmd, lv);
-+		if (!resume_lv(cmd, lv))
-+			stack;
- 		goto_out;
- 	}
- 
---- LVM2/tools/lvresize.c	2009/12/03 19:18:34	1.117
-+++ LVM2/tools/lvresize.c	2010/01/05 21:07:31	1.118
-@@ -638,7 +638,8 @@
- 
- 	if (!vg_commit(vg)) {
- 		stack;
--		resume_lv(cmd, lock_lv);
-+		if (!resume_lv(cmd, lock_lv))
-+			stack;
- 		backup(vg);
- 		return ECMD_FAILED;
- 	}
---- LVM2/tools/pvmove.c	2009/12/04 14:03:18	1.70
-+++ LVM2/tools/pvmove.c	2010/01/05 21:07:31	1.71
-@@ -302,7 +302,8 @@
- 	/* Suspend mirrors on subsequent calls */
- 	if (!first_time) {
- 		if (!suspend_lv(cmd, lv_mirr)) {
--			resume_lvs(cmd, lvs_changed);
-+			if (!resume_lvs(cmd, lvs_changed))
-+				stack;
- 			vg_revert(vg);
- 			goto_out;
- 		}
-@@ -312,8 +313,10 @@
- 	if (!vg_commit(vg)) {
- 		log_error("ABORTING: Volume group metadata update failed.");
- 		if (!first_time)
--			resume_lv(cmd, lv_mirr);
--		resume_lvs(cmd, lvs_changed);
-+			if (!resume_lv(cmd, lv_mirr))
-+				stack;
-+		if (!resume_lvs(cmd, lvs_changed))
-+			stack;
- 		goto out;
- 	}
- 
-@@ -339,7 +342,8 @@
- 	} else if (!resume_lv(cmd, lv_mirr)) {
- 		log_error("Unable to reactivate logical volume \"%s\"",
- 			  lv_mirr->name);
--		resume_lvs(cmd, lvs_changed);
-+		if (!resume_lvs(cmd, lvs_changed))
-+			stack;
- 		goto out;
- 	}
- 
-@@ -513,8 +517,10 @@
- 		log_error("ABORTING: Failed to write new data locations "
- 			  "to disk.");
- 		vg_revert(vg);
--		resume_lv(cmd, lv_mirr);
--		resume_lvs(cmd, lvs_changed);
-+		if (!resume_lv(cmd, lv_mirr))
-+			stack;
-+		if (!resume_lvs(cmd, lvs_changed))
-+			stack;
- 		return 0;
- 	}
- 
-@@ -526,7 +532,8 @@
- 	}
- 
- 	/* Unsuspend LVs */
--	resume_lvs(cmd, lvs_changed);
-+	if (!resume_lvs(cmd, lvs_changed))
-+		stack;
- 
- 	/* Deactivate mirror LV */
- 	if (!deactivate_lv(cmd, lv_mirr)) {
---- LVM2/tools/toollib.c	2009/12/11 13:11:56	1.180
-+++ LVM2/tools/toollib.c	2010/01/05 21:07:31	1.181
-@@ -1251,7 +1251,18 @@
- 
- int lv_refresh(struct cmd_context *cmd, struct logical_volume *lv)
- {
--	return suspend_lv(cmd, lv) && resume_lv(cmd, lv);
-+	int r = 0;
+diff --git a/test/shell/component-cache.sh b/test/shell/component-cache.sh
+new file mode 100644
+index 0000000..2060b31
+--- /dev/null
++++ b/test/shell/component-cache.sh
+@@ -0,0 +1,92 @@
++#!/usr/bin/env bash
 +
-+	r = suspend_lv(cmd, lv);
-+	if (!r)
-+		goto_out;
++# Copyright (C) 2018 Red Hat, Inc. All rights reserved.
++#
++# This copyrighted material is made available to anyone wishing to use,
++# modify, copy, or redistribute it subject to the terms and conditions
++# of the GNU General Public License v.2.
++#
++# You should have received a copy of the GNU General Public License
++# along with this program; if not, write to the Free Software Foundation,
++# Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 +
-+	r = resume_lv(cmd, lv);
-+	if (!r)
-+		goto_out;
++# Exercise activation of cache component devices
 +
-+out:
-+	return r;
- }
- 
- int vg_refresh_visible(struct cmd_context *cmd, struct volume_group *vg)
++SKIP_WITH_LVMLOCKD=1
++SKIP_WITH_LVMPOLLD=1
++
++. lib/inittest
++
++aux have_cache 1 3 0 || skip
++
++aux prepare_vg 5 80
++
++lvcreate --type cache-pool -L 2 -n cpool $vg
++lvcreate -H -L 4 -n corigin --cachepool $vg/cpool
++lvchange -an $vg
++
++for j in 1 2
++do
++
++# Activate supported components
++for i in cpool_cmeta cpool_cdata corigin_corig
++do
++	test ! -e "$DM_DEV_DIR/$vg/$i"
++	lvchange -ay -y $vg/$i
++	# check usable link is there
++	test -e "$DM_DEV_DIR/$vg/$i"
++
++        # cannot take snapshot of any active component LV
++        test "$j" -eq 2 || not lvcreate -s -L1 $vg/$i
++done
++
++# After 1st. phase deactivation works
++# Volumes are left active for vgremove on 2nd.. pass
++test "$j" -eq 2 || lvchange -an $vg
++
++done
++
++# Cannot active cached LV while any component LV is active
++not lvchange -ay $vg/corigin |& tee err
++grep "prohibited" err
++
++lvs -a $vg
++
++# Can split for writethrough|passthrough
++# deactivates all components as well...
++lvconvert --splitcache $vg/corigin
++lvs -a $vg
++
++# Cannot cache LV while components are active
++lvcreate -L 4 -n $lv2 $vg
++lvchange -ay -y $vg/cpool_cmeta
++
++not lvconvert -y --cachepool $vg/cpool -H $lv2
++
++lvremove -f $vg
++lvs -a $vg
++
++if aux have_thin 1 0 0 ; then
++
++lvcreate --type cache-pool -L 2 -n cpool $vg
++lvcreate -H -L 4 -n tpool --cachepool $vg/cpool
++lvchange -an $vg
++lvs -a $vg
++# Cannot convert to thin-pool with component LV active
++lvchange -ay -y $vg/cpool_cmeta
++
++# Conversion does not need to activate data device, so it can proceed ??
++lvconvert -y --thinpool $vg/tpool
++
++# Thin-pool cannot be activated
++not lvchange -ay $vg/tpool |& tee err
++grep "prohibited" err
++
++lvs -a $vg
++
++fi
++
++lvs -a $vg
++
++# And final removal works
++vgremove -f $vg
+diff --git a/test/shell/component-mirror.sh b/test/shell/component-mirror.sh
+new file mode 100644
+index 0000000..b565c98
+--- /dev/null
++++ b/test/shell/component-mirror.sh
+@@ -0,0 +1,70 @@
++#!/usr/bin/env bash
++
++# Copyright (C) 2018 Red Hat, Inc. All rights reserved.
++#
++# This copyrighted material is made available to anyone wishing to use,
++# modify, copy, or redistribute it subject to the terms and conditions
++# of the GNU General Public License v.2.
++#
++# You should have received a copy of the GNU General Public License
++# along with this program; if not, write to the Free Software Foundation,
++# Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
++
++# Exercise activation of mirror component devices
++
++SKIP_WITH_LVMLOCKD=1
++SKIP_WITH_LVMPOLLD=1
++
++. lib/inittest
++
++aux have_cache 1 3 0 || skip
++
++aux prepare_vg 5 80
++
++lvcreate -aey --type mirror -L 2 -m 1 -n $lv1 $vg
++lvchange -an $vg
++
++lvs -a
++
++lvchange -an $vg
++
++for k in 1 2
++do
++
++# Activate supported components
++for i in ${lv1}_mimage_0 ${lv1}_mimage_1 ${lv1}_mlog
++do
++	test ! -e "$DM_DEV_DIR/$vg/$i"
++	lvchange -ay -y $vg/$i
++	# check usable link is there
++	test -e "$DM_DEV_DIR/$vg/$i"
++done
++
++# Deactivation works in 1st. pass
++test $k -eq 2 || lvchange -an $vg
++
++done
++
++# Cannot be resized
++not lvextend -L+20 $vg/$lv1 |& tee err
++grep "Cannot resize" err
++
++not lvresize -L-20 $vg/$lv1 |& tee err
++grep "Cannot resize" err
++
++# Cannot be converted
++lvcreate -aey -L10 -n $lv2 $vg
++not lvconvert -y -s $vg/$lv1 $lv2 |& tee err
++grep "Cannot use" err
++
++# Cannot be splitted
++not lvconvert --splitmirrors 1 -n split $vg/$lv1 |& tee err
++grep "Cannot convert" err
++
++# Cannot add new leg
++not lvconvert -m+1 $vg/$lv1 |& tee err
++grep "Cannot convert" err
++
++lvs -a
++
++vgremove -f $vg
+diff --git a/test/shell/component-raid.sh b/test/shell/component-raid.sh
+new file mode 100644
+index 0000000..84f823f
+--- /dev/null
++++ b/test/shell/component-raid.sh
+@@ -0,0 +1,50 @@
++#!/usr/bin/env bash
++
++# Copyright (C) 2018 Red Hat, Inc. All rights reserved.
++#
++# This copyrighted material is made available to anyone wishing to use,
++# modify, copy, or redistribute it subject to the terms and conditions
++# of the GNU General Public License v.2.
++#
++# You should have received a copy of the GNU General Public License
++# along with this program; if not, write to the Free Software Foundation,
++# Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
++
++# Exercise activation of raid component devices
++
++SKIP_WITH_LVMLOCKD=1
++SKIP_WITH_LVMPOLLD=1
++
++. lib/inittest
++
++aux have_cache 1 3 0 || skip
++
++aux prepare_vg 5 80
++
++lvcreate --type raid1 -L 2 -m 1 -n $lv1 $vg
++lvchange -an $vg
++
++lvs -a $vg
++
++for k in 1 2
++do
++
++# Activate supported components
++for j in 0 1
++do
++for i in ${lv1}_rimage_$j ${lv1}_rmeta_$j
++do
++	test ! -e "$DM_DEV_DIR/$vg/$i"
++	lvchange -ay -y $vg/$i
++	# check usable link is there
++	test -e "$DM_DEV_DIR/$vg/$i"
++done
++done
++
++# Deactivation works in 1st. pass
++test $k -eq 2 || lvchange -an $vg
++
++done
++
++# And final removal works
++vgremove -f $vg
+diff --git a/test/shell/component-thin.sh b/test/shell/component-thin.sh
+new file mode 100644
+index 0000000..4b1a35b
+--- /dev/null
++++ b/test/shell/component-thin.sh
+@@ -0,0 +1,49 @@
++#!/usr/bin/env bash
++
++# Copyright (C) 2018 Red Hat, Inc. All rights reserved.
++#
++# This copyrighted material is made available to anyone wishing to use,
++# modify, copy, or redistribute it subject to the terms and conditions
++# of the GNU General Public License v.2.
++#
++# You should have received a copy of the GNU General Public License
++# along with this program; if not, write to the Free Software Foundation,
++# Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
++
++# Exercise activation of thin component devices
++
++SKIP_WITH_LVMLOCKD=1
++SKIP_WITH_LVMPOLLD=1
++
++. lib/inittest
++
++aux have_thin 1 0 0 || skip
++
++aux prepare_vg 5 80
++
++lvcreate -T -L2 -V20 $vg/pool -n $lv1
++
++lvs -a
++
++lvchange -an $vg
++
++for i in pool_tdata pool_tmeta
++do
++	lvchange -ay -y $vg/$i
++	# check usable is there
++	test -e "$DM_DEV_DIR/$vg/$i"
++done
++
++lvs -a
++
++# When component LVs are active, thin-pool cannot be actived
++not lvcreate -V20 $vg/pool
++
++
++# FIXME: ATM removal of thin volumes goes 1-by-1 and needs to activate thin-pool.
++# And thin-pool cannot be activate thus vgremove fails.
++# To fix this it would need to be able to remove volumes without activation.
++should vgremove -f $vg
++
++# -ff bypass activation failure
++vgremove -ff $vg
 
 
