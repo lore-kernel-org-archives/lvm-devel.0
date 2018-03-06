@@ -1,80 +1,56 @@
-From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 7 Jan 2010 14:47:57 -0000
-Subject: LVM2/lib/format_text flags.c
-Message-ID: <20100107144757.30787.qmail@sourceware.org>
+From: Zdenek Kabelac <zkabelac@sourceware.org>
+Date: Tue, 6 Mar 2018 09:45:42 -0500
+Subject: master - raid: fix error path for lv_raid_data_offset
+Message-ID: <201803061445.w26Ejgnm026605@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2010-01-07 14:47:57
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=ce199db848e663ffa040015106725553eafb1c98
+Commit:        ce199db848e663ffa040015106725553eafb1c98
+Parent:        9be086fbeef0a24fc6f441dec29ee2385bca0280
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Fri Mar 2 15:49:12 2018 +0100
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Tue Mar 6 15:36:11 2018 +0100
 
-Modified files:
-	lib/format_text: flags.c 
+raid: fix error path for lv_raid_data_offset
 
-Log message:
-	Add few const modifiers.
+Avoid using allocated status on error path.
+---
+ WHATS_NEW               |    1 +
+ lib/activate/activate.c |    6 ++++--
+ 2 files changed, 5 insertions(+), 2 deletions(-)
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/format_text/flags.c.diff?cvsroot=lvm2&r1=1.38&r2=1.39
-
---- LVM2/lib/format_text/flags.c	2009/11/24 22:55:56	1.38
-+++ LVM2/lib/format_text/flags.c	2010/01/07 14:47:57	1.39
-@@ -28,7 +28,7 @@
- 	int kind;
- };
- 
--static struct flag _vg_flags[] = {
-+static const struct flag _vg_flags[] = {
- 	{EXPORTED_VG, "EXPORTED", STATUS_FLAG},
- 	{RESIZEABLE_VG, "RESIZEABLE", STATUS_FLAG},
- 	{PVMOVE, "PVMOVE", STATUS_FLAG},
-@@ -41,14 +41,14 @@
- 	{0, NULL, 0}
- };
- 
--static struct flag _pv_flags[] = {
-+static const struct flag _pv_flags[] = {
- 	{ALLOCATABLE_PV, "ALLOCATABLE", STATUS_FLAG},
- 	{EXPORTED_VG, "EXPORTED", STATUS_FLAG},
- 	{MISSING_PV, "MISSING", COMPATIBLE_FLAG},
- 	{0, NULL, 0}
- };
- 
--static struct flag _lv_flags[] = {
-+static const struct flag _lv_flags[] = {
- 	{LVM_READ, "READ", STATUS_FLAG},
- 	{LVM_WRITE, "WRITE", STATUS_FLAG},
- 	{FIXED_MINOR, "FIXED_MINOR", STATUS_FLAG},
-@@ -69,7 +69,7 @@
- 	{0, NULL, 0}
- };
- 
--static struct flag *_get_flags(int type)
-+static const struct flag *_get_flags(int type)
- {
- 	switch (type & ~STATUS_FLAG) {
- 	case VG_FLAGS:
-@@ -94,7 +94,7 @@
- int print_flags(uint64_t status, int type, char *buffer, size_t size)
- {
- 	int f, first = 1;
--	struct flag *flags;
-+	const struct flag *flags;
- 
- 	if (!(flags = _get_flags(type)))
+diff --git a/WHATS_NEW b/WHATS_NEW
+index 46f66b0..52cf4bc 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.178 - 
+ =====================================
++  Fix memleak on error path when obtaining lv_raid_data_offset.
+   Fix compatibility size test of extended external origin.
+   Add external_origin visiting in for_each_sub_lv().
+   Ensure cluster commands drop their device cache before locking VG.
+diff --git a/lib/activate/activate.c b/lib/activate/activate.c
+index 3052f31..f5e9ef9 100644
+--- a/lib/activate/activate.c
++++ b/lib/activate/activate.c
+@@ -1006,8 +1006,10 @@ int lv_raid_data_offset(const struct logical_volume *lv, uint64_t *data_offset)
+ 	if (!(dm = dev_manager_create(lv->vg->cmd, lv->vg->name, 1)))
  		return_0;
-@@ -139,7 +139,7 @@
- {
- 	int f;
- 	uint64_t s = UINT64_C(0);
--	struct flag *flags;
-+	const struct flag *flags;
  
- 	if (!(flags = _get_flags(type)))
- 		return_0;
+-	if (!(r = dev_manager_raid_status(dm, lv, &status)))
+-		stack;
++	if (!(r = dev_manager_raid_status(dm, lv, &status))) {
++		dev_manager_destroy(dm);
++		return_0;
++	}
+ 
+ 	*data_offset = status->data_offset;
+ 
 
 
