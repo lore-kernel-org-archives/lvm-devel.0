@@ -1,78 +1,54 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Thu, 15 Mar 2018 06:04:37 -0400
-Subject: master - locking: introduce prioritized_section
-Message-ID: <201803151004.w2FA4bZ3023641@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Tue, 6 Mar 2018 09:45:50 -0500
+Subject: master - lvremove: drop duplicate check for active LV
+Message-ID: <201803061445.w26EjoJr026654@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=6365f011b00357e7f67fbe3aca0ca00ccf17ba66
-Commit:        6365f011b00357e7f67fbe3aca0ca00ccf17ba66
-Parent:        043f58452a0a2c136dd6a90f1d60b063ae17a866
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=f04abd1f8a7eea9edf473be17ae1e2aea1a00ee6
+Commit:        f04abd1f8a7eea9edf473be17ae1e2aea1a00ee6
+Parent:        23de09aeb87ec10bd1a553ea8868e2f946117232
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu Mar 15 09:07:24 2018 +0100
+AuthorDate:    Tue Mar 6 13:31:06 2018 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Thu Mar 15 10:59:42 2018 +0100
+CommitterDate: Tue Mar 6 15:40:31 2018 +0100
 
-locking: introduce prioritized_section
+lvremove: drop duplicate check for active LV
 
-Introduce prioritized_section() as a closer match to previous logic
-of critical_section() that has been held over longer sequence of
-ioctl commands - essentially it's matching operation on a single
-cookie.
-
-While 'critical_section()' now corresponds to locked memory - we hold
-this memory only between suspend/resume thus notion of 'cookie' was
-lost.
-
-This patch restores some logic unintentionaly lost with dropping
-memory locking for just activation/deactivation calls.
+Since this code branch already tested LV is active,
+avoid repeating same query.
 ---
- WHATS_NEW        |    1 +
- lib/mm/memlock.c |    5 +++++
- lib/mm/memlock.h |    1 +
- 3 files changed, 7 insertions(+), 0 deletions(-)
+ WHATS_NEW               |    1 +
+ lib/metadata/lv_manip.c |    3 +--
+ 2 files changed, 2 insertions(+), 2 deletions(-)
 
 diff --git a/WHATS_NEW b/WHATS_NEW
-index a545a5d..da5f5f4 100644
+index 3ed3e5a..b282caa 100644
 --- a/WHATS_NEW
 +++ b/WHATS_NEW
 @@ -1,5 +1,6 @@
  Version 2.02.178 - 
  =====================================
-+  Add prioritized_section() to restore cookie boundaries (2.02.177).
-   Enhance error messages when read error happens.
-   Enhance mirror log initialization for old mirror target.
-   Skip private crypto and stratis devices.
-diff --git a/lib/mm/memlock.c b/lib/mm/memlock.c
-index 897bf10..b55cc97 100644
---- a/lib/mm/memlock.c
-+++ b/lib/mm/memlock.c
-@@ -634,6 +634,11 @@ int critical_section(void)
- 	return _critical_section;
- }
++  Skip duplicate check for active LV when prompting for its removal.
+   Activate correct lock holding LV when it is cached.
+   Do not modify archived metadata when removing striped raid.
+   Fix memleak on error path when obtaining lv_raid_data_offset.
+diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
+index 88b0d9d..d4a6107 100644
+--- a/lib/metadata/lv_manip.c
++++ b/lib/metadata/lv_manip.c
+@@ -6040,8 +6040,7 @@ int lv_remove_single(struct cmd_context *cmd, struct logical_volume *lv,
  
-+int prioritized_section(void)
-+{
-+	return _priority_raised;
-+}
-+
- /*
-  * The memlock_*_daemon functions will force the mlockall() call that we need
-  * to stay in memory, but they will have no effect on device scans (unlike
-diff --git a/lib/mm/memlock.h b/lib/mm/memlock.h
-index ef2ebcb..d0807d5 100644
---- a/lib/mm/memlock.h
-+++ b/lib/mm/memlock.h
-@@ -34,6 +34,7 @@ struct cmd_context;
- void critical_section_inc(struct cmd_context *cmd, const char *reason);
- void critical_section_dec(struct cmd_context *cmd, const char *reason);
- int critical_section(void);
-+int prioritized_section(void);
- void memlock_inc_daemon(struct cmd_context *cmd);
- void memlock_dec_daemon(struct cmd_context *cmd);
- int memlock_count_daemon(void);
+ 		if ((force == PROMPT) &&
+ 		    !lv_is_pending_delete(lv) &&
+-		    lv_is_visible(lv) &&
+-		    lv_is_active(lv)) {
++		    lv_is_visible(lv)) {
+ 			if (yes_no_prompt("Do you really want to remove%s active "
+ 					  "%slogical volume %s? [y/n]: ",
+ 					  ask_discard ? " and DISCARD" : "",
 
 
