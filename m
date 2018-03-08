@@ -1,150 +1,100 @@
-From: prajnoha@sourceware.org <prajnoha@sourceware.org>
-Date: 7 Jan 2010 19:45:13 -0000
-Subject: LVM2 ./WHATS_NEW_DM man/dmsetup.8.in tools/dms ...
-Message-ID: <20100107194513.16308.qmail@sourceware.org>
+From: Zdenek Kabelac <zkabelac@sourceware.org>
+Date: Thu, 8 Mar 2018 04:43:06 -0500
+Subject: master - snapshot: keep COW writable for read-only volumes
+Message-ID: <201803080943.w289h6as019624@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	prajnoha at sourceware.org	2010-01-07 19:45:12
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=a6fdb9d9d70f51c49ad11a87ab4243344e6701a3
+Commit:        a6fdb9d9d70f51c49ad11a87ab4243344e6701a3
+Parent:        15b6793528de99a70e988d09502ca33ad1d7c575
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Thu Mar 8 10:27:04 2018 +0100
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Thu Mar 8 10:39:03 2018 +0100
 
-Modified files:
-	.              : WHATS_NEW_DM 
-	man            : dmsetup.8.in 
-	tools          : dmsetup.c 
+snapshot: keep COW writable for read-only volumes
 
-Log message:
-	Add --noudevrules option for dmsetup to disable /dev node management by udev.
+When snapshot is created in read-only mode with 'lvcreate -s -pr...',
+lvm2 still needs to be able to write to layered -cow volume
+to store metadata and exceptions blocks.
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW_DM.diff?cvsroot=lvm2&r1=1.324&r2=1.325
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/man/dmsetup.8.in.diff?cvsroot=lvm2&r1=1.29&r2=1.30
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/dmsetup.c.diff?cvsroot=lvm2&r1=1.130&r2=1.131
+TODO: in some case we might be able to do full tree with read-only
+volume but this probably needs futher validation:
+1. checking snapshot header already exist
+2. origin & snapshot are both in read-only mode.
+---
+ WHATS_NEW                  |    1 +
+ lib/activate/activate.c    |    2 +-
+ lib/activate/dev_manager.c |    7 +++++--
+ lib/activate/dev_manager.h |    2 +-
+ 4 files changed, 8 insertions(+), 4 deletions(-)
 
---- LVM2/WHATS_NEW_DM	2010/01/07 14:30:47	1.324
-+++ LVM2/WHATS_NEW_DM	2010/01/07 19:45:12	1.325
+diff --git a/WHATS_NEW b/WHATS_NEW
+index 69345c6..d0bc386 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
 @@ -1,5 +1,6 @@
- Version 1.02.41 -
- ====================================
-+  Add --noudevrules option for dmsetup to disable /dev node management by udev.
-   Update code to show all fields for 'dmsetup info -c -o all'.
-   Return error from dm_tree_deactivate_children().
-   Return error from dm_tree_suspend_children().
---- LVM2/man/dmsetup.8.in	2009/11/06 01:40:59	1.29
-+++ LVM2/man/dmsetup.8.in	2010/01/07 19:45:12	1.30
-@@ -127,6 +127,9 @@
- .IP \fB--notable
- .br
- When creating a device, don't load any table.
-+.IP \fB--noudevrules
-+Do not allow udev to manage nodes for devices in device-mapper directory.
-+.br
- .IP \fB--noudevsync
- Do not synchronise with udev when creating, renaming or removing devices.
- .br
---- LVM2/tools/dmsetup.c	2009/12/11 13:16:39	1.130
-+++ LVM2/tools/dmsetup.c	2010/01/07 19:45:12	1.131
-@@ -127,6 +127,7 @@
- 	NOLOCKFS_ARG,
- 	NOOPENCOUNT_ARG,
- 	NOTABLE_ARG,
-+	NOUDEVRULES_ARG,
- 	NOUDEVSYNC_ARG,
- 	OPTIONS_ARG,
- 	READAHEAD_ARG,
-@@ -557,6 +558,7 @@
- 	struct dm_task *dmt;
- 	const char *file = NULL;
- 	uint32_t cookie = 0;
-+	uint16_t udev_flags = 0;
- 
- 	if (argc == 3)
- 		file = argv[2];
-@@ -605,7 +607,11 @@
- 	if (_switches[NOTABLE_ARG])
- 		dm_udev_set_sync_support(0);
- 
--	if (!dm_task_set_cookie(dmt, &cookie, 0) ||
-+	if (_switches[NOUDEVRULES_ARG])
-+		udev_flags |= DM_UDEV_DISABLE_DM_RULES_FLAG |
-+			      DM_UDEV_DISABLE_SUBSYSTEM_RULES_FLAG;
-+
-+	if (!dm_task_set_cookie(dmt, &cookie, udev_flags) ||
- 	    !dm_task_run(dmt))
+ Version 2.02.178 - 
+ =====================================
++  Ensure COW device is writable even for read-only thick snapshots.
+   Support activation of component LVs in read-only mode.
+   Extend internal library to recognize and work with component LV.
+   Skip duplicate check for active LV when prompting for its removal.
+diff --git a/lib/activate/activate.c b/lib/activate/activate.c
+index cb9b1cf..777fc21 100644
+--- a/lib/activate/activate.c
++++ b/lib/activate/activate.c
+@@ -2694,7 +2694,7 @@ static int _lv_activate(struct cmd_context *cmd, const char *lvid_s,
+ 	 * Nothing to do?
+ 	 */
+ 	if (info.exists && !info.suspended && info.live_table &&
+-	    (info.read_only == read_only_lv(lv, laopts))) {
++	    (info.read_only == read_only_lv(lv, laopts, NULL))) {
+ 		r = 1;
+ 		log_debug_activation("LV %s is already active.", display_lvname(lv));
  		goto out;
+diff --git a/lib/activate/dev_manager.c b/lib/activate/dev_manager.c
+index a40fd2b..b8b937d 100644
+--- a/lib/activate/dev_manager.c
++++ b/lib/activate/dev_manager.c
+@@ -75,8 +75,11 @@ struct lv_layer {
+ 	int visible_component;
+ };
  
-@@ -626,6 +632,7 @@
- 	int r = 0;
- 	struct dm_task *dmt;
- 	uint32_t cookie = 0;
-+	uint16_t udev_flags = 0;
- 
- 	if (!(dmt = dm_task_create(DM_DEVICE_RENAME)))
- 		return 0;
-@@ -643,7 +650,11 @@
- 	if (_switches[INACTIVE_ARG] && !dm_task_query_inactive_table(dmt))
- 		goto out;
- 
--	if (!dm_task_set_cookie(dmt, &cookie, 0) ||
-+	if (_switches[NOUDEVRULES_ARG])
-+		udev_flags |= DM_UDEV_DISABLE_DM_RULES_FLAG |
-+			      DM_UDEV_DISABLE_SUBSYSTEM_RULES_FLAG;
-+
-+	if (!dm_task_set_cookie(dmt, &cookie, udev_flags) ||
- 	    !dm_task_run(dmt))
- 		goto out;
- 
-@@ -1011,6 +1022,7 @@
- static int _simple(int task, const char *name, uint32_t event_nr, int display)
+-int read_only_lv(const struct logical_volume *lv, const struct lv_activate_opts *laopts)
++int read_only_lv(const struct logical_volume *lv, const struct lv_activate_opts *laopts, const char *layer)
  {
- 	uint32_t cookie = 0;
-+	uint16_t udev_flags = 0;
- 	int udev_wait_flag = task == DM_DEVICE_RESUME ||
- 			     task == DM_DEVICE_REMOVE;
- 	int r = 0;
-@@ -1043,7 +1055,11 @@
- 				    _read_ahead_flags))
- 		goto out;
- 
--	if (udev_wait_flag && !dm_task_set_cookie(dmt, &cookie, 0))
-+	if (_switches[NOUDEVRULES_ARG])
-+		udev_flags |= DM_UDEV_DISABLE_DM_RULES_FLAG |
-+			      DM_UDEV_DISABLE_SUBSYSTEM_RULES_FLAG;
++	if (layer && lv_is_cow(lv))
++		return 0; /* Keep snapshot's COW volume writable */
 +
-+	if (udev_wait_flag && !dm_task_set_cookie(dmt, &cookie, udev_flags))
- 		goto out;
+ 	return (laopts->read_only || !(lv->status & LVM_WRITE));
+ }
  
- 	r = dm_task_run(dmt);
-@@ -2559,7 +2575,8 @@
- 	fprintf(out, "Usage:\n\n");
- 	fprintf(out, "dmsetup [--version] [-v|--verbose [-v|--verbose ...]]\n"
- 		"        [-r|--readonly] [--noopencount] [--nolockfs] [--inactive]\n"
--		"        [--noudevsync] [-y|--yes] [--readahead [+]<sectors>|auto|none]\n"
-+		"        [--noudevrules] [--noudevsync] [-y|--yes]\n"
-+		"        [--readahead [+]<sectors>|auto|none]\n"
- 		"        [-c|-C|--columns] [-o <fields>] [-O|--sort <sort_fields>]\n"
- 		"        [--nameprefixes] [--noheadings] [--separator <separator>]\n\n");
- 	for (i = 0; _commands[i].name; i++)
-@@ -2927,6 +2944,7 @@
- 		{"nolockfs", 0, &ind, NOLOCKFS_ARG},
- 		{"noopencount", 0, &ind, NOOPENCOUNT_ARG},
- 		{"notable", 0, &ind, NOTABLE_ARG},
-+		{"noudevrules", 0, &ind, NOUDEVRULES_ARG},
- 		{"noudevsync", 0, &ind, NOUDEVSYNC_ARG},
- 		{"options", 1, &ind, OPTIONS_ARG},
- 		{"readahead", 1, &ind, READAHEAD_ARG},
-@@ -3039,6 +3057,8 @@
- 		}
- 		if (c == 'y' || ind == YES_ARG)
- 			_switches[YES_ARG]++;
-+		if (ind == NOUDEVRULES_ARG)
-+			_switches[NOUDEVRULES_ARG]++;
- 		if (ind == NOUDEVSYNC_ARG)
- 			_switches[NOUDEVSYNC_ARG]++;
- 		if (c == 'G' || ind == GID_ARG) {
+@@ -2824,7 +2827,7 @@ static int _add_new_lv_to_dtree(struct dev_manager *dm, struct dm_tree *dtree,
+ 	if (!(dnode = dm_tree_add_new_dev_with_udev_flags(dtree, name, dlid,
+ 					     layer ? UINT32_C(0) : (uint32_t) lv->major,
+ 					     layer ? UINT32_C(0) : (uint32_t) lv->minor,
+-					     read_only_lv(lv, laopts),
++					     read_only_lv(lv, laopts, layer),
+ 					     ((lv->vg->status & PRECOMMITTED) | laopts->revert) ? 1 : 0,
+ 					     lvlayer,
+ 					     _get_udev_flags(dm, lv, layer, laopts->noscan, laopts->temporary,
+diff --git a/lib/activate/dev_manager.h b/lib/activate/dev_manager.h
+index ba198f5..5be417b 100644
+--- a/lib/activate/dev_manager.h
++++ b/lib/activate/dev_manager.h
+@@ -27,7 +27,7 @@ struct dm_info;
+ struct device;
+ struct lv_seg_status;
+ 
+-int read_only_lv(const struct logical_volume *lv, const struct lv_activate_opts *laopts);
++int read_only_lv(const struct logical_volume *lv, const struct lv_activate_opts *laopts, const char *layer);
+ 
+ /*
+  * Constructor and destructor.
 
 
