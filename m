@@ -1,20 +1,20 @@
 From: Heinz Mauelshagen <heinzm@sourceware.org>
-Date: Fri, 9 Mar 2018 15:20:19 -0500
+Date: Fri, 9 Mar 2018 15:23:48 -0500
 Subject: master - raid: support raid5_n convenience type on conversion to raid10
-Message-ID: <201803092020.w29KKJZv001402@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Message-ID: <201803092023.w29KNmtK002618@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=efac928c52418dc06501359f6abb3502a46d8b49
-Commit:        efac928c52418dc06501359f6abb3502a46d8b49
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=dd88a0f05cb27d54aa74960bbe9370fa37197cdc
+Commit:        dd88a0f05cb27d54aa74960bbe9370fa37197cdc
 Parent:        6cb2c35d1654558efc1b37ca44d77f83682446c7
 Author:        Heinz Mauelshagen <heinzm@redhat.com>
 AuthorDate:    Fri Mar 9 21:15:41 2018 +0100
 Committer:     Heinz Mauelshagen <heinzm@redhat.com>
-CommitterDate: Fri Mar 9 21:19:08 2018 +0100
+CommitterDate: Fri Mar 9 21:23:16 2018 +0100
 
 raid: support raid5_n convenience type on conversion to raid10
 
@@ -23,10 +23,22 @@ not offering offering interim convenience type raid5_n.
 
 Resolves: rhbz1468600
 ---
+ WHATS_NEW                               |    1 +
  lib/metadata/raid_manip.c               |    2 +-
  test/shell/lvconvert-raid5_to_raid10.sh |   63 +++++++++++++++++++++++++++++++
- 2 files changed, 64 insertions(+), 1 deletions(-)
+ 3 files changed, 65 insertions(+), 1 deletions(-)
 
+diff --git a/WHATS_NEW b/WHATS_NEW
+index 16ad1d9..40f81f5 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.178 - 
+ =====================================
++  Offer convenience type raid5_n converting to raid10
+   Automatically avoid reading invalid snapshots during device scan.
+   Ensure COW device is writable even for read-only thick snapshots.
+   Support activation of component LVs in read-only mode.
 diff --git a/lib/metadata/raid_manip.c b/lib/metadata/raid_manip.c
 index 0f56120..7d82a24 100644
 --- a/lib/metadata/raid_manip.c
