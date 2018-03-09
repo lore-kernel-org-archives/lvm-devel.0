@@ -1,25 +1,27 @@
 From: Heinz Mauelshagen <heinzm@sourceware.org>
-Date: Fri, 9 Mar 2018 15:18:28 -0500
+Date: Fri, 9 Mar 2018 15:20:19 -0500
 Subject: master - raid: support raid5_n convenience type on conversion to raid10
-Message-ID: <201803092018.w29KISao000960@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Message-ID: <201803092020.w29KKJZv001402@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=321b761d3641e38bec125af789e11466aa9407ae
-Commit:        321b761d3641e38bec125af789e11466aa9407ae
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=efac928c52418dc06501359f6abb3502a46d8b49
+Commit:        efac928c52418dc06501359f6abb3502a46d8b49
 Parent:        6cb2c35d1654558efc1b37ca44d77f83682446c7
 Author:        Heinz Mauelshagen <heinzm@redhat.com>
 AuthorDate:    Fri Mar 9 21:15:41 2018 +0100
 Committer:     Heinz Mauelshagen <heinzm@redhat.com>
-CommitterDate: Fri Mar 9 21:15:54 2018 +0100
+CommitterDate: Fri Mar 9 21:19:08 2018 +0100
 
 raid: support raid5_n convenience type on conversion to raid10
 
 Fix requesting a conversion on raid5_{ls,rs,la,ra} -> raid10
 not offering offering interim convenience type raid5_n.
+
+Resolves: rhbz1468600
 ---
  lib/metadata/raid_manip.c               |    2 +-
  test/shell/lvconvert-raid5_to_raid10.sh |   63 +++++++++++++++++++++++++++++++
