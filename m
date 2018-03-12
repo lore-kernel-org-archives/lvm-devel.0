@@ -1,125 +1,60 @@
 From: Heinz Mauelshagen <heinzm@sourceware.org>
-Date: Fri, 9 Mar 2018 15:23:48 -0500
-Subject: master - raid: support raid5_n convenience type on conversion to raid10
-Message-ID: <201803092023.w29KNmtK002618@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Mon, 12 Mar 2018 17:31:47 -0400
+Subject: master - dev_manager: always activate RAID SubLVs readwrite
+Message-ID: <201803122131.w2CLVlFn003047@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=dd88a0f05cb27d54aa74960bbe9370fa37197cdc
-Commit:        dd88a0f05cb27d54aa74960bbe9370fa37197cdc
-Parent:        6cb2c35d1654558efc1b37ca44d77f83682446c7
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=0646fd465eef51f3cfbd2219a0992af27d61ae14
+Commit:        0646fd465eef51f3cfbd2219a0992af27d61ae14
+Parent:        dd88a0f05cb27d54aa74960bbe9370fa37197cdc
 Author:        Heinz Mauelshagen <heinzm@redhat.com>
-AuthorDate:    Fri Mar 9 21:15:41 2018 +0100
+AuthorDate:    Mon Mar 12 22:21:13 2018 +0100
 Committer:     Heinz Mauelshagen <heinzm@redhat.com>
-CommitterDate: Fri Mar 9 21:23:16 2018 +0100
+CommitterDate: Mon Mar 12 22:29:54 2018 +0100
 
-raid: support raid5_n convenience type on conversion to raid10
+dev_manager: always activate RAID SubLVs readwrite
 
-Fix requesting a conversion on raid5_{ls,rs,la,ra} -> raid10
-not offering offering interim convenience type raid5_n.
+RaidLVs on read_only_volume_list have their SubLVs
+activated readonly thus disabling metadata updates
+or image resynchronization/recovery.  Bug also causes
+automatic repairs to fail.
 
-Resolves: rhbz1468600
+Fix by always activating the RAID SubLVs readwrite.
+
+Resolves: rhbz1208269
 ---
- WHATS_NEW                               |    1 +
- lib/metadata/raid_manip.c               |    2 +-
- test/shell/lvconvert-raid5_to_raid10.sh |   63 +++++++++++++++++++++++++++++++
- 3 files changed, 65 insertions(+), 1 deletions(-)
+ WHATS_NEW                  |    1 +
+ lib/activate/dev_manager.c |    3 +++
+ 2 files changed, 4 insertions(+), 0 deletions(-)
 
 diff --git a/WHATS_NEW b/WHATS_NEW
-index 16ad1d9..40f81f5 100644
+index 40f81f5..177a2fe 100644
 --- a/WHATS_NEW
 +++ b/WHATS_NEW
 @@ -1,5 +1,6 @@
  Version 2.02.178 - 
  =====================================
-+  Offer convenience type raid5_n converting to raid10
++  Activate RAID SubLVs on read_only_volume_list readwrite
+   Offer convenience type raid5_n converting to raid10
    Automatically avoid reading invalid snapshots during device scan.
    Ensure COW device is writable even for read-only thick snapshots.
-   Support activation of component LVs in read-only mode.
-diff --git a/lib/metadata/raid_manip.c b/lib/metadata/raid_manip.c
-index 0f56120..7d82a24 100644
---- a/lib/metadata/raid_manip.c
-+++ b/lib/metadata/raid_manip.c
-@@ -6119,7 +6119,7 @@ static int _set_convenient_raid145610_segtype_to(const struct lv_segment *seg_fr
- 				return 0;
- 			}
+diff --git a/lib/activate/dev_manager.c b/lib/activate/dev_manager.c
+index 6b042fb..f4d602f 100644
+--- a/lib/activate/dev_manager.c
++++ b/lib/activate/dev_manager.c
+@@ -80,6 +80,9 @@ int read_only_lv(const struct logical_volume *lv, const struct lv_activate_opts
+ 	if (layer && lv_is_cow(lv))
+ 		return 0; /* Keep snapshot's COW volume writable */
  
--			seg_flag = SEG_RAID0_META;
-+			seg_flag = seg_is_raid5_n(seg_from) ? SEG_RAID0_META : SEG_RAID5_N;
++	if (lv_is_raid_image(lv) || lv_is_raid_metadata(lv))
++		return 0; /* Keep RAID SubLvs writable */
++
+ 	return (laopts->read_only || !(lv->status & LVM_WRITE));
+ }
  
- 		} else if (segtype_is_any_raid6(*segtype)) {
- 			if (seg_from->area_count < 4) {
-diff --git a/test/shell/lvconvert-raid5_to_raid10.sh b/test/shell/lvconvert-raid5_to_raid10.sh
-new file mode 100644
-index 0000000..cc0e468
---- /dev/null
-+++ b/test/shell/lvconvert-raid5_to_raid10.sh
-@@ -0,0 +1,63 @@
-+#!/usr/bin/env bash
-+
-+# Copyright (C) 2018 Red Hat, Inc. All rights reserved.
-+#
-+# This copyrighted material is made available to anyone wishing to use,
-+# modify, copy, or redistribute it subject to the terms and conditions
-+# of the GNU General Public License v.2.
-+#
-+# You should have received a copy of the GNU General Public License
-+# along with this program; if not, write to the Free Software Foundation,
-+# Inc., 51 Franklin Street, Fifth Floor, Boston, MA2110-1301 USA
-+
-+SKIP_WITH_LVMLOCKD=1
-+SKIP_WITH_LVMPOLLD=1
-+
-+. lib/inittest
-+
-+which mkfs.ext4 || skip
-+aux have_raid 1 13 2 || skip
-+
-+aux prepare_vg 6
-+
-+#
-+# Test multi step raid5 -> raid10 conversion
-+#
-+
-+# Create raid5(_ls) LV
-+lvcreate -y --type raid5 -i 3 -L 16M -R 256K -n $lv1 $vg
-+check lv_field $vg/$lv1 segtype "raid5"
-+check lv_field $vg/$lv1 stripes 4
-+check lv_field $vg/$lv1 data_stripes 3
-+check lv_field $vg/$lv1 region_size "256.00k"
-+echo y|mkfs -t ext4 $DM_DEV_DIR/$vg/$lv1
-+fsck -fn $DM_DEV_DIR/$vg/$lv1
-+aux wait_for_sync $vg $lv1
-+fsck -fn $DM_DEV_DIR/$vg/$lv1
-+
-+# Convert raid5 -> raid10 (first step raid5 -> raid5_n)
-+lvconvert -y --ty raid10 $vg/$lv1
-+fsck -fn $DM_DEV_DIR/$vg/$lv1
-+check lv_field $vg/$lv1 segtype "raid5_n"
-+check lv_field $vg/$lv1 stripes 4
-+check lv_field $vg/$lv1 data_stripes 3
-+check lv_field $vg/$lv1 region_size "256.00k"
-+aux wait_for_sync $vg $lv1
-+fsck -fn $DM_DEV_DIR/$vg/$lv1
-+
-+# Convert raid5 -> raid10 (second step raid5_n -> raid0_meta)
-+lvconvert -y --ty raid10 $vg/$lv1
-+check lv_field $vg/$lv1 segtype "raid0_meta"
-+check lv_field $vg/$lv1 stripes 3
-+check lv_field $vg/$lv1 data_stripes 3
-+fsck -fn $DM_DEV_DIR/$vg/$lv1
-+
-+# Convert raid5 -> raid10 (third + last step raid0_meta -> raid10)
-+lvconvert -y --ty raid10 -R 256K $vg/$lv1
-+fsck -fn $DM_DEV_DIR/$vg/$lv1
-+check lv_field $vg/$lv1 segtype "raid10"
-+check lv_field $vg/$lv1 stripes 6
-+check lv_field $vg/$lv1 data_stripes 3
-+check lv_field $vg/$lv1 region_size "256.00k"
-+
-+vgremove -ff $vg
 
 
