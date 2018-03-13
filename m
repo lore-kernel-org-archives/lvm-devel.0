@@ -1,77 +1,63 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Tue, 13 Mar 2018 08:05:21 -0400
-Subject: master - dmsetup: report close as debug
-Message-ID: <201803131205.w2DC5LML002770@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Tue, 13 Mar 2018 08:05:24 -0400
+Subject: master - cleanup: matching signess
+Message-ID: <201803131205.w2DC5ORD002792@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=49a8c786d5fdbf79ac60f2720d4e1433146d14f4
-Commit:        49a8c786d5fdbf79ac60f2720d4e1433146d14f4
-Parent:        06c1f71897273558b5ffe607ceaee6d51576b861
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=e9cadbe105b7a449d98598a9329a170bce2d689e
+Commit:        e9cadbe105b7a449d98598a9329a170bce2d689e
+Parent:        49a8c786d5fdbf79ac60f2720d4e1433146d14f4
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Mon Mar 12 23:01:52 2018 +0100
+AuthorDate:    Sun Mar 11 21:08:07 2018 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Tue Mar 13 12:58:57 2018 +0100
 
-dmsetup: report close as debug
+cleanup: matching signess
 
-Since close() failures are not causing command errors,
-issue error via debug log stream only.
 ---
- tools/dmsetup.c |   10 +++++-----
- 1 files changed, 5 insertions(+), 5 deletions(-)
+ lib/cache/lvmetad.c |    2 +-
+ tools/command.c     |    5 +++--
+ 2 files changed, 4 insertions(+), 3 deletions(-)
 
-diff --git a/tools/dmsetup.c b/tools/dmsetup.c
-index c866cd6..0d5b713 100644
---- a/tools/dmsetup.c
-+++ b/tools/dmsetup.c
-@@ -5437,7 +5437,7 @@ static int _stats_create_file(CMD_ARGS)
+diff --git a/lib/cache/lvmetad.c b/lib/cache/lvmetad.c
+index b266152..589b48e 100644
+--- a/lib/cache/lvmetad.c
++++ b/lib/cache/lvmetad.c
+@@ -1677,7 +1677,7 @@ int lvmetad_pv_found(struct cmd_context *cmd, const struct id *pvid, struct devi
+ 
+ 	if (vg && result) {
+ 		seqno_after = daemon_reply_int(reply, "seqno_after", -1);
+-		if ((seqno_after != vg->seqno) ||
++		if ((seqno_after != (int) vg->seqno) ||
+ 		    (seqno_after != daemon_reply_int(reply, "seqno_before", -1)))
+ 			log_warn("WARNING: Inconsistent metadata found for VG %s", vg->name);
  	}
+diff --git a/tools/command.c b/tools/command.c
+index 10efedb..fafbaa9 100644
+--- a/tools/command.c
++++ b/tools/command.c
+@@ -2927,7 +2927,8 @@ static void _print_man_option_desc(struct command_name *cname, int opt_enum)
+ 	char buf[DESC_LINE];
+ 	int started_cname = 0;
+ 	int line_count = 0;
+-	int di, bi = 0;
++	int bi = 0;
++	unsigned di;
  
- 	if (close(fd))
--		log_error("Error closing %s.", abspath);
-+		log_sys_debug("close", abspath);
+ 	if (desc[0] != '#') {
+ 		printf("%s", desc);
+@@ -3246,7 +3247,7 @@ static void _print_man_all_positions_desc(struct command_name *cname)
+ static void _print_desc_man(const char *desc)
+ {
+ 	char buf[DESC_LINE] = {0};
+-	int di = 0;
++	unsigned di;
+ 	int bi = 0;
  
- 	fd = -1;
- 
-@@ -5466,7 +5466,7 @@ bad:
- 	dm_free(bounds);
- 
- 	if ((fd > -1) && close(fd))
--		log_error("Error closing %s", path);
-+		log_sys_debug("close", path);
- 
- 	if (dms)
- 		dm_stats_destroy(dms);
-@@ -6065,7 +6065,7 @@ static int _stats_update_file(CMD_ARGS)
- 
- out:
- 	if (close(fd))
--		log_error("Error closing %s", abspath);
-+		log_sys_debug("close", abspath);
- 
- 	dm_free(regions);
- 	dm_free(abspath);
-@@ -6076,7 +6076,7 @@ bad:
- 	dm_free(abspath);
- 
- 	if ((fd > -1) && close(fd))
--		log_error("Error closing %s", path);
-+		log_sys_debug("close", path);
- 
- 	dm_stats_destroy(dms);
- 
-@@ -6614,7 +6614,7 @@ bad:
- 	if (fd > -1 && close(fd))
- 		log_sys_error("close", file);
- 
--	return_0;
-+	return 0;
- }
- 
- static int _process_losetup_switches(const char *base, int *argcp, char ***argvp,
+ 	for (di = 0; di < strlen(desc); di++) {
 
 
