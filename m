@@ -1,241 +1,88 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Tue, 13 Mar 2018 08:02:39 -0400
-Subject: master - mirror: correct locking for mirror log initialization
-Message-ID: <201803131202.w2DC2dV0002015@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Tue, 13 Mar 2018 08:03:13 -0400
+Subject: master - cleanup: all tests needs target_type
+Message-ID: <201803131203.w2DC3DKq002127@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=29b2cfba06ee849774025c50599edb1c7587b7d9
-Commit:        29b2cfba06ee849774025c50599edb1c7587b7d9
-Parent:        1bd57b4c1d4a6d715d24ab5dc162c350b97fc613
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=a8a579b154432ea3438a8844a724c5a9f3d2548a
+Commit:        a8a579b154432ea3438a8844a724c5a9f3d2548a
+Parent:        0646fd465eef51f3cfbd2219a0992af27d61ae14
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Mar 13 12:48:36 2018 +0100
+AuthorDate:    Thu Mar 8 13:01:12 2018 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Tue Mar 13 12:58:27 2018 +0100
+CommitterDate: Tue Mar 13 12:53:59 2018 +0100
 
-mirror: correct locking for mirror log initialization
+cleanup: all tests needs target_type
 
-The code was not acking proper lock holding LVs when trying to
-initialize mirror log to predefined values.
+Simplify code.
 ---
- WHATS_NEW             |    1 +
- lib/metadata/mirror.c |  103 +++++++++++++++++--------------------------------
- 2 files changed, 37 insertions(+), 67 deletions(-)
+ lib/activate/dev_manager.c |   19 +++++++++++++------
+ 1 files changed, 13 insertions(+), 6 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index 1d9e61c..faf43fe 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.02.178 - 
- =====================================
-+  Enhance mirror log initialization for old mirror target.
-   Skip private crypto and stratis devices.
-   Skip frozen raid devices from scanning.
-   Activate RAID SubLVs on read_only_volume_list readwrite
-diff --git a/lib/metadata/mirror.c b/lib/metadata/mirror.c
-index 6419b5c..d3ced60 100644
---- a/lib/metadata/mirror.c
-+++ b/lib/metadata/mirror.c
-@@ -317,8 +317,13 @@ static int _init_mirror_log(struct cmd_context *cmd,
- 			    struct dm_list *tagsl, int remove_on_failure)
- {
- 	struct dm_str_list *sl;
--	uint64_t orig_status = log_lv->status;
--	int was_active = 0;
+diff --git a/lib/activate/dev_manager.c b/lib/activate/dev_manager.c
+index f4d602f..e0d1fa1 100644
+--- a/lib/activate/dev_manager.c
++++ b/lib/activate/dev_manager.c
+@@ -448,7 +448,11 @@ static int _ignore_suspended_snapshot_component(struct device *dev)
+ 
+ 	do {
+ 		next = dm_get_next_target(dmt, next, &start, &length, &target_type, &params);
+-		if (!target_type || !strcmp(target_type, TARGET_NAME_SNAPSHOT)) {
 +
-+	if (log_lv != lv_lock_holder(log_lv) || !lv_is_visible(log_lv)) {
-+		/* Expect fully visible device for init */
-+		log_error(INTERNAL_ERROR "Log LV %s is not top level LV for initialization.",
-+			  display_lvname(log_lv));
-+		return 0;
-+	}
- 
- 	if (test_mode()) {
- 		log_verbose("Test mode: Skipping mirror log initialisation.");
-@@ -331,53 +336,22 @@ static int _init_mirror_log(struct cmd_context *cmd,
- 		return 0;
- 	}
- 
--	/* If the LV is active, deactivate it first. */
--	if (lv_is_active(log_lv)) {
--		(void) deactivate_lv(cmd, log_lv);
--		/*
--		 * FIXME: workaround to fail early
--		 * Ensure that log is really deactivated because deactivate_lv
--		 * on cluster do not fail if there is log_lv with different UUID.
--		 */
--		if (lv_is_active(log_lv)) {
--			log_error("Aborting. Unable to deactivate mirror log.");
--			goto revert_new_lv;
--		}
--		was_active = 1;
--	}
--
--	/* Temporary make it visible for set_lv() */
--	lv_set_visible(log_lv);
--
- 	/* Temporary tag mirror log for activation */
- 	dm_list_iterate_items(sl, tagsl)
- 		if (!str_list_add(cmd->mem, &log_lv->tags, sl->str)) {
- 			log_error("Aborting. Unable to tag mirror log.");
--			goto activate_lv;
-+			return 0;
- 		}
- 
- 	/* store mirror log on disk(s) */
- 	if (!vg_write(log_lv->vg) || !vg_commit(log_lv->vg))
--		goto activate_lv;
--
--	backup(log_lv->vg);
--
--	/* Wait for events following any deactivation before reactivating */
--	if (!sync_local_dev_names(cmd)) {
--		log_error("Aborting. Failed to sync local devices before initialising mirror log %s.",
--			  display_lvname(log_lv));
--		goto revert_new_lv;
--	}
-+		return_0;
- 
--	if (!activate_lv(cmd, log_lv)) {
-+	if (!activate_lv_excl_local(cmd, log_lv)) {
- 		log_error("Aborting. Failed to activate mirror log.");
- 		goto revert_new_lv;
- 	}
- 
--	/* Remove the temporary tags */
--	dm_list_iterate_items(sl, tagsl)
--		str_list_del(&log_lv->tags, sl->str);
--
- 	if (activation()) {
- 		if (!wipe_lv(log_lv, (struct wipe_params)
- 			     { .do_zero = 1, .zero_sectors = log_lv->size,
-@@ -385,23 +359,29 @@ static int _init_mirror_log(struct cmd_context *cmd,
- 			log_error("Aborting. Failed to wipe mirror log.");
- 			goto deactivate_and_revert_new_lv;
- 		}
--	}
- 
--	if (activation() && !_write_log_header(cmd, log_lv)) {
--		log_error("Aborting. Failed to write mirror log header.");
--		goto deactivate_and_revert_new_lv;
-+		if (!_write_log_header(cmd, log_lv)) {
-+			log_error("Aborting. Failed to write mirror log header.");
-+			goto deactivate_and_revert_new_lv;
-+		}
- 	}
- 
- 	if (!deactivate_lv(cmd, log_lv)) {
- 		log_error("Aborting. Failed to deactivate mirror log. "
- 			  "Manual intervention required.");
--		return 0;
-+		goto revert_new_lv;
- 	}
- 
--	lv_set_hidden(log_lv);
-+	/* Wait for events following any deactivation before reactivating */
-+	if (!sync_local_dev_names(cmd)) {
-+		log_error("Aborting. Failed to sync local devices before initialising mirror log %s.",
-+			  display_lvname(log_lv));
-+		goto revert_new_lv;
-+	}
- 
--	if (was_active && !activate_lv(cmd, log_lv))
--		return_0;
-+	/* Remove the temporary tags */
-+	dm_list_iterate_items(sl, tagsl)
-+		str_list_del(&log_lv->tags, sl->str);
- 
- 	return 1;
- 
-@@ -413,8 +393,6 @@ deactivate_and_revert_new_lv:
- 	}
- 
- revert_new_lv:
--	log_lv->status = orig_status;
--
- 	dm_list_iterate_items(sl, tagsl)
- 		str_list_del(&log_lv->tags, sl->str);
- 
-@@ -430,10 +408,6 @@ revert_new_lv:
- 	else
- 		backup(log_lv->vg);
- 
--activate_lv:
--	if (was_active && !remove_on_failure && !activate_lv(cmd, log_lv))
--		return_0;
--
- 	return 0;
- }
- 
-@@ -657,6 +631,7 @@ static int _split_mirror_images(struct logical_volume *lv,
- 	struct lv_list *lvl;
- 	struct cmd_context *cmd = lv->vg->cmd;
- 	char layer_name[NAME_LEN], format[NAME_LEN];
-+	int act;
- 
- 	if (!lv_is_mirrored(lv)) {
- 		log_error("Unable to split non-mirrored LV %s.",
-@@ -791,30 +766,22 @@ static int _split_mirror_images(struct logical_volume *lv,
- 	 * Suspend and resume the mirror - this includes all
- 	 * the sub-LVs and soon-to-be-split sub-LVs
- 	 */
--	if (!lv_update_and_reload(mirrored_seg->lv))
-+	if (!lv_update_and_reload(lv))
- 		return_0;
- 
--	/*
--	 * Recycle newly split LV so it is properly renamed.
--	 *   Cluster requires the extra deactivate/activate calls.
--	 */
--	if (vg_is_clustered(lv->vg) &&
--	    (!deactivate_lv(cmd, new_lv) ||
--	     !_activate_lv_like_model(lv, new_lv))) {
--		log_error("Failed to rename newly split LV in the kernel");
--		return 0;
--	}
--	if (!suspend_lv(cmd, new_lv) || !resume_lv(cmd, new_lv)) {
-+	act = lv_is_active(lv_lock_holder(lv));
++		if (!target_type)
++			continue;
 +
-+	if (act && !_activate_lv_like_model(lv, new_lv)) {
- 		log_error("Failed to rename newly split LV in the kernel");
- 		return 0;
- 	}
++		if (!strcmp(target_type, TARGET_NAME_SNAPSHOT)) {
+ 			if (!params || sscanf(params, "%d:%d %d:%d", &major1, &minor1, &major2, &minor2) != 4) {
+ 				log_warn("WARNING: Incorrect snapshot table found for %d:%d.",
+ 					 (int)MAJOR(dev->dev), (int)MINOR(dev->dev));
+@@ -615,7 +619,10 @@ int device_is_usable(struct device *dev, struct dev_usable_check_params check)
+ 		next = dm_get_next_target(dmt, next, &start, &length,
+ 					  &target_type, &params);
  
- 	/* Remove original mirror layer if it has been converted to linear */
--	if (sub_lv && !_delete_lv(lv, sub_lv, 1))
-+	if (sub_lv && !_delete_lv(lv, sub_lv, act))
- 		return_0;
- 
- 	/* Remove the log if it has been converted to linear */
--	if (detached_log_lv && !_delete_lv(lv, detached_log_lv, 1))
-+	if (detached_log_lv && !_delete_lv(lv, detached_log_lv, act))
- 		return_0;
- 
- 	return 1;
-@@ -1051,15 +1018,17 @@ static int _remove_mirror_images(struct logical_volume *lv,
- 
- 	/* Mirror with only 1 area is 'in sync'. */
- 	if (new_area_count == 1 && is_temporary_mirror_layer(lv)) {
--		if (first_seg(lv)->log_lv &&
--		    !_init_mirror_log(lv->vg->cmd, first_seg(lv)->log_lv,
-+		detached_log_lv = detach_mirror_log(mirrored_seg);
-+		if (!_init_mirror_log(lv->vg->cmd, detached_log_lv,
- 				      1, &lv->tags, 0)) {
- 			/* As a result, unnecessary sync may run after
- 			 * collapsing. But safe.*/
- 			log_error("Failed to initialize log device %s.",
--				  display_lvname(first_seg(lv)->log_lv));
-+				  display_lvname(detached_log_lv));
- 			return 0;
+-		if (check.check_blocked && target_type && !strcmp(target_type, TARGET_NAME_MIRROR)) {
++		if (!target_type)
++			continue;
++
++		if (check.check_blocked && !strcmp(target_type, TARGET_NAME_MIRROR)) {
+ 			if (ignore_lvm_mirrors()) {
+ 				log_debug_activation("%s: Scanning mirror devices is disabled.", dev_name(dev));
+ 				goto out;
+@@ -649,27 +656,27 @@ int device_is_usable(struct device *dev, struct dev_usable_check_params check)
+ 		 * correctly, not just snapshots but any cobimnation possible
+ 		 * in a stack - use proper dm tree to check this instead.
+ 		 */
+-		if (check.check_suspended && target_type &&
++		if (check.check_suspended &&
+ 		    (!strcmp(target_type, TARGET_NAME_SNAPSHOT) || !strcmp(target_type, TARGET_NAME_SNAPSHOT_ORIGIN)) &&
+ 		    _ignore_suspended_snapshot_component(dev)) {
+ 			log_debug_activation("%s: %s device %s not usable.", dev_name(dev), target_type, name);
+ 			goto out;
  		}
-+		if (!attach_mirror_log(mirrored_seg, detached_log_lv))
-+			return_0;
- 	}
  
- 	if (removed)
+-		if (target_type && !strcmp(target_type, TARGET_NAME_SNAPSHOT) &&
++		if (!strcmp(target_type, TARGET_NAME_SNAPSHOT) &&
+ 		    _ignore_invalid_snapshot(params)) {
+ 			log_debug_activation("%s: Invalid %s device %s not usable.", dev_name(dev), target_type, name);
+ 			goto out;
+ 		}
+ 
+ 		/* TODO: extend check struct ? */
+-		if (target_type && !strcmp(target_type, TARGET_NAME_THIN) &&
++		if (!strcmp(target_type, TARGET_NAME_THIN) &&
+ 		    !_ignore_unusable_thins(dev)) {
+ 			log_debug_activation("%s: %s device %s not usable.", dev_name(dev), target_type, name);
+ 			goto out;
+ 		}
+ 
+-		if (target_type && strcmp(target_type, TARGET_NAME_ERROR))
++		if (strcmp(target_type, TARGET_NAME_ERROR))
+ 			only_error_target = 0;
+ 	} while (next);
+ 
 
 
