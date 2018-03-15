@@ -1,77 +1,78 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Thu, 15 Mar 2018 06:04:32 -0400
-Subject: master - libdm-stats: fix error messages
-Message-ID: <201803151004.w2FA4WRH023619@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Thu, 15 Mar 2018 06:04:37 -0400
+Subject: master - locking: introduce prioritized_section
+Message-ID: <201803151004.w2FA4bZ3023641@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=043f58452a0a2c136dd6a90f1d60b063ae17a866
-Commit:        043f58452a0a2c136dd6a90f1d60b063ae17a866
-Parent:        a082ce2613f3a9587b0109df0bbc3ebb7e6b1e75
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=6365f011b00357e7f67fbe3aca0ca00ccf17ba66
+Commit:        6365f011b00357e7f67fbe3aca0ca00ccf17ba66
+Parent:        043f58452a0a2c136dd6a90f1d60b063ae17a866
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed Mar 14 21:00:46 2018 +0100
+AuthorDate:    Thu Mar 15 09:07:24 2018 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Thu Mar 15 10:56:31 2018 +0100
+CommitterDate: Thu Mar 15 10:59:42 2018 +0100
 
-libdm-stats: fix error messages
+locking: introduce prioritized_section
 
-When function dm_stats_populate() returns 0 it's an error and needs
-log_error() message -  function can't have 'success' returning 0 or
-error without reasons.
+Introduce prioritized_section() as a closer match to previous logic
+of critical_section() that has been held over longer sequence of
+ioctl commands - essentially it's matching operation on a single
+cookie.
+
+While 'critical_section()' now corresponds to locked memory - we hold
+this memory only between suspend/resume thus notion of 'cookie' was
+lost.
+
+This patch restores some logic unintentionaly lost with dropping
+memory locking for just activation/deactivation calls.
 ---
- WHATS_NEW_DM        |    1 +
- libdm/libdm-stats.c |   11 ++++++-----
- 2 files changed, 7 insertions(+), 5 deletions(-)
+ WHATS_NEW        |    1 +
+ lib/mm/memlock.c |    5 +++++
+ lib/mm/memlock.h |    1 +
+ 3 files changed, 7 insertions(+), 0 deletions(-)
 
-diff --git a/WHATS_NEW_DM b/WHATS_NEW_DM
-index 2fafe74..34c6833 100644
---- a/WHATS_NEW_DM
-+++ b/WHATS_NEW_DM
+diff --git a/WHATS_NEW b/WHATS_NEW
+index a545a5d..da5f5f4 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
 @@ -1,5 +1,6 @@
- Version 1.02.147 - 
+ Version 2.02.178 - 
  =====================================
-+  Add missing log_error() into dm_stats_populate() returning 0.
-   Avoid calling dm_stats_populat() for DM devices without any stats regions.
-   Support DM_DEBUG_WITH_LINE_NUMBERS envvar for debug msg with source:line.
-   Configured command for thin pool threshold handling gets whole environment.
-diff --git a/libdm/libdm-stats.c b/libdm/libdm-stats.c
-index c74444a..94ad380 100644
---- a/libdm/libdm-stats.c
-+++ b/libdm/libdm-stats.c
-@@ -403,7 +403,7 @@ static int _stats_bound(const struct dm_stats *dms)
- 	if (dms->bind_major > 0 || dms->bind_name || dms->bind_uuid)
- 		return 1;
- 	/* %p format specifier expects a void pointer. */
--	log_debug("Stats handle at %p is not bound.", dms);
-+	log_error("Stats handle at %p is not bound.", dms);
- 	return 0;
++  Add prioritized_section() to restore cookie boundaries (2.02.177).
+   Enhance error messages when read error happens.
+   Enhance mirror log initialization for old mirror target.
+   Skip private crypto and stratis devices.
+diff --git a/lib/mm/memlock.c b/lib/mm/memlock.c
+index 897bf10..b55cc97 100644
+--- a/lib/mm/memlock.c
++++ b/lib/mm/memlock.c
+@@ -634,6 +634,11 @@ int critical_section(void)
+ 	return _critical_section;
  }
  
-@@ -2336,6 +2336,11 @@ int dm_stats_populate(struct dm_stats *dms, const char *program_id,
- 		return 0;
- 	}
- 
-+	if (!dms->nr_regions) {
-+		log_error("No regions registered.");
-+		return 0;
-+	}
++int prioritized_section(void)
++{
++	return _priority_raised;
++}
 +
- 	/* allow zero-length program_id for populate */
- 	if (!program_id)
- 		program_id = dms->program_id;
-@@ -2347,10 +2352,6 @@ int dm_stats_populate(struct dm_stats *dms, const char *program_id,
- 		goto_bad;
- 	}
- 
--	/* successful list but no regions registered */
--	if (!dms->nr_regions)
--		return 0;
--
- 	dms->walk_flags = DM_STATS_WALK_REGION;
- 	dm_stats_walk_start(dms);
- 	do {
+ /*
+  * The memlock_*_daemon functions will force the mlockall() call that we need
+  * to stay in memory, but they will have no effect on device scans (unlike
+diff --git a/lib/mm/memlock.h b/lib/mm/memlock.h
+index ef2ebcb..d0807d5 100644
+--- a/lib/mm/memlock.h
++++ b/lib/mm/memlock.h
+@@ -34,6 +34,7 @@ struct cmd_context;
+ void critical_section_inc(struct cmd_context *cmd, const char *reason);
+ void critical_section_dec(struct cmd_context *cmd, const char *reason);
+ int critical_section(void);
++int prioritized_section(void);
+ void memlock_inc_daemon(struct cmd_context *cmd);
+ void memlock_dec_daemon(struct cmd_context *cmd);
+ int memlock_count_daemon(void);
 
 
