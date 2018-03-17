@@ -1,81 +1,55 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Sat, 17 Mar 2018 18:35:10 -0400
-Subject: master - cleanup: use zalloc
-Message-ID: <201803172235.w2HMZAAP011297@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Sat, 17 Mar 2018 18:35:13 -0400
+Subject: master - tests: test striped COW LV
+Message-ID: <201803172235.w2HMZDtQ011319@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=c82ab92d04acec41f9a3550e2ee7970d3937566e
-Commit:        c82ab92d04acec41f9a3550e2ee7970d3937566e
-Parent:        5c40e81a7e6a42e40a49c89758f8e9fd269de8d7
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=9e7b00a3b9cecd43c7a339ee4ae5fb174179d3dd
+Commit:        9e7b00a3b9cecd43c7a339ee4ae5fb174179d3dd
+Parent:        c82ab92d04acec41f9a3550e2ee7970d3937566e
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Sat Mar 17 14:14:25 2018 +0100
+AuthorDate:    Sat Mar 17 14:26:15 2018 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Sat Mar 17 23:33:58 2018 +0100
 
-cleanup: use zalloc
+tests: test striped COW LV
 
-Replace malloc() + memset()   with zalloc().
 ---
- daemons/lvmetad/lvmetad-core.c |    4 +---
- libdm/datastruct/hash.c        |    8 +++-----
- libdm/ioctl/libdm-iface.c      |    4 +---
- 3 files changed, 5 insertions(+), 11 deletions(-)
+ test/shell/lvconvert-snapshot.sh |    6 +++++-
+ 1 files changed, 5 insertions(+), 1 deletions(-)
 
-diff --git a/daemons/lvmetad/lvmetad-core.c b/daemons/lvmetad/lvmetad-core.c
-index 66a6b82..f4f5f42 100644
---- a/daemons/lvmetad/lvmetad-core.c
-+++ b/daemons/lvmetad/lvmetad-core.c
-@@ -2528,10 +2528,8 @@ inval:
+diff --git a/test/shell/lvconvert-snapshot.sh b/test/shell/lvconvert-snapshot.sh
+index f751c30..ecf6b3c 100644
+--- a/test/shell/lvconvert-snapshot.sh
++++ b/test/shell/lvconvert-snapshot.sh
+@@ -17,7 +17,7 @@ SKIP_WITH_LVMPOLLD=1
  
- 	info = dm_hash_lookup(s->vgid_to_info, uuid);
- 	if (!info) {
--		info = malloc(sizeof(struct vg_info));
--		if (!info)
-+		if (!(info = dm_zalloc(sizeof(struct vg_info))))
- 			goto bad;
--		memset(info, 0, sizeof(struct vg_info));
- 		if (!dm_hash_insert(s->vgid_to_info, uuid, (void*)info))
- 			goto bad;
- 	}
-diff --git a/libdm/datastruct/hash.c b/libdm/datastruct/hash.c
-index 6df3efe..fb153ce 100644
---- a/libdm/datastruct/hash.c
-+++ b/libdm/datastruct/hash.c
-@@ -102,11 +102,9 @@ struct dm_hash_table *dm_hash_create(unsigned size_hint)
+ . lib/inittest
  
- 	hc->num_slots = new_size;
- 	len = sizeof(*(hc->slots)) * new_size;
--	if (!(hc->slots = dm_malloc(len))) {
--		stack;
--		goto bad;
--	}
--	memset(hc->slots, 0, len);
-+	if (!(hc->slots = dm_zalloc(len)))
-+		goto_bad;
+-aux prepare_pvs 1
++aux prepare_pvs 2
+ get_devs
+ 
+ vgcreate -s 1k "$vg" "${DEVICES[@]}"
+@@ -30,6 +30,7 @@ lvcreate -L1 -s -n $lv3 $vg/$lv2
+ lvcreate -l1 -n $lv4 $vg
+ lvcreate -L1 -n $lv5 $vg
+ lvcreate -L1 -n $lv6 $vg
++lvcreate -L1 -i2 -n $lv7 $vg
+ 
+ not lvconvert -s $vg/$lv1 $vg/not_exist
+ 
+@@ -60,4 +61,7 @@ grep "smaller" err
+ lvconvert --yes -s $vg/$lv2 $vg/$lv5
+ lvconvert --yes --type snapshot $vg/$lv2 $vg/$lv6
+ 
++# Striped LV is also supported
++lvconvert --yes --snapshot $vg/$lv2 $vg/$lv7
 +
- 	return hc;
- 
-       bad:
-diff --git a/libdm/ioctl/libdm-iface.c b/libdm/ioctl/libdm-iface.c
-index 8bee24b..3965be6 100644
---- a/libdm/ioctl/libdm-iface.c
-+++ b/libdm/ioctl/libdm-iface.c
-@@ -1156,11 +1156,9 @@ static struct dm_ioctl *_flatten(struct dm_task *dmt, unsigned repeat_count)
- 	while (repeat_count--)
- 		len *= 2;
- 
--	if (!(dmi = dm_malloc(len)))
-+	if (!(dmi = dm_zalloc(len)))
- 		return NULL;
- 
--	memset(dmi, 0, len);
--
- 	version = &_cmd_data_v4[dmt->type].version;
- 
- 	dmi->version[0] = (*version)[0];
+ vgremove -f $vg
 
 
