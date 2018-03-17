@@ -1,113 +1,57 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Sat, 17 Mar 2018 18:35:14 -0400
-Subject: master - tests: check activation of cache without cache_check
-Message-ID: <201803172235.w2HMZEcn011330@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Sat, 17 Mar 2018 19:37:10 -0400
+Subject: master - tests: use 4k extents
+Message-ID: <201803172337.w2HNbARN024439@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=e5b40e0488ae85e4adf8736e06a973666ea9280c
-Commit:        e5b40e0488ae85e4adf8736e06a973666ea9280c
-Parent:        9e7b00a3b9cecd43c7a339ee4ae5fb174179d3dd
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=08487a30983bfa4b3c0a7bcd9060657b6c1803ae
+Commit:        08487a30983bfa4b3c0a7bcd9060657b6c1803ae
+Parent:        e5b40e0488ae85e4adf8736e06a973666ea9280c
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Sat Mar 17 23:26:48 2018 +0100
+AuthorDate:    Sun Mar 18 00:30:43 2018 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Sat Mar 17 23:33:58 2018 +0100
+CommitterDate: Sun Mar 18 00:30:43 2018 +0100
 
-tests: check activation of cache without cache_check
+tests: use 4k extents
 
+Use 4K chunks since some older kernels are not capable
+to create striped volumes with smaller size.
+
+TODO: lvm2 should detect this ahead and avoid kernel
+reporting "Invalid chunk".
 ---
- test/shell/lvcreate-cache-no-tools.sh |   81 +++++++++++++++++++++++++++++++++
- 1 files changed, 81 insertions(+), 0 deletions(-)
+ test/shell/lvconvert-snapshot.sh |    8 +++++++-
+ 1 files changed, 7 insertions(+), 1 deletions(-)
 
-diff --git a/test/shell/lvcreate-cache-no-tools.sh b/test/shell/lvcreate-cache-no-tools.sh
-new file mode 100644
-index 0000000..72359e5
---- /dev/null
-+++ b/test/shell/lvcreate-cache-no-tools.sh
-@@ -0,0 +1,81 @@
-+#!/usr/bin/env bash
+diff --git a/test/shell/lvconvert-snapshot.sh b/test/shell/lvconvert-snapshot.sh
+index ecf6b3c..f18115d 100644
+--- a/test/shell/lvconvert-snapshot.sh
++++ b/test/shell/lvconvert-snapshot.sh
+@@ -30,7 +30,6 @@ lvcreate -L1 -s -n $lv3 $vg/$lv2
+ lvcreate -l1 -n $lv4 $vg
+ lvcreate -L1 -n $lv5 $vg
+ lvcreate -L1 -n $lv6 $vg
+-lvcreate -L1 -i2 -n $lv7 $vg
+ 
+ not lvconvert -s $vg/$lv1 $vg/not_exist
+ 
+@@ -61,6 +60,13 @@ grep "smaller" err
+ lvconvert --yes -s $vg/$lv2 $vg/$lv5
+ lvconvert --yes --type snapshot $vg/$lv2 $vg/$lv6
+ 
++vgremove -f $vg
 +
-+# Copyright (C) 2018 Red Hat, Inc. All rights reserved.
-+#
-+# This copyrighted material is made available to anyone wishing to use,
-+# modify, copy, or redistribute it subject to the terms and conditions
-+# of the GNU General Public License v.2.
-+#
-+# You should have received a copy of the GNU General Public License
-+# along with this program; if not, write to the Free Software Foundation,
-+# Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
++# FIXME: older stripe target can't handle 1K chunks
++vgcreate -s 4k "$vg" "${DEVICES[@]}"
++lvcreate -aey -L1 -n $lv2 $vg
++lvcreate -L1 -i2 -n $lv7 $vg
 +
-+# Exercise creation of cache without cache_check
-+
-+SKIP_WITH_LVMLOCKD=1
-+SKIP_WITH_LVMPOLLD=1
-+
-+. lib/inittest
-+
-+aux have_cache 1 3 0 || skip
-+
-+# FIXME: parallel cache metadata allocator is crashing when used value 8000!
-+aux prepare_vg 5 80000
-+
-+aux lvmconf 'global/cache_disabled_features = [ "policy_smq" ]' \
-+	    'global/cache_check_executable = "./fake-tool.sh"'
-+
-+rm -f fake-tool.sh
-+
-+lvcreate -l1 -n $lv1 $vg
-+lvcreate -H -l2 $vg/$lv1
-+
-+lvchange -an $vg |& tee out
-+grep "Check is skipped" out
-+
-+lvchange -ay $vg
-+grep "Check is skipped" out
-+
-+# prepare fake version of cache_check tool that reports old version
-+cat <<- EOF >fake-tool.sh
-+#!/bin/sh
-+echo "0.1.0"
-+exit 1
-+EOF
-+chmod +x fake-tool.sh
-+
-+lvchange -an $vg |& tee out
-+grep "upgrade" out
-+
-+lvchange -ay $vg
-+grep "upgrade" out
-+
-+# prepare fake version of cache_check tool that reports garbage
-+cat <<- EOF >fake-tool.sh
-+#!/bin/sh
-+echo "garbage"
-+exit 1
-+EOF
-+chmod +x fake-tool.sh
-+
-+lvchange -an $vg |& tee out
-+grep "parse" out
-+
-+lvchange -ay $vg
-+grep "parse" out
-+
-+# prepare fake version of cache_check tool with high version
-+cat <<- EOF >fake-tool.sh
-+#!/bin/sh
-+echo "9.0.0"
-+exit 1
-+EOF
-+chmod +x fake-tool.sh
-+
-+# Integrity check fails, but deactivation is OK
-+lvchange -an $vg |& tee out
-+grep "failed" out
-+# Activation must fail
-+fail lvchange -ay $vg
-+
-+vgremove -ff $vg
+ # Striped LV is also supported
+ lvconvert --yes --snapshot $vg/$lv2 $vg/$lv7
+ 
 
 
