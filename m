@@ -1,182 +1,95 @@
-From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Mon, 19 Mar 2018 07:09:52 -0400
-Subject: master - tests: update no tool test
-Message-ID: <201803191109.w2JB9q0l016337@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: Gang He <ghe@suse.com>
+Date: Fri, 23 Mar 2018 02:30:05 -0600
+Subject: Can't work normally after attaching disk volumes originally in a VG on another machine
+Message-ID: <5AB52B8D020000F9000B14B9@prv-mh.provo.novell.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=8c02cc9e8ffba777a92d798ca08c60e73dd2c109
-Commit:        8c02cc9e8ffba777a92d798ca08c60e73dd2c109
-Parent:        4e0c0417ce1af29ae5253bca7f1277e13e3c3ee6
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Mon Mar 19 10:26:50 2018 +0100
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Mon Mar 19 12:08:04 2018 +0100
+Hello List,
 
-tests: update no tool test
+Since I am new to LVM area, but I got a problem about LVM can't work normally after attaching disk volumes originally in a VG on another machine.
+Then, I sent this problem to the list, to see if we can get a fix or there has been a fix.
+The problem is very easy to reproduce,
+1) create two virtual machines(tb0307-nd1, tb0307-nd2), create two virtual disks.
+2) attach two virtual disks to VM1(tb0307-nd1).
+tb0307-nd1:/# lsblk
+NAME   MAJ:MIN RM  SIZE RO TYPE MOUNTPOINT
+sr0     11:0    1  4.3G  0 rom
+vda    254:0    0   40G  0 disk
+??vda1 254:1    0    4G  0 part [SWAP]
+??vda2 254:2    0 23.6G  0 part /
+??vda3 254:3    0 12.4G  0 part /home
+vdb    254:16   0   40G  0 disk
+vdc    254:32   0   20G  0 disk <<= disk1
+vdd    254:48   0   20G  0 disk <<= disk2
+3) pvcreate two virtual disks, and add them to vg1.
+tb0307-nd1:/# pvcreate /dev/vdc
+  Physical volume "/dev/vdc" successfully created.
+tb0307-nd1:/# pvcreate /dev/vdd
+  Physical volume "/dev/vdd" successfully created.
+tb0307-nd1:/# pvs
+  PV         VG Fmt  Attr PSize  PFree
+  /dev/vdc      lvm2 ---  20.00g 20.00g
+  /dev/vdd      lvm2 ---  20.00g 20.00g
+tb0307-nd1:/# vgcreate vg1 /dev/vdc /dev/vdd
+4) disconnect two virtual disks from VM1, and attach disk1 to VM2(tb0307-nd2).
+5) delete vg1, create vg2, and add disk1 to vg2.
+tb0307-nd2:~ # pvs
+  WARNING: Device for PV t6gjHU-dtY4-th5O-A0mr-5OEC-R1ZK-TPQgIh not found or rejected by a filter.
+  PV         VG  Fmt  Attr PSize  PFree
+  /dev/vdc   vg1 lvm2 a--  20.00g 20.00g
+  [unknown]  vg1 lvm2 a-m  20.00g 20.00g
+tb0307-nd2:~ # pvremove /dev/vdc
+  WARNING: Device for PV t6gjHU-dtY4-th5O-A0mr-5OEC-R1ZK-TPQgIh not found or rejected by a filter.
+  PV /dev/vdc is used by VG vg1 so please use vgreduce first.
+  (If you are certain you need pvremove, then confirm by using --force twice.)
+  /dev/vdc: physical volume label not removed.
+tb0307-nd2:~ # vgreduce --removemissing vg1
+  WARNING: Device for PV t6gjHU-dtY4-th5O-A0mr-5OEC-R1ZK-TPQgIh not found or rejected by a filter.
+  Wrote out consistent volume group vg1.
+tb0307-nd2:~ # pvs
+  PV         VG  Fmt  Attr PSize  PFree
+  /dev/vdc   vg1 lvm2 a--  20.00g 20.00g
+tb0307-nd2:~ # vgremove vg1
+  Volume group "vg1" successfully removed
+tb0307-nd2:~ # vgcreate vg2 /dev/vdc
+  Volume group "vg2" successfully created
+tb0307-nd2:~ # vgs
+  VG  #PV #LV #SN Attr   VSize  VFree
+  vg2   1   0   0 wz--n- 20.00g 20.00g
+tb0307-nd2:~ # pvs
+  PV         VG  Fmt  Attr PSize  PFree
+  /dev/vdc   vg2 lvm2 a--  20.00g 20.00g
 
-Correct testing with format 1 and mq policy.
+6) attach disk2 to VM2(tb0307-nd2), the vg on VM2 looks abnormal.
+tb0307-nd2:~ # pvs
+  WARNING: Device for PV JJOL4H-kc0j-jyTD-LDwl-71FZ-dHKM-YoFtNV not found or rejected by a filter.
+  PV         VG  Fmt  Attr PSize  PFree
+  /dev/vdc   vg2 lvm2 a--  20.00g 20.00g
+  /dev/vdd   vg1 lvm2 a--  20.00g 20.00g
+  [unknown]  vg1 lvm2 a-m  20.00g 20.00g
+tb0307-nd2:~ # vgs
+  WARNING: Device for PV JJOL4H-kc0j-jyTD-LDwl-71FZ-dHKM-YoFtNV not found or rejected by a filter.
+  VG  #PV #LV #SN Attr   VSize  VFree
+  vg1   2   0   0 wz-pn- 39.99g 39.99g
+  vg2   1   0   0 wz--n- 20.00g 20.00g
 
-Add testing of 'smq'
+7) reboot VM2, the result looks worse (vdc disk belongs to two vg).
+tb0307-nd2:/mnt/shared # pvs
+  PV         VG  Fmt  Attr PSize  PFree
+  /dev/vdc   vg1 lvm2 a--  20.00g     0
+  /dev/vdc   vg2 lvm2 a--  20.00g 10.00g
+  /dev/vdd   vg1 lvm2 a--  20.00g  9.99g
 
-Fix testing with clvmd - where logged message is part of clvmd log
-and we can only check command status.
----
- test/shell/lvcreate-cache-no-tools.sh |  121 ++++++++++++++++++++++-----------
- 1 files changed, 80 insertions(+), 41 deletions(-)
 
-diff --git a/test/shell/lvcreate-cache-no-tools.sh b/test/shell/lvcreate-cache-no-tools.sh
-index 72359e5..c38ecfd 100644
---- a/test/shell/lvcreate-cache-no-tools.sh
-+++ b/test/shell/lvcreate-cache-no-tools.sh
-@@ -17,65 +17,104 @@ SKIP_WITH_LVMPOLLD=1
- 
- . lib/inittest
- 
-+if test -e LOCAL_CLVMD ; then
-+# In cluster, the error from activation is logged in clvmd
-+# so we can only check resulting state of activation
-+	GREP=echo
-+else
-+	GREP=grep
-+fi
-+
-+make_fake_() {
-+	cat <<- EOF >fake-tool.sh
-+#!/bin/sh
-+echo "$1"
-+exit 1
-+EOF
-+	chmod +x fake-tool.sh
-+}
-+
-+check_change_() {
-+	lvchange -an $vg |& tee out
-+	"$GREP" "$1" out
-+
-+	lvchange -ay $vg |& tee out
-+	"$GREP" "$1" out
-+}
-+
-+# Integrity check fails, but deactivation is OK
-+check_change_failed_() {
-+	lvchange -an $vg |& tee out
-+	"$GREP" "failed" out
-+
-+	# Activation must fail
-+	fail lvchange -ay $vg |& tee out
-+	"$GREP" "failed" out
-+
-+	cat <<- EOF >fake-tool.sh
-+#!/bin/sh
-+exit
-+EOF
-+	chmod +x fake-tool.sh
-+	# Activate without any check
-+	lvchange -ay $vg
-+}
-+
-+
- aux have_cache 1 3 0 || skip
- 
- # FIXME: parallel cache metadata allocator is crashing when used value 8000!
- aux prepare_vg 5 80000
- 
--aux lvmconf 'global/cache_disabled_features = [ "policy_smq" ]' \
--	    'global/cache_check_executable = "./fake-tool.sh"'
--
-+aux lvmconf 'global/cache_check_executable = "./fake-tool.sh"'
- rm -f fake-tool.sh
- 
--lvcreate -l1 -n $lv1 $vg
--lvcreate -H -l2 $vg/$lv1
-+# On cache target that supports  V2
-+if aux have_cache 1 10 0 ; then
- 
--lvchange -an $vg |& tee out
--grep "Check is skipped" out
-+lvcreate -aey -l1 -n $lv1 $vg
-+lvcreate -H -l2 $vg/$lv1
- 
--lvchange -ay $vg
--grep "Check is skipped" out
-+check_change_ "Check is skipped"
-+vgcfgbackup -f /dev/shm/back
- 
- # prepare fake version of cache_check tool that reports old version
--cat <<- EOF >fake-tool.sh
--#!/bin/sh
--echo "0.1.0"
--exit 1
--EOF
--chmod +x fake-tool.sh
-+make_fake_ "0.1.0"
-+check_change_ "upgrade"
- 
--lvchange -an $vg |& tee out
--grep "upgrade" out
-+# prepare fake version of cache_check tool that reports garbage
-+make_fake_ "garbage"
-+check_change_ "parse"
- 
--lvchange -ay $vg
--grep "upgrade" out
-+# prepare fake version of cache_check tool with high version
-+make_fake_ "99.0.0"
-+check_change_failed_
- 
--# prepare fake version of cache_check tool that reports garbage
--cat <<- EOF >fake-tool.sh
--#!/bin/sh
--echo "garbage"
--exit 1
--EOF
--chmod +x fake-tool.sh
-+lvremove -f $vg
-+
-+fi
- 
--lvchange -an $vg |& tee out
--grep "parse" out
- 
--lvchange -ay $vg
--grep "parse" out
-+# On older cache target that supports only V1 format
-+aux lvmconf 'global/cache_disabled_features = [ "policy_smq" ]'
-+rm -f fake-tool.sh
-+
-+lvcreate -aey -l1 -n $lv1 $vg
-+lvcreate -H -l2 $vg/$lv1
-+
-+check_change_ "Check is skipped"
-+
-+# prepare fake version of cache_check tool that reports old version
-+make_fake_ "0.1.0"
-+check_change_failed_
-+
-+# prepare fake version of cache_check tool that reports garbage
-+make_fake_ "garbage"
-+check_change_failed_
- 
- # prepare fake version of cache_check tool with high version
--cat <<- EOF >fake-tool.sh
--#!/bin/sh
--echo "9.0.0"
--exit 1
--EOF
--chmod +x fake-tool.sh
-+make_fake_ "99.0.0"
-+check_change_failed_
- 
--# Integrity check fails, but deactivation is OK
--lvchange -an $vg |& tee out
--grep "failed" out
--# Activation must fail
--fail lvchange -ay $vg
- 
- vgremove -ff $vg
+It looks like LVM2 meta consistency problem? please help to take a look.
+
+Thanks
+Gang
+
+
 
 
