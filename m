@@ -1,41 +1,41 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Tue, 6 Mar 2018 09:46:02 -0500
-Subject: master - debug: update comment
-Message-ID: <201803061446.w26Ek2bJ026703@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Fri, 23 Mar 2018 12:25:42 -0400
+Subject: master - tests: handle setting better
+Message-ID: <201803231625.w2NGPgFk031907@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=6481471c9d74038da457b74ef1f2b0c15931bfa8
-Commit:        6481471c9d74038da457b74ef1f2b0c15931bfa8
-Parent:        b6e7a0b490a3fa2e43675a4d3fb3d25daaac831e
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=fe69731d31648af24383515c1c3bc323551d75e5
+Commit:        fe69731d31648af24383515c1c3bc323551d75e5
+Parent:        30975a3328a0d101dda935644349dac58e2fb97f
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Mar 2 15:06:36 2018 +0100
+AuthorDate:    Mon Mar 19 19:58:53 2018 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Tue Mar 6 15:40:34 2018 +0100
+CommitterDate: Fri Mar 23 17:25:00 2018 +0100
 
-debug: update comment
+tests: handle setting better
 
+When using 'make check...  LVM_TEST_AUX_TRACE=0'  make it behaving
+like other supported VARS in use so it's like disabled.
 ---
- lib/metadata/lv_manip.c |    2 +-
+ test/lib/aux.sh |    2 +-
  1 files changed, 1 insertions(+), 1 deletions(-)
 
-diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
-index d4a6107..915a032 100644
---- a/lib/metadata/lv_manip.c
-+++ b/lib/metadata/lv_manip.c
-@@ -4371,9 +4371,9 @@ static int _for_each_sub_lv(struct logical_volume *lv, int level,
- 	if (level++) {
- 		if (!(r = fn(lv, data)))
- 			return_0;
--		/* Only r == 1 lets you run for_each... */
- 		if (r == -1)
- 			return 1;
-+		/* Only r != -1 continues with for_each_sub_lv()... */
- 	}
+diff --git a/test/lib/aux.sh b/test/lib/aux.sh
+index 9f8c8d7..a7ad60a 100644
+--- a/test/lib/aux.sh
++++ b/test/lib/aux.sh
+@@ -1650,7 +1650,7 @@ kernel_at_least() {
+ 	version_at_least "$(uname -r)" "$@"
+ }
  
- 	if (lv_is_cow(lv) && lv_is_virtual_origin(org = origin_from_cow(lv))) {
+-test -z "${LVM_TEST_AUX_TRACE-}" || set -x
++test "${LVM_TEST_AUX_TRACE-0}" = "0" || set -x
+ 
+ test -f DEVICES && devs=$(< DEVICES)
+ 
 
 
