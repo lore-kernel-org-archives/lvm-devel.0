@@ -1,10 +1,10 @@
 From: Peter Rajnoha <prajnoha@redhat.com>
-Date: Tue, 17 Apr 2018 11:46:43 +0200
-Subject: [PATCH RESEND 1/2] lvm2: 69-dm-lvm-metad.rules: explicit pvscan rule
-In-Reply-To: <20180416185341.8588-2-mwilck@suse.com>
+Date: Tue, 17 Apr 2018 11:48:48 +0200
+Subject: [PATCH RESEND 2/2] lvm2: 69-dm-lvm-metad.rules: set systemd vars on "change"
+In-Reply-To: <20180416185341.8588-3-mwilck@suse.com>
 References: <20180416185341.8588-1-mwilck@suse.com>
-	<20180416185341.8588-2-mwilck@suse.com>
-Message-ID: <8adb2a0c-3aa2-2233-0ba7-40e95cc602a5@redhat.com>
+	<20180416185341.8588-3-mwilck@suse.com>
+Message-ID: <cb503a94-3993-013a-2bd1-4c3a143d055c@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -12,29 +12,51 @@ Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
 On 04/16/2018 08:53 PM, Martin Wilck wrote:
-> Make the distinction between the cases with and without systemd
-> background jobs explicit in 69-dm-lvm-metad.rules rather than
-> substituting the rule from the Makefile. At this stage,
-> this improves only readibility, at the cost of one GOTO statement.
+> The current logic that avoids setting SYSTEMD_ALIAS and SYSTEMD_WANTS
+> on "change" events is flawed in the default "systemd background job"
+> configuration. For systemd, it's important that device properties don't
+> change spuriously.
 > 
-> The next patch will add more differences between the two cases (mostly
-> comments), which are practically impossible to generate with the current
-> string subsitution approach.
+> If an "add" event starts lvm2-pvscan at .service for a device, and a
+> "change" event follows, removing SYSTEMD_ALIAS and SYSTEMD_WANTS from the
+> udev db, information about unit dependencies between the device and the
+> pvscan service can be lost in systemd, in particular if the daemon
+> configuration is reloaded.
 > 
-> This patch introduces no functional change to the udev rules.
+> Steps to reproduce problem:
+> 
+> - create a device with an LVM PV
+> - remove device
+> - add device (generates "add" and "change" uevents for the device)
+>   (at this point SYSTEMD_ALIAS and SYSTEMD_WANTS are clear in udev db)
+> - systemctl daemon-reload
+>   (systemd reloads udev db)
+> - vgchange -a n
+> - remove device
+> 
+> => the lvm2-pvscan at .service for the device is still active although the
+> device is gone.
+> 
+> - add device again
+> 
+> => the PV is not detected, because systemd sees the lvm2-pvscan at .service
+> as active and thus doesn't restart it.
+> 
+> The original purpose of this logic was to avoid volumes being scanned
+> over and over again. With systemd background jobs, that isn't necessary,
+> because systemd will not restart the job as long as it's active.
 > 
 > Signed-off-by: Martin Wilck <mwilck@suse.com>
 > ---
->  udev/69-dm-lvm-metad.rules.in | 19 ++++++++++++++++++-
->  udev/Makefile.in              |  7 ++++---
->  2 files changed, 22 insertions(+), 4 deletions(-)
+>  udev/69-dm-lvm-metad.rules.in | 56 +++++++++++++++++++++++++++++++------------
+>  udev/Makefile.in              |  4 +++-
+>  2 files changed, 44 insertions(+), 16 deletions(-)
 > 
 
-OK, I agree, this makes it a bit more readable, applied:
+Thanks for the patch! I wasn't aware that systemd is reading those
+variables again from udev db on reload - nice catch! Applied:
 
-https://sourceware.org/git/?p=lvm2.git;a=commit;h=99bfbbf229acf4548f1ffc06625f464dc0ae4ca4
-
-Thanks
+https://sourceware.org/git/?p=lvm2.git;a=commit;h=7a7b8a7778aace88c967ee8285485c494ce1f3f8
 
 -- 
 Peter
