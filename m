@@ -1,32 +1,48 @@
-From: Martin Wilck <mwilck@suse.com>
-Date: Mon, 16 Apr 2018 20:53:40 +0200
-Subject: [PATCH RESEND 1/2] lvm2: 69-dm-lvm-metad.rules: explicit pvscan rule
-In-Reply-To: <20180416185341.8588-1-mwilck@suse.com>
-References: <20180416185341.8588-1-mwilck@suse.com>
-Message-ID: <20180416185341.8588-2-mwilck@suse.com>
+From: Peter Rajnoha <prajnoha@sourceware.org>
+Date: Tue, 17 Apr 2018 05:43:57 -0400
+Subject: master - udev: explicit pvscan rule in 69-dm-lvm-metad.rules
+Message-ID: <201804170943.w3H9hvUY005962@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=99bfbbf229acf4548f1ffc06625f464dc0ae4ca4
+Commit:        99bfbbf229acf4548f1ffc06625f464dc0ae4ca4
+Parent:        bc286910ecb9a1a5962b93618852d1ed4a7ca7dc
+Author:        Martin Wilck <mwilck@suse.com>
+AuthorDate:    Tue Apr 17 11:32:52 2018 +0200
+Committer:     Peter Rajnoha <prajnoha@redhat.com>
+CommitterDate: Tue Apr 17 11:32:52 2018 +0200
+
+udev: explicit pvscan rule in 69-dm-lvm-metad.rules
+
 Make the distinction between the cases with and without systemd
 background jobs explicit in 69-dm-lvm-metad.rules rather than
 substituting the rule from the Makefile. At this stage,
 this improves only readibility, at the cost of one GOTO statement.
 
-The next patch will add more differences between the two cases (mostly
-comments), which are practically impossible to generate with the current
-string subsitution approach.
-
 This patch introduces no functional change to the udev rules.
 
 Signed-off-by: Martin Wilck <mwilck@suse.com>
 ---
- udev/69-dm-lvm-metad.rules.in | 19 ++++++++++++++++++-
- udev/Makefile.in              |  7 ++++---
- 2 files changed, 22 insertions(+), 4 deletions(-)
+ WHATS_NEW                     |    1 +
+ udev/69-dm-lvm-metad.rules.in |   19 ++++++++++++++++++-
+ udev/Makefile.in              |    7 ++++---
+ 3 files changed, 23 insertions(+), 4 deletions(-)
 
+diff --git a/WHATS_NEW b/WHATS_NEW
+index e5d34dc..e0e9c51 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.178 - 
+ =====================================
++  Write systemd and non-systemd rule in 69-dm-lvm-metad.rules, GOTO active one.
+   Add test for activation/volume_list (Sub)LV remnants.
+   Disallow usage of cache format 2 with mq cache policy.
+   Again accept striped LV as COW LV with lvconvert -s (2.02.169).
 diff --git a/udev/69-dm-lvm-metad.rules.in b/udev/69-dm-lvm-metad.rules.in
 index bd75fc8..38687f4 100644
 --- a/udev/69-dm-lvm-metad.rules.in
@@ -85,7 +101,5 @@ index c498aa8..9b2e2c3 100644
  
  %_install: %.rules
  	$(INSTALL_DATA) -D $< $(udevdir)/$(<F)
--- 
-2.16.1
 
 
