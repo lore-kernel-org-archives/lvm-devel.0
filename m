@@ -1,39 +1,47 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Fri, 23 Apr 2021 21:06:04 +0000 (GMT)
-Subject: main - clang: remove unused assignment
-Message-ID: <20210423210604.3F356393BC13@sourceware.org>
+Date: Fri, 20 Apr 2018 07:02:45 -0400
+Subject: master - cleanup: enhance debug message
+Message-ID: <201804201102.w3KB2jjb031388@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=6a099707c433f0b3f2644c52f7773751832693a4
-Commit:        6a099707c433f0b3f2644c52f7773751832693a4
-Parent:        49caa9f3b1950ffd2ca9aa990e8bf0b480b62b87
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=9731d48691e85641e45a127ddf77fb603aa4900c
+Commit:        9731d48691e85641e45a127ddf77fb603aa4900c
+Parent:        d437bd86ffcb8dc589ddf941ec7c12d493c89b33
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Apr 23 17:27:44 2021 +0200
+AuthorDate:    Thu Apr 19 12:32:01 2018 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Fri Apr 23 23:00:55 2021 +0200
+CommitterDate: Fri Apr 20 12:17:01 2018 +0200
 
-clang: remove unused assignment
+cleanup: enhance debug message
 
 ---
- lib/device/dev-md.c | 2 +-
- 1 file changed, 1 insertion(+), 1 deletion(-)
+ lib/metadata/lv_manip.c |    9 +++++----
+ 1 files changed, 5 insertions(+), 4 deletions(-)
 
-diff --git a/lib/device/dev-md.c b/lib/device/dev-md.c
-index 78a77a968..6ddeb5b9e 100644
---- a/lib/device/dev-md.c
-+++ b/lib/device/dev-md.c
-@@ -55,7 +55,7 @@ static int _dev_has_md_magic(struct device *dev, uint64_t sb_offset)
- static int _dev_has_imsm_magic(struct device *dev, uint64_t devsize_sectors)
- {
- 	char imsm_signature[IMSM_SIG_LEN];
--	uint64_t off = (devsize_sectors * 512) - 1024;
-+	uint64_t off;
- 	unsigned int physical_block_size = 0;
- 	unsigned int logical_block_size = 0;
+diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
+index 97a4e39..160943f 100644
+--- a/lib/metadata/lv_manip.c
++++ b/lib/metadata/lv_manip.c
+@@ -3439,11 +3439,12 @@ static struct alloc_handle *_alloc_init(struct cmd_context *cmd,
+ 					    (existing_extents + new_extents) / ah->area_multiple);
+ 	}
  
+-	log_debug("Adjusted allocation request to %" PRIu32 " logical extents. Existing size %" PRIu32 ". New size %" PRIu32 ".",
+-		  total_extents, existing_extents, total_extents + existing_extents);
++	if (total_extents || existing_extents)
++		log_debug("Adjusted allocation request to " FMTu32 " logical extents. Existing size " FMTu32 ". New size " FMTu32 ".",
++			  total_extents, existing_extents, total_extents + existing_extents);
+ 	if (ah->log_len)
+-		log_debug("Mirror log of %" PRIu32 " extents of size %" PRIu32 " sectors needed for region size %" PRIu32  ".",
+-			  ah->log_len, extent_size, ah->region_size);
++		log_debug("Mirror log of " FMTu32 " extents of size " FMTu32 " sectors needed for region size %s.",
++			  ah->log_len, extent_size, display_size(cmd, (uint64_t)ah->region_size));
+ 
+ 	if (mirrors || stripes)
+ 		total_extents += existing_extents;
 
 
