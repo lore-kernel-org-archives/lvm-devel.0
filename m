@@ -1,47 +1,41 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Fri, 20 Apr 2018 07:02:45 -0400
-Subject: master - cleanup: enhance debug message
-Message-ID: <201804201102.w3KB2jjb031388@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Fri, 20 Apr 2018 07:02:46 -0400
+Subject: master - cleanup: avoid compiler warn
+Message-ID: <201804201102.w3KB2k15031395@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=9731d48691e85641e45a127ddf77fb603aa4900c
-Commit:        9731d48691e85641e45a127ddf77fb603aa4900c
-Parent:        d437bd86ffcb8dc589ddf941ec7c12d493c89b33
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=037c234eaaabd4989e769e1f9db47c8452fa4966
+Commit:        037c234eaaabd4989e769e1f9db47c8452fa4966
+Parent:        73cda0437f8added751716c9bbae33fe321b4963
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu Apr 19 12:32:01 2018 +0200
+AuthorDate:    Thu Mar 29 18:49:42 2018 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Fri Apr 20 12:17:01 2018 +0200
 
-cleanup: enhance debug message
+cleanup: avoid compiler warn
 
+When variable is unused...
 ---
- lib/metadata/lv_manip.c |    9 +++++----
- 1 files changed, 5 insertions(+), 4 deletions(-)
+ daemons/cmirrord/cluster.c |    2 ++
+ 1 files changed, 2 insertions(+), 0 deletions(-)
 
-diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
-index 97a4e39..160943f 100644
---- a/lib/metadata/lv_manip.c
-+++ b/lib/metadata/lv_manip.c
-@@ -3439,11 +3439,12 @@ static struct alloc_handle *_alloc_init(struct cmd_context *cmd,
- 					    (existing_extents + new_extents) / ah->area_multiple);
- 	}
+diff --git a/daemons/cmirrord/cluster.c b/daemons/cmirrord/cluster.c
+index 5b8b68d..e56d8f3 100644
+--- a/daemons/cmirrord/cluster.c
++++ b/daemons/cmirrord/cluster.c
+@@ -166,7 +166,9 @@ int cluster_send(struct clog_request *rq)
+ {
+ 	int r;
+ 	int found = 0;
++#if CMIRROR_HAS_CHECKPOINT
+ 	int count = 0;
++#endif
+ 	struct iovec iov;
+ 	struct clog_cpg *entry;
  
--	log_debug("Adjusted allocation request to %" PRIu32 " logical extents. Existing size %" PRIu32 ". New size %" PRIu32 ".",
--		  total_extents, existing_extents, total_extents + existing_extents);
-+	if (total_extents || existing_extents)
-+		log_debug("Adjusted allocation request to " FMTu32 " logical extents. Existing size " FMTu32 ". New size " FMTu32 ".",
-+			  total_extents, existing_extents, total_extents + existing_extents);
- 	if (ah->log_len)
--		log_debug("Mirror log of %" PRIu32 " extents of size %" PRIu32 " sectors needed for region size %" PRIu32  ".",
--			  ah->log_len, extent_size, ah->region_size);
-+		log_debug("Mirror log of " FMTu32 " extents of size " FMTu32 " sectors needed for region size %s.",
-+			  ah->log_len, extent_size, display_size(cmd, (uint64_t)ah->region_size));
- 
- 	if (mirrors || stripes)
- 		total_extents += existing_extents;
 
 
