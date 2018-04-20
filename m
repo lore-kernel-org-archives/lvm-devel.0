@@ -1,55 +1,58 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Fri, 20 Apr 2018 07:01:17 -0400
-Subject: master - pvmove: support properly subLV locking
-Message-ID: <201804201101.w3KB1HD2030979@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Fri, 20 Apr 2018 07:01:26 -0400
+Subject: master - lvconvert: drop limitation for converting lv
+Message-ID: <201804201101.w3KB1QmM031113@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=ace97c9f9cdc6f0bfd33ae465404169a33953c1e
-Commit:        ace97c9f9cdc6f0bfd33ae465404169a33953c1e
-Parent:        7a7b8a7778aace88c967ee8285485c494ce1f3f8
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=9068de011d900df46a87d6cb0de08160136bde66
+Commit:        9068de011d900df46a87d6cb0de08160136bde66
+Parent:        a7d077b89b71fb2ddd9e87526b5675aadf38dfba
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Mar 27 21:08:40 2018 +0200
+AuthorDate:    Wed Apr 18 12:57:17 2018 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Fri Apr 20 12:03:16 2018 +0200
+CommitterDate: Fri Apr 20 12:06:51 2018 +0200
 
-pvmove: support properly subLV locking
+lvconvert: drop limitation for converting lv
 
-Since we support snapshot of mirrors, we do need to properly check
-for stacked lock holder - fixes problem of pvmove in cluster
-with mirrors under snapshot.
+Fixing regresion on argument acceptance where any lv can be passed
+with paramaterless lvconvert which is meant to figure out needed
+operation - i.e. wait for  mirror synchronization.
 
-WHATS_NEW for this patch goes with 'Restore pvmove support...'
+User has no other 'effective' method to wait for mirror getting in-sync.
 ---
- tools/pvmove.c |   13 +++++++++----
- 1 files changed, 9 insertions(+), 4 deletions(-)
+ WHATS_NEW              |    1 +
+ tools/command-lines.in |    4 ++--
+ 2 files changed, 3 insertions(+), 2 deletions(-)
 
-diff --git a/tools/pvmove.c b/tools/pvmove.c
-index 2a26a10..84efdf4 100644
---- a/tools/pvmove.c
-+++ b/tools/pvmove.c
-@@ -393,10 +393,15 @@ static struct logical_volume *_set_up_pvmove_lv(struct cmd_context *cmd,
- 		}
+diff --git a/WHATS_NEW b/WHATS_NEW
+index 192c5c2..82b47c5 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.178 - 
+ =====================================
++  Fix regression on acceptance of any LV on lvconvert.
+   Restore usability of thin LV to be again external origin for another thin.
+   Keep systemd vars on change event in 69-dm-lvm-metad.rules for systemd reload.
+   Write systemd and non-systemd rule in 69-dm-lvm-metad.rules, GOTO active one.
+diff --git a/tools/command-lines.in b/tools/command-lines.in
+index e555e95..9d407d0 100644
+--- a/tools/command-lines.in
++++ b/tools/command-lines.in
+@@ -701,8 +701,8 @@ RULE: all and lv_is_converting
+ lvconvert LV_mirror_raid
+ OO: OO_LVCONVERT
+ ID: lvconvert_start_poll
+-DESC: Poll LV to continue conversion (also see --startpoll).
+-RULE: all and lv_is_converting
++DESC: Poll LV to continue conversion (also see --startpoll)
++DESC: or waits till conversion/mirror syncing is finished
+ FLAGS: SECONDARY_SYNTAX
  
- 		seg = first_seg(lv);
--
--		/* Presence of exclusive LV decides whether pvmove must be also exclusive */
--		if ((seg_only_exclusive(seg) || lv_is_origin(lv) || lv_is_cow(lv)))
--			needs_exclusive = 1;
-+		if (!needs_exclusive) {
-+			/* Presence of exclusive LV decides whether pvmove must be also exclusive */
-+			if (!seg_only_exclusive(seg)) {
-+				holder = lv_lock_holder(lv);
-+				if (seg_only_exclusive(first_seg(holder)) || lv_is_origin(holder) || lv_is_cow(holder))
-+					needs_exclusive = 1;
-+			} else
-+				needs_exclusive = 1;
-+		}
- 
- 		if (seg_is_raid(seg) || seg_is_mirrored(seg)) {
- 			dm_list_init(&trim_list);
+ ---
 
 
