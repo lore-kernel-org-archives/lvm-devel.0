@@ -1,111 +1,71 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Fri, 20 Apr 2018 07:01:36 -0400
-Subject: master - mirror: improve mirror log size estimation
-Message-ID: <201804201101.w3KB1aYs031160@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Fri, 20 Apr 2018 07:01:38 -0400
+Subject: master - mirror: fix calcs for maximal region_size
+Message-ID: <201804201101.w3KB1c8T031179@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=91965af9b1d53e6bf89ef7a849c0347277e72276
-Commit:        91965af9b1d53e6bf89ef7a849c0347277e72276
-Parent:        73189170f53ea661e7bf117404cdb5f461f0df1b
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=a19456b868849816f21cfd7517777c5999c43a89
+Commit:        a19456b868849816f21cfd7517777c5999c43a89
+Parent:        91965af9b1d53e6bf89ef7a849c0347277e72276
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Apr 20 10:12:25 2018 +0200
+AuthorDate:    Fri Apr 20 10:03:26 2018 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Fri Apr 20 12:11:42 2018 +0200
+CommitterDate: Fri Apr 20 12:13:08 2018 +0200
 
-mirror: improve mirror log size estimation
+mirror: fix calcs for maximal region_size
 
-Drop mirrored mirror log limitation that applies only in very limited
-use-case and actually mirrored mirror log is deprecated anyway.
+Since extent_size is no longer power_of_2 this max region size
+evalution was rather producing random bitsize as a combination
+of lowest bit from number of extents and extent size itself.
 
-So 'disk' mirror log is selecting the correct minimal size, and
-bigger size is only enforced with real mirrored mirror log.
-
-Also for mirrored mirror log we let use 'smalled' region size if needed
-so if user uses  1G region size, we still keep small mirror log
-with much smaller region size in this case when needed.
-
-Also mirror log extent calculation is now properly detecting error
-with too big mirrors where previosly trimmed uint32_t was applies
-unintentionally.
+Correct calculation to use whole LV size and pick biggest
+possible power of 2 value smaller then UINT32_MAX.
 ---
- WHATS_NEW               |    1 +
- lib/metadata/lv_manip.c |   21 ++++++++-------------
- lib/metadata/mirror.c   |   16 ++++++++++++----
- 3 files changed, 21 insertions(+), 17 deletions(-)
+ WHATS_NEW             |    1 +
+ lib/metadata/mirror.c |   10 +++++-----
+ 2 files changed, 6 insertions(+), 5 deletions(-)
 
 diff --git a/WHATS_NEW b/WHATS_NEW
-index 0bb94aa..ca9e6fa 100644
+index ca9e6fa..9682d22 100644
 --- a/WHATS_NEW
 +++ b/WHATS_NEW
 @@ -1,5 +1,6 @@
  Version 2.02.178 - 
  =====================================
-+  Enhance mirror log size estimation and use smaller size when possible.
++  Fix evaluation of maximal region size for mirror log.
+   Enhance mirror log size estimation and use smaller size when possible.
    Fix incorrect mirror log size calculation on 32bit arch.
    Enhnace preloading tree creating.
-   Fix regression on acceptance of any LV on lvconvert.
-diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
-index f275ecd..b8bbdec 100644
---- a/lib/metadata/lv_manip.c
-+++ b/lib/metadata/lv_manip.c
-@@ -1681,19 +1681,14 @@ static uint32_t _mirror_log_extents(uint32_t region_size, uint32_t pe_size, uint
- 	log_size >>= SECTOR_SHIFT;
- 	log_size = dm_div_up(log_size, pe_size);
- 
--	/*
--	 * Kernel requires a mirror to be at least 1 region large.  So,
--	 * if our mirror log is itself a mirror, it must be at least
--	 * 1 region large.  This restriction may not be necessary for
--	 * non-mirrored logs, but we apply the rule anyway.
--	 *
--	 * (The other option is to make the region size of the log
--	 * mirror smaller than the mirror it is acting as a log for,
--	 * but that really complicates things.  It's much easier to
--	 * keep the region_size the same for both.)
--	 */
--	return (log_size > (region_size / pe_size)) ? log_size :
--		(region_size / pe_size);
-+	if (log_size > UINT32_MAX) {
-+		log_error("Log size needs too many extents "FMTu64" with region size of %u sectors.",
-+			  log_size,  region_size);
-+		log_size = UINT32_MAX;
-+		/* VG likely will not have enough free space for this allocation -> error */
-+	}
-+
-+	return (uint32_t) log_size;
- }
- 
- /* Is there enough total space or should we give up immediately? */
 diff --git a/lib/metadata/mirror.c b/lib/metadata/mirror.c
-index d3ced60..6107619 100644
+index 6107619..db2883b 100644
 --- a/lib/metadata/mirror.c
 +++ b/lib/metadata/mirror.c
-@@ -1805,10 +1805,18 @@ static struct logical_volume *_set_up_mirror_log(struct cmd_context *cmd,
- 		return NULL;
- 	}
+@@ -161,17 +161,17 @@ uint32_t adjusted_mirror_region_size(struct cmd_context *cmd,
+ 				     uint32_t extent_size, uint32_t extents,
+ 				     uint32_t region_size, int internal, int clustered)
+ {
+-	uint64_t region_max;
+-	uint64_t region_min, region_min_pow2;
++	uint64_t region_max, region_min;
++	uint32_t region_min_pow2;
  
--	if ((log_count > 1) &&
--	    !_form_mirror(cmd, ah, log_lv, log_count-1, 1, 0, region_size, 2)) {
--		log_error("Failed to form mirrored log.");
--		return NULL;
-+	if (log_count > 1) {
-+		/* Kernel requires a mirror to be at least 1 region large. */
-+		if (region_size > log_lv->size) {
-+			region_size = UINT64_C(1) << (31 - clz(log_lv->size));
-+			log_debug("Adjusting region_size to %s for mirrored log.",
-+				  display_size(cmd, (uint64_t)region_size));
-+		}
-+
-+		if (!_form_mirror(cmd, ah, log_lv, log_count-1, 1, 0, region_size, 2)) {
-+			log_error("Failed to form mirrored log.");
-+			return NULL;
-+		}
- 	}
+-	region_max = (UINT64_C(1) << (ffs((int)extents) - 1)) * (UINT64_C(1) << (ffs((int)extent_size) - 1));
++	region_max = (uint64_t) extents * extent_size;
  
- 	if (!_init_mirror_log(cmd, log_lv, in_sync, &lv->tags, 1)) {
+ 	if (region_max < UINT32_MAX && region_size > region_max) {
+-		region_size = (uint32_t) region_max;
++		region_size =  UINT64_C(1) << (31 - clz(region_max));
+ 		if (!internal)
+ 			log_print_unless_silent("Using reduced mirror region size of %s",
+ 						display_size(cmd, region_size));
+-                else
++		else
+ 			log_verbose("Using reduced mirror region size of %s",
+ 				    display_size(cmd, region_size));
+ 	}
 
 
