@@ -1,125 +1,103 @@
 From: David Teigland <teigland@sourceware.org>
-Date: Mon, 23 Apr 2018 09:49:54 -0400
-Subject: master - process_each_label: use lvmcache
-Message-ID: <201804231349.w3NDnsoI031708@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Mon, 23 Apr 2018 09:49:55 -0400
+Subject: master - scan: add a dev to bcache before each read to handle write path
+Message-ID: <201804231349.w3NDntqG031717@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=4343280ebc0e2aae0de5fe959c24574b13d0d7be
-Commit:        4343280ebc0e2aae0de5fe959c24574b13d0d7be
-Parent:        f17c2cf7c614e8f6e4ffe9b7415d628ecab61d47
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=9d2add136192a08be7b3441b6fbe583c27b03dc8
+Commit:        9d2add136192a08be7b3441b6fbe583c27b03dc8
+Parent:        6c67c7557c266063db962807aca18fc088ba921e
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Fri Feb 9 11:24:40 2018 -0600
+AuthorDate:    Tue Feb 13 12:50:44 2018 -0600
 Committer:     David Teigland <teigland@redhat.com>
 CommitterDate: Fri Apr 20 11:22:46 2018 -0500
 
-process_each_label: use lvmcache
+scan: add a dev to bcache before each read to handle write path
 
-In the same way as the other process_each functions.
-In the common case all the info that's needed can be
-used from lvmcache after a label scan.  But this means
-that unchosen devs for duplicate PVs need to be handled
-explicitly.
+This is a temporary hacky workaround to the problem of
+reads going through bcache and writes not using bcache.
+The write path wants to read parts of data that it is
+incrementally writing to disk, but the reads (using
+bcache) don't work because the writes are not in the
+bcache.  For now, add a dev to bcache before each attempt
+to read it in case it's being used on the write path.
 ---
- tools/toollib.c |   60 ++++++++++++++++++++++++++++++++++++++++++++++++------
- 1 files changed, 53 insertions(+), 7 deletions(-)
+ lib/format_text/format-text.c |    6 ++++++
+ lib/label/label.c             |   18 ++++++++++++++++++
+ lib/label/label.h             |    1 +
+ 3 files changed, 25 insertions(+), 0 deletions(-)
 
-diff --git a/tools/toollib.c b/tools/toollib.c
-index 6593195..f6169ae 100644
---- a/tools/toollib.c
-+++ b/tools/toollib.c
-@@ -1493,13 +1493,19 @@ int process_each_label(struct cmd_context *cmd, int argc, char **argv,
- 	struct label *label;
- 	struct dev_iter *iter;
- 	struct device *dev;
--
-+	struct lvmcache_info *info;
-+	struct dm_list process_duplicates;
-+	struct device_list *devl;
- 	int ret_max = ECMD_PROCESSED;
- 	int ret;
- 	int opt = 0;
+diff --git a/lib/format_text/format-text.c b/lib/format_text/format-text.c
+index a5d8397..f33451f 100644
+--- a/lib/format_text/format-text.c
++++ b/lib/format_text/format-text.c
+@@ -320,6 +320,8 @@ static int _raw_read_mda_header(struct mda_header *mdah, struct device_area *dev
+ 	log_debug_metadata("Reading mda header sector from %s at %llu",
+ 			   dev_name(dev_area->dev), (unsigned long long)dev_area->start);
  
-+	dm_list_init(&process_duplicates);
++	label_scan_confirm(dev_area->dev);  /* FIXME: remove this, ensures dev is in bcache */
 +
- 	log_set_report_object_type(LOG_REPORT_OBJECT_TYPE_LABEL);
+ 	if (!bcache_read_bytes(scan_bcache, dev_area->dev->bcache_fd, dev_area->start, MDA_HEADER_SIZE, mdah)) {
+ 		log_error("Failed to read metadata area header on %s at %llu",
+ 			  dev_name(dev_area->dev), (unsigned long long)dev_area->start);
+@@ -462,6 +464,8 @@ static struct raw_locn *_read_metadata_location_vg(struct device_area *dev_area,
+ 	 */
+ 	memset(vgnamebuf, 0, sizeof(vgnamebuf));
  
-+	lvmcache_label_scan(cmd);
++	label_scan_confirm(dev_area->dev);  /* FIXME: remove this, ensures dev is in bcache */
 +
- 	if (argc) {
- 		for (; opt < argc; opt++) {
- 			if (!(dev = dev_cache_get(argv[opt], cmd->full_filter))) {
-@@ -1509,14 +1515,54 @@ int process_each_label(struct cmd_context *cmd, int argc, char **argv,
- 				continue;
- 			}
+ 	bcache_read_bytes(scan_bcache, dev_area->dev->bcache_fd, dev_area->start + rlocn->offset, NAME_LEN, vgnamebuf);
  
-+			if (!(label = lvmcache_get_dev_label(dev))) {
-+				if (!lvmcache_dev_is_unchosen_duplicate(dev)) {
-+					log_error("No physical volume label read from %s.", argv[opt]);
-+					ret_max = ECMD_FAILED;
-+				} else {
-+					if (!(devl = dm_malloc(sizeof(*devl))))
-+						return_0;
-+					devl->dev = dev;
-+					dm_list_add(&process_duplicates, &devl->list);
-+				}
-+				continue;
-+			}
-+
- 			log_set_report_object_name_and_id(dev_name(dev), NULL);
+ 	if (!strncmp(vgnamebuf, vgname, len = strlen(vgname)) &&
+@@ -1209,6 +1213,8 @@ int read_metadata_location_summary(const struct format_type *fmt,
+ 		return 0;
+ 	}
  
--			if (!label_read(dev, &label, 0)) {
--				log_error("No physical volume label read from %s.",
--					  argv[opt]);
--				ret_max = ECMD_FAILED;
-+			ret = process_single_label(cmd, label, handle);
-+			report_log_ret_code(ret);
++	label_scan_confirm(dev_area->dev);  /* FIXME: remove this, ensures dev is in bcache */
 +
-+			if (ret > ret_max)
-+				ret_max = ret;
-+
-+			log_set_report_object_name_and_id(NULL, NULL);
-+
-+			if (sigint_caught())
-+				break;
-+		}
-+
-+		dm_list_iterate_items(devl, &process_duplicates) {
-+			/* 
-+			 * remove the existing dev for this pvid from lvmcache
-+			 * so that the duplicate dev can replace it.
-+			 */
-+			if ((info = lvmcache_info_from_pvid(devl->dev->pvid, NULL, 0)))
-+				lvmcache_del(info);
-+
-+			/*
-+			 * add info to lvmcache from the duplicate dev.
-+			 */
-+			label_read(devl->dev, NULL, 0);
-+
-+			/*
-+			 * the info/label should now be found because
-+			 * the label_read should have added it.
-+			 */
-+			if (!(label = lvmcache_get_dev_label(devl->dev)))
- 				continue;
--			}
-+
-+			log_set_report_object_name_and_id(dev_name(dev), NULL);
+ 	bcache_read_bytes(scan_bcache, dev_area->dev->bcache_fd, dev_area->start + rlocn->offset, NAME_LEN, buf);
  
- 			ret = process_single_label(cmd, label, handle);
- 			report_log_ret_code(ret);
-@@ -1541,7 +1587,7 @@ int process_each_label(struct cmd_context *cmd, int argc, char **argv,
+ 	while (buf[len] && !isspace(buf[len]) && buf[len] != '{' &&
+diff --git a/lib/label/label.c b/lib/label/label.c
+index 2ec187c..5da781e 100644
+--- a/lib/label/label.c
++++ b/lib/label/label.c
+@@ -786,3 +786,21 @@ int label_read_sector(struct device *dev, struct label **labelp, uint64_t scan_s
+ 	return label_read(dev, labelp, 0);
+ }
  
- 	while ((dev = dev_iter_get(iter)))
- 	{
--		if (!label_read(dev, &label, 0))
-+		if (!(label = lvmcache_get_dev_label(dev)))
- 			continue;
++/*
++ * FIXME: remove this.  It should not be needed once writes are going through
++ * bcache.  As it is now, the write path involves multiple writes to a device,
++ * and later writes want to read previous writes from disk.  They do these
++ * reads using the standard read paths which require the devs to be in bcache,
++ * but the bcache reads do not find the dev because the writes have gone around
++ * bcache.  To work around this for now, check if each dev is in bcache before
++ * reading it, and if not add it first.
++ */
++
++void label_scan_confirm(struct device *dev)
++{
++	if (!_in_bcache(dev)) {
++		log_warn("add dev %s to bcache", dev_name(dev));
++		label_read(dev, NULL, 0);
++	}
++}
++
+diff --git a/lib/label/label.h b/lib/label/label.h
+index eb62f64..e265a6b 100644
+--- a/lib/label/label.h
++++ b/lib/label/label.h
+@@ -109,5 +109,6 @@ void label_scan_invalidate(struct device *dev);
+ void label_scan_destroy(struct cmd_context *cmd);
+ int label_read(struct device *dev, struct label **labelp, uint64_t unused_sector);
+ int label_read_sector(struct device *dev, struct label **labelp, uint64_t scan_sector);
++void label_scan_confirm(struct device *dev);
  
- 		log_set_report_object_name_and_id(dev_name(label->dev), NULL);
+ #endif
 
 
