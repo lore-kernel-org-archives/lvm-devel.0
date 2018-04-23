@@ -1,125 +1,78 @@
 From: David Teigland <teigland@sourceware.org>
-Date: Mon, 23 Apr 2018 09:53:29 -0400
-Subject: master - process_each_label: use lvmcache
-Message-ID: <201804231353.w3NDrTrO001135@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Mon, 23 Apr 2018 09:56:51 -0400
+Subject: master - clvm: rescan when VG or PV not found
+Message-ID: <201804231356.w3NDupk8002500@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=4343280ebc0e2aae0de5fe959c24574b13d0d7be
-Commit:        4343280ebc0e2aae0de5fe959c24574b13d0d7be
-Parent:        f17c2cf7c614e8f6e4ffe9b7415d628ecab61d47
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=1409c4a1c20319845171b91edb6310e25ae81792
+Commit:        1409c4a1c20319845171b91edb6310e25ae81792
+Parent:        c42a18d372f314aa51d9d7877342f1d78fd68973
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Fri Feb 9 11:24:40 2018 -0600
+AuthorDate:    Fri Apr 20 16:09:49 2018 -0500
 Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Fri Apr 20 11:22:46 2018 -0500
+CommitterDate: Fri Apr 20 16:09:49 2018 -0500
 
-process_each_label: use lvmcache
+clvm: rescan when VG or PV not found
 
-In the same way as the other process_each functions.
-In the common case all the info that's needed can be
-used from lvmcache after a label scan.  But this means
-that unchosen devs for duplicate PVs need to be handled
-explicitly.
+Rescan devices to update lvmcache content when
+clvmd vg_read doesn't find a VG or PV.
 ---
- tools/toollib.c |   60 ++++++++++++++++++++++++++++++++++++++++++++++++------
- 1 files changed, 53 insertions(+), 7 deletions(-)
+ lib/metadata/metadata.c |   28 ++++++++++++++++++++++++----
+ 1 files changed, 24 insertions(+), 4 deletions(-)
 
-diff --git a/tools/toollib.c b/tools/toollib.c
-index 6593195..f6169ae 100644
---- a/tools/toollib.c
-+++ b/tools/toollib.c
-@@ -1493,13 +1493,19 @@ int process_each_label(struct cmd_context *cmd, int argc, char **argv,
- 	struct label *label;
- 	struct dev_iter *iter;
- 	struct device *dev;
--
-+	struct lvmcache_info *info;
-+	struct dm_list process_duplicates;
-+	struct device_list *devl;
- 	int ret_max = ECMD_PROCESSED;
- 	int ret;
- 	int opt = 0;
+diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
+index 685c589..2df9abe 100644
+--- a/lib/metadata/metadata.c
++++ b/lib/metadata/metadata.c
+@@ -4585,6 +4585,7 @@ static struct volume_group *_vg_read_by_vgid(struct cmd_context *cmd,
+ 	if (!(vgname = lvmcache_vgname_from_vgid(cmd->mem, vgid))) {
+ 		log_debug_metadata("Reading VG by vgid %.8s no VG name found, retrying.", vgid);
+ 		lvmcache_destroy(cmd, 0, 0);
++		label_scan_destroy(cmd);
+ 		lvmcache_label_scan(cmd);
+ 	}
  
-+	dm_list_init(&process_duplicates);
+@@ -4597,14 +4598,33 @@ static struct volume_group *_vg_read_by_vgid(struct cmd_context *cmd,
+ 
+ 	label_scan_setup_bcache();
+ 
+-	if ((vg = _vg_read(cmd, vgname, vgid, warn_flags, &consistent, precommitted))) {
+-		/* Does it matter if consistent is 0 or 1? */
+-		label_scan_destroy(cmd);
+-		return vg;
++	if (!(vg = _vg_read(cmd, vgname, vgid, warn_flags, &consistent, precommitted))) {
++		log_error("Rescan devices to look for missing VG.");
++		goto scan;
++	}
 +
- 	log_set_report_object_type(LOG_REPORT_OBJECT_TYPE_LABEL);
++	if (vg_missing_pv_count(vg)) {
++		log_error("Rescan devices to look for missing PVs.");
++		release_vg(vg);
++		goto scan;
+ 	}
  
++	label_scan_destroy(cmd); /* drop bcache to close devs, keep lvmcache */
++	return vg;
++
++ scan:
++	lvmcache_destroy(cmd, 0, 0);
+ 	label_scan_destroy(cmd);
 +	lvmcache_label_scan(cmd);
 +
- 	if (argc) {
- 		for (; opt < argc; opt++) {
- 			if (!(dev = dev_cache_get(argv[opt], cmd->full_filter))) {
-@@ -1509,14 +1515,54 @@ int process_each_label(struct cmd_context *cmd, int argc, char **argv,
- 				continue;
- 			}
++	if (!(vg = _vg_read(cmd, vgname, vgid, warn_flags, &consistent, precommitted)))
++		goto fail;
++
++	label_scan_destroy(cmd); /* drop bcache to close devs, keep lvmcache */
++	return vg;
  
-+			if (!(label = lvmcache_get_dev_label(dev))) {
-+				if (!lvmcache_dev_is_unchosen_duplicate(dev)) {
-+					log_error("No physical volume label read from %s.", argv[opt]);
-+					ret_max = ECMD_FAILED;
-+				} else {
-+					if (!(devl = dm_malloc(sizeof(*devl))))
-+						return_0;
-+					devl->dev = dev;
-+					dm_list_add(&process_duplicates, &devl->list);
-+				}
-+				continue;
-+			}
-+
- 			log_set_report_object_name_and_id(dev_name(dev), NULL);
- 
--			if (!label_read(dev, &label, 0)) {
--				log_error("No physical volume label read from %s.",
--					  argv[opt]);
--				ret_max = ECMD_FAILED;
-+			ret = process_single_label(cmd, label, handle);
-+			report_log_ret_code(ret);
-+
-+			if (ret > ret_max)
-+				ret_max = ret;
-+
-+			log_set_report_object_name_and_id(NULL, NULL);
-+
-+			if (sigint_caught())
-+				break;
-+		}
-+
-+		dm_list_iterate_items(devl, &process_duplicates) {
-+			/* 
-+			 * remove the existing dev for this pvid from lvmcache
-+			 * so that the duplicate dev can replace it.
-+			 */
-+			if ((info = lvmcache_info_from_pvid(devl->dev->pvid, NULL, 0)))
-+				lvmcache_del(info);
-+
-+			/*
-+			 * add info to lvmcache from the duplicate dev.
-+			 */
-+			label_read(devl->dev, NULL, 0);
-+
-+			/*
-+			 * the info/label should now be found because
-+			 * the label_read should have added it.
-+			 */
-+			if (!(label = lvmcache_get_dev_label(devl->dev)))
- 				continue;
--			}
-+
-+			log_set_report_object_name_and_id(dev_name(dev), NULL);
- 
- 			ret = process_single_label(cmd, label, handle);
- 			report_log_ret_code(ret);
-@@ -1541,7 +1587,7 @@ int process_each_label(struct cmd_context *cmd, int argc, char **argv,
- 
- 	while ((dev = dev_iter_get(iter)))
- 	{
--		if (!label_read(dev, &label, 0))
-+		if (!(label = lvmcache_get_dev_label(dev)))
- 			continue;
- 
- 		log_set_report_object_name_and_id(dev_name(label->dev), NULL);
++ fail:
++	label_scan_destroy(cmd); /* drop bache to close devs, keep lvmcache */
+ 	log_debug_metadata("Reading VG by vgid %.8s not found.", vgid);
+ 	return NULL;
+ }
 
 
