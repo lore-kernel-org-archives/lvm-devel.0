@@ -1,49 +1,43 @@
 From: David Teigland <teigland@sourceware.org>
-Date: Mon, 23 Apr 2018 09:50:01 -0400
-Subject: master - scan: handle request to scan missing dev
-Message-ID: <201804231350.w3NDo1uI031785@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Mon, 23 Apr 2018 09:50:08 -0400
+Subject: master - scan: skip extra scan in vg_read
+Message-ID: <201804231350.w3NDo8uQ031811@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=e4f478d86d6545f6cced7a8ba3bc0b79dccb7b6e
-Commit:        e4f478d86d6545f6cced7a8ba3bc0b79dccb7b6e
-Parent:        89f54a5094981c827ca557cb1381e5f1a028912c
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=37471bb4777f3f407d2cd942995b45c326ea221a
+Commit:        37471bb4777f3f407d2cd942995b45c326ea221a
+Parent:        e4f478d86d6545f6cced7a8ba3bc0b79dccb7b6e
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Tue Feb 13 16:17:02 2018 -0600
+AuthorDate:    Wed Feb 14 13:49:56 2018 -0600
 Committer:     David Teigland <teigland@redhat.com>
 CommitterDate: Fri Apr 20 11:22:46 2018 -0500
 
-scan: handle request to scan missing dev
+scan: skip extra scan in vg_read
 
+Drop an extra label scan in the recovery part
+of vg_read.  This is a temporary improvement
+until the pending replacement for the broken
+recovery code burried in vg_read.
 ---
- lib/label/label.c |    5 +++++
- 1 files changed, 5 insertions(+), 0 deletions(-)
+ lib/metadata/metadata.c |    2 --
+ 1 files changed, 0 insertions(+), 2 deletions(-)
 
-diff --git a/lib/label/label.c b/lib/label/label.c
-index 1268498..19beecf 100644
---- a/lib/label/label.c
-+++ b/lib/label/label.c
-@@ -257,6 +257,8 @@ struct bcache *scan_bcache;
+diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
+index 5d3f835..b588a04 100644
+--- a/lib/metadata/metadata.c
++++ b/lib/metadata/metadata.c
+@@ -4080,8 +4080,6 @@ static struct volume_group *_vg_read(struct cmd_context *cmd,
+ 		/* Independent MDAs aren't supported under low memory */
+ 		if (!cmd->independent_metadata_areas && prioritized_section())
+ 			return_NULL;
+-		lvmcache_force_next_label_scan();
+-		lvmcache_label_scan(cmd);
+ 		if (!(fmt = lvmcache_fmt_from_vgname(cmd, vgname, vgid, 0)))
+ 			return_NULL;
  
- static bool _in_bcache(struct device *dev)
- {
-+	if (!dev)
-+		return NULL;
- 	return (dev->flags & DEV_IN_BCACHE) ? true : false;
- }
- 
-@@ -402,6 +404,9 @@ static int _scan_dev_open(struct device *dev)
- 	int flags = 0;
- 	int fd;
- 
-+	if (!dev)
-+		return 0;
-+
- 	if (dev->flags & DEV_IN_BCACHE) {
- 		log_error("scan_dev_open %s DEV_IN_BCACHE already set", dev_name(dev));
- 		dev->flags &= ~DEV_IN_BCACHE;
 
 
