@@ -1,53 +1,43 @@
 From: David Teigland <teigland@sourceware.org>
-Date: Mon, 23 Apr 2018 09:54:27 -0400
-Subject: master - lvmdiskscan: use the new label_scan
-Message-ID: <201804231354.w3NDsR3C001446@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Mon, 23 Apr 2018 09:54:29 -0400
+Subject: master - scan: skip extra scan in vg_read
+Message-ID: <201804231354.w3NDsT9P001458@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=96a61337b00a250f69e7a8e6ac390c47c36c2c0f
-Commit:        96a61337b00a250f69e7a8e6ac390c47c36c2c0f
-Parent:        28255e3eeef13a0e73a40d533623b22dd9db89cb
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=37471bb4777f3f407d2cd942995b45c326ea221a
+Commit:        37471bb4777f3f407d2cd942995b45c326ea221a
+Parent:        e4f478d86d6545f6cced7a8ba3bc0b79dccb7b6e
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Wed Feb 14 16:43:26 2018 -0600
+AuthorDate:    Wed Feb 14 13:49:56 2018 -0600
 Committer:     David Teigland <teigland@redhat.com>
 CommitterDate: Fri Apr 20 11:22:46 2018 -0500
 
-lvmdiskscan: use the new label_scan
+scan: skip extra scan in vg_read
 
-instead of doing it's own.
+Drop an extra label scan in the recovery part
+of vg_read.  This is a temporary improvement
+until the pending replacement for the broken
+recovery code burried in vg_read.
 ---
- tools/lvmdiskscan.c |    7 +++----
- 1 files changed, 3 insertions(+), 4 deletions(-)
+ lib/metadata/metadata.c |    2 --
+ 1 files changed, 0 insertions(+), 2 deletions(-)
 
-diff --git a/tools/lvmdiskscan.c b/tools/lvmdiskscan.c
-index cb688b5..7e2fc88 100644
---- a/tools/lvmdiskscan.c
-+++ b/tools/lvmdiskscan.c
-@@ -87,7 +87,6 @@ int lvmdiskscan(struct cmd_context *cmd, int argc __attribute__((unused)),
- 	uint64_t size;
- 	struct dev_iter *iter;
- 	struct device *dev;
--	struct label *label;
+diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
+index 5d3f835..b588a04 100644
+--- a/lib/metadata/metadata.c
++++ b/lib/metadata/metadata.c
+@@ -4080,8 +4080,6 @@ static struct volume_group *_vg_read(struct cmd_context *cmd,
+ 		/* Independent MDAs aren't supported under low memory */
+ 		if (!cmd->independent_metadata_areas && prioritized_section())
+ 			return_NULL;
+-		lvmcache_force_next_label_scan();
+-		lvmcache_label_scan(cmd);
+ 		if (!(fmt = lvmcache_fmt_from_vgname(cmd, vgname, vgid, 0)))
+ 			return_NULL;
  
- 	/* initialise these here to avoid problems with the lvm shell */
- 	disks_found = 0;
-@@ -105,10 +104,10 @@ int lvmdiskscan(struct cmd_context *cmd, int argc __attribute__((unused)),
- 		return ECMD_FAILED;
- 	}
- 
--	/* Do scan */
-+	label_scan(cmd);
-+
- 	for (dev = dev_iter_get(iter); dev; dev = dev_iter_get(iter)) {
--		/* Try if it is a PV first */
--		if ((label_read(dev, &label, UINT64_C(0)))) {
-+		if (lvmcache_has_dev_info(dev)) {
- 			if (!dev_get_size(dev, &size)) {
- 				log_error("Couldn't get size of \"%s\"",
- 					  dev_name(dev));
 
 
