@@ -1,78 +1,44 @@
-From: David Teigland <teigland@sourceware.org>
-Date: Mon, 23 Apr 2018 09:56:51 -0400
-Subject: master - clvm: rescan when VG or PV not found
-Message-ID: <201804231356.w3NDupk8002500@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: Zdenek Kabelac <zkabelac@sourceware.org>
+Date: Mon, 23 Apr 2018 16:43:27 -0400
+Subject: master - lvchange: update mirror table when changing monitoring
+Message-ID: <201804232043.w3NKhR8e004989@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=1409c4a1c20319845171b91edb6310e25ae81792
-Commit:        1409c4a1c20319845171b91edb6310e25ae81792
-Parent:        c42a18d372f314aa51d9d7877342f1d78fd68973
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Fri Apr 20 16:09:49 2018 -0500
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Fri Apr 20 16:09:49 2018 -0500
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=ae274617770aa44263619151ef24393cb8a16a79
+Commit:        ae274617770aa44263619151ef24393cb8a16a79
+Parent:        fcdac700f9aac079761ad302e06413a5eb2178b9
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Mon Apr 23 21:28:35 2018 +0200
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Mon Apr 23 22:42:18 2018 +0200
 
-clvm: rescan when VG or PV not found
+lvchange: update mirror table when changing monitoring
 
-Rescan devices to update lvmcache content when
-clvmd vg_read doesn't find a VG or PV.
+Since for non-monitored mirrors we let mirror running without
+error handling - when monitoring changes for mirror, updated
+table (refresh) is needed.
 ---
- lib/metadata/metadata.c |   28 ++++++++++++++++++++++++----
- 1 files changed, 24 insertions(+), 4 deletions(-)
+ tools/lvchange.c |    4 ++++
+ 1 files changed, 4 insertions(+), 0 deletions(-)
 
-diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
-index 685c589..2df9abe 100644
---- a/lib/metadata/metadata.c
-+++ b/lib/metadata/metadata.c
-@@ -4585,6 +4585,7 @@ static struct volume_group *_vg_read_by_vgid(struct cmd_context *cmd,
- 	if (!(vgname = lvmcache_vgname_from_vgid(cmd->mem, vgid))) {
- 		log_debug_metadata("Reading VG by vgid %.8s no VG name found, retrying.", vgid);
- 		lvmcache_destroy(cmd, 0, 0);
-+		label_scan_destroy(cmd);
- 		lvmcache_label_scan(cmd);
- 	}
- 
-@@ -4597,14 +4598,33 @@ static struct volume_group *_vg_read_by_vgid(struct cmd_context *cmd,
- 
- 	label_scan_setup_bcache();
- 
--	if ((vg = _vg_read(cmd, vgname, vgid, warn_flags, &consistent, precommitted))) {
--		/* Does it matter if consistent is 0 or 1? */
--		label_scan_destroy(cmd);
--		return vg;
-+	if (!(vg = _vg_read(cmd, vgname, vgid, warn_flags, &consistent, precommitted))) {
-+		log_error("Rescan devices to look for missing VG.");
-+		goto scan;
-+	}
+diff --git a/tools/lvchange.c b/tools/lvchange.c
+index 0aac5ac..e1be4cb 100644
+--- a/tools/lvchange.c
++++ b/tools/lvchange.c
+@@ -1603,6 +1603,10 @@ static int _lvchange_monitor_poll_single(struct cmd_context *cmd,
+ 				         struct logical_volume *lv,
+ 				         struct processing_handle *handle)
+ {
++	/* Mirror is using different table line when un/monitored */
++	if (lv_is_mirror(lv) && !lv_refresh(cmd, lv))
++		return_ECMD_FAILED;
 +
-+	if (vg_missing_pv_count(vg)) {
-+		log_error("Rescan devices to look for missing PVs.");
-+		release_vg(vg);
-+		goto scan;
- 	}
- 
-+	label_scan_destroy(cmd); /* drop bcache to close devs, keep lvmcache */
-+	return vg;
-+
-+ scan:
-+	lvmcache_destroy(cmd, 0, 0);
- 	label_scan_destroy(cmd);
-+	lvmcache_label_scan(cmd);
-+
-+	if (!(vg = _vg_read(cmd, vgname, vgid, warn_flags, &consistent, precommitted)))
-+		goto fail;
-+
-+	label_scan_destroy(cmd); /* drop bcache to close devs, keep lvmcache */
-+	return vg;
- 
-+ fail:
-+	label_scan_destroy(cmd); /* drop bache to close devs, keep lvmcache */
- 	log_debug_metadata("Reading VG by vgid %.8s not found.", vgid);
- 	return NULL;
- }
+ 	if (arg_is_set(cmd, monitor_ARG) &&
+ 	    !_lvchange_monitoring(cmd, lv))
+ 		return_ECMD_FAILED;
 
 
