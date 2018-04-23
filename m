@@ -1,88 +1,68 @@
 From: David Teigland <teigland@sourceware.org>
-Date: Mon, 23 Apr 2018 09:55:29 -0400
-Subject: master - scan: add function to drop bcache blocks
-Message-ID: <201804231355.w3NDtTdK001723@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Mon, 23 Apr 2018 09:55:38 -0400
+Subject: master - clvm: fix bcache scan handling
+Message-ID: <201804231355.w3NDtcVY001769@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=217f3f8741c1f516ab1f039b8725ac3ce638e302
-Commit:        217f3f8741c1f516ab1f039b8725ac3ce638e302
-Parent:        da2b155a9da4c4c9caf502b87ad263de6e678b30
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=ddb5de7a98af5e354013a07c61e46636b9ec01e6
+Commit:        ddb5de7a98af5e354013a07c61e46636b9ec01e6
+Parent:        196579af1f7ebe25c0266043c7d966b344699d5d
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Tue Feb 27 16:35:47 2018 -0600
+AuthorDate:    Thu Mar 1 12:43:29 2018 -0600
 Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Fri Apr 20 11:22:47 2018 -0500
+CommitterDate: Fri Apr 20 11:22:48 2018 -0500
 
-scan: add function to drop bcache blocks
+clvm: fix bcache scan handling
 
-which can be a little more efficient that destroy.
+We can't let clvmd keep all scanned devs open,
+which prevents them from being removed.  So
+drop the bcache data (and close fds) affter
+doing a label scan.
+
+Also set up bcache before the clvm-specific
+vg_read (which needs to rescan the vg's devs
+using bcache) and destroy the bcache after.
 ---
- lib/label/label.c |   24 ++++++++++++++++--------
- lib/label/label.h |    1 +
- 2 files changed, 17 insertions(+), 8 deletions(-)
+ daemons/clvmd/lvm-functions.c |    1 +
+ lib/metadata/metadata.c       |    5 +++++
+ 2 files changed, 6 insertions(+), 0 deletions(-)
 
-diff --git a/lib/label/label.c b/lib/label/label.c
-index 0514ddf..dd455ec 100644
---- a/lib/label/label.c
-+++ b/lib/label/label.c
-@@ -733,20 +733,15 @@ void label_scan_invalidate_lv(struct cmd_context *cmd, struct logical_volume *lv
+diff --git a/daemons/clvmd/lvm-functions.c b/daemons/clvmd/lvm-functions.c
+index c845e6d..64bdab3 100644
+--- a/daemons/clvmd/lvm-functions.c
++++ b/daemons/clvmd/lvm-functions.c
+@@ -665,6 +665,7 @@ int do_refresh_cache(void)
+ 	init_ignore_suspended_devices(1);
+ 	lvmcache_force_next_label_scan();
+ 	lvmcache_label_scan(cmd);
++	label_scan_destroy(cmd); /* destroys bcache (to close devs), keeps lvmcache */
+ 	dm_pool_empty(cmd->mem);
+ 
+ 	pthread_mutex_unlock(&lvm_lock);
+diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
+index b442451..462c391 100644
+--- a/lib/metadata/metadata.c
++++ b/lib/metadata/metadata.c
+@@ -4530,11 +4530,16 @@ static struct volume_group *_vg_read_by_vgid(struct cmd_context *cmd,
+ 
+ 	consistent = 0;
+ 
++	label_scan_setup_bcache();
++
+ 	if ((vg = _vg_read(cmd, vgname, vgid, warn_flags, &consistent, precommitted))) {
+ 		/* Does it matter if consistent is 0 or 1? */
++		label_scan_destroy(cmd);
+ 		return vg;
+ 	}
+ 
++	label_scan_destroy(cmd);
++
+ 	log_debug_metadata("Reading VG by vgid %.8s not found.", vgid);
+ 	return NULL;
  }
- 
- /*
-- * Undo label_scan()
-- *
-- * Close devices that are open because bcache is holding blocks for them.
-- * Destroy the bcache.
-+ * Empty the bcache of all blocks and close all open fds,
-+ * but keep the bcache set up.
-  */
- 
--void label_scan_destroy(struct cmd_context *cmd)
-+void label_scan_drop(struct cmd_context *cmd)
- {
- 	struct dev_iter *iter;
- 	struct device *dev;
- 
--	if (!scan_bcache)
--		return;
--
- 	if (!(iter = dev_iter_create(cmd->full_filter, 0))) {
- 		return;
- 	}
-@@ -756,6 +751,19 @@ void label_scan_destroy(struct cmd_context *cmd)
- 			_scan_dev_close(dev);
- 	}
- 	dev_iter_destroy(iter);
-+}
-+
-+/*
-+ * Close devices that are open because bcache is holding blocks for them.
-+ * Destroy the bcache.
-+ */
-+
-+void label_scan_destroy(struct cmd_context *cmd)
-+{
-+	if (!scan_bcache)
-+		return;
-+
-+	label_scan_drop(cmd);
- 
- 	bcache_destroy(scan_bcache);
- 	scan_bcache = NULL;
-diff --git a/lib/label/label.h b/lib/label/label.h
-index 8ef687b..55e92e8 100644
---- a/lib/label/label.h
-+++ b/lib/label/label.h
-@@ -107,6 +107,7 @@ int label_scan_devs(struct cmd_context *cmd, struct dm_list *devs);
- int label_scan_devs_excl(struct dm_list *devs);
- void label_scan_invalidate(struct device *dev);
- void label_scan_invalidate_lv(struct cmd_context *cmd, struct logical_volume *lv);
-+void label_scan_drop(struct cmd_context *cmd);
- void label_scan_destroy(struct cmd_context *cmd);
- int label_read(struct device *dev, struct label **labelp, uint64_t unused_sector);
- int label_read_sector(struct device *dev, struct label **labelp, uint64_t scan_sector);
 
 
