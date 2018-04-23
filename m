@@ -1,39 +1,63 @@
 From: David Teigland <teigland@sourceware.org>
-Date: Mon, 23 Apr 2018 09:47:40 -0400
-Subject: master - [device/bcache] fix min() function
-Message-ID: <201804231347.w3NDle79031330@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Mon, 23 Apr 2018 09:47:51 -0400
+Subject: master - [device/bcache] bcache_read_bytes should put blocks
+Message-ID: <201804231347.w3NDlpDt031359@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=7be54bd687ead6aa21e04c8a85a648da369a3d88
-Commit:        7be54bd687ead6aa21e04c8a85a648da369a3d88
-Parent:        d9e6298edb0bc6533c22f7e95e613189abe89c99
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=93fc9374294aae679faa23aef0bd631db2e9a31a
+Commit:        93fc9374294aae679faa23aef0bd631db2e9a31a
+Parent:        7be54bd687ead6aa21e04c8a85a648da369a3d88
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Thu Feb 8 11:16:19 2018 -0600
+AuthorDate:    Thu Feb 8 13:44:54 2018 -0600
 Committer:     David Teigland <teigland@redhat.com>
 CommitterDate: Fri Apr 20 11:12:50 2018 -0500
 
-[device/bcache] fix min() function
+[device/bcache] bcache_read_bytes should put blocks
 
 ---
- lib/device/bcache.c |    2 +-
- 1 files changed, 1 insertions(+), 1 deletions(-)
+ lib/device/bcache.c |   11 ++++++++---
+ 1 files changed, 8 insertions(+), 3 deletions(-)
 
 diff --git a/lib/device/bcache.c b/lib/device/bcache.c
-index cea4db4..52be947 100644
+index 52be947..5141083 100644
 --- a/lib/device/bcache.c
 +++ b/lib/device/bcache.c
-@@ -997,7 +997,7 @@ void bcache_prefetch_bytes(struct bcache *cache, int fd, off_t start, size_t len
+@@ -1009,14 +1009,17 @@ bool bcache_read_bytes(struct bcache *cache, int fd, off_t start, size_t len, vo
+ 	block_address bb, be, i;
+ 	unsigned char *udata = data;
+ 	off_t block_size = cache->block_sectors << SECTOR_SHIFT;
++	int errors = 0;
  
- static off_t _min(off_t lhs, off_t rhs)
- {
--	if (rhs > lhs)
-+	if (rhs < lhs)
- 		return rhs;
+ 	byte_range_to_block_range(cache, start, len, &bb, &be);
+ 	for (i = bb; i < be; i++)
+ 		bcache_prefetch(cache, fd, i);
  
- 	return lhs;
+ 	for (i = bb; i < be; i++) {
+-		if (!bcache_get(cache, fd, i, 0, &b))
+-			return false;
++		if (!bcache_get(cache, fd, i, 0, &b)) {
++			errors++;
++			continue;
++		}
+ 
+ 		if (i == bb) {
+ 			off_t block_offset = start % block_size;
+@@ -1030,9 +1033,11 @@ bool bcache_read_bytes(struct bcache *cache, int fd, off_t start, size_t len, vo
+ 			len -= blen;
+ 			udata += blen;
+ 		}
++
++		bcache_put(b);
+ 	}
+ 
+-	return true;
++	return errors ? false : true;
+ }
+ 
+ //----------------------------------------------------------------
 
 
