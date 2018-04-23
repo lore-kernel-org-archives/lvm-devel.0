@@ -1,422 +1,137 @@
 From: David Teigland <teigland@sourceware.org>
 Date: Mon, 23 Apr 2018 09:52:27 -0400
-Subject: master - [device/bcache] more work on bcache
-Message-ID: <201804231352.w3NDqRoc000798@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Subject: master - scan: drop bcache between lvm shell commands
+Message-ID: <201804231352.w3NDqRsE000803@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=dc8034f5eb8d14b621c3d99ff58c95f74153c448
-Commit:        dc8034f5eb8d14b621c3d99ff58c95f74153c448
-Parent:        1cde30eba0fc4404f092fb5106f7cc7fcd66795b
-Author:        Joe Thornber <ejt@redhat.com>
-AuthorDate:    Tue Feb 6 15:10:44 2018 +0000
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=ae21305ee7fa60edbd85824d83ce554989161189
+Commit:        ae21305ee7fa60edbd85824d83ce554989161189
+Parent:        a01a8d71723740577e5fe9635412940d941b5da9
+Author:        David Teigland <teigland@redhat.com>
+AuthorDate:    Fri Apr 6 13:05:17 2018 -0500
 Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Fri Apr 20 11:12:50 2018 -0500
+CommitterDate: Fri Apr 20 11:22:48 2018 -0500
 
-[device/bcache] more work on bcache
+scan: drop bcache between lvm shell commands
 
+A running lvm shell keeps all lvm devices open
+unless the bcache is dropped.
 ---
- lib/device/bcache.c  |    2 +-
- test/unit/bcache_t.c |  152 +++++++++++++++++++++++++++++++++----------------
- 2 files changed, 103 insertions(+), 51 deletions(-)
+ lib/cache/lvmcache.c |   22 ++++++++++++++++++++--
+ tools/lvmcmdline.c   |    7 +++----
+ tools/toollib.c      |    1 -
+ 3 files changed, 23 insertions(+), 7 deletions(-)
 
-diff --git a/lib/device/bcache.c b/lib/device/bcache.c
-index 1d83306..dce05ef 100644
---- a/lib/device/bcache.c
-+++ b/lib/device/bcache.c
-@@ -365,7 +365,7 @@ static struct block *_hash_lookup(struct bcache *cache, int fd, uint64_t index)
- 	unsigned h = _hash(cache, fd, index);
+diff --git a/lib/cache/lvmcache.c b/lib/cache/lvmcache.c
+index 6479080..78665bf 100644
+--- a/lib/cache/lvmcache.c
++++ b/lib/cache/lvmcache.c
+@@ -406,7 +406,7 @@ int lvmcache_verify_lock_order(const char *vgname)
+ 		return 1;
  
- 	dm_list_iterate_items_gen (b, cache->buckets + h, hash)
--		if (b->index == index)
-+		if (b->fd == fd && b->index == index)
- 			return b;
+ 	if (!_lock_hash)
+-		return_0;
++		return 1;
  
- 	return NULL;
-diff --git a/test/unit/bcache_t.c b/test/unit/bcache_t.c
-index 5fb6789..07a45fe 100644
---- a/test/unit/bcache_t.c
-+++ b/test/unit/bcache_t.c
-@@ -54,6 +54,7 @@ struct mock_engine {
- 	struct dm_list expected_calls;
- 	struct dm_list issued_io;
- 	unsigned max_io;
-+	sector_t block_size;
- };
+ 	dm_hash_iterate(n, _lock_hash) {
+ 		if (!dm_hash_get_data(_lock_hash, n))
+@@ -836,6 +836,9 @@ static int _label_scan_invalid(struct cmd_context *cmd)
+ 		dev_count++;
+ 	}
  
- enum method {
-@@ -66,6 +67,11 @@ enum method {
- struct mock_call {
- 	struct dm_list list;
- 	enum method m;
++	if (dm_list_empty(&devs))
++		return 1;
 +
-+	bool match_args;
-+	enum dir d;
-+	int fd;
-+	block_address b;
- };
+ 	log_debug_cache("Scanning %d devs with invalid info.", dev_count);
  
- struct mock_io {
-@@ -97,23 +103,35 @@ static void _expect(struct mock_engine *e, enum method m)
- {
- 	struct mock_call *mc = malloc(sizeof(*mc));
- 	mc->m = m;
-+	mc->match_args = false;
- 	dm_list_add(&e->expected_calls, &mc->list);
- }
+ 	ret = label_scan_devs(cmd, &devs);
+@@ -1236,8 +1239,10 @@ int lvmcache_label_scan(struct cmd_context *cmd)
+ 	struct dm_list del_cache_devs;
+ 	struct dm_list add_cache_devs;
+ 	struct lvmcache_info *info;
++	struct lvmcache_vginfo *vginfo;
+ 	struct device_list *devl;
+ 	struct format_type *fmt;
++	int vginfo_count = 0;
  
--static void _expect_read(struct mock_engine *e)
-+static void _expect_read(struct mock_engine *e, int fd, block_address b)
- {
--	// FIXME: finish
--	_expect(e, E_ISSUE);
-+	struct mock_call *mc = malloc(sizeof(*mc));
-+	mc->m = E_ISSUE;
-+	mc->match_args = true;
-+	mc->d = DIR_READ;
-+	mc->fd = fd;
-+	mc->b = b;
-+	dm_list_add(&e->expected_calls, &mc->list);
- }
+ 	int r = 0;
  
--static void _expect_write(struct mock_engine *e)
-+static void _expect_write(struct mock_engine *e, int fd, block_address b)
- {
--	// FIXME: finish
--	_expect(e, E_ISSUE);
-+	struct mock_call *mc = malloc(sizeof(*mc));
-+	mc->m = E_ISSUE;
-+	mc->match_args = true;
-+	mc->d = DIR_WRITE;
-+	mc->fd = fd;
-+	mc->b = b;
-+	dm_list_add(&e->expected_calls, &mc->list);
- }
+@@ -1247,6 +1252,8 @@ int lvmcache_label_scan(struct cmd_context *cmd)
+ 		return 1;
+ 	}
  
--static void _match(struct mock_engine *e, enum method m)
-+static struct mock_call *_match_pop(struct mock_engine *e, enum method m)
- {
++	log_debug_cache("Finding VG info");
 +
- 	struct mock_call *mc;
+ 	/* Avoid recursion when a PVID can't be found! */
+ 	if (_scanning_in_progress)
+ 		return 0;
+@@ -1315,6 +1322,8 @@ int lvmcache_label_scan(struct cmd_context *cmd)
+ 		dm_list_init(&del_cache_devs);
+ 		dm_list_init(&add_cache_devs);
  
- 	if (dm_list_empty(&e->expected_calls))
-@@ -129,7 +147,12 @@ static void _match(struct mock_engine *e, enum method m)
- 		fprintf(stderr, "%s called (expected)\n", _show_method(m));
- #endif
- 
--	free(mc);
-+	return mc;
-+}
++		log_debug_cache("Resolving duplicate devices");
 +
-+static void _match(struct mock_engine *e, enum method m)
-+{
-+	free(_match_pop(e, m));
- }
+ 		_choose_preferred_devs(cmd, &del_cache_devs, &add_cache_devs);
  
- static void _no_outstanding_expectations(struct mock_engine *e)
-@@ -163,9 +186,18 @@ static bool _mock_issue(struct io_engine *e, enum dir d, int fd,
- 	      		sector_t sb, sector_t se, void *data, void *context)
- {
- 	struct mock_io *io;
-+	struct mock_call *mc;
- 	struct mock_engine *me = _to_mock(e);
+ 		dm_list_iterate_items(devl, &del_cache_devs) {
+@@ -1354,6 +1363,14 @@ int lvmcache_label_scan(struct cmd_context *cmd)
+ 	_scanning_in_progress = 0;
+ 	_force_label_scan = 0;
  
--	_match(me, E_ISSUE);
-+	mc = _match_pop(me, E_ISSUE);
-+	if (mc->match_args) {
-+		T_ASSERT(d == mc->d);
-+		T_ASSERT(fd == mc->fd);
-+		T_ASSERT(sb == mc->b * me->block_size);
-+		T_ASSERT(se == (mc->b + 1) * me->block_size);
++	dm_list_iterate_items(vginfo, &_vginfos) {
++		if (is_orphan_vg(vginfo->vgname))
++			continue;
++		vginfo_count++;
 +	}
-+	free(mc);
 +
- 	io = malloc(sizeof(*io));
- 	if (!io)
- 		abort();
-@@ -202,7 +234,7 @@ static unsigned _mock_max_io(struct io_engine *e)
- 	return me->max_io;
- }
- 
--static struct mock_engine *_mock_create(unsigned max_io)
-+static struct mock_engine *_mock_create(unsigned max_io, sector_t block_size)
- {
- 	struct mock_engine *m = malloc(sizeof(*m));
- 
-@@ -212,6 +244,7 @@ static struct mock_engine *_mock_create(unsigned max_io)
- 	m->e.max_io = _mock_max_io;
- 
- 	m->max_io = max_io;
-+	m->block_size = block_size;
- 	dm_list_init(&m->expected_calls);
- 	dm_list_init(&m->issued_io);
- 
-@@ -226,15 +259,15 @@ struct fixture {
- 	struct bcache *cache;
- };
- 
--static struct fixture *_fixture_init(unsigned nr_cache_blocks)
-+static struct fixture *_fixture_init(sector_t block_size, unsigned nr_cache_blocks)
- {
- 	struct fixture *f = malloc(sizeof(*f));
- 
--	f->me = _mock_create(16);
-+	f->me = _mock_create(16, block_size);
- 	T_ASSERT(f->me);
- 
- 	_expect(f->me, E_MAX_IO);
--	f->cache = bcache_create(128, nr_cache_blocks, &f->me->e);
-+	f->cache = bcache_create(block_size, nr_cache_blocks, &f->me->e);
- 	T_ASSERT(f->cache);
- 
- 	return f;
-@@ -250,7 +283,7 @@ static void _fixture_exit(struct fixture *f)
- 
- static void *_small_fixture_init(void)
- {
--	return _fixture_init(16);
-+	return _fixture_init(128, 16);
- }
- 
- static void _small_fixture_exit(void *context)
-@@ -260,7 +293,7 @@ static void _small_fixture_exit(void *context)
- 
- static void *_large_fixture_init(void)
- {
--	return _fixture_init(1024);
-+	return _fixture_init(128, 1024);
- }
- 
- static void _large_fixture_exit(void *context)
-@@ -277,7 +310,7 @@ static void _large_fixture_exit(void *context)
- static void good_create(sector_t block_size, unsigned nr_cache_blocks)
- {
- 	struct bcache *cache;
--	struct mock_engine *me = _mock_create(16);
-+	struct mock_engine *me = _mock_create(16, 128);
- 
- 	_expect(me, E_MAX_IO);
- 	cache = bcache_create(block_size, nr_cache_blocks, &me->e);
-@@ -290,7 +323,7 @@ static void good_create(sector_t block_size, unsigned nr_cache_blocks)
- static void bad_create(sector_t block_size, unsigned nr_cache_blocks)
- {
- 	struct bcache *cache;
--	struct mock_engine *me = _mock_create(16);
-+	struct mock_engine *me = _mock_create(16, 128);
- 
- 	_expect(me, E_MAX_IO);
- 	cache = bcache_create(block_size, nr_cache_blocks, &me->e);
-@@ -335,7 +368,7 @@ static void test_get_triggers_read(void *context)
- 	int fd = 17;   // arbitrary key
- 	struct block *b;
- 
--	_expect(f->me, E_ISSUE);
-+	_expect_read(f->me, fd, 0);
- 	_expect(f->me, E_WAIT);
- 	T_ASSERT(bcache_get(f->cache, fd, 0, 0, &b));
- 	bcache_put(b);
-@@ -349,7 +382,7 @@ static void test_repeated_reads_are_cached(void *context)
- 	unsigned i;
- 	struct block *b;
- 
--	_expect(f->me, E_ISSUE);
-+	_expect_read(f->me, fd, 0);
- 	_expect(f->me, E_WAIT);
- 	for (i = 0; i < 100; i++) {
- 		T_ASSERT(bcache_get(f->cache, fd, 0, 0, &b));
-@@ -370,14 +403,14 @@ static void test_block_gets_evicted_with_many_reads(void *context)
- 	struct block *b;
- 
- 	for (i = 0; i < nr_cache_blocks; i++) {
--		_expect(me, E_ISSUE);
-+		_expect_read(me, fd, i);
- 		_expect(me, E_WAIT);
- 		T_ASSERT(bcache_get(cache, fd, i, 0, &b));
- 		bcache_put(b);
- 	}
- 
- 	// Not enough cache blocks to hold this one
--	_expect(me, E_ISSUE);
-+	_expect_read(me, fd, nr_cache_blocks);
- 	_expect(me, E_WAIT);
- 	T_ASSERT(bcache_get(cache, fd, nr_cache_blocks, 0, &b));
- 	bcache_put(b);
-@@ -406,7 +439,7 @@ static void test_prefetch_issues_a_read(void *context)
- 
- 	for (i = 0; i < nr_cache_blocks; i++) {
- 		// prefetch should not wait
--		_expect(me, E_ISSUE);
-+		_expect_read(me, fd, i);
- 		bcache_prefetch(cache, fd, i);
- 	}
- 
-@@ -431,7 +464,7 @@ static void test_too_many_prefetches_does_not_trigger_a_wait(void *context)
- 	for (i = 0; i < 10 * nr_cache_blocks; i++) {
- 		// prefetch should not wait
- 		if (i < nr_cache_blocks)
--			_expect(me, E_ISSUE);
-+			_expect_read(me, fd, i);
- 		bcache_prefetch(cache, fd, i);
- 	}
- 
-@@ -446,19 +479,17 @@ static void test_dirty_data_gets_written_back(void *context)
- 	struct mock_engine *me = f->me;
- 	struct bcache *cache = f->cache;
- 
--	const unsigned nr_cache_blocks = 16;
- 	int fd = 17;   // arbitrary key
- 	struct block *b;
- 
--	// FIXME: be specific about the IO direction
- 	// Expect the read
--	_expect(me, E_ISSUE);
-+	_expect_read(me, fd, 0);
- 	_expect(me, E_WAIT);
- 	T_ASSERT(bcache_get(cache, fd, 0, GF_DIRTY, &b));
- 	bcache_put(b);
- 
- 	// Expect the write
--	_expect(me, E_ISSUE);
-+	_expect_write(me, fd, 0);
- 	_expect(me, E_WAIT);
- }
- 
-@@ -468,7 +499,6 @@ static void test_zeroed_data_counts_as_dirty(void *context)
- 	struct mock_engine *me = f->me;
- 	struct bcache *cache = f->cache;
- 
--	const unsigned nr_cache_blocks = 16;
- 	int fd = 17;   // arbitrary key
- 	struct block *b;
- 
-@@ -477,7 +507,7 @@ static void test_zeroed_data_counts_as_dirty(void *context)
- 	bcache_put(b);
- 
- 	// Expect the write
--	_expect(me, E_ISSUE);
-+	_expect_write(me, fd, 0);
- 	_expect(me, E_WAIT);
- }
- 
-@@ -496,7 +526,7 @@ static void test_flush_waits_for_all_dirty(void *context)
- 		if (i % 2) {
- 			T_ASSERT(bcache_get(cache, fd, i, GF_ZERO, &b));
- 		} else {
--			_expect_read(me);
-+			_expect_read(me, fd, i);
- 			_expect(me, E_WAIT);
- 			T_ASSERT(bcache_get(cache, fd, i, 0, &b));
- 		}
-@@ -505,7 +535,7 @@ static void test_flush_waits_for_all_dirty(void *context)
- 
- 	for (i = 0; i < count; i++) {
- 		if (i % 2)
--			_expect_write(me);
-+			_expect_write(me, fd, i);
- 	}
- 
- 	for (i = 0; i < count; i++) {
-@@ -517,6 +547,25 @@ static void test_flush_waits_for_all_dirty(void *context)
- 	_no_outstanding_expectations(me);
- }
- 
-+static void test_multiple_files(void * context)
-+{
-+	static int _fds[] = {1, 128, 345, 678, 890};
++	log_debug_cache("Found VG info for %d VGs", vginfo_count);
 +
-+	struct fixture *f = context;
-+	struct mock_engine *me = f->me;
-+	struct bcache *cache = f->cache;
-+	struct block *b;
-+	unsigned i;
-+
-+	for (i = 0; i < DM_ARRAY_SIZE(_fds); i++) {
-+		_expect_read(me, _fds[i], 0);
-+		_expect(me, E_WAIT);
-+
-+		T_ASSERT(bcache_get(cache, _fds[i], 0, 0, &b));
-+		bcache_put(b);
-+	}
-+}
-+
- // Tests to be written
- // Open multiple files and prove the blocks are coming from the correct file
- // show invalidate works
-@@ -525,31 +574,34 @@ static void test_flush_waits_for_all_dirty(void *context)
- // check zeroing
+ 	return r;
+ }
  
- struct test_details {
--	const char *name;
-+	const char *path;
-+	const char *desc;
- 	void (*fn)(void *);
- 	void *(*fixture_init)(void);
- 	void (*fixture_exit)(void *);
- };
- 
--#define TEST(name, fn) {name, fn, NULL, NULL}
--#define TEST_S(name, fn) {name, fn, _small_fixture_init, _small_fixture_exit}
--#define TEST_L(name, fn) {name, fn, _large_fixture_init, _large_fixture_exit}
-+#define PATH "device/bcache/"
-+#define TEST(path, name, fn) {PATH path, name, fn, NULL, NULL}
-+#define TEST_S(path, name, fn) {PATH path, name, fn, _small_fixture_init, _small_fixture_exit}
-+#define TEST_L(path, name, fn) {PATH path, name, fn, _large_fixture_init, _large_fixture_exit}
- 
- int main(int argc, char **argv)
+@@ -2291,7 +2308,8 @@ static void _lvmcache_destroy_lockname(struct dm_hash_node *n)
+ void lvmcache_destroy(struct cmd_context *cmd, int retain_orphans, int reset)
  {
- 	static struct test_details _tests[] = {
--		TEST("simple create/destroy", test_create),
--		TEST("nr cache blocks must be positive", test_nr_cache_blocks_must_be_positive),
--		TEST("block size must be positive", test_block_size_must_be_positive),
--		TEST("block size must be a multiple of page size", test_block_size_must_be_multiple_of_page_size),
--		TEST_S("bcache_get() triggers read", test_get_triggers_read),
--		TEST_S("repeated reads are cached", test_repeated_reads_are_cached),
--		TEST_S("block get evicted with many reads", test_block_gets_evicted_with_many_reads),
--		TEST_S("prefetch issues a read", test_prefetch_issues_a_read),
--		TEST_S("too many prefetches does not trigger a wait", test_too_many_prefetches_does_not_trigger_a_wait),
--		TEST_S("dirty data gets written back", test_dirty_data_gets_written_back),
--		TEST_S("zeroed data counts as dirty", test_zeroed_data_counts_as_dirty),
--		TEST_L("flush waits for all dirty", test_flush_waits_for_all_dirty),
-+		TEST("create-destroy", "simple create/destroy", test_create),
-+		TEST("cache-blocks-positive", "nr cache blocks must be positive", test_nr_cache_blocks_must_be_positive),
-+		TEST("block-size-positive", "block size must be positive", test_block_size_must_be_positive),
-+		TEST("block-size-multiple-page", "block size must be a multiple of page size", test_block_size_must_be_multiple_of_page_size),
-+		TEST_S("get-reads", "bcache_get() triggers read", test_get_triggers_read),
-+		TEST_S("reads-cached", "repeated reads are cached", test_repeated_reads_are_cached),
-+		TEST_S("blocks-get-evicted", "block get evicted with many reads", test_block_gets_evicted_with_many_reads),
-+		TEST_S("prefetch-reads", "prefetch issues a read", test_prefetch_issues_a_read),
-+		TEST_S("prefetch-never-waits", "too many prefetches does not trigger a wait", test_too_many_prefetches_does_not_trigger_a_wait),
-+		TEST_S("writeback-occurs", "dirty data gets written back", test_dirty_data_gets_written_back),
-+		TEST_S("zero-flag-dirties", "zeroed data counts as dirty", test_zeroed_data_counts_as_dirty),
-+		TEST_L("flush waits for all dirty", "flush waits for all dirty", test_flush_waits_for_all_dirty),
-+		TEST_S("read-multiple-files", "read from multiple files", test_multiple_files),
- 	};
+ 	struct dm_hash_node *n;
+-	log_verbose("Wiping internal VG cache");
++
++	log_debug_cache("Dropping VG info");
  
- 	// We have to declare these as volatile because of the setjmp()
-@@ -558,10 +610,10 @@ int main(int argc, char **argv)
- 	for (i = 0; i < DM_ARRAY_SIZE(_tests); i++) {
- 		void *fixture;
- 		struct test_details *t = _tests + i;
--		fprintf(stderr, "[RUN    ] %s\n", t->name);
-+		fprintf(stderr, "[RUN    ] %s\n", t->path);
+ 	_has_scanned = 0;
  
- 		if (setjmp(_test_k))
--			fprintf(stderr, "[   FAIL] %s\n", t->name);
-+			fprintf(stderr, "[   FAIL] %s\n", t->path);
- 		else {
- 			if (t->fixture_init)
- 				fixture = t->fixture_init();
-@@ -574,7 +626,7 @@ int main(int argc, char **argv)
- 				t->fixture_exit(fixture);
+diff --git a/tools/lvmcmdline.c b/tools/lvmcmdline.c
+index fc96b8d..3774014 100644
+--- a/tools/lvmcmdline.c
++++ b/tools/lvmcmdline.c
+@@ -3013,10 +3013,9 @@ int lvm_run_command(struct cmd_context *cmd, int argc, char **argv)
+ 		lvmnotify_send(cmd);
  
- 			passed++;
--			fprintf(stderr, "[     OK] %s\n", t->name);
-+			fprintf(stderr, "[     OK] %s\n", t->path);
- 		}
- 	}
+       out:
+-	if (test_mode()) {
+-		log_verbose("Test mode: Wiping internal cache");
+-		lvmcache_destroy(cmd, 1, 0);
+-	}
++
++	lvmcache_destroy(cmd, 1, 1);
++	label_scan_destroy(cmd);
  
+ 	if ((config_string_cft = remove_config_tree_by_source(cmd, CONFIG_STRING)))
+ 		dm_config_destroy(config_string_cft);
+diff --git a/tools/toollib.c b/tools/toollib.c
+index c8dd9d3..7e3b021 100644
+--- a/tools/toollib.c
++++ b/tools/toollib.c
+@@ -4508,7 +4508,6 @@ int process_each_pv(struct cmd_context *cmd,
+ 	 * before process_each_pv is called.
+ 	 */
+ 	if (!trust_cache() && !orphans_locked) {
+-		log_debug("Scanning for available devices");
+ 		lvmcache_destroy(cmd, 1, 0);
+ 
+ 		/*
 
 
