@@ -1,41 +1,38 @@
 From: David Teigland <teigland@sourceware.org>
-Date: Mon, 23 Apr 2018 09:49:56 -0400
-Subject: master - remove debugging print
-Message-ID: <201804231349.w3NDnuTD031729@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Mon, 23 Apr 2018 09:49:57 -0400
+Subject: master - remove unused variable in _pvremove_check_single
+Message-ID: <201804231349.w3NDnvOd031752@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=89f54a5094981c827ca557cb1381e5f1a028912c
-Commit:        89f54a5094981c827ca557cb1381e5f1a028912c
-Parent:        c29899b910811d0d1dc5607d200a1e59773eff0c
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=c29899b910811d0d1dc5607d200a1e59773eff0c
+Commit:        c29899b910811d0d1dc5607d200a1e59773eff0c
+Parent:        a1e3398ffcf5def36934eabbb9ea26db221bbe74
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Tue Feb 13 15:53:59 2018 -0600
+AuthorDate:    Tue Feb 13 14:28:24 2018 -0600
 Committer:     David Teigland <teigland@redhat.com>
 CommitterDate: Fri Apr 20 11:22:46 2018 -0500
 
-remove debugging print
+remove unused variable in _pvremove_check_single
 
 ---
- lib/label/label.c |    4 +---
- 1 files changed, 1 insertions(+), 3 deletions(-)
+ tools/toollib.c |    1 -
+ 1 files changed, 0 insertions(+), 1 deletions(-)
 
-diff --git a/lib/label/label.c b/lib/label/label.c
-index f0ec92f..1268498 100644
---- a/lib/label/label.c
-+++ b/lib/label/label.c
-@@ -802,9 +802,7 @@ int label_read_sector(struct device *dev, struct label **labelp, uint64_t scan_s
+diff --git a/tools/toollib.c b/tools/toollib.c
+index 0cc2edd..807e34c 100644
+--- a/tools/toollib.c
++++ b/tools/toollib.c
+@@ -5279,7 +5279,6 @@ static int _pvremove_check_single(struct cmd_context *cmd,
+ 	struct pvcreate_params *pp = (struct pvcreate_params *) handle->custom_handle;
+ 	struct pvcreate_device *pd;
+ 	struct pvcreate_prompt *prompt;
+-	struct label *label;
+ 	int found = 0;
  
- void label_scan_confirm(struct device *dev)
- {
--	if (!_in_bcache(dev)) {
--		log_warn("add dev %s to bcache", dev_name(dev));
-+	if (!_in_bcache(dev))
- 		label_read(dev, NULL, 0);
--	}
- }
- 
+ 	if (!pv->dev)
 
 
