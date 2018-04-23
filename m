@@ -1,58 +1,49 @@
 From: David Teigland <teigland@sourceware.org>
-Date: Mon, 23 Apr 2018 09:50:00 -0400
-Subject: master - scan: handle no devices
-Message-ID: <201804231350.w3NDo0Dh031771@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Mon, 23 Apr 2018 09:50:01 -0400
+Subject: master - scan: handle request to scan missing dev
+Message-ID: <201804231350.w3NDo1uI031785@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=a1e3398ffcf5def36934eabbb9ea26db221bbe74
-Commit:        a1e3398ffcf5def36934eabbb9ea26db221bbe74
-Parent:        9d2add136192a08be7b3441b6fbe583c27b03dc8
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=e4f478d86d6545f6cced7a8ba3bc0b79dccb7b6e
+Commit:        e4f478d86d6545f6cced7a8ba3bc0b79dccb7b6e
+Parent:        89f54a5094981c827ca557cb1381e5f1a028912c
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Tue Feb 13 13:37:10 2018 -0600
+AuthorDate:    Tue Feb 13 16:17:02 2018 -0600
 Committer:     David Teigland <teigland@redhat.com>
 CommitterDate: Fri Apr 20 11:22:46 2018 -0500
 
-scan: handle no devices
+scan: handle request to scan missing dev
 
-Still create bcache.
 ---
- lib/label/label.c |    6 +++++-
- 1 files changed, 5 insertions(+), 1 deletions(-)
+ lib/label/label.c |    5 +++++
+ 1 files changed, 5 insertions(+), 0 deletions(-)
 
 diff --git a/lib/label/label.c b/lib/label/label.c
-index 5da781e..f0ec92f 100644
+index 1268498..19beecf 100644
 --- a/lib/label/label.c
 +++ b/lib/label/label.c
-@@ -577,6 +577,7 @@ int label_scan(struct cmd_context *cmd)
- 	struct device_list *devl;
- 	struct device *dev;
- 	struct io_engine *ioe;
-+	int cache_blocks;
+@@ -257,6 +257,8 @@ struct bcache *scan_bcache;
  
- 	log_debug_devs("Finding devices to scan");
+ static bool _in_bcache(struct device *dev)
+ {
++	if (!dev)
++		return NULL;
+ 	return (dev->flags & DEV_IN_BCACHE) ? true : false;
+ }
  
-@@ -615,6 +616,9 @@ int label_scan(struct cmd_context *cmd)
- 	dev_iter_destroy(iter);
+@@ -402,6 +404,9 @@ static int _scan_dev_open(struct device *dev)
+ 	int flags = 0;
+ 	int fd;
  
- 	if (!scan_bcache) {
-+		/* No devices can happen, just create bcache with any small number. */
-+		if (!(cache_blocks = dm_list_size(&all_devs)))
-+			cache_blocks = 8;
- 
- 		/*
- 		 * 100 is arbitrary, it's the max number of concurrent aio's
-@@ -630,7 +634,7 @@ int label_scan(struct cmd_context *cmd)
- 		 * of the devs will not be lvm devices, and we don't need
- 		 * an entry for those.  We might want to change this.
- 		 */
--		if (!(scan_bcache = bcache_create(BCACHE_BLOCK_SIZE_IN_SECTORS, dm_list_size(&all_devs), ioe)))
-+		if (!(scan_bcache = bcache_create(BCACHE_BLOCK_SIZE_IN_SECTORS, cache_blocks, ioe)))
- 			return 0;
- 	}
- 
++	if (!dev)
++		return 0;
++
+ 	if (dev->flags & DEV_IN_BCACHE) {
+ 		log_error("scan_dev_open %s DEV_IN_BCACHE already set", dev_name(dev));
+ 		dev->flags &= ~DEV_IN_BCACHE;
 
 
