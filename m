@@ -1,123 +1,115 @@
 From: David Teigland <teigland@sourceware.org>
-Date: Mon, 23 Apr 2018 09:55:51 -0400
-Subject: master - scan: check for errors in text layer
-Message-ID: <201804231355.w3NDtpu6001835@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Mon, 23 Apr 2018 09:55:55 -0400
+Subject: master - lvmetad: more fixes related to bcache
+Message-ID: <201804231355.w3NDtt8t001852@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=196579af1f7ebe25c0266043c7d966b344699d5d
-Commit:        196579af1f7ebe25c0266043c7d966b344699d5d
-Parent:        44726ed9cb9559801868ade5440d9e6ea6a61127
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=a9b0aa5c178a6d8bb708ed35f833c648f7437ae3
+Commit:        a9b0aa5c178a6d8bb708ed35f833c648f7437ae3
+Parent:        e351f8bc66d49fecaa0ab78f8413d50a4674604a
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Thu Mar 1 12:42:18 2018 -0600
+AuthorDate:    Fri Mar 9 11:39:12 2018 -0600
 Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Fri Apr 20 11:22:47 2018 -0500
+CommitterDate: Fri Apr 20 11:22:48 2018 -0500
 
-scan: check for errors in text layer
+lvmetad: more fixes related to bcache
 
-The scanning code in the format_text layer
-has previously ignored errors.  Start checking
-for and returning them.
+Need to open devs prior to bcache io.
 ---
- lib/format_text/format-text.c |    5 ++++-
- lib/format_text/text_label.c  |   38 ++++++++++++++++++++++----------------
- 2 files changed, 26 insertions(+), 17 deletions(-)
+ lib/label/label.c       |   25 +++++++++++++++++--------
+ lib/metadata/metadata.c |   12 ++++++++++++
+ 2 files changed, 29 insertions(+), 8 deletions(-)
 
-diff --git a/lib/format_text/format-text.c b/lib/format_text/format-text.c
-index 4a9c303..4146e7c 100644
---- a/lib/format_text/format-text.c
-+++ b/lib/format_text/format-text.c
-@@ -536,8 +536,10 @@ static struct volume_group *_vg_read_raw_area(struct format_instance *fid,
- 	char *desc;
- 	uint32_t wrap = 0;
+diff --git a/lib/label/label.c b/lib/label/label.c
+index 9401067..14a7e90 100644
+--- a/lib/label/label.c
++++ b/lib/label/label.c
+@@ -515,7 +515,7 @@ static int _scan_list(struct dm_list *devs, int *failed)
+ 		bb = NULL;
  
--	if (!(mdah = raw_read_mda_header(fid->fmt, area, primary_mda)))
-+	if (!(mdah = raw_read_mda_header(fid->fmt, area, primary_mda))) {
-+		log_error("Failed to read vg %s from %s", vgname, dev_name(area->dev));
- 		goto_out;
-+	}
+ 		if (!bcache_get(scan_bcache, devl->dev->bcache_fd, 0, 0, &bb)) {
+-			log_error("Scan failed to read %s.", dev_name(devl->dev));
++			log_debug_devs("Scan failed to read %s.", dev_name(devl->dev));
+ 			scan_failed_count++;
+ 			scan_failed = 1;
+ 			lvmcache_del_dev(devl->dev);
+@@ -525,7 +525,7 @@ static int _scan_list(struct dm_list *devs, int *failed)
+ 			ret = _process_block(devl->dev, bb, &is_lvm_device);
  
- 	if (!(rlocn = _read_metadata_location_vg(area, mdah, primary_mda, vgname, &precommitted))) {
- 		log_debug_metadata("VG %s not found on %s", vgname, dev_name(area->dev));
-@@ -1213,6 +1215,7 @@ int read_metadata_location_summary(const struct format_type *fmt,
- 		log_debug_metadata("Metadata location on %s at %llu has offset 0.",
- 				   dev_name(dev_area->dev),
- 				   (unsigned long long)(dev_area->start + rlocn->offset));
-+		vgsummary->zero_offset = 1;
- 		return 0;
+ 			if (!ret && is_lvm_device) {
+-				log_error("Scan failed to process %s", dev_name(devl->dev));
++				log_debug_devs("Scan failed to process %s", dev_name(devl->dev));
+ 				scan_failed_count++;
+ 				scan_failed = 1;
+ 				lvmcache_del_dev(devl->dev);
+@@ -893,8 +893,11 @@ bool dev_read_bytes(struct device *dev, off_t start, size_t len, void *data)
  	}
  
-diff --git a/lib/format_text/text_label.c b/lib/format_text/text_label.c
-index 206ae3f..e65079e 100644
---- a/lib/format_text/text_label.c
-+++ b/lib/format_text/text_label.c
-@@ -331,16 +331,9 @@ static int _read_mda_header_and_metadata(struct metadata_area *mda, void *baton)
- 	struct mda_header *mdah;
- 	struct lvmcache_vgsummary vgsummary = { 0 };
- 
--	/*
--	 * Using the labeller struct to preserve info about
--	 * the last parsed vgname, vgid, creation host
--	 *
--	 * TODO: make lvmcache smarter and move this cache logic there
--	 */
--
- 	if (!(mdah = raw_read_mda_header(fmt, &mdac->area, mda_is_primary(mda)))) {
--		stack;
--		goto close_dev;
-+		log_error("Failed to read mda header from %s", dev_name(mdac->area.dev));
-+		goto fail;
+ 	if (dev->bcache_fd <= 0) {
+-		log_error("dev_read_bytes %s with invalid fd %d", dev_name(dev), dev->bcache_fd);
+-		return false;
++		/* This is not often needed, perhaps only with lvmetad. */
++		if (!label_scan_open(dev)) {
++			log_error("dev_read_bytes %s cannot open dev", dev_name(dev));
++			return false;
++		}
  	}
  
- 	mda_set_ignored(mda, rlocn_is_ignored(mdah->raw_locns));
-@@ -352,14 +345,25 @@ static int _read_mda_header_and_metadata(struct metadata_area *mda, void *baton)
- 		return 1;
+ 	if (!bcache_read_bytes(scan_bcache, dev->bcache_fd, start, len, data)) {
+@@ -924,8 +927,11 @@ bool dev_write_bytes(struct device *dev, off_t start, size_t len, void *data)
  	}
  
--	if (read_metadata_location_summary(fmt, mdah, mda_is_primary(mda), &mdac->area, &vgsummary,
--			     &mdac->free_sectors) &&
--	    !lvmcache_update_vgname_and_id(p->info, &vgsummary)) {
--		return_0;
-+	if (!read_metadata_location_summary(fmt, mdah, mda_is_primary(mda), &mdac->area,
-+					    &vgsummary, &mdac->free_sectors)) {
-+		if (vgsummary.zero_offset)
-+			return 1;
+ 	if (dev->bcache_fd <= 0) {
+-		log_error("dev_write_bytes %s with invalid fd %d", dev_name(dev), dev->bcache_fd);
+-		return false;
++		/* This is not often needed, perhaps only with lvmetad. */
++		if (!label_scan_open(dev)) {
++			log_error("dev_write_bytes %s cannot open dev", dev_name(dev));
++			return false;
++		}
+ 	}
+ 
+ 	if (!bcache_write_bytes(scan_bcache, dev->bcache_fd, start, len, data)) {
+@@ -954,8 +960,11 @@ bool dev_write_zeros(struct device *dev, off_t start, size_t len)
+ 	}
+ 
+ 	if (dev->bcache_fd <= 0) {
+-		log_error("dev_write_zeros %s with invalid fd %d", dev_name(dev), dev->bcache_fd);
+-		return false;
++		/* This is not often needed, perhaps only with lvmetad. */
++		if (!label_scan_open(dev)) {
++			log_error("dev_write_zeros %s cannot open dev", dev_name(dev));
++			return false;
++		}
+ 	}
+ 
+ 	if (!bcache_write_zeros(scan_bcache, dev->bcache_fd, start, len)) {
+diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
+index 462c391..8cb06be 100644
+--- a/lib/metadata/metadata.c
++++ b/lib/metadata/metadata.c
+@@ -3809,6 +3809,18 @@ static struct volume_group *_vg_read(struct cmd_context *cmd,
+ 				release_vg(correct_vg);
+ 				return_NULL;
+ 			}
 +
-+		log_error("Failed to read metadata summary from %s", dev_name(mdac->area.dev));
-+		goto fail;
-+	}
++			/*
++		 	 * When a command reads the vg from lvmetad, and then
++			 * writes the vg, the write path does some disk reads
++		 	 * of the devs.
++		 	 * FIXME: when a command is going to write the vg,
++		 	 * we should just read the vg from disk entirely
++		 	 * and skip reading it from lvmetad.
++		 	 */
++			dm_list_iterate_items(pvl, &correct_vg->pvs)
++				label_scan_open(pvl->pv->dev);
 +
-+	if (!lvmcache_update_vgname_and_id(p->info, &vgsummary)) {
-+		log_error("Failed to save lvm summary for %s", dev_name(mdac->area.dev));
-+		goto fail;
- 	}
+ 		}
  
--close_dev:
- 	return 1;
-+
-+fail:
-+	lvmcache_del(p->info);
-+	return 0;
- }
- 
- static int _text_read(struct labeller *l, struct device *dev, void *label_buf,
-@@ -434,10 +438,12 @@ out:
- 	baton.info = info;
- 	baton.label = *label;
- 
--	lvmcache_foreach_mda(info, _read_mda_header_and_metadata, &baton);
-+	if (!lvmcache_foreach_mda(info, _read_mda_header_and_metadata, &baton)) {
-+		log_error("Failed to scan VG from %s", dev_name(dev));
-+		return 0;
-+	}
- 
- 	lvmcache_make_valid(info);
--
- 	return 1;
- }
- 
+ 		return correct_vg;
 
 
