@@ -1,79 +1,47 @@
 From: David Teigland <teigland@sourceware.org>
-Date: Mon, 23 Apr 2018 09:52:07 -0400
-Subject: master - bcache: fix error handling
-Message-ID: <201804231352.w3NDq7lg000314@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Mon, 23 Apr 2018 09:52:08 -0400
+Subject: master - lvmetad: need to set up bcache in another place
+Message-ID: <201804231352.w3NDq8hO000327@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=570c6239eebf18e6884d350654274d3bc8f1c4f1
-Commit:        570c6239eebf18e6884d350654274d3bc8f1c4f1
-Parent:        217f3f8741c1f516ab1f039b8725ac3ce638e302
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=e351f8bc66d49fecaa0ab78f8413d50a4674604a
+Commit:        e351f8bc66d49fecaa0ab78f8413d50a4674604a
+Parent:        7e33bd1335ba91d6b978df3a39250987d3412116
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Thu Mar 1 10:17:32 2018 -0600
+AuthorDate:    Tue Mar 6 15:05:27 2018 -0600
 Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Fri Apr 20 11:22:47 2018 -0500
+CommitterDate: Fri Apr 20 11:22:48 2018 -0500
 
-bcache: fix error handling
+lvmetad: need to set up bcache in another place
 
-The error handling code wasn't working, but it
-appears that just removing it is what we need.
-The doesn't really need any different behavior
-related to bcache blocks on an io error, it just
-wants to know if there was an error.
+We need to find one common place to set up bcache
+for the lvmetad case, instead of adding calls in
+various places.
 ---
- lib/device/bcache.c |   16 +++++++++++++++-
- 1 files changed, 15 insertions(+), 1 deletions(-)
+ lib/label/label.c |    7 +++++++
+ 1 files changed, 7 insertions(+), 0 deletions(-)
 
-diff --git a/lib/device/bcache.c b/lib/device/bcache.c
-index 94623a8..9034776 100644
---- a/lib/device/bcache.c
-+++ b/lib/device/bcache.c
-@@ -539,6 +539,14 @@ static void _complete_io(void *context, int err)
- 	dm_list_del(&b->list);
+diff --git a/lib/label/label.c b/lib/label/label.c
+index 82d4bf3..9401067 100644
+--- a/lib/label/label.c
++++ b/lib/label/label.c
+@@ -675,6 +675,13 @@ int label_scan_devs(struct cmd_context *cmd, struct dm_list *devs)
+ {
+ 	struct device_list *devl;
  
- 	if (b->error) {
-+		log_warn("bcache io error %d fd %d", b->error, b->fd);
-+		memset(b->data, 0, cache->block_sectors << SECTOR_SHIFT);
++	/* FIXME: get rid of this, it's only needed for lvmetad in which
++	   case we should be setting up bcache in one place. */
++	if (!scan_bcache) {
++		if (!_setup_bcache(0))
++			return 0;
 +	}
 +
-+	/* Things don't work with this block of code, but work without it. */
-+#if 0
-+	if (b->error) {
-+		log_warn("bcache io error %d fd %d", b->error, b->fd);
- 		if (b->io_dir == DIR_READ) {
- 			// We can just forget about this block, since there's
- 			// no dirty data to be written back.
-@@ -552,6 +560,9 @@ static void _complete_io(void *context, int err)
- 		_clear_flags(b, BF_DIRTY);
- 		_link_block(b);
- 	}
-+#endif
-+	_clear_flags(b, BF_DIRTY);
-+	_link_block(b);
- }
- 
- /*
-@@ -768,7 +779,7 @@ static struct block *_lookup_or_read_block(struct bcache *cache,
- 		}
- 	}
- 
--	if (b && !b->error) {
-+	if (b) {
- 		if (flags & (GF_DIRTY | GF_ZERO))
- 			_set_flags(b, BF_DIRTY);
- 
-@@ -904,6 +915,9 @@ bool bcache_get(struct bcache *cache, int fd, block_address index,
- 		b->ref_count++;
- 
- 		*result = b;
-+
-+		if (b->error)
-+			return false;
- 		return true;
- 	}
- 
+ 	dm_list_iterate_items(devl, devs) {
+ 		if (_in_bcache(devl->dev)) {
+ 			bcache_invalidate_fd(scan_bcache, devl->dev->bcache_fd);
 
 
