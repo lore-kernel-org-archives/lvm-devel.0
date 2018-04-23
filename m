@@ -1,78 +1,59 @@
 From: David Teigland <teigland@sourceware.org>
-Date: Mon, 23 Apr 2018 09:55:26 -0400
-Subject: master - bcache: fix error handling
-Message-ID: <201804231355.w3NDtQmf001703@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Mon, 23 Apr 2018 09:55:29 -0400
+Subject: master - scan: create bcache with minimum number of blocks
+Message-ID: <201804231355.w3NDtTab001717@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=570c6239eebf18e6884d350654274d3bc8f1c4f1
-Commit:        570c6239eebf18e6884d350654274d3bc8f1c4f1
-Parent:        217f3f8741c1f516ab1f039b8725ac3ce638e302
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=21057676a1f01c6b1f19b2e879d8385d76adb517
+Commit:        21057676a1f01c6b1f19b2e879d8385d76adb517
+Parent:        e49b114f7e437666caefa04aada31f32820e286e
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Thu Mar 1 10:17:32 2018 -0600
+AuthorDate:    Tue Feb 27 12:35:45 2018 -0600
 Committer:     David Teigland <teigland@redhat.com>
 CommitterDate: Fri Apr 20 11:22:47 2018 -0500
 
-bcache: fix error handling
+scan: create bcache with minimum number of blocks
 
-The error handling code wasn't working, but it
-appears that just removing it is what we need.
-The doesn't really need any different behavior
-related to bcache blocks on an io error, it just
-wants to know if there was an error.
+In some odd cases (e.g. tests) there are very few devices
+which results in creating too few blocks in bcache, so
+create bcache with a minimum number of blocks.
 ---
- lib/device/bcache.c |   16 +++++++++++++++-
- 1 files changed, 15 insertions(+), 1 deletions(-)
+ lib/label/label.c |    8 +++++---
+ 1 files changed, 5 insertions(+), 3 deletions(-)
 
-diff --git a/lib/device/bcache.c b/lib/device/bcache.c
-index 94623a8..9034776 100644
---- a/lib/device/bcache.c
-+++ b/lib/device/bcache.c
-@@ -539,6 +539,14 @@ static void _complete_io(void *context, int err)
- 	dm_list_del(&b->list);
- 
- 	if (b->error) {
-+		log_warn("bcache io error %d fd %d", b->error, b->fd);
-+		memset(b->data, 0, cache->block_sectors << SECTOR_SHIFT);
-+	}
-+
-+	/* Things don't work with this block of code, but work without it. */
-+#if 0
-+	if (b->error) {
-+		log_warn("bcache io error %d fd %d", b->error, b->fd);
- 		if (b->io_dir == DIR_READ) {
- 			// We can just forget about this block, since there's
- 			// no dirty data to be written back.
-@@ -552,6 +560,9 @@ static void _complete_io(void *context, int err)
- 		_clear_flags(b, BF_DIRTY);
- 		_link_block(b);
- 	}
-+#endif
-+	_clear_flags(b, BF_DIRTY);
-+	_link_block(b);
+diff --git a/lib/label/label.c b/lib/label/label.c
+index 45a3ecf..88001a9 100644
+--- a/lib/label/label.c
++++ b/lib/label/label.c
+@@ -560,13 +560,15 @@ static int _scan_list(struct dm_list *devs, int *failed)
+ 	return 1;
  }
  
- /*
-@@ -768,7 +779,7 @@ static struct block *_lookup_or_read_block(struct bcache *cache,
- 		}
- 	}
- 
--	if (b && !b->error) {
-+	if (b) {
- 		if (flags & (GF_DIRTY | GF_ZERO))
- 			_set_flags(b, BF_DIRTY);
- 
-@@ -904,6 +915,9 @@ bool bcache_get(struct bcache *cache, int fd, block_address index,
- 		b->ref_count++;
- 
- 		*result = b;
++#define MIN_BCACHE_BLOCKS 32
 +
-+		if (b->error)
-+			return false;
- 		return true;
+ static int _setup_bcache(int cache_blocks)
+ {
+ 	struct io_engine *ioe;
+ 
+ 	/* No devices can happen, just create bcache with any small number. */
+-	if (!cache_blocks)
+-		cache_blocks = 8;
++	if (cache_blocks < MIN_BCACHE_BLOCKS)
++		cache_blocks = MIN_BCACHE_BLOCKS;
+ 
+ 	/*
+ 	 * 100 is arbitrary, it's the max number of concurrent aio's
+@@ -831,7 +833,7 @@ int label_read_sector(struct device *dev, struct label **labelp, uint64_t scan_s
+ int label_scan_setup_bcache(void)
+ {
+ 	if (!scan_bcache) {
+-		if (!_setup_bcache(32))
++		if (!_setup_bcache(0))
+ 			return 0;
  	}
  
 
