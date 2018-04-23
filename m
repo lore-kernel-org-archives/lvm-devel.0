@@ -1,115 +1,137 @@
 From: David Teigland <teigland@sourceware.org>
-Date: Mon, 23 Apr 2018 09:55:58 -0400
-Subject: master - scan: improve io error checking and reporting
-Message-ID: <201804231355.w3NDtw2k001875@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Mon, 23 Apr 2018 09:56:01 -0400
+Subject: master - scan: drop bcache between lvm shell commands
+Message-ID: <201804231356.w3NDu1Q4001904@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=45e5e702c1d488df4898a41db0c00ead63c5f6ee
-Commit:        45e5e702c1d488df4898a41db0c00ead63c5f6ee
-Parent:        6d05859862cebe79981557fe1a1005a530302f70
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=ae21305ee7fa60edbd85824d83ce554989161189
+Commit:        ae21305ee7fa60edbd85824d83ce554989161189
+Parent:        a01a8d71723740577e5fe9635412940d941b5da9
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Fri Apr 6 13:12:26 2018 -0500
+AuthorDate:    Fri Apr 6 13:05:17 2018 -0500
 Committer:     David Teigland <teigland@redhat.com>
 CommitterDate: Fri Apr 20 11:22:48 2018 -0500
 
-scan: improve io error checking and reporting
+scan: drop bcache between lvm shell commands
 
+A running lvm shell keeps all lvm devices open
+unless the bcache is dropped.
 ---
- lib/label/label.c |   30 +++++++++++++++++++-----------
- 1 files changed, 19 insertions(+), 11 deletions(-)
+ lib/cache/lvmcache.c |   22 ++++++++++++++++++++--
+ tools/lvmcmdline.c   |    7 +++----
+ tools/toollib.c      |    1 -
+ 3 files changed, 23 insertions(+), 7 deletions(-)
 
-diff --git a/lib/label/label.c b/lib/label/label.c
-index 14a7e90..6c3be05 100644
---- a/lib/label/label.c
-+++ b/lib/label/label.c
-@@ -466,17 +466,20 @@ static int _scan_list(struct dm_list *devs, int *failed)
- 	struct dm_list done_devs;
- 	struct device_list *devl, *devl2;
- 	struct block *bb;
-+	int scan_open_errors = 0;
-+	int scan_read_errors = 0;
-+	int scan_process_errors = 0;
- 	int scan_failed_count = 0;
--	int scan_lvm_count = 0;
- 	int rem_prefetches;
- 	int scan_failed;
- 	int is_lvm_device;
-+	int error;
- 	int ret;
+diff --git a/lib/cache/lvmcache.c b/lib/cache/lvmcache.c
+index 6479080..78665bf 100644
+--- a/lib/cache/lvmcache.c
++++ b/lib/cache/lvmcache.c
+@@ -406,7 +406,7 @@ int lvmcache_verify_lock_order(const char *vgname)
+ 		return 1;
  
- 	dm_list_init(&wait_devs);
- 	dm_list_init(&done_devs);
+ 	if (!_lock_hash)
+-		return_0;
++		return 1;
  
--	log_debug_devs("Scanning %d devices.", dm_list_size(devs));
-+	log_debug_devs("Scanning %d devices for VG info", dm_list_size(devs));
+ 	dm_hash_iterate(n, _lock_hash) {
+ 		if (!dm_hash_get_data(_lock_hash, n))
+@@ -836,6 +836,9 @@ static int _label_scan_invalid(struct cmd_context *cmd)
+ 		dev_count++;
+ 	}
  
-  scan_more:
- 	rem_prefetches = bcache_max_prefetches(scan_bcache);
-@@ -498,6 +501,7 @@ static int _scan_list(struct dm_list *devs, int *failed)
- 				log_debug_devs("Scan failed to open %s.", dev_name(devl->dev));
- 				dm_list_del(&devl->list);
- 				dm_list_add(&done_devs, &devl->list);
-+				scan_open_errors++;
- 				scan_failed_count++;
- 				continue;
- 			}
-@@ -513,11 +517,15 @@ static int _scan_list(struct dm_list *devs, int *failed)
- 
- 	dm_list_iterate_items_safe(devl, devl2, &wait_devs) {
- 		bb = NULL;
-+		error = 0;
-+		scan_failed = 0;
-+		is_lvm_device = 0;
- 
--		if (!bcache_get(scan_bcache, devl->dev->bcache_fd, 0, 0, &bb)) {
--			log_debug_devs("Scan failed to read %s.", dev_name(devl->dev));
--			scan_failed_count++;
-+		if (!bcache_get(scan_bcache, devl->dev->bcache_fd, 0, 0, &bb, &error)) {
-+			log_debug_devs("Scan failed to read %s error %d.", dev_name(devl->dev), error);
- 			scan_failed = 1;
-+			scan_read_errors++;
-+			scan_failed_count++;
- 			lvmcache_del_dev(devl->dev);
- 		} else {
- 			log_debug_devs("Processing data from device %s fd %d block %p", dev_name(devl->dev), devl->dev->bcache_fd, bb);
-@@ -526,12 +534,10 @@ static int _scan_list(struct dm_list *devs, int *failed)
- 
- 			if (!ret && is_lvm_device) {
- 				log_debug_devs("Scan failed to process %s", dev_name(devl->dev));
--				scan_failed_count++;
- 				scan_failed = 1;
-+				scan_process_errors++;
-+				scan_failed_count++;
- 				lvmcache_del_dev(devl->dev);
--			} else {
--				scan_lvm_count++;
--				scan_failed = 0;
- 			}
- 		}
- 
-@@ -556,8 +562,8 @@ static int _scan_list(struct dm_list *devs, int *failed)
- 	if (!dm_list_empty(devs))
- 		goto scan_more;
- 
--	log_debug_devs("Scanned devices: %d lvm, %d failed.",
--			scan_lvm_count, scan_failed_count);
-+	log_debug_devs("Scanned devices: open errors %d read errors %d process errors %d",
-+			scan_open_errors, scan_read_errors, scan_process_errors);
- 
- 	if (failed)
- 		*failed = scan_failed_count;
-@@ -649,6 +655,8 @@ int label_scan(struct cmd_context *cmd)
- 	};
- 	dev_iter_destroy(iter);
- 
-+	log_debug_devs("Found %d devices to scan", dm_list_size(&all_devs));
++	if (dm_list_empty(&devs))
++		return 1;
 +
- 	if (!scan_bcache) {
+ 	log_debug_cache("Scanning %d devs with invalid info.", dev_count);
+ 
+ 	ret = label_scan_devs(cmd, &devs);
+@@ -1236,8 +1239,10 @@ int lvmcache_label_scan(struct cmd_context *cmd)
+ 	struct dm_list del_cache_devs;
+ 	struct dm_list add_cache_devs;
+ 	struct lvmcache_info *info;
++	struct lvmcache_vginfo *vginfo;
+ 	struct device_list *devl;
+ 	struct format_type *fmt;
++	int vginfo_count = 0;
+ 
+ 	int r = 0;
+ 
+@@ -1247,6 +1252,8 @@ int lvmcache_label_scan(struct cmd_context *cmd)
+ 		return 1;
+ 	}
+ 
++	log_debug_cache("Finding VG info");
++
+ 	/* Avoid recursion when a PVID can't be found! */
+ 	if (_scanning_in_progress)
+ 		return 0;
+@@ -1315,6 +1322,8 @@ int lvmcache_label_scan(struct cmd_context *cmd)
+ 		dm_list_init(&del_cache_devs);
+ 		dm_list_init(&add_cache_devs);
+ 
++		log_debug_cache("Resolving duplicate devices");
++
+ 		_choose_preferred_devs(cmd, &del_cache_devs, &add_cache_devs);
+ 
+ 		dm_list_iterate_items(devl, &del_cache_devs) {
+@@ -1354,6 +1363,14 @@ int lvmcache_label_scan(struct cmd_context *cmd)
+ 	_scanning_in_progress = 0;
+ 	_force_label_scan = 0;
+ 
++	dm_list_iterate_items(vginfo, &_vginfos) {
++		if (is_orphan_vg(vginfo->vgname))
++			continue;
++		vginfo_count++;
++	}
++
++	log_debug_cache("Found VG info for %d VGs", vginfo_count);
++
+ 	return r;
+ }
+ 
+@@ -2291,7 +2308,8 @@ static void _lvmcache_destroy_lockname(struct dm_hash_node *n)
+ void lvmcache_destroy(struct cmd_context *cmd, int retain_orphans, int reset)
+ {
+ 	struct dm_hash_node *n;
+-	log_verbose("Wiping internal VG cache");
++
++	log_debug_cache("Dropping VG info");
+ 
+ 	_has_scanned = 0;
+ 
+diff --git a/tools/lvmcmdline.c b/tools/lvmcmdline.c
+index fc96b8d..3774014 100644
+--- a/tools/lvmcmdline.c
++++ b/tools/lvmcmdline.c
+@@ -3013,10 +3013,9 @@ int lvm_run_command(struct cmd_context *cmd, int argc, char **argv)
+ 		lvmnotify_send(cmd);
+ 
+       out:
+-	if (test_mode()) {
+-		log_verbose("Test mode: Wiping internal cache");
+-		lvmcache_destroy(cmd, 1, 0);
+-	}
++
++	lvmcache_destroy(cmd, 1, 1);
++	label_scan_destroy(cmd);
+ 
+ 	if ((config_string_cft = remove_config_tree_by_source(cmd, CONFIG_STRING)))
+ 		dm_config_destroy(config_string_cft);
+diff --git a/tools/toollib.c b/tools/toollib.c
+index c8dd9d3..7e3b021 100644
+--- a/tools/toollib.c
++++ b/tools/toollib.c
+@@ -4508,7 +4508,6 @@ int process_each_pv(struct cmd_context *cmd,
+ 	 * before process_each_pv is called.
+ 	 */
+ 	if (!trust_cache() && !orphans_locked) {
+-		log_debug("Scanning for available devices");
+ 		lvmcache_destroy(cmd, 1, 0);
+ 
  		/*
- 		 * FIXME: there should probably be some max number of
 
 
