@@ -1,39 +1,43 @@
 From: David Teigland <teigland@sourceware.org>
-Date: Mon, 23 Apr 2018 09:52:53 -0400
-Subject: master - liblvm2app: missed the addition of lvmcache_label_scan
-Message-ID: <201804231352.w3NDqrms000999@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Mon, 23 Apr 2018 09:53:00 -0400
+Subject: master - independent metadata areas: fix bogus code
+Message-ID: <201804231353.w3NDr0rO001033@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=c42a18d372f314aa51d9d7877342f1d78fd68973
-Commit:        c42a18d372f314aa51d9d7877342f1d78fd68973
-Parent:        aee27dc7bad5734012885fe9f174def0a3f26771
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=098c843c50cdcc2e4f4162037e1ff5975624f3e2
+Commit:        098c843c50cdcc2e4f4162037e1ff5975624f3e2
+Parent:        d9ef9eb330bdc66dd6d9b45713d5c0b25d645ac0
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Fri Apr 20 12:00:49 2018 -0500
+AuthorDate:    Wed Oct 25 13:55:22 2017 -0500
 Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Fri Apr 20 12:00:49 2018 -0500
+CommitterDate: Fri Apr 20 11:21:41 2018 -0500
 
-liblvm2app: missed the addition of lvmcache_label_scan
+independent metadata areas: fix bogus code
 
+Fix mixing bitwise & and logical && which was
+always 1 in any case.
 ---
- liblvm/lvm_vg.c |    2 ++
- 1 files changed, 2 insertions(+), 0 deletions(-)
+ lib/format_text/format-text.c |    4 +++-
+ 1 files changed, 3 insertions(+), 1 deletions(-)
 
-diff --git a/liblvm/lvm_vg.c b/liblvm/lvm_vg.c
-index 0678bdc..616c78f 100644
---- a/liblvm/lvm_vg.c
-+++ b/liblvm/lvm_vg.c
-@@ -219,6 +219,8 @@ static vg_t _lvm_vg_open(lvm_t libh, const char *vgname, const char *mode,
- 		return NULL;
- 	}
+diff --git a/lib/format_text/format-text.c b/lib/format_text/format-text.c
+index 8c12c82..9538080 100644
+--- a/lib/format_text/format-text.c
++++ b/lib/format_text/format-text.c
+@@ -1362,7 +1362,9 @@ static int _scan_raw(const struct format_type *fmt, const char *vgname __attribu
  
-+	lvmcache_label_scan((struct cmd_context *)libh);
-+
- 	vg = vg_read((struct cmd_context *)libh, vgname, NULL, internal_flags, 0);
- 	if (vg_read_error(vg)) {
- 		/* FIXME: use log_errno either here in inside vg_read */
+ static int _text_scan(const struct format_type *fmt, const char *vgname)
+ {
+-	return (_scan_file(fmt, vgname) & _scan_raw(fmt, vgname));
++	_scan_file(fmt, vgname);
++	_scan_raw(fmt, vgname);
++	return 1;
+ }
+ 
+ struct _write_single_mda_baton {
 
 
