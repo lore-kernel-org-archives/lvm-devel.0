@@ -1,121 +1,60 @@
 From: David Teigland <teigland@sourceware.org>
-Date: Mon, 23 Apr 2018 09:51:22 -0400
-Subject: master - [device/bcache] Add a couple of invalidate methods
-Message-ID: <201804231351.w3NDpMYV032513@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Mon, 23 Apr 2018 09:51:23 -0400
+Subject: master - scan: create bcache with minimum number of blocks
+Message-ID: <201804231351.w3NDpNHU032537@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=c4c4acfd423323cbe8fbfbdb8c1882edb4a92b29
-Commit:        c4c4acfd423323cbe8fbfbdb8c1882edb4a92b29
-Parent:        0f0eb04edb00cb5e95c47cb9ca2e70574e6e49ce
-Author:        Joe Thornber <ejt@redhat.com>
-AuthorDate:    Fri Feb 2 07:59:49 2018 +0000
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=21057676a1f01c6b1f19b2e879d8385d76adb517
+Commit:        21057676a1f01c6b1f19b2e879d8385d76adb517
+Parent:        e49b114f7e437666caefa04aada31f32820e286e
+Author:        David Teigland <teigland@redhat.com>
+AuthorDate:    Tue Feb 27 12:35:45 2018 -0600
 Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Fri Apr 20 11:12:50 2018 -0500
+CommitterDate: Fri Apr 20 11:22:47 2018 -0500
 
-[device/bcache] Add a couple of invalidate methods
+scan: create bcache with minimum number of blocks
 
+In some odd cases (e.g. tests) there are very few devices
+which results in creating too few blocks in bcache, so
+create bcache with a minimum number of blocks.
 ---
- lib/device/bcache.c |   60 +++++++++++++++++++++++++++++++++++++++++++++++++++
- lib/device/bcache.h |   13 +++++++++++
- 2 files changed, 73 insertions(+), 0 deletions(-)
+ lib/label/label.c |    8 +++++---
+ 1 files changed, 5 insertions(+), 3 deletions(-)
 
-diff --git a/lib/device/bcache.c b/lib/device/bcache.c
-index 5a7b2f9..09ef6ef 100644
---- a/lib/device/bcache.c
-+++ b/lib/device/bcache.c
-@@ -884,5 +884,65 @@ int bcache_flush(struct bcache *cache)
- 	return dm_list_empty(&cache->errored) ? 0 : -EIO;
+diff --git a/lib/label/label.c b/lib/label/label.c
+index 45a3ecf..88001a9 100644
+--- a/lib/label/label.c
++++ b/lib/label/label.c
+@@ -560,13 +560,15 @@ static int _scan_list(struct dm_list *devs, int *failed)
+ 	return 1;
  }
  
-+static void _recycle_block(struct bcache *cache, struct block *b)
-+{
-+	_unlink_block(b);
-+	_hash_remove(b);
-+	dm_list_add(&cache->free, &b->list);
-+}
++#define MIN_BCACHE_BLOCKS 32
 +
-+/*
-+ * You can safely call this with a NULL block.
-+ */
-+static void _invalidate_block(struct bcache *cache, struct block *b)
-+{
-+	if (!b)
-+		return;
-+
-+	if (_test_flags(b, BF_IO_PENDING))
-+		_wait_specific(b);
-+
-+	if (b->ref_count)
-+		log_warn("bcache_invalidate: block (%d, %llu) still held",
-+			 b->fd, (unsigned long long) index);
-+	else {
-+		if (_test_flags(b, BF_DIRTY)) {
-+			_issue_write(b);
-+			_wait_specific(b);
-+		}
-+
-+		_recycle_block(cache, b);
-+	}
-+}
-+
-+void bcache_invalidate(struct bcache *cache, int fd, block_address index)
-+{
-+	_invalidate_block(cache, _hash_lookup(cache, fd, index));
-+}
-+
-+// FIXME: switch to a trie, or maybe 1 hash table per fd?  To save iterating
-+// through the whole cache.
-+void bcache_invalidate_fd(struct bcache *cache, int fd)
-+{
-+	struct block *b, *tmp;
-+
-+	// Start writing back any dirty blocks on this fd.
-+	dm_list_iterate_items_safe (b, tmp, &cache->dirty)
-+		if (b->fd == fd)
-+			_issue_write(b);
-+
-+	_wait_all(cache);
-+
-+	// Everything should be in the clean list now.
-+	dm_list_iterate_items_safe (b, tmp, &cache->clean)
-+		if (b->fd == fd)
-+			_invalidate_block(cache, b);
-+
-+	// Except they could be in the errored list :)
-+	dm_list_iterate_items_safe (b, tmp, &cache->errored)
-+		if (b->fd == fd)
-+			_recycle_block(cache, b);
-+}
-+
- //----------------------------------------------------------------
+ static int _setup_bcache(int cache_blocks)
+ {
+ 	struct io_engine *ioe;
  
-diff --git a/lib/device/bcache.h b/lib/device/bcache.h
-index 2730347..5c68e3c 100644
---- a/lib/device/bcache.h
-+++ b/lib/device/bcache.h
-@@ -93,6 +93,19 @@ void bcache_put(struct block *b);
+ 	/* No devices can happen, just create bcache with any small number. */
+-	if (!cache_blocks)
+-		cache_blocks = 8;
++	if (cache_blocks < MIN_BCACHE_BLOCKS)
++		cache_blocks = MIN_BCACHE_BLOCKS;
  
- int bcache_flush(struct bcache *cache);
+ 	/*
+ 	 * 100 is arbitrary, it's the max number of concurrent aio's
+@@ -831,7 +833,7 @@ int label_read_sector(struct device *dev, struct label **labelp, uint64_t scan_s
+ int label_scan_setup_bcache(void)
+ {
+ 	if (!scan_bcache) {
+-		if (!_setup_bcache(32))
++		if (!_setup_bcache(0))
+ 			return 0;
+ 	}
  
-+/*
-+ * Removes a block from the cache.  If the block is dirty it will be written
-+ * back first.  If the block is currently held a warning will be issued, and it
-+ * will not be removed.
-+ */
-+void bcache_invalidate(struct bcache *cache, int fd, block_address index);
-+
-+/*
-+ * Invalidates all blocks on the given descriptor.  Call this before closing
-+ * the descriptor to make sure everything is written back.
-+ */
-+void bcache_invalidate_fd(struct bcache *cache, int fd);
-+
- /*----------------------------------------------------------------*/
- 
- #endif
 
 
