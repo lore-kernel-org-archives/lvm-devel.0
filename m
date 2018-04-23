@@ -1,40 +1,88 @@
 From: David Teigland <teigland@sourceware.org>
 Date: Mon, 23 Apr 2018 09:55:29 -0400
-Subject: master - lvmetad: fix process_each_label
-Message-ID: <201804231355.w3NDtTiU001722@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Subject: master - scan: add function to drop bcache blocks
+Message-ID: <201804231355.w3NDtTdK001723@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=7e33bd1335ba91d6b978df3a39250987d3412116
-Commit:        7e33bd1335ba91d6b978df3a39250987d3412116
-Parent:        ddb5de7a98af5e354013a07c61e46636b9ec01e6
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=217f3f8741c1f516ab1f039b8725ac3ce638e302
+Commit:        217f3f8741c1f516ab1f039b8725ac3ce638e302
+Parent:        da2b155a9da4c4c9caf502b87ad263de6e678b30
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Tue Mar 6 11:22:18 2018 -0600
+AuthorDate:    Tue Feb 27 16:35:47 2018 -0600
 Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Fri Apr 20 11:22:48 2018 -0500
+CommitterDate: Fri Apr 20 11:22:47 2018 -0500
 
-lvmetad: fix process_each_label
+scan: add function to drop bcache blocks
 
-Was missing the call to populate lvmcache info from lvmetad
-at the start of process_each_label.
+which can be a little more efficient that destroy.
 ---
- tools/toollib.c |    1 +
- 1 files changed, 1 insertions(+), 0 deletions(-)
+ lib/label/label.c |   24 ++++++++++++++++--------
+ lib/label/label.h |    1 +
+ 2 files changed, 17 insertions(+), 8 deletions(-)
 
-diff --git a/tools/toollib.c b/tools/toollib.c
-index b029a0d..c8dd9d3 100644
---- a/tools/toollib.c
-+++ b/tools/toollib.c
-@@ -1505,6 +1505,7 @@ int process_each_label(struct cmd_context *cmd, int argc, char **argv,
- 	log_set_report_object_type(LOG_REPORT_OBJECT_TYPE_LABEL);
+diff --git a/lib/label/label.c b/lib/label/label.c
+index 0514ddf..dd455ec 100644
+--- a/lib/label/label.c
++++ b/lib/label/label.c
+@@ -733,20 +733,15 @@ void label_scan_invalidate_lv(struct cmd_context *cmd, struct logical_volume *lv
+ }
  
- 	lvmcache_label_scan(cmd);
-+	lvmcache_seed_infos_from_lvmetad(cmd);
+ /*
+- * Undo label_scan()
+- *
+- * Close devices that are open because bcache is holding blocks for them.
+- * Destroy the bcache.
++ * Empty the bcache of all blocks and close all open fds,
++ * but keep the bcache set up.
+  */
  
- 	if (argc) {
- 		for (; opt < argc; opt++) {
+-void label_scan_destroy(struct cmd_context *cmd)
++void label_scan_drop(struct cmd_context *cmd)
+ {
+ 	struct dev_iter *iter;
+ 	struct device *dev;
+ 
+-	if (!scan_bcache)
+-		return;
+-
+ 	if (!(iter = dev_iter_create(cmd->full_filter, 0))) {
+ 		return;
+ 	}
+@@ -756,6 +751,19 @@ void label_scan_destroy(struct cmd_context *cmd)
+ 			_scan_dev_close(dev);
+ 	}
+ 	dev_iter_destroy(iter);
++}
++
++/*
++ * Close devices that are open because bcache is holding blocks for them.
++ * Destroy the bcache.
++ */
++
++void label_scan_destroy(struct cmd_context *cmd)
++{
++	if (!scan_bcache)
++		return;
++
++	label_scan_drop(cmd);
+ 
+ 	bcache_destroy(scan_bcache);
+ 	scan_bcache = NULL;
+diff --git a/lib/label/label.h b/lib/label/label.h
+index 8ef687b..55e92e8 100644
+--- a/lib/label/label.h
++++ b/lib/label/label.h
+@@ -107,6 +107,7 @@ int label_scan_devs(struct cmd_context *cmd, struct dm_list *devs);
+ int label_scan_devs_excl(struct dm_list *devs);
+ void label_scan_invalidate(struct device *dev);
+ void label_scan_invalidate_lv(struct cmd_context *cmd, struct logical_volume *lv);
++void label_scan_drop(struct cmd_context *cmd);
+ void label_scan_destroy(struct cmd_context *cmd);
+ int label_read(struct device *dev, struct label **labelp, uint64_t unused_sector);
+ int label_read_sector(struct device *dev, struct label **labelp, uint64_t scan_sector);
 
 
