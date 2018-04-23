@@ -1,78 +1,65 @@
 From: David Teigland <teigland@sourceware.org>
-Date: Mon, 23 Apr 2018 09:53:22 -0400
-Subject: master - clvm: rescan when VG or PV not found
-Message-ID: <201804231353.w3NDrMwH001086@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Mon, 23 Apr 2018 09:54:18 -0400
+Subject: master - vgremove: fix force remove on devs with damaged metadata
+Message-ID: <201804231354.w3NDsI8D001397@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=1409c4a1c20319845171b91edb6310e25ae81792
-Commit:        1409c4a1c20319845171b91edb6310e25ae81792
-Parent:        c42a18d372f314aa51d9d7877342f1d78fd68973
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=6e580465b50edcd5fef0eb95180a620cb785d835
+Commit:        6e580465b50edcd5fef0eb95180a620cb785d835
+Parent:        37471bb4777f3f407d2cd942995b45c326ea221a
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Fri Apr 20 16:09:49 2018 -0500
+AuthorDate:    Wed Feb 14 14:47:28 2018 -0600
 Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Fri Apr 20 16:09:49 2018 -0500
+CommitterDate: Fri Apr 20 11:22:46 2018 -0500
 
-clvm: rescan when VG or PV not found
+vgremove: fix force remove on devs with damaged metadata
 
-Rescan devices to update lvmcache content when
-clvmd vg_read doesn't find a VG or PV.
+The improved detection of bad metadata when scanning
+(where errors were ignored before) means we now have to
+override some errors when forcibly erasing damaged metadata.
 ---
- lib/metadata/metadata.c |   28 ++++++++++++++++++++++++----
- 1 files changed, 24 insertions(+), 4 deletions(-)
+ lib/format_text/format-text.c |   22 +++++++++++++++++++---
+ 1 files changed, 19 insertions(+), 3 deletions(-)
 
-diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
-index 685c589..2df9abe 100644
---- a/lib/metadata/metadata.c
-+++ b/lib/metadata/metadata.c
-@@ -4585,6 +4585,7 @@ static struct volume_group *_vg_read_by_vgid(struct cmd_context *cmd,
- 	if (!(vgname = lvmcache_vgname_from_vgid(cmd->mem, vgid))) {
- 		log_debug_metadata("Reading VG by vgid %.8s no VG name found, retrying.", vgid);
- 		lvmcache_destroy(cmd, 0, 0);
-+		label_scan_destroy(cmd);
- 		lvmcache_label_scan(cmd);
- 	}
+diff --git a/lib/format_text/format-text.c b/lib/format_text/format-text.c
+index f33451f..8a42213 100644
+--- a/lib/format_text/format-text.c
++++ b/lib/format_text/format-text.c
+@@ -865,12 +865,28 @@ static int _vg_remove_raw(struct format_instance *fid, struct volume_group *vg,
+ 	int r = 0;
+ 	int noprecommit = 0;
  
-@@ -4597,14 +4598,33 @@ static struct volume_group *_vg_read_by_vgid(struct cmd_context *cmd,
- 
- 	label_scan_setup_bcache();
- 
--	if ((vg = _vg_read(cmd, vgname, vgid, warn_flags, &consistent, precommitted))) {
--		/* Does it matter if consistent is 0 or 1? */
--		label_scan_destroy(cmd);
--		return vg;
-+	if (!(vg = _vg_read(cmd, vgname, vgid, warn_flags, &consistent, precommitted))) {
-+		log_error("Rescan devices to look for missing VG.");
-+		goto scan;
+-	if (!(mdah = raw_read_mda_header(fid->fmt, &mdac->area, mda_is_primary(mda))))
+-		goto_out;
++	if (!(mdah = dm_pool_alloc(fid->fmt->cmd->mem, MDA_HEADER_SIZE))) {
++		log_error("struct mda_header allocation failed");
++		return 0;
 +	}
+ 
+-	if (!(rlocn = _read_metadata_location_vg(&mdac->area, mdah, mda_is_primary(mda), vg->name, &noprecommit))) {
++	/*
++	 * FIXME: what's the point of reading the mda_header and metadata,
++	 * since we zero the rlocn fields whether we can read them or not.
++	 */
 +
-+	if (vg_missing_pv_count(vg)) {
-+		log_error("Rescan devices to look for missing PVs.");
-+		release_vg(vg);
-+		goto scan;
++	if (!_raw_read_mda_header(mdah, &mdac->area, mda_is_primary(mda))) {
++		log_warn("WARNING: Removing metadata location on %s with bad mda header.",
++			  dev_name(mdac->area.dev));
+ 		rlocn = &mdah->raw_locns[0];
+ 		mdah->raw_locns[1].offset = 0;
++	} else {
++		if (!(rlocn = _read_metadata_location_vg(&mdac->area, mdah, mda_is_primary(mda), vg->name, &noprecommit))) {
++			log_warn("WARNING: Removing metadata location on %s with bad metadata.",
++				 dev_name(mdac->area.dev));
++			rlocn = &mdah->raw_locns[0];
++			mdah->raw_locns[1].offset = 0;
++		}
  	}
  
-+	label_scan_destroy(cmd); /* drop bcache to close devs, keep lvmcache */
-+	return vg;
-+
-+ scan:
-+	lvmcache_destroy(cmd, 0, 0);
- 	label_scan_destroy(cmd);
-+	lvmcache_label_scan(cmd);
-+
-+	if (!(vg = _vg_read(cmd, vgname, vgid, warn_flags, &consistent, precommitted)))
-+		goto fail;
-+
-+	label_scan_destroy(cmd); /* drop bcache to close devs, keep lvmcache */
-+	return vg;
- 
-+ fail:
-+	label_scan_destroy(cmd); /* drop bache to close devs, keep lvmcache */
- 	log_debug_metadata("Reading VG by vgid %.8s not found.", vgid);
- 	return NULL;
- }
+ 	rlocn->offset = 0;
 
 
