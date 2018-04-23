@@ -1,123 +1,149 @@
 From: David Teigland <teigland@sourceware.org>
-Date: Mon, 23 Apr 2018 09:51:50 -0400
-Subject: master - scan: check for errors in text layer
-Message-ID: <201804231351.w3NDpoiw032653@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Mon, 23 Apr 2018 09:51:51 -0400
+Subject: master - [build] include test/unit/Makefile rather than recursive build
+Message-ID: <201804231351.w3NDppVm032669@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=196579af1f7ebe25c0266043c7d966b344699d5d
-Commit:        196579af1f7ebe25c0266043c7d966b344699d5d
-Parent:        44726ed9cb9559801868ade5440d9e6ea6a61127
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Thu Mar 1 12:42:18 2018 -0600
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=8ae3b244fcbc207b51a81514e51008fe64d13368
+Commit:        8ae3b244fcbc207b51a81514e51008fe64d13368
+Parent:        b03e55a5130ffdf6be9188b227c59e6793dc0dfc
+Author:        Joe Thornber <ejt@redhat.com>
+AuthorDate:    Fri Feb 2 15:39:17 2018 +0000
 Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Fri Apr 20 11:22:47 2018 -0500
+CommitterDate: Fri Apr 20 11:12:50 2018 -0500
 
-scan: check for errors in text layer
+[build] include test/unit/Makefile rather than recursive build
 
-The scanning code in the format_text layer
-has previously ignored errors.  Start checking
-for and returning them.
+FIXME: unit tests are not currently run as part of make check.
 ---
- lib/format_text/format-text.c |    5 ++++-
- lib/format_text/text_label.c  |   38 ++++++++++++++++++++++----------------
- 2 files changed, 26 insertions(+), 17 deletions(-)
+ Makefile.in           |   23 +------------------
+ test/Makefile.in      |    2 +-
+ test/unit/Makefile.in |   58 ++++++++++++++++---------------------------------
+ 3 files changed, 21 insertions(+), 62 deletions(-)
 
-diff --git a/lib/format_text/format-text.c b/lib/format_text/format-text.c
-index 4a9c303..4146e7c 100644
---- a/lib/format_text/format-text.c
-+++ b/lib/format_text/format-text.c
-@@ -536,8 +536,10 @@ static struct volume_group *_vg_read_raw_area(struct format_instance *fid,
- 	char *desc;
- 	uint32_t wrap = 0;
+diff --git a/Makefile.in b/Makefile.in
+index 31d428d..146ed55 100644
+--- a/Makefile.in
++++ b/Makefile.in
+@@ -212,28 +212,7 @@ endif
+ endif
  
--	if (!(mdah = raw_read_mda_header(fid->fmt, area, primary_mda)))
-+	if (!(mdah = raw_read_mda_header(fid->fmt, area, primary_mda))) {
-+		log_error("Failed to read vg %s from %s", vgname, dev_name(area->dev));
- 		goto_out;
-+	}
- 
- 	if (!(rlocn = _read_metadata_location_vg(area, mdah, primary_mda, vgname, &precommitted))) {
- 		log_debug_metadata("VG %s not found on %s", vgname, dev_name(area->dev));
-@@ -1213,6 +1215,7 @@ int read_metadata_location_summary(const struct format_type *fmt,
- 		log_debug_metadata("Metadata location on %s at %llu has offset 0.",
- 				   dev_name(dev_area->dev),
- 				   (unsigned long long)(dev_area->start + rlocn->offset));
-+		vgsummary->zero_offset = 1;
- 		return 0;
- 	}
- 
-diff --git a/lib/format_text/text_label.c b/lib/format_text/text_label.c
-index 206ae3f..e65079e 100644
---- a/lib/format_text/text_label.c
-+++ b/lib/format_text/text_label.c
-@@ -331,16 +331,9 @@ static int _read_mda_header_and_metadata(struct metadata_area *mda, void *baton)
- 	struct mda_header *mdah;
- 	struct lvmcache_vgsummary vgsummary = { 0 };
- 
--	/*
--	 * Using the labeller struct to preserve info about
--	 * the last parsed vgname, vgid, creation host
--	 *
--	 * TODO: make lvmcache smarter and move this cache logic there
--	 */
+ ifeq ("$(TESTING)", "yes")
+-# testing and report generation
+-RUBY=ruby1.9 -Ireport-generators/lib -Ireport-generators/test
 -
- 	if (!(mdah = raw_read_mda_header(fmt, &mdac->area, mda_is_primary(mda)))) {
--		stack;
--		goto close_dev;
-+		log_error("Failed to read mda header from %s", dev_name(mdac->area.dev));
-+		goto fail;
- 	}
- 
- 	mda_set_ignored(mda, rlocn_is_ignored(mdah->raw_locns));
-@@ -352,14 +345,25 @@ static int _read_mda_header_and_metadata(struct metadata_area *mda, void *baton)
- 		return 1;
- 	}
- 
--	if (read_metadata_location_summary(fmt, mdah, mda_is_primary(mda), &mdac->area, &vgsummary,
--			     &mdac->free_sectors) &&
--	    !lvmcache_update_vgname_and_id(p->info, &vgsummary)) {
--		return_0;
-+	if (!read_metadata_location_summary(fmt, mdah, mda_is_primary(mda), &mdac->area,
-+					    &vgsummary, &mdac->free_sectors)) {
-+		if (vgsummary.zero_offset)
-+			return 1;
-+
-+		log_error("Failed to read metadata summary from %s", dev_name(mdac->area.dev));
-+		goto fail;
-+	}
-+
-+	if (!lvmcache_update_vgname_and_id(p->info, &vgsummary)) {
-+		log_error("Failed to save lvm summary for %s", dev_name(mdac->area.dev));
-+		goto fail;
- 	}
- 
--close_dev:
- 	return 1;
-+
-+fail:
-+	lvmcache_del(p->info);
-+	return 0;
- }
- 
- static int _text_read(struct labeller *l, struct device *dev, void *label_buf,
-@@ -434,10 +438,12 @@ out:
- 	baton.info = info;
- 	baton.label = *label;
- 
--	lvmcache_foreach_mda(info, _read_mda_header_and_metadata, &baton);
-+	if (!lvmcache_foreach_mda(info, _read_mda_header_and_metadata, &baton)) {
-+		log_error("Failed to scan VG from %s", dev_name(dev));
-+		return 0;
-+	}
- 
- 	lvmcache_make_valid(info);
+-.PHONY: unit-test ruby-test test-programs
 -
- 	return 1;
- }
+-# FIXME: put dependencies on libdm and liblvm
+-# FIXME: Should be handled by Makefiles in subdirs, not here at top level.
+-test-programs:
+-	cd unit-tests/regex && $(MAKE)
+-	cd unit-tests/datastruct && $(MAKE)
+-	cd unit-tests/mm && $(MAKE)
+-
+-unit-test: test-programs
+-	$(RUBY) report-generators/unit_test.rb $(shell find . -name TESTS)
+-	$(RUBY) report-generators/title_page.rb
+-
+-memcheck: test-programs
+-	$(RUBY) report-generators/memcheck.rb $(shell find . -name TESTS)
+-	$(RUBY) report-generators/title_page.rb
+-
+-ruby-test:
+-	$(RUBY) report-generators/test/ts.rb
++include test/unit/Makefile
+ endif
  
+ ifneq ($(shell which ctags),)
+diff --git a/test/Makefile.in b/test/Makefile.in
+index 230ce5b..097b2fa 100644
+--- a/test/Makefile.in
++++ b/test/Makefile.in
+@@ -27,7 +27,7 @@ datarootdir = @datarootdir@
+ 
+ LVM_TEST_RESULTS ?= results
+ 
+-SUBDIRS = api unit
++SUBDIRS = api
+ SOURCES = lib/not.c lib/harness.c
+ CXXSOURCES = lib/runner.cpp
+ CXXFLAGS += $(EXTRA_EXEC_CFLAGS)
+diff --git a/test/unit/Makefile.in b/test/unit/Makefile.in
+index 5cf92ba..2e2c819 100644
+--- a/test/unit/Makefile.in
++++ b/test/unit/Makefile.in
+@@ -1,4 +1,4 @@
+-# Copyright (C) 2011-2017 Red Hat, Inc. All rights reserved.
++# Copyright (C) 2011-2018 Red Hat, Inc. All rights reserved.
+ #
+ # This file is part of LVM2.
+ #
+@@ -10,44 +10,24 @@
+ # along with this program; if not, write to the Free Software Foundation,
+ # Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
+ 
+-srcdir = @srcdir@
+-top_srcdir = @top_srcdir@
+-top_builddir = @top_builddir@
+-
+-VPATH = $(srcdir)
+-UNITS = \
+-	bcache_t.c \
+-	bitset_t.c\
+-	config_t.c\
+-	dmlist_t.c\
+-	dmstatus_t.c\
+-	matcher_t.c\
+-	percent_t.c\
+-	string_t.c\
+-	run.c
+-
+-ifeq ("@TESTING@", "yes")
+-SOURCES = $(UNITS)
+-TARGETS = run
+-endif
+-
+-include $(top_builddir)/make.tmpl
+-
+-ifeq ($(MAKECMDGOALS),distclean)
+-SOURCES = $(UNITS)
+-endif
+-
+-ifeq ("$(TESTING)", "yes")
+-LDLIBS += $(LVMINTERNAL_LIBS) -ldevmapper -laio @CUNIT_LIBS@
+-CFLAGS += @CUNIT_CFLAGS@
+-
+-check: unit
+-
+-$(TARGETS): $(OBJECTS) $(top_builddir)/libdm/libdevmapper.$(LIB_SUFFIX)
++UNIT_SOURCE=\
++	test/unit/bcache_t.c \
++	test/unit/bitset_t.c\
++	test/unit/config_t.c\
++	test/unit/dmlist_t.c\
++	test/unit/dmstatus_t.c\
++	test/unit/matcher_t.c\
++	test/unit/percent_t.c\
++	test/unit/string_t.c\
++	test/unit/run.c
++UNIT_OBJECTS=$(UNIT_SOURCE:%.c=%.o)
++
++UNIT_LDLIBS += $(LVMINTERNAL_LIBS) -ldevmapper -laio -lcunit
++
++test/unit/run: $(UNIT_OBJECTS) libdm/libdevmapper.$(LIB_SUFFIX) lib/liblvm-internal.a
+ 	$(CC) $(CFLAGS) $(LDFLAGS) $(EXTRA_EXEC_LDFLAGS) -L$(top_builddir)/libdm \
+-	      -o $@ $(OBJECTS) $(LDLIBS)
++	      -o $@ $(UNIT_OBJECTS) $(UNIT_LDLIBS)
+ 
+-unit: $(TARGETS) $(top_builddir)/lib/liblvm-internal.a
++unit-test: test/unit/run
+ 	@echo Running unit tests
+-	LD_LIBRARY_PATH=$(top_builddir)/libdm ./$(TARGETS)
+-endif
++	LD_LIBRARY_PATH=libdm test/unit/run
 
 
