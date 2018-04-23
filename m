@@ -1,42 +1,53 @@
 From: David Teigland <teigland@sourceware.org>
-Date: Mon, 23 Apr 2018 09:50:16 -0400
-Subject: master - scan: leave the caller's dev list unchanged
-Message-ID: <201804231350.w3NDoGI4031858@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Mon, 23 Apr 2018 09:50:29 -0400
+Subject: master - lvmdiskscan: use the new label_scan
+Message-ID: <201804231350.w3NDoTB7031900@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=f328532f05877fc04e7f67c751ef95a844831b9b
-Commit:        f328532f05877fc04e7f67c751ef95a844831b9b
-Parent:        7bce66c5e83296398e2eee99140b3d6e409236c9
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=96a61337b00a250f69e7a8e6ac390c47c36c2c0f
+Commit:        96a61337b00a250f69e7a8e6ac390c47c36c2c0f
+Parent:        28255e3eeef13a0e73a40d533623b22dd9db89cb
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Wed Feb 14 16:15:30 2018 -0600
+AuthorDate:    Wed Feb 14 16:43:26 2018 -0600
 Committer:     David Teigland <teigland@redhat.com>
 CommitterDate: Fri Apr 20 11:22:46 2018 -0500
 
-scan: leave the caller's dev list unchanged
+lvmdiskscan: use the new label_scan
 
-When scanning the list of devs from the caller
-they are moved to another temporary list, but
-were never returned to the original list.
+instead of doing it's own.
 ---
- lib/label/label.c |    2 ++
- 1 files changed, 2 insertions(+), 0 deletions(-)
+ tools/lvmdiskscan.c |    7 +++----
+ 1 files changed, 3 insertions(+), 4 deletions(-)
 
-diff --git a/lib/label/label.c b/lib/label/label.c
-index bf1070c..3359b4d 100644
---- a/lib/label/label.c
-+++ b/lib/label/label.c
-@@ -567,6 +567,8 @@ static int _scan_list(struct dm_list *devs, int *failed)
- 	if (failed)
- 		*failed = scan_failed_count;
+diff --git a/tools/lvmdiskscan.c b/tools/lvmdiskscan.c
+index cb688b5..7e2fc88 100644
+--- a/tools/lvmdiskscan.c
++++ b/tools/lvmdiskscan.c
+@@ -87,7 +87,6 @@ int lvmdiskscan(struct cmd_context *cmd, int argc __attribute__((unused)),
+ 	uint64_t size;
+ 	struct dev_iter *iter;
+ 	struct device *dev;
+-	struct label *label;
  
-+	dm_list_splice(devs, &done_devs);
+ 	/* initialise these here to avoid problems with the lvm shell */
+ 	disks_found = 0;
+@@ -105,10 +104,10 @@ int lvmdiskscan(struct cmd_context *cmd, int argc __attribute__((unused)),
+ 		return ECMD_FAILED;
+ 	}
+ 
+-	/* Do scan */
++	label_scan(cmd);
 +
- 	return 1;
- }
- 
+ 	for (dev = dev_iter_get(iter); dev; dev = dev_iter_get(iter)) {
+-		/* Try if it is a PV first */
+-		if ((label_read(dev, &label, UINT64_C(0)))) {
++		if (lvmcache_has_dev_info(dev)) {
+ 			if (!dev_get_size(dev, &size)) {
+ 				log_error("Couldn't get size of \"%s\"",
+ 					  dev_name(dev));
 
 
