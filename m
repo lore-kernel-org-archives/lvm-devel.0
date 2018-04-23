@@ -1,129 +1,143 @@
 From: David Teigland <teigland@sourceware.org>
 Date: Mon, 23 Apr 2018 09:52:36 -0400
-Subject: master - remove unnecessary REQUIRES_FULL_LABEL_SCAN
-Message-ID: <201804231352.w3NDqaGb000874@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Subject: master - label_scan: fix independent metadata areas
+Message-ID: <201804231352.w3NDqaWY000875@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=89c65d4f71e51c2db4fcba176546d2474e3451bd
-Commit:        89c65d4f71e51c2db4fcba176546d2474e3451bd
-Parent:        45e5e702c1d488df4898a41db0c00ead63c5f6ee
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=d9ef9eb330bdc66dd6d9b45713d5c0b25d645ac0
+Commit:        d9ef9eb330bdc66dd6d9b45713d5c0b25d645ac0
+Parent:        748f29b42a61e05fb696a86e04b4b589d70d6d79
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Fri Apr 6 13:18:03 2018 -0500
+AuthorDate:    Wed Oct 25 13:39:46 2017 -0500
 Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Fri Apr 20 11:22:48 2018 -0500
+CommitterDate: Fri Apr 20 11:21:41 2018 -0500
 
-remove unnecessary REQUIRES_FULL_LABEL_SCAN
+label_scan: fix independent metadata areas
 
-we always scan all devices
+This fixes the use of lvmcache_label_rescan_vg() in the previous
+commit for the special case of independent metadata areas.
+
+label scan is about discovering VG name to device associations
+using information from disks, but devices in VGs with
+independent metadata areas have no information on disk, so
+the label scan does nothing for these VGs/devices.
+With independent metadata areas, only the VG metadata found
+in files is used.  This metadata is found and read in
+vg_read in the processing phase.
+
+lvmcache_label_rescan_vg() drops lvmcache info for the VG devices
+before repeating the label scan on them.  In the case of
+independent metadata areas, there is no metadata on devices, so the
+label scan of the devices will find nothing, so will not recreate
+the necessary vginfo/info data in lvmcache for the VG.  Fix this
+by setting a flag in the lvmcache vginfo struct indicating that
+the VG uses independent metadata areas, and label rescanning should
+be skipped.
+
+In the case of independent metadata areas, it is the metadata
+processing in the vg_read phase that sets up the lvmcache
+vginfo/info information, and label scan has no role.
 ---
- tools/command.c    |    3 +--
- tools/commands.h   |    2 +-
- tools/lvmcmdline.c |    7 +------
- tools/tools.h      |    7 ++-----
- tools/vgrename.c   |    5 -----
- 5 files changed, 5 insertions(+), 19 deletions(-)
+ lib/format_text/format-text.c |   24 +++++++++++++++++++++++-
+ 1 files changed, 23 insertions(+), 1 deletions(-)
 
-diff --git a/tools/command.c b/tools/command.c
-index 8944399..f3b5d82 100644
---- a/tools/command.c
-+++ b/tools/command.c
-@@ -134,13 +134,12 @@ static inline int configtype_arg(struct cmd_context *cmd __attribute__((unused))
- #define ALLOW_UUID_AS_NAME      0x00000010
- #define LOCKD_VG_SH             0x00000020
- #define NO_METADATA_PROCESSING  0x00000040
--#define REQUIRES_FULL_LABEL_SCAN 0x00000080
-+#define IGNORE_PERSISTENT_FILTER 0x00000080
- #define MUST_USE_ALL_ARGS        0x00000100
- #define NO_LVMETAD_AUTOSCAN      0x00000200
- #define ENABLE_DUPLICATE_DEVS    0x00000400
- #define DISALLOW_TAG_ARGS        0x00000800
- #define GET_VGNAME_FROM_OPTIONS  0x00001000
--#define IGNORE_PERSISTENT_FILTER 0x00002000
+diff --git a/lib/format_text/format-text.c b/lib/format_text/format-text.c
+index 6c13346..8c12c82 100644
+--- a/lib/format_text/format-text.c
++++ b/lib/format_text/format-text.c
+@@ -1141,6 +1141,9 @@ static int _scan_file(const struct format_type *fmt, const char *vgname)
  
- /* create foo_CMD enums for command def ID's in command-lines.in */
+ 	dir_list = &((struct mda_lists *) fmt->private)->dirs;
  
-diff --git a/tools/commands.h b/tools/commands.h
-index cbd527b..3d142c3 100644
---- a/tools/commands.h
-+++ b/tools/commands.h
-@@ -225,7 +225,7 @@ xx(vgremove,
- 
- xx(vgrename,
-    "Rename a volume group",
--   ALLOW_UUID_AS_NAME | REQUIRES_FULL_LABEL_SCAN)
-+   ALLOW_UUID_AS_NAME)
- 
- xx(vgs,
-    "Display information about volume groups",
-diff --git a/tools/lvmcmdline.c b/tools/lvmcmdline.c
-index 3774014..bcb2c53 100644
---- a/tools/lvmcmdline.c
-+++ b/tools/lvmcmdline.c
-@@ -2727,11 +2727,6 @@ static int _cmd_no_lvmetad_autoscan(struct cmd_context *cmd)
- 	return cmd->cname->flags & NO_LVMETAD_AUTOSCAN;
++	if (!dm_list_empty(dir_list))
++		log_debug_metadata("Scanning independent files for %s", vgname ? vgname : "VGs");
++
+ 	dm_list_iterate_items(dl, dir_list) {
+ 		if (!(d = opendir(dl->dir))) {
+ 			log_sys_error("opendir", dl->dir);
+@@ -1173,10 +1176,14 @@ static int _scan_file(const struct format_type *fmt, const char *vgname)
+ 					stack;
+ 					break;
+ 				}
++
++				log_debug_metadata("Scanning independent file %s for VG %s", path, scanned_vgname);
++
+ 				if ((vg = _vg_read_file_name(fid, scanned_vgname,
+ 							     path))) {
+ 					/* FIXME Store creation host in vg */
+ 					lvmcache_update_vg(vg, 0);
++					lvmcache_set_independent_location(vg->name);
+ 					release_vg(vg);
+ 				}
+ 			}
+@@ -1302,6 +1309,8 @@ int read_metadata_location_summary(const struct format_type *fmt,
+ 	return 1;
  }
  
--static int _cmd_requires_full_label_scan(struct cmd_context *cmd)
--{
--	return cmd->cname->flags & REQUIRES_FULL_LABEL_SCAN;
--}
--
- static int _cmd_ignores_persistent_filter(struct cmd_context *cmd)
++/* used for independent_metadata_areas */
++
+ static int _scan_raw(const struct format_type *fmt, const char *vgname __attribute__((unused)))
  {
- 	return cmd->cname->flags & IGNORE_PERSISTENT_FILTER;
-@@ -2865,7 +2860,7 @@ int lvm_run_command(struct cmd_context *cmd, int argc, char **argv)
- 	 * Similarly ignore the persistent cache if the command is going to discard it regardless.
- 	 */
- 	if (!cmd->initialized.filters && !_cmd_no_meta_proc(cmd) &&
--	    !init_filters(cmd, !(refresh_done || _cmd_requires_full_label_scan(cmd) || _cmd_ignores_persistent_filter(cmd))))
-+	    !init_filters(cmd, !(refresh_done || _cmd_ignores_persistent_filter(cmd))))
- 		return_ECMD_FAILED;
+ 	struct raw_list *rl;
+@@ -1313,11 +1322,16 @@ static int _scan_raw(const struct format_type *fmt, const char *vgname __attribu
  
- 	if (arg_is_set(cmd, readonly_ARG))
-diff --git a/tools/tools.h b/tools/tools.h
-index 0886551..d4d2fb2 100644
---- a/tools/tools.h
-+++ b/tools/tools.h
-@@ -124,8 +124,8 @@ struct arg_value_group_list {
- #define LOCKD_VG_SH		0x00000020
- /* Command does not process any metadata. */
- #define NO_METADATA_PROCESSING	0x00000040
--/* Command wants to scan for new devices and force labels to be read from them all. */
--#define REQUIRES_FULL_LABEL_SCAN 0x00000080
-+/* Command must not load the contents saved by the persistent filter */
-+#define IGNORE_PERSISTENT_FILTER 0x00000080
- /* Command must use all specified arg names and fail if all cannot be used. */
- #define MUST_USE_ALL_ARGS        0x00000100
- /* Command wants to control the device scan for lvmetad itself. */
-@@ -136,9 +136,6 @@ struct arg_value_group_list {
- #define DISALLOW_TAG_ARGS        0x00000800
- /* Command may need to find VG name in an option value. */
- #define GET_VGNAME_FROM_OPTIONS  0x00001000
--/* Command must not load the contents saved by the persistent filter */
--#define IGNORE_PERSISTENT_FILTER 0x00002000
--
- void usage(const char *name);
+ 	raw_list = &((struct mda_lists *) fmt->private)->raws;
  
- /* the argument verify/normalise functions */
-diff --git a/tools/vgrename.c b/tools/vgrename.c
-index 5c69faf..4f2a08b 100644
---- a/tools/vgrename.c
-+++ b/tools/vgrename.c
-@@ -59,11 +59,6 @@ static int _vgrename_single(struct cmd_context *cmd, const char *vg_name,
- 	/*
- 	 * Check if a VG already exists with the new VG name.
- 	 *
--	 * When not using lvmetad, it's essential that a full scan has
--	 * been done to ensure we see all existing VG names, so we
--	 * do not use an existing name.  This has been done by
--	 * process_each_vg REQUIRES_FULL_LABEL_SCAN.
--	 *
- 	 * (FIXME: We could look for the new name in the list of all
- 	 * VGs that process_each_vg created, but we don't have access
- 	 * to that list here, so we have to look in lvmcache.
++	if (!dm_list_empty(raw_list))
++		log_debug_metadata("Scanning independent raw locations for %s", vgname ? vgname : "VGs");
++
+ 	fid.fmt = fmt;
+ 	dm_list_init(&fid.metadata_areas_in_use);
+ 	dm_list_init(&fid.metadata_areas_ignored);
+ 
+ 	dm_list_iterate_items(rl, raw_list) {
++		log_debug_metadata("Scanning independent dev %s", dev_name(rl->dev_area.dev));
++
+ 		/* FIXME We're reading mdah twice here... */
+ 		if (!dev_open_readonly(rl->dev_area.dev)) {
+ 			stack;
+@@ -1331,8 +1345,10 @@ static int _scan_raw(const struct format_type *fmt, const char *vgname __attribu
+ 
+ 		if (read_metadata_location_summary(fmt, mdah, 0, &rl->dev_area, &vgsummary, NULL)) {
+ 			vg = _vg_read_raw_area(&fid, vgsummary.vgname, &rl->dev_area, NULL, NULL, 0, 0, 0);
+-			if (vg)
++			if (vg) {
+ 				lvmcache_update_vg(vg, 0);
++				lvmcache_set_independent_location(vg->name);
++			}
+ 		}
+ 	close_dev:
+ 		if (!dev_close(rl->dev_area.dev))
+@@ -1342,6 +1358,8 @@ static int _scan_raw(const struct format_type *fmt, const char *vgname __attribu
+ 	return 1;
+ }
+ 
++/* used for independent_metadata_areas */
++
+ static int _text_scan(const struct format_type *fmt, const char *vgname)
+ {
+ 	return (_scan_file(fmt, vgname) & _scan_raw(fmt, vgname));
+@@ -1796,6 +1814,8 @@ static struct metadata_area_ops _metadata_text_raw_ops = {
+ 	.mda_import_text = _mda_import_text_raw
+ };
+ 
++/* used only for sending info to lvmetad */
++
+ static int _mda_export_text_raw(struct metadata_area *mda,
+ 				struct dm_config_tree *cft,
+ 				struct dm_config_node *parent)
+@@ -1820,6 +1840,8 @@ static int _mda_export_text_raw(struct metadata_area *mda,
+ 				 NULL) ? 1 : 0;
+ }
+ 
++/* used only for receiving info from lvmetad */
++
+ static int _mda_import_text_raw(struct lvmcache_info *info, const struct dm_config_node *cn)
+ {
+ 	struct device *device;
 
 
