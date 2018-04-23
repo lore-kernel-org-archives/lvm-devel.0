@@ -1,421 +1,477 @@
 From: David Teigland <teigland@sourceware.org>
 Date: Mon, 23 Apr 2018 09:52:34 -0400
-Subject: master - dev_cache: clean up scan
-Message-ID: <201804231352.w3NDqYVd000841@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Subject: master - scan: use new label_scan for lvmcache_label_scan
+Message-ID: <201804231352.w3NDqYEs000847@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=c0973e70a58e7e14e9cca29a0f8ad12719ea554f
-Commit:        c0973e70a58e7e14e9cca29a0f8ad12719ea554f
-Parent:        89c65d4f71e51c2db4fcba176546d2474e3451bd
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=4507ba3596a549697733e1b839f25af454ccf878
+Commit:        4507ba3596a549697733e1b839f25af454ccf878
+Parent:        a7cb76ae94a90c89b86a810ceb4b6a91bab3441e
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Mon Apr 9 11:13:43 2018 -0500
+AuthorDate:    Wed Feb 7 13:14:08 2018 -0600
 Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Fri Apr 20 11:22:48 2018 -0500
+CommitterDate: Fri Apr 20 11:19:32 2018 -0500
 
-dev_cache: clean up scan
+scan: use new label_scan for lvmcache_label_scan
 
-Pull out all of the twisted logic and simply call dev_cache_scan
-at the start of the command prior to label scan.
+To do label scanning, lvm code calls lvmcache_label_scan().
+Change lvmcache_label_scan() to use the new label_scan()
+based on bcache.
+
+Also add lvmcache_label_rescan_vg() which calls the new
+label_scan_devs() which does label scanning on only the
+specified devices.  This is for a subsequent commit and
+is not yet used.
 ---
- daemons/clvmd/lvm-functions.c   |    1 -
- lib/cache/lvmcache.c            |    5 +--
- lib/commands/toolcontext.c      |    1 -
- lib/device/dev-cache.c          |   40 ++++----------------------------------
- lib/device/dev-cache.h          |    6 +---
- lib/filters/filter-persistent.c |   13 ------------
- lib/label/label.c               |    2 +-
- lib/misc/lvm-globals.c          |   11 ----------
- lib/misc/lvm-globals.h          |    2 -
- tools/lvmcmdline.c              |    1 -
- tools/polldaemon.c              |    9 +++----
- tools/pvscan.c                  |    4 +-
- tools/toollib.c                 |    2 -
- tools/vgimportclone.c           |    1 -
- 14 files changed, 16 insertions(+), 82 deletions(-)
+ lib/cache/lvmcache.c           |  234 ++++++++++++++++++++++++++++------------
+ lib/cache/lvmcache.h           |   12 ++-
+ lib/format_text/format-text.c  |    2 +-
+ lib/format_text/import_vsn1.c  |    3 +-
+ lib/metadata/metadata-liblvm.c |    2 +-
+ 5 files changed, 174 insertions(+), 79 deletions(-)
 
-diff --git a/daemons/clvmd/lvm-functions.c b/daemons/clvmd/lvm-functions.c
-index 64bdab3..c278692 100644
---- a/daemons/clvmd/lvm-functions.c
-+++ b/daemons/clvmd/lvm-functions.c
-@@ -661,7 +661,6 @@ int do_refresh_cache(void)
- 		return -1;
- 	}
- 
--	init_full_scan_done(0);
- 	init_ignore_suspended_devices(1);
- 	lvmcache_force_next_label_scan();
- 	lvmcache_label_scan(cmd);
 diff --git a/lib/cache/lvmcache.c b/lib/cache/lvmcache.c
-index 78665bf..ef180b9 100644
+index fb81002..c0b2202 100644
 --- a/lib/cache/lvmcache.c
 +++ b/lib/cache/lvmcache.c
-@@ -157,6 +157,8 @@ void lvmcache_seed_infos_from_lvmetad(struct cmd_context *cmd)
- 	if (!lvmetad_used() || _has_scanned)
- 		return;
+@@ -72,6 +72,7 @@ struct lvmcache_vginfo {
+ 	unsigned vg_use_count;	/* Counter of vg reusage */
+ 	unsigned precommitted;	/* Is vgmetadata live or precommitted? */
+ 	unsigned cached_vg_invalidated;	/* Signal to regenerate cached_vg */
++	int independent_metadata_location; /* metadata read from independent areas */
+ };
  
-+	dev_cache_scan();
+ static struct dm_hash_table *_pvid_hash = NULL;
+@@ -542,7 +543,6 @@ const struct format_type *lvmcache_fmt_from_vgname(struct cmd_context *cmd,
+ {
+ 	struct lvmcache_vginfo *vginfo;
+ 	struct lvmcache_info *info;
+-	struct label *label;
+ 	struct dm_list *devh, *tmp;
+ 	struct dm_list devs;
+ 	struct device_list *devl;
+@@ -587,7 +587,7 @@ const struct format_type *lvmcache_fmt_from_vgname(struct cmd_context *cmd,
+ 
+ 	dm_list_iterate_safe(devh, tmp, &devs) {
+ 		devl = dm_list_item(devh, struct device_list);
+-		(void) label_read(devl->dev, &label, UINT64_C(0));
++		label_read(devl->dev, NULL, UINT64_C(0));
+ 		dm_list_del(&devl->list);
+ 		dm_free(devl);
+ 	}
+@@ -750,7 +750,7 @@ char *lvmcache_vgname_from_pvid(struct cmd_context *cmd, const char *pvid)
+ 	struct lvmcache_info *info;
+ 	char *vgname;
+ 
+-	if (!lvmcache_device_from_pvid(cmd, (const struct id *)pvid, NULL, NULL)) {
++	if (!lvmcache_device_from_pvid(cmd, (const struct id *)pvid, NULL)) {
+ 		log_error("Couldn't find device with uuid %s.", pvid);
+ 		return NULL;
+ 	}
+@@ -766,19 +766,42 @@ char *lvmcache_vgname_from_pvid(struct cmd_context *cmd, const char *pvid)
+ 	return vgname;
+ }
+ 
+-static void _rescan_entry(struct lvmcache_info *info)
++/*
++ * FIXME: get rid of the CACHE_INVALID state and rescanning
++ * infos with that flag.  The code should just know which devices
++ * need scanning and when.
++ */
++static int _label_scan_invalid(struct cmd_context *cmd)
+ {
+-	struct label *label;
++	struct dm_list devs;
++	struct dm_hash_node *n;
++	struct device_list *devl;
++	struct lvmcache_info *info;
++	int dev_count = 0;
++	int ret;
+ 
+-	if (info->status & CACHE_INVALID)
+-		(void) label_read(info->dev, &label, UINT64_C(0));
+-}
++	dm_list_init(&devs);
+ 
+-static int _scan_invalid(void)
+-{
+-	dm_hash_iter(_pvid_hash, (dm_hash_iterate_fn) _rescan_entry);
++	dm_hash_iterate(n, _pvid_hash) {
++		if (!(info = dm_hash_get_data(_pvid_hash, n)))
++			continue;
+ 
+-	return 1;
++		if (!(info->status & CACHE_INVALID))
++			continue;
 +
- 	if (!lvmetad_pv_list_to_lvmcache(cmd)) {
- 		stack;
- 		return;
-@@ -357,9 +359,6 @@ void lvmcache_drop_metadata(const char *vgname, int drop_precommitted)
- 		_drop_metadata(FMT_TEXT_ORPHAN_VG_NAME, 0);
- 		_drop_metadata(FMT_LVM1_ORPHAN_VG_NAME, 0);
- 		_drop_metadata(FMT_POOL_ORPHAN_VG_NAME, 0);
--
--		/* Indicate that PVs could now be missing from the cache */
--		init_full_scan_done(0);
- 	} else
- 		_drop_metadata(vgname, drop_precommitted);
++		if (!(devl = dm_pool_zalloc(cmd->mem, sizeof(*devl))))
++			return_0;
++
++		devl->dev = info->dev;
++		dm_list_add(&devs, &devl->list);
++		dev_count++;
++	}
++
++	log_debug_cache("Scanning %d devs with invalid info.", dev_count);
++
++	ret = label_scan_devs(cmd, &devs);
++
++	return ret;
  }
-diff --git a/lib/commands/toolcontext.c b/lib/commands/toolcontext.c
-index 3dc3e2d..a54f4d7 100644
---- a/lib/commands/toolcontext.c
-+++ b/lib/commands/toolcontext.c
-@@ -1648,7 +1648,6 @@ static void _init_rand(struct cmd_context *cmd)
  
- static void _init_globals(struct cmd_context *cmd)
+ /*
+@@ -1093,17 +1116,89 @@ next:
+ 	goto next;
+ }
+ 
++/*
++ * The initial label_scan at the start of the command is done without
++ * holding VG locks.  Then for each VG identified during the label_scan,
++ * vg_read(vgname) is called while holding the VG lock.  The labels
++ * and metadata on this VG's devices could have changed between the
++ * initial unlocked label_scan and the current vg_read().  So, we reread
++ * the labels/metadata for each device in the VG now that we hold the
++ * lock, and use this for processing the VG.
++ *
++ * FIXME: In some cases, the data read by label_scan may be fine, and not
++ * need to be reread here. e.g. a reporting command, possibly with a
++ * special option, could skip this second reread.  Or, we could look
++ * at the VG seqno in each copy of the metadata read in the first label
++ * scan, and if they all match, consider it good enough to use for
++ * reporting without rereading it.  (A command modifying the VG would
++ * always want to reread while the lock is held before modifying.)
++ *
++ * A label scan is ultimately creating associations between devices
++ * and VGs so that when vg_read wants to get VG metadata, it knows
++ * which devices to read.  In the special case where VG metadata is
++ * stored in files on the file system (configured in lvm.conf), the
++ * vginfo->independent_metadata_location flag is set during label scan.
++ * When we get here to rescan, we are revalidating the device to VG
++ * mapping from label scan by repeating the label scan on a subset of
++ * devices.  If we see independent_metadata_location is set from the
++ * initial label scan, we know that there is nothing to do because
++ * there is no device to VG mapping to revalidate, since the VG metadata
++ * comes directly from files.
++ */
++
++int lvmcache_label_rescan_vg(struct cmd_context *cmd, const char *vgname, const char *vgid)
++{
++	struct dm_list devs;
++	struct device_list *devl;
++	struct lvmcache_vginfo *vginfo;
++	struct lvmcache_info *info;
++
++	if (lvmetad_used())
++		return 1;
++
++	dm_list_init(&devs);
++
++	if (!(vginfo = lvmcache_vginfo_from_vgname(vgname, vgid)))
++		return_0;
++
++	/*
++	 * When the VG metadata is from an independent location,
++	 * then rescanning the devices in the VG won't find the
++	 * metadata, and will destroy the vginfo/info associations
++	 * that were created during label scan when the
++	 * independent locations were read.
++	 */
++	if (vginfo->independent_metadata_location)
++		return 1;
++
++	dm_list_iterate_items(info, &vginfo->infos) {
++		if (!(devl = dm_malloc(sizeof(*devl)))) {
++			log_error("device_list element allocation failed");
++			return 0;
++		}
++		devl->dev = info->dev;
++		dm_list_add(&devs, &devl->list);
++	}
++
++	label_scan_devs(cmd, &devs);
++
++	/*
++	 * TODO: grab vginfo again, and compare vginfo->infos
++	 * to what was found above before rereading labels.
++	 * If there are any info->devs now that were not in the
++	 * first devs list, then do label_read on those also.
++	 */
++
++	return 1;
++}
++
+ int lvmcache_label_scan(struct cmd_context *cmd)
  {
--	init_full_scan_done(0);
- 	init_mirror_in_sync(0);
- }
+ 	struct dm_list del_cache_devs;
+ 	struct dm_list add_cache_devs;
+ 	struct lvmcache_info *info;
+ 	struct device_list *devl;
+-	struct label *label;
+-	struct dev_iter *iter;
+-	struct device *dev;
+ 	struct format_type *fmt;
+-	int dev_count = 0;
  
-diff --git a/lib/device/dev-cache.c b/lib/device/dev-cache.c
-index e72ffd6..52edad8 100644
---- a/lib/device/dev-cache.c
-+++ b/lib/device/dev-cache.c
-@@ -1077,12 +1077,11 @@ static int _insert(const char *path, const struct stat *info,
- 	return 1;
- }
+ 	int r = 0;
  
--static void _full_scan(int dev_scan)
-+void dev_cache_scan(void)
- {
- 	struct dir_list *dl;
- 
--	if (_cache.has_scanned && !dev_scan)
--		return;
-+	_cache.has_scanned = 1;
- 
- 	_insert_dirs(&_cache.dirs);
- 
-@@ -1090,9 +1089,6 @@ static void _full_scan(int dev_scan)
- 
- 	dm_list_iterate_items(dl, &_cache.files)
- 		_insert_file(dl->dir);
--
--	_cache.has_scanned = 1;
--	init_full_scan_done(1);
- }
- 
- int dev_cache_has_scanned(void)
-@@ -1100,14 +1096,6 @@ int dev_cache_has_scanned(void)
- 	return _cache.has_scanned;
- }
- 
--void dev_cache_scan(int do_scan)
--{
--	if (!do_scan)
--		_cache.has_scanned = 1;
--	else
--		_full_scan(1);
--}
--
- static int _init_preferred_names(struct cmd_context *cmd)
- {
- 	const struct dm_config_node *cn;
-@@ -1171,7 +1159,6 @@ out:
- int dev_cache_init(struct cmd_context *cmd)
- {
- 	_cache.names = NULL;
--	_cache.has_scanned = 0;
- 
- 	if (!(_cache.mem = dm_pool_create("dev_cache", 10 * 1024)))
- 		return_0;
-@@ -1413,7 +1400,7 @@ struct device *dev_cache_get(const char *name, struct dev_filter *f)
- 		_insert(name, info_available ? &buf : NULL, 0, obtain_device_list_from_udev());
- 		d = (struct device *) dm_hash_lookup(_cache.names, name);
- 		if (!d) {
--			_full_scan(0);
-+			dev_cache_scan();
- 			d = (struct device *) dm_hash_lookup(_cache.names, name);
- 		}
+@@ -1121,34 +1216,40 @@ int lvmcache_label_scan(struct cmd_context *cmd)
+ 		goto out;
  	}
-@@ -1469,7 +1456,7 @@ struct device *dev_cache_get_by_devt(dev_t dev, struct dev_filter *f)
- 			}
- 		}
  
--		_full_scan(0);
-+		dev_cache_scan();
- 		d = _dev_cache_seek_devt(dev);
++	/*
++	 * Scan devices whose info struct has the INVALID flag set.
++	 * When scanning has read the pv_header, mda_header and
++	 * mda locations, it will clear the INVALID flag (via
++	 * lvmcache_make_valid).
++	 */
+ 	if (_has_scanned && !_force_label_scan) {
+-		r = _scan_invalid();
++		r = _label_scan_invalid(cmd);
+ 		goto out;
  	}
  
-@@ -1477,17 +1464,7 @@ struct device *dev_cache_get_by_devt(dev_t dev, struct dev_filter *f)
- 		      f->passes_filter(f, d))) ? d : NULL;
+ 	if (_force_label_scan && (cmd->full_filter && !cmd->full_filter->use_count) && !refresh_filters(cmd))
+ 		goto_out;
+ 
+-	if (!cmd->full_filter || !(iter = dev_iter_create(cmd->full_filter, _force_label_scan))) {
+-		log_error("dev_iter creation failed");
++	if (!cmd->full_filter) {
++		log_error("label scan is missing full filter");
+ 		goto out;
+ 	}
+ 
+-	log_very_verbose("Scanning device labels");
+-
+ 	/*
+ 	 * Duplicates found during this label scan are added to _found_duplicate_devs().
+ 	 */
+ 	_destroy_duplicate_device_list(&_found_duplicate_devs);
+ 
+-	while ((dev = dev_iter_get(iter))) {
+-		(void) label_read(dev, &label, UINT64_C(0));
+-		dev_count++;
+-	}
+-
+-	dev_iter_destroy(iter);
+-
+-	log_very_verbose("Scanned %d device labels", dev_count);
++	/*
++	 * Do the actual scanning.  This populates lvmcache
++	 * with infos/vginfos based on reading headers from
++	 * each device, and a vg summary from each mda.
++	 *
++	 * Note that this will *skip* scanning a device if
++	 * an info struct already exists in lvmcache for
++	 * the device.
++	 */
++	label_scan(cmd);
+ 
+ 	/*
+ 	 * _choose_preferred_devs() returns:
+@@ -1182,7 +1283,7 @@ int lvmcache_label_scan(struct cmd_context *cmd)
+ 
+ 		dm_list_iterate_items(devl, &add_cache_devs) {
+ 			log_debug_cache("Rescan preferred device %s for lvmcache", dev_name(devl->dev));
+-			(void) label_read(devl->dev, &label, UINT64_C(0));
++			label_read(devl->dev, NULL, UINT64_C(0));
+ 		}
+ 
+ 		dm_list_splice(&_unused_duplicate_devs, &del_cache_devs);
+@@ -1441,61 +1542,45 @@ struct dm_list *lvmcache_get_pvids(struct cmd_context *cmd, const char *vgname,
+ 	return pvids;
  }
  
--void dev_cache_full_scan(struct dev_filter *f)
--{
--	if (f && f->wipe) {
--		f->wipe(f); /* might call _full_scan(1) */
--		if (!full_scan_done())
--			_full_scan(1);
--	} else
--		_full_scan(1);
--}
--
--struct dev_iter *dev_iter_create(struct dev_filter *f, int dev_scan)
-+struct dev_iter *dev_iter_create(struct dev_filter *f, int unused)
+-static struct device *_device_from_pvid(const struct id *pvid,
+-					uint64_t *label_sector)
++int lvmcache_get_vg_devs(struct cmd_context *cmd,
++			 struct lvmcache_vginfo *vginfo,
++			 struct dm_list *devs)
  {
- 	struct dev_iter *di = dm_malloc(sizeof(*di));
+ 	struct lvmcache_info *info;
+-	struct label *label;
++	struct device_list *devl;
  
-@@ -1496,13 +1473,6 @@ struct dev_iter *dev_iter_create(struct dev_filter *f, int dev_scan)
+-	if ((info = lvmcache_info_from_pvid((const char *) pvid, NULL, 0))) {
+-		if (lvmetad_used()) {
+-			if (info->label && label_sector)
+-				*label_sector = info->label->sector;
+-			return info->dev;
+-		}
++	dm_list_iterate_items(info, &vginfo->infos) {
++		if (!(devl = dm_pool_zalloc(cmd->mem, sizeof(*devl))))
++			return_0;
+ 
+-		if (label_read(info->dev, &label, UINT64_C(0))) {
+-			info = (struct lvmcache_info *) label->info;
+-			if (id_equal(pvid, (struct id *) &info->dev->pvid)) {
+-				if (label_sector)
+-					*label_sector = label->sector;
+-				return info->dev;
+-                        }
+-		}
++		devl->dev = info->dev;
++		dm_list_add(devs, &devl->list);
+ 	}
+-	return NULL;
++	return 1;
+ }
+ 
+-struct device *lvmcache_device_from_pvid(struct cmd_context *cmd, const struct id *pvid,
+-				unsigned *scan_done_once, uint64_t *label_sector)
++static struct device *_device_from_pvid(const struct id *pvid, uint64_t *label_sector)
+ {
+-	struct device *dev;
+-
+-	/* Already cached ? */
+-	dev = _device_from_pvid(pvid, label_sector);
+-	if (dev)
+-		return dev;
+-
+-	lvmcache_label_scan(cmd);
++	struct lvmcache_info *info;
+ 
+-	/* Try again */
+-	dev = _device_from_pvid(pvid, label_sector);
+-	if (dev)
+-		return dev;
++	if ((info = lvmcache_info_from_pvid((const char *) pvid, NULL, 0))) {
++		if (info->label && label_sector)
++			*label_sector = info->label->sector;
++		return info->dev;
++	}
+ 
+-	if (critical_section() || (scan_done_once && *scan_done_once))
+-		return NULL;
++	return NULL;
++}
+ 
+-	lvmcache_force_next_label_scan();
+-	lvmcache_label_scan(cmd);
+-	if (scan_done_once)
+-		*scan_done_once = 1;
++struct device *lvmcache_device_from_pvid(struct cmd_context *cmd, const struct id *pvid, uint64_t *label_sector)
++{
++	struct device *dev;
+ 
+-	/* Try again */
+ 	dev = _device_from_pvid(pvid, label_sector);
+ 	if (dev)
+ 		return dev;
+ 
++	log_debug_devs("No device with uuid %s.", (const char *)pvid);
+ 	return NULL;
+ }
+ 
+@@ -1503,7 +1588,6 @@ const char *lvmcache_pvid_from_devname(struct cmd_context *cmd,
+ 				       const char *devname)
+ {
+ 	struct device *dev;
+-	struct label *label;
+ 
+ 	if (!(dev = dev_cache_get(devname, cmd->filter))) {
+ 		log_error("%s: Couldn't find device.  Check your filters?",
+@@ -1511,7 +1595,7 @@ const char *lvmcache_pvid_from_devname(struct cmd_context *cmd,
  		return NULL;
  	}
  
--	if (dev_scan && !trust_cache()) {
--		/* Flag gets reset between each command */
--		if (!full_scan_done())
--			dev_cache_full_scan(f);
--	} else
--		_full_scan(0);
--
- 	di->current = btree_first(_cache.devices);
- 	di->filter = f;
- 	if (di->filter)
-diff --git a/lib/device/dev-cache.h b/lib/device/dev-cache.h
-index 546b1fe..4797274 100644
---- a/lib/device/dev-cache.h
-+++ b/lib/device/dev-cache.h
-@@ -46,10 +46,8 @@ int dev_cache_exit(void);
-  */
- int dev_cache_check_for_open_devices(void);
+-	if (!(label_read(dev, &label, UINT64_C(0))))
++	if (!(label_read(dev, NULL, UINT64_C(0))))
+ 		return NULL;
  
--/* Trigger(1) or avoid(0) a scan */
--void dev_cache_scan(int do_scan);
-+void dev_cache_scan(void);
- int dev_cache_has_scanned(void);
--void dev_cache_full_scan(struct dev_filter *f);
- 
- int dev_cache_add_dir(const char *path);
- int dev_cache_add_loopfile(const char *path);
-@@ -66,7 +64,7 @@ void dev_set_preferred_name(struct dm_str_list *sl, struct device *dev);
-  * Object for iterating through the cache.
-  */
- struct dev_iter;
--struct dev_iter *dev_iter_create(struct dev_filter *f, int dev_scan);
-+struct dev_iter *dev_iter_create(struct dev_filter *f, int unused);
- void dev_iter_destroy(struct dev_iter *iter);
- struct device *dev_iter_get(struct dev_iter *iter);
- 
-diff --git a/lib/filters/filter-persistent.c b/lib/filters/filter-persistent.c
-index 5bc0861..a4151c2 100644
---- a/lib/filters/filter-persistent.c
-+++ b/lib/filters/filter-persistent.c
-@@ -48,11 +48,7 @@ static void _persistent_filter_wipe(struct dev_filter *f)
- {
- 	struct pfilter *pf = (struct pfilter *) f->private;
- 
--	log_verbose("Wiping cache of LVM-capable devices");
- 	dm_hash_wipe(pf->devices);
--
--	/* Trigger complete device scan */
--	dev_cache_scan(1);
- }
- 
- static int _read_array(struct pfilter *pf, struct dm_config_tree *cft,
-@@ -126,15 +122,6 @@ int persistent_filter_load(struct dev_filter *f, struct dm_config_tree **cft_out
- 	/* _read_array(pf, cft, "persistent_filter_cache/invalid_devices",
- 	   PF_BAD_DEVICE); */
- 
--	/* Did we find anything? */
--	if (dm_hash_get_num_entries(pf->devices)) {
--		/* We populated dev_cache ourselves */
--		dev_cache_scan(0);
--		if (!dev_cache_index_devs())
--			stack;
--		r = 1;
--	}
--
- 	log_very_verbose("Loaded persistent filter cache from %s", pf->file);
- 
-       out:
-diff --git a/lib/label/label.c b/lib/label/label.c
-index 6c3be05..c11a040 100644
---- a/lib/label/label.c
-+++ b/lib/label/label.c
-@@ -631,7 +631,7 @@ int label_scan(struct cmd_context *cmd)
- 	 * on it.  This info will be used by the vg_read() phase of the
- 	 * command.
- 	 */
--	dev_cache_full_scan(cmd->full_filter);
-+	dev_cache_scan();
- 
- 	if (!(iter = dev_iter_create(cmd->full_filter, 0))) {
- 		log_error("Scanning failed to get devices.");
-diff --git a/lib/misc/lvm-globals.c b/lib/misc/lvm-globals.c
-index 0f384bb..9941489 100644
---- a/lib/misc/lvm-globals.c
-+++ b/lib/misc/lvm-globals.c
-@@ -28,7 +28,6 @@ static int _md_filtering = 0;
- static int _internal_filtering = 0;
- static int _fwraid_filtering = 0;
- static int _pvmove = 0;
--static int _full_scan_done = 0;	/* Restrict to one full scan during each cmd */
- static int _obtain_device_list_from_udev = DEFAULT_OBTAIN_DEVICE_LIST_FROM_UDEV;
- static enum dev_ext_e _external_device_info_source = DEV_EXT_NONE;
- static int _trust_cache = 0; /* Don't scan when incomplete VGs encountered */
-@@ -92,11 +91,6 @@ void init_pvmove(int level)
- 	_pvmove = level;
- }
- 
--void init_full_scan_done(int level)
--{
--	_full_scan_done = level;
--}
--
- void init_obtain_device_list_from_udev(int device_list_from_udev)
- {
- 	_obtain_device_list_from_udev = device_list_from_udev;
-@@ -253,11 +247,6 @@ int pvmove_mode(void)
- 	return _pvmove;
- }
- 
--int full_scan_done(void)
--{
--	return _full_scan_done;
--}
--
- int obtain_device_list_from_udev(void)
- {
- 	return _obtain_device_list_from_udev;
-diff --git a/lib/misc/lvm-globals.h b/lib/misc/lvm-globals.h
-index e23d598..b383891 100644
---- a/lib/misc/lvm-globals.h
-+++ b/lib/misc/lvm-globals.h
-@@ -29,7 +29,6 @@ void init_md_filtering(int level);
- void init_internal_filtering(int level);
- void init_fwraid_filtering(int level);
- void init_pvmove(int level);
--void init_full_scan_done(int level);
- void init_external_device_info_source(enum dev_ext_e src);
- void init_obtain_device_list_from_udev(int device_list_from_udev);
- void init_trust_cache(int trustcache);
-@@ -63,7 +62,6 @@ int md_filtering(void);
- int internal_filtering(void);
- int fwraid_filtering(void);
- int pvmove_mode(void);
--int full_scan_done(void);
- int obtain_device_list_from_udev(void);
- enum dev_ext_e external_device_info_source(void);
- int trust_cache(void);
-diff --git a/tools/lvmcmdline.c b/tools/lvmcmdline.c
-index bcb2c53..c7ac4b6 100644
---- a/tools/lvmcmdline.c
-+++ b/tools/lvmcmdline.c
-@@ -2446,7 +2446,6 @@ static void _apply_current_settings(struct cmd_context *cmd)
- 	_apply_current_output_settings(cmd);
- 
- 	init_test(cmd->current_settings.test);
--	init_full_scan_done(0);
- 	init_mirror_in_sync(0);
- 	init_dmeventd_monitor(DEFAULT_DMEVENTD_MONITOR);
- 
-diff --git a/tools/polldaemon.c b/tools/polldaemon.c
-index d69284d..cf7a947 100644
---- a/tools/polldaemon.c
-+++ b/tools/polldaemon.c
-@@ -123,13 +123,12 @@ static void _nanosleep(unsigned secs, unsigned allow_zero_time)
- 	while (!nanosleep(&wtime, &wtime) && errno == EINTR) {}
- }
- 
--static void _sleep_and_rescan_devices(struct daemon_parms *parms)
-+static void _sleep_and_rescan_devices(struct cmd_context *cmd, struct daemon_parms *parms)
- {
- 	if (parms->interval && !parms->aborting) {
- 		dev_close_all();
- 		_nanosleep(parms->interval, 1);
--		/* Devices might have changed while we slept */
--		init_full_scan_done(0);
-+		lvmcache_label_scan(cmd);
- 	}
- }
- 
-@@ -145,7 +144,7 @@ int wait_for_single_lv(struct cmd_context *cmd, struct poll_operation_id *id,
- 	/* Poll for completion */
- 	while (!finished) {
- 		if (parms->wait_before_testing)
--			_sleep_and_rescan_devices(parms);
-+			_sleep_and_rescan_devices(cmd, parms);
- 
- 		/*
- 		 * An ex VG lock is needed because the check can call finish_copy
-@@ -218,7 +217,7 @@ int wait_for_single_lv(struct cmd_context *cmd, struct poll_operation_id *id,
- 		 * continue polling an LV that doesn't have a "status".
- 		 */
- 		if (!parms->wait_before_testing && !finished)
--			_sleep_and_rescan_devices(parms);
-+			_sleep_and_rescan_devices(cmd, parms);
- 	}
- 
+ 	return dev->pvid;
+@@ -2657,6 +2741,14 @@ int lvmcache_vgid_is_cached(const char *vgid) {
  	return 1;
-diff --git a/tools/pvscan.c b/tools/pvscan.c
-index ab6ea0b..1fcf606 100644
---- a/tools/pvscan.c
-+++ b/tools/pvscan.c
-@@ -288,8 +288,6 @@ static int _pvscan_autoactivate(struct cmd_context *cmd, struct pvscan_aa_params
- 		pp->refresh_all = 1;
- 	}
+ }
  
--	dev_cache_full_scan(cmd->full_filter);
--
- 	ret = process_each_vg(cmd, 0, NULL, NULL, vgnames, 0, 0, handle, _pvscan_autoactivate_single);
++void lvmcache_set_independent_location(const char *vgname)
++{
++	struct lvmcache_vginfo *vginfo;
++
++	if ((vginfo = lvmcache_vginfo_from_vgname(vgname, NULL)))
++		vginfo->independent_metadata_location = 1;
++}
++
+ /*
+  * Return true iff it is impossible to find out from this info alone whether the
+  * PV in question is or is not an orphan.
+diff --git a/lib/cache/lvmcache.h b/lib/cache/lvmcache.h
+index 847c208..826e91e 100644
+--- a/lib/cache/lvmcache.h
++++ b/lib/cache/lvmcache.h
+@@ -74,6 +74,7 @@ void lvmcache_destroy(struct cmd_context *cmd, int retain_orphans, int reset);
+  */
+ void lvmcache_force_next_label_scan(void);
+ int lvmcache_label_scan(struct cmd_context *cmd);
++int lvmcache_label_rescan_vg(struct cmd_context *cmd, const char *vgname, const char *vgid);
  
- 	destroy_processing_handle(cmd, handle);
-@@ -495,6 +493,7 @@ static int _pvscan_cache(struct cmd_context *cmd, int argc, char **argv)
- 	}
+ /* Add/delete a device */
+ struct lvmcache_info *lvmcache_add(struct labeller *labeller, const char *pvid,
+@@ -105,10 +106,8 @@ struct lvmcache_vginfo *lvmcache_vginfo_from_vgid(const char *vgid);
+ struct lvmcache_info *lvmcache_info_from_pvid(const char *pvid, struct device *dev, int valid_only);
+ const char *lvmcache_vgname_from_vgid(struct dm_pool *mem, const char *vgid);
+ const char *lvmcache_vgid_from_vgname(struct cmd_context *cmd, const char *vgname);
+-struct device *lvmcache_device_from_pvid(struct cmd_context *cmd, const struct id *pvid,
+-				unsigned *scan_done_once, uint64_t *label_sector);
+-const char *lvmcache_pvid_from_devname(struct cmd_context *cmd,
+-				       const char *devname);
++struct device *lvmcache_device_from_pvid(struct cmd_context *cmd, const struct id *pvid, uint64_t *label_sector);
++const char *lvmcache_pvid_from_devname(struct cmd_context *cmd, const char *devname);
+ char *lvmcache_vgname_from_pvid(struct cmd_context *cmd, const char *pvid);
+ const char *lvmcache_vgname_from_info(struct lvmcache_info *info);
+ const struct format_type *lvmcache_fmt_from_info(struct lvmcache_info *info);
+@@ -215,4 +214,9 @@ void lvmcache_remove_unchosen_duplicate(struct device *dev);
  
- 	if (!dm_list_empty(&single_devs)) {
-+		dev_cache_scan();
- 		label_scan_devs(cmd, &single_devs);
+ int lvmcache_pvid_in_unchosen_duplicates(const char *pvid);
  
- 		dm_list_iterate_items(devl, &single_devs) {
-@@ -540,6 +539,7 @@ static int _pvscan_cache(struct cmd_context *cmd, int argc, char **argv)
- 	}
- 
- 	if (!dm_list_empty(&single_devs)) {
-+		dev_cache_scan();
- 		label_scan_devs(cmd, &single_devs);
- 
- 		dm_list_iterate_items(devl, &single_devs) {
-diff --git a/tools/toollib.c b/tools/toollib.c
-index 7e3b021..fabf2dc 100644
---- a/tools/toollib.c
-+++ b/tools/toollib.c
-@@ -5503,8 +5503,6 @@ int pvcreate_each_device(struct cmd_context *cmd,
++int lvmcache_get_vg_devs(struct cmd_context *cmd,
++			 struct lvmcache_vginfo *vginfo,
++			 struct dm_list *devs);
++void lvmcache_set_independent_location(const char *vgname);
++
+ #endif
+diff --git a/lib/format_text/format-text.c b/lib/format_text/format-text.c
+index e9a34e6..c438b2d 100644
+--- a/lib/format_text/format-text.c
++++ b/lib/format_text/format-text.c
+@@ -2534,7 +2534,7 @@ static int _get_config_disk_area(struct cmd_context *cmd,
  		return 0;
  	}
  
--	dev_cache_full_scan(cmd->full_filter);
--
- 	lvmcache_label_scan(cmd);
+-	if (!(dev_area.dev = lvmcache_device_from_pvid(cmd, &id, NULL, NULL))) {
++	if (!(dev_area.dev = lvmcache_device_from_pvid(cmd, &id, NULL))) {
+ 		char buffer[64] __attribute__((aligned(8)));
  
+ 		if (!id_write_format(&id, buffer, sizeof(buffer)))
+diff --git a/lib/format_text/import_vsn1.c b/lib/format_text/import_vsn1.c
+index d51397a..b41d83c 100644
+--- a/lib/format_text/import_vsn1.c
++++ b/lib/format_text/import_vsn1.c
+@@ -216,8 +216,7 @@ static int _read_pv(struct format_instance *fid,
  	/*
-diff --git a/tools/vgimportclone.c b/tools/vgimportclone.c
-index 146d3b4..224d0b5 100644
---- a/tools/vgimportclone.c
-+++ b/tools/vgimportclone.c
-@@ -332,7 +332,6 @@ retry_name:
- 	dm_list_iterate_items(vd, &vp.arg_import)
- 		internal_filter_allow(cmd->mem, vd->dev);
- 	lvmcache_destroy(cmd, 1, 0);
--	dev_cache_full_scan(cmd->full_filter);
+ 	 * Convert the uuid into a device.
+ 	 */
+-	if (!(pv->dev = lvmcache_device_from_pvid(fid->fmt->cmd, &pv->id, scan_done_once,
+-                                         &pv->label_sector))) {
++	if (!(pv->dev = lvmcache_device_from_pvid(fid->fmt->cmd, &pv->id, &pv->label_sector))) {
+ 		char buffer[64] __attribute__((aligned(8)));
  
- 	log_debug("Changing VG %s to %s.", vp.old_vgname, vp.new_vgname);
+ 		if (!id_write_format(&pv->id, buffer, sizeof(buffer)))
+diff --git a/lib/metadata/metadata-liblvm.c b/lib/metadata/metadata-liblvm.c
+index a4284bc..388e8d9 100644
+--- a/lib/metadata/metadata-liblvm.c
++++ b/lib/metadata/metadata-liblvm.c
+@@ -314,7 +314,7 @@ struct physical_volume *pvcreate_vol(struct cmd_context *cmd, const char *pv_nam
+ 	}
  
+ 	if (pp->pva.idp) {
+-		if ((dev = lvmcache_device_from_pvid(cmd, pp->pva.idp, NULL, NULL)) &&
++		if ((dev = lvmcache_device_from_pvid(cmd, pp->pva.idp, NULL)) &&
+ 		    (dev != dev_cache_get(pv_name, cmd->full_filter))) {
+ 			if (!id_write_format((const struct id*)&pp->pva.idp->uuid,
+ 			    buffer, sizeof(buffer)))
 
 
