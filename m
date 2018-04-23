@@ -1,153 +1,125 @@
 From: David Teigland <teigland@sourceware.org>
-Date: Mon, 23 Apr 2018 09:49:29 -0400
-Subject: master - format-text.c log message fixes
-Message-ID: <201804231349.w3NDnT05031665@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Mon, 23 Apr 2018 09:49:54 -0400
+Subject: master - process_each_label: use lvmcache
+Message-ID: <201804231349.w3NDnsoI031708@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=29c6c171217753daf5603432bcaeaed2e8dc8418
-Commit:        29c6c171217753daf5603432bcaeaed2e8dc8418
-Parent:        d9a77e8bb4d25af33625d3cdddf5288207101d5b
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=4343280ebc0e2aae0de5fe959c24574b13d0d7be
+Commit:        4343280ebc0e2aae0de5fe959c24574b13d0d7be
+Parent:        f17c2cf7c614e8f6e4ffe9b7415d628ecab61d47
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Wed Feb 7 15:20:39 2018 -0600
+AuthorDate:    Fri Feb 9 11:24:40 2018 -0600
 Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Fri Apr 20 11:22:45 2018 -0500
+CommitterDate: Fri Apr 20 11:22:46 2018 -0500
 
-format-text.c log message fixes
+process_each_label: use lvmcache
 
+In the same way as the other process_each functions.
+In the common case all the info that's needed can be
+used from lvmcache after a label scan.  But this means
+that unchosen devs for duplicate PVs need to be handled
+explicitly.
 ---
- lib/format_text/format-text.c |   56 ++++++++++++++++++++++------------------
- 1 files changed, 31 insertions(+), 25 deletions(-)
+ tools/toollib.c |   60 ++++++++++++++++++++++++++++++++++++++++++++++++------
+ 1 files changed, 53 insertions(+), 7 deletions(-)
 
-diff --git a/lib/format_text/format-text.c b/lib/format_text/format-text.c
-index ee1f11d..8740a05 100644
---- a/lib/format_text/format-text.c
-+++ b/lib/format_text/format-text.c
-@@ -468,12 +468,11 @@ static struct raw_locn *_read_metadata_location_vg(struct device_area *dev_area,
- 	    (isspace(vgnamebuf[len]) || vgnamebuf[len] == '{'))
- 		return rlocn;
+diff --git a/tools/toollib.c b/tools/toollib.c
+index 6593195..f6169ae 100644
+--- a/tools/toollib.c
++++ b/tools/toollib.c
+@@ -1493,13 +1493,19 @@ int process_each_label(struct cmd_context *cmd, int argc, char **argv,
+ 	struct label *label;
+ 	struct dev_iter *iter;
+ 	struct device *dev;
+-
++	struct lvmcache_info *info;
++	struct dm_list process_duplicates;
++	struct device_list *devl;
+ 	int ret_max = ECMD_PROCESSED;
+ 	int ret;
+ 	int opt = 0;
  
--	log_debug_metadata("Volume group name found in %smetadata on %s at " FMTu64 " does "
--			   "not match expected name %s.", 
--			   *precommitted ? "precommitted " : "",
--			   dev_name(dev_area->dev), dev_area->start + rlocn->offset, vgname);
-+	log_error("Metadata on %s at %llu has wrong VG name \"%s\" expected %s.",
-+		  dev_name(dev_area->dev),
-+		  (unsigned long long)(dev_area->start + rlocn->offset),
-+		  vgnamebuf, vgname);
++	dm_list_init(&process_duplicates);
++
+ 	log_set_report_object_type(LOG_REPORT_OBJECT_TYPE_LABEL);
  
--      bad:
- 	if ((info = lvmcache_info_from_pvid(dev_area->dev->pvid, dev_area->dev, 0)) &&
- 	    !lvmcache_update_vgname_and_id(info, &vgsummary_orphan))
- 		stack;
-@@ -553,8 +552,10 @@ static struct volume_group *_vg_read_raw_area(struct format_instance *fid,
- 		wrap = (uint32_t) ((rlocn->offset + rlocn->size) - mdah->size);
++	lvmcache_label_scan(cmd);
++
+ 	if (argc) {
+ 		for (; opt < argc; opt++) {
+ 			if (!(dev = dev_cache_get(argv[opt], cmd->full_filter))) {
+@@ -1509,14 +1515,54 @@ int process_each_label(struct cmd_context *cmd, int argc, char **argv,
+ 				continue;
+ 			}
  
- 	if (wrap > rlocn->offset) {
--		log_error("VG %s metadata on %s (" FMTu64 " bytes) too large for circular buffer (" FMTu64 " bytes)",
--			  vgname, dev_name(area->dev), rlocn->size, mdah->size - MDA_HEADER_SIZE);
-+		log_error("Metadata for VG %s on %s at %llu size %llu is too large for circular buffer.",
-+			  vgname, dev_name(area->dev),
-+			  (unsigned long long)(area->start + rlocn->offset),
-+			  (unsigned long long)rlocn->size);
- 		goto out;
- 	}
++			if (!(label = lvmcache_get_dev_label(dev))) {
++				if (!lvmcache_dev_is_unchosen_duplicate(dev)) {
++					log_error("No physical volume label read from %s.", argv[opt]);
++					ret_max = ECMD_FAILED;
++				} else {
++					if (!(devl = dm_malloc(sizeof(*devl))))
++						return_0;
++					devl->dev = dev;
++					dm_list_add(&process_duplicates, &devl->list);
++				}
++				continue;
++			}
++
+ 			log_set_report_object_name_and_id(dev_name(dev), NULL);
  
-@@ -572,10 +573,10 @@ static struct volume_group *_vg_read_raw_area(struct format_instance *fid,
- 		   that skips parsing the metadata which also returns NULL. */
- 	}
+-			if (!label_read(dev, &label, 0)) {
+-				log_error("No physical volume label read from %s.",
+-					  argv[opt]);
+-				ret_max = ECMD_FAILED;
++			ret = process_single_label(cmd, label, handle);
++			report_log_ret_code(ret);
++
++			if (ret > ret_max)
++				ret_max = ret;
++
++			log_set_report_object_name_and_id(NULL, NULL);
++
++			if (sigint_caught())
++				break;
++		}
++
++		dm_list_iterate_items(devl, &process_duplicates) {
++			/* 
++			 * remove the existing dev for this pvid from lvmcache
++			 * so that the duplicate dev can replace it.
++			 */
++			if ((info = lvmcache_info_from_pvid(devl->dev->pvid, NULL, 0)))
++				lvmcache_del(info);
++
++			/*
++			 * add info to lvmcache from the duplicate dev.
++			 */
++			label_read(devl->dev, NULL, 0);
++
++			/*
++			 * the info/label should now be found because
++			 * the label_read should have added it.
++			 */
++			if (!(label = lvmcache_get_dev_label(devl->dev)))
+ 				continue;
+-			}
++
++			log_set_report_object_name_and_id(dev_name(dev), NULL);
  
--	log_debug_metadata("Found metadata on %s at %"FMTu64" size %"FMTu64" for VG %s",
-+	log_debug_metadata("Found metadata on %s at %llu size %llu for VG %s",
- 			   dev_name(area->dev),
--			   area->start + rlocn->offset,
--			   rlocn->size,
-+			   (unsigned long long)(area->start + rlocn->offset),
-+			   (unsigned long long)rlocn->size,
- 			   vgname);
+ 			ret = process_single_label(cmd, label, handle);
+ 			report_log_ret_code(ret);
+@@ -1541,7 +1587,7 @@ int process_each_label(struct cmd_context *cmd, int argc, char **argv,
  
- 	if (vg && precommitted)
-@@ -1220,8 +1221,9 @@ int read_metadata_location_summary(const struct format_type *fmt,
- 	 * If no valid offset, do not try to search for vgname
- 	 */
- 	if (!rlocn->offset) {
--		log_debug_metadata("Metadata location on %s at %"FMTu64" has offset 0.",
--				   dev_name(dev_area->dev), dev_area->start + rlocn->offset);
-+		log_debug_metadata("Metadata location on %s at %llu has offset 0.",
-+				   dev_name(dev_area->dev),
-+				   (unsigned long long)(dev_area->start + rlocn->offset));
- 		return 0;
- 	}
+ 	while ((dev = dev_iter_get(iter)))
+ 	{
+-		if (!label_read(dev, &label, 0))
++		if (!(label = lvmcache_get_dev_label(dev)))
+ 			continue;
  
-@@ -1235,9 +1237,10 @@ int read_metadata_location_summary(const struct format_type *fmt,
- 
- 	/* Ignore this entry if the characters aren't permissible */
- 	if (!validate_name(buf)) {
--		log_error("Metadata location on %s at %"FMTu64" begins with invalid VG name.",
--			  dev_name(dev_area->dev), dev_area->start + rlocn->offset);
--		return_0;
-+		log_error("Metadata location on %s at %llu begins with invalid VG name.",
-+			  dev_name(dev_area->dev),
-+			  (unsigned long long)(dev_area->start + rlocn->offset));
-+		return 0;
- 	}
- 
- 	/* We found a VG - now check the metadata */
-@@ -1245,8 +1248,9 @@ int read_metadata_location_summary(const struct format_type *fmt,
- 		wrap = (uint32_t) ((rlocn->offset + rlocn->size) - mdah->size);
- 
- 	if (wrap > rlocn->offset) {
--		log_error("Metadata location on %s at %"FMTu64" is too large for circular buffer.",
--			  dev_name(dev_area->dev), dev_area->start + rlocn->offset);
-+		log_error("Metadata location on %s at %llu is too large for circular buffer.",
-+			  dev_name(dev_area->dev),
-+			  (unsigned long long)(dev_area->start + rlocn->offset));
- 		return 0;
- 	}
- 
-@@ -1277,22 +1281,24 @@ int read_metadata_location_summary(const struct format_type *fmt,
- 				(off_t) (dev_area->start + MDA_HEADER_SIZE),
- 				wrap, calc_crc, vgsummary->vgname ? 1 : 0,
- 				vgsummary)) {
--		log_error("Metadata location on %s at %"FMTu64" has invalid summary for VG.",
--			  dev_name(dev_area->dev), dev_area->start + rlocn->offset);
-+		log_error("Metadata location on %s at %llu has invalid summary for VG.",
-+			  dev_name(dev_area->dev),
-+			  (unsigned long long)(dev_area->start + rlocn->offset));
- 		return 0;
- 	}
- 
- 	/* Ignore this entry if the characters aren't permissible */
- 	if (!validate_name(vgsummary->vgname)) {
--		log_error("Metadata location on %s at %"FMTu64" has invalid VG name.",
--			  dev_name(dev_area->dev), dev_area->start + rlocn->offset);
-+		log_error("Metadata location on %s at %llu has invalid VG name.",
-+			  dev_name(dev_area->dev),
-+			  (unsigned long long)(dev_area->start + rlocn->offset));
- 		return 0;
- 	}
- 
--	log_debug_metadata("Found metadata summary on %s at %"FMTu64" size %"FMTu64" for VG %s",
-+	log_debug_metadata("Found metadata summary on %s at %llu size %llu for VG %s",
- 			   dev_name(dev_area->dev),
--			   dev_area->start + rlocn->offset,
--			   rlocn->size,
-+			   (unsigned long long)(dev_area->start + rlocn->offset),
-+			   (unsigned long long)rlocn->size,
- 			   vgsummary->vgname);
- 
- 	if (mda_free_sectors) {
-@@ -1344,7 +1350,7 @@ static int _scan_raw(const struct format_type *fmt, const char *vgname __attribu
- 		}
- 
- 		if (read_metadata_location_summary(fmt, mdah, 0, &rl->dev_area, &vgsummary, NULL)) {
--			vg = _vg_read_raw_area(&fid, vgsummary.vgname, &rl->dev_area, NULL, NULL, 0, 0, 0);
-+			vg = _vg_read_raw_area(&fid, vgsummary.vgname, &rl->dev_area, NULL, NULL, 0, 0);
- 			if (vg) {
- 				lvmcache_update_vg(vg, 0);
- 				lvmcache_set_independent_location(vg->name);
+ 		log_set_report_object_name_and_id(dev_name(label->dev), NULL);
 
 
