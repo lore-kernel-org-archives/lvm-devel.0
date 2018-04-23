@@ -1,43 +1,43 @@
 From: David Teigland <teigland@sourceware.org>
 Date: Mon, 23 Apr 2018 09:54:29 -0400
-Subject: master - scan: skip extra scan in vg_read
-Message-ID: <201804231354.w3NDsT9P001458@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Subject: master - test: vgsplit-usage if LVM1 tests
+Message-ID: <201804231354.w3NDsTPV001464@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=37471bb4777f3f407d2cd942995b45c326ea221a
-Commit:        37471bb4777f3f407d2cd942995b45c326ea221a
-Parent:        e4f478d86d6545f6cced7a8ba3bc0b79dccb7b6e
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=ae093df3f15f6d125bf85ed921e5a971b170dc23
+Commit:        ae093df3f15f6d125bf85ed921e5a971b170dc23
+Parent:        d75aa557845e37f5c4b90ca43c81943bd9b90094
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Wed Feb 14 13:49:56 2018 -0600
+AuthorDate:    Thu Feb 15 10:00:07 2018 -0600
 Committer:     David Teigland <teigland@redhat.com>
 CommitterDate: Fri Apr 20 11:22:46 2018 -0500
 
-scan: skip extra scan in vg_read
+test: vgsplit-usage if LVM1 tests
 
-Drop an extra label scan in the recovery part
-of vg_read.  This is a temporary improvement
-until the pending replacement for the broken
-recovery code burried in vg_read.
 ---
- lib/metadata/metadata.c |    2 --
- 1 files changed, 0 insertions(+), 2 deletions(-)
+ test/shell/vgsplit-usage.sh |    2 ++
+ 1 files changed, 2 insertions(+), 0 deletions(-)
 
-diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
-index 5d3f835..b588a04 100644
---- a/lib/metadata/metadata.c
-+++ b/lib/metadata/metadata.c
-@@ -4080,8 +4080,6 @@ static struct volume_group *_vg_read(struct cmd_context *cmd,
- 		/* Independent MDAs aren't supported under low memory */
- 		if (!cmd->independent_metadata_areas && prioritized_section())
- 			return_NULL;
--		lvmcache_force_next_label_scan();
--		lvmcache_label_scan(cmd);
- 		if (!(fmt = lvmcache_fmt_from_vgname(cmd, vgname, vgid, 0)))
- 			return_NULL;
+diff --git a/test/shell/vgsplit-usage.sh b/test/shell/vgsplit-usage.sh
+index 98818ab..a112e86 100644
+--- a/test/shell/vgsplit-usage.sh
++++ b/test/shell/vgsplit-usage.sh
+@@ -184,6 +184,7 @@ check pvlv_counts $vg1 2 1 0
+ vgremove -f $vg1
  
+ # vgsplit rejects split because metadata types differ
++if test -n "$LVM_TEST_LVM1" ; then
+ pvcreate -ff -M1 "$dev3" "$dev4"
+ pvcreate -ff "$dev1" "$dev2"
+ vgcreate -M1 $vg1 "$dev3" "$dev4"
+@@ -192,3 +193,4 @@ not vgsplit $vg1 $vg2 "$dev3" 2>err;
+ grep "Metadata types differ" err
+ vgremove -f $vg1 $vg2
+ fi
++fi
 
 
