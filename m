@@ -1,60 +1,110 @@
 From: David Teigland <teigland@sourceware.org>
-Date: Mon, 23 Apr 2018 09:51:23 -0400
-Subject: master - scan: create bcache with minimum number of blocks
-Message-ID: <201804231351.w3NDpNHU032537@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Mon, 23 Apr 2018 09:51:24 -0400
+Subject: master - [device/bcache] Add bcache_max_prefetches()
+Message-ID: <201804231351.w3NDpOci032544@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=21057676a1f01c6b1f19b2e879d8385d76adb517
-Commit:        21057676a1f01c6b1f19b2e879d8385d76adb517
-Parent:        e49b114f7e437666caefa04aada31f32820e286e
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Tue Feb 27 12:35:45 2018 -0600
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=1563b936911d26c665b590f200884c9ed31ab7c3
+Commit:        1563b936911d26c665b590f200884c9ed31ab7c3
+Parent:        c4c4acfd423323cbe8fbfbdb8c1882edb4a92b29
+Author:        Joe Thornber <ejt@redhat.com>
+AuthorDate:    Fri Feb 2 12:06:14 2018 +0000
 Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Fri Apr 20 11:22:47 2018 -0500
+CommitterDate: Fri Apr 20 11:12:50 2018 -0500
 
-scan: create bcache with minimum number of blocks
+[device/bcache] Add bcache_max_prefetches()
 
-In some odd cases (e.g. tests) there are very few devices
-which results in creating too few blocks in bcache, so
-create bcache with a minimum number of blocks.
+Ignore prefetches if max io is in flight.
 ---
- lib/label/label.c |    8 +++++---
- 1 files changed, 5 insertions(+), 3 deletions(-)
+ lib/device/bcache.c |   23 +++++++++++++++--------
+ lib/device/bcache.h |    1 +
+ 2 files changed, 16 insertions(+), 8 deletions(-)
 
-diff --git a/lib/label/label.c b/lib/label/label.c
-index 45a3ecf..88001a9 100644
---- a/lib/label/label.c
-+++ b/lib/label/label.c
-@@ -560,13 +560,15 @@ static int _scan_list(struct dm_list *devs, int *failed)
- 	return 1;
+diff --git a/lib/device/bcache.c b/lib/device/bcache.c
+index 09ef6ef..4283ce5 100644
+--- a/lib/device/bcache.c
++++ b/lib/device/bcache.c
+@@ -216,17 +216,18 @@ static bool _engine_issue(struct io_engine *e, enum dir d, int fd,
+ 	return true;
  }
  
-+#define MIN_BCACHE_BLOCKS 32
+-#define MAX_IO 64
++#define MAX_IO 1024
++#define MAX_EVENT 64
+ typedef void complete_fn(void *context, int io_error);
+ 
+ static bool _engine_wait(struct io_engine *e, complete_fn fn)
+ {
+ 	int i, r;
+-	struct io_event event[MAX_IO];
++	struct io_event event[MAX_EVENT];
+ 	struct control_block *cb;
+ 
+ 	memset(&event, 0, sizeof(event));
+-	r = io_getevents(e->aio_context, 1, MAX_IO, event, NULL);
++	r = io_getevents(e->aio_context, 1, MAX_EVENT, event, NULL);
+ 	if (r < 0) {
+ 		log_sys_warn("io_getevents");
+ 		return false;
+@@ -300,6 +301,7 @@ struct bcache {
+ 	sector_t block_sectors;
+ 	uint64_t nr_data_blocks;
+ 	uint64_t nr_cache_blocks;
++	unsigned max_io;
+ 
+ 	struct io_engine *engine;
+ 
+@@ -762,8 +764,8 @@ struct bcache *bcache_create(sector_t block_sectors, unsigned nr_cache_blocks)
+ 
+ 	cache->block_sectors = block_sectors;
+ 	cache->nr_cache_blocks = nr_cache_blocks;
+-
+-	cache->engine = _engine_create(nr_cache_blocks < 1024u ? nr_cache_blocks : 1024u);
++	cache->max_io = nr_cache_blocks < MAX_IO ? nr_cache_blocks : MAX_IO;
++	cache->engine = _engine_create(cache->max_io);
+ 	if (!cache->engine) {
+ 		dm_free(cache);
+ 		return NULL;
+@@ -820,16 +822,21 @@ unsigned bcache_nr_cache_blocks(struct bcache *cache)
+ 	return cache->nr_cache_blocks;
+ }
+ 
++unsigned bcache_max_prefetches(struct bcache *cache)
++{
++	return cache->max_io;
++}
 +
- static int _setup_bcache(int cache_blocks)
+ void bcache_prefetch(struct bcache *cache, int fd, block_address index)
  {
- 	struct io_engine *ioe;
+ 	struct block *b = _hash_lookup(cache, fd, index);
  
- 	/* No devices can happen, just create bcache with any small number. */
--	if (!cache_blocks)
--		cache_blocks = 8;
-+	if (cache_blocks < MIN_BCACHE_BLOCKS)
-+		cache_blocks = MIN_BCACHE_BLOCKS;
- 
- 	/*
- 	 * 100 is arbitrary, it's the max number of concurrent aio's
-@@ -831,7 +833,7 @@ int label_read_sector(struct device *dev, struct label **labelp, uint64_t scan_s
- int label_scan_setup_bcache(void)
- {
- 	if (!scan_bcache) {
--		if (!_setup_bcache(32))
-+		if (!_setup_bcache(0))
- 			return 0;
+ 	if (!b) {
+-		cache->prefetches++;
+-
+ 		b = _new_block(cache, fd, index);
+-		if (b)
++		if (b && (cache->nr_io_pending < cache->max_io)) {
++			cache->prefetches++;
+ 			_issue_read(b);
++		}
  	}
+ }
  
+diff --git a/lib/device/bcache.h b/lib/device/bcache.h
+index 5c68e3c..14204be 100644
+--- a/lib/device/bcache.h
++++ b/lib/device/bcache.h
+@@ -62,6 +62,7 @@ enum bcache_get_flags {
+ typedef uint64_t block_address;
+ 
+ unsigned bcache_nr_cache_blocks(struct bcache *cache);
++unsigned bcache_max_prefetches(struct bcache *cache);
+ 
+ /*
+  * Use the prefetch method to take advantage of asynchronous IO.  For example,
 
 
