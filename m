@@ -1,79 +1,67 @@
-From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Mon, 23 Apr 2018 16:43:45 -0400
-Subject: master - tests: more zero usage
-Message-ID: <201804232043.w3NKhjDi005032@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: Han Han <hhan@redhat.com>
+Date: Wed, 25 Apr 2018 14:10:06 +0800
+Subject: [PATCH] Fix memory leak in function create_toolcontext
+Message-ID: <20180425061006.23879-1-hhan@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=dcb5434a7f4a3b736d72c7bebe276be6735142ce
-Commit:        dcb5434a7f4a3b736d72c7bebe276be6735142ce
-Parent:        fc3ed8856f445079de43cd33f64582cee9bc80ea
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed Mar 21 11:21:38 2018 +0100
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Mon Apr 23 22:42:18 2018 +0200
+Close stdin and stdout file handlers before create_toolcontext returns.
 
-tests: more zero usage
-
-Another case where usage of zero backend for mirror legs is more
-effective then using delayed_dev.
+Signed-off-by: Han Han <hhan@redhat.com>
 ---
- test/shell/lvconvert-mirror-updown.sh |   25 +++++++++++++------------
- 1 files changed, 13 insertions(+), 12 deletions(-)
+ lib/commands/toolcontext.c | 14 ++++++++++++--
+ 1 file changed, 12 insertions(+), 2 deletions(-)
 
-diff --git a/test/shell/lvconvert-mirror-updown.sh b/test/shell/lvconvert-mirror-updown.sh
-index 5c7b130..d5059c2 100644
---- a/test/shell/lvconvert-mirror-updown.sh
-+++ b/test/shell/lvconvert-mirror-updown.sh
-@@ -1,6 +1,6 @@
- #!/usr/bin/env bash
+diff --git a/lib/commands/toolcontext.c b/lib/commands/toolcontext.c
+index a54f4d7b5..f81743540 100644
+--- a/lib/commands/toolcontext.c
++++ b/lib/commands/toolcontext.c
+@@ -1838,6 +1838,8 @@ struct cmd_context *create_toolcontext(unsigned is_long_lived,
+ {
+ 	struct cmd_context *cmd;
+ 	int flags;
++    FILE **stdin_stream = NULL;
++    FILE **stdout_stream = NULL;
  
--# Copyright (C) 2014 Red Hat, Inc. All rights reserved.
-+# Copyright (C) 2018 Red Hat, Inc. All rights reserved.
- #
- # This copyrighted material is made available to anyone wishing to use,
- # modify, copy, or redistribute it subject to the terms and conditions
-@@ -16,26 +16,27 @@ SKIP_WITH_LVMLOCKD=1
+ #ifdef M_MMAP_MAX
+ 	mallopt(M_MMAP_MAX, 0);
+@@ -1892,7 +1894,7 @@ struct cmd_context *create_toolcontext(unsigned is_long_lived,
+ 		if (is_valid_fd(STDIN_FILENO) &&
+ 		    ((flags = fcntl(STDIN_FILENO, F_GETFL)) > 0) &&
+ 		    (flags & O_ACCMODE) != O_WRONLY) {
+-			if (!reopen_standard_stream(&stdin, "r"))
++			if (!reopen_standard_stream(stdin_stream=&stdin, "r"))
+ 				goto_out;
+ 			if (setvbuf(stdin, cmd->linebuffer, _IOLBF, _linebuffer_size)) {
+ 				log_sys_error("setvbuf", "");
+@@ -1903,7 +1905,7 @@ struct cmd_context *create_toolcontext(unsigned is_long_lived,
+ 		if (is_valid_fd(STDOUT_FILENO) &&
+ 		    ((flags = fcntl(STDOUT_FILENO, F_GETFL)) > 0) &&
+ 		    (flags & O_ACCMODE) != O_RDONLY) {
+-			if (!reopen_standard_stream(&stdout, "w"))
++			if (!reopen_standard_stream(stdin_stream=&stdout, "w"))
+ 				goto_out;
+ 			if (setvbuf(stdout, cmd->linebuffer + _linebuffer_size,
+ 				     _IOLBF, _linebuffer_size)) {
+@@ -2015,6 +2017,14 @@ out:
+ 		cmd = NULL;
+ 	}
  
- . lib/inittest
- 
--aux prepare_pvs 3
-+aux prepare_pvs 3 100
- get_devs
- 
- vgcreate -s 64k "$vg" "${DEVICES[@]}"
- 
--lvcreate -aey -l10 --type mirror -m1 -n $lv1 $vg "$dev1" "$dev2"
-+# Use zero devices for big mirror legs
-+aux zero_dev "$dev2" $(get first_extent_sector "$dev2"):
-+aux zero_dev "$dev3" $(get first_extent_sector "$dev3"):
- 
--# Slow down device so we are able to start next conversion in parallel
--aux delay_dev "$dev3" 0 200
-+lvcreate -aey -L90 --type mirror --corelog --regionsize 16k -m1 -n $lv1 $vg "$dev1" "$dev2"
- 
- lvconvert -m+1 -b $vg/$lv1 "$dev3"
- 
--# To fix - wait helps here....
--#lvconvert $vg/$lv1
- 
--lvs -a $vg
-+# We want here ongoing conversion
- 
--#
--# It fails so use 'should' and -vvvv for now
--#
--should lvconvert -vvvv -m-1 $vg/$lv1 "$dev2"
-+lvs -a -o+seg_pe_ranges $vg
++    if (stdin_stream != NULL){
++        fclose(*stdin_stream);
++    }
 +
-+# Now it should be able to drop 2nd. leg
-+lvconvert -m-1 $vg/$lv1 "$dev2"
++    if (stdout_stream != NULL){
++        fclose(*stdin_stream);
++    }
 +
-+lvs -a $vg
+ 	return cmd;
+ }
  
- vgremove -f $vg
+-- 
+2.17.0
 
 
