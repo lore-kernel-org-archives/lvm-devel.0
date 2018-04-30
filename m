@@ -1,64 +1,107 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Mon, 30 Apr 2018 04:42:56 -0400
-Subject: master - aux: enhance teardown to better handle weird names
-Message-ID: <201804300842.w3U8guQw017302@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Mon, 30 Apr 2018 04:42:59 -0400
+Subject: master - mirror: improve table update
+Message-ID: <201804300842.w3U8gxHO017313@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=dd7ac793a02553c9c7a14b9715d5a6ad636aa065
-Commit:        dd7ac793a02553c9c7a14b9715d5a6ad636aa065
-Parent:        877c2f2ffb3813e3236a55f07958009633dc8558
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=fade45b1d14c90eac7c6cc41019ef946659a8fb5
+Commit:        fade45b1d14c90eac7c6cc41019ef946659a8fb5
+Parent:        dd7ac793a02553c9c7a14b9715d5a6ad636aa065
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Apr 27 23:23:45 2018 +0200
+AuthorDate:    Sat Apr 28 22:14:47 2018 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Mon Apr 30 10:41:51 2018 +0200
 
-aux: enhance teardown to better handle weird names
+mirror: improve table update
 
-When 'dmsetup' reports result with --nameprefixes it currently
-incorrectly 'escapes' problematic characters.
+Shift refresh of mirror table right into monitor_dev_for_events().
+Use  !vg_write_lock_held() to recognize use of lvchange/vgchange.
+(this shall change if this would no longer work, but requires
+futher some API changes).
 
-Letting pass such string though shell 'eval' function is hard task.
-So instead cut away substring.
+With this patch  dm mirror table is only refreshed when necassary.
 
-Once dmsetup will start to properly escape backslash and apostrophe
-this function may need further tuning.
+Also update WARNING message about mirror usage without monitoring
+and display LV name.
 ---
- test/lib/aux.sh |   11 ++++++-----
- 1 files changed, 6 insertions(+), 5 deletions(-)
+ lib/activate/activate.c |   14 ++++++++++++++
+ lib/mirror/mirrored.c   |   11 ++++++-----
+ tools/lvchange.c        |    4 ----
+ 3 files changed, 20 insertions(+), 9 deletions(-)
 
-diff --git a/test/lib/aux.sh b/test/lib/aux.sh
-index 4269987..fa6309c 100644
---- a/test/lib/aux.sh
-+++ b/test/lib/aux.sh
-@@ -442,19 +442,20 @@ teardown_devs_prefixed() {
- 			# HACK: sort also by minors - so we try to close 'possibly later' created device first
- 			test "$i" = 0 || sortby="-minor"
+diff --git a/lib/activate/activate.c b/lib/activate/activate.c
+index 7a2a945..a7113f1 100644
+--- a/lib/activate/activate.c
++++ b/lib/activate/activate.c
+@@ -1857,6 +1857,7 @@ int monitor_dev_for_events(struct cmd_context *cmd, const struct logical_volume
+ 	int (*monitor_fn) (struct lv_segment *s, int e);
+ 	uint32_t s;
+ 	static const struct lv_activate_opts zlaopts = { 0 };
++	struct lv_activate_opts mirr_laopts = { .origin_only = 1 };
+ 	struct lvinfo info;
+ 	const char *dso = NULL;
+ 	int new_unmonitor;
+@@ -2057,6 +2058,19 @@ int monitor_dev_for_events(struct cmd_context *cmd, const struct logical_volume
+ 		} else
+ 			continue;
  
--			for dm in $(dm_info name,open --separator ';'  --nameprefixes --sort open,"$sortby" -S "name=~$prefix") ; do
-+			for dm in $(dm_info name,open --separator ';'  --nameprefixes --unquoted --sort open,"$sortby" -S "name=~$prefix" --mangle none || true) ; do
- 				test "$dm" != "No devices found" || break 2
--				eval "$dm"
++		if (!vg_write_lock_held() && lv_is_mirror(lv)) {
++			mirr_laopts.exclusive = lv_is_active_exclusive_locally(lv) ? 1 : 0;
++			/*
++			 * Commands vgchange and lvchange do use read-only lock when changing
++			 * monitoring (--monitor y|n). All other use cases hold 'write-lock'
++			 * so they skip this dm mirror table refreshing step.
++			 */
++			if (!_lv_activate_lv(lv, &mirr_laopts)) {
++				stack;
++				r = 0;
++			}
++		}
++
+ 		/* Check [un]monitor results */
+ 		/* Try a couple times if pending, but not forever... */
+ 		for (i = 0;; i++) {
+diff --git a/lib/mirror/mirrored.c b/lib/mirror/mirrored.c
+index 10828e8..7c5c0a6 100644
+--- a/lib/mirror/mirrored.c
++++ b/lib/mirror/mirrored.c
+@@ -315,12 +315,13 @@ static int _add_log(struct dm_pool *mem, struct lv_segment *seg,
+ 		log_flags |= DM_NOSYNC;
+ 
+ 	if (_block_on_error_available && !(seg->status & PVMOVE)) {
+-		if (dmeventd_monitor_mode() > 0)
++		if (dmeventd_monitor_mode() == 0) {
++			log_warn_suppress(seg->lv->vg->cmd->mirror_warn_printed,
++					  "WARNING: Mirror %s without monitoring will not react on failures.",
++					  display_lvname(seg->lv));
++			seg->lv->vg->cmd->mirror_warn_printed = 1; /* Do not print this more then once */
++		} else
+ 			log_flags |= DM_BLOCK_ON_ERROR;
+-		else {
+-			log_warn_suppress(seg->lv->vg->cmd->mirror_warn_printed, "WARNING: Mirrors without monitoring will not react on failures.");
+-			seg->lv->vg->cmd->mirror_warn_printed = 1;
+-		}
+ 	}
+ 
+ 	return dm_tree_node_add_mirror_target_log(node, region_size, clustered, log_dlid, area_count, log_flags);
+diff --git a/tools/lvchange.c b/tools/lvchange.c
+index e1be4cb..0aac5ac 100644
+--- a/tools/lvchange.c
++++ b/tools/lvchange.c
+@@ -1603,10 +1603,6 @@ static int _lvchange_monitor_poll_single(struct cmd_context *cmd,
+ 				         struct logical_volume *lv,
+ 				         struct processing_handle *handle)
+ {
+-	/* Mirror is using different table line when un/monitored */
+-	if (lv_is_mirror(lv) && !lv_refresh(cmd, lv))
+-		return_ECMD_FAILED;
 -
-+				DM_NAME=${dm##DM_NAME=}
-+				DM_NAME=${DM_NAME%%;DM_OPEN*}
-+				DM_OPEN=${dm##*;DM_OPEN=}
- 				if test "$i" = 0; then
- 					if test "$once" = 1 ; then
- 						once=0
- 						echo "## removing stray mapped devices with names beginning with $prefix: "
- 					fi
- 					test "$DM_OPEN" = 0 || break  # stop loop with 1st. opened device
--					dmsetup remove "$DM_NAME" &>/dev/null || touch REMOVE_FAILED &
-+					dmsetup remove "$DM_NAME" --mangle none || true # &>/dev/null || touch REMOVE_FAILED &
- 				else
--					dmsetup remove -f "$DM_NAME" || true
-+					dmsetup remove -f "$DM_NAME" --mangle none || true
- 				fi
- 
- 				num_devs=$(( num_devs + 1 ))
+ 	if (arg_is_set(cmd, monitor_ARG) &&
+ 	    !_lvchange_monitoring(cmd, lv))
+ 		return_ECMD_FAILED;
 
 
