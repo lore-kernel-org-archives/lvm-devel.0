@@ -1,75 +1,64 @@
-From: David Teigland <teigland@sourceware.org>
-Date: Fri, 27 Apr 2018 17:26:08 -0400
-Subject: master - test: remove pv-duplicate
-Message-ID: <201804272126.w3RLQ8VV027880@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: Joe Thornber <thornber@sourceware.org>
+Date: Mon, 30 Apr 2018 04:34:46 -0400
+Subject: master - build: Calculate dependencies at same time as compiling.
+Message-ID: <201804300834.w3U8Yknx016112@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=138225a3a8c03a5a2db5e0af0b1c78d32be07b88
-Commit:        138225a3a8c03a5a2db5e0af0b1c78d32be07b88
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=0931067dc5549c443e144d599683b53220021f44
+Commit:        0931067dc5549c443e144d599683b53220021f44
 Parent:        ab63923d19afe3f72d4806082fb8496c8c7900f9
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Fri Apr 27 11:42:58 2018 -0500
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Fri Apr 27 16:25:41 2018 -0500
+Author:        Joe Thornber <ejt@redhat.com>
+AuthorDate:    Mon Apr 30 09:32:14 2018 +0100
+Committer:     Joe Thornber <ejt@redhat.com>
+CommitterDate: Mon Apr 30 09:32:14 2018 +0100
 
-test: remove pv-duplicate
+build: Calculate dependencies at same time as compiling.
 
-This wasn't testing duplicate PVs, which are tested by
-process-each-duplicate-pvs.sh.
+Speeds up the build slightly.
 ---
- test/shell/pv-duplicate.sh |   41 -----------------------------------------
- 1 files changed, 0 insertions(+), 41 deletions(-)
+ make.tmpl.in |   17 +++++------------
+ 1 files changed, 5 insertions(+), 12 deletions(-)
 
-diff --git a/test/shell/pv-duplicate.sh b/test/shell/pv-duplicate.sh
-deleted file mode 100644
-index 133f032..0000000
---- a/test/shell/pv-duplicate.sh
-+++ /dev/null
-@@ -1,41 +0,0 @@
--#!/usr/bin/env bash
--
--# Copyright (C) 2011-2015 Red Hat, Inc. All rights reserved.
--#
--# This copyrighted material is made available to anyone wishing to use,
--# modify, copy, or redistribute it subject to the terms and conditions
--# of the GNU General Public License v.2.
--#
--# You should have received a copy of the GNU General Public License
--# along with this program; if not, write to the Free Software Foundation,
--# Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
--
--# 'Exercise duplicate metadata diagnostics'
--
--SKIP_WITH_LVMLOCKD=1
--SKIP_WITH_LVMPOLLD=1
--
--. lib/inittest
--
--aux prepare_devs 3
--
--pvcreate "$dev1"
--
--dd if="$dev1" of=backup_dev1 bs=256K count=1
--
--vgcreate --metadatasize 128k $vg1 "$dev1"
--
--# copy mda
--dd if="$dev1" of="$dev2" bs=256K count=1
--dd if="$dev1" of="$dev3" bs=256K count=1
--
--pvs "$dev3" -o pv_uuid
--
--vgs $vg1
--
--dd if=backup_dev1 of="$dev3" bs=256K count=1
--pvs
--#-vvvv
--# TODO: Surely needs more inspecition about correct
--#       behavior for such case
--# vgs $vg1
+diff --git a/make.tmpl.in b/make.tmpl.in
+index 4542392..76e076a 100644
+--- a/make.tmpl.in
++++ b/make.tmpl.in
+@@ -441,9 +441,11 @@ endif
+ 
+ .LIBPATTERNS = lib%.so lib%.a
+ 
++DEPFLAGS=-MT $@ -MMD -MP -MF $*.d
++
+ %.o: %.c
+ 	@echo "    [CC] $<"
+-	$(Q) $(CC) -c $(INCLUDES) $(VALGRIND_CFLAGS) $(PROGS_CFLAGS) $(DEFS) $(DEFS_$@) $(WFLAGS) $(WCFLAGS) $(CFLAGS) $(CFLAGS_$@) $< -o $@
++	$(Q) $(CC) $(DEPFLAGS) -c $(INCLUDES) $(VALGRIND_CFLAGS) $(PROGS_CFLAGS) $(DEFS) $(DEFS_$@) $(WFLAGS) $(WCFLAGS) $(CFLAGS) $(CFLAGS_$@) $< -o $@
+ 
+ %.o: %.cpp
+ 	@echo "    [CXX] $<"
+@@ -503,17 +505,8 @@ $(LIB_STATIC): $(OBJECTS)
+ 	$(Q) $(RM) $@
+ 	$(Q) $(AR) rsv $@ $(OBJECTS) > /dev/null
+ 
+-%.d: %.c
+-	@echo "    [DEP] $<"
+-	$(Q) $(MKDIR_P) $(dir $@); \
+-	set -e; \
+-	FILE=`echo $@ | sed 's/\\//\\\\\\//g;s/\\.d//g'`; \
+-	DEPS=`echo $(DEPS) | sed -e 's/\\//\\\\\\//g'`; \
+-	$(CC) -MM $(INCLUDES) $(VALGRIND_CFLAGS) $(PROGS_CFLAGS) $(DEFS) -o $@ $<; \
+-	sed -i "s/\(.*\)\.o[ :]*/$$FILE.o $$FILE.d $$FILE.pot: $$DEPS /g" $@; \
+-	DEPLIST=`sed 's/ \\\\//;s/.*://;' < $@`; \
+-	echo $$DEPLIST | fmt -1 | sed 's/ //g;s/\(.*\)/\1:/' >> $@; \
+-	[ -s $@ ] || $(RM) $@
++%.d: ;
++.PRECIOUS: %.d
+ 
+ %.mo: %.po
+ 	@echo "    [MSGFMT] $<"
 
 
