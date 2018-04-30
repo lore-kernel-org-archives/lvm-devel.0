@@ -1,89 +1,52 @@
-From: Joe Thornber <thornber@sourceware.org>
-Date: Mon, 30 Apr 2018 12:10:18 -0400
-Subject: master - unit-test/io_engine_t: Improve the read test.
-Message-ID: <201804301610.w3UGAIM9005079@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: David Teigland <teigland@sourceware.org>
+Date: Mon, 30 Apr 2018 14:03:36 -0400
+Subject: master - clvmd: keep old saved_vg if it matches new
+Message-ID: <201804301803.w3UI3aaF026932@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=39f24a169c7cdec5e927a20aacb774e88407d31a
-Commit:        39f24a169c7cdec5e927a20aacb774e88407d31a
-Parent:        ef79d639fe245f93202df00381b2c87a05917374
-Author:        Joe Thornber <ejt@redhat.com>
-AuthorDate:    Mon Apr 30 17:09:24 2018 +0100
-Committer:     Joe Thornber <ejt@redhat.com>
-CommitterDate: Mon Apr 30 17:09:24 2018 +0100
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=89935ace29bd2097467201546e9211ebed23c4bc
+Commit:        89935ace29bd2097467201546e9211ebed23c4bc
+Parent:        39f24a169c7cdec5e927a20aacb774e88407d31a
+Author:        David Teigland <teigland@redhat.com>
+AuthorDate:    Mon Apr 30 13:00:05 2018 -0500
+Committer:     David Teigland <teigland@redhat.com>
+CommitterDate: Mon Apr 30 13:03:15 2018 -0500
 
-unit-test/io_engine_t: Improve the read test.
+clvmd: keep old saved_vg if it matches new
 
-Now verifies what it reads.
+There is no need to release the old saved_vg
+if it matches the new version.
 ---
- test/unit/io_engine_t.c |   19 ++++++++++++++++---
- 1 files changed, 16 insertions(+), 3 deletions(-)
+ lib/cache/lvmcache.c |    6 ++++--
+ 1 files changed, 4 insertions(+), 2 deletions(-)
 
-diff --git a/test/unit/io_engine_t.c b/test/unit/io_engine_t.c
-index 57fdbda..3a70265 100644
---- a/test/unit/io_engine_t.c
-+++ b/test/unit/io_engine_t.c
-@@ -33,7 +33,7 @@
- 
- struct fixture {
- 	struct io_engine *e;
--	void *data;
-+	uint8_t *data;
- 
- 	char fname[64];
- 	int fd;
-@@ -41,19 +41,25 @@ struct fixture {
- 
- static void *_fix_init(void)
- {
-+        uint8_t b = 123;
-+        unsigned i;
-         struct fixture *f = malloc(sizeof(*f));
- 
-         T_ASSERT(f);
-         f->e = create_async_io_engine();
-         T_ASSERT(f->e);
--	if (posix_memalign(&f->data, 4096, SECTOR_SIZE * BLOCK_SIZE_SECTORS))
-+	if (posix_memalign((void **) &f->data, 4096, SECTOR_SIZE * BLOCK_SIZE_SECTORS))
-         	test_fail("posix_memalign failed");
- 
-         snprintf(f->fname, sizeof(f->fname), "unit-test-XXXXXX");
- 	f->fd = mkostemp(f->fname, O_RDWR | O_CREAT | O_EXCL);
- 	T_ASSERT(f->fd >= 0);
- 
--	memset(f->data, 0, SECTOR_SIZE * BLOCK_SIZE_SECTORS);
-+	for (i = 0; i < SECTOR_SIZE * BLOCK_SIZE_SECTORS; i++) {
-+        	f->data[i] = b;
-+        	b = ((b << 5) + b) + i;
-+	}
+diff --git a/lib/cache/lvmcache.c b/lib/cache/lvmcache.c
+index bd92055..cb19030 100644
+--- a/lib/cache/lvmcache.c
++++ b/lib/cache/lvmcache.c
+@@ -360,7 +360,8 @@ struct volume_group *lvmcache_get_saved_vg(const char *vgid, int precommitted)
+ 		/* Do we need to actually set saved_vg_old to match saved_vg_new?
+ 		 * By just dropping old, we force a subsequent request for old to
+ 		 * reread it rather than just using new. */
+-		if (vginfo->saved_vg_old) {
 +
- 	write(f->fd, f->data, SECTOR_SIZE * BLOCK_SIZE_SECTORS);
- 	lseek(f->fd, 0, SEEK_SET);
-         return f;
-@@ -97,6 +103,8 @@ static void _test_read(void *fixture)
- {
- 	struct fixture *f = fixture;
- 
-+	uint8_t b = 123;
-+	unsigned i;
- 	struct io io;
- 
- 	_io_init(&io);
-@@ -104,6 +112,11 @@ static void _test_read(void *fixture)
- 	T_ASSERT(f->e->wait(f->e, _complete_io));
- 	T_ASSERT(io.completed);
- 	T_ASSERT(!io.error);
-+	
-+	for (i = 0; i < SECTOR_SIZE * BLOCK_SIZE_SECTORS; i++) {
-+        	T_ASSERT_EQUAL(f->data[i], b);
-+        	b = ((b << 5) + b) + i;
-+	}
- }
- 
- static void _test_write(void *fixture)
++		if (vginfo->saved_vg_old && (vginfo->saved_vg_old < vg->seqno)) {
+ 			log_debug_cache("lvmcache: drop saved_vg_old because new invalidates");
+ 			_saved_vg_free(vginfo, 1, 0);
+ 		}
+@@ -425,7 +426,8 @@ struct volume_group *lvmcache_get_saved_vg_latest(const char *vgid)
+ 		/* Do we need to actually set saved_vg_old to match saved_vg_new?
+ 		 * By just dropping old, we force a subsequent request for old to
+ 		 * reread it rather than just using new. */
+-		if (vginfo->saved_vg_old) {
++
++		if (vginfo->saved_vg_old && (vginfo->saved_vg_old->seqno < vg->seqno)) {
+ 			log_debug_cache("lvmcache: drop saved_vg_old because new invalidates");
+ 			_saved_vg_free(vginfo, 1, 0);
+ 		}
 
 
