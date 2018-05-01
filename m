@@ -1,39 +1,64 @@
 From: David Teigland <teigland@sourceware.org>
-Date: Tue, 1 May 2018 10:07:21 -0400
-Subject: master - lvmcache: fix typo in lvmcache_get_saved_vg
-Message-ID: <201805011407.w41E7LtU009364@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Tue, 1 May 2018 10:35:36 -0400
+Subject: master - bcache_write_bytes needs to be followed by flush
+Message-ID: <201805011435.w41EZaEw013813@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=a418f88b76d6b67c58af6b8a7d75db29106ff0e1
-Commit:        a418f88b76d6b67c58af6b8a7d75db29106ff0e1
-Parent:        3ea862bdfc036f6e5ce08ba01eb706d1d10638cd
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=8dcc973bbb2372edaac8f4df4d8480225c04cfe5
+Commit:        8dcc973bbb2372edaac8f4df4d8480225c04cfe5
+Parent:        a418f88b76d6b67c58af6b8a7d75db29106ff0e1
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Tue May 1 09:06:04 2018 -0500
+AuthorDate:    Tue May 1 09:33:55 2018 -0500
 Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Tue May 1 09:06:57 2018 -0500
+CommitterDate: Tue May 1 09:33:55 2018 -0500
 
-lvmcache: fix typo in lvmcache_get_saved_vg
+bcache_write_bytes needs to be followed by flush
 
+The improved bcache_write_bytes is not flushing, so
+the caller needs to do that.
 ---
- lib/cache/lvmcache.c |    2 +-
- 1 files changed, 1 insertions(+), 1 deletions(-)
+ lib/label/label.c |   18 ++++++++++++++++--
+ 1 files changed, 16 insertions(+), 2 deletions(-)
 
-diff --git a/lib/cache/lvmcache.c b/lib/cache/lvmcache.c
-index 8ba8b3c..9023bcc 100644
---- a/lib/cache/lvmcache.c
-+++ b/lib/cache/lvmcache.c
-@@ -359,7 +359,7 @@ struct volume_group *lvmcache_get_saved_vg(const char *vgid, int precommitted)
- 		 * By just dropping old, we force a subsequent request for old to
- 		 * reread it rather than just using new. */
+diff --git a/lib/label/label.c b/lib/label/label.c
+index 97e2a0b..a981809 100644
+--- a/lib/label/label.c
++++ b/lib/label/label.c
+@@ -946,7 +946,14 @@ bool dev_write_bytes(struct device *dev, off_t start, size_t len, void *data)
+ 	}
  
--		if (vginfo->saved_vg_old && (vginfo->saved_vg_old < vg->seqno)) {
-+		if (vginfo->saved_vg_old && (vginfo->saved_vg_old->seqno < vg->seqno)) {
- 			log_debug_cache("lvmcache: drop saved_vg_old because new invalidates");
- 			_saved_vg_free(vginfo, 1, 0);
- 		}
+ 	if (!bcache_write_bytes(scan_bcache, dev->bcache_fd, start, len, data)) {
+-		log_error("dev_write_bytes %s at %u failed invalidate fd %d",
++		log_error("dev_write_bytes %s at %u bcache write failed invalidate fd %d",
++			  dev_name(dev), (uint32_t)start, dev->bcache_fd);
++		label_scan_invalidate(dev);
++		return false;
++	}
++
++	if (!bcache_flush(scan_bcache)) {
++		log_error("dev_write_bytes %s at %u bcache flush failed invalidate fd %d",
+ 			  dev_name(dev), (uint32_t)start, dev->bcache_fd);
+ 		label_scan_invalidate(dev);
+ 		return false;
+@@ -982,7 +989,14 @@ bool dev_write_zeros(struct device *dev, off_t start, size_t len)
+ 	}
+ 
+ 	if (!bcache_write_zeros(scan_bcache, dev->bcache_fd, start, len)) {
+-		log_error("dev_write_zeros %s at %u failed invalidate fd %d",
++		log_error("dev_write_zeros %s at %u bcache write failed invalidate fd %d",
++			  dev_name(dev), (uint32_t)start, dev->bcache_fd);
++		label_scan_invalidate(dev);
++		return false;
++	}
++
++	if (!bcache_flush(scan_bcache)) {
++		log_error("dev_write_zeros %s at %u bcache flush failed invalidate fd %d",
+ 			  dev_name(dev), (uint32_t)start, dev->bcache_fd);
+ 		label_scan_invalidate(dev);
+ 		return false;
 
 
