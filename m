@@ -1,39 +1,39 @@
-From: Joe Thornber <thornber@sourceware.org>
-Date: Tue, 1 May 2018 09:18:02 -0400
-Subject: master - unit-test/bcache_t: test was using too large a block size
-Message-ID: <201805011318.w41DI2WN001250@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: David Teigland <teigland@sourceware.org>
+Date: Tue, 1 May 2018 10:07:21 -0400
+Subject: master - lvmcache: fix typo in lvmcache_get_saved_vg
+Message-ID: <201805011407.w41E7LtU009364@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=3ea862bdfc036f6e5ce08ba01eb706d1d10638cd
-Commit:        3ea862bdfc036f6e5ce08ba01eb706d1d10638cd
-Parent:        bfc61a9543f3fc669d265d9b6e384cef0ab78ef2
-Author:        Joe Thornber <ejt@redhat.com>
-AuthorDate:    Tue May 1 14:17:12 2018 +0100
-Committer:     Joe Thornber <ejt@redhat.com>
-CommitterDate: Tue May 1 14:17:12 2018 +0100
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=a418f88b76d6b67c58af6b8a7d75db29106ff0e1
+Commit:        a418f88b76d6b67c58af6b8a7d75db29106ff0e1
+Parent:        3ea862bdfc036f6e5ce08ba01eb706d1d10638cd
+Author:        David Teigland <teigland@redhat.com>
+AuthorDate:    Tue May 1 09:06:04 2018 -0500
+Committer:     David Teigland <teigland@redhat.com>
+CommitterDate: Tue May 1 09:06:57 2018 -0500
 
-unit-test/bcache_t: test was using too large a block size
+lvmcache: fix typo in lvmcache_get_saved_vg
 
 ---
- test/unit/bcache_t.c |    2 +-
+ lib/cache/lvmcache.c |    2 +-
  1 files changed, 1 insertions(+), 1 deletions(-)
 
-diff --git a/test/unit/bcache_t.c b/test/unit/bcache_t.c
-index bb1db29..b0e2dd2 100644
---- a/test/unit/bcache_t.c
-+++ b/test/unit/bcache_t.c
-@@ -412,7 +412,7 @@ static void test_block_size_must_be_multiple_of_page_size(void *fixture)
- 	for (i = 0; i < DM_ARRAY_SIZE(_bad_examples); i++)
- 		bad_create(_bad_examples[i], 16);
+diff --git a/lib/cache/lvmcache.c b/lib/cache/lvmcache.c
+index 8ba8b3c..9023bcc 100644
+--- a/lib/cache/lvmcache.c
++++ b/lib/cache/lvmcache.c
+@@ -359,7 +359,7 @@ struct volume_group *lvmcache_get_saved_vg(const char *vgid, int precommitted)
+ 		 * By just dropping old, we force a subsequent request for old to
+ 		 * reread it rather than just using new. */
  
--	for (i = 1; i < 1000; i++)
-+	for (i = 1; i < 100; i++)
- 		good_create(i * 8, 16);
- }
- 
+-		if (vginfo->saved_vg_old && (vginfo->saved_vg_old < vg->seqno)) {
++		if (vginfo->saved_vg_old && (vginfo->saved_vg_old->seqno < vg->seqno)) {
+ 			log_debug_cache("lvmcache: drop saved_vg_old because new invalidates");
+ 			_saved_vg_free(vginfo, 1, 0);
+ 		}
 
 
