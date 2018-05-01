@@ -1,57 +1,185 @@
 From: Joe Thornber <thornber@sourceware.org>
-Date: Tue, 1 May 2018 05:50:08 -0400
-Subject: master - unit-test/bcache_t: fixup a test.
-Message-ID: <201805010950.w419o85P002601@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Tue, 1 May 2018 05:50:12 -0400
+Subject: master - unit-test/io_engine_t: add a little test for bcache_{read, write}_bytes
+Message-ID: <201805010950.w419oCAv002613@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=f6459757af0f255fe6cc89a05b614e7512ab1bca
-Commit:        f6459757af0f255fe6cc89a05b614e7512ab1bca
-Parent:        39f24a169c7cdec5e927a20aacb774e88407d31a
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=7aba7fe68b6da2ca8ec7b01f5730396d64426fb0
+Commit:        7aba7fe68b6da2ca8ec7b01f5730396d64426fb0
+Parent:        f6459757af0f255fe6cc89a05b614e7512ab1bca
 Author:        Joe Thornber <ejt@redhat.com>
-AuthorDate:    Tue May 1 09:17:55 2018 +0100
+AuthorDate:    Tue May 1 10:47:40 2018 +0100
 Committer:     Joe Thornber <ejt@redhat.com>
-CommitterDate: Tue May 1 09:17:55 2018 +0100
+CommitterDate: Tue May 1 10:47:40 2018 +0100
 
-unit-test/bcache_t: fixup a test.
+unit-test/io_engine_t: add a little test for bcache_{read,write}_bytes
 
-Problem found with valgrind.
 ---
- test/unit/bcache_t.c |   12 +++++++++++-
- 1 files changed, 11 insertions(+), 1 deletions(-)
+ test/unit/bcache_t.c    |    1 +
+ test/unit/io_engine_t.c |   84 ++++++++++++++++++++++++++++++++++++++--------
+ 2 files changed, 70 insertions(+), 15 deletions(-)
 
 diff --git a/test/unit/bcache_t.c b/test/unit/bcache_t.c
-index d06d5fe..ce159cd 100644
+index ce159cd..ecbe07b 100644
 --- a/test/unit/bcache_t.c
 +++ b/test/unit/bcache_t.c
-@@ -100,6 +100,16 @@ static void _expect_read(struct mock_engine *e, int fd, block_address b)
- 	dm_list_add(&e->expected_calls, &mc->list);
+@@ -821,6 +821,7 @@ static void test_invalidate_held_block(void *context)
+ 	bcache_put(b);
  }
  
-+static void _expect_read_any(struct mock_engine *e)
-+{
-+	struct mock_call *mc = malloc(sizeof(*mc));
-+	mc->m = E_ISSUE;
-+	mc->match_args = false;
-+	mc->issue_r = true;
-+	mc->wait_r = true;
-+	dm_list_add(&e->expected_calls, &mc->list);
++
+ /*----------------------------------------------------------------
+  * Top level
+  *--------------------------------------------------------------*/
+diff --git a/test/unit/io_engine_t.c b/test/unit/io_engine_t.c
+index 3a70265..822789a 100644
+--- a/test/unit/io_engine_t.c
++++ b/test/unit/io_engine_t.c
+@@ -29,7 +29,8 @@
+ //----------------------------------------------------------------
+ 
+ #define SECTOR_SIZE 512
+-#define BLOCK_SIZE_SECTORS 64
++#define BLOCK_SIZE_SECTORS 8
++#define NR_BLOCKS 64
+ 
+ struct fixture {
+ 	struct io_engine *e;
+@@ -39,10 +40,46 @@ struct fixture {
+ 	int fd;
+ };
+ 
+-static void *_fix_init(void)
++static void _fill_buffer(uint8_t *buffer, uint8_t seed, size_t count)
+ {
+-        uint8_t b = 123;
+         unsigned i;
++        uint8_t b = seed;
++
++	for (i = 0; i < count; i++) {
++        	buffer[i] = b;
++        	b = ((b << 5) + b) + i;
++	}
 +}
 +
- static void _expect_write(struct mock_engine *e, int fd, block_address b)
++static void _check_buffer(uint8_t *buffer, uint8_t seed, size_t count)
++{
++	unsigned i;
++	uint8_t b = seed;
++
++	for (i = 0; i < count; i++) {
++        	T_ASSERT_EQUAL(buffer[i], b);
++        	b = ((b << 5) + b) + i;
++	}
++}
++
++static void _print_buffer(const char *name, uint8_t *buffer, size_t count)
++{
++	unsigned col;
++
++	fprintf(stderr, "%s:\n", name);
++	while (count) {
++		for (col = 0; count && col < 20; col++) {
++        		fprintf(stderr, "%x, ", (unsigned) *buffer);
++        		col++;
++        		buffer++;
++        		count--;
++		}
++		fprintf(stderr, "\n");
++	}
++}
++
++static void *_fix_init(void)
++{
+         struct fixture *f = malloc(sizeof(*f));
+ 
+         T_ASSERT(f);
+@@ -55,10 +92,7 @@ static void *_fix_init(void)
+ 	f->fd = mkostemp(f->fname, O_RDWR | O_CREAT | O_EXCL);
+ 	T_ASSERT(f->fd >= 0);
+ 
+-	for (i = 0; i < SECTOR_SIZE * BLOCK_SIZE_SECTORS; i++) {
+-        	f->data[i] = b;
+-        	b = ((b << 5) + b) + i;
+-	}
++	_fill_buffer(f->data, 123, sizeof(f->data));
+ 
+ 	write(f->fd, f->data, SECTOR_SIZE * BLOCK_SIZE_SECTORS);
+ 	lseek(f->fd, 0, SEEK_SET);
+@@ -72,7 +106,8 @@ static void _fix_exit(void *fixture)
+ 	close(f->fd);
+ 	unlink(f->fname);
+         free(f->data);
+-        f->e->destroy(f->e);
++        if (f->e)
++                f->e->destroy(f->e);
+         free(f);
+ }
+ 
+@@ -103,8 +138,6 @@ static void _test_read(void *fixture)
  {
- 	struct mock_call *mc = malloc(sizeof(*mc));
-@@ -466,7 +476,7 @@ static void test_block_gets_evicted_with_many_reads(void *context)
- 	// Now if we run through we should find one block has been
- 	// evicted.  We go backwards because the oldest is normally
- 	// evicted first.
--	_expect(me, E_ISSUE);
-+	_expect_read_any(me);
- 	_expect(me, E_WAIT);
- 	for (i = nr_cache_blocks; i; i--) {
- 		T_ASSERT(bcache_get(cache, fd, i - 1, 0, &b, &err));
+ 	struct fixture *f = fixture;
+ 
+-	uint8_t b = 123;
+-	unsigned i;
+ 	struct io io;
+ 
+ 	_io_init(&io);
+@@ -112,11 +145,8 @@ static void _test_read(void *fixture)
+ 	T_ASSERT(f->e->wait(f->e, _complete_io));
+ 	T_ASSERT(io.completed);
+ 	T_ASSERT(!io.error);
+-	
+-	for (i = 0; i < SECTOR_SIZE * BLOCK_SIZE_SECTORS; i++) {
+-        	T_ASSERT_EQUAL(f->data[i], b);
+-        	b = ((b << 5) + b) + i;
+-	}
++
++	_check_buffer(f->data, 123, sizeof(f->data));
+ }
+ 
+ static void _test_write(void *fixture)
+@@ -132,6 +162,29 @@ static void _test_write(void *fixture)
+ 	T_ASSERT(!io.error);
+ }
+ 
++static void _test_write_bytes(void *fixture)
++{
++	struct fixture *f = fixture;
++
++	unsigned offset = 345;
++	char buf_out[32];
++	char buf_in[32];
++	struct bcache *cache = bcache_create(8, BLOCK_SIZE_SECTORS, f->e);
++	T_ASSERT(cache);
++
++	// T_ASSERT(bcache_read_bytes(cache, f->fd, offset, sizeof(buf_in), buf_in));
++	_fill_buffer((uint8_t *) buf_out, 234, sizeof(buf_out));
++	T_ASSERT(bcache_write_bytes(cache, f->fd, offset, sizeof(buf_out), buf_out));
++	T_ASSERT(bcache_read_bytes(cache, f->fd, offset, sizeof(buf_in), buf_in));
++
++	_print_buffer("buf_out", (uint8_t *) buf_out, sizeof(buf_out));
++	_print_buffer("buf_in", (uint8_t *) buf_in, sizeof(buf_in));
++	T_ASSERT(!memcmp(buf_out, buf_in, sizeof(buf_out)));
++
++	bcache_destroy(cache);
++	f->e = NULL;   // already destroyed
++}
++
+ //----------------------------------------------------------------
+ 
+ #define T(path, desc, fn) register_test(ts, "/base/device/bcache/io-engine/" path, desc, fn)
+@@ -147,6 +200,7 @@ static struct test_suite *_tests(void)
+         T("create-destroy", "simple create/destroy", _test_create);
+         T("create-read", "read sanity check", _test_read);
+         T("create-write", "write sanity check", _test_write);
++        T("bcache-write-bytes", "test the utility fns", _test_write_bytes);
+ 
+         return ts;
+ }
 
 
