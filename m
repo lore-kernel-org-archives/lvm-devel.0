@@ -1,185 +1,88 @@
 From: Joe Thornber <thornber@sourceware.org>
-Date: Tue, 1 May 2018 05:50:12 -0400
-Subject: master - unit-test/io_engine_t: add a little test for bcache_{read, write}_bytes
-Message-ID: <201805010950.w419oCAv002613@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Tue, 1 May 2018 05:50:19 -0400
+Subject: master - Merge branch 'master' of git+ssh://sourceware.org/git/lvm2
+Message-ID: <201805010950.w419oJ5D002629@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=7aba7fe68b6da2ca8ec7b01f5730396d64426fb0
-Commit:        7aba7fe68b6da2ca8ec7b01f5730396d64426fb0
-Parent:        f6459757af0f255fe6cc89a05b614e7512ab1bca
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=c863c9581dead8f41e30c66df38017bef2229a90
+Commit:        c863c9581dead8f41e30c66df38017bef2229a90
+Parent:        7aba7fe68b6da2ca8ec7b01f5730396d64426fb0 c1cd18f21ef233fa19e948cf130e97c005a349ad
 Author:        Joe Thornber <ejt@redhat.com>
-AuthorDate:    Tue May 1 10:47:40 2018 +0100
+AuthorDate:    Tue May 1 10:48:42 2018 +0100
 Committer:     Joe Thornber <ejt@redhat.com>
-CommitterDate: Tue May 1 10:47:40 2018 +0100
+CommitterDate: Tue May 1 10:48:42 2018 +0100
 
-unit-test/io_engine_t: add a little test for bcache_{read,write}_bytes
+Merge branch 'master' of git+ssh://sourceware.org/git/lvm2
 
----
- test/unit/bcache_t.c    |    1 +
- test/unit/io_engine_t.c |   84 ++++++++++++++++++++++++++++++++++++++--------
- 2 files changed, 70 insertions(+), 15 deletions(-)
 
-diff --git a/test/unit/bcache_t.c b/test/unit/bcache_t.c
-index ce159cd..ecbe07b 100644
---- a/test/unit/bcache_t.c
-+++ b/test/unit/bcache_t.c
-@@ -821,6 +821,7 @@ static void test_invalidate_held_block(void *context)
- 	bcache_put(b);
- }
- 
-+
- /*----------------------------------------------------------------
-  * Top level
-  *--------------------------------------------------------------*/
-diff --git a/test/unit/io_engine_t.c b/test/unit/io_engine_t.c
-index 3a70265..822789a 100644
---- a/test/unit/io_engine_t.c
-+++ b/test/unit/io_engine_t.c
-@@ -29,7 +29,8 @@
- //----------------------------------------------------------------
- 
- #define SECTOR_SIZE 512
--#define BLOCK_SIZE_SECTORS 64
-+#define BLOCK_SIZE_SECTORS 8
-+#define NR_BLOCKS 64
- 
- struct fixture {
- 	struct io_engine *e;
-@@ -39,10 +40,46 @@ struct fixture {
- 	int fd;
- };
- 
--static void *_fix_init(void)
-+static void _fill_buffer(uint8_t *buffer, uint8_t seed, size_t count)
- {
--        uint8_t b = 123;
-         unsigned i;
-+        uint8_t b = seed;
-+
-+	for (i = 0; i < count; i++) {
-+        	buffer[i] = b;
-+        	b = ((b << 5) + b) + i;
-+	}
-+}
-+
-+static void _check_buffer(uint8_t *buffer, uint8_t seed, size_t count)
-+{
-+	unsigned i;
-+	uint8_t b = seed;
-+
-+	for (i = 0; i < count; i++) {
-+        	T_ASSERT_EQUAL(buffer[i], b);
-+        	b = ((b << 5) + b) + i;
-+	}
-+}
-+
-+static void _print_buffer(const char *name, uint8_t *buffer, size_t count)
-+{
-+	unsigned col;
-+
-+	fprintf(stderr, "%s:\n", name);
-+	while (count) {
-+		for (col = 0; count && col < 20; col++) {
-+        		fprintf(stderr, "%x, ", (unsigned) *buffer);
-+        		col++;
-+        		buffer++;
-+        		count--;
-+		}
-+		fprintf(stderr, "\n");
-+	}
-+}
-+
-+static void *_fix_init(void)
-+{
-         struct fixture *f = malloc(sizeof(*f));
- 
-         T_ASSERT(f);
-@@ -55,10 +92,7 @@ static void *_fix_init(void)
- 	f->fd = mkostemp(f->fname, O_RDWR | O_CREAT | O_EXCL);
- 	T_ASSERT(f->fd >= 0);
- 
--	for (i = 0; i < SECTOR_SIZE * BLOCK_SIZE_SECTORS; i++) {
--        	f->data[i] = b;
--        	b = ((b << 5) + b) + i;
--	}
-+	_fill_buffer(f->data, 123, sizeof(f->data));
- 
- 	write(f->fd, f->data, SECTOR_SIZE * BLOCK_SIZE_SECTORS);
- 	lseek(f->fd, 0, SEEK_SET);
-@@ -72,7 +106,8 @@ static void _fix_exit(void *fixture)
- 	close(f->fd);
- 	unlink(f->fname);
-         free(f->data);
--        f->e->destroy(f->e);
-+        if (f->e)
-+                f->e->destroy(f->e);
-         free(f);
- }
- 
-@@ -103,8 +138,6 @@ static void _test_read(void *fixture)
- {
- 	struct fixture *f = fixture;
- 
--	uint8_t b = 123;
--	unsigned i;
- 	struct io io;
- 
- 	_io_init(&io);
-@@ -112,11 +145,8 @@ static void _test_read(void *fixture)
- 	T_ASSERT(f->e->wait(f->e, _complete_io));
- 	T_ASSERT(io.completed);
- 	T_ASSERT(!io.error);
--	
--	for (i = 0; i < SECTOR_SIZE * BLOCK_SIZE_SECTORS; i++) {
--        	T_ASSERT_EQUAL(f->data[i], b);
--        	b = ((b << 5) + b) + i;
--	}
-+
-+	_check_buffer(f->data, 123, sizeof(f->data));
- }
- 
- static void _test_write(void *fixture)
-@@ -132,6 +162,29 @@ static void _test_write(void *fixture)
- 	T_ASSERT(!io.error);
- }
- 
-+static void _test_write_bytes(void *fixture)
-+{
-+	struct fixture *f = fixture;
-+
-+	unsigned offset = 345;
-+	char buf_out[32];
-+	char buf_in[32];
-+	struct bcache *cache = bcache_create(8, BLOCK_SIZE_SECTORS, f->e);
-+	T_ASSERT(cache);
-+
-+	// T_ASSERT(bcache_read_bytes(cache, f->fd, offset, sizeof(buf_in), buf_in));
-+	_fill_buffer((uint8_t *) buf_out, 234, sizeof(buf_out));
-+	T_ASSERT(bcache_write_bytes(cache, f->fd, offset, sizeof(buf_out), buf_out));
-+	T_ASSERT(bcache_read_bytes(cache, f->fd, offset, sizeof(buf_in), buf_in));
-+
-+	_print_buffer("buf_out", (uint8_t *) buf_out, sizeof(buf_out));
-+	_print_buffer("buf_in", (uint8_t *) buf_in, sizeof(buf_in));
-+	T_ASSERT(!memcmp(buf_out, buf_in, sizeof(buf_out)));
-+
-+	bcache_destroy(cache);
-+	f->e = NULL;   // already destroyed
-+}
-+
- //----------------------------------------------------------------
- 
- #define T(path, desc, fn) register_test(ts, "/base/device/bcache/io-engine/" path, desc, fn)
-@@ -147,6 +200,7 @@ static struct test_suite *_tests(void)
-         T("create-destroy", "simple create/destroy", _test_create);
-         T("create-read", "read sanity check", _test_read);
-         T("create-write", "write sanity check", _test_write);
-+        T("bcache-write-bytes", "test the utility fns", _test_write_bytes);
- 
-         return ts;
- }
+ configure.ac                      |   58 ---
+ daemons/clvmd/clvmd-command.c     |    1 -
+ daemons/clvmd/lvm-functions.c     |   10 -
+ daemons/clvmd/lvm-functions.h     |    1 -
+ daemons/lvmetad/lvmetad-client.h  |    1 -
+ daemons/lvmetad/lvmetad-core.c    |    9 +-
+ lib/Makefile.in                   |   29 --
+ lib/activate/activate.c           |   13 -
+ lib/activate/activate.h           |    1 -
+ lib/cache/lvmcache.c              |   10 +-
+ lib/cache/lvmetad.c               |   23 +-
+ lib/commands/toolcontext.c        |   22 -
+ lib/config/config_settings.h      |   20 +-
+ lib/display/display.c             |    9 +-
+ lib/format1/.exported_symbols     |    1 -
+ lib/format1/Makefile.in           |   33 --
+ lib/format1/disk-rep.c            |  761 -------------------------------------
+ lib/format1/disk-rep.h            |  250 ------------
+ lib/format1/format1.c             |  631 ------------------------------
+ lib/format1/format1.h             |   29 --
+ lib/format1/import-export.c       |  680 ---------------------------------
+ lib/format1/import-extents.c      |  377 ------------------
+ lib/format1/layout.c              |  172 ---------
+ lib/format1/lvm1-label.c          |  129 -------
+ lib/format1/lvm1-label.h          |   23 --
+ lib/format1/vg_number.c           |   60 ---
+ lib/format_pool/.exported_symbols |    1 -
+ lib/format_pool/Makefile.in       |   30 --
+ lib/format_pool/disk_rep.c        |  409 --------------------
+ lib/format_pool/disk_rep.h        |  156 --------
+ lib/format_pool/format_pool.c     |  338 ----------------
+ lib/format_pool/format_pool.h     |   28 --
+ lib/format_pool/import_export.c   |  285 --------------
+ lib/format_pool/pool_label.c      |  104 -----
+ lib/format_pool/pool_label.h      |   23 --
+ lib/format_pool/sptype_names.h    |   42 --
+ lib/format_text/export.c          |    2 -
+ lib/format_text/format-text.c     |    4 +-
+ lib/format_text/import_vsn1.c     |    9 +-
+ lib/locking/locking.c             |   40 --
+ lib/metadata/lv_manip.c           |   26 --
+ lib/metadata/metadata-exported.h  |   10 +-
+ lib/metadata/metadata.c           |   27 +-
+ lib/metadata/segtype.h            |    2 +-
+ lib/metadata/snapshot_manip.c     |   11 -
+ lib/metadata/vg.c                 |   17 +-
+ lib/metadata/vg.h                 |    1 -
+ lib/report/report.c               |    4 +-
+ lib/striped/striped.c             |    2 +-
+ man/vgconvert.8_des               |    7 +-
+ test/lib/aux.sh                   |    4 -
+ test/shell/format-lvm1.sh         |   38 --
+ test/shell/lvm1-basic.sh          |   36 --
+ test/shell/snapshot-lvm1.sh       |   35 --
+ tools/args.h                      |    3 +-
+ tools/lvconvert.c                 |    5 -
+ tools/lvmcmdline.c                |   58 +---
+ tools/pvscan.c                    |    5 +-
+ tools/stub.h                      |    1 -
+ tools/toollib.c                   |   29 +--
+ tools/vals.h                      |    4 +-
+ tools/vgchange.c                  |   10 -
+ tools/vgconvert.c                 |   53 +--
+ tools/vgscan.c                    |    4 +-
+ 64 files changed, 62 insertions(+), 5154 deletions(-)
 
 
