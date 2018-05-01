@@ -1,188 +1,232 @@
 From: Joe Thornber <thornber@sourceware.org>
-Date: Tue, 1 May 2018 07:14:05 -0400
-Subject: master - bcache: rewrite bcache_{write,zero}_bytes
-Message-ID: <201805011114.w41BE5rV014258@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Tue, 1 May 2018 07:14:07 -0400
+Subject: master - build: update ./configure and configure.h.in
+Message-ID: <201805011114.w41BE790014269@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=f564e78d98747266c7add85906309f773de42061
-Commit:        f564e78d98747266c7add85906309f773de42061
-Parent:        c863c9581dead8f41e30c66df38017bef2229a90
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=61153d90e55309cd6bca9c8d1a1e7a7421464663
+Commit:        61153d90e55309cd6bca9c8d1a1e7a7421464663
+Parent:        f564e78d98747266c7add85906309f773de42061
 Author:        Joe Thornber <ejt@redhat.com>
-AuthorDate:    Tue May 1 12:07:33 2018 +0100
+AuthorDate:    Tue May 1 12:12:07 2018 +0100
 Committer:     Joe Thornber <ejt@redhat.com>
-CommitterDate: Tue May 1 12:07:33 2018 +0100
+CommitterDate: Tue May 1 12:12:07 2018 +0100
 
-bcache: rewrite bcache_{write,zero}_bytes
+build: update ./configure and configure.h.in
 
-These are utility functions so should only use the public interface.
-
-Also write_bytes was flushing, which will kill performance.
+Fallout from Dave's removal of format1 and pool.
 ---
- lib/device/bcache.c     |   68 +++++++++++++++++++++++-----------------------
- test/unit/bcache_t.c    |    7 +++++
- test/unit/io_engine_t.c |    6 ++--
- 3 files changed, 44 insertions(+), 37 deletions(-)
+ configure              |   93 +-----------------------------------------------
+ include/configure.h.in |   14 -------
+ 2 files changed, 1 insertions(+), 106 deletions(-)
 
-diff --git a/lib/device/bcache.c b/lib/device/bcache.c
-index 0995ba9..2464e59 100644
---- a/lib/device/bcache.c
-+++ b/lib/device/bcache.c
-@@ -1056,6 +1056,9 @@ static off_t _min(off_t lhs, off_t rhs)
- 	return lhs;
- }
+diff --git a/configure b/configure
+index f2e946e..844e628 100755
+--- a/configure
++++ b/configure
+@@ -676,7 +676,6 @@ PYTHON_BINDINGS
+ PYTHON3
+ PTHREAD_LIBS
+ M_LIBS
+-POOL
+ PKGCONFIG
+ ODIRECT
+ OCFDIR
+@@ -691,8 +690,6 @@ LVM_MINOR
+ LVM_MAJOR
+ LVM_LIBAPI
+ LVM_VERSION
+-LVM1_FALLBACK
+-LVM1
+ LIB_SUFFIX
+ LDDEPS
+ JOBS
+@@ -720,7 +717,6 @@ DEFAULT_RAID10_SEGTYPE
+ DEFAULT_PROFILE_SUBDIR
+ DEFAULT_PID_DIR
+ DEFAULT_MIRROR_SEGTYPE
+-DEFAULT_FALLBACK_TO_LVM1
+ DEFAULT_LOCK_DIR
+ DEFAULT_DM_RUN_DIR
+ DEFAULT_DATA_ALIGNMENT
+@@ -913,9 +909,6 @@ with_device_gid
+ with_device_mode
+ with_device_nodes_on
+ with_default_name_mangling
+-enable_lvm1_fallback
+-with_lvm1
+-with_pool
+ with_cluster
+ with_snapshots
+ with_mirrors
+@@ -1682,8 +1675,6 @@ Optional Features:
+                           speeds up one-time build.
+   --enable-static_link    use this to link the tools to their libraries
+                           statically (default is dynamic linking
+-  --enable-lvm1_fallback  use this to fall back and use LVM1 binaries if
+-                          device-mapper is missing from the kernel
+   --disable-thin_check_needs_check
+                           required if thin_check version is < 0.3.0
+   --disable-cache_check_needs_check
+@@ -1750,10 +1741,6 @@ Optional Packages:
+                           create nodes on resume or create [ON=resume]
+   --with-default-name-mangling=MANGLING
+                           default name mangling: auto/none/hex [auto]
+-  --with-lvm1=TYPE        LVM1 metadata support: internal/shared/none
+-                          [internal]
+-  --with-pool=TYPE        GFS pool read-only support: internal/shared/none
+-                          [internal]
+   --with-cluster=TYPE     cluster LVM locking support: internal/shared/none
+                           [internal]
+   --with-snapshots=TYPE   snapshot support: internal/shared/none [internal]
+@@ -8388,78 +8375,6 @@ _ACEOF
  
-+// These functions are all utilities, they should only use the public
-+// interface to bcache.
-+// FIXME: there's common code that can be factored out of these 3
- bool bcache_read_bytes(struct bcache *cache, int fd, off_t start, size_t len, void *data)
- {
- 	struct block *b;
-@@ -1070,7 +1073,7 @@ bool bcache_read_bytes(struct bcache *cache, int fd, off_t start, size_t len, vo
  
- 	for (i = bb; i < be; i++) {
- 		if (!bcache_get(cache, fd, i, 0, &b, NULL)) {
--			log_error("bcache_read failed to get block %u fd %d bb %u be %u",
-+			log_error("bcache_read_bytes failed to get block %u fd %d bb %u be %u",
- 				  (uint32_t)i, fd, (uint32_t)bb, (uint32_t)be);
- 			errors++;
- 			continue;
-@@ -1108,11 +1111,11 @@ bool bcache_write_bytes(struct bcache *cache, int fd, off_t start, size_t len, v
- 		bcache_prefetch(cache, fd, i);
- 
- 	for (i = bb; i < be; i++) {
--		if (!bcache_get(cache, fd, i, 0, &b, NULL)) {
--			log_error("bcache_write failed to get block %u fd %d bb %u be %u",
-+		if (!bcache_get(cache, fd, i, GF_DIRTY, &b, NULL)) {
-+			log_error("bcache_write_bytes failed to get block %u fd %d bb %u be %u",
- 				  (uint32_t)i, fd, (uint32_t)bb, (uint32_t)be);
- 			errors++;
--			break;
-+			continue;
- 		}
- 
- 		if (i == bb) {
-@@ -1128,49 +1131,46 @@ bool bcache_write_bytes(struct bcache *cache, int fd, off_t start, size_t len, v
- 			udata += blen;
- 		}
- 
--		_set_flags(b, BF_DIRTY);
--		_unlink_block(b);
--		_link_block(b);
--		_put_ref(b);
-+		bcache_put(b);
- 	}
- 
--	if (!bcache_flush(cache))
--		errors++;
+ ################################################################################
+-{ $as_echo "$as_me:${as_lineno-$LINENO}: checking whether to enable lvm1 fallback" >&5
+-$as_echo_n "checking whether to enable lvm1 fallback... " >&6; }
+-# Check whether --enable-lvm1_fallback was given.
+-if test "${enable_lvm1_fallback+set}" = set; then :
+-  enableval=$enable_lvm1_fallback; LVM1_FALLBACK=$enableval
+-else
+-  LVM1_FALLBACK=no
+-fi
 -
- 	return errors ? false : true;
- }
- 
--#define ZERO_BUF_LEN 4096
+-{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $LVM1_FALLBACK" >&5
+-$as_echo "$LVM1_FALLBACK" >&6; }
 -
- bool bcache_write_zeros(struct bcache *cache, int fd, off_t start, size_t len)
- {
--	char zerobuf[ZERO_BUF_LEN];
--	size_t plen;
--	size_t poff;
+-if test "$LVM1_FALLBACK" = yes; then
+-	DEFAULT_FALLBACK_TO_LVM1=1
 -
--	memset(zerobuf, 0, sizeof(zerobuf));
+-$as_echo "#define LVM1_FALLBACK 1" >>confdefs.h
 -
--	if (len <= ZERO_BUF_LEN)
--		return bcache_write_bytes(cache, fd, start, len, &zerobuf);
+-else
+-	DEFAULT_FALLBACK_TO_LVM1=0
+-fi
 -
--	poff = 0;
--	plen = ZERO_BUF_LEN;
-+	struct block *b;
-+	block_address bb, be, i;
-+	off_t block_size = cache->block_sectors << SECTOR_SHIFT;
-+	int errors = 0;
+-cat >>confdefs.h <<_ACEOF
+-#define DEFAULT_FALLBACK_TO_LVM1 $DEFAULT_FALLBACK_TO_LVM1
+-_ACEOF
+-
+-
+-################################################################################
+-{ $as_echo "$as_me:${as_lineno-$LINENO}: checking whether to include support for lvm1 metadata" >&5
+-$as_echo_n "checking whether to include support for lvm1 metadata... " >&6; }
+-
+-# Check whether --with-lvm1 was given.
+-if test "${with_lvm1+set}" = set; then :
+-  withval=$with_lvm1; LVM1=$withval
+-else
+-  LVM1=internal
+-fi
+-
+-
+-{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $LVM1" >&5
+-$as_echo "$LVM1" >&6; }
+-
+-case "$LVM1" in
+-  none|shared) ;;
+-  internal)
+-$as_echo "#define LVM1_INTERNAL 1" >>confdefs.h
+- ;;
+-  *) as_fn_error $? "--with-lvm1 parameter invalid" "$LINENO" 5 ;;
+-esac
+-
+-################################################################################
+-{ $as_echo "$as_me:${as_lineno-$LINENO}: checking whether to include support for GFS pool metadata" >&5
+-$as_echo_n "checking whether to include support for GFS pool metadata... " >&6; }
+-
+-# Check whether --with-pool was given.
+-if test "${with_pool+set}" = set; then :
+-  withval=$with_pool; POOL=$withval
+-else
+-  POOL=internal
+-fi
+-
+-{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $POOL" >&5
+-$as_echo "$POOL" >&6; }
+-
+-case "$POOL" in
+-  none|shared) ;;
+-  internal)
+-$as_echo "#define POOL_INTERNAL 1" >>confdefs.h
+- ;;
+-  *) as_fn_error $? "--with-pool parameter invalid" "$LINENO" 5
+-esac
+-
+-################################################################################
+ { $as_echo "$as_me:${as_lineno-$LINENO}: checking whether to include support for cluster locking" >&5
+ $as_echo_n "checking whether to include support for cluster locking... " >&6; }
  
--	while (1) {
--		if (!bcache_write_bytes(cache, fd, start + poff, plen, &zerobuf))
--			return false;
-+	byte_range_to_block_range(cache, start, len, &bb, &be);
-+	for (i = bb; i < be; i++)
-+		bcache_prefetch(cache, fd, i);
- 
--		poff += plen;
--		len -= plen;
-+	for (i = bb; i < be; i++) {
-+		if (!bcache_get(cache, fd, i, GF_DIRTY, &b, NULL)) {
-+			log_error("bcache_write_bytes failed to get block %u fd %d bb %u be %u",
-+				  (uint32_t)i, fd, (uint32_t)bb, (uint32_t)be);
-+			errors++;
-+			continue;
-+		}
- 
--		if (!len)
--			break;
-+		if (i == bb) {
-+			off_t block_offset = start % block_size;
-+			size_t blen = _min(block_size - block_offset, len);
-+			memset(((unsigned char *) b->data) + block_offset, 0, blen);
-+			len -= blen;
-+		} else {
-+			size_t blen = _min(block_size, len);
-+			memset(b->data, 0, blen);
-+			len -= blen;
-+		}
- 
--		if (len < ZERO_BUF_LEN)
--			plen = len;
-+		bcache_put(b);
- 	}
- 
--	return true;
-+	return errors ? false : true;
- }
+@@ -15667,12 +15582,8 @@ _ACEOF
  
  
-diff --git a/test/unit/bcache_t.c b/test/unit/bcache_t.c
-index ecbe07b..85bb321 100644
---- a/test/unit/bcache_t.c
-+++ b/test/unit/bcache_t.c
-@@ -428,6 +428,13 @@ static void test_get_triggers_read(void *context)
- 	_expect(f->me, E_WAIT);
- 	T_ASSERT(bcache_get(f->cache, fd, 0, 0, &b, &err));
- 	bcache_put(b);
-+
-+	_expect_read(f->me, fd, 1);
-+	_expect(f->me, E_WAIT);
-+	T_ASSERT(bcache_get(f->cache, fd, 1, GF_DIRTY, &b, &err));
-+	_expect_write(f->me, fd, 1);
-+	_expect(f->me, E_WAIT);
-+	bcache_put(b);
- }
  
- static void test_repeated_reads_are_cached(void *context)
-diff --git a/test/unit/io_engine_t.c b/test/unit/io_engine_t.c
-index 822789a..01f659e 100644
---- a/test/unit/io_engine_t.c
-+++ b/test/unit/io_engine_t.c
-@@ -92,7 +92,7 @@ static void *_fix_init(void)
- 	f->fd = mkostemp(f->fname, O_RDWR | O_CREAT | O_EXCL);
- 	T_ASSERT(f->fd >= 0);
+-
+-
+-
+-
+ ################################################################################
+-ac_config_files="$ac_config_files Makefile make.tmpl daemons/Makefile daemons/clvmd/Makefile daemons/cmirrord/Makefile daemons/dmeventd/Makefile daemons/dmeventd/libdevmapper-event.pc daemons/dmeventd/plugins/Makefile daemons/dmeventd/plugins/lvm2/Makefile daemons/dmeventd/plugins/raid/Makefile daemons/dmeventd/plugins/mirror/Makefile daemons/dmeventd/plugins/snapshot/Makefile daemons/dmeventd/plugins/thin/Makefile daemons/dmfilemapd/Makefile daemons/lvmdbusd/Makefile daemons/lvmdbusd/lvmdbusd daemons/lvmdbusd/lvmdb.py daemons/lvmdbusd/lvm_shell_proxy.py daemons/lvmdbusd/path.py daemons/lvmetad/Makefile daemons/lvmpolld/Makefile daemons/lvmlockd/Makefile conf/Makefile conf/example.conf conf/lvmlocal.conf conf/command_profile_template.profile conf/metadata_profile_template.profile include/Makefile lib/Makefile lib/format1/Makefile lib/format_pool/Makefile lib/locking/Makefile include/lvm-version.h libdaemon/Makefile libdaemon/client/Makefile libdaemon/server/Makefile libdm/Makefile l
+ ibdm/libdevmapper.pc liblvm/Makefile liblvm/liblvm2app.pc man/Makefile po/Makefile python/Makefile python/setup.py scripts/blkdeactivate.sh scripts/blk_availability_init_red_hat scripts/blk_availability_systemd_red_hat.service scripts/clvmd_init_red_hat scripts/cmirrord_init_red_hat scripts/com.redhat.lvmdbus1.service scripts/dm_event_systemd_red_hat.service scripts/dm_event_systemd_red_hat.socket scripts/lvm2_cluster_activation_red_hat.sh scripts/lvm2_cluster_activation_systemd_red_hat.service scripts/lvm2_clvmd_systemd_red_hat.service scripts/lvm2_cmirrord_systemd_red_hat.service scripts/lvm2_lvmdbusd_systemd_red_hat.service scripts/lvm2_lvmetad_init_red_hat scripts/lvm2_lvmetad_systemd_red_hat.service scripts/lvm2_lvmetad_systemd_red_hat.socket scripts/lvm2_lvmpolld_init_red_hat scripts/lvm2_lvmpolld_systemd_red_hat.service scripts/lvm2_lvmpolld_systemd_red_hat.socket scripts/lvm2_lvmlockd_systemd_red_hat.service scripts/lvm2_lvmlocking_systemd_red_hat.service scripts/lvm2_monito
+ ring_init_red_hat scripts/lvm2_monitoring_systemd_red_hat.service scripts/lvm2_pvscan_systemd_red_hat at .service scripts/lvm2_tmpfiles_red_hat.conf scripts/lvmdump.sh scripts/Makefile test/Makefile test/api/Makefile test/unit/Makefile tools/Makefile udev/Makefile"
++ac_config_files="$ac_config_files Makefile make.tmpl daemons/Makefile daemons/clvmd/Makefile daemons/cmirrord/Makefile daemons/dmeventd/Makefile daemons/dmeventd/libdevmapper-event.pc daemons/dmeventd/plugins/Makefile daemons/dmeventd/plugins/lvm2/Makefile daemons/dmeventd/plugins/raid/Makefile daemons/dmeventd/plugins/mirror/Makefile daemons/dmeventd/plugins/snapshot/Makefile daemons/dmeventd/plugins/thin/Makefile daemons/dmfilemapd/Makefile daemons/lvmdbusd/Makefile daemons/lvmdbusd/lvmdbusd daemons/lvmdbusd/lvmdb.py daemons/lvmdbusd/lvm_shell_proxy.py daemons/lvmdbusd/path.py daemons/lvmetad/Makefile daemons/lvmpolld/Makefile daemons/lvmlockd/Makefile conf/Makefile conf/example.conf conf/lvmlocal.conf conf/command_profile_template.profile conf/metadata_profile_template.profile include/Makefile lib/Makefile lib/locking/Makefile include/lvm-version.h libdaemon/Makefile libdaemon/client/Makefile libdaemon/server/Makefile libdm/Makefile libdm/libdevmapper.pc liblvm/Makefile liblvm/li
+ blvm2app.pc man/Makefile po/Makefile python/Makefile python/setup.py scripts/blkdeactivate.sh scripts/blk_availability_init_red_hat scripts/blk_availability_systemd_red_hat.service scripts/clvmd_init_red_hat scripts/cmirrord_init_red_hat scripts/com.redhat.lvmdbus1.service scripts/dm_event_systemd_red_hat.service scripts/dm_event_systemd_red_hat.socket scripts/lvm2_cluster_activation_red_hat.sh scripts/lvm2_cluster_activation_systemd_red_hat.service scripts/lvm2_clvmd_systemd_red_hat.service scripts/lvm2_cmirrord_systemd_red_hat.service scripts/lvm2_lvmdbusd_systemd_red_hat.service scripts/lvm2_lvmetad_init_red_hat scripts/lvm2_lvmetad_systemd_red_hat.service scripts/lvm2_lvmetad_systemd_red_hat.socket scripts/lvm2_lvmpolld_init_red_hat scripts/lvm2_lvmpolld_systemd_red_hat.service scripts/lvm2_lvmpolld_systemd_red_hat.socket scripts/lvm2_lvmlockd_systemd_red_hat.service scripts/lvm2_lvmlocking_systemd_red_hat.service scripts/lvm2_monitoring_init_red_hat scripts/lvm2_monitoring_syst
+ emd_red_hat.service scripts/lvm2_pvscan_systemd_red_hat at .service scripts/lvm2_tmpfiles_red_hat.conf scripts/lvmdump.sh scripts/Makefile test/Makefile test/api/Makefile test/unit/Makefile tools/Makefile udev/Makefile"
  
--	_fill_buffer(f->data, 123, sizeof(f->data));
-+	_fill_buffer(f->data, 123, SECTOR_SIZE * BLOCK_SIZE_SECTORS);
+ cat >confcache <<\_ACEOF
+ # This file is a shell script that caches the results of configure
+@@ -16396,8 +16307,6 @@ do
+     "conf/metadata_profile_template.profile") CONFIG_FILES="$CONFIG_FILES conf/metadata_profile_template.profile" ;;
+     "include/Makefile") CONFIG_FILES="$CONFIG_FILES include/Makefile" ;;
+     "lib/Makefile") CONFIG_FILES="$CONFIG_FILES lib/Makefile" ;;
+-    "lib/format1/Makefile") CONFIG_FILES="$CONFIG_FILES lib/format1/Makefile" ;;
+-    "lib/format_pool/Makefile") CONFIG_FILES="$CONFIG_FILES lib/format_pool/Makefile" ;;
+     "lib/locking/Makefile") CONFIG_FILES="$CONFIG_FILES lib/locking/Makefile" ;;
+     "include/lvm-version.h") CONFIG_FILES="$CONFIG_FILES include/lvm-version.h" ;;
+     "libdaemon/Makefile") CONFIG_FILES="$CONFIG_FILES libdaemon/Makefile" ;;
+diff --git a/include/configure.h.in b/include/configure.h.in
+index 89f7a22..66cc27c 100644
+--- a/include/configure.h.in
++++ b/include/configure.h.in
+@@ -72,10 +72,6 @@
+ /* Default system configuration directory. */
+ #undef DEFAULT_ETC_DIR
  
- 	write(f->fd, f->data, SECTOR_SIZE * BLOCK_SIZE_SECTORS);
- 	lseek(f->fd, 0, SEEK_SET);
-@@ -198,8 +198,8 @@ static struct test_suite *_tests(void)
-         }
+-/* Fall back to LVM1 by default if device-mapper is missing from the kernel.
+-   */
+-#undef DEFAULT_FALLBACK_TO_LVM1
+-
+ /* Name of default locking directory. */
+ #undef DEFAULT_LOCK_DIR
  
-         T("create-destroy", "simple create/destroy", _test_create);
--        T("create-read", "read sanity check", _test_read);
--        T("create-write", "write sanity check", _test_write);
-+        T("read", "read sanity check", _test_read);
-+        T("write", "write sanity check", _test_write);
-         T("bcache-write-bytes", "test the utility fns", _test_write_bytes);
+@@ -617,13 +613,6 @@
+    slash. */
+ #undef LSTAT_FOLLOWS_SLASHED_SYMLINK
  
-         return ts;
+-/* Define to 1 if 'lvm' should fall back to using LVM1 binaries if
+-   device-mapper is missing from the kernel */
+-#undef LVM1_FALLBACK
+-
+-/* Define to 1 to include built-in support for LVM1 metadata. */
+-#undef LVM1_INTERNAL
+-
+ /* Path to lvmetad pidfile. */
+ #undef LVMETAD_PIDFILE
+ 
+@@ -686,9 +675,6 @@
+ /* Define to the version of this package. */
+ #undef PACKAGE_VERSION
+ 
+-/* Define to 1 to include built-in support for GFS pool metadata. */
+-#undef POOL_INTERNAL
+-
+ /* Define to 1 to include built-in support for raid. */
+ #undef RAID_INTERNAL
+ 
 
 
