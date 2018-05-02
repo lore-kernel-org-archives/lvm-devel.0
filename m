@@ -1,82 +1,82 @@
-From: David Teigland <teigland@sourceware.org>
-Date: Tue, 1 May 2018 16:26:36 -0400
-Subject: master - tests: add gfs-pool test
-Message-ID: <201805012026.w41KQa1r002395@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: Joe Thornber <thornber@sourceware.org>
+Date: Wed, 2 May 2018 08:32:46 -0400
+Subject: master - unit-test/matcher_t: add another (failing!) test for Kabi
+Message-ID: <201805021232.w42CWkRR012192@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=11436b00e0fa4a54ce504beba72b23bbf0682b27
-Commit:        11436b00e0fa4a54ce504beba72b23bbf0682b27
-Parent:        24e7745d7a54c6ef66cc76ebe2358a1bf2d3bd20
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Tue May 1 15:24:42 2018 -0500
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Tue May 1 15:24:42 2018 -0500
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=506ab29bfd8ec5721cdabb0745ae29af739b47a4
+Commit:        506ab29bfd8ec5721cdabb0745ae29af739b47a4
+Parent:        11436b00e0fa4a54ce504beba72b23bbf0682b27
+Author:        Joe Thornber <ejt@redhat.com>
+AuthorDate:    Wed May 2 13:31:57 2018 +0100
+Committer:     Joe Thornber <ejt@redhat.com>
+CommitterDate: Wed May 2 13:31:57 2018 +0100
 
-tests: add gfs-pool test
+unit-test/matcher_t: add another (failing!) test for Kabi
 
-Put back a test like the old one that was removed
-in d709d8445f206b67cfc06266ce7553f9cb6f3df5.
-
-It verifies that lvm will ignore and not use a
-gfs-pool device.
 ---
- test/shell/pool-labels.sh |   45 +++++++++++++++++++++++++++++++++++++++++++++
- 1 files changed, 45 insertions(+), 0 deletions(-)
+ test/unit/matcher_t.c |   38 ++++++++++++++++++++++++++++++++++++++
+ 1 files changed, 38 insertions(+), 0 deletions(-)
 
-diff --git a/test/shell/pool-labels.sh b/test/shell/pool-labels.sh
-new file mode 100644
-index 0000000..7ae203d
---- /dev/null
-+++ b/test/shell/pool-labels.sh
-@@ -0,0 +1,45 @@
-+#!/usr/bin/env bash
-+
-+# Copyright (C) 2007 Red Hat, Inc. All rights reserved.
-+#
-+# This copyrighted material is made available to anyone wishing to use,
-+# modify, copy, or redistribute it subject to the terms and conditions
-+# of the GNU General Public License v.2.
-+#
-+# You should have received a copy of the GNU General Public License
-+# along with this program; if not, write to the Free Software Foundation,
-+# Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
-+
-+# lvmetad does not handle pool labels so skip test.
-+SKIP_WITH_LVMLOCKD=1
-+SKIP_WITH_LVMETAD=1
-+SKIP_WITH_LVMPOLLD=1
-+
-+. lib/inittest
-+
-+env printf "" || skip # skip if printf is not available
-+
-+# create the old GFS pool labeled linear devices
-+create_pool_label_()
+diff --git a/test/unit/matcher_t.c b/test/unit/matcher_t.c
+index a5eb5f9..b5bf1cf 100644
+--- a/test/unit/matcher_t.c
++++ b/test/unit/matcher_t.c
+@@ -72,6 +72,43 @@ static void test_matching(void *fixture)
+ 		T_ASSERT_EQUAL(dm_regex_match(scanner, nonprint[i].str), nonprint[i].expected - 1);
+ }
+ 
++static void test_kabi_query(void *fixture)
 +{
-+  # FIXME
-+  # echo -e is bashism, dash builtin sh doesn't do \xNN in printf either
-+  # printf comes from coreutils, and is probably not posix either
-+  env printf "\x01\x16\x70\x06\x5f\xcf\xff\xb9\xf8\x24\x8apool1" | dd of="$2" bs=5 seek=1 conv=notrunc
-+  env printf "\x04\x01\x03\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00\x02\x00\x00\x00\x0$1\x68\x01\x16\x70\x00\x00\x00\x00\x00\x06\x5f\xd0" | dd of=$2 bs=273 seek=1 conv=notrunc
-+  aux notify_lvmetad "$2"
++        static const char *_patterns[] = {
++                "loop", "/dev/md.*", ".*"
++        };
++
++        static struct {
++                const char *input;
++                int r;
++        } _cases[] = {
++		{"foo", 2},
++		{"/dev/mapper/vg-lvol1", 2},
++		{"/dev/mapper/vglvol1", 2},
++		{"loop", 0},
++        };
++
++	int r;
++	unsigned i;
++	struct dm_pool *mem = fixture;
++  	struct dm_regex *scanner;
++
++	scanner = dm_regex_create(mem, _patterns, DM_ARRAY_SIZE(_patterns));
++	T_ASSERT(scanner != NULL);
++
++	for (i = 0; i < DM_ARRAY_SIZE(_cases); i++) {
++        	r = dm_regex_match(scanner, _cases[i].input);
++        	if (r != _cases[i].r) {
++                	test_fail("'%s' expected to match '%s', but matched %s",
++                                  _cases[i].input,
++                                  _cases[i].r >= DM_ARRAY_SIZE(_patterns) ? "<nothing>" : _patterns[_cases[i].r],
++                                  r >= DM_ARRAY_SIZE(_patterns) ? "<nothing>" : _patterns[r]);
++        	}
++	}
++
++
 +}
 +
-+
-+aux prepare_devs 2
-+
-+create_pool_label_ 0 "$dev1"
-+create_pool_label_ 1 "$dev2"
-+
-+# verify that lvm will ignore and not use a gfs-pool device
-+
-+not pvs "$dev1"
-+
-+# check that pvcreate fails without -ff on the pool device
-+not pvcreate "$dev1"
-+
+ #define T(path, desc, fn) register_test(ts, "/base/regex/" path, desc, fn)
+ 
+ void regex_tests(struct dm_list *all_tests)
+@@ -84,6 +121,7 @@ void regex_tests(struct dm_list *all_tests)
+ 
+ 	T("fingerprints", "not sure", test_fingerprints);
+ 	T("matching", "test the matcher with a variety of regexes", test_matching);
++	T("kabi-query", "test the matcher with some specific patterns", test_kabi_query);
+ 
+ 	dm_list_add(all_tests, &ts->list);
+ }
 
 
