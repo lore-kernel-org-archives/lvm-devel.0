@@ -1,77 +1,221 @@
-From: Heinz Mauelshagen <heinzm@sourceware.org>
-Date: Fri, 4 May 2018 10:58:49 -0400
-Subject: master - tests: bump raid target version in reshape tests
-Message-ID: <201805041458.w44Ewnh7027335@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: David Teigland <teigland@sourceware.org>
+Date: Fri, 4 May 2018 11:54:40 -0400
+Subject: master - doc: lvm disk reading
+Message-ID: <201805041554.w44Fseto003395@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=c9729022bf691a57df25bca43995e9a05c9cf130
-Commit:        c9729022bf691a57df25bca43995e9a05c9cf130
-Parent:        8bf92875f7f4633d457640af2503c06ffdee7f37
-Author:        Heinz Mauelshagen <heinzm@redhat.com>
-AuthorDate:    Fri May 4 16:56:38 2018 +0200
-Committer:     Heinz Mauelshagen <heinzm@redhat.com>
-CommitterDate: Fri May 4 16:58:11 2018 +0200
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=a2310e2de0c29cc4d43cd20148856669b308bc5d
+Commit:        a2310e2de0c29cc4d43cd20148856669b308bc5d
+Parent:        c9729022bf691a57df25bca43995e9a05c9cf130
+Author:        David Teigland <teigland@redhat.com>
+AuthorDate:    Fri Jan 26 06:50:52 2018 -0600
+Committer:     David Teigland <teigland@redhat.com>
+CommitterDate: Fri May 4 10:54:29 2018 -0500
 
-tests: bump raid target version in reshape tests
+doc: lvm disk reading
 
-Adjust to target version allowing tests to succeed.
 ---
- test/shell/lvconvert-raid-reshape-load.sh          |    2 +-
- .../lvconvert-raid-reshape-stripes-load-fail.sh    |    5 +----
- test/shell/lvconvert-raid-reshape-stripes-load.sh  |    2 +-
- 3 files changed, 3 insertions(+), 6 deletions(-)
+ doc/lvm-disk-reading.txt |  189 ++++++++++++++++++++++++++++++++++++++++++++++
+ 1 files changed, 189 insertions(+), 0 deletions(-)
 
-diff --git a/test/shell/lvconvert-raid-reshape-load.sh b/test/shell/lvconvert-raid-reshape-load.sh
-index 23046e5..cd72d09 100644
---- a/test/shell/lvconvert-raid-reshape-load.sh
-+++ b/test/shell/lvconvert-raid-reshape-load.sh
-@@ -21,7 +21,7 @@ SKIP_WITH_LVMPOLLD=1
- test $(aux total_mem) -gt $((4096*1024)) || skip
- 
- which mkfs.ext4 || skip
--aux have_raid 1 13 1 || skip
-+aux have_raid 1 13 2 || skip
- 
- mount_dir="mnt"
- 
-diff --git a/test/shell/lvconvert-raid-reshape-stripes-load-fail.sh b/test/shell/lvconvert-raid-reshape-stripes-load-fail.sh
-index e7066be..88722b0 100644
---- a/test/shell/lvconvert-raid-reshape-stripes-load-fail.sh
-+++ b/test/shell/lvconvert-raid-reshape-stripes-load-fail.sh
-@@ -15,16 +15,13 @@ SKIP_WITH_LVMPOLLD=1
- 
- . lib/inittest
- 
--# FIXME - skippping until properly kernel is released
--skip
--
- # Test reshaping under io load
- 
- # FIXME: This test requires 3GB in /dev/shm!
- test $(aux total_mem) -gt $((4096*1024)) || skip
- 
- which mkfs.ext4 || skip
--aux have_raid 1 13 1 || skip
-+aux have_raid 1 13 2 || skip
- 
- mount_dir="mnt"
- 
-diff --git a/test/shell/lvconvert-raid-reshape-stripes-load.sh b/test/shell/lvconvert-raid-reshape-stripes-load.sh
-index 2143b4c..1be8d61 100644
---- a/test/shell/lvconvert-raid-reshape-stripes-load.sh
-+++ b/test/shell/lvconvert-raid-reshape-stripes-load.sh
-@@ -21,7 +21,7 @@ SKIP_WITH_LVMPOLLD=1
- test $(aux total_mem) -gt $((4096*1024)) || skip
- 
- which mkfs.ext4 || skip
--aux have_raid 1 13 1 || skip
-+aux have_raid 1 13 2 || skip
- 
- mount_dir="mnt"
- 
+diff --git a/doc/lvm-disk-reading.txt b/doc/lvm-disk-reading.txt
+new file mode 100644
+index 0000000..241a7ab
+--- /dev/null
++++ b/doc/lvm-disk-reading.txt
+@@ -0,0 +1,189 @@
++LVM disk reading
++
++Reading disks happens in two phases.  The first is a discovery phase,
++which determines what's on the disks.  The second is a working phase,
++which does a particular job for the command.
++
++
++Phase 1: Discovery
++------------------
++
++Read all the disks on the system to find out:
++- What are the LVM devices?
++- What VG's exist on those devices?
++
++This phase is called "label scan" (although it reads and scans everything,
++not just the label.)  It stores the information it discovers (what LVM
++devices exist, and what VGs exist on them) in lvmcache.  The devs/VGs info
++in lvmcache is the starting point for phase two.
++
++
++Phase 1 in outline:
++
++For each device:
++
++a. Read the first <N> KB of the device. (N is configurable.)
++
++b. Look for the lvm label_header in the first four sectors,
++   if none exists, it's not an lvm device, so quit looking at it.
++   (By default, label_header is in the second sector.)
++
++c. Look at the pv_header, which follows the label_header.
++   This tells us the location of VG metadata on the device.
++   There can be 0, 1 or 2 copies of VG metadata.  The first
++   is always at the start of the device, the second (if used)
++   is at the end.
++
++d. Look at the first mda_header (location came from pv_header
++   in the previous step).  This is by default in sector 8,
++   4096 bytes from the start of the device.  This tells us the
++   location of the actual VG metadata text.
++
++e. Look at the first copy of the text VG metadata (location came
++   from mda_header in the previous step).  This is by default
++   in sector 9, 4608 bytes from the start of the device.
++   The VG metadata is only partially analyzed to create a basic
++   summary of the VG.
++
++f. Store an "info" entry in lvmcache for this device,
++   indicating that it is an lvm device, and store a "vginfo"
++   entry in lvmcache indicating the name of the VG seen
++   in the metadata in step e.
++
++g. If the pv_header in step c shows a second mda_header
++   location at the end of the device, then read that as
++   in step d, and repeat steps e-f for it.
++
++At the end of phase 1, lvmcache will have a list of devices
++that belong to LVM, and a list of VG names that exist on
++those devices.  Each device (info struct) is associated
++with the VG (vginfo struct) it is used in.
++
++
++Phase 1 in code:
++
++The most relevant functions are listed for each step in the outline.
++
++lvmcache_label_scan()
++label_scan()
++
++. dev_cache_scan()
++  choose which devices on the system to look at
++
++. for each dev in dev_cache: bcache prefetch/read
++
++. _process_block() to process data from bcache
++  _find_lvm_header() checks if this is an lvm dev by looking at label_header
++  _text_read() via ops->read() looks at mda/pv/vg data to populate lvmcache
++
++. _read_mda_header_and_metadata()
++   raw_read_mda_header()
++
++. _read_mda_header_and_metadata()
++   read_metadata_location()
++   text_read_metadata_summary()
++   config_file_read_fd()
++   _read_vgsummary() via ops->read_vgsummary()
++
++. _text_read(): lvmcache_add()
++     [adds this device to list of lvm devices]
++  _read_mda_header_and_metadata(): lvmcache_update_vgname_and_id()
++     [adds the VG name to list of VGs]
++
++
++Phase 2: Work
++-------------
++
++This phase carries out the operation requested by the command that was
++run.
++
++Whereas the first phase is based on iterating through each device on the
++system, this phase is based on iterating through each VG name.  The list
++of VG names comes from phase 1, which stored the list in lvmcache to be
++used by phase 2.
++
++Some commands may need to iterate through all VG names, while others may
++need to iterate through just one or two.
++
++This phase includes locking each VG as work is done on it, so that two
++commands do not interfere with each other.
++
++
++Phase 2 in outline:
++
++For each VG name:
++
++a. Lock the VG.
++
++b. Repeat the phase 1 scan steps for each device in this VG.
++   The phase 1 information in lvmcache may have changed because no VG lock
++   was held during phase 1.  So, repeat the phase 1 steps, but only for the
++   devices in this VG.  N.B. for commands that are just reporting data,
++   we skip this step if the data from phase 1 was complete and consistent.
++
++c. Get the list of on-disk metadata locations for this VG.
++   Phase 1 created this list in lvmcache to be used here.  At this
++   point we copy it out of lvmcache.  In the simple/common case,
++   this is a list of devices in the VG.  But, some devices may
++   have 0 or 2 metadata locations instead of the default 1, so it
++   is not always equal to the list of devices.  We want to read
++   every copy of the metadata for this VG.
++
++d. For each metadata location on each device in the VG
++   (the list from the previous step):
++
++    1) Look at the mda_header.  The location of the mda_header was saved
++       in the lvmcache info struct by phase 1 (where it came from the
++       pv_header.) The mda_header tells us where the text VG metadata is
++       located.
++
++    2) Look at the text VG metadata.  The location came from mda_header
++       in the previous step.  The VG metadata is fully analyzed and used
++       to create an in-memory 'struct volume_group'.
++
++e. Compare the copies of VG metadata that were found in each location.
++   If some copies are older, choose the newest one to use, and update
++   any older copies.
++
++f. Update details about the devices/VG in lvmcache.
++
++g. Pass the 'vg' struct to the command-specific code to work with.
++
++
++Phase 2 in code:
++
++The most relevant functions are listed for each step in the outline.
++
++For each VG name:
++   process_each_vg()
++
++. vg_read()
++   lock_vol()
++
++. vg_read()
++   lvmcache_label_rescan_vg() (if needed)
++   [insert phase 1 steps for scanning devs, but only devs in this vg]
++
++. vg_read()
++   create_instance()
++   _text_create_text_instance()
++   _create_vg_text_instance()
++   lvmcache_fid_add_mdas_vg()
++   [Copies mda locations from info->mdas where it was saved
++    by phase 1, into fid->metadata_areas_in_use.  This is
++    the key connection between phase 1 and phase 2.]
++
++. dm_list_iterate_items(mda, &fid->metadata_areas_in_use)
++
++    . _vg_read_raw() via ops->vg_read()
++      raw_read_mda_header()
++
++    . _vg_read_raw()
++      text_read_metadata()
++      config_file_read_fd()
++      _read_vg() via ops->read_vg()
++
++. return the 'vg' struct from vg_read() and use it to do
++  command-specific work
++
++
 
 
