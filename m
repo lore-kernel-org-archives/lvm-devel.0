@@ -1,40 +1,39 @@
 From: Joe Thornber <thornber@sourceware.org>
-Date: Fri, 11 May 2018 06:41:47 -0400
-Subject: master - radix-tree: remove some unneccessary includes
-Message-ID: <201805111041.w4BAfld2011592@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Fri, 11 May 2018 06:41:48 -0400
+Subject: master - radix-tree: fix a function decl
+Message-ID: <201805111041.w4BAfm3R011597@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=30a4c7988e790c16cea043b6b6743f0576c80c1e
-Commit:        30a4c7988e790c16cea043b6b6743f0576c80c1e
-Parent:        0a31fb4aa323e0e8636d9c0b9332d14df86afda5
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=413488edc6dd077e79517e44a8d3b9a51c5138e5
+Commit:        413488edc6dd077e79517e44a8d3b9a51c5138e5
+Parent:        30a4c7988e790c16cea043b6b6743f0576c80c1e
 Author:        Joe Thornber <ejt@redhat.com>
-AuthorDate:    Fri May 11 09:46:34 2018 +0100
+AuthorDate:    Fri May 11 11:40:47 2018 +0100
 Committer:     Joe Thornber <ejt@redhat.com>
-CommitterDate: Fri May 11 09:46:34 2018 +0100
+CommitterDate: Fri May 11 11:40:47 2018 +0100
 
-radix-tree: remove some unneccessary includes
+radix-tree: fix a function decl
 
 ---
- base/data-struct/radix-tree.c |    3 ---
- 1 files changed, 0 insertions(+), 3 deletions(-)
+ test/unit/radix_tree_t.c |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
 
-diff --git a/base/data-struct/radix-tree.c b/base/data-struct/radix-tree.c
-index f2f53e9..b4b6791 100644
---- a/base/data-struct/radix-tree.c
-+++ b/base/data-struct/radix-tree.c
-@@ -12,9 +12,6 @@
+diff --git a/test/unit/radix_tree_t.c b/test/unit/radix_tree_t.c
+index 6a7ecac..4455f2b 100644
+--- a/test/unit/radix_tree_t.c
++++ b/test/unit/radix_tree_t.c
+@@ -19,7 +19,7 @@
  
- #include "radix-tree.h"
+ //----------------------------------------------------------------
  
--#include "dm-logging.h"
--#include "log.h"
--
- #include "base/memory/container_of.h"
- #include "base/memory/zalloc.h"
- 
+-static void *rt_init()
++static void *rt_init(void)
+ {
+ 	struct radix_tree *rt = radix_tree_create();
+ 	T_ASSERT(rt);
 
 
