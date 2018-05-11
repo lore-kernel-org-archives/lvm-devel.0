@@ -1,107 +1,54 @@
 From: Joe Thornber <thornber@sourceware.org>
-Date: Fri, 11 May 2018 00:41:00 -0400
-Subject: master - bcache/sync io engine: handle short ios
-Message-ID: <201805110441.w4B4f0kD022232@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Fri, 11 May 2018 00:41:05 -0400
+Subject: master - Merge branch 'master' of git+ssh://sourceware.org/git/lvm2
+Message-ID: <201805110441.w4B4f5s9022246@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=5f780813f295cd927d92d669ab086063adb1534e
-Commit:        5f780813f295cd927d92d669ab086063adb1534e
-Parent:        39ce38eb8868e367fa796ddb12b1020647d14c63
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=3b02b35c3eef04ddc62302328323d7874f6b9daa
+Commit:        3b02b35c3eef04ddc62302328323d7874f6b9daa
+Parent:        5f780813f295cd927d92d669ab086063adb1534e 9ad42e5f068ec9c712724631696afb9eb96bc24b
 Author:        Joe Thornber <ejt@redhat.com>
-AuthorDate:    Fri May 11 05:37:47 2018 +0100
+AuthorDate:    Fri May 11 05:39:27 2018 +0100
 Committer:     Joe Thornber <ejt@redhat.com>
-CommitterDate: Fri May 11 05:37:47 2018 +0100
+CommitterDate: Fri May 11 05:39:27 2018 +0100
 
-bcache/sync io engine: handle short ios
+Merge branch 'master' of git+ssh://sourceware.org/git/lvm2
 
----
- lib/device/bcache.c |   45 ++++++++++++++++++++++++++++++---------------
- 1 files changed, 30 insertions(+), 15 deletions(-)
 
-diff --git a/lib/device/bcache.c b/lib/device/bcache.c
-index 7a221c5..9085d87 100644
---- a/lib/device/bcache.c
-+++ b/lib/device/bcache.c
-@@ -283,7 +283,6 @@ struct io_engine *create_async_io_engine(void)
- struct sync_io {
-         struct dm_list list;
- 	void *context;
--	int err;
- };
- 
- struct sync_engine {
-@@ -306,30 +305,46 @@ static bool _sync_issue(struct io_engine *ioe, enum dir d, int fd,
-                         sector_t sb, sector_t se, void *data, void *context)
- {
-         int r;
--        uint64_t len = (se - sb) * 512;
-+        uint64_t len = (se - sb) * 512, where;
- 	struct sync_engine *e = _to_sync(ioe);
- 	struct sync_io *io = malloc(sizeof(*io));
--	if (!io)
-+	if (!io) {
-+		log_warn("unable to allocate sync_io");
-         	return false;
-+	}
- 
--	r = lseek(fd, sb * 512, SEEK_SET);
--	if (r < 0)
-+	where = sb * 512;
-+	r = lseek(fd, where, SEEK_SET);
-+	if (r < 0) {
-+        	log_warn("unable to seek to position %llu", (unsigned long long) where);
-         	return false;
-+	}
- 
--	do {
--        	if (d == DIR_READ)
--                        r = read(fd, data, len);
--                else
--                        r = write(fd, data, len);
-+	while (len) {
-+        	do {
-+                	if (d == DIR_READ)
-+                                r = read(fd, data, len);
-+                        else
-+                                r = write(fd, data, len);
-+
-+        	} while ((r < 0) && ((r == EINTR) || (r == EAGAIN)));
- 
--	} while (r == EINTR || r == EAGAIN);
-+        	if (r < 0) {
-+                	log_warn("io failed %d", r);
-+                	return false;
-+        	}
-+
-+                len -= r;
-+	}
-+
-+	if (len) {
-+        	log_warn("short io %u bytes remaining", (unsigned) len);
-+        	return false;
-+	}
- 
--	if (r != len)
--        	r = -EIO;
- 
- 	dm_list_add(&e->complete, &io->list);
- 	io->context = context;
--	io->err = r < 0 ? r : 0;
- 
- 	return true;
- }
-@@ -340,7 +355,7 @@ static bool _sync_wait(struct io_engine *ioe, io_complete_fn fn)
- 	struct sync_engine *e = _to_sync(ioe);
- 
- 	dm_list_iterate_items_safe(io, tmp, &e->complete) {
--		fn(io->context, io->err);
-+		fn(io->context, 0);
- 		dm_list_del(&io->list);
- 		dm_free(io);
- 	}
+ lib/cache/lvmcache.c             |    2 +-
+ lib/cache/lvmetad.c              |    2 +-
+ lib/commands/toolcontext.c       |    2 +-
+ lib/commands/toolcontext.h       |    1 +
+ lib/device/dev-cache.c           |   70 +++++++++++++++++++++++++++++-----
+ lib/device/dev-io.c              |    4 +-
+ lib/device/dev-luks.c            |   13 ++----
+ lib/device/dev-md.c              |   67 +++++++++++++++++++++++++--------
+ lib/device/dev-swap.c            |   16 ++-----
+ lib/device/dev-type.c            |   18 +++------
+ lib/device/dev-type.h            |    7 ++-
+ lib/device/device.h              |    2 +
+ lib/filters/filter-composite.c   |    9 +++-
+ lib/filters/filter-md.c          |   39 ++++++++++++++++--
+ lib/filters/filter-partitioned.c |   12 +++++-
+ lib/filters/filter-persistent.c  |   78 ++++++++++++++++++++++++++++++-------
+ lib/filters/filter-signature.c   |   12 +++---
+ lib/filters/filter-usable.c      |    9 ----
+ lib/filters/filter.h             |    2 +-
+ lib/label/label.c                |   58 +++++++++++++++++++++++-----
+ lib/label/label.h                |    2 +-
+ lib/metadata/metadata-exported.h |    2 +-
+ lib/metadata/metadata.c          |   19 ++-------
+ lib/metadata/mirror.c            |    9 ++--
+ tools/lvmdiskscan.c              |    5 +-
+ tools/pvck.c                     |   48 +++++++++++++++++------
+ tools/pvcreate.c                 |    3 +
+ tools/pvscan.c                   |   49 ++++++++++++++++++++---
+ tools/vgcreate.c                 |    3 +
+ tools/vgextend.c                 |    3 +
+ 30 files changed, 408 insertions(+), 158 deletions(-)
 
 
