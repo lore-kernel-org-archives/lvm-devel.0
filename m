@@ -1,45 +1,55 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Sat, 12 May 2018 17:39:12 -0400
-Subject: master - tests: fix check sysfs
-Message-ID: <201805122139.w4CLdCg7005434@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Sat, 12 May 2018 17:39:17 -0400
+Subject: master - tests: start to use 4k mkfs
+Message-ID: <201805122139.w4CLdHQj005450@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=ca87674ea4f6fd12b9049ea2a6498a5cf191893e
-Commit:        ca87674ea4f6fd12b9049ea2a6498a5cf191893e
-Parent:        edede1d20f413a5baee5474e40cffd135c133bef
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=9640320aea74e7cef0bde64c9be6e3471a85746e
+Commit:        9640320aea74e7cef0bde64c9be6e3471a85746e
+Parent:        ca87674ea4f6fd12b9049ea2a6498a5cf191893e
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Sat May 12 23:01:52 2018 +0200
+AuthorDate:    Sat May 12 23:22:20 2018 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Sat May 12 23:01:52 2018 +0200
+CommitterDate: Sat May 12 23:22:20 2018 +0200
 
-tests: fix check sysfs
+tests: start to use 4k mkfs
 
-Commit 810f856c2490eb1d5db858f26a26621c4a3477e0 missed to move
-assign of P after setting maj & min.
+While newer system can detect need for 4K mkfs, on older test machines
+running test suite over 4k is reporting problems.
+Some more generic solution is needed thought.
 ---
- test/lib/check.sh |    3 ++-
- 1 files changed, 2 insertions(+), 1 deletions(-)
+ test/shell/thin-merge.sh       |    1 +
+ test/shell/topology-support.sh |    2 +-
+ 2 files changed, 2 insertions(+), 1 deletions(-)
 
-diff --git a/test/lib/check.sh b/test/lib/check.sh
-index c796104..8637619 100644
---- a/test/lib/check.sh
-+++ b/test/lib/check.sh
-@@ -422,10 +422,11 @@ sysfs() {
- 	# read maj min and also convert hex to decimal
- 	local maj
- 	local min
--	local P="/sys/dev/block/$maj:$min/$2"
-+	local P
- 	local val
- 	maj=$(($(stat -L --printf=0x%t "$1")))
- 	min=$(($(stat -L --printf=0x%T "$1")))
-+	P="/sys/dev/block/$maj:$min/$2"
- 	val=$(< "$P") || return 0 # no sysfs ?
- 	test "$val" -eq "$3" || \
- 		die "$1: $P = $val differs from expected value $3!"
+diff --git a/test/shell/thin-merge.sh b/test/shell/thin-merge.sh
+index 24dec96..457bd47 100644
+--- a/test/shell/thin-merge.sh
++++ b/test/shell/thin-merge.sh
+@@ -22,6 +22,7 @@ MKFS=mkfs.ext2
+ which $MKFS  || skip
+ which fsck || skip
+ 
++MKFS="$MKFS -b4096"
+ #
+ # Main
+ #
+diff --git a/test/shell/topology-support.sh b/test/shell/topology-support.sh
+index 98a6d9f..482205a 100644
+--- a/test/shell/topology-support.sh
++++ b/test/shell/topology-support.sh
+@@ -23,7 +23,7 @@ lvdev_() {
+ 
+ test_snapshot_mount() {
+     lvcreate -aey -L4M -n $lv1 $vg "$dev1"
+-    mkfs.ext3 "$(lvdev_ $vg $lv1)"
++    mkfs.ext3 -b4096 "$(lvdev_ $vg $lv1)"
+     mkdir test_mnt
+     mount "$(lvdev_ $vg $lv1)" test_mnt
+     lvcreate -L4M -n $lv2 -s $vg/$lv1
 
 
