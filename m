@@ -1,40 +1,42 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Sat, 12 May 2018 12:26:24 -0400
-Subject: master - build: properly track source file for lmvlockctl
-Message-ID: <201805121626.w4CGQOdM008310@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Sat, 12 May 2018 12:26:25 -0400
+Subject: master - tests: add support to run unit test
+Message-ID: <201805121626.w4CGQPPD008315@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=7616a7f46ee3de6dfc898b98ed33dbbf9d12cc95
-Commit:        7616a7f46ee3de6dfc898b98ed33dbbf9d12cc95
-Parent:        cbe81a0b058b6c994ff2cdf9b3f7bd7903074320
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=d38a2d64f0cddc951774b63d56b2fb5d9afb336e
+Commit:        d38a2d64f0cddc951774b63d56b2fb5d9afb336e
+Parent:        7616a7f46ee3de6dfc898b98ed33dbbf9d12cc95
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Sat May 12 01:19:07 2018 +0200
+AuthorDate:    Sat May 12 18:09:44 2018 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Sat May 12 18:05:50 2018 +0200
+CommitterDate: Sat May 12 18:18:23 2018 +0200
 
-build: properly track source file for lmvlockctl
+tests: add support to run unit test
 
-Ensure the source file is tracked by various cleanup functions.
 ---
- daemons/lvmlockd/Makefile.in |    2 ++
- 1 files changed, 2 insertions(+), 0 deletions(-)
+ test/lib/aux.sh |    5 +++++
+ 1 files changed, 5 insertions(+), 0 deletions(-)
 
-diff --git a/daemons/lvmlockd/Makefile.in b/daemons/lvmlockd/Makefile.in
-index 8f16d06..63944cb 100644
---- a/daemons/lvmlockd/Makefile.in
-+++ b/daemons/lvmlockd/Makefile.in
-@@ -27,6 +27,8 @@ ifeq ("@BUILD_LOCKDDLM@", "yes")
-   LOCK_LIBS += -ldlm_lt
- endif
+diff --git a/test/lib/aux.sh b/test/lib/aux.sh
+index c56767e..977e917 100644
+--- a/test/lib/aux.sh
++++ b/test/lib/aux.sh
+@@ -1351,6 +1351,11 @@ apitest() {
+ 	"$TESTOLDPWD/api/$1.t" "${@:2}" && rm -f debug.log strace.log
+ }
  
-+SOURCES2 = lvmlockctl.c
++unittest() {
++	test -x "$TESTOLDPWD/unit/unit-test" || skip
++	"$TESTOLDPWD/unit/unit-test" "${@}"
++}
 +
- TARGETS = lvmlockd lvmlockctl
- 
- .PHONY: install_lvmlockd
+ mirror_recovery_works() {
+ 	case "$(uname -r)" in
+ 	  3.3.4-5.fc17.i686|3.3.4-5.fc17.x86_64) return 1 ;;
 
 
