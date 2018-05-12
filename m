@@ -1,55 +1,65 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Sat, 12 May 2018 17:39:17 -0400
-Subject: master - tests: start to use 4k mkfs
-Message-ID: <201805122139.w4CLdHQj005450@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Sat, 12 May 2018 17:39:24 -0400
+Subject: master - tests: swith to mkstemp
+Message-ID: <201805122139.w4CLdO84005466@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=9640320aea74e7cef0bde64c9be6e3471a85746e
-Commit:        9640320aea74e7cef0bde64c9be6e3471a85746e
-Parent:        ca87674ea4f6fd12b9049ea2a6498a5cf191893e
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=0a5edc1f12ddad72e0c34dddfecbb46cbfdb192f
+Commit:        0a5edc1f12ddad72e0c34dddfecbb46cbfdb192f
+Parent:        9640320aea74e7cef0bde64c9be6e3471a85746e
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Sat May 12 23:22:20 2018 +0200
+AuthorDate:    Sat May 12 23:23:54 2018 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Sat May 12 23:22:20 2018 +0200
+CommitterDate: Sat May 12 23:23:54 2018 +0200
 
-tests: start to use 4k mkfs
+tests: swith to mkstemp
 
-While newer system can detect need for 4K mkfs, on older test machines
-running test suite over 4k is reporting problems.
-Some more generic solution is needed thought.
+As mkostemp is only on newer systems, switch to more old version
+which effectively does exactly the same thing for given list of
+open flags.
 ---
- test/shell/thin-merge.sh       |    1 +
- test/shell/topology-support.sh |    2 +-
- 2 files changed, 2 insertions(+), 1 deletions(-)
+ test/unit/bcache_utils_t.c |    2 +-
+ test/unit/io_engine_t.c    |    7 ++++---
+ 2 files changed, 5 insertions(+), 4 deletions(-)
 
-diff --git a/test/shell/thin-merge.sh b/test/shell/thin-merge.sh
-index 24dec96..457bd47 100644
---- a/test/shell/thin-merge.sh
-+++ b/test/shell/thin-merge.sh
-@@ -22,6 +22,7 @@ MKFS=mkfs.ext2
- which $MKFS  || skip
- which fsck || skip
+diff --git a/test/unit/bcache_utils_t.c b/test/unit/bcache_utils_t.c
+index e5e66d5..9ddc194 100644
+--- a/test/unit/bcache_utils_t.c
++++ b/test/unit/bcache_utils_t.c
+@@ -68,7 +68,7 @@ static void *_fix_init(struct io_engine *engine)
+         T_ASSERT(f);
  
-+MKFS="$MKFS -b4096"
- #
- # Main
- #
-diff --git a/test/shell/topology-support.sh b/test/shell/topology-support.sh
-index 98a6d9f..482205a 100644
---- a/test/shell/topology-support.sh
-+++ b/test/shell/topology-support.sh
-@@ -23,7 +23,7 @@ lvdev_() {
+         snprintf(f->fname, sizeof(f->fname), "unit-test-XXXXXX");
+-	f->fd = mkostemp(f->fname, O_RDWR | O_CREAT | O_EXCL);
++	f->fd = mkstemp(f->fname);
+ 	T_ASSERT(f->fd >= 0);
  
- test_snapshot_mount() {
-     lvcreate -aey -L4M -n $lv1 $vg "$dev1"
--    mkfs.ext3 "$(lvdev_ $vg $lv1)"
-+    mkfs.ext3 -b4096 "$(lvdev_ $vg $lv1)"
-     mkdir test_mnt
-     mount "$(lvdev_ $vg $lv1)" test_mnt
-     lvcreate -L4M -n $lv2 -s $vg/$lv1
+ 	for (b = 0; b < NR_BLOCKS; b++) {
+diff --git a/test/unit/io_engine_t.c b/test/unit/io_engine_t.c
+index 01f659e..5efd4e4 100644
+--- a/test/unit/io_engine_t.c
++++ b/test/unit/io_engine_t.c
+@@ -89,13 +89,14 @@ static void *_fix_init(void)
+         	test_fail("posix_memalign failed");
+ 
+         snprintf(f->fname, sizeof(f->fname), "unit-test-XXXXXX");
+-	f->fd = mkostemp(f->fname, O_RDWR | O_CREAT | O_EXCL);
++	f->fd = mkstemp(f->fname);
+ 	T_ASSERT(f->fd >= 0);
+ 
+ 	_fill_buffer(f->data, 123, SECTOR_SIZE * BLOCK_SIZE_SECTORS);
+ 
+-	write(f->fd, f->data, SECTOR_SIZE * BLOCK_SIZE_SECTORS);
+-	lseek(f->fd, 0, SEEK_SET);
++	T_ASSERT(write(f->fd, f->data, SECTOR_SIZE * BLOCK_SIZE_SECTORS) > 0);
++	T_ASSERT(lseek(f->fd, 0, SEEK_SET) != -1);
++
+         return f;
+ }
+ 
 
 
