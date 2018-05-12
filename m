@@ -1,141 +1,67 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Sat, 12 May 2018 12:26:02 -0400
-Subject: master - tests: using throttling
-Message-ID: <201805121626.w4CGQ2fE007877@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Sat, 12 May 2018 12:26:10 -0400
+Subject: master - tests: drop delaying
+Message-ID: <201805121626.w4CGQArw007889@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=86c8f0f01f07a1516f5a3f20e2a3c282b52c25dc
-Commit:        86c8f0f01f07a1516f5a3f20e2a3c282b52c25dc
-Parent:        7362ed68be4a292fd51ad32fd8960c1c8ef765d9
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=ec0f5c2bf67df53072196f1630f3407501384397
+Commit:        ec0f5c2bf67df53072196f1630f3407501384397
+Parent:        86c8f0f01f07a1516f5a3f20e2a3c282b52c25dc
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Mon May 7 13:09:46 2018 +0200
+AuthorDate:    Sat May 12 18:04:06 2018 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Sat May 12 17:48:31 2018 +0200
+CommitterDate: Sat May 12 18:05:50 2018 +0200
 
-tests: using throttling
+tests: drop delaying
 
+Here seem delaying dev has no use.
 ---
- test/shell/pvmove-abort-all.sh |   18 ++++++++----------
- test/shell/pvmove-abort.sh     |   18 ++++++++----------
- 2 files changed, 16 insertions(+), 20 deletions(-)
+ test/shell/mirror-names.sh |   16 ++--------------
+ 1 files changed, 2 insertions(+), 14 deletions(-)
 
-diff --git a/test/shell/pvmove-abort-all.sh b/test/shell/pvmove-abort-all.sh
-index 7cb549f..5a86a37 100644
---- a/test/shell/pvmove-abort-all.sh
-+++ b/test/shell/pvmove-abort-all.sh
-@@ -20,18 +20,19 @@ export DM_ABORT_ON_INTERNAL_ERRORS=0
+diff --git a/test/shell/mirror-names.sh b/test/shell/mirror-names.sh
+index 899d63d..a3bc80f 100644
+--- a/test/shell/mirror-names.sh
++++ b/test/shell/mirror-names.sh
+@@ -51,18 +51,6 @@ lv_convert_lv_() {
+ 	get lv_field "$1" convert_lv | tr -d []
+ }
  
- . lib/inittest
- 
-+aux lvmconf 'activation/raid_region_size = 16'
-+
- aux prepare_pvs 6 60
- 
--vgcreate -s 128k $vg "$dev1" "$dev2"
-+vgcreate -s 512k $vg "$dev1" "$dev2"
- pvcreate --metadatacopies 0 "$dev3"
- vgextend $vg "$dev3"
--vgcreate -s 128k $vg1 "$dev4" "$dev5"
-+vgcreate -s 512k $vg1 "$dev4" "$dev5"
- pvcreate --metadatacopies 0 "$dev6"
- vgextend $vg1 "$dev6"
- 
--# Slowdown writes
--aux delay_dev "$dev3" 0 800 "$(get first_extent_sector "$dev3"):"
--aux delay_dev "$dev6" 0 800 "$(get first_extent_sector "$dev6"):"
-+# Throttle mirroring
-+aux throttle_dm_mirror
- 
- for mode in "--atomic" "" ;
- do
-@@ -48,7 +49,6 @@ cmd1=(pvmove -i1 $backgroundarg $mode "$dev1" "$dev3")
- cmd2=(pvmove -i1 $backgroundarg $mode "$dev2" "$dev3")
- cmd3=(pvmove -i1 $backgroundarg $mode -n $vg1/$lv1 "$dev4" "$dev6")
- 
--if test -e HAVE_DM_DELAY; then
- 
- if test -z "$backgroundarg" ; then
- 	"${cmd1[@]}" &
-@@ -64,8 +64,6 @@ else
- 	LVM_TEST_TAG="kill_me_$PREFIX" "${cmd3[@]}"
- fi
- 
--fi
+-enable_devs() {
+-	for i in "$dev1" "$dev2" "$dev3" "$dev4" "$dev5" ; do
+-		aux enable_dev "$i"
+-	done
+-}
 -
- # test removal of all pvmove LVs
- pvmove --abort
- 
-@@ -82,7 +80,7 @@ aux kill_tagged_processes
- done
- done
- 
--# Restore delayed device back
--aux enable_dev "$dev3" "$dev6"
-+# Restore throttling
-+aux restore_dm_mirror
- 
- vgremove -ff $vg $vg1
-diff --git a/test/shell/pvmove-abort.sh b/test/shell/pvmove-abort.sh
-index 0b8960b..5ca993b 100644
---- a/test/shell/pvmove-abort.sh
-+++ b/test/shell/pvmove-abort.sh
-@@ -16,14 +16,16 @@ SKIP_WITH_LVMLOCKD=1
- 
- . lib/inittest
- 
-+aux lvmconf 'activation/raid_region_size = 16'
-+
- aux prepare_pvs 3 60
- 
--vgcreate -s 128k $vg "$dev1" "$dev2"
-+vgcreate -s 512k $vg "$dev1" "$dev2"
- pvcreate --metadatacopies 0 "$dev3"
- vgextend $vg "$dev3"
- 
--# Slowdown read/writes
--aux delay_dev "$dev3" 0 800 "$(get first_extent_sector "$dev3"):"
-+# Throttle mirroring
-+aux throttle_dm_mirror
- 
- for mode in "--atomic" "" ;
- do
-@@ -32,13 +34,11 @@ do
- 
- # Create multisegment LV
- lvcreate -an -Zn -l30 -n $lv1 $vg "$dev1"
--lvcreate -an -Zn -l30 -n $lv2 $vg "$dev2"
-+lvcreate -an -Zn -l40 -n $lv2 $vg "$dev2"
- 
- cmd1=(pvmove -i1 $backgroundarg $mode "$dev1" "$dev3")
- cmd2=(pvmove -i1 $backgroundarg $mode "$dev2" "$dev3")
- 
--if test -e HAVE_DM_DELAY; then
+-delay_devs() {
+-	for i in "$dev1" "$dev2" "$dev3" "$dev4" "$dev5" ; do
+-		aux delay_dev "$i" 0 1000 "$(get first_extent_sector "$i"):"
+-	done
+-}
 -
- if test -z "$backgroundarg" ; then
- 	"${cmd1[@]}" &
- 	aux wait_pvmove_lv_ready "$vg-pvmove0"
-@@ -57,8 +57,6 @@ get lv_field $vg name -a | tee out
- not grep -E "^\[?pvmove0" out
- grep -E "^\[?pvmove1" out
+ # ---------------------------------------------------------------------
+ # Common environment setup/cleanup for each sub testcases
  
--fi
--
- # remove any remaining pvmoves in progress
- pvmove --abort
+@@ -122,14 +110,14 @@ check_and_cleanup_lvs_
  
-@@ -69,7 +67,7 @@ aux kill_tagged_processes
- done
- done
+ #COMM "converting mirror names is ${lv1}_mimagetmp_2"
+ lvcreate -aey -l2 --type mirror -m1 -n $lv1 $vg
+-delay_devs
++# Use large enough polling interval so mirror is keeping mimagetmp
+ LVM_TEST_TAG="kill_me_$PREFIX" lvconvert -m+1 -i+40 -b $vg/$lv1
+ convlv=$(lv_convert_lv_ $vg/$lv1)
+ test "$convlv" = "${lv1}_mimagetmp_2"
+ lv_devices_ $vg/$lv1 $convlv ${lv1}_mimage_2
+ lv_devices_ $vg/$convlv ${lv1}_mimage_0 ${lv1}_mimage_1
+ lv_mirror_log_ $vg/$convlv ${lv1}_mlog
+-enable_devs
++check lv_exists $vg ${lv1}_mimagetmp_2
  
--# Restore delayed device back
--aux enable_dev "$dev3"
-+# Restore throttling
-+aux restore_dm_mirror
- 
- vgremove -ff $vg
+ #COMM "mirror log name after re-adding is ${lv1}_mlog"
+ lvconvert -f --mirrorlog core $vg/$lv1
 
 
