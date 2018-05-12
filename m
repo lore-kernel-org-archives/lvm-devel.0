@@ -1,76 +1,46 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Sat, 12 May 2018 12:25:54 -0400
-Subject: master - tests: use throttle_dm_mirror
-Message-ID: <201805121625.w4CGPsKD007849@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Sat, 12 May 2018 12:26:00 -0400
+Subject: master - tests: move device discard
+Message-ID: <201805121626.w4CGQ01L007866@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=f5da325d701082edab568160824c9c8c7289cf15
-Commit:        f5da325d701082edab568160824c9c8c7289cf15
-Parent:        172d8fb3554c3c71ce4ba0d8efa65dce62a877c3
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=7362ed68be4a292fd51ad32fd8960c1c8ef765d9
+Commit:        7362ed68be4a292fd51ad32fd8960c1c8ef765d9
+Parent:        f5da325d701082edab568160824c9c8c7289cf15
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Mon May 7 11:45:11 2018 +0200
+AuthorDate:    Mon May 7 11:56:00 2018 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Sat May 12 17:48:31 2018 +0200
 
-tests: use throttle_dm_mirror
+tests: move device discard
 
-In this case it's better to use throttling of mirror sync,
-that delay everything with dm_delay.
 ---
- test/shell/lvconvert-mirror.sh |   11 ++++++++---
- 1 files changed, 8 insertions(+), 3 deletions(-)
+ test/lib/aux.sh |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
 
-diff --git a/test/shell/lvconvert-mirror.sh b/test/shell/lvconvert-mirror.sh
-index a45e6e7..72a3978 100644
---- a/test/shell/lvconvert-mirror.sh
-+++ b/test/shell/lvconvert-mirror.sh
-@@ -17,7 +17,7 @@ export LVM_TEST_LVMETAD_DEBUG_OPTS=${LVM_TEST_LVMETAD_DEBUG_OPTS-}
+diff --git a/test/lib/aux.sh b/test/lib/aux.sh
+index 853a78f..877934c 100644
+--- a/test/lib/aux.sh
++++ b/test/lib/aux.sh
+@@ -867,6 +867,7 @@ prepare_devs() {
+ 	prepare_backing_dev $(( n * devsize ))
+ 	# shift start of PV devices on /dev/loopXX by 1M
+ 	not diff LOOP BACKING_DEV >/dev/null 2>&1 || shift=2048
++	blkdiscard "$BACKING_DEV" 2>/dev/null || true
+ 	echo -n "## preparing $n devices..."
  
- . lib/inittest
+ 	local size=$(( devsize * 2048 )) # sectors
+@@ -894,7 +895,6 @@ prepare_devs() {
  
--aux prepare_pvs 5 100
-+aux prepare_pvs 5
- get_devs
- 
- # proper DEVRANGE needs to be set according to extent size
-@@ -319,10 +319,12 @@ fi
- #
- aux zero_dev "$dev2" $(get first_extent_sector "$dev2"):
- aux zero_dev "$dev4" $(get first_extent_sector "$dev4"):
-+aux throttle_dm_mirror
- 
- # Use large enough mirror that takes time to sychronize with small regionsize
--lvcreate -aey -L80 -Zn -Wn --type mirror --regionsize 16k -m2 -n $lv1 $vg "$dev1" "$dev2" "$dev4" "$dev3:$DEVRANGE"
-+lvcreate -aey -L20 -Zn -Wn --type mirror --regionsize 16k -m2 -n $lv1 $vg "$dev1" "$dev2" "$dev4" "$dev3:$DEVRANGE"
- not lvconvert -m-1 $vg/$lv1 "$dev1" 2>&1 | tee out
-+aux restore_dm_mirror
- grep "not in-sync" out
- 
- lvconvert $vg/$lv1 # wait
-@@ -334,9 +336,11 @@ check linear $vg $lv1
- check lv_on $vg $lv1 "$dev4"
- lvremove -ff $vg
- 
-+
-+aux throttle_dm_mirror
- # No parallel lvconverts on a single LV please
- # Use big enough mirror size and small regionsize to run on all test machines succesfully
--lvcreate -aey -Zn -Wn -L80 --type mirror --regionsize 16k -m1 -n $lv1 $vg "$dev1" "$dev2" "$dev3:0-8"
-+lvcreate -aey -Zn -Wn -L20 --type mirror --regionsize 16k -m1 -n $lv1 $vg "$dev1" "$dev2" "$dev3:0-8"
- check mirror $vg $lv1
- check mirror_legs $vg $lv1 2
- 
-@@ -345,6 +349,7 @@ LVM_TEST_TAG="kill_me_$PREFIX" lvconvert -m+1 -b $vg/$lv1 "$dev4"
- 
- # Next convert should fail b/c we can't have 2 at once
- not lvconvert -m+1 $vg/$lv1 "$dev5"  2>&1 | tee out
-+aux restore_dm_mirror
- grep "is already being converted" out
- 
- lvconvert $vg/$lv1 # wait
+ 	# non-ephemeral devices need to be cleared between tests
+ 	test -f LOOP -o -f RAMDISK || for d in "${DEVICES[@]}"; do
+-		blkdiscard "$d" 2>/dev/null || true
+ 		# ensure disk header is always zeroed
+ 		dd if=/dev/zero of="$d" bs=32k count=1
+ 		wipefs -a "$d" 2>/dev/null || true
 
 
