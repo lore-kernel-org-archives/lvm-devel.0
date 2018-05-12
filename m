@@ -1,40 +1,55 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Sat, 12 May 2018 12:25:39 -0400
-Subject: master - tests: raise min size for XFS
-Message-ID: <201805121625.w4CGPdqa007788@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Sat, 12 May 2018 12:25:43 -0400
+Subject: master - tests: crypt test cannot run on ramdisk
+Message-ID: <201805121625.w4CGPhDK007802@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=e2be14e2d5fc3136257034a8bc194d2127a7c2d3
-Commit:        e2be14e2d5fc3136257034a8bc194d2127a7c2d3
-Parent:        6740c78e838b0b2322097de307fb41f1eeb60839
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=842b3074b7b186815ee8a200598f2e97f08c54af
+Commit:        842b3074b7b186815ee8a200598f2e97f08c54af
+Parent:        6f48741062710fec2eb5c58dd8d4364194bdbf44
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Sat May 12 15:56:46 2018 +0200
+AuthorDate:    Sat May 12 16:00:55 2018 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Sat May 12 17:48:31 2018 +0200
 
-tests: raise min size for XFS
+tests: crypt test cannot run on ramdisk
 
-Seems XFS now requires at least 1605 blocks.
+This test can't use brd (ramdisk) as backend since for some
+weird reason  lsblk is not listing these device.
+
+TODO: test could be probably rewritten to avoid using lsblk somehow??
 ---
- test/shell/fsadm-renamed.sh |    2 +-
- 1 files changed, 1 insertions(+), 1 deletions(-)
+ test/shell/fsadm-crypt.sh |    7 ++++++-
+ 1 files changed, 6 insertions(+), 1 deletions(-)
 
-diff --git a/test/shell/fsadm-renamed.sh b/test/shell/fsadm-renamed.sh
-index e88846a..beec6be 100644
---- a/test/shell/fsadm-renamed.sh
-+++ b/test/shell/fsadm-renamed.sh
-@@ -70,7 +70,7 @@ lvcreate -n $lv1 -L20M $vg
+diff --git a/test/shell/fsadm-crypt.sh b/test/shell/fsadm-crypt.sh
+index 634fef3..68959e3 100644
+--- a/test/shell/fsadm-crypt.sh
++++ b/test/shell/fsadm-crypt.sh
+@@ -14,6 +14,10 @@ test_description='Exercise fsadm filesystem resize on crypt devices'
+ SKIP_WITH_LVMLOCKD=1
+ SKIP_WITH_LVMPOLLD=1
  
- case "$i" in
- *ext3)		MKFS_ARGS="-b1024 -j" ;;
--*xfs)		MKFS_ARGS="-l internal,size=1000b -f" ;;
-+*xfs)		MKFS_ARGS="-l internal,size=1700b -f" ;;
- *reiserfs)	MKFS_ARGS="-s 513 -f" ;;
- esac
++# FIXME: cannot use brd (ramdisk)  - lsblk is NOT listing it
++# so lsblk usage should be replaced
++export LVM_TEST_PREFER_BRD=0
++
+ . lib/inittest
+ 
+ aux prepare_vg 1 300
+@@ -119,7 +123,8 @@ check_missing()
+ }
+ 
+ get_crypt_kname() {
+-	lsblk -r -n -o KNAME,NAME | grep "$1" | cut -d ' ' -f 1
++	lsblk -r -n -o KNAME,NAME | tee out
++	grep "$1" out | cut -d ' ' -f 1
+ }
+ 
  
 
 
