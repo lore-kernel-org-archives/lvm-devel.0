@@ -1,141 +1,112 @@
-From: David Teigland <teigland@sourceware.org>
-Date: Tue, 15 May 2018 16:19:22 -0400
-Subject: master - doc: add some performance info
-Message-ID: <201805152019.w4FKJMAN004094@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: Joe Thornber <thornber@sourceware.org>
+Date: Wed, 16 May 2018 05:14:47 -0400
+Subject: master - bcache: nr_ios_pending wasn't being incremented
+Message-ID: <201805160914.w4G9ElFS025616@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=ed799404f887339ebf8bc6ca4504c8bff6b1f491
-Commit:        ed799404f887339ebf8bc6ca4504c8bff6b1f491
-Parent:        3bbc17a6706b4ceae8a41da519d87945da27fd14
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Tue May 15 15:16:02 2018 -0500
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Tue May 15 15:17:36 2018 -0500
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=df2acbbb97dbda000053afd40d2e4a707e226b52
+Commit:        df2acbbb97dbda000053afd40d2e4a707e226b52
+Parent:        413488edc6dd077e79517e44a8d3b9a51c5138e5
+Author:        Joe Thornber <ejt@redhat.com>
+AuthorDate:    Wed May 16 10:09:17 2018 +0100
+Committer:     Joe Thornber <ejt@redhat.com>
+CommitterDate: Wed May 16 10:09:17 2018 +0100
 
-doc: add some performance info
+bcache: nr_ios_pending wasn't being incremented
 
+... but it was being decremented on completion.  Which meant
+it wrapped, and no prefetches were ever issued after the
+first completion.
 ---
- doc/lvm-disk-reading.txt |  107 ++++++++++++++++++++++++++++++++++++++++++++++
- 1 files changed, 107 insertions(+), 0 deletions(-)
+ lib/device/bcache.c  |    1 +
+ test/unit/bcache_t.c |   45 ++++++++++++++++++++++++++++++++++++++++++++-
+ 2 files changed, 45 insertions(+), 1 deletions(-)
 
-diff --git a/doc/lvm-disk-reading.txt b/doc/lvm-disk-reading.txt
-index 1255ae8..66b4467 100644
---- a/doc/lvm-disk-reading.txt
-+++ b/doc/lvm-disk-reading.txt
-@@ -229,3 +229,110 @@ It may be worthwhile to change the filters to use the udev info as a hint,
- or only use udev info for filtering in reporting commands where
- inaccuracies are not a big problem.)
+diff --git a/lib/device/bcache.c b/lib/device/bcache.c
+index 9085d87..652441f 100644
+--- a/lib/device/bcache.c
++++ b/lib/device/bcache.c
+@@ -667,6 +667,7 @@ static void _issue_low_level(struct block *b, enum dir d)
  
+ 	b->io_dir = d;
+ 	_set_flags(b, BF_IO_PENDING);
++	cache->nr_io_pending++;
+ 
+ 	dm_list_move(&cache->io_pending, &b->list);
+ 
+diff --git a/test/unit/bcache_t.c b/test/unit/bcache_t.c
+index e1c0e85..803a088 100644
+--- a/test/unit/bcache_t.c
++++ b/test/unit/bcache_t.c
+@@ -504,7 +504,7 @@ static void test_prefetch_issues_a_read(void *context)
+ 		_expect_read(me, fd, i);
+ 		bcache_prefetch(cache, fd, i);
+ 	}
+-
++	_no_outstanding_expectations(me);
+ 
+ 	for (i = 0; i < nr_cache_blocks; i++) {
+ 		_expect(me, E_WAIT);
+@@ -810,6 +810,47 @@ static void test_invalidate_held_block(void *context)
+ 	bcache_put(b);
+ }
+ 
++//----------------------------------------------------------------
++// Chasing a bug reported by dct
 +
++static void _cycle(struct fixture *f, unsigned nr_cache_blocks)
++{
++	struct mock_engine *me = f->me;
++	struct bcache *cache = f->cache;
 +
-+I/O Performance
-+---------------
++	unsigned i;
++	struct block *b;
 +
-+. 400 loop devices used as PVs
-+. 40 VGs each with 10 PVs
-+. each VG has one active LV
-+. each of the 10 PVs in vg0 has an artificial 100 ms read delay
-+. read/write/io_submit are system call counts using strace
-+. old is lvm 2.2.175
-+. new is lvm 2.2.178 (shortly before)
++	for (i = 0; i < nr_cache_blocks; i++) {
++		// prefetch should not wait
++		_expect_read(me, i, 0);
++		bcache_prefetch(cache, i, 0);
++	}
 +
++	// This double checks the reads occur in response to the prefetch
++	_no_outstanding_expectations(me);
 +
-+Command: pvs
-+------------
-+old: 0m17.422s
-+new: 0m0.331s
++	for (i = 0; i < nr_cache_blocks; i++) {
++		_expect(me, E_WAIT);
++		T_ASSERT(bcache_get(cache, i, 0, 0, &b));
++		bcache_put(b);
++	}
 +
-+old: read 7773 write 497
-+new: read 2807 write 495 io_submit 448
++	_no_outstanding_expectations(me);
++}
 +
++static void test_concurrent_reads_after_invalidate(void *context)
++{
++	struct fixture *f = context;
++	unsigned i, nr_cache_blocks = 16;
 +
-+Command: vgs
-+------------
-+old: 0m20.383s
-+new: 0m0.325s
-+
-+old: read 10684 write 129
-+new: read  2807 write 129 io_submit 448
-+
-+
-+Command: vgck vg0
-+-----------------
-+old: 0m16.212s
-+new: 0m1.290s
-+
-+old: read 6372 write 4
-+new: read 2807 write 4 io_submit 458
-+
-+
-+Command: lvcreate -n test -l1 -an vg0
-+-------------------------------------
-+old: 0m29.271s
-+new: 0m1.351s
-+
-+old: read 6503 write 39
-+new: read 2808 write 9 io_submit 488
-+
-+
-+Command: lvremove vg0/test
-+--------------------------
-+old: 0m29.262s
-+new: 0m1.348s
-+
-+old: read 6502 write 36
-+new: read 2807 write 6 io_submit 488
-+
-+
-+io_submit sources
-+-----------------
-+
-+vgs:
-+  reads:
-+  - 400 for each PV
-+  - 40 for each LV
-+  - 8 for other devs on the system
-+
-+vgck vg0:
-+  reads:
-+  - 400 for each PV
-+  - 40 for each LV
-+  - 10 for each PV in vg0 (rescan)
-+  - 8 for other devs on the system
-+
-+lvcreate -n test -l1 -an vg0
-+  reads:
-+  - 400 for each PV
-+  - 40 for each LV
-+  - 10 for each PV in vg0 (rescan)
-+  - 8 for other devs on the system
-+  writes:
-+  - 10 for metadata on each PV in vg0
-+  - 10 for precommit on each PV in vg0
-+  - 10 for commit on each PV in vg0
-+
-+
-+
-+With lvmetad
-+------------
-+
-+Command: pvs
-+------------
-+old: 0m5.405s
-+new: 0m1.404s
-+
-+Command: vgs
-+------------
-+old: 0m0.222s
-+new: 0m0.223s
-+
-+Command: lvcreate -n test -l1 -an vg0
-+-------------------------------------
-+old: 0m10.128s
-+new: 0m1.137s
-+
-+
++	_cycle(f, nr_cache_blocks);
++	fprintf(stderr, "cycle 1 complete\n");
++	for (i = 0; i < nr_cache_blocks; i++)
++        	bcache_invalidate_fd(f->cache, i);
++        _cycle(f, nr_cache_blocks);
++	fprintf(stderr, "cycle 2 complete\n");
++}
+ 
+ /*----------------------------------------------------------------
+  * Top level
+@@ -859,6 +900,8 @@ static struct test_suite *_small_tests(void)
+ 	T("invalidate-read-error", "invalidate a block that errored", test_invalidate_after_read_error);
+ 	T("invalidate-write-error", "invalidate a block that errored", test_invalidate_after_write_error);
+ 	T("invalidate-fails-in-held", "invalidating a held block fails", test_invalidate_held_block);
++	T("concurrent-reads-after-invalidate", "prefetch should still issue concurrent reads after invalidate",
++          test_concurrent_reads_after_invalidate);
+ 
+ 	return ts;
+ }
 
 
