@@ -1,73 +1,92 @@
-From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Thu, 17 May 2018 04:48:00 -0400
-Subject: master - bcache: don't use PAGE_SIZE compile const
-Message-ID: <201805170848.w4H8m0Or012931@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: Joe Thornber <thornber@sourceware.org>
+Date: Thu, 17 May 2018 05:06:02 -0400
+Subject: master - scripts/code-stats.rb: count files better, handle bad utf8
+Message-ID: <201805170906.w4H962Q6015844@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=c6ca81a38d7012ec9d18a9ea00eff321ff2c47d0
-Commit:        c6ca81a38d7012ec9d18a9ea00eff321ff2c47d0
-Parent:        8c453e2e5e5a660b1923629365c8bb87ef017a8f
-Author:        Alex Benn??e <alex.bennee@linaro.org>
-AuthorDate:    Wed May 16 21:19:03 2018 +0100
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Thu May 17 10:38:16 2018 +0200
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=3417d6229dcdcb2e1c9595026a8f97d10f25804a
+Commit:        3417d6229dcdcb2e1c9595026a8f97d10f25804a
+Parent:        64dd656ef7943f9991c83802dfa5f762c902e1fb
+Author:        Joe Thornber <ejt@redhat.com>
+AuthorDate:    Thu May 17 09:52:13 2018 +0100
+Committer:     Joe Thornber <ejt@redhat.com>
+CommitterDate: Thu May 17 09:52:13 2018 +0100
 
-bcache: don't use PAGE_SIZE compile const
+scripts/code-stats.rb: count files better, handle bad utf8
 
-PAGE_SIZE is not a compile time constant. Use sysconf instead like
-elsewhere in the code.
-
-Signed-off-by: Alex Benn??e <alex.bennee@linaro.org>
 ---
- lib/device/bcache.c |    9 ++++++---
- 1 files changed, 6 insertions(+), 3 deletions(-)
+ scripts/code-stats.rb |   28 +++++++++++++++++++---------
+ 1 files changed, 19 insertions(+), 9 deletions(-)
 
-diff --git a/lib/device/bcache.c b/lib/device/bcache.c
-index 30df54a..3f5a45e 100644
---- a/lib/device/bcache.c
-+++ b/lib/device/bcache.c
-@@ -162,8 +162,9 @@ static bool _async_issue(struct io_engine *ioe, enum dir d, int fd,
- 	struct iocb *cb_array[1];
- 	struct control_block *cb;
- 	struct async_engine *e = _to_async(ioe);
-+	long pgsize = sysconf(_SC_PAGESIZE);
+diff --git a/scripts/code-stats.rb b/scripts/code-stats.rb
+index e87de26..d73343b 100755
+--- a/scripts/code-stats.rb
++++ b/scripts/code-stats.rb
+@@ -2,21 +2,22 @@
  
--	if (((uintptr_t) data) & (PAGE_SIZE - 1)) {
-+	if (((uintptr_t) data) & (pgsize - 1)) {
- 		log_warn("misaligned data buffer");
- 		return false;
- 	}
-@@ -547,8 +548,9 @@ static bool _init_free_list(struct bcache *cache, unsigned count)
- {
- 	unsigned i;
- 	size_t block_size = cache->block_sectors << SECTOR_SHIFT;
-+	long pgsize = sysconf(_SC_PAGESIZE);
- 	unsigned char *data =
--		(unsigned char *) _alloc_aligned(count * block_size, PAGE_SIZE);
-+		(unsigned char *) _alloc_aligned(count * block_size, pgsize);
+ require 'date'
+ require 'pp'
++require 'set'
  
- 	/* Allocate the data for each block.  We page align the data. */
- 	if (!data)
-@@ -899,6 +901,7 @@ struct bcache *bcache_create(sector_t block_sectors, unsigned nr_cache_blocks,
- {
- 	struct bcache *cache;
- 	unsigned max_io = engine->max_io(engine);
-+	long pgsize = sysconf(_SC_PAGESIZE);
+ REGEX = /(\w+)\s+'(.+)'\s+(.*)/
  
- 	if (!nr_cache_blocks) {
- 		log_warn("bcache must have at least one cache block");
-@@ -910,7 +913,7 @@ struct bcache *bcache_create(sector_t block_sectors, unsigned nr_cache_blocks,
- 		return NULL;
- 	}
+ Commit = Struct.new(:hash, :time, :author, :stats)
+-CommitStats = Struct.new(:nr_files, :nr_added, :nr_deleted)
++CommitStats = Struct.new(:files, :nr_added, :nr_deleted)
  
--	if (block_sectors & ((PAGE_SIZE >> SECTOR_SHIFT) - 1)) {
-+	if (block_sectors & ((pgsize >> SECTOR_SHIFT) - 1)) {
- 		log_warn("bcache block size must be a multiple of page size");
- 		return NULL;
- 	}
+ def calc_stats(diff)
+-        changed = 0
++        changed = Set.new
+         added = 0
+         deleted = 0
+         
+         diff.lines.each do |l|
+-        	case l
+-                when /^\+\+\+/
+-                        changed = changed + 1
++        	case l.encode('UTF-8', 'binary', invalid: :replace, undef: :replace, replace: '')
++                when /^\+\+\+ (\S+)/
++                        changed << $1
+                 when /^\+/
+                         added = added + 1
+                 when /^---/
+@@ -61,20 +62,29 @@ def pad(str, col)
+         str + (' ' * (col - str.size))
+ end
+ 
++def code_delta(s)
++        s.nr_added + s.nr_deleted
++end
++
++def cmp_stats(lhs, rhs)
++        code_delta(rhs) <=> code_delta(lhs)
++end
++
+ #-----------------------------------
+ 
+ commits = select_commits(&since(DateTime.now - 14))
+ 
+-authors = Hash.new {|hash, key| hash[key] = CommitStats.new(0, 0, 0)}
++authors = Hash.new {|hash, key| hash[key] = CommitStats.new(Set.new, 0, 0)}
+ 
+ commits.each do |c|
+ 	author_stats = authors[c.author]
+-	author_stats.nr_files = author_stats.nr_files + c.stats.nr_files
++	author_stats.files.merge(c.stats.files)
+ 	author_stats.nr_added = author_stats.nr_added + c.stats.nr_added
+ 	author_stats.nr_deleted = author_stats.nr_deleted + c.stats.nr_deleted
+ end
+ 
+ puts "#{pad("Author", 20)}\tChanged files\tInsertions\tDeletions"
+-authors.each_pair do |k, v|
+-	puts "#{pad(k, 20)}\t#{v.nr_files}\t\t#{v.nr_added}\t\t#{v.nr_deleted}"
++authors.keys.sort {|a1, a2| cmp_stats(authors[a1], authors[a2])}.each do |k|
++	v = authors[k]
++	puts "#{pad(k, 20)}\t#{v.files.size}\t\t#{v.nr_added}\t\t#{v.nr_deleted}"
+ end
 
 
