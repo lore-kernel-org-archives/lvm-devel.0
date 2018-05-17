@@ -1,7 +1,7 @@
-From: Heinz Mauelshagen <heinzm@sourceware.org>
-Date: Thu, 17 May 2018 08:42:20 -0400
-Subject: master - tests: fix kernal_at_least argument in aux.sh
-Message-ID: <201805171242.w4HCgK3t026246@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: David Teigland <teigland@sourceware.org>
+Date: Thu, 17 May 2018 12:57:20 -0400
+Subject: 2018-05-17-put-format1-and-pool-back - tests: fix kernal_at_least argument in aux.sh
+Message-ID: <201805171657.w4HGvKPT015932@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
