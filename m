@@ -1,82 +1,60 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Fri, 18 May 2018 10:27:57 -0400
-Subject: master - build: set clean vars earlier
-Message-ID: <201805181427.w4IERvos012355@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Fri, 18 May 2018 10:27:58 -0400
+Subject: master - python: use python3 paths directly
+Message-ID: <201805181427.w4IERwgw012360@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=5b86b0e3dca804fce7c3e6adcd636c0a6d341a9b
-Commit:        5b86b0e3dca804fce7c3e6adcd636c0a6d341a9b
-Parent:        f7435cd8c7bf4c245c9efabbae1274989d2e49ed
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=43fb32e761a2c4d1ebaec5eff9d9f0f372563cf9
+Commit:        43fb32e761a2c4d1ebaec5eff9d9f0f372563cf9
+Parent:        5b86b0e3dca804fce7c3e6adcd636c0a6d341a9b
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri May 18 16:15:25 2018 +0200
+AuthorDate:    Thu May 17 23:03:36 2018 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Fri May 18 16:25:44 2018 +0200
 
-build: set clean vars earlier
+python: use python3 paths directly
 
-For better cleaning of test dirs.
+Do not use /usr/bin/env for path of python3 as this is seen
+as 'unwanted' and should be avoided.
 ---
- daemons/lvmdbusd/Makefile.in |    2 ++
- test/Makefile.in             |   23 ++++++++++++-----------
- 2 files changed, 14 insertions(+), 11 deletions(-)
+ test/dbus/lvmdbustest.py   |    2 +-
+ test/dbus/testlib.py       |    2 +-
+ test/dbus/validatestate.py |    2 +-
+ 3 files changed, 3 insertions(+), 3 deletions(-)
 
-diff --git a/daemons/lvmdbusd/Makefile.in b/daemons/lvmdbusd/Makefile.in
-index 7cd7724..7b62e7e 100644
---- a/daemons/lvmdbusd/Makefile.in
-+++ b/daemons/lvmdbusd/Makefile.in
-@@ -44,6 +44,8 @@ LVMDBUS_BUILDDIR_FILES = \
+diff --git a/test/dbus/lvmdbustest.py b/test/dbus/lvmdbustest.py
+index 0914b7a..bab9986 100755
+--- a/test/dbus/lvmdbustest.py
++++ b/test/dbus/lvmdbustest.py
+@@ -1,4 +1,4 @@
+-#!/usr/bin/env python3
++#!/usr/bin/python3
  
- LVMDBUSD = lvmdbusd
+ # Copyright (C) 2015-2016 Red Hat, Inc. All rights reserved.
+ #
+diff --git a/test/dbus/testlib.py b/test/dbus/testlib.py
+index 34ff33a..08f612c 100644
+--- a/test/dbus/testlib.py
++++ b/test/dbus/testlib.py
+@@ -1,4 +1,4 @@
+-#!/usr/bin/env python3
++#!/usr/bin/python3
  
-+CLEAN_DIRS += __pycache__
-+
- include $(top_builddir)/make.tmpl
+ # Copyright (C) 2015-2016 Red Hat, Inc. All rights reserved.
+ #
+diff --git a/test/dbus/validatestate.py b/test/dbus/validatestate.py
+index faa2083..ae999ad 100755
+--- a/test/dbus/validatestate.py
++++ b/test/dbus/validatestate.py
+@@ -1,4 +1,4 @@
+-#!/usr/bin/env python3
++#!/usr/bin/python3
  
- .PHONY: install_lvmdbusd
-diff --git a/test/Makefile.in b/test/Makefile.in
-index 407babd..f6345a5 100644
---- a/test/Makefile.in
-+++ b/test/Makefile.in
-@@ -32,6 +32,18 @@ SOURCES = lib/not.c lib/harness.c
- CXXSOURCES = lib/runner.cpp
- CXXFLAGS += $(EXTRA_EXEC_CFLAGS)
- 
-+CLEAN_DIRS += dbus/__pycache__ $(LVM_TEST_RESULTS)
-+ifneq (.,$(firstword $(srcdir)))
-+CLEAN_TARGETS += $(RUN_BASE) $(addprefix lib/,$(LIB_LVMLOCKD_CONF))
-+endif
-+
-+CLEAN_TARGETS += .lib-dir-stamp .tests-stamp $(LIB) $(addprefix lib/,\
-+	$(CMDS) clvmd dmeventd dmsetup dmstats lvmetad lvmpolld \
-+	harness lvmdbusd.profile thin-performance.profile fsadm \
-+	dm-version-expected version-expected \
-+	paths-installed paths-installed-t paths-common paths-common-t)
-+
-+
- include $(top_builddir)/make.tmpl
- 
- T ?= .
-@@ -352,17 +364,6 @@ LIB = $(addprefix lib/, $(LIB_SHARED) $(LIB_LOCAL) $(LIB_NOT) $(LIB_LINK_NOT) $(
- 		$(LN_S) -f $(abs_top_srcdir)/test/lib/$$i lib/; done
- 	touch $@
- 
--CLEAN_DIRS += $(LVM_TEST_RESULTS)
--ifneq (.,$(firstword $(srcdir)))
--CLEAN_TARGETS += $(RUN_BASE) $(addprefix lib/,$(LIB_LVMLOCKD_CONF))
--endif
--
--CLEAN_TARGETS += .lib-dir-stamp .tests-stamp $(LIB) $(addprefix lib/,\
--	$(CMDS) clvmd dmeventd dmsetup dmstats lvmetad lvmpolld \
--	harness lvmdbusd.profile thin-performance.profile fsadm \
--	dm-version-expected version-expected \
--	paths-installed paths-installed-t paths-common paths-common-t)
--
- Makefile: $(srcdir)/Makefile.in $(top_builddir)/config.status
- 	cd $(top_builddir) && $(SHELL) ./config.status $(subdir)/$@
- 
+ # Copyright (C) 2015-2016 Red Hat, Inc. All rights reserved.
+ #
 
 
