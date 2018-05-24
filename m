@@ -1,42 +1,39 @@
 From: Joe Thornber <thornber@sourceware.org>
-Date: Tue, 29 May 2018 13:16:13 -0400
-Subject: master - Merge branch '2018-05-29-radix-tree-iterate' into 2018-05-23-radix-tree-remove
-Message-ID: <201805291716.w4THGDOk023699@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Thu, 24 May 2018 07:26:54 -0400
+Subject: master - release note: typo
+Message-ID: <201805241126.w4OBQsd8019276@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=0181c77e3fe0fd4c82b10e283d4852a09ff78452
-Commit:        0181c77e3fe0fd4c82b10e283d4852a09ff78452
-Parent:        6cd798f556b34c4c4171d536298d8f718f8aef62 033df741e2e771b3abda3e190ed9c359d579ce4a
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=fab063cfcbbe2e3801ba2af7d061059eb37a7eaa
+Commit:        fab063cfcbbe2e3801ba2af7d061059eb37a7eaa
+Parent:        9337ff48bcf5ed60a06c8cea8daafc855653e493
 Author:        Joe Thornber <ejt@redhat.com>
-AuthorDate:    Tue May 29 11:04:32 2018 +0100
+AuthorDate:    Thu May 24 12:26:34 2018 +0100
 Committer:     Joe Thornber <ejt@redhat.com>
-CommitterDate: Tue May 29 11:04:32 2018 +0100
+CommitterDate: Thu May 24 12:26:34 2018 +0100
 
-Merge branch '2018-05-29-radix-tree-iterate' into 2018-05-23-radix-tree-remove
+release note: typo
 
+---
+ doc/release-notes/2.02.178 |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
 
- .gitignore                          |   52 +++++++++++++++-
- VERSION                             |    2 +-
- VERSION_DM                          |    2 +-
- WHATS_NEW                           |   25 ++++----
- WHATS_NEW_DM                        |    7 ++-
- base/data-struct/radix-tree.c       |   10 ++-
- base/data-struct/radix-tree.h       |    7 +-
- doc/release-notes/2.02.178          |   53 ++++++++++++++++
- lib/device/dev-cache.c              |    2 +
- lib/format_text/archive.c           |    4 +-
- lib/label/label.c                   |  115 +++++++++++++++++++++++++++++++---
- man/dmeventd.8_main                 |    4 +-
- man/vgexport.8_pregen               |   19 +++++-
- test/lib/aux.sh                     |   30 ++++++---
- test/shell/lvmetad-pvscan-md.sh     |    3 +-
- test/shell/pvcreate-md-fake-hdr.sh  |   94 ++++++++++++++++++++++++++++
- test/shell/pvcreate-operation-md.sh |   17 ++++-
- test/unit/radix_tree_t.c            |    4 +-
- 18 files changed, 388 insertions(+), 62 deletions(-)
+diff --git a/doc/release-notes/2.02.178 b/doc/release-notes/2.02.178
+index 3a53eab..f986d1d 100644
+--- a/doc/release-notes/2.02.178
++++ b/doc/release-notes/2.02.178
+@@ -22,7 +22,7 @@ Almost all IO uses libaio now.
+ Rewrite label scanning
+ ----------------------
+ 
+-Dave Tiegland has reworked the label scanning and metadata reading
++Dave Teigland has reworked the label scanning and metadata reading
+ logic to minimise the amount a IOs issued.  Combined with the aio changes 
+ this can greatly improve scanning speed for some systems.
+ 
 
 
