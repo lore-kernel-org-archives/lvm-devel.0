@@ -1,69 +1,125 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Thu, 24 May 2018 05:34:55 -0400
-Subject: master - tests: correcting symlink manipulation
-Message-ID: <201805240934.w4O9Yt1W002261@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Thu, 24 May 2018 05:34:56 -0400
+Subject: master - tests: checking scanning correctness
+Message-ID: <201805240934.w4O9Yurw002270@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=89f34eaf0cc2d3916f9aa640e3a660c6c18fd3b8
-Commit:        89f34eaf0cc2d3916f9aa640e3a660c6c18fd3b8
-Parent:        76a45424a7b4d2e903bcb41b45b4f8cf131183ce
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=a90de76fd8502644e8b42daf88fe055c82fb2abc
+Commit:        a90de76fd8502644e8b42daf88fe055c82fb2abc
+Parent:        f865e1bf87b474a0795e5b38456ebbeef406351c
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu May 24 11:04:38 2018 +0200
+AuthorDate:    Thu May 24 11:21:49 2018 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Thu May 24 11:22:32 2018 +0200
 
-tests: correcting symlink manipulation
+tests: checking scanning correctness
 
-Fix symlink and add 'verbose' pvs for a while for checking
-scanning correctness.
 ---
- test/shell/pvcreate-operation-md.sh |   11 ++++++++---
- 1 files changed, 8 insertions(+), 3 deletions(-)
+ test/shell/pvcreate-md-fake-hdr.sh |   93 ++++++++++++++++++++++++++++++++++++
+ 1 files changed, 93 insertions(+), 0 deletions(-)
 
-diff --git a/test/shell/pvcreate-operation-md.sh b/test/shell/pvcreate-operation-md.sh
-index d228ada..359113d 100644
---- a/test/shell/pvcreate-operation-md.sh
-+++ b/test/shell/pvcreate-operation-md.sh
-@@ -83,7 +83,7 @@ EOF
-     if aux kernel_at_least 2 6 33 ; then
- 	# in case the system is running without devtmpfs /dev
- 	# wait here for created device node on tmpfs
--	test "$DM_DEV_DIR" != "/dev" && cp -LR "${mddev}p1" "$DM_DEV_DIR"
-+	test "$DM_DEV_DIR" = "/dev" || cp -LR "${mddev}p1" "${pvdev%/*}"
- 
- 	pvcreate --metadatasize 128k "${pvdev}p1"
- 
-@@ -100,20 +100,25 @@ EOF
- 	check pv_field "${pvdev}p1" pe_start $pv_align --units b --nosuffix
- 
- 	pvremove "${pvdev}p1"
--	test "$DM_DEV_DIR" != "/dev" && rm -f "$DM_DEV_DIR/${mddev}p1"
-+	test "$DM_DEV_DIR" = "/dev" || rm -f "${pvdev}p1"
-     fi
- fi
- 
- # Test newer topology-aware alignment detection w/ --dataalignment override
- if aux kernel_at_least 2 6 33 ; then
-     # make sure we're clean for another test
--    dd if=/dev/zero of="$mddev" bs=512 count=1
-+    dd if=/dev/zero of="$mddev" bs=512 count=4 conv=fdatasync
-+    partprobe -s "$mddev"
-     aux prepare_md_dev 0 1024 2 "$dev1" "$dev2"
-     pvdev=$(< MD_DEV_PV)
- 
-     # optimal_io_size=2097152, minimum_io_size=1048576
-     pvcreate --metadatasize 128k \
- 	--config 'devices { md_chunk_alignment=0 }' "$pvdev"
+diff --git a/test/shell/pvcreate-md-fake-hdr.sh b/test/shell/pvcreate-md-fake-hdr.sh
+new file mode 100644
+index 0000000..acd6785
+--- /dev/null
++++ b/test/shell/pvcreate-md-fake-hdr.sh
+@@ -0,0 +1,93 @@
++#!/usr/bin/env bash
 +
-+    # to see the processing of scanning
-+    pvs -vvvv
++# Copyright (C) 2018 Red Hat, Inc. All rights reserved.
++#
++# This copyrighted material is made available to anyone wishing to use,
++# modify, copy, or redistribute it subject to the terms and conditions
++# of the GNU General Public License v.2.
++#
++# You should have received a copy of the GNU General Public License
++# along with this program; if not, write to the Free Software Foundation,
++# Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 +
-     check pv_field "$pvdev" pe_start "2.00m"
- 
-     # now verify pe_start alignment override using --dataalignment
++
++# TODO: once code get fixed, add matching 'check' calls
++SKIP_WITH_LVMLOCKD=1
++SKIP_WITH_LVMPOLLD=1
++
++. lib/inittest
++
++test -f /proc/mdstat && grep -q raid1 /proc/mdstat || \
++	modprobe raid1 || skip
++
++aux lvmconf 'devices/md_component_detection = 1'
++aux extend_filter_LVMTEST "a|/dev/md|"
++
++aux prepare_devs 4
++
++vgcreate $vg "$dev3" "$dev4"
++
++# create 2 disk MD raid1 array
++# by default using metadata format 1.0 with data at the end of device
++aux prepare_md_dev 1 64 2 "$dev1" "$dev2"
++
++mddev=$(< MD_DEV)
++pvdev=$(< MD_DEV_PV)
++
++mdadm --stop "$mddev"
++
++# copy fake PV/VG header PV3 -> PV2 (which is however md raid1 leg)
++dd if="$dev3"  of="$dev2" bs=64k count=1 conv=fdatasync
++
++# remove VG on PV3 & PV4
++vgremove -f $vg
++
++sleep 3
++aux udev_wait
++# too bad  'dd' wakes up  md array reassembling
++should not mdadm --detail "$mddev"
++should not mdadm --stop "$mddev"
++sleep 3
++
++# print what  blkid thinks about each PV
++for i in "$dev1" "$dev2" "$dev3" "$dev4"
++do
++   blkid "$i"
++done
++
++# expect open count for each PV to be 0
++dmsetup info -c
++
++pvs -vvvv  "$dev2" "$dev3" || true
++
++# still expect open count for each PV to be 0
++dmsetup info -c
++
++pvs -vvvv  "$dev3" "$dev2" || true
++
++# and again we expect open count for each PV to be 0
++dmsetup info -c
++dmsetup table
++
++# even after 3 second of possible hidden raid array assembling
++sleep 3
++dmsetup info -c
++
++# if for any reason array went up - stop it again
++mdadm --detail "$mddev" && {
++	mdadm --stop "$mddev"
++	aux udev_wait
++	should not mdadm --detail "$mddev"
++}
++
++# now reassemble array from  PV1 & PV2 
++mdadm --assemble --verbose "$mddev" "$dev1" "$dev2"
++aux udev_wait
++sleep 1
++
++# and let 'fake hdr' to be fixed from master/primary leg
++mdadm --action=repair "$mddev"
++sleep 1
++
++# should be showing correctly PV3 & PV4
++pvs
 
 
