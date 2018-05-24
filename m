@@ -1,54 +1,78 @@
-From: David Teigland <teigland@sourceware.org>
-Date: Thu, 31 May 2018 10:14:49 -0400
-Subject: master - pvremove: skip lvmlockd locks for forced clearing
-Message-ID: <201805311414.w4VEEnCH031237@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: Zdenek Kabelac <zkabelac@sourceware.org>
+Date: Thu, 24 May 2018 10:03:27 -0400
+Subject: master - tests: improve usability on older systems
+Message-ID: <201805241403.w4OE3RPq012099@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=3759a1f62bf314fbe2f25b2365c1aebca8071e31
-Commit:        3759a1f62bf314fbe2f25b2365c1aebca8071e31
-Parent:        5c5e449dc5f955481f9409ff0e7ed39cf7b2e87d
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Fri May 25 15:57:17 2018 -0500
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Wed May 30 09:25:45 2018 -0500
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=3702f39ef3e1bb7811427df3fe92235890228fc0
+Commit:        3702f39ef3e1bb7811427df3fe92235890228fc0
+Parent:        d6f244599623ef547fe2c5f70e21abf4cce9a49d
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Thu May 24 15:20:22 2018 +0200
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Thu May 24 16:02:31 2018 +0200
 
-pvremove: skip lvmlockd locks for forced clearing
+tests: improve usability on older systems
 
-pvremove -ff to force clear a PV shouldn't care if
-lvmlockd locks fail.
 ---
- tools/pvremove.c |   13 +++++++++++--
- 1 files changed, 11 insertions(+), 2 deletions(-)
+ test/shell/pvcreate-md-fake-hdr.sh |   21 +++++++++++----------
+ 1 files changed, 11 insertions(+), 10 deletions(-)
 
-diff --git a/tools/pvremove.c b/tools/pvremove.c
-index 28c7b83..06a7e73 100644
---- a/tools/pvremove.c
-+++ b/tools/pvremove.c
-@@ -39,10 +39,19 @@ int pvremove(struct cmd_context *cmd, int argc, char **argv)
- 	 * (disable afterward to prevent process_each_pv from doing
- 	 * a shared global lock since it's already acquired it ex.)
- 	 */
--	if (!lockd_gl(cmd, "ex", 0))
--		return_ECMD_FAILED;
-+	if (!lockd_gl(cmd, "ex", 0)) {
-+		/* Let pvremove -ff skip locks */
-+		if (pp.force == DONT_PROMPT_OVERRIDE)
-+			log_warn("WARNING: skipping global lock in lvmlockd for force.");
-+		else
-+			return_ECMD_FAILED;
-+	}
- 	cmd->lockd_gl_disable = 1;
+diff --git a/test/shell/pvcreate-md-fake-hdr.sh b/test/shell/pvcreate-md-fake-hdr.sh
+index acd6785..50a5b14 100644
+--- a/test/shell/pvcreate-md-fake-hdr.sh
++++ b/test/shell/pvcreate-md-fake-hdr.sh
+@@ -33,7 +33,7 @@ aux prepare_md_dev 1 64 2 "$dev1" "$dev2"
  
-+	/* When forcibly clearing a PV we don't care about a VG lock. */
-+	if (pp.force == DONT_PROMPT_OVERRIDE)
-+		cmd->lockd_vg_disable = 1;
-+
- 	if (!(handle = init_processing_handle(cmd, NULL))) {
- 		log_error("Failed to initialize processing handle.");
- 		return ECMD_FAILED;
+ mddev=$(< MD_DEV)
+ pvdev=$(< MD_DEV_PV)
+-
++sleep 3
+ mdadm --stop "$mddev"
+ 
+ # copy fake PV/VG header PV3 -> PV2 (which is however md raid1 leg)
+@@ -52,7 +52,7 @@ sleep 3
+ # print what  blkid thinks about each PV
+ for i in "$dev1" "$dev2" "$dev3" "$dev4"
+ do
+-   blkid "$i"
++	blkid -c /dev/null -w /dev/null "$i" || echo "Unknown signature"
+ done
+ 
+ # expect open count for each PV to be 0
+@@ -74,20 +74,21 @@ sleep 3
+ dmsetup info -c
+ 
+ # if for any reason array went up - stop it again
+-mdadm --detail "$mddev" && {
++if mdadm --detail "$mddev" ; then
+ 	mdadm --stop "$mddev"
+ 	aux udev_wait
+ 	should not mdadm --detail "$mddev"
+-}
++fi
+ 
+-# now reassemble array from  PV1 & PV2 
++# now reassemble array from  PV1 & PV2
+ mdadm --assemble --verbose "$mddev" "$dev1" "$dev2"
+ aux udev_wait
+ sleep 1
+ 
+ # and let 'fake hdr' to be fixed from master/primary leg
+-mdadm --action=repair "$mddev"
+-sleep 1
+-
+-# should be showing correctly PV3 & PV4
+-pvs
++# (when mdadm supports repair)
++if mdadm --action=repair "$mddev" ; then
++	sleep 1
++	# should be showing correctly PV3 & PV4
++	pvs
++fi
 
 
