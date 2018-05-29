@@ -1,70 +1,38 @@
-From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 6 Sep 2011 22:35:45 -0000
-Subject: LVM2/lib/thin thin.c
-Message-ID: <20110906223545.14191.qmail@sourceware.org>
+From: Joe Thornber <thornber@sourceware.org>
+Date: Tue, 29 May 2018 13:16:10 -0400
+Subject: master - radix_tree_t: knock out some debug
+Message-ID: <201805291716.w4THGAPd023683@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2011-09-06 22:35:45
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=6cd798f556b34c4c4171d536298d8f718f8aef62
+Commit:        6cd798f556b34c4c4171d536298d8f718f8aef62
+Parent:        b7fd8ac8ebf07f7a8119aae723f40ef6f85273ce
+Author:        Joe Thornber <ejt@redhat.com>
+AuthorDate:    Wed May 23 12:54:02 2018 +0100
+Committer:     Joe Thornber <ejt@redhat.com>
+CommitterDate: Wed May 23 12:54:02 2018 +0100
 
-Modified files:
-	lib/thin       : thin.c 
+radix_tree_t: knock out some debug
 
-Log message:
-	Convert data->pool
+---
+ test/unit/radix_tree_t.c |    1 -
+ 1 files changed, 0 insertions(+), 1 deletions(-)
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/thin/thin.c.diff?cvsroot=lvm2&r1=1.9&r2=1.10
-
---- LVM2/lib/thin/thin.c	2011/09/06 19:25:44	1.9
-+++ LVM2/lib/thin/thin.c	2011/09/06 22:35:44	1.10
-@@ -48,19 +48,19 @@
- {
- 	const char *lv_name;
+diff --git a/test/unit/radix_tree_t.c b/test/unit/radix_tree_t.c
+index 9f2ba07..4cf394f 100644
+--- a/test/unit/radix_tree_t.c
++++ b/test/unit/radix_tree_t.c
+@@ -256,7 +256,6 @@ static void test_remove_prefix_keys_reversed(void *fixture)
+ 	}
  
--	if (!dm_config_get_str(sn, "data", &lv_name))
--		return SEG_LOG_ERROR("Thin pool data must be a string in");
-+	if (!dm_config_get_str(sn, "pool", &lv_name))
-+		return SEG_LOG_ERROR("Pool must be a string in");
- 
- // Use attach_pool_lv
- 	if (!(seg->pool_lv = find_lv(seg->lv->vg, lv_name)))
--		return SEG_LOG_ERROR("Unknown pool data %s in", lv_name);
-+		return SEG_LOG_ERROR("Unknown pool %s in", lv_name);
- 
- 	if (!dm_config_get_str(sn, "metadata", &lv_name))
--		return SEG_LOG_ERROR("Thin pool metadata must be a string in");
-+		return SEG_LOG_ERROR("Metadata must be a string in");
- 
- // Use attach_pool_metadata()
- 	if (!(seg->metadata_lv = find_lv(seg->lv->vg, lv_name)))
--		return SEG_LOG_ERROR("Unknown pool metadata %s in", lv_name);
-+		return SEG_LOG_ERROR("Unknown metadata %s in", lv_name);
- 
- 	if (!dm_config_get_uint64(sn, "transaction_id", &seg->transaction_id))
- 		return SEG_LOG_ERROR("Could not read transaction_id for");
-@@ -74,7 +74,7 @@
- 
- static int _thin_pool_text_export(const struct lv_segment *seg, struct formatter *f)
- {
--	outf(f, "data = \"%s\"", seg->pool_lv->name);
-+	outf(f, "pool = \"%s\"", seg->pool_lv->name);
- 	outf(f, "metadata = \"%s\"", seg->metadata_lv->name);
- 	outf(f, "transaction_id = %" PRIu64, seg->transaction_id);
- 	if (seg->zero_new_blocks)
-@@ -101,7 +101,7 @@
- 
- 	if (dm_config_has_node(sn, "origin")) {
- 		if (!dm_config_get_str(sn, "origin", &lv_name))
--			return SEG_LOG_ERROR("Thin pool origin must be a string in");
-+			return SEG_LOG_ERROR("Origin must be a string in");
- 
- 		if (!(seg->origin = find_lv(seg->lv->vg, lv_name)))
- 			return SEG_LOG_ERROR("Unknown origin %s in", lv_name);
+ 	for (i = 0; i < 32; i++) {
+-        	fprintf(stderr, "removing %u\n", i);
+         	T_ASSERT(radix_tree_remove(rt, k, k + (31 - i)));
+         	for (j = 0; j < 31 - i; j++) {
+                 	T_ASSERT(radix_tree_lookup(rt, k, k + j, &v));
 
 
