@@ -1,195 +1,179 @@
 From: Joe Thornber <thornber@sourceware.org>
-Date: Tue, 29 May 2018 13:16:19 -0400
-Subject: master - radix-tree: call the value dtr when removing an entry.
-Message-ID: <201805291716.w4THGJa6024011@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Tue, 29 May 2018 13:16:21 -0400
+Subject: master - radix-tree: radix_tree_remove_prefix()
+Message-ID: <201805291716.w4THGLoI024023@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=9b41efae826257ecfd9400d6a9d17d7e98e822dc
-Commit:        9b41efae826257ecfd9400d6a9d17d7e98e822dc
-Parent:        0181c77e3fe0fd4c82b10e283d4852a09ff78452
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=c2a8bbed3bc8c5c4f505a7cecc4db0b94e7243bc
+Commit:        c2a8bbed3bc8c5c4f505a7cecc4db0b94e7243bc
+Parent:        9b41efae826257ecfd9400d6a9d17d7e98e822dc
 Author:        Joe Thornber <ejt@redhat.com>
-AuthorDate:    Tue May 29 11:23:36 2018 +0100
+AuthorDate:    Tue May 29 13:25:59 2018 +0100
 Committer:     Joe Thornber <ejt@redhat.com>
-CommitterDate: Tue May 29 11:23:36 2018 +0100
+CommitterDate: Tue May 29 13:25:59 2018 +0100
 
-radix-tree: call the value dtr when removing an entry.
+radix-tree: radix_tree_remove_prefix()
 
 ---
- base/data-struct/radix-tree.c |   46 +++++++++++++++++++++++-----------------
- 1 files changed, 26 insertions(+), 20 deletions(-)
+ base/data-struct/radix-tree.c |   33 +++++++++++++++++++++++++--------
+ base/data-struct/radix-tree.h |    4 ++++
+ test/unit/radix_tree_t.c      |   22 ++++++++++++++++++++++
+ 3 files changed, 51 insertions(+), 8 deletions(-)
 
 diff --git a/base/data-struct/radix-tree.c b/base/data-struct/radix-tree.c
-index 3df85e7..26748e3 100644
+index 26748e3..5688dec 100644
 --- a/base/data-struct/radix-tree.c
 +++ b/base/data-struct/radix-tree.c
-@@ -95,7 +95,13 @@ struct radix_tree *radix_tree_create(radix_value_dtr dtr, void *dtr_context)
- 	return rt;
+@@ -101,9 +101,10 @@ static inline void _dtr(struct radix_tree *rt, union radix_value v)
+         	rt->dtr(rt->dtr_context, v);
  }
  
--static void _free_node(struct value v, radix_value_dtr dtr, void *context)
-+static inline void _dtr(struct radix_tree *rt, union radix_value v)
-+{
-+	if (rt->dtr)
-+        	rt->dtr(rt->dtr_context, v);
-+}
-+
-+static void _free_node(struct radix_tree *rt, struct value v)
+-static void _free_node(struct radix_tree *rt, struct value v)
++// Returns the number of values removed
++static unsigned _free_node(struct radix_tree *rt, struct value v)
  {
- 	unsigned i;
+-	unsigned i;
++	unsigned i, nr = 0;
  	struct value_chain *vc;
-@@ -110,49 +116,47 @@ static void _free_node(struct value v, radix_value_dtr dtr, void *context)
- 		break;
+ 	struct prefix_chain *pc;
+ 	struct node4 *n4;
+@@ -117,49 +118,52 @@ static void _free_node(struct radix_tree *rt, struct value v)
  
  	case VALUE:
--		if (dtr)
--			dtr(context, v.value);
-+        	_dtr(rt, v.value);
+         	_dtr(rt, v.value);
++        	nr = 1;
  		break;
  
  	case VALUE_CHAIN:
  		vc = v.value.ptr;
--		if (dtr)
--			dtr(context, vc->value);
--		_free_node(vc->child, dtr, context);
-+		_dtr(rt, vc->value);
-+		_free_node(rt, vc->child);
+ 		_dtr(rt, vc->value);
+-		_free_node(rt, vc->child);
++		nr = 1 + _free_node(rt, vc->child);
  		free(vc);
  		break;
  
  	case PREFIX_CHAIN:
  		pc = v.value.ptr;
--		_free_node(pc->child, dtr, context);
-+		_free_node(rt, pc->child);
+-		_free_node(rt, pc->child);
++		nr = _free_node(rt, pc->child);
  		free(pc);
  		break;
  
  	case NODE4:
  		n4 = (struct node4 *) v.value.ptr;
  		for (i = 0; i < n4->nr_entries; i++)
--			_free_node(n4->values[i], dtr, context);
-+			_free_node(rt, n4->values[i]);
+-			_free_node(rt, n4->values[i]);
++			nr += _free_node(rt, n4->values[i]);
  		free(n4);
  		break;
  
  	case NODE16:
  		n16 = (struct node16 *) v.value.ptr;
  		for (i = 0; i < n16->nr_entries; i++)
--			_free_node(n16->values[i], dtr, context);
-+			_free_node(rt, n16->values[i]);
+-			_free_node(rt, n16->values[i]);
++			nr += _free_node(rt, n16->values[i]);
  		free(n16);
  		break;
  
  	case NODE48:
  		n48 = (struct node48 *) v.value.ptr;
  		for (i = 0; i < n48->nr_entries; i++)
--			_free_node(n48->values[i], dtr, context);
-+			_free_node(rt, n48->values[i]);
+-			_free_node(rt, n48->values[i]);
++			nr += _free_node(rt, n48->values[i]);
  		free(n48);
  		break;
  
  	case NODE256:
  		n256 = (struct node256 *) v.value.ptr;
  		for (i = 0; i < 256; i++)
--			_free_node(n256->values[i], dtr, context);
-+			_free_node(rt, n256->values[i]);
+-			_free_node(rt, n256->values[i]);
++			nr += _free_node(rt, n256->values[i]);
  		free(n256);
  		break;
  	}
-@@ -160,7 +164,7 @@ static void _free_node(struct value v, radix_value_dtr dtr, void *context)
++
++	return nr;
+ }
  
  void radix_tree_destroy(struct radix_tree *rt)
- {
--	_free_node(rt->root, rt->dtr, rt->dtr_context);
-+	_free_node(rt, rt->root);
- 	free(rt);
+@@ -728,6 +732,19 @@ bool radix_tree_remove(struct radix_tree *rt, uint8_t *key_begin, uint8_t *key_e
+ 	return false;
  }
  
-@@ -593,7 +597,7 @@ static void _degrade_to_n48(struct node256 *n256, struct value *result)
- 	result->value.ptr = n48;
++unsigned radix_tree_remove_prefix(struct radix_tree *rt, uint8_t *kb, uint8_t *ke)
++{
++        unsigned count = 0;
++	struct lookup_result lr = _lookup_prefix(&rt->root, kb, ke);
++	if (lr.kb == ke) {
++        	count = _free_node(rt, *lr.v);
++        	lr.v->type = UNSET;
++	}
++
++	rt->nr_entries -= count;
++	return count;
++}
++
+ bool radix_tree_lookup(struct radix_tree *rt,
+ 		       uint8_t *kb, uint8_t *ke, union radix_value *result)
+ {
+diff --git a/base/data-struct/radix-tree.h b/base/data-struct/radix-tree.h
+index 8560b34..ad8a952 100644
+--- a/base/data-struct/radix-tree.h
++++ b/base/data-struct/radix-tree.h
+@@ -34,6 +34,10 @@ void radix_tree_destroy(struct radix_tree *rt);
+ unsigned radix_tree_size(struct radix_tree *rt);
+ bool radix_tree_insert(struct radix_tree *rt, uint8_t *kb, uint8_t *ke, union radix_value v);
+ bool radix_tree_remove(struct radix_tree *rt, uint8_t *kb, uint8_t *ke);
++
++// Returns the number of values removed
++unsigned radix_tree_remove_prefix(struct radix_tree *rt, uint8_t *prefix_b, uint8_t *prefix_e);
++
+ bool radix_tree_lookup(struct radix_tree *rt,
+ 		       uint8_t *kb, uint8_t *ke, union radix_value *result);
+ 
+diff --git a/test/unit/radix_tree_t.c b/test/unit/radix_tree_t.c
+index d2b0adc..eb35773 100644
+--- a/test/unit/radix_tree_t.c
++++ b/test/unit/radix_tree_t.c
+@@ -267,6 +267,27 @@ static void test_remove_prefix_keys_reversed(void *fixture)
+                 T_ASSERT(!radix_tree_lookup(rt, k, k + i, &v));
  }
  
--static bool _remove(struct value *root, uint8_t *kb, uint8_t *ke)
-+static bool _remove(struct radix_tree *rt, struct value *root, uint8_t *kb, uint8_t *ke)
- {
- 	bool r;
- 	unsigned i;
-@@ -607,10 +611,12 @@ static bool _remove(struct value *root, uint8_t *kb, uint8_t *ke)
- 	if (kb == ke) {
-         	if (root->type == VALUE) {
-                 	root->type = UNSET;
-+                	_dtr(rt, root->value);
-                 	return true;
++static void test_remove_prefix(void *fixture)
++{
++	struct radix_tree *rt = fixture;
++	unsigned i, count = 0;
++	uint8_t k[4];
++	union radix_value v;
++
++	// populate some random 32bit keys
++	for (i = 0; i < 100000; i++) {
++        	_gen_key(k, k + sizeof(k));
++        	if (k[0] == 21)
++                	count++;
++		v.n = i;
++		T_ASSERT(radix_tree_insert(rt, k, k + sizeof(k), v));
++	}
++
++	// remove keys in a sub range 
++	k[0] = 21;
++	T_ASSERT_EQUAL(radix_tree_remove_prefix(rt, k, k + 1), count);
++}
++
+ //----------------------------------------------------------------
  
-                 } else if (root->type == VALUE_CHAIN) {
- 			vc = root->value.ptr;
-+			_dtr(rt, vc->value);
- 			memcpy(root, &vc->child, sizeof(*root));
- 			free(vc);
- 			return true;
-@@ -627,7 +633,7 @@ static bool _remove(struct value *root, uint8_t *kb, uint8_t *ke)
+ #define T(path, desc, fn) register_test(ts, "/base/data-struct/radix-tree/" path, desc, fn)
+@@ -291,6 +312,7 @@ void radix_tree_tests(struct dm_list *all_tests)
+ 	T("remove-one-byte-keys", "remove many one byte keys", test_remove_one_byte_keys);
+ 	T("remove-prefix-keys", "remove a set of keys that have common prefixes", test_remove_prefix_keys);
+ 	T("remove-prefix-keys-reversed", "remove a set of keys that have common prefixes (reversed)", test_remove_prefix_keys_reversed);
++	T("remove-prefix", "remove a subrange", test_remove_prefix);
  
- 	case VALUE_CHAIN:
- 		vc = root->value.ptr;
--		r = _remove(&vc->child, kb, ke);
-+		r = _remove(rt, &vc->child, kb, ke);
- 		if (r && (vc->child.type == UNSET)) {
- 			memcpy(root, &vc->child, sizeof(*root));
- 			free(vc);
-@@ -643,13 +649,13 @@ static bool _remove(struct value *root, uint8_t *kb, uint8_t *ke)
- 			if (kb[i] != pc->prefix[i])
-         			return false;
- 
--		return _remove(&pc->child, kb + pc->len, ke);
-+		return _remove(rt, &pc->child, kb + pc->len, ke);
- 
- 	case NODE4:
- 		n4 = root->value.ptr;
- 		for (i = 0; i < n4->nr_entries; i++) {
- 			if (n4->keys[i] == *kb) {
--				r = _remove(n4->values + i, kb + 1, ke);
-+				r = _remove(rt, n4->values + i, kb + 1, ke);
- 				if (r && n4->values[i].type == UNSET) {
-         				n4->nr_entries--;
-         				if (i < n4->nr_entries)
-@@ -668,7 +674,7 @@ static bool _remove(struct value *root, uint8_t *kb, uint8_t *ke)
-         	n16 = root->value.ptr;
- 		for (i = 0; i < n16->nr_entries; i++) {
- 			if (n16->keys[i] == *kb) {
--				r = _remove(n16->values + i, kb + 1, ke);
-+				r = _remove(rt, n16->values + i, kb + 1, ke);
- 				if (r && n16->values[i].type == UNSET) {
-         				n16->nr_entries--;
-         				if (i < n16->nr_entries)
-@@ -687,7 +693,7 @@ static bool _remove(struct value *root, uint8_t *kb, uint8_t *ke)
- 		n48 = root->value.ptr;
- 		i = n48->keys[*kb];
- 		if (i < 48) {
--        		r = _remove(n48->values + i, kb + 1, ke);
-+        		r = _remove(rt, n48->values + i, kb + 1, ke);
-         		if (r && n48->values[i].type == UNSET) {
-                 		n48->keys[*kb] = 48;
- 				n48->nr_entries--;
-@@ -700,7 +706,7 @@ static bool _remove(struct value *root, uint8_t *kb, uint8_t *ke)
- 
- 	case NODE256:
- 		n256 = root->value.ptr;
--		r = _remove(n256->values + (*kb), kb + 1, ke);
-+		r = _remove(rt, n256->values + (*kb), kb + 1, ke);
- 		if (r && n256->values[*kb].type == UNSET) {
- 			n256->nr_entries--;
- 			if (n256->nr_entries <= 48)
-@@ -714,7 +720,7 @@ static bool _remove(struct value *root, uint8_t *kb, uint8_t *ke)
- 
- bool radix_tree_remove(struct radix_tree *rt, uint8_t *key_begin, uint8_t *key_end)
- {
--	if (_remove(&rt->root, key_begin, key_end)) {
-+	if (_remove(rt, &rt->root, key_begin, key_end)) {
-         	rt->nr_entries--;
-         	return true;
- 	}
+ 	dm_list_add(all_tests, &ts->list);
+ }
 
 
