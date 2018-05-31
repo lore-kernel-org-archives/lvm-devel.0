@@ -1,137 +1,304 @@
 From: David Teigland <teigland@sourceware.org>
-Date: Thu, 31 May 2018 17:22:29 -0400
-Subject: master - tests: enable more working tests with lvmlockd
-Message-ID: <201805312122.w4VLMTTo001290@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Thu, 31 May 2018 17:22:52 -0400
+Subject: master - tests: enable non-working tests with lvmlockd
+Message-ID: <201805312122.w4VLMqXY001309@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=00f6a8466edfc386067efb1e000a808080966076
-Commit:        00f6a8466edfc386067efb1e000a808080966076
-Parent:        06b2e5c176b7a371efa62b27af2acb1e6f7984be
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=885eb2024ffff6757bba39666a1d334d6d72a066
+Commit:        885eb2024ffff6757bba39666a1d334d6d72a066
+Parent:        00f6a8466edfc386067efb1e000a808080966076
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Thu May 31 15:55:18 2018 -0500
+AuthorDate:    Thu May 31 16:18:53 2018 -0500
 Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Thu May 31 16:13:58 2018 -0500
+CommitterDate: Thu May 31 16:18:53 2018 -0500
 
-tests: enable more working tests with lvmlockd
+tests: enable non-working tests with lvmlockd
 
+Those that are failing for reasons other than lvmlockd
+restrictions.
 ---
- test/shell/lvconvert-repair-cache.sh     |    1 -
- test/shell/lvconvert-repair.sh           |    8 +++++---
- test/shell/lvcreate-repair.sh            |    5 ++---
- test/shell/lvextend-snapshot-dmeventd.sh |    1 -
- test/shell/mdata-strings.sh              |    3 +--
- 5 files changed, 8 insertions(+), 10 deletions(-)
+ test/shell/component-thin.sh                       |    2 +-
+ test/shell/lvconvert-raid-allocation.sh            |    4 ++--
+ test/shell/lvconvert-raid-reshape-load.sh          |    4 ++--
+ .../lvconvert-raid-reshape-stripes-load-fail.sh    |    4 ++--
+ .../lvconvert-raid-reshape-stripes-load-reload.sh  |    4 ++--
+ test/shell/lvconvert-raid-reshape-stripes-load.sh  |    4 ++--
+ test/shell/lvconvert-raid-reshape.sh               |    4 ++--
+ test/shell/lvconvert-raid-status-validation.sh     |    4 ++--
+ test/shell/lvconvert-raid5_to_raid10.sh            |    2 +-
+ test/shell/lvcreate-large-raid.sh                  |    4 ++--
+ test/shell/mirror-names.sh                         |    2 +-
+ test/shell/pvcreate-md-fake-hdr.sh                 |    4 ++--
+ test/shell/pvcreate-operation-md.sh                |    2 +-
+ test/shell/thin-large.sh                           |    2 +-
+ 14 files changed, 23 insertions(+), 23 deletions(-)
 
-diff --git a/test/shell/lvconvert-repair-cache.sh b/test/shell/lvconvert-repair-cache.sh
-index 6afb7ea..348dbaf 100644
---- a/test/shell/lvconvert-repair-cache.sh
-+++ b/test/shell/lvconvert-repair-cache.sh
-@@ -12,7 +12,6 @@
+diff --git a/test/shell/component-thin.sh b/test/shell/component-thin.sh
+index 4b1a35b..3cf02f3 100644
+--- a/test/shell/component-thin.sh
++++ b/test/shell/component-thin.sh
+@@ -12,7 +12,7 @@
  
- # Test repairing of broken cached LV
+ # Exercise activation of thin component devices
  
--SKIP_WITH_LVMPOLLD=1
- SKIP_WITH_LVMLOCKD=1
+-SKIP_WITH_LVMLOCKD=1
++
+ SKIP_WITH_LVMPOLLD=1
  
  . lib/inittest
-diff --git a/test/shell/lvconvert-repair.sh b/test/shell/lvconvert-repair.sh
-index b5ae206..9ee7980 100644
---- a/test/shell/lvconvert-repair.sh
-+++ b/test/shell/lvconvert-repair.sh
-@@ -10,14 +10,12 @@
+diff --git a/test/shell/lvconvert-raid-allocation.sh b/test/shell/lvconvert-raid-allocation.sh
+index 7529800..acdae0c 100644
+--- a/test/shell/lvconvert-raid-allocation.sh
++++ b/test/shell/lvconvert-raid-allocation.sh
+@@ -10,7 +10,7 @@
  # along with this program; if not, write to the Free Software Foundation,
  # Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  
 -SKIP_WITH_LVMLOCKD=1
--
- . lib/inittest
++
+ SKIP_WITH_LVMPOLLD=1
  
- recreate_vg_()
+ . lib/inittest
+@@ -20,7 +20,7 @@ aux have_raid 1 3 0 || skip
+ aux prepare_pvs 5
+ get_devs
+ 
+-vgcreate -s 256k "$vg" "${DEVICES[@]}"
++vgcreate $SHARED -s 256k "$vg" "${DEVICES[@]}"
+ 
+ # Start with linear on 2 PV and ensure that converting to
+ # RAID is not allowed to reuse PVs for different images.  (Bug 1113180)
+diff --git a/test/shell/lvconvert-raid-reshape-load.sh b/test/shell/lvconvert-raid-reshape-load.sh
+index cd72d09..11af24d 100644
+--- a/test/shell/lvconvert-raid-reshape-load.sh
++++ b/test/shell/lvconvert-raid-reshape-load.sh
+@@ -10,7 +10,7 @@
+ # along with this program; if not, write to the Free Software Foundation,
+ # Inc., 51 Franklin Street, Fifth Floor, Boston, MA2110-1301 USA
+ 
+-SKIP_WITH_LVMLOCKD=1
++
+ SKIP_WITH_LVMPOLLD=1
+ 
+ . lib/inittest
+@@ -35,7 +35,7 @@ aux prepare_pvs 16 32
+ 
+ get_devs
+ 
+-vgcreate -s 1M "$vg" "${DEVICES[@]}"
++vgcreate $SHARED -s 1M "$vg" "${DEVICES[@]}"
+ 
+ trap 'cleanup_mounted_and_teardown' EXIT
+ 
+diff --git a/test/shell/lvconvert-raid-reshape-stripes-load-fail.sh b/test/shell/lvconvert-raid-reshape-stripes-load-fail.sh
+index 88722b0..feaf1e2 100644
+--- a/test/shell/lvconvert-raid-reshape-stripes-load-fail.sh
++++ b/test/shell/lvconvert-raid-reshape-stripes-load-fail.sh
+@@ -10,7 +10,7 @@
+ # along with this program; if not, write to the Free Software Foundation,
+ # Inc., 51 Franklin Street, Fifth Floor, Boston, MA2110-1301 USA
+ 
+-SKIP_WITH_LVMLOCKD=1
++
+ SKIP_WITH_LVMPOLLD=1
+ 
+ . lib/inittest
+@@ -35,7 +35,7 @@ aux prepare_pvs 16 32
+ 
+ get_devs
+ 
+-vgcreate -s 1M "$vg" "${DEVICES[@]}"
++vgcreate $SHARED -s 1M "$vg" "${DEVICES[@]}"
+ 
+ trap 'cleanup_mounted_and_teardown' EXIT
+ 
+diff --git a/test/shell/lvconvert-raid-reshape-stripes-load-reload.sh b/test/shell/lvconvert-raid-reshape-stripes-load-reload.sh
+index fc463bf..839e704 100644
+--- a/test/shell/lvconvert-raid-reshape-stripes-load-reload.sh
++++ b/test/shell/lvconvert-raid-reshape-stripes-load-reload.sh
+@@ -10,7 +10,7 @@
+ # along with this program; if not, write to the Free Software Foundation,
+ # Inc., 51 Franklin Street, Fifth Floor, Boston, MA2110-1301 USA
+ 
+-SKIP_WITH_LVMLOCKD=1
++
+ SKIP_WITH_LVMPOLLD=1
+ 
+ . lib/inittest
+@@ -35,7 +35,7 @@ aux prepare_pvs 16 32
+ 
+ get_devs
+ 
+-vgcreate -s 1M "$vg" "${DEVICES[@]}"
++vgcreate $SHARED -s 1M "$vg" "${DEVICES[@]}"
+ 
+ trap 'cleanup_mounted_and_teardown' EXIT
+ 
+diff --git a/test/shell/lvconvert-raid-reshape-stripes-load.sh b/test/shell/lvconvert-raid-reshape-stripes-load.sh
+index 1be8d61..29790aa 100644
+--- a/test/shell/lvconvert-raid-reshape-stripes-load.sh
++++ b/test/shell/lvconvert-raid-reshape-stripes-load.sh
+@@ -10,7 +10,7 @@
+ # along with this program; if not, write to the Free Software Foundation,
+ # Inc., 51 Franklin Street, Fifth Floor, Boston, MA2110-1301 USA
+ 
+-SKIP_WITH_LVMLOCKD=1
++
+ SKIP_WITH_LVMPOLLD=1
+ 
+ . lib/inittest
+@@ -35,7 +35,7 @@ aux prepare_pvs 16 32
+ 
+ get_devs
+ 
+-vgcreate -s 1M "$vg" "${DEVICES[@]}"
++vgcreate $SHARED -s 1M "$vg" "${DEVICES[@]}"
+ 
+ trap 'cleanup_mounted_and_teardown' EXIT
+ 
+diff --git a/test/shell/lvconvert-raid-reshape.sh b/test/shell/lvconvert-raid-reshape.sh
+index e621318..ab3ea4e 100644
+--- a/test/shell/lvconvert-raid-reshape.sh
++++ b/test/shell/lvconvert-raid-reshape.sh
+@@ -10,7 +10,7 @@
+ # along with this program; if not, write to the Free Software Foundation,
+ # Inc., 51 Franklin Street, Fifth Floor, Boston, MA2110-1301 USA
+ 
+-SKIP_WITH_LVMLOCKD=1
++
+ SKIP_WITH_LVMPOLLD=1
+ 
+ LVM_SKIP_LARGE_TESTS=0
+@@ -34,7 +34,7 @@ fi
+ 
+ get_devs
+ 
+-vgcreate -s 1M "$vg" "${DEVICES[@]}"
++vgcreate $SHARED -s 1M "$vg" "${DEVICES[@]}"
+ 
+ function _lvcreate
  {
- 	vgremove -ff $vg
--	vgcreate "$vg" "$@" "${DEVICES[@]}"
-+	vgcreate $SHARED "$vg" "$@" "${DEVICES[@]}"
- }
+diff --git a/test/shell/lvconvert-raid-status-validation.sh b/test/shell/lvconvert-raid-status-validation.sh
+index 3e91d23..c5396d7 100644
+--- a/test/shell/lvconvert-raid-status-validation.sh
++++ b/test/shell/lvconvert-raid-status-validation.sh
+@@ -15,7 +15,7 @@
+ # 'dmsetup status' for RAID LVs - especially during various sync action
+ # transitions, like: recover, resync, check, repair, idle, reshape, etc
+ #######################################################################
+-SKIP_WITH_LVMLOCKD=1
++
+ SKIP_WITH_LVMPOLLD=1
  
- _check_mlog()
-@@ -70,7 +68,11 @@ vgreduce --removemissing $vg
- aux enable_dev "$dev4"
+ export LVM_TEST_LVMETAD_DEBUG_OPTS=${LVM_TEST_LVMETAD_DEBUG_OPTS-}
+@@ -33,7 +33,7 @@ aux have_raid 1 13 0 || skip
+ aux prepare_pvs 9
+ get_devs
  
- # 3-way, mirrored log => 3-way, core log
-+if test -n "$LVM_TEST_LVMLOCKD"; then
-+recreate_vg_
-+else
- recreate_vg_ -c n
-+fi
- lvcreate -aey --type mirror -m 2 --mirrorlog mirrored --ignoremonitoring -L 1 -n 3way $vg \
-     "$dev1" "$dev2" "$dev3" "$dev4":0 "$dev5":0
- aux disable_dev "$dev4" "$dev5"
-diff --git a/test/shell/lvcreate-repair.sh b/test/shell/lvcreate-repair.sh
-index 5e02e7f..cff0018 100644
---- a/test/shell/lvcreate-repair.sh
-+++ b/test/shell/lvcreate-repair.sh
-@@ -10,7 +10,6 @@
+-vgcreate -s 2m "$vg" "${DEVICES[@]}"
++vgcreate $SHARED -s 2m "$vg" "${DEVICES[@]}"
+ 
+ ###########################################
+ # Upconverted RAID1 should never have all 'a's in status output
+diff --git a/test/shell/lvconvert-raid5_to_raid10.sh b/test/shell/lvconvert-raid5_to_raid10.sh
+index cc0e468..e38e4d3 100644
+--- a/test/shell/lvconvert-raid5_to_raid10.sh
++++ b/test/shell/lvconvert-raid5_to_raid10.sh
+@@ -10,7 +10,7 @@
+ # along with this program; if not, write to the Free Software Foundation,
+ # Inc., 51 Franklin Street, Fifth Floor, Boston, MA2110-1301 USA
+ 
+-SKIP_WITH_LVMLOCKD=1
++
+ SKIP_WITH_LVMPOLLD=1
+ 
+ . lib/inittest
+diff --git a/test/shell/lvcreate-large-raid.sh b/test/shell/lvcreate-large-raid.sh
+index 3488db4..b66cfd2 100644
+--- a/test/shell/lvcreate-large-raid.sh
++++ b/test/shell/lvcreate-large-raid.sh
+@@ -12,7 +12,7 @@
+ 
+ # 'Exercise some lvcreate diagnostics'
+ 
+-SKIP_WITH_LVMLOCKD=1
++
+ SKIP_WITH_LVMPOLLD=1
+ 
+ . lib/inittest
+@@ -31,7 +31,7 @@ aux have_raid4 && segtypes="raid4 raid5"
+ aux prepare_pvs 5 1000000000
+ get_devs
+ 
+-vgcreate "$vg1" "${DEVICES[@]}"
++vgcreate $SHARED "$vg1" "${DEVICES[@]}"
+ 
+ aux lvmconf 'devices/issue_discards = 1'
+ 
+diff --git a/test/shell/mirror-names.sh b/test/shell/mirror-names.sh
+index a3bc80f..54d42e1 100644
+--- a/test/shell/mirror-names.sh
++++ b/test/shell/mirror-names.sh
+@@ -13,7 +13,7 @@
+ 
+ test_description="check namings of mirrored LV"
+ 
+-SKIP_WITH_LVMLOCKD=1
++
+ 
+ . lib/inittest
+ 
+diff --git a/test/shell/pvcreate-md-fake-hdr.sh b/test/shell/pvcreate-md-fake-hdr.sh
+index 50a5b14..b89fe43 100644
+--- a/test/shell/pvcreate-md-fake-hdr.sh
++++ b/test/shell/pvcreate-md-fake-hdr.sh
+@@ -12,7 +12,7 @@
+ 
+ 
+ # TODO: once code get fixed, add matching 'check' calls
+-SKIP_WITH_LVMLOCKD=1
++
+ SKIP_WITH_LVMPOLLD=1
+ 
+ . lib/inittest
+@@ -25,7 +25,7 @@ aux extend_filter_LVMTEST "a|/dev/md|"
+ 
+ aux prepare_devs 4
+ 
+-vgcreate $vg "$dev3" "$dev4"
++vgcreate $SHARED $vg "$dev3" "$dev4"
+ 
+ # create 2 disk MD raid1 array
+ # by default using metadata format 1.0 with data at the end of device
+diff --git a/test/shell/pvcreate-operation-md.sh b/test/shell/pvcreate-operation-md.sh
+index f534785..11f0887 100644
+--- a/test/shell/pvcreate-operation-md.sh
++++ b/test/shell/pvcreate-operation-md.sh
+@@ -10,7 +10,7 @@
  # along with this program; if not, write to the Free Software Foundation,
  # Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  
 -SKIP_WITH_LVMLOCKD=1
++
  SKIP_WITH_LVMPOLLD=1
  
  . lib/inittest
-@@ -23,7 +22,7 @@ for i in "$dev1" "$dev2" "$dev3" ; do
- 		if test "$i" = "$j" ; then continue ; fi
+diff --git a/test/shell/thin-large.sh b/test/shell/thin-large.sh
+index b1cf29a..714f91e 100644
+--- a/test/shell/thin-large.sh
++++ b/test/shell/thin-large.sh
+@@ -12,7 +12,7 @@
  
- 		vgremove -ff $vg
--		vgcreate $vg "$dev1" "$dev2" "$dev3"
-+		vgcreate $SHARED $vg "$dev1" "$dev2" "$dev3"
- 		# exit 1
- 
- 		lvcreate -l1 -n $lv1 $vg "$dev1"
-@@ -49,7 +48,7 @@ for i in "$dev1" "$dev2" "$dev3" ; do
- done
- 
- vgremove -ff $vg
--vgcreate $vg "$dev1" "$dev2" "$dev3"
-+vgcreate $SHARED $vg "$dev1" "$dev2" "$dev3"
- 
- # use tricky 'dd'
- for i in "$dev1" "$dev2" "$dev3" ; do
-diff --git a/test/shell/lvextend-snapshot-dmeventd.sh b/test/shell/lvextend-snapshot-dmeventd.sh
-index 0f9b0a9..01fc843 100644
---- a/test/shell/lvextend-snapshot-dmeventd.sh
-+++ b/test/shell/lvextend-snapshot-dmeventd.sh
-@@ -10,7 +10,6 @@
- # along with this program; if not, write to the Free Software Foundation,
- # Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
+ # 'Exercise logic around boundary sizes of thin-pool data and chunksize
  
 -SKIP_WITH_LVMLOCKD=1
++
  SKIP_WITH_LVMPOLLD=1
  
  . lib/inittest
-diff --git a/test/shell/mdata-strings.sh b/test/shell/mdata-strings.sh
-index 4fcb89c..c87cd75 100644
---- a/test/shell/mdata-strings.sh
-+++ b/test/shell/mdata-strings.sh
-@@ -12,7 +12,6 @@
- 
- # 'Test for proper escaping of strings in metadata (bz431474)'
- 
--SKIP_WITH_LVMLOCKD=1
- SKIP_WITH_LVMPOLLD=1
- 
- . lib/inittest
-@@ -42,7 +41,7 @@ pvcreate "$dev1" || created="$dev2"
- pvdisplay 2>&1 | tee err
- should grep -F "$pv_ugly" err
- should check pv_field "$dev1" pv_name "$dev1"
--vgcreate $vg "$created"
-+vgcreate $SHARED $vg "$created"
- # 'no parse errors and VG really exists'
- vgs $vg 2>err
- not grep "Parse error" err
 
 
