@@ -1,118 +1,175 @@
 From: David Teigland <teigland@sourceware.org>
-Date: Thu, 31 May 2018 15:51:40 -0400
-Subject: master - tests: enable lvmlockd with tests using lvcreate -H -L LV
-Message-ID: <201805311951.w4VJpe2V020767@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Thu, 31 May 2018 16:37:57 -0400
+Subject: master - tests: enable metadata-balance with lvmlockd
+Message-ID: <201805312037.w4VKbvRc027301@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=08771bbbbf20298df0440dd8ca75ca10af60eb2f
-Commit:        08771bbbbf20298df0440dd8ca75ca10af60eb2f
-Parent:        8d9d32b315afd0fb2b674ca3bb857cb4ce2cbf2e
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=4a01e4f3895a947c0c693d0336643a1287de6df5
+Commit:        4a01e4f3895a947c0c693d0336643a1287de6df5
+Parent:        08771bbbbf20298df0440dd8ca75ca10af60eb2f
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Thu May 31 14:49:16 2018 -0500
+AuthorDate:    Thu May 31 15:12:34 2018 -0500
 Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Thu May 31 14:49:16 2018 -0500
+CommitterDate: Thu May 31 15:12:34 2018 -0500
 
-tests: enable lvmlockd with tests using lvcreate -H -L LV
+tests: enable metadata-balance with lvmlockd
 
 ---
- test/shell/lvcreate-cache-no-tools.sh |    2 +-
- test/shell/lvcreate-cache-raid.sh     |    2 +-
- test/shell/lvcreate-cache.sh          |    2 +-
- test/shell/lvcreate-thin-cache.sh     |    4 ++--
- test/shell/lvextend-thin-cache.sh     |    2 +-
- test/shell/lvs-cache.sh               |    2 +-
- 6 files changed, 7 insertions(+), 7 deletions(-)
+ test/shell/metadata-balance.sh |   49 ++++++++++++++++++++++------------------
+ 1 files changed, 27 insertions(+), 22 deletions(-)
 
-diff --git a/test/shell/lvcreate-cache-no-tools.sh b/test/shell/lvcreate-cache-no-tools.sh
-index c38ecfd..23528e4 100644
---- a/test/shell/lvcreate-cache-no-tools.sh
-+++ b/test/shell/lvcreate-cache-no-tools.sh
-@@ -12,7 +12,7 @@
- 
- # Exercise creation of cache without cache_check
+diff --git a/test/shell/metadata-balance.sh b/test/shell/metadata-balance.sh
+index fe94aed..5f856a1 100644
+--- a/test/shell/metadata-balance.sh
++++ b/test/shell/metadata-balance.sh
+@@ -10,7 +10,6 @@
+ # along with this program; if not, write to the Free Software Foundation,
+ # Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  
 -SKIP_WITH_LVMLOCKD=1
-+
  SKIP_WITH_LVMPOLLD=1
  
  . lib/inittest
-diff --git a/test/shell/lvcreate-cache-raid.sh b/test/shell/lvcreate-cache-raid.sh
-index d540d4e..d1d1c19 100644
---- a/test/shell/lvcreate-cache-raid.sh
-+++ b/test/shell/lvcreate-cache-raid.sh
-@@ -12,7 +12,7 @@
+@@ -23,7 +22,7 @@ for mdacp in 1 2; do
+ 	pvcreate --metadatacopies $mdacp "$dev1" "$dev2"
+         pvcreate --metadatacopies 0 "$dev3"
+ 	if [ $pv_in_vg = 1 ]; then
+-		vgcreate $vg "$dev1" "$dev2" "$dev3"
++		vgcreate $SHARED $vg "$dev1" "$dev2" "$dev3"
+ 	fi
+ 	pvchange --metadataignore y "$dev1"
+ 	check pv_field "$dev1" pv_mda_count $mdacp
+@@ -64,7 +63,7 @@ pvunignore_ () {
+ 	fi
+ }
  
- # Exercise creation of cache and raids
+-echo Test of vgmetadatacopies with vgcreate and vgchange
++echo Test of vgmetadatacopies with vgcreate $SHARED and vgchange
+ for mdacp in 1 2; do
+ 	pvcreate --metadatacopies $mdacp "$dev1" "$dev2" "$dev4" "$dev5"
+ 	check pv_field "$dev1" pv_mda_used_count $mdacp
+@@ -72,7 +71,7 @@ for mdacp in 1 2; do
+ 	check pv_field "$dev4" pv_mda_used_count $mdacp
+ 	check pv_field "$dev5" pv_mda_used_count $mdacp
+ 	pvcreate --metadatacopies 0 "$dev3"
+-	vgcreate $vg "$dev1" "$dev2" "$dev3"
++	vgcreate $SHARED $vg "$dev1" "$dev2" "$dev3"
+ 	check vg_field $vg vg_mda_copies unmanaged
+ 	echo ensure both --vgmetadatacopies and --metadatacopies accepted
+ 	vgchange --metadatacopies $(( mdacp * 1 )) $vg
+@@ -91,34 +90,34 @@ for mdacp in 1 2; do
+ 	vgchange --vgmetadatacopies unmanaged $vg
+ 	check vg_field $vg vg_mda_copies unmanaged
+ 	vgremove -f $vg
+-	echo vgcreate succeeds even when creating a VG w/all ignored mdas
++	echo vgcreate $SHARED succeeds even when creating a VG w/all ignored mdas
+ 	pvchange --metadataignore y "$dev1" "$dev2"
+ 	check pv_field "$dev1" pv_mda_count $mdacp
+ 	check pv_field "$dev2" pv_mda_used_count 0
+-	vgcreate $vg "$dev1" "$dev2"
++	vgcreate $SHARED $vg "$dev1" "$dev2"
+ 	check vg_field $vg vg_mda_copies unmanaged
+ 	vgremove -f $vg
+-	echo vgcreate succeeds with a specific number of metadata copies
+-	vgcreate --vgmetadatacopies $(( mdacp * 2 )) $vg "$dev1" "$dev2"
++	echo vgcreate $SHARED succeeds with a specific number of metadata copies
++	vgcreate $SHARED --vgmetadatacopies $(( mdacp * 2 )) $vg "$dev1" "$dev2"
+ 	check vg_field $vg vg_mda_copies $(( mdacp * 2 ))
+ 	vgremove -f $vg
+-	vgcreate --vgmetadatacopies $(( mdacp * 1 )) $vg "$dev1" "$dev2"
++	vgcreate $SHARED --vgmetadatacopies $(( mdacp * 1 )) $vg "$dev1" "$dev2"
+ 	check vg_field $vg vg_mda_copies $(( mdacp * 1 ))
+ 	vgremove -f $vg
+-	echo vgcreate succeeds with a larger value than total metadatacopies
+-	vgcreate --vgmetadatacopies $(( mdacp * 5 )) $vg "$dev1" "$dev2"
++	echo vgcreate $SHARED succeeds with a larger value than total metadatacopies
++	vgcreate $SHARED --vgmetadatacopies $(( mdacp * 5 )) $vg "$dev1" "$dev2"
+ 	check vg_field $vg vg_mda_copies $(( mdacp * 5 ))
+ 	vgremove -f $vg
+-	echo vgcreate succeeds with --vgmetadatacopies unmanaged
+-	vgcreate --vgmetadatacopies unmanaged $vg "$dev1" "$dev2"
++	echo vgcreate $SHARED succeeds with --vgmetadatacopies unmanaged
++	vgcreate $SHARED --vgmetadatacopies unmanaged $vg "$dev1" "$dev2"
+ 	check vg_field $vg vg_mda_copies unmanaged
+ 	vgremove -f $vg
+ 	pvunignore_ "$dev1"
+ 	pvunignore_ "$dev2"
+ 	pvunignore_ "$dev4"
+ 	pvunignore_ "$dev5"
+-	echo vgcreate succeds with small value of --metadatacopies, ignores mdas
+-	vgcreate --vgmetadatacopies 1 $vg "$dev1" "$dev2" "$dev4" "$dev5"
++	echo vgcreate $SHARED succeds with small value of --metadatacopies, ignores mdas
++	vgcreate $SHARED --vgmetadatacopies 1 $vg "$dev1" "$dev2" "$dev4" "$dev5"
+ 	check vg_field $vg vg_mda_copies 1
+ 	check vg_field $vg vg_mda_count $(( mdacp * 4 ))
+ 	check vg_field $vg vg_mda_used_count 1
+@@ -131,11 +130,11 @@ for mdacp in 1 2; do
+ 	check vg_field $vg vg_mda_count $(( mdacp * 4 ))
+ 	check vg_field $vg vg_mda_copies unmanaged
+ 	check vg_field $vg vg_mda_used_count $(( mdacp * 4 ))
+-	echo --vgmetadatacopies 0 should be unmanaged for vgchange and vgcreate
++	echo --vgmetadatacopies 0 should be unmanaged for vgchange and vgcreate $SHARED
+ 	vgchange --vgmetadatacopies 0 $vg
+ 	check vg_field $vg vg_mda_copies unmanaged
+ 	vgremove -f $vg
+-	vgcreate --vgmetadatacopies 0 $vg "$dev1" "$dev2" "$dev4" "$dev5"
++	vgcreate $SHARED --vgmetadatacopies 0 $vg "$dev1" "$dev2" "$dev4" "$dev5"
+ 	check vg_field $vg vg_mda_copies unmanaged
+ 	vgremove -f $vg
+ done
+@@ -145,7 +144,7 @@ for mdacp in 1 2; do
+ 	pvcreate --metadatacopies $mdacp "$dev1" "$dev2" "$dev4" "$dev5"
+ 	pvcreate --metadatacopies 0 "$dev3"
+ 	echo Set a large value of vgmetadatacopies
+-	vgcreate --vgmetadatacopies $(( mdacp * 5 )) $vg "$dev1" "$dev2" "$dev3"
++	vgcreate $SHARED --vgmetadatacopies $(( mdacp * 5 )) $vg "$dev1" "$dev2" "$dev3"
+ 	check vg_field $vg vg_mda_copies $(( mdacp * 5 ))
+ 	echo Ignore mdas on devices to be used for vgextend
+ 	echo Large value of vgetadatacopies should automatically un-ignore mdas
+@@ -156,7 +155,7 @@ for mdacp in 1 2; do
+ 	check pv_field "$dev5" pv_mda_used_count $mdacp
+ 	vgremove -f $vg
+ 	echo Set a small value of vgmetadatacopies
+-	vgcreate --vgmetadatacopies $(( mdacp * 1 )) $vg "$dev1" "$dev2" "$dev3"
++	vgcreate $SHARED --vgmetadatacopies $(( mdacp * 1 )) $vg "$dev1" "$dev2" "$dev3"
+ 	check vg_field $vg vg_mda_copies $(( mdacp * 1 ))
+ 	echo Ignore mdas on devices to be used for vgextend
+ 	echo Small value of vgetadatacopies should leave mdas as ignored
+@@ -186,11 +185,15 @@ for mdacp in 1 2; do
+ 	vgremove -f $vg
+ done
  
--SKIP_WITH_LVMLOCKD=1
++if test -n "$LVM_TEST_LVMLOCKD"; then
++echo skip vgsplit and vgmerge with lvmlockd
++else
 +
- SKIP_WITH_LVMPOLLD=1
+ echo Test special situations, vgsplit, vgmerge, etc
+ for mdacp in 1 2; do
+ 	pvcreate --metadatacopies $mdacp "$dev1" "$dev2" "$dev3" "$dev4" "$dev5"
+-	vgcreate --vgmetadatacopies 2 $vg1 "$dev1" "$dev2" "$dev3"
+-	vgcreate --vgmetadatacopies $(( mdacp * 1 )) $vg2 "$dev4" "$dev5"
++	vgcreate $SHARED --vgmetadatacopies 2 $vg1 "$dev1" "$dev2" "$dev3"
++	vgcreate $SHARED --vgmetadatacopies $(( mdacp * 1 )) $vg2 "$dev4" "$dev5"
+ 	echo vgsplit/vgmerge preserves value of metadata copies
+ 	check vg_field $vg1 vg_mda_copies 2
+ 	check vg_field $vg2 vg_mda_copies $(( mdacp * 1 ))
+@@ -207,10 +210,12 @@ for mdacp in 1 2; do
+ 	vgremove -f $vg1 $vg2
+ done
  
- . lib/inittest
-diff --git a/test/shell/lvcreate-cache.sh b/test/shell/lvcreate-cache.sh
-index 8edbeb2..010c06f 100644
---- a/test/shell/lvcreate-cache.sh
-+++ b/test/shell/lvcreate-cache.sh
-@@ -15,7 +15,7 @@
- # Full CLI uses  --type
- # Shorthand CLI uses -H | --cache
- 
--SKIP_WITH_LVMLOCKD=1
++fi
 +
- SKIP_WITH_LVMPOLLD=1
- 
- . lib/inittest
-diff --git a/test/shell/lvcreate-thin-cache.sh b/test/shell/lvcreate-thin-cache.sh
-index 0b9f3c8..f87526a 100644
---- a/test/shell/lvcreate-thin-cache.sh
-+++ b/test/shell/lvcreate-thin-cache.sh
-@@ -12,7 +12,7 @@
- 
- # Exercise caching thin-pool's data LV
- 
--SKIP_WITH_LVMLOCKD=1
-+
- SKIP_WITH_LVMPOLLD=1
- 
- export LVM_TEST_THIN_REPAIR_CMD=${LVM_TEST_THIN_REPAIR_CMD-/bin/false}
-@@ -30,7 +30,7 @@ which mkfs.ext4 || skip
- aux prepare_pvs 2 64
- get_devs
- 
--vgcreate -s 64K "$vg" "${DEVICES[@]}"
-+vgcreate $SHARED -s 64K "$vg" "${DEVICES[@]}"
- 
- lvcreate -L10M -V10M -T $vg/pool --name $lv1
- 
-diff --git a/test/shell/lvextend-thin-cache.sh b/test/shell/lvextend-thin-cache.sh
-index 8983b7d..f7bbfd9 100644
---- a/test/shell/lvextend-thin-cache.sh
-+++ b/test/shell/lvextend-thin-cache.sh
-@@ -12,7 +12,7 @@
- 
- # Exercise resize of cached thin pool data volumes
- 
--SKIP_WITH_LVMLOCKD=1
-+
- SKIP_WITH_LVMPOLLD=1
- 
- export LVM_TEST_THIN_REPAIR_CMD=${LVM_TEST_THIN_REPAIR_CMD-/bin/false}
-diff --git a/test/shell/lvs-cache.sh b/test/shell/lvs-cache.sh
-index 84ac026..62d45ac 100644
---- a/test/shell/lvs-cache.sh
-+++ b/test/shell/lvs-cache.sh
-@@ -15,7 +15,7 @@
- # Full CLI uses  --type
- # Shorthand CLI uses -H | --cache
- 
--SKIP_WITH_LVMLOCKD=1
-+
- SKIP_WITH_LVMPOLLD=1
- 
- . lib/inittest
+ echo Test combination of --vgmetadatacopies and pvchange --metadataignore
+ for mdacp in 1 2; do
+ 	pvcreate --metadatacopies $mdacp "$dev1" "$dev2" "$dev3" "$dev4" "$dev5"
+-	vgcreate --vgmetadatacopies $(( mdacp * 1 )) $vg1 "$dev1" "$dev2"
++	vgcreate $SHARED --vgmetadatacopies $(( mdacp * 1 )) $vg1 "$dev1" "$dev2"
+ 	check vg_field $vg1 vg_mda_copies $(( mdacp * 1 ))
+ 	check vg_field $vg1 vg_mda_used_count $(( mdacp * 1 ))
+ 	pvignore_ "$dev3"
 
 
