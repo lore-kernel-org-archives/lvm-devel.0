@@ -1,126 +1,94 @@
 From: David Teigland <teigland@sourceware.org>
-Date: Thu, 31 May 2018 10:16:11 -0400
-Subject: master - tests: enable lvcreate cache tests with lvmlockd
-Message-ID: <201805311416.w4VEGBUR031446@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Thu, 31 May 2018 10:16:16 -0400
+Subject: master - tests: change lvcreate syntax to allow lvmlockd
+Message-ID: <201805311416.w4VEGGrD031456@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=214235367b3500a586fc42232af34bd04ad14078
-Commit:        214235367b3500a586fc42232af34bd04ad14078
-Parent:        c516321325f41f6b1f9d9342e2b0d0507b5a30fd
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=2beb3009bd7e34604dbd4f03c95fb7cd85eb98a6
+Commit:        2beb3009bd7e34604dbd4f03c95fb7cd85eb98a6
+Parent:        214235367b3500a586fc42232af34bd04ad14078
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Wed May 30 15:56:08 2018 -0500
+AuthorDate:    Wed May 30 16:40:03 2018 -0500
 Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Wed May 30 15:56:08 2018 -0500
+CommitterDate: Wed May 30 16:40:03 2018 -0500
 
-tests: enable lvcreate cache tests with lvmlockd
+tests: change lvcreate syntax to allow lvmlockd
 
-Tests that want to use lvcreate to create a new
-origin LV and then combine it with an existing
-cache pool to create a cache LV.
+Using the less ambiguous lvcreate syntax for creating a
+cache LV allows more tests to run with lvmlockd.
 ---
- test/shell/cache-metadata2.sh       |    2 +-
- test/shell/component-cache.sh       |    2 +-
- test/shell/lvchange-cache-mode.sh   |    2 +-
- test/shell/lvchange-cache.sh        |    2 +-
- test/shell/lvconvert-cache-abort.sh |    2 +-
- test/shell/lvconvert-cache-smq.sh   |    2 +-
- test/shell/profiles-cache.sh        |    2 +-
- 7 files changed, 7 insertions(+), 7 deletions(-)
+ test/shell/lvchange-cache-old.sh      |    4 ++--
+ test/shell/lvconvert-cache-raid.sh    |    3 +--
+ test/shell/lvcreate-cache-snapshot.sh |    3 +--
+ 3 files changed, 4 insertions(+), 6 deletions(-)
 
-diff --git a/test/shell/cache-metadata2.sh b/test/shell/cache-metadata2.sh
-index a7586f7..684ae67 100644
---- a/test/shell/cache-metadata2.sh
-+++ b/test/shell/cache-metadata2.sh
+diff --git a/test/shell/lvchange-cache-old.sh b/test/shell/lvchange-cache-old.sh
+index cb7915d..992249c 100644
+--- a/test/shell/lvchange-cache-old.sh
++++ b/test/shell/lvchange-cache-old.sh
 @@ -12,7 +12,7 @@
  
- # Exercise usage of metadata2 cache metadata format
- 
--SKIP_WITH_LVMLOCKD=1
-+
- SKIP_WITH_LVMPOLLD=1
- 
- # Until new version of cache_check tools - no integrity validation
-diff --git a/test/shell/component-cache.sh b/test/shell/component-cache.sh
-index 2060b31..87ca958 100644
---- a/test/shell/component-cache.sh
-+++ b/test/shell/component-cache.sh
-@@ -12,7 +12,7 @@
- 
- # Exercise activation of cache component devices
+ # Exercise usage of older metadata which are missing some new settings
  
 -SKIP_WITH_LVMLOCKD=1
 +
  SKIP_WITH_LVMPOLLD=1
  
  . lib/inittest
-diff --git a/test/shell/lvchange-cache-mode.sh b/test/shell/lvchange-cache-mode.sh
-index 2bb8641..a34e517 100644
---- a/test/shell/lvchange-cache-mode.sh
-+++ b/test/shell/lvchange-cache-mode.sh
-@@ -12,7 +12,7 @@
+@@ -24,7 +24,7 @@ aux prepare_vg 5 80
  
- # Exercise changing of caching mode on both cache pool and cached LV.
+ 
+ lvcreate -l 10 --type cache-pool $vg/cpool
+-lvcreate -l 20 -H -n $lv1 $vg/cpool
++lvcreate -l 20 -H -n $lv1 --cachepool $vg/cpool $vg
+ 
+ vgcfgbackup -f backup $vg
+ 
+diff --git a/test/shell/lvconvert-cache-raid.sh b/test/shell/lvconvert-cache-raid.sh
+index ec9b1e4..fa49163 100644
+--- a/test/shell/lvconvert-cache-raid.sh
++++ b/test/shell/lvconvert-cache-raid.sh
+@@ -12,7 +12,6 @@
+ 
+ # Exercise usage of stacked cache volume using raid volume
  
 -SKIP_WITH_LVMLOCKD=1
-+
  SKIP_WITH_LVMPOLLD=1
  
  . lib/inittest
-diff --git a/test/shell/lvchange-cache.sh b/test/shell/lvchange-cache.sh
-index 73ad6c0..7e95f61 100644
---- a/test/shell/lvchange-cache.sh
-+++ b/test/shell/lvchange-cache.sh
-@@ -10,7 +10,7 @@
- # along with this program; if not, write to the Free Software Foundation,
- # Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
+@@ -86,7 +85,7 @@ lvremove -f $vg
+ 
+ # Test up/down raid conversion of cache pool data and metadata
+ lvcreate --type cache-pool $vg/cpool -l 10
+-lvcreate -n corigin -H $vg/cpool -l 20
++lvcreate -H -n corigin --cachepool $vg/cpool -l 20 $vg
+ 
+ lvconvert -y -m +1 --type raid1 $vg/cpool_cmeta
+ check lv_field $vg/cpool_cmeta layout "raid,raid1"
+diff --git a/test/shell/lvcreate-cache-snapshot.sh b/test/shell/lvcreate-cache-snapshot.sh
+index c1be6a2..5d1c5a7 100644
+--- a/test/shell/lvcreate-cache-snapshot.sh
++++ b/test/shell/lvcreate-cache-snapshot.sh
+@@ -12,7 +12,6 @@
+ 
+ # Exercise creation of snapshot of cached LV
  
 -SKIP_WITH_LVMLOCKD=1
-+
  SKIP_WITH_LVMPOLLD=1
  
  . lib/inittest
-diff --git a/test/shell/lvconvert-cache-abort.sh b/test/shell/lvconvert-cache-abort.sh
-index e771947..404f442 100644
---- a/test/shell/lvconvert-cache-abort.sh
-+++ b/test/shell/lvconvert-cache-abort.sh
-@@ -12,7 +12,7 @@
+@@ -25,7 +24,7 @@ aux have_cache 1 5 0 || skip
+ aux prepare_vg 2
  
- # Exercise cache flushing is abortable
+ lvcreate --type cache-pool -L1 $vg/cpool
+-lvcreate -H -L4 -n $lv1 $vg/cpool
++lvcreate -H -L4 -n $lv1 --cachepool $vg/cpool $vg
  
--SKIP_WITH_LVMLOCKD=1
-+
- SKIP_WITH_LVMPOLLD=1
- 
- . lib/inittest
-diff --git a/test/shell/lvconvert-cache-smq.sh b/test/shell/lvconvert-cache-smq.sh
-index e329aee..67710fa 100644
---- a/test/shell/lvconvert-cache-smq.sh
-+++ b/test/shell/lvconvert-cache-smq.sh
-@@ -12,7 +12,7 @@
- 
- # Exercise conversion of cache and cache pool
- 
--SKIP_WITH_LVMLOCKD=1
-+
- SKIP_WITH_LVMPOLLD=1
- 
- . lib/inittest
-diff --git a/test/shell/profiles-cache.sh b/test/shell/profiles-cache.sh
-index dd4affb..9e17ebf 100644
---- a/test/shell/profiles-cache.sh
-+++ b/test/shell/profiles-cache.sh
-@@ -13,7 +13,7 @@
- # Exercise obtaining cache parameter from various sources
- # Either commmand line or metadata profile or implicit default...
- 
--SKIP_WITH_LVMLOCKD=1
-+
- SKIP_WITH_LVMPOLLD=1
- 
- . lib/inittest
+ lvcreate -s -L2 -n $lv2 $vg/$lv1
+ check lv_field $vg/$lv1 segtype cache
 
 
