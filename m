@@ -1,54 +1,51 @@
 From: David Teigland <teigland@sourceware.org>
-Date: Fri, 1 Jun 2018 14:16:05 -0400
-Subject: master - lvmlockd: clarify lock_type use for coverity
-Message-ID: <201806011816.w51IG5Se002037@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Fri, 1 Jun 2018 14:16:11 -0400
+Subject: master - devs: clear coverity warning about null info
+Message-ID: <201806011816.w51IGB54002050@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=09177b53dddadf89f976ad72ec293c61d0eee9ba
-Commit:        09177b53dddadf89f976ad72ec293c61d0eee9ba
-Parent:        b6f0f20da25ac4ab6b5294129fd2f383bf818062
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=0625c7f372a8481e21752b1fc930984ba7c900db
+Commit:        0625c7f372a8481e21752b1fc930984ba7c900db
+Parent:        09177b53dddadf89f976ad72ec293c61d0eee9ba
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Fri Jun 1 10:12:04 2018 -0500
+AuthorDate:    Fri Jun 1 10:15:48 2018 -0500
 Committer:     David Teigland <teigland@redhat.com>
 CommitterDate: Fri Jun 1 13:15:22 2018 -0500
 
-lvmlockd: clarify lock_type use for coverity
+devs: clear coverity warning about null info
 
-Make it clearer when vg->lock_type will be used so
-coverity doesn't worry about it.
+a theoretical possibility.
 ---
- lib/metadata/metadata.c |   14 ++++++++------
- 1 files changed, 8 insertions(+), 6 deletions(-)
+ lib/cache/lvmcache.c |    6 ++++--
+ 1 files changed, 4 insertions(+), 2 deletions(-)
 
-diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
-index 6525cf9..1bbea19 100644
---- a/lib/metadata/metadata.c
-+++ b/lib/metadata/metadata.c
-@@ -2929,13 +2929,15 @@ int vg_write(struct volume_group *vg)
- 	struct lv_list *lvl;
- 	int revert = 0, wrote = 0;
+diff --git a/lib/cache/lvmcache.c b/lib/cache/lvmcache.c
+index 68170d8..527f0a6 100644
+--- a/lib/cache/lvmcache.c
++++ b/lib/cache/lvmcache.c
+@@ -1010,7 +1010,8 @@ static void _filter_duplicate_devs(struct cmd_context *cmd)
  
--	dm_list_iterate_items(lvl, &vg->lvs) {
--		if (lvl->lv->lock_args && !strcmp(lvl->lv->lock_args, "pending")) {
--			if (!lockd_init_lv_args(vg->cmd, vg, lvl->lv, vg->lock_type, &lvl->lv->lock_args)) {
--				log_error("Cannot allocate lock for new LV.");
--				return 0;
-+	if (vg_is_shared(vg)) {
-+		dm_list_iterate_items(lvl, &vg->lvs) {
-+			if (lvl->lv->lock_args && !strcmp(lvl->lv->lock_args, "pending")) {
-+				if (!lockd_init_lv_args(vg->cmd, vg, lvl->lv, vg->lock_type, &lvl->lv->lock_args)) {
-+					log_error("Cannot allocate lock for new LV.");
-+					return 0;
-+				}
-+				lvl->lv->new_lock_args = 1;
- 			}
--			lvl->lv->new_lock_args = 1;
- 		}
- 	}
+ 	dm_list_iterate_items_safe(devl, devl2, &_unused_duplicate_devs) {
  
+-		info = lvmcache_info_from_pvid(devl->dev->pvid, NULL, 0);
++		if (!(info = lvmcache_info_from_pvid(devl->dev->pvid, NULL, 0)))
++			continue;
+ 
+ 		if (MAJOR(info->dev->dev) == dt->md_major) {
+ 			log_debug_devs("Ignoring md component duplicate %s", dev_name(devl->dev));
+@@ -1038,7 +1039,8 @@ static void _warn_duplicate_devs(struct cmd_context *cmd)
+ 
+ 	dm_list_iterate_items_safe(devl, devl2, &_unused_duplicate_devs) {
+ 		/* info for the preferred device that we're actually using */
+-		info = lvmcache_info_from_pvid(devl->dev->pvid, NULL, 0);
++		if (!(info = lvmcache_info_from_pvid(devl->dev->pvid, NULL, 0)))
++			continue;
+ 
+ 		if (!id_write_format((const struct id *)info->dev->pvid, uuid, sizeof(uuid)))
+ 			stack;
 
 
