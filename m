@@ -1,360 +1,270 @@
 From: Joe Thornber <thornber@sourceware.org>
-Date: Mon, 4 Jun 2018 08:22:54 -0400
-Subject: master - build: get separate builddir working again
-Message-ID: <201806041222.w54CMsuA018622@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Mon, 4 Jun 2018 08:56:23 -0400
+Subject: master - build: libbase.a
+Message-ID: <201806041256.w54CuNJD024645@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=29abba378520a270c3a9385724c8ef5df66497b1
-Commit:        29abba378520a270c3a9385724c8ef5df66497b1
-Parent:        66b10275c5ce7328cd5fb0f00a52de6c76e45481
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=232918fb86e1ee254ae5e4c9aece4615d828c9bb
+Commit:        232918fb86e1ee254ae5e4c9aece4615d828c9bb
+Parent:        29abba378520a270c3a9385724c8ef5df66497b1
 Author:        Joe Thornber <ejt@redhat.com>
-AuthorDate:    Mon Jun 4 13:22:14 2018 +0100
+AuthorDate:    Mon Jun 4 13:53:07 2018 +0100
 Committer:     Joe Thornber <ejt@redhat.com>
-CommitterDate: Mon Jun 4 13:22:14 2018 +0100
+CommitterDate: Mon Jun 4 13:53:07 2018 +0100
 
-build: get separate builddir working again
+build: libbase.a
 
 ---
- Makefile.in                       |    2 +-
- device_mapper/Makefile            |   10 +++++-----
- device_mapper/datastruct/bitset.c |    2 +-
- device_mapper/datastruct/hash.c   |    2 +-
- device_mapper/datastruct/list.c   |    2 +-
- device_mapper/ioctl/libdm-iface.c |   10 +++++-----
- device_mapper/mm/dbg_malloc.c     |    2 +-
- device_mapper/mm/pool-fast.c      |    2 +-
- device_mapper/mm/pool.c           |    2 +-
- device_mapper/regex/matcher.c     |    2 +-
- device_mapper/regex/parse_rx.c    |    2 +-
- device_mapper/regex/ttree.c       |    2 +-
- libdm/make.tmpl.in                |   29 ++++++++++++++++++++---------
- make.tmpl.in                      |   19 +++++++++++++------
- 14 files changed, 53 insertions(+), 35 deletions(-)
+ Makefile.in                  |    1 +
+ daemons/clvmd/Makefile.in    |    2 +-
+ daemons/dmeventd/Makefile.in |    2 +-
+ daemons/lvmetad/Makefile.in  |    8 ++++----
+ daemons/lvmlockd/Makefile.in |    6 ++----
+ daemons/lvmpolld/Makefile.in |    3 +--
+ lib/Makefile.in              |    1 -
+ libdm/make.tmpl.in           |    4 ++--
+ make.tmpl.in                 |    8 ++++++--
+ scripts/Makefile.in          |    4 ++--
+ test/api/Makefile.in         |    3 +--
+ test/unit/Makefile.in        |    2 +-
+ tools/Makefile.in            |    8 ++++----
+ 13 files changed, 26 insertions(+), 26 deletions(-)
 
 diff --git a/Makefile.in b/Makefile.in
-index 00b4f1e..851447e 100644
+index 851447e..7eb6460 100644
 --- a/Makefile.in
 +++ b/Makefile.in
-@@ -213,7 +213,7 @@ endif
- endif
+@@ -214,6 +214,7 @@ endif
  
  include test/unit/Makefile
--include device_mapper/Makefile
-+include $(top_srcdir)/device_mapper/Makefile
+ include $(top_srcdir)/device_mapper/Makefile
++include $(top_srcdir)/base/Makefile
  
  ifneq ($(shell which ctags),)
  .PHONY: tags
-diff --git a/device_mapper/Makefile b/device_mapper/Makefile
-index 999c3ba..b246f82 100644
---- a/device_mapper/Makefile
-+++ b/device_mapper/Makefile
-@@ -30,17 +30,17 @@ DEVICE_MAPPER_SOURCE=\
- 	device_mapper/regex/ttree.c \
- 	device_mapper/ioctl/libdm-iface.c
+diff --git a/daemons/clvmd/Makefile.in b/daemons/clvmd/Makefile.in
+index 9e096b5..622a603 100644
+--- a/daemons/clvmd/Makefile.in
++++ b/daemons/clvmd/Makefile.in
+@@ -80,7 +80,7 @@ CFLAGS += -fno-strict-aliasing $(EXTRA_EXEC_CFLAGS)
+ INSTALL_TARGETS = \
+ 	install_clvmd
  
--DEVICE_MAPPER_DEPENDS=$(subst .c,.d,$(DEVICE_MAPPER_SOURCE))
--DEVICE_MAPPER_OBJECTS=$(subst .c,.o,$(DEVICE_MAPPER_SOURCE))
-+DEVICE_MAPPER_DEPENDS=$(addprefix $(top_builddir)/,$(subst .c,.d,$(DEVICE_MAPPER_SOURCE)))
-+DEVICE_MAPPER_OBJECTS=$(addprefix $(top_builddir)/,$(subst .c,.o,$(DEVICE_MAPPER_SOURCE)))
- CLEAN_TARGETS+=$(DEVICE_MAPPER_DEPENDS) $(DEVICE_MAPPER_OBJECTS)
+-clvmd: $(OBJECTS) $(top_builddir)/lib/liblvm-internal.a $(top_builddir)/device_mapper/libdevice-mapper.a
++clvmd: $(OBJECTS) $(top_builddir)/lib/liblvm-internal.a $(INTERNAL_LIBS)
+ 	$(CC) $(CFLAGS) $(LDFLAGS) $(EXTRA_EXEC_LDFLAGS) $(ELDFLAGS) \
+ 	      -o clvmd $+ $(LMLIBS) $(LIBS)
  
- -include $(DEVICE_MAPPER_DEPENDS)
+diff --git a/daemons/dmeventd/Makefile.in b/daemons/dmeventd/Makefile.in
+index e43bb2b..56a9e35 100644
+--- a/daemons/dmeventd/Makefile.in
++++ b/daemons/dmeventd/Makefile.in
+@@ -61,7 +61,7 @@ LIBS += $(PTHREAD_LIBS)
  
--$(DEVICE_MAPPER_OBJECTS): INCLUDES+=-Idevice_mapper/
-+$(DEVICE_MAPPER_OBJECTS): INCLUDES+=-I$(top_srcdir)/device_mapper/
+ dmeventd: $(LIB_SHARED) dmeventd.o
+ 	$(CC) $(CFLAGS) -L. $(LDFLAGS) $(EXTRA_EXEC_LDFLAGS) $(ELDFLAGS) dmeventd.o \
+-		-o $@ $(DL_LIBS) $(DMEVENT_LIBS) $(top_builddir)/device_mapper/libdevice-mapper.a $(LIBS) -lm
++		-o $@ $(DL_LIBS) $(DMEVENT_LIBS) $(INTERNAL_LIBS) $(LIBS) -lm
  
--device_mapper/libdevice-mapper.a: $(DEVICE_MAPPER_OBJECTS)
-+$(top_builddir)/device_mapper/libdevice-mapper.a: $(DEVICE_MAPPER_OBJECTS)
- 	@echo "    [AR] $@"
- 	$(Q) $(RM) $@
- 	$(Q) $(AR) rsv $@ $(DEVICE_MAPPER_OBJECTS) > /dev/null
+ dmeventd.static: $(LIB_STATIC) dmeventd.o
+ 	$(CC) $(CFLAGS) $(LDFLAGS) -static -L. -L$(interfacebuilddir) dmeventd.o \
+diff --git a/daemons/lvmetad/Makefile.in b/daemons/lvmetad/Makefile.in
+index f652db8..5738bbe 100644
+--- a/daemons/lvmetad/Makefile.in
++++ b/daemons/lvmetad/Makefile.in
+@@ -36,13 +36,13 @@ LIBS += $(RT_LIBS) $(DAEMON_LIBS) $(PTHREAD_LIBS) -lm
  
--CLEAN_TARGETS+=device_mapper/libdevice-mapper.a
-+CLEAN_TARGETS+=$(top_builddir)/device_mapper/libdevice-mapper.a
-diff --git a/device_mapper/datastruct/bitset.c b/device_mapper/datastruct/bitset.c
-index 6ae99d3..f093ac0 100644
---- a/device_mapper/datastruct/bitset.c
-+++ b/device_mapper/datastruct/bitset.c
-@@ -13,7 +13,7 @@
-  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
-  */
+ lvmetad: $(OBJECTS) $(top_builddir)/libdaemon/client/libdaemonclient.a \
+ 		    $(top_builddir)/libdaemon/server/libdaemonserver.a \
+-		    $(top_builddir)/device_mapper/libdevice-mapper.a
+-	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(OBJECTS) $(top_builddir)/device_mapper/libdevice-mapper.a -ldaemonserver $(LIBS)
++		    $(INTERNAL_LIBS)
++	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(OBJECTS) -ldaemonserver $(INTERNAL_LIBS) $(LIBS)
  
--#include "misc/dmlib.h"
-+#include "device_mapper/misc/dmlib.h"
+ lvmetactl: lvmetactl.o $(top_builddir)/libdaemon/client/libdaemonclient.a \
+ 	$(top_builddir)/libdaemon/server/libdaemonserver.a \
+-	$(top_builddir)/device_mapper/libdevice-mapper.a
+-	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ lvmetactl.o $(top_builddir)/device_mapper/libdevice-mapper.a $(LIBS)
++	$(INTERNAL_LIBS)
++	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ lvmetactl.o $(INTERNAL_LIBS) $(LIBS)
  
- #include <ctype.h>
+ CLEAN_TARGETS += lvmetactl.o
  
-diff --git a/device_mapper/datastruct/hash.c b/device_mapper/datastruct/hash.c
-index 9b9c939..59e719b 100644
---- a/device_mapper/datastruct/hash.c
-+++ b/device_mapper/datastruct/hash.c
-@@ -13,7 +13,7 @@
-  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
-  */
+diff --git a/daemons/lvmlockd/Makefile.in b/daemons/lvmlockd/Makefile.in
+index 7c58fe2..6dcc207 100644
+--- a/daemons/lvmlockd/Makefile.in
++++ b/daemons/lvmlockd/Makefile.in
+@@ -42,12 +42,10 @@ LIBS += $(RT_LIBS) $(DAEMON_LIBS) $(PTHREAD_LIBS)
  
--#include "misc/dmlib.h"
-+#include "device_mapper/misc/dmlib.h"
+ lvmlockd: $(OBJECTS) $(top_builddir)/libdaemon/client/libdaemonclient.a \
+ 		    $(top_builddir)/libdaemon/server/libdaemonserver.a
+-	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(OBJECTS) $(LOCK_LIBS) -ldaemonserver \
+-		$(top_builddir)/device_mapper/libdevice-mapper.a $(LIBS)
++	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(OBJECTS) $(LOCK_LIBS) -ldaemonserver $(INTERNAL_LIBS) $(LIBS)
  
- struct dm_hash_node {
- 	struct dm_hash_node *next;
-diff --git a/device_mapper/datastruct/list.c b/device_mapper/datastruct/list.c
-index 86c3e4e..bda8027 100644
---- a/device_mapper/datastruct/list.c
-+++ b/device_mapper/datastruct/list.c
-@@ -13,7 +13,7 @@
-  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
-  */
+ lvmlockctl: lvmlockctl.o $(top_builddir)/libdaemon/client/libdaemonclient.a
+-	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ lvmlockctl.o \
+-		$(top_builddir)/device_mapper/libdevice-mapper.a $(LIBS)
++	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ lvmlockctl.o $(INTERNAL_LIBS) $(LIBS)
  
--#include "misc/dmlib.h"
-+#include "device_mapper/misc/dmlib.h"
- #include <assert.h>
+ install_lvmlockd: lvmlockd
+ 	$(INSTALL_PROGRAM) -D $< $(sbindir)/$(<F)
+diff --git a/daemons/lvmpolld/Makefile.in b/daemons/lvmpolld/Makefile.in
+index 229a87e..8bf2556 100644
+--- a/daemons/lvmpolld/Makefile.in
++++ b/daemons/lvmpolld/Makefile.in
+@@ -34,8 +34,7 @@ LIBS += $(DAEMON_LIBS) -ldaemonserver $(PTHREAD_LIBS)
  
- /*
-diff --git a/device_mapper/ioctl/libdm-iface.c b/device_mapper/ioctl/libdm-iface.c
-index 4825f1d..3e1b445 100644
---- a/device_mapper/ioctl/libdm-iface.c
-+++ b/device_mapper/ioctl/libdm-iface.c
-@@ -13,9 +13,9 @@
-  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
-  */
+ lvmpolld: $(OBJECTS) $(top_builddir)/libdaemon/client/libdaemonclient.a \
+ 		    $(top_builddir)/libdaemon/server/libdaemonserver.a
+-	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(OBJECTS) \
+-		$(top_builddir)/device_mapper/libdevice-mapper.a $(LIBS)
++	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(OBJECTS) $(INTERNAL_LIBS) $(LIBS)
  
--#include "misc/dmlib.h"
--#include "libdm-targets.h"
--#include "libdm-common.h"
-+#include "device_mapper/misc/dmlib.h"
-+#include "device_mapper/ioctl/libdm-targets.h"
-+#include "device_mapper/libdm-common.h"
+ install_lvmpolld: lvmpolld
+ 	$(INSTALL_PROGRAM) -D $< $(sbindir)/$(<F)
+diff --git a/lib/Makefile.in b/lib/Makefile.in
+index 4fb4fcf..1d42235 100644
+--- a/lib/Makefile.in
++++ b/lib/Makefile.in
+@@ -21,7 +21,6 @@ ifeq ("@CLUSTER@", "shared")
+ endif
  
- #include <stddef.h>
- #include <fcntl.h>
-@@ -26,7 +26,7 @@
- #include <unistd.h>
- 
- #ifdef __linux__
--#  include "misc/kdev_t.h"
-+#  include "device_mapper/misc/kdev_t.h"
- #  include <linux/limits.h>
- #else
- #  define MAJOR(x) major((x))
-@@ -34,7 +34,7 @@
- #  define MKDEV(x,y) makedev((x),(y))
- #endif
- 
--#include "misc/dm-ioctl.h"
-+#include "device_mapper/misc/dm-ioctl.h"
- 
- /*
-  * Ensure build compatibility.  
-diff --git a/device_mapper/mm/dbg_malloc.c b/device_mapper/mm/dbg_malloc.c
-index a17203c..b169f8b 100644
---- a/device_mapper/mm/dbg_malloc.c
-+++ b/device_mapper/mm/dbg_malloc.c
-@@ -13,7 +13,7 @@
-  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
-  */
- 
--#include "misc/dmlib.h"
-+#include "device_mapper/misc/dmlib.h"
- 
- #ifdef VALGRIND_POOL
- #include "memcheck.h"
-diff --git a/device_mapper/mm/pool-fast.c b/device_mapper/mm/pool-fast.c
-index 895872e..b83c693 100644
---- a/device_mapper/mm/pool-fast.c
-+++ b/device_mapper/mm/pool-fast.c
-@@ -17,7 +17,7 @@
- #include "memcheck.h"
- #endif
- 
--#include "misc/dmlib.h"
-+#include "device_mapper/misc/dmlib.h"
- #include <stddef.h>	/* For musl libc */
- #include <malloc.h>
- 
-diff --git a/device_mapper/mm/pool.c b/device_mapper/mm/pool.c
-index a710704..20d7fd9 100644
---- a/device_mapper/mm/pool.c
-+++ b/device_mapper/mm/pool.c
-@@ -13,7 +13,7 @@
-  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
-  */
- 
--#include "misc/dmlib.h"
-+#include "device_mapper/misc/dmlib.h"
- #include <sys/mman.h>
- #include <pthread.h>
- 
-diff --git a/device_mapper/regex/matcher.c b/device_mapper/regex/matcher.c
-index 375c1ab..b3870e0 100644
---- a/device_mapper/regex/matcher.c
-+++ b/device_mapper/regex/matcher.c
-@@ -13,7 +13,7 @@
-  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
-  */
- 
--#include "misc/dmlib.h"
-+#include "device_mapper/misc/dmlib.h"
- #include "parse_rx.h"
- #include "ttree.h"
- #include "assert.h"
-diff --git a/device_mapper/regex/parse_rx.c b/device_mapper/regex/parse_rx.c
-index cc83bfe..563d2ae 100644
---- a/device_mapper/regex/parse_rx.c
-+++ b/device_mapper/regex/parse_rx.c
-@@ -13,7 +13,7 @@
-  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
-  */
- 
--#include "misc/dmlib.h"
-+#include "device_mapper/misc/dmlib.h"
- #include "parse_rx.h"
- 
- #ifdef DEBUG
-diff --git a/device_mapper/regex/ttree.c b/device_mapper/regex/ttree.c
-index 62c5bf7..27b775e 100644
---- a/device_mapper/regex/ttree.c
-+++ b/device_mapper/regex/ttree.c
-@@ -13,7 +13,7 @@
-  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
-  */
- 
--#include "misc/dmlib.h"
-+#include "device_mapper/misc/dmlib.h"
- #include "ttree.h"
- 
- struct node {
+ SOURCES =\
+-	../base/data-struct/radix-tree.c \
+ 	activate/activate.c \
+ 	cache/lvmcache.c \
+ 	cache_segtype/cache.c \
 diff --git a/libdm/make.tmpl.in b/libdm/make.tmpl.in
-index 7e3f4a4..b9672dc 100644
+index b9672dc..fc29034 100644
 --- a/libdm/make.tmpl.in
 +++ b/libdm/make.tmpl.in
-@@ -58,6 +58,7 @@ PYTHON3 = @PYTHON3@
- PYCOMPILE = $(top_srcdir)/autoconf/py-compile
- 
- LIBS = @LIBS@
-+LIBS += $(SELINUX_LIBS) $(UDEV_LIBS) $(BLKID_LIBS) $(RT_LIBS) -lm
- # Extra libraries always linked with static binaries
- STATIC_LIBS = $(SELINUX_LIBS) $(UDEV_LIBS) $(BLKID_LIBS)
- DEFS += @DEFS@
-@@ -68,7 +69,9 @@ CLDFLAGS += @CLDFLAGS@
- ELDFLAGS += @ELDFLAGS@
- LDDEPS += @LDDEPS@
- LIB_SUFFIX = @LIB_SUFFIX@
--LVMINTERNAL_LIBS = -llvm-internal $(DMEVENT_LIBS) $(DAEMON_LIBS) $(SYSTEMD_LIBS) $(UDEV_LIBS) $(DL_LIBS) $(BLKID_LIBS)
-+LVMINTERNAL_LIBS=\
-+	-llvm-internal \
-+	$(DMEVENT_LIBS) $(DAEMON_LIBS) $(SYSTEMD_LIBS) $(UDEV_LIBS) $(DL_LIBS) $(BLKID_LIBS)
- DL_LIBS = @DL_LIBS@
- RT_LIBS = @RT_LIBS@
- M_LIBS = @M_LIBS@
-@@ -308,6 +311,7 @@ LIB_VERSION_APP := $(shell $(AWK) -F '[(). ]' '{printf "%s.%s",$$1,$$4}' $(top_s
- 
- INCLUDES += -I$(top_srcdir) -I$(srcdir) -I$(top_builddir)/include
- 
-+
- DEPS = $(top_builddir)/make.tmpl $(top_srcdir)/VERSION \
-        $(top_builddir)/Makefile
- 
-@@ -338,7 +342,7 @@ SUBDIRS.distclean := $(SUBDIRS:=.distclean)
+@@ -342,7 +342,7 @@ SUBDIRS.distclean := $(SUBDIRS:=.distclean)
  
  TARGETS += $(LIB_SHARED) $(LIB_STATIC)
  
--all: $(SUBDIRS) $(TARGETS)
-+all: $(top_builddir)/device_mapper/libdevice-mapper.a $(SUBDIRS) $(TARGETS)
+-all: $(top_builddir)/device_mapper/libdevice-mapper.a $(SUBDIRS) $(TARGETS)
++all: $(SUBDIRS) $(TARGETS)
  
  install: all $(SUBDIRS.install)
  install_cluster: all $(SUBDIRS.install_cluster)
-@@ -347,7 +351,7 @@ install_lvm2: $(SUBDIRS.install_lvm2)
+@@ -351,7 +351,7 @@ install_lvm2: $(SUBDIRS.install_lvm2)
  install_ocf: $(SUBDIRS.install_ocf)
  cflow: $(SUBDIRS.cflow)
  
--$(SUBDIRS): $(SUBDIRS.device-mapper)
-+$(SUBDIRS): $(SUBDIRS.device-mapper) $(top_builddir)/device_mapper/libdevice-mapper.a
+-$(SUBDIRS): $(SUBDIRS.device-mapper) $(top_builddir)/device_mapper/libdevice-mapper.a
++$(SUBDIRS): $(SUBDIRS.device-mapper)
  	$(MAKE) -C $@
  
  $(SUBDIRS.device-mapper):
-@@ -440,14 +444,12 @@ endif
- 
- .LIBPATTERNS = lib%.so lib%.a
- 
--DEPFLAGS=-MT $@ -MMD -MP -MF $*.d
--
- # still needed in 2018 for 32bit builds
- DEFS+=-D_FILE_OFFSET_BITS=64
- 
- %.o: %.c
- 	@echo "    [CC] $<"
--	$(Q) $(CC) $(DEPFLAGS) -c $(INCLUDES) $(VALGRIND_CFLAGS) $(PROGS_CFLAGS) $(DEFS) $(DEFS_$@) $(WFLAGS) $(WCFLAGS) $(CFLAGS) $(CFLAGS_$@) $< -o $@
-+	$(Q) $(CC) -c $(INCLUDES) $(VALGRIND_CFLAGS) $(PROGS_CFLAGS) $(DEFS) $(DEFS_$@) $(WFLAGS) $(WCFLAGS) $(CFLAGS) $(CFLAGS_$@) $< -o $@
- 
- %.o: %.cpp
- 	@echo "    [CXX] $<"
-@@ -507,9 +509,18 @@ $(LIB_STATIC): $(OBJECTS)
- 	$(Q) $(RM) $@
- 	$(Q) $(AR) rsv $@ $(OBJECTS) > /dev/null
- 
--%.d:
--.PRECIOUS: %.d
--	
-+%.d: %.c
-+	@echo "    [DEP] $<"
-+	$(Q) $(MKDIR_P) $(dir $@); \
-+	set -e; \
-+	FILE=`echo $@ | sed 's/\\//\\\\\\//g;s/\\.d//g'`; \
-+	DEPS=`echo $(DEPS) | sed -e 's/\\//\\\\\\//g'`; \
-+	$(CC) -MM $(INCLUDES) $(VALGRIND_CFLAGS) $(PROGS_CFLAGS) $(DEFS) -o $@ $<; \
-+	sed -i "s/\(.*\)\.o[ :]*/$$FILE.o $$FILE.d $$FILE.pot: $$DEPS /g" $@; \
-+	DEPLIST=`sed 's/ \\\\//;s/.*://;' < $@`; \
-+	echo $$DEPLIST | fmt -1 | sed 's/ //g;s/\(.*\)/\1:/' >> $@; \
-+	[ -s $@ ] || $(RM) $@
-+
- %.mo: %.po
- 	@echo "    [MSGFMT] $<"
- 	$(Q) $(MSGFMT) -o $@ $<
 diff --git a/make.tmpl.in b/make.tmpl.in
-index 16a8571..b9672dc 100644
+index b9672dc..0790d7b 100644
 --- a/make.tmpl.in
 +++ b/make.tmpl.in
-@@ -444,14 +444,12 @@ endif
+@@ -342,7 +342,11 @@ SUBDIRS.distclean := $(SUBDIRS:=.distclean)
  
- .LIBPATTERNS = lib%.so lib%.a
+ TARGETS += $(LIB_SHARED) $(LIB_STATIC)
  
--DEPFLAGS=-MT $@ -MMD -MP -MF $*.d
--
- # still needed in 2018 for 32bit builds
- DEFS+=-D_FILE_OFFSET_BITS=64
+-all: $(top_builddir)/device_mapper/libdevice-mapper.a $(SUBDIRS) $(TARGETS)
++INTERNAL_LIBS=\
++	$(top_builddir)/device_mapper/libdevice-mapper.a \
++	$(top_builddir)/base/libbase.a
++	
++all: $(INTERNAL_LIBS) $(SUBDIRS) $(TARGETS)
  
- %.o: %.c
- 	@echo "    [CC] $<"
--	$(Q) $(CC) $(DEPFLAGS) -c $(INCLUDES) $(VALGRIND_CFLAGS) $(PROGS_CFLAGS) $(DEFS) $(DEFS_$@) $(WFLAGS) $(WCFLAGS) $(CFLAGS) $(CFLAGS_$@) $< -o $@
-+	$(Q) $(CC) -c $(INCLUDES) $(VALGRIND_CFLAGS) $(PROGS_CFLAGS) $(DEFS) $(DEFS_$@) $(WFLAGS) $(WCFLAGS) $(CFLAGS) $(CFLAGS_$@) $< -o $@
+ install: all $(SUBDIRS.install)
+ install_cluster: all $(SUBDIRS.install_cluster)
+@@ -351,7 +355,7 @@ install_lvm2: $(SUBDIRS.install_lvm2)
+ install_ocf: $(SUBDIRS.install_ocf)
+ cflow: $(SUBDIRS.cflow)
  
- %.o: %.cpp
- 	@echo "    [CXX] $<"
-@@ -511,9 +509,18 @@ $(LIB_STATIC): $(OBJECTS)
- 	$(Q) $(RM) $@
- 	$(Q) $(AR) rsv $@ $(OBJECTS) > /dev/null
+-$(SUBDIRS): $(SUBDIRS.device-mapper) $(top_builddir)/device_mapper/libdevice-mapper.a
++$(SUBDIRS): $(SUBDIRS.device-mapper) $(INTERNAL_LIBS)
+ 	$(MAKE) -C $@
  
--%.d:
--.PRECIOUS: %.d
--	
-+%.d: %.c
-+	@echo "    [DEP] $<"
-+	$(Q) $(MKDIR_P) $(dir $@); \
-+	set -e; \
-+	FILE=`echo $@ | sed 's/\\//\\\\\\//g;s/\\.d//g'`; \
-+	DEPS=`echo $(DEPS) | sed -e 's/\\//\\\\\\//g'`; \
-+	$(CC) -MM $(INCLUDES) $(VALGRIND_CFLAGS) $(PROGS_CFLAGS) $(DEFS) -o $@ $<; \
-+	sed -i "s/\(.*\)\.o[ :]*/$$FILE.o $$FILE.d $$FILE.pot: $$DEPS /g" $@; \
-+	DEPLIST=`sed 's/ \\\\//;s/.*://;' < $@`; \
-+	echo $$DEPLIST | fmt -1 | sed 's/ //g;s/\(.*\)/\1:/' >> $@; \
-+	[ -s $@ ] || $(RM) $@
-+
- %.mo: %.po
- 	@echo "    [MSGFMT] $<"
- 	$(Q) $(MSGFMT) -o $@ $<
+ $(SUBDIRS.device-mapper):
+diff --git a/scripts/Makefile.in b/scripts/Makefile.in
+index 194d2e2..ee39306 100644
+--- a/scripts/Makefile.in
++++ b/scripts/Makefile.in
+@@ -88,8 +88,8 @@ endif
+ 
+ CFLAGS_lvm2_activation_generator_systemd_red_hat.o += $(EXTRA_EXEC_CFLAGS)
+ 
+-lvm2_activation_generator_systemd_red_hat: $(OBJECTS) $(DEPLIBS) $(top_builddir)/device_mapper/libdevice-mapper.a
+-	$(CC) -o $@ $(OBJECTS) $(CFLAGS) $(LDFLAGS) $(EXTRA_EXEC_LDFLAGS) $(ELDFLAGS) $(LVMLIBS) $(top_builddir)/device_mapper/libdevice-mapper.a $(LIBS)
++lvm2_activation_generator_systemd_red_hat: $(OBJECTS) $(DEPLIBS) $(INTERNAL_LIBS)
++	$(CC) -o $@ $(OBJECTS) $(CFLAGS) $(LDFLAGS) $(EXTRA_EXEC_LDFLAGS) $(ELDFLAGS) $(LVMLIBS) $(INTERNAL_LIBS) $(LIBS)
+ 
+ install_systemd_generators:
+ 	$(INSTALL_DIR) $(systemd_generator_dir)
+diff --git a/test/api/Makefile.in b/test/api/Makefile.in
+index d010394..6872095 100644
+--- a/test/api/Makefile.in
++++ b/test/api/Makefile.in
+@@ -46,8 +46,7 @@ DEFS += -D_REENTRANT
+ DEPLIBS += $(top_builddir)/liblvm/liblvm2app.so
+ LDFLAGS+=\
+ 	-L$(top_builddir)/liblvm \
+-	-L$(top_builddir)/daemons/dmeventd \
+-	-L$(top_builddir)/device_mapper/libdevice-mapper.a
++	-L$(top_builddir)/daemons/dmeventd
+ LIBS += @LVM2APP_LIB@ $(DMEVENT_LIBS)
+ 
+ %.t: %.o $(DEPLIBS)
+diff --git a/test/unit/Makefile.in b/test/unit/Makefile.in
+index ca36c57..994968c 100644
+--- a/test/unit/Makefile.in
++++ b/test/unit/Makefile.in
+@@ -34,7 +34,7 @@ UNIT_OBJECTS=$(UNIT_SOURCE:%.c=%.o)
+ CLEAN_TARGETS+=$(UNIT_DEPENDS) $(UNIT_OBJECTS)
+ UNIT_LDLIBS += $(LVMINTERNAL_LIBS) -laio
+ 
+-test/unit/unit-test: $(UNIT_OBJECTS) lib/liblvm-internal.a device_mapper/libdevice-mapper.a
++test/unit/unit-test: $(UNIT_OBJECTS) lib/liblvm-internal.a $(INTERNAL_LIBS)
+ 	@echo "    [LD] $@"
+ 	$(Q) $(CC) $(CFLAGS) $(LDFLAGS) $(EXTRA_EXEC_LDFLAGS) \
+ 	      -o $@ $+ $(UNIT_LDLIBS) -lm
+diff --git a/tools/Makefile.in b/tools/Makefile.in
+index d4514a2..2dbd93b 100644
+--- a/tools/Makefile.in
++++ b/tools/Makefile.in
+@@ -122,12 +122,12 @@ device-mapper: $(TARGETS_DM)
+ 
+ CFLAGS_dmsetup.o += $(UDEV_CFLAGS) $(EXTRA_EXEC_CFLAGS)
+ 
+-dmsetup: dmsetup.o $(top_builddir)/device_mapper/libdevice-mapper.a
++dmsetup: dmsetup.o $(INTERNAL_LIBS)
+ 	@echo "    [CC] $@"
+ 	$(Q) $(CC) $(CFLAGS) $(LDFLAGS) $(EXTRA_EXEC_LDFLAGS) $(ELDFLAGS) \
+ 	      -o $@ $+ $(LIBS) -lm
+ 
+-dmsetup.static: dmsetup.o $(top_builddir)/device_mapper/libdevice-mapper.a
++dmsetup.static: dmsetup.o $(INTERNAL_LIBS)
+ 	@echo "    [CC] $@"
+ 	$(Q) $(CC) $(CFLAGS) $(LDFLAGS) -static -L$(interfacebuilddir) \
+ 	      -o $@ $+ $(M_LIBS) $(PTHREAD_LIBS) $(STATIC_LIBS) $(LIBS)
+@@ -138,7 +138,7 @@ CFLAGS_lvm.o += $(EXTRA_EXEC_CFLAGS)
+ 
+ INCLUDES += -I$(top_builddir)/tools
+ 
+-lvm: $(OBJECTS) lvm.o $(top_builddir)/lib/liblvm-internal.a $(top_builddir)/device_mapper/libdevice-mapper.a
++lvm: $(OBJECTS) lvm.o $(top_builddir)/lib/liblvm-internal.a $(INTERNAL_LIBS)
+ 	@echo "    [CC] $@"
+ 	$(Q) $(CC) $(CFLAGS) $(LDFLAGS) $(EXTRA_EXEC_LDFLAGS) $(ELDFLAGS) -o $@ $+ \
+ 		$(LVMLIBS) $(READLINE_LIBS) $(LIBS) -lm
+@@ -157,7 +157,7 @@ ifeq ("@BUILD_LVMETAD@", "yes")
+ lvm: $(top_builddir)/libdaemon/client/libdaemonclient.a
+ endif
+ 
+-lvm.static: $(OBJECTS) lvm-static.o $(top_builddir)/lib/liblvm-internal.a  $(top_builddir)/device_mapper/libdevice-mapper.a
++lvm.static: $(OBJECTS) lvm-static.o $(top_builddir)/lib/liblvm-internal.a $(INTERNAL_LIBS)
+ 	@echo "    [CC] $@"
+ 	$(Q) $(CC) $(CFLAGS) $(LDFLAGS) -static -L$(interfacebuilddir) -o $@ \
+ 	      $(OBJECTS) lvm-static.o $(LVMLIBS) $(STATIC_LIBS) $(LIBS)
 
 
