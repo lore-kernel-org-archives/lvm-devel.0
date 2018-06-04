@@ -1,135 +1,88 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Mon, 4 Jun 2018 06:28:50 -0400
-Subject: master - build: remove any leftover file
-Message-ID: <201806041028.w54ASo0g032043@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Mon, 4 Jun 2018 06:28:54 -0400
+Subject: master - build: fixes
+Message-ID: <201806041028.w54ASsGC032054@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=eebf070d32b491fb08f7defccc08f9bcefb9aba2
-Commit:        eebf070d32b491fb08f7defccc08f9bcefb9aba2
-Parent:        21a5be2364574de43e2afe55a250ccced02df008
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=1140d70893e4f246a46fa360d20838ceafa690ec
+Commit:        1140d70893e4f246a46fa360d20838ceafa690ec
+Parent:        eebf070d32b491fb08f7defccc08f9bcefb9aba2
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Mon Jun 4 12:16:30 2018 +0200
+AuthorDate:    Mon Jun 4 12:25:48 2018 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Mon Jun 4 12:26:38 2018 +0200
+CommitterDate: Mon Jun 4 12:28:13 2018 +0200
 
-build: remove any leftover file
+build: fixes
 
-In case repository is used after building older version of lvm2
-(i.e. git bisect) make sure clean erases any possible old symlinks.
 ---
- include/.gitignore  |    3 --
- include/Makefile.in |   83 ++++++++++++++++++++++++++++++++++++++++++++++++++-
- 2 files changed, 82 insertions(+), 4 deletions(-)
+ daemons/lvmlockd/Makefile.in |    6 ++++--
+ daemons/lvmpolld/Makefile.in |    3 ++-
+ lib/activate/activate.h      |    2 +-
+ lib/metadata/lv.c            |    2 +-
+ 4 files changed, 8 insertions(+), 5 deletions(-)
 
-diff --git a/include/.gitignore b/include/.gitignore
-index 4971e07..424c745 100644
---- a/include/.gitignore
-+++ b/include/.gitignore
-@@ -1,4 +1 @@
--.symlinks
--.symlinks_created
--
- *.h
-diff --git a/include/Makefile.in b/include/Makefile.in
-index cbbc003..efe263c 100644
---- a/include/Makefile.in
-+++ b/include/Makefile.in
-@@ -1,6 +1,6 @@
- #
- # Copyright (C) 2001-2004 Sistina Software, Inc. All rights reserved.
--# Copyright (C) 2004-2015 Red Hat, Inc. All rights reserved.
-+# Copyright (C) 2004-2018 Red Hat, Inc. All rights reserved.
- #
- # This file is part of LVM2.
- #
-@@ -19,3 +19,84 @@ top_builddir = @top_builddir@
- include $(top_builddir)/make.tmpl
+diff --git a/daemons/lvmlockd/Makefile.in b/daemons/lvmlockd/Makefile.in
+index 9e2297f..7c58fe2 100644
+--- a/daemons/lvmlockd/Makefile.in
++++ b/daemons/lvmlockd/Makefile.in
+@@ -42,10 +42,12 @@ LIBS += $(RT_LIBS) $(DAEMON_LIBS) $(PTHREAD_LIBS)
  
- DISTCLEAN_TARGETS += .configure.h lvm-version.h
-+CLEAN_TARGETS += \
-+ activate.h \
-+ archiver.h \
-+ bcache.h \
-+ btree.h \
-+ clvm.h \
-+ config-util.h \
-+ config.h \
-+ config_settings.h \
-+ crc.h \
-+ daemon-client.h \
-+ daemon-io.h \
-+ defaults.h \
-+ dev-cache.h \
-+ dev-ext-udev-constants.h \
-+ dev-type.h \
-+ device-types.h \
-+ device.h \
-+ display.h \
-+ dm-ioctl.h \
-+ dm-log-userspace.h \
-+ dm-logging.h \
-+ dmlib.h \
-+ filter.h \
-+ format-text.h \
-+ format1.h \
-+ format_pool.h \
-+ intl.h \
-+ kdev_t.h \
-+ label.h \
-+ last-path-component.h \
-+ lib.h \
-+ libdevmapper-event.h \
-+ libdevmapper.h \
-+ locking.h \
-+ log.h \
-+ lv.h \
-+ lvm-exec.h \
-+ lvm-file.h \
-+ lvm-flock.h \
-+ lvm-globals.h \
-+ lvm-logging.h \
-+ lvm-maths.h \
-+ lvm-percent.h \
-+ lvm-signal.h \
-+ lvm-string.h \
-+ lvm-wrappers.h \
-+ lvm2app.h \
-+ lvm2cmd.h \
-+ lvmcache.h \
-+ lvmetad-client.h \
-+ lvmetad.h \
-+ lvmlockd-client.h \
-+ lvmlockd.h \
-+ lvmnotify.h \
-+ lvmpolld-client.h \
-+ lvmpolld-protocol.h \
-+ lv_alloc.h \
-+ memlock.h \
-+ metadata-exported.h \
-+ metadata.h \
-+ pogen.h \
-+ polldaemon.h \
-+ polling_ops.h \
-+ properties.h \
-+ prop_common.h \
-+ pv.h \
-+ pv_alloc.h \
-+ report.h \
-+ segtype.h \
-+ sharedlib.h \
-+ str_list.h \
-+ targets.h \
-+ text_export.h \
-+ text_import.h \
-+ tool.h \
-+ toolcontext.h \
-+ util.h \
-+ uuid.h \
-+ vg.h \
-+ xlate.h
+ lvmlockd: $(OBJECTS) $(top_builddir)/libdaemon/client/libdaemonclient.a \
+ 		    $(top_builddir)/libdaemon/server/libdaemonserver.a
+-	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(OBJECTS) $(LOCK_LIBS) -ldaemonserver $(LIBS)
++	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(OBJECTS) $(LOCK_LIBS) -ldaemonserver \
++		$(top_builddir)/device_mapper/libdevice-mapper.a $(LIBS)
+ 
+ lvmlockctl: lvmlockctl.o $(top_builddir)/libdaemon/client/libdaemonclient.a
+-	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ lvmlockctl.o $(LIBS)
++	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ lvmlockctl.o \
++		$(top_builddir)/device_mapper/libdevice-mapper.a $(LIBS)
+ 
+ install_lvmlockd: lvmlockd
+ 	$(INSTALL_PROGRAM) -D $< $(sbindir)/$(<F)
+diff --git a/daemons/lvmpolld/Makefile.in b/daemons/lvmpolld/Makefile.in
+index 69c4a8d..229a87e 100644
+--- a/daemons/lvmpolld/Makefile.in
++++ b/daemons/lvmpolld/Makefile.in
+@@ -34,7 +34,8 @@ LIBS += $(DAEMON_LIBS) -ldaemonserver $(PTHREAD_LIBS)
+ 
+ lvmpolld: $(OBJECTS) $(top_builddir)/libdaemon/client/libdaemonclient.a \
+ 		    $(top_builddir)/libdaemon/server/libdaemonserver.a
+-	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(OBJECTS) $(LIBS)
++	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(OBJECTS) \
++		$(top_builddir)/device_mapper/libdevice-mapper.a $(LIBS)
+ 
+ install_lvmpolld: lvmpolld
+ 	$(INSTALL_PROGRAM) -D $< $(sbindir)/$(<F)
+diff --git a/lib/activate/activate.h b/lib/activate/activate.h
+index 60ee4a7..8175f68 100644
+--- a/lib/activate/activate.h
++++ b/lib/activate/activate.h
+@@ -210,7 +210,7 @@ int monitor_dev_for_events(struct cmd_context *cmd, const struct logical_volume
+ 			   const struct lv_activate_opts *laopts, int monitor);
+ 
+ #ifdef DMEVENTD
+-#  include "libdevmapper-event.h"
++#  include "daemons/dmeventd/libdevmapper-event.h"
+ char *get_monitor_dso_path(struct cmd_context *cmd, int id);
+ int target_registered_with_dmeventd(struct cmd_context *cmd, const char *dso,
+ 				    const struct logical_volume *lv, int *pending, int *monitored);
+diff --git a/lib/metadata/lv.c b/lib/metadata/lv.c
+index 54edc88..68507dc 100644
+--- a/lib/metadata/lv.c
++++ b/lib/metadata/lv.c
+@@ -290,7 +290,7 @@ char *lvseg_cachemode_dup(struct dm_pool *mem, const struct lv_segment *seg)
+ }
+ 
+ #ifdef DMEVENTD
+-#  include "libdevmapper-event.h"
++#  include "daemons/dmeventd/libdevmapper-event.h"
+ #endif
+ char *lvseg_monitor_dup(struct dm_pool *mem, const struct lv_segment *seg)
+ {
 
 
