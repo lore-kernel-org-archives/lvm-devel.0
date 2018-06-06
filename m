@@ -1,20 +1,20 @@
 From: David Teigland <teigland@sourceware.org>
-Date: Wed, 6 Jun 2018 11:07:32 -0400
-Subject: 2018-06-01-stable - devices: clean up io error messages
-Message-ID: <201806061507.w56F7Wvu020683@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Wed, 6 Jun 2018 11:08:53 -0400
+Subject: master - devices: clean up io error messages
+Message-ID: <201806061508.w56F8rDm020719@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=1e5f6887b1d31762dd5fcfd7f53c2ca24646aece
-Commit:        1e5f6887b1d31762dd5fcfd7f53c2ca24646aece
-Parent:        81f07c3cca417bbf8d290073a20586b47a6d127e
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=c67bd8b47b755a33104e942abc49e516d2a6dace
+Commit:        c67bd8b47b755a33104e942abc49e516d2a6dace
+Parent:        3e781ea446bb7ddc9a494cbba6b6104dd51c3910
 Author:        David Teigland <teigland@redhat.com>
 AuthorDate:    Wed Jun 6 10:05:08 2018 -0500
 Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Wed Jun 6 10:05:08 2018 -0500
+CommitterDate: Wed Jun 6 10:08:25 2018 -0500
 
 devices: clean up io error messages
 
@@ -29,10 +29,10 @@ more user friendly.
  2 files changed, 22 insertions(+), 19 deletions(-)
 
 diff --git a/lib/device/bcache.c b/lib/device/bcache.c
-index 9e94fcc..ce50c0c 100644
+index 8fda0bd..561f68e 100644
 --- a/lib/device/bcache.c
 +++ b/lib/device/bcache.c
-@@ -646,7 +646,6 @@ static void _complete_io(void *context, int err)
+@@ -623,7 +623,6 @@ static void _complete_io(void *context, int err)
  	dm_list_del(&b->list);
  
  	if (b->error) {
@@ -41,7 +41,7 @@ index 9e94fcc..ce50c0c 100644
  
  	} else {
 diff --git a/lib/label/label.c b/lib/label/label.c
-index 97a4359..d7d3f9e 100644
+index f36c706..ce995d6 100644
 --- a/lib/label/label.c
 +++ b/lib/label/label.c
 @@ -1122,14 +1122,15 @@ bool dev_read_bytes(struct device *dev, uint64_t start, size_t len, void *data)
