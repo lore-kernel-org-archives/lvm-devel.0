@@ -1,73 +1,304 @@
 From: Joe Thornber <thornber@sourceware.org>
-Date: Thu, 7 Jun 2018 11:22:07 -0400
-Subject: master - use exclusive file lock on VG for activation
-Message-ID: <201806071522.w57FM7rp013211@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Thu, 7 Jun 2018 11:25:42 -0400
+Subject: master - test/unit: activation generator unit tests
+Message-ID: <201806071525.w57FPgfZ013283@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=616eeba6f2b33640534e26dea43661724edf3a14
-Commit:        616eeba6f2b33640534e26dea43661724edf3a14
-Parent:        e7aa51c70f17af10df906a7e123a497c1cf3c1ba
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Wed Jun 6 11:14:39 2018 -0500
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=60db97ae1d934e0475ec8c5752237ae5965a62d4
+Commit:        60db97ae1d934e0475ec8c5752237ae5965a62d4
+Parent:        00befc04d0406b0443d35bec89ae2af1df2ebd3b
+Author:        Joe Thornber <ejt@redhat.com>
+AuthorDate:    Thu Jun 7 16:24:42 2018 +0100
 Committer:     Joe Thornber <ejt@redhat.com>
-CommitterDate: Thu Jun 7 16:17:04 2018 +0100
+CommitterDate: Thu Jun 7 16:24:42 2018 +0100
 
-use exclusive file lock on VG for activation
+test/unit: activation generator unit tests
 
-Make activation commands:
-  vgchange -ay, lvchange -ay, pvscan -aay
-
-take an exclusive file lock on the VG to serialize
-multiple concurrent activation commands which could
-otherwise interfere with each other.
 ---
- tools/lvchange.c |    2 +-
- tools/pvscan.c   |    2 +-
- tools/vgchange.c |    2 +-
- 3 files changed, 3 insertions(+), 3 deletions(-)
+ test/unit/activation-generator_t.c |  272 ++++++++++++++++++++++++++++++++++++
+ 1 files changed, 272 insertions(+), 0 deletions(-)
 
-diff --git a/tools/lvchange.c b/tools/lvchange.c
-index a90174e..3ed6b06 100644
---- a/tools/lvchange.c
-+++ b/tools/lvchange.c
-@@ -1386,7 +1386,7 @@ int lvchange_activate_cmd(struct cmd_context *cmd, int argc, char **argv)
- 	} else /* Component LVs might be active, support easy deactivation */
- 		cmd->process_component_lvs = 1;
- 
--	ret = process_each_lv(cmd, argc, argv, NULL, NULL, 0,
-+	ret = process_each_lv(cmd, argc, argv, NULL, NULL, READ_FOR_UPDATE,
- 			      NULL, &_lvchange_activate_check, &_lvchange_activate_single);
- 
- 	if (ret != ECMD_PROCESSED)
-diff --git a/tools/pvscan.c b/tools/pvscan.c
-index 7cba0f4..61626e6 100644
---- a/tools/pvscan.c
-+++ b/tools/pvscan.c
-@@ -288,7 +288,7 @@ static int _pvscan_autoactivate(struct cmd_context *cmd, struct pvscan_aa_params
- 		pp->refresh_all = 1;
- 	}
- 
--	ret = process_each_vg(cmd, 0, NULL, NULL, vgnames, 0, 0, handle, _pvscan_autoactivate_single);
-+	ret = process_each_vg(cmd, 0, NULL, NULL, vgnames, READ_FOR_UPDATE, 0, handle, _pvscan_autoactivate_single);
- 
- 	destroy_processing_handle(cmd, handle);
- 
-diff --git a/tools/vgchange.c b/tools/vgchange.c
-index a67c3be..b07057f 100644
---- a/tools/vgchange.c
-+++ b/tools/vgchange.c
-@@ -791,7 +791,7 @@ int vgchange(struct cmd_context *cmd, int argc, char **argv)
- 			cmd->lockd_vg_enforce_sh = 1;
- 	}
- 
--	if (update)
-+	if (update || arg_is_set(cmd, activate_ARG))
- 		flags |= READ_FOR_UPDATE;
- 
- 	if (!(handle = init_processing_handle(cmd, NULL))) {
+diff --git a/test/unit/activation-generator_t.c b/test/unit/activation-generator_t.c
+new file mode 100644
+index 0000000..56871a7
+--- /dev/null
++++ b/test/unit/activation-generator_t.c
+@@ -0,0 +1,272 @@
++/*
++ * Copyright (C) 2018 Red Hat, Inc. All rights reserved.
++ *
++ * This file is part of LVM2.
++ *
++ * This copyrighted material is made available to anyone wishing to use,
++ * modify, copy, or redistribute it subject to the terms and conditions
++ * of the GNU General Public License v.2.
++ *
++ * You should have received a copy of the GNU General Public License
++ * along with this program; if not, write to the Free Software Foundation,
++ * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
++ */
++
++#include "scripts/generator-internals.c"
++#include "framework.h"
++#include "units.h"
++
++#include "device_mapper/libdevmapper.h"
++
++//----------------------------------------------------------------
++
++static void _error(const char *format, ...)
++{
++	va_list ap;
++
++	va_start(ap, format);
++	vfprintf(stderr, format, ap);
++	va_end(ap);
++}
++
++//----------------------------------------------------------------
++
++struct bw_test {
++	const char *input;
++	const char *prefix;
++	const char *val;
++};
++
++static void _test_begins_with(void *fixture)
++{
++	static struct bw_test _tests[] = {
++		{"", "foo", NULL},
++		{"lskdj", "foo", NULL},
++		{"foo", "foobar", NULL},
++		{"fish", "fish", ""},
++		{"foo=bar ", "foo=", "bar "},
++        };
++
++	unsigned i;
++	for (i = 0; i < DM_ARRAY_SIZE(_tests); i++) {
++        	const char *val;
++        	struct bw_test *t = _tests + i;
++        	if (t->val) {
++                	if (!_begins_with(t->input, t->prefix, &val))
++                        	test_fail("_begins_with('%s', '%s') failed", t->input, t->prefix);
++			if (strcmp(val, t->val))
++        			test_fail("_begins_with('%s', '%s') -> '%s', expected '%s'",
++                                          t->input, t->prefix, val, t->val);
++		} else {
++			if (_begins_with(t->input, t->prefix, &val))
++        			test_fail("_begins_with('%s', '%s') unexpectedly succeeded",
++                                          t->input, t->prefix);
++
++		}
++	}
++}
++
++struct pb_test {
++	const char *input;
++	bool parsed;
++	bool result;
++};
++
++static const char *_bool(bool v)
++{
++        return v ? "true" : "false";
++}
++
++static void _test_parse_bool(void *fixture)
++{
++	static struct pb_test _tests[] = {
++		{"", false, false},
++		{"fish", false, false},
++		{"true", false, false},
++		{"false", false, false},
++		{"1", true, true},
++		{" \t 1\t\t", true, true},
++		{"0", true, false},
++		{"  \t0  ", true, false}
++	};
++
++	unsigned i;
++
++	for (i = 0; i < DM_ARRAY_SIZE(_tests); i++) {
++        	bool result;
++        	struct pb_test *t = _tests + i;
++
++        	if (t->parsed) {
++			if (!_parse_bool(t->input, &result))
++        			test_fail("_parse_bool('%s') unexpectedly failed", t->input);
++        		if (result != t->result)
++                		test_fail("_parse_bool('%s') -> %s", t->input, _bool(result));
++        	} else {
++                	if (_parse_bool(t->input, &result))
++                        	test_fail("_parse_bool('%s') unexpectedly succeeded", t->input);
++        	}
++	}
++}
++
++struct pl_test {
++	const char *input;
++	bool success;
++	bool use_lvmetad;
++	bool sysinit_needed;
++};
++
++static void _test_parse_line(void *fixture)
++{
++	static struct pl_test _tests[] = {
++        	{"", false, false, false},
++        	{"sldkjfs", false, false, false},
++        	{"use_lvmetad=1", true, true, true},
++        	{"use_lvmetad=0", true, false, true},
++        	{"use_lvmpolld=1", true, false, false},
++        	{"use_lvmpolld=0", true, false, true}
++	};
++
++	unsigned i;
++
++	for (i = 0; i< DM_ARRAY_SIZE(_tests); i++) {
++        	bool r;
++		struct config cfg;
++		struct pl_test *t = _tests + i;
++
++		cfg.use_lvmetad = false;
++		cfg.sysinit_needed = true;
++
++		r = _parse_line(t->input, &cfg);
++		if (t->success) {
++			if (!r)
++        			test_fail("_parse_line('%s') failed", t->input);
++
++        		if (cfg.use_lvmetad != t->use_lvmetad)
++                		test_fail("_parse_line('%s') -> use_lvmetad='%s'",
++                                          t->input, _bool(cfg.use_lvmetad));
++
++                	if (cfg.sysinit_needed != t->sysinit_needed)
++                        	test_fail("_parse_line('%s') -> sysinit_needed='%s'",
++                                          t->input, _bool(cfg.sysinit_needed));
++		} else if (r)
++                		test_fail("_parse_line('%s') succeeded", t->input);
++	}
++}
++
++static void _test_get_config_bad_path(void *fixture)
++{
++        struct config cfg;
++
++	if (_get_config(&cfg, "/usr/bin/no-such-file"))
++        	test_fail("_get_config() succeeded despite a bad lvmconfig path");
++}
++
++static void _test_get_config_bad_exit(void *fixture)
++{
++        struct config cfg;
++
++	if (_get_config(&cfg, "/usr/bin/false"))
++        	test_fail("_get_config() succeeded despite a bad lvmconfig exit");
++}
++
++struct gc_test {
++        const char *output;
++        bool success;
++        bool use_lvmetad;
++        bool sysinit_needed;
++};
++
++static const char *_fake_lvmconfig(const char *output)
++{
++        const char *path = "./fake-lvmconfig";
++
++	FILE *fp = fopen(path, "w");
++	if (!fp)
++        	return NULL;
++
++	fprintf(fp, "#!/usr/bin/sh\n");
++	fprintf(fp, "cat <<EOF\n");
++	fprintf(fp, "%s", output);
++	fprintf(fp, "EOF\n");
++
++	fclose(fp);
++	chmod(path, 0770);
++
++	return path;
++}
++
++static void _test_get_config(void *fixture)
++{
++	static struct gc_test _tests[] = {
++		{"", true, false, true},
++		{"lsdjkf\n\n\n", false, false, false},
++
++		{"use_lvmetad=0\nuse_lvmpolld=1\n", true, false, false},
++		{"use_lvmetad=1\nuse_lvmpolld=1\n", true, true, false},
++		{"use_lvmetad=1\nuse_lvmpolld=0\n", true, true, true},
++	};
++
++	bool r;
++	unsigned i;
++	struct config cfg;
++	const char *path;
++
++	for (i = 0; i < DM_ARRAY_SIZE(_tests); i++) {
++        	struct gc_test *t = _tests + i;
++
++        	cfg.use_lvmetad = false;
++        	cfg.sysinit_needed = true;
++
++		path = _fake_lvmconfig(t->output);
++		if (!path)
++        		test_fail("couldn't create fake lvmconfig");
++
++        	r = _get_config(&cfg, path);
++        	if (t->success) {
++			if (!r)
++        			test_fail("_get_config() <- '%s' failed", t->output);
++
++        		if (t->use_lvmetad != cfg.use_lvmetad)
++                		test_fail("_get_config() <- '%s', use_lvmetad = %s",
++                                          t->output, _bool(cfg.use_lvmetad));
++
++                	if (t->sysinit_needed != cfg.sysinit_needed)
++                        	test_fail("_get_config() <- '%s', sysinit = %s",
++                                          t->output, _bool(cfg.sysinit_needed));
++        	} else {
++			if (r)
++        			test_fail("_get_config() <- '%s' unexpectedly succeeded", t->output);
++        	}
++
++        	unlink(path);
++	}
++}
++
++//----------------------------------------------------------------
++
++#define T(path, desc, fn) register_test(ts, "/activation-generator/" path, desc, fn)
++
++static struct test_suite *_tests(void)
++{
++	struct test_suite *ts = test_suite_create(NULL, NULL);
++	if (!ts) {
++        	fprintf(stderr, "out of memory\n");
++        	exit(1);
++	};
++
++	T("begins-with", "Test cases for _begins_with()", _test_begins_with);
++	T("parse-bool", "Test cases for _parse_bool()", _test_parse_bool);
++	T("parse-line", "Test cases for _parse_line()", _test_parse_line);
++	T("get-config-bad-path", "_get_config() needs a valid lvmconfig path", _test_get_config_bad_path);
++	T("get-config-bad-exit", "lvmconfig bad exit code gets propagated", _test_get_config_bad_exit);
++	T("get-config", "Test cases for _get_config()", _test_get_config);
++
++	return ts;
++}
++
++void activation_generator_tests(struct dm_list *all_tests)
++{
++	dm_list_add(all_tests, &_tests()->list);
++}
++
++//----------------------------------------------------------------
 
 
