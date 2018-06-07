@@ -1,1275 +1,517 @@
 From: Joe Thornber <thornber@sourceware.org>
-Date: Thu, 7 Jun 2018 11:21:32 -0400
-Subject: master - Remove unused clvm variations for active LVs
-Message-ID: <201806071521.w57FLWSb013120@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Thu, 7 Jun 2018 11:21:40 -0400
+Subject: master - Remove locking infrastructure from activation paths
+Message-ID: <201806071521.w57FLeoU013131@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=18259d5559307f2708e12b9923988319e46572df
-Commit:        18259d5559307f2708e12b9923988319e46572df
-Parent:        e4d9099e19591a7f3ad546c180b59a601e0d03da
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=da30b4a7865b82c05cd2be1a8eb3bca42c39abb3
+Commit:        da30b4a7865b82c05cd2be1a8eb3bca42c39abb3
+Parent:        616eeba6f2b33640534e26dea43661724edf3a14
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Tue Jun 5 13:21:28 2018 -0500
+AuthorDate:    Tue Jun 5 16:47:24 2018 -0500
 Committer:     Joe Thornber <ejt@redhat.com>
 CommitterDate: Thu Jun 7 16:17:04 2018 +0100
 
-Remove unused clvm variations for active LVs
+Remove locking infrastructure from activation paths
 
-Different flavors of activate_lv() and lv_is_active()
-which are meaningful in a clustered VG can be eliminated
-and replaced with whatever that flavor already falls back
-to in a local VG.
+Basic LV functions:
 
-e.g. lv_is_active_exclusive_locally() is distinct from
-lv_is_active() in a clustered VG, but in a local VG they
-are equivalent.  So, all instances of the variant are
-replaced with the basic local equivalent.
+  activate_lv(), deactivate_lv(),
+  suspend_lv(), resume_lv()
 
-For local VGs, the same behavior remains as before.
-For shared VGs, lvmlockd was written with the explicit
-requirement of local behavior from these functions
-(lvmlockd requires locking_type 1), so the behavior
-in shared VGs also remains the same.
+were routed through the locking infrastruture on the way to:
+
+  lv_activate_with_filter(), lv_deactivate(),
+  lv_suspend_if_active(), lv_resume_if_active()
+
+This commit removes the locking infrastructure from the
+middle and calls the later functions directly from the former.
+
+There were a couple of ancillary steps that the locking
+infrastructure added along the way which are still included:
+
+  - critical section inc/dec during suspend/resume
+  - checking for active component LVs during activate
+
+The "activation" file lock (serializing activation) has not
+been kept because activation commands have been changed to
+take the VG file lock exclusively which makes the activation
+lock unused and unnecessary.
 ---
- lib/activate/activate.c       |  131 ++--------------------------------------
- lib/activate/activate.h       |    6 --
- lib/locking/locking.c         |   18 +-----
- lib/locking/locking.h         |   10 +---
- lib/metadata/cache_manip.c    |    6 +-
- lib/metadata/lv.c             |   64 ++------------------
- lib/metadata/lv.h             |    2 +-
- lib/metadata/lv_manip.c       |   36 +++++-------
- lib/metadata/mirror.c         |   65 ++------------------
- lib/metadata/pool_manip.c     |    2 +-
- lib/metadata/raid_manip.c     |   46 ++++----------
- lib/metadata/snapshot_manip.c |    6 --
- lib/metadata/thin_manip.c     |    4 +-
- lib/report/report.c           |   40 +------------
- tools/lvchange.c              |   11 +--
- tools/lvconvert.c             |   27 ++++-----
- tools/lvcreate.c              |    4 +-
- tools/polldaemon.c            |    4 +-
- tools/pvmove.c                |    8 +--
- tools/toollib.c               |    4 +-
- tools/vgchange.c              |   16 +-----
- 21 files changed, 88 insertions(+), 422 deletions(-)
+ lib/activate/activate.c    |  103 ++++++++++++++++++++++++++++++++++++++++----
+ lib/activate/activate.h    |    8 +++
+ lib/locking/file_locking.c |   48 --------------------
+ lib/locking/locking.c      |   65 ++-------------------------
+ lib/locking/locking.h      |   76 --------------------------------
+ 5 files changed, 107 insertions(+), 193 deletions(-)
 
 diff --git a/lib/activate/activate.c b/lib/activate/activate.c
-index 4c70443..c9ead42 100644
+index c9ead42..a7e5fe3 100644
 --- a/lib/activate/activate.c
 +++ b/lib/activate/activate.c
-@@ -374,31 +374,6 @@ int lv_is_active(const struct logical_volume *lv)
- {
- 	return 0;
- }
--int lv_is_active_locally(const struct logical_volume *lv)
--{
--	return 0;
--}
--int lv_is_active_remotely(const struct logical_volume *lv)
--{
--	return 0;
--}
--int lv_is_active_but_not_locally(const struct logical_volume *lv)
--{
--	return 0;
--}
--int lv_is_active_exclusive(const struct logical_volume *lv)
--{
--	return 0;
--}
--int lv_is_active_exclusive_locally(const struct logical_volume *lv)
--{
--	return 0;
--}
--int lv_is_active_exclusive_remotely(const struct logical_volume *lv)
--{
--	return 0;
--}
--
- int lv_check_transient(struct logical_volume *lv)
- {
- 	return 1;
-@@ -1471,61 +1446,6 @@ int lvs_in_vg_opened(const struct volume_group *vg)
- }
+@@ -2424,15 +2424,6 @@ static int _lv_activate(struct cmd_context *cmd, const char *lvid_s,
+ 	if (!activation())
+ 		return 1;
  
- /*
-- * _lv_is_active
-- * @lv:        logical volume being queried
-- * @locally:   set if active locally (when provided)
-- * @remotely:  set if active remotely (when provided)
-- * @exclusive: set if active exclusively (when provided)
-- *
-- * Determine whether an LV is active locally or in a cluster.
-- * In addition to the return code which indicates whether or
-- * not the LV is active somewhere, two other values are set
-- * to yield more information about the status of the activation:
-- *
-- *	return	locally	exclusively	status
-- *	======	=======	===========	======
-- *	   0	   0	    0		not active
-- *	   1	   0	    0		active remotely
-- *	   1	   0	    1		exclusive remotely
-- *	   1	   1	    0		active locally and possibly remotely
-- *	   1	   1	    1		exclusive locally (or local && !cluster)
-- * The VG lock must be held to call this function.
-- *
-- * Returns: 0 or 1
-- */
--static int _lv_is_active(const struct logical_volume *lv,
--			 int *locally, int *remotely, int *exclusive)
--{
--	int r, l, e; /* remote, local, and exclusive */
--	int skip_cluster_query = 0;
+-	if (!laopts->exclusive &&
+-	    (lv_is_origin(lv) ||
+-	     seg_only_exclusive(first_seg(lv))))  {
+-		log_error(INTERNAL_ERROR "Trying non-exlusive activation of %s with "
+-			  "a volume type %s requiring exclusive activation.",
+-			  display_lvname(lv), lvseg_name(first_seg(lv)));
+-		return 0;
+-	}
 -
--	r = l = e = 0;
--
--	if (_lv_active(lv->vg->cmd, lv))
--		l = 1;
--
--	if (l)
--		e = 1;  /* exclusive by definition */
--
--	if (locally)
--		*locally = l;
--	if (exclusive)
--		*exclusive = e;
--	if (remotely)
--		*remotely = r;
--
--	log_very_verbose("%s is %sactive%s%s%s%s",
--			 display_lvname(lv),
--			 (r || l) ? "" : "not ",
--			 (exclusive && e) ? " exclusive" : "",
--			 l ? " locally" : "",
--			 (!skip_cluster_query && l && r) ? " and" : "",
--			 (!skip_cluster_query && r) ? " remotely" : "");
--
--	return r || l;
--}
--
--/*
-  * Check if "raid4" @segtype is supported by kernel.
-  *
-  * if segment type is not raid4, return 1.
-@@ -1545,51 +1465,14 @@ int raid4_is_supported(struct cmd_context *cmd, const struct segment_type *segty
+ 	if (filter && !_passes_activation_filter(cmd, lv)) {
+ 		log_verbose("Not activating %s since it does not pass "
+ 			    "activation filter.", display_lvname(lv));
+@@ -2765,3 +2756,97 @@ int deactivate_lv_with_sub_lv(const struct logical_volume *lv)
+ 
  	return 1;
  }
- 
-+/*
-+ * The VG lock must be held to call this function.
-+ *
-+ * Returns: 0 or 1
-+ */
- int lv_is_active(const struct logical_volume *lv)
- {
--	return _lv_is_active(lv, NULL, NULL, NULL);
--}
--
--int lv_is_active_locally(const struct logical_volume *lv)
--{
--	int l;
--
--	return _lv_is_active(lv, &l, NULL, NULL) && l;
--}
--
--int lv_is_active_remotely(const struct logical_volume *lv)
--{
--	int r;
--
--	return _lv_is_active(lv, NULL, &r, NULL) && r;
--}
--
--int lv_is_active_but_not_locally(const struct logical_volume *lv)
--{
--	int l;
--
--	return _lv_is_active(lv, &l, NULL, NULL) && !l;
--}
--
--int lv_is_active_exclusive(const struct logical_volume *lv)
--{
--	int e;
--
--	return _lv_is_active(lv, NULL, NULL, &e) && e;
--}
--
--int lv_is_active_exclusive_locally(const struct logical_volume *lv)
--{
--	int l, e;
--
--	return _lv_is_active(lv, &l, NULL, &e) && l && e;
--}
--
--int lv_is_active_exclusive_remotely(const struct logical_volume *lv)
--{
--	int l, e;
--
--	return _lv_is_active(lv, &l, NULL, &e) && !l && e;
-+	return _lv_active(lv->vg->cmd, lv);
- }
- 
- #ifdef DMEVENTD
-@@ -1991,7 +1874,7 @@ int monitor_dev_for_events(struct cmd_context *cmd, const struct logical_volume
- 			continue;
- 
- 		if (!vg_write_lock_held() && lv_is_mirror(lv)) {
--			mirr_laopts.exclusive = lv_is_active_exclusive_locally(lv) ? 1 : 0;
-+			mirr_laopts.exclusive = lv_is_active(lv) ? 1 : 0;
- 			/*
- 			 * Commands vgchange and lvchange do use read-only lock when changing
- 			 * monitoring (--monitor y|n). All other use cases hold 'write-lock'
++
++int activate_lv(struct cmd_context *cmd, const struct logical_volume *lv)
++{
++	const struct logical_volume *active_lv;
++	int ret;
++
++	/*
++	 * When trying activating component LV, make sure none of sub component
++	 * LV or LVs that are using it are active.
++	 */
++	if (!lv_is_visible(lv))
++		active_lv = lv_holder_is_active(lv);
++	else
++		active_lv = lv_component_is_active(lv);
++
++	if (active_lv) {
++		log_error("Activation of logical volume %s is prohibited while logical volume %s is active.",
++			  display_lvname(lv), display_lvname(active_lv));
++		ret = 0;
++		goto out;
++	}
++
++	ret = lv_activate_with_filter(cmd, NULL, 0,
++				      (lv->status & LV_NOSCAN) ? 1 : 0,
++				      (lv->status & LV_TEMPORARY) ? 1 : 0,
++				      lv_committed(lv));
++out:
++	return ret;
++}
++
++int deactivate_lv(struct cmd_context *cmd, const struct logical_volume *lv)
++{
++	int ret;
++
++	ret = lv_deactivate(cmd, NULL, lv_committed(lv));
++
++	return ret;
++}
++
++int suspend_lv(struct cmd_context *cmd, const struct logical_volume *lv)
++{
++	int ret;
++
++	critical_section_inc(cmd, "locking for suspend");
++
++	ret = lv_suspend_if_active(cmd, NULL, 0, 0, lv_committed(lv), lv);
++
++	return ret;
++}
++
++int suspend_lv_origin(struct cmd_context *cmd, const struct logical_volume *lv)
++{
++	int ret;
++
++	critical_section_inc(cmd, "locking for suspend");
++
++	ret = lv_suspend_if_active(cmd, NULL, 1, 0, lv_committed(lv), lv);
++
++	return ret;
++}
++
++int resume_lv(struct cmd_context *cmd, const struct logical_volume *lv)
++{
++	int ret;
++
++	ret = lv_resume_if_active(cmd, NULL, 0, 0, 0, lv_committed(lv));
++
++	critical_section_dec(cmd, "unlocking on resume");
++
++	return ret;
++}
++
++int resume_lv_origin(struct cmd_context *cmd, const struct logical_volume *lv)
++{
++	int ret;
++
++	ret = lv_resume_if_active(cmd, NULL, 1, 0, 0, lv_committed(lv));
++
++	critical_section_dec(cmd, "unlocking on resume");
++
++	return ret;
++}
++
++int revert_lv(struct cmd_context *cmd, const struct logical_volume *lv)
++{
++	int ret;
++
++	ret = lv_resume_if_active(cmd, NULL, 0, 0, 1, lv_committed(lv));
++
++	critical_section_dec(cmd, "unlocking on resume");
++
++	return ret;
++}
++
 diff --git a/lib/activate/activate.h b/lib/activate/activate.h
-index 8175f68..8b6c4ad 100644
+index 8b6c4ad..2f0b0a0 100644
 --- a/lib/activate/activate.h
 +++ b/lib/activate/activate.h
-@@ -191,12 +191,6 @@ int lvs_in_vg_activated(const struct volume_group *vg);
- int lvs_in_vg_opened(const struct volume_group *vg);
+@@ -126,6 +126,14 @@ int lv_mknodes(struct cmd_context *cmd, const struct logical_volume *lv);
  
- int lv_is_active(const struct logical_volume *lv);
--int lv_is_active_locally(const struct logical_volume *lv);
--int lv_is_active_remotely(const struct logical_volume *lv);
--int lv_is_active_but_not_locally(const struct logical_volume *lv);
--int lv_is_active_exclusive(const struct logical_volume *lv);
--int lv_is_active_exclusive_locally(const struct logical_volume *lv);
--int lv_is_active_exclusive_remotely(const struct logical_volume *lv);
+ int lv_deactivate_any_missing_subdevs(const struct logical_volume *lv);
  
- /* Check is any component LV is active */
- const struct logical_volume *lv_component_is_active(const struct logical_volume *lv);
-diff --git a/lib/locking/locking.c b/lib/locking/locking.c
-index 0e5658f..a4fcaf7 100644
---- a/lib/locking/locking.c
-+++ b/lib/locking/locking.c
-@@ -273,16 +273,6 @@ int lock_vol(struct cmd_context *cmd, const char *vol, uint32_t flags, const str
- 	return 1;
- }
- 
--/*
-- * First try to activate exclusively locally.
-- * Then if the VG is clustered and the LV is not yet active (e.g. due to 
-- * an activation filter) try activating on remote nodes.
-- */
--int activate_lv_excl(struct cmd_context *cmd, const struct logical_volume *lv)
--{
--	return activate_lv_excl_local(cmd, lv);
--}
--
- /* Lock a list of LVs */
- int activate_lvs(struct cmd_context *cmd, struct dm_list *lvs, unsigned exclusive)
++int activate_lv(struct cmd_context *cmd, const struct logical_volume *lv);
++int deactivate_lv(struct cmd_context *cmd, const struct logical_volume *lv);
++int suspend_lv(struct cmd_context *cmd, const struct logical_volume *lv);
++int suspend_lv_origin(struct cmd_context *cmd, const struct logical_volume *lv);
++int resume_lv(struct cmd_context *cmd, const struct logical_volume *lv);
++int resume_lv_origin(struct cmd_context *cmd, const struct logical_volume *lv);
++int revert_lv(struct cmd_context *cmd, const struct logical_volume *lv);
++
+ /*
+  * Returns 1 if info structure has been populated, else 0 on failure.
+  * When lvinfo* is NULL, it returns 1 if the device is locally active, 0 otherwise.
+diff --git a/lib/locking/file_locking.c b/lib/locking/file_locking.c
+index d4f47c6..a60a3e5 100644
+--- a/lib/locking/file_locking.c
++++ b/lib/locking/file_locking.c
+@@ -44,20 +44,8 @@ static int _file_lock_resource(struct cmd_context *cmd, const char *resource,
+ 			       uint32_t flags, const struct logical_volume *lv)
  {
-@@ -290,13 +280,9 @@ int activate_lvs(struct cmd_context *cmd, struct dm_list *lvs, unsigned exclusiv
- 	struct lv_list *lvl;
+ 	char lockfile[PATH_MAX];
+-	unsigned origin_only = (flags & LCK_ORIGIN_ONLY) ? 1 : 0;
+-	unsigned revert = (flags & LCK_REVERT) ? 1 : 0;
  
- 	dm_list_iterate_items(lvl, lvs) {
--		if (!exclusive && !lv_is_active_exclusive(lvl->lv)) {
--			if (!activate_lv(cmd, lvl->lv)) {
--				log_error("Failed to activate %s", display_lvname(lvl->lv));
--				return 0;
--			}
--		} else if (!activate_lv_excl(cmd, lvl->lv)) {
-+		if (!activate_lv(cmd, lvl->lv)) {
- 			log_error("Failed to activate %s", display_lvname(lvl->lv));
-+
- 			dm_list_uniterate(lvh, lvs, &lvl->list) {
- 				lvl = dm_list_item(lvh, struct lv_list);
- 				if (!deactivate_lv(cmd, lvl->lv))
-diff --git a/lib/locking/locking.h b/lib/locking/locking.h
-index 8b2bced..f3956c2 100644
---- a/lib/locking/locking.h
-+++ b/lib/locking/locking.h
-@@ -231,20 +231,14 @@ int check_lvm1_vg_inactive(struct cmd_context *cmd, const char *vgname);
- })
- #define suspend_lv(cmd, lv)	\
- 	(lock_activation((cmd), (lv)) ? lock_lv_vol((cmd), (lv), LCK_LV_SUSPEND | LCK_HOLD) : 0)
-+
- #define suspend_lv_origin(cmd, lv)	lock_lv_vol(cmd, lv, LCK_LV_SUSPEND | LCK_HOLD | LCK_ORIGIN_ONLY)
-+
- #define deactivate_lv(cmd, lv)	lock_lv_vol_serially(cmd, lv, LCK_LV_DEACTIVATE)
- 
- #define activate_lv(cmd, lv)	lock_lv_vol_serially(cmd, lv, LCK_LV_ACTIVATE | LCK_HOLD)
--#define activate_lv_excl_local(cmd, lv)	\
--				lock_lv_vol_serially(cmd, lv, LCK_LV_EXCLUSIVE | LCK_HOLD | LCK_LOCAL)
--#define activate_lv_excl_remote(cmd, lv)	\
--				lock_lv_vol(cmd, lv, LCK_LV_EXCLUSIVE | LCK_HOLD | LCK_REMOTE)
- 
- struct logical_volume;
--int activate_lv_excl(struct cmd_context *cmd, const struct logical_volume *lv);
+ 	switch (flags & LCK_SCOPE_MASK) {
+-	case LCK_ACTIVATION:
+-		if (dm_snprintf(lockfile, sizeof(lockfile),
+-				"%s/A_%s", _lock_dir, resource) < 0) {
+-			log_error("Too long locking filename %s/A_%s.", _lock_dir, resource);
+-			return 0;
+-		}
 -
--#define activate_lv_local(cmd, lv)	\
--	lock_lv_vol_serially(cmd, lv, LCK_LV_ACTIVATE | LCK_HOLD | LCK_LOCAL)
- 
- #define deactivate_lv_local(cmd, lv)	\
- 	lock_lv_vol_serially(cmd, lv, LCK_LV_DEACTIVATE | LCK_LOCAL)
-diff --git a/lib/metadata/cache_manip.c b/lib/metadata/cache_manip.c
-index 0768e6f..fe91fee 100644
---- a/lib/metadata/cache_manip.c
-+++ b/lib/metadata/cache_manip.c
-@@ -566,8 +566,8 @@ int lv_cache_remove(struct logical_volume *cache_lv)
- 		default:
- 			/* Otherwise localy activate volume to sync dirty blocks */
- 			cache_lv->status |= LV_TEMPORARY;
--			if (!activate_lv_excl_local(cache_lv->vg->cmd, cache_lv) ||
--			    !lv_is_active_locally(cache_lv)) {
-+			if (!activate_lv(cache_lv->vg->cmd, cache_lv) ||
-+			    !lv_is_active(cache_lv)) {
- 				log_error("Failed to active cache locally %s.",
- 					  display_lvname(cache_lv));
- 				return 0;
-@@ -969,7 +969,7 @@ int wipe_cache_pool(struct logical_volume *cache_pool_lv)
- 	}
- 
- 	cache_pool_lv->status |= LV_TEMPORARY;
--	if (!activate_lv_excl_local(cache_pool_lv->vg->cmd, cache_pool_lv)) {
-+	if (!activate_lv(cache_pool_lv->vg->cmd, cache_pool_lv)) {
- 		log_error("Aborting. Failed to activate cache pool %s.",
- 			  display_lvname(cache_pool_lv));
- 		return 0;
-diff --git a/lib/metadata/lv.c b/lib/metadata/lv.c
-index f930633..14d7312 100644
---- a/lib/metadata/lv.c
-+++ b/lib/metadata/lv.c
-@@ -1023,7 +1023,7 @@ int lv_raid_image_in_sync(const struct logical_volume *lv)
- 	 * If the LV is not active locally,
- 	 * it doesn't make sense to check status
- 	 */
--	if (!lv_is_active_locally(lv))
-+	if (!lv_is_active(lv))
- 		return 0;  /* Assume not in-sync */
- 
- 	if (!lv_is_raid_image(lv)) {
-@@ -1081,7 +1081,7 @@ int lv_raid_healthy(const struct logical_volume *lv)
- 	 * If the LV is not active locally,
- 	 * it doesn't make sense to check status
- 	 */
--	if (!lv_is_active_locally(lv))
-+	if (!lv_is_active(lv))
- 		return 1;  /* assume healthy */
- 
- 	if (!lv_is_raid_type(lv)) {
-@@ -1446,22 +1446,8 @@ char *lv_host_dup(struct dm_pool *mem, const struct logical_volume *lv)
- 	return dm_pool_strdup(mem, lv->hostname ? : "");
- }
- 
--static int _lv_is_exclusive(struct logical_volume *lv)
--{
--	struct lv_segment *seg;
--
--	/* Some seg types require exclusive activation */
--	/* FIXME Scan recursively */
--	dm_list_iterate_items(seg, &lv->segments)
--		if (seg_only_exclusive(seg))
--			return 1;
--
--	/* Origin has no seg type require exlusiveness */
--	return lv_is_origin(lv);
--}
--
- int lv_active_change(struct cmd_context *cmd, struct logical_volume *lv,
--		     enum activation_change activate, int needs_exclusive)
-+		     enum activation_change activate)
- {
- 	const char *ay_with_mode = NULL;
- 
-@@ -1478,45 +1464,22 @@ int lv_active_change(struct cmd_context *cmd, struct logical_volume *lv,
- 
- 	switch (activate) {
- 	case CHANGE_AN:
-+	case CHANGE_ALN:
- 		log_verbose("Deactivating logical volume %s.", display_lvname(lv));
- 		if (!deactivate_lv(cmd, lv))
+-		if (!lock_file(lockfile, flags))
+-			return_0;
+-		break;
+ 	case LCK_VG:
+ 		if (!strcmp(resource, VG_SYNC_NAMES))
+ 			fs_unlock();
+@@ -84,42 +72,6 @@ static int _file_lock_resource(struct cmd_context *cmd, const char *resource,
+ 		if (!lock_file(lockfile, flags))
  			return_0;
  		break;
--	case CHANGE_ALN:
--		log_verbose("Deactivating logical volume %s locally.",
--			    display_lvname(lv));
--		if (!deactivate_lv_local(cmd, lv))
--			return_0;
--		break;
-+
- 	case CHANGE_ALY:
- 	case CHANGE_AAY:
--		if (needs_exclusive || _lv_is_exclusive(lv)) {
--			log_verbose("Activating logical volume %s exclusively locally.",
--				    display_lvname(lv));
--			if (!activate_lv_excl_local(cmd, lv))
--				return_0;
--		} else {
--			log_verbose("Activating logical volume %s locally.",
--				    display_lvname(lv));
--			if (!activate_lv_local(cmd, lv))
--				return_0;
+-	case LCK_LV:
+-		switch (flags & LCK_TYPE_MASK) {
+-		case LCK_UNLOCK:
+-			log_very_verbose("Unlocking LV %s%s%s", resource, origin_only ? " without snapshots" : "", revert ? " (reverting)" : "");
+-			if (!lv_resume_if_active(cmd, resource, origin_only, 0, revert, lv_committed(lv)))
+-				return 0;
+-			break;
+-		case LCK_NULL:
+-			log_very_verbose("Locking LV %s (NL)", resource);
+-			if (!lv_deactivate(cmd, resource, lv_committed(lv)))
+-				return 0;
+-			break;
+-		case LCK_READ:
+-			log_very_verbose("Locking LV %s (R)", resource);
+-			if (!lv_activate_with_filter(cmd, resource, 0, (lv->status & LV_NOSCAN) ? 1 : 0,
+-						     (lv->status & LV_TEMPORARY) ? 1 : 0, lv_committed(lv)))
+-				return 0;
+-			break;
+-		case LCK_PREAD:
+-			log_very_verbose("Locking LV %s (PR) - ignored", resource);
+-			break;
+-		case LCK_WRITE:
+-			log_very_verbose("Locking LV %s (W)%s", resource, origin_only ? " without snapshots" : "");
+-			if (!lv_suspend_if_active(cmd, resource, origin_only, 0, lv_committed(lv), lv))
+-				return 0;
+-			break;
+-		case LCK_EXCL:
+-			log_very_verbose("Locking LV %s (EX)", resource);
+-			if (!lv_activate_with_filter(cmd, resource, 1, (lv->status & LV_NOSCAN) ? 1 : 0,
+-						     (lv->status & LV_TEMPORARY) ? 1 : 0, lv_committed(lv)))
+-				return 0;
+-			break;
+-		default:
+-			break;
 -		}
 -		break;
- 	case CHANGE_AEY:
--exclusive:
--		log_verbose("Activating logical volume %s exclusively.",
--			    display_lvname(lv));
--		if (!activate_lv_excl(cmd, lv))
--			return_0;
--		break;
- 	case CHANGE_ASY:
- 	case CHANGE_AY:
  	default:
--		if (needs_exclusive || _lv_is_exclusive(lv))
--			goto exclusive;
- 		log_verbose("Activating logical volume %s.", display_lvname(lv));
- 		if (!activate_lv(cmd, lv))
- 			return_0;
-+		break;
- 	}
+ 		log_error("Unrecognised lock scope: %d",
+ 			  flags & LCK_SCOPE_MASK);
+diff --git a/lib/locking/locking.c b/lib/locking/locking.c
+index 5e28452..4b7d7eb 100644
+--- a/lib/locking/locking.c
++++ b/lib/locking/locking.c
+@@ -35,30 +35,6 @@ static int _vg_lock_count = 0;		/* Number of locks held */
+ static int _vg_write_lock_held = 0;	/* VG write lock held? */
+ static int _blocking_supported = 0;
  
- 	if (!is_change_activating(activate) &&
-@@ -1535,23 +1498,10 @@ char *lv_active_dup(struct dm_pool *mem, const struct logical_volume *lv)
+-typedef enum {
+-        LV_NOOP,
+-        LV_SUSPEND,
+-        LV_RESUME
+-} lv_operation_t;
+-
+-static void _lock_memory(struct cmd_context *cmd, lv_operation_t lv_op)
+-{
+-	if (!(_locking.flags & LCK_PRE_MEMLOCK))
+-		return;
+-
+-	if (lv_op == LV_SUSPEND)
+-		critical_section_inc(cmd, "locking for suspend");
+-}
+-
+-static void _unlock_memory(struct cmd_context *cmd, lv_operation_t lv_op)
+-{
+-	if (!(_locking.flags & LCK_PRE_MEMLOCK))
+-		return;
+-
+-	if (lv_op == LV_RESUME)
+-		critical_section_dec(cmd, "unlocking on resume");
+-}
+-
+ static void _unblock_signals(void)
+ {
+ 	/* Don't unblock signals while any locks are held */
+@@ -139,16 +115,13 @@ void fin_locking(void)
+  * VG locking is by VG name.
+  * FIXME This should become VG uuid.
+  */
+-static int _lock_vol(struct cmd_context *cmd, const char *resource,
+-		     uint32_t flags, lv_operation_t lv_op, const struct logical_volume *lv)
++static int _lock_vol(struct cmd_context *cmd, const char *resource, uint32_t flags)
+ {
+ 	uint32_t lck_type = flags & LCK_TYPE_MASK;
+ 	uint32_t lck_scope = flags & LCK_SCOPE_MASK;
+ 	int ret = 0;
+-	const struct logical_volume *active_lv;
+ 
+ 	block_signals(flags);
+-	_lock_memory(cmd, lv_op);
+ 
+ 	assert(resource);
+ 
+@@ -162,23 +135,13 @@ static int _lock_vol(struct cmd_context *cmd, const char *resource,
  		goto out;
  	}
  
--	if (vg_is_clustered(lv->vg)) {
--		//const struct logical_volume *lvo = lv;
--		lv = lv_lock_holder(lv);
--		//log_debug("Holder for %s => %s.", lvo->name, lv->name);
+-	/* When trying activating component LV, make sure none of
+-	 * sub component LV or  LVs that are using it are active */
+-	if (lv && ((lck_type == LCK_READ) || (lck_type == LCK_EXCL)) &&
+-	    ((!lv_is_visible(lv) && (active_lv = lv_holder_is_active(lv))) ||
+-	     (active_lv = lv_component_is_active(lv)))) {
+-		log_error("Activation of logical volume %s is prohibited while logical volume %s is active.",
+-			  display_lvname(lv), display_lvname(active_lv));
+-		goto out;
 -	}
 -
- 	if (!lv_is_active(lv))
- 		s = ""; /* not active */
--	else if (!vg_is_clustered(lv->vg))
-+	else
- 		s = "active";
--	else if (lv_is_active_exclusive(lv))
--		/* exclusive cluster activation */
--		s = lv_is_active_exclusive_locally(lv) ?
--			"local exclusive" : "remote exclusive";
--	else /* locally active */
--		s = lv_is_active_but_not_locally(lv) ?
--			"remotely" : "locally";
+ 	if (cmd->metadata_read_only && lck_type == LCK_WRITE &&
+ 	    strcmp(resource, VG_GLOBAL)) {
+ 		log_error("Operation prohibited while global/metadata_read_only is set.");
+ 		goto out;
+ 	}
+ 
+-	if ((ret = _locking.lock_resource(cmd, resource, flags, lv))) {
++	if ((ret = _locking.lock_resource(cmd, resource, flags, NULL))) {
+ 		if (lck_scope == LCK_VG && !(flags & LCK_CACHE)) {
+ 			if (lck_type != LCK_UNLOCK)
+ 				lvmcache_lock_vgname(resource, lck_type == LCK_READ);
+@@ -196,7 +159,6 @@ static int _lock_vol(struct cmd_context *cmd, const char *resource,
+ 			_update_vg_lock_count(resource, flags);
+ 	}
  out:
- 	return dm_pool_strdup(mem, s);
- }
-diff --git a/lib/metadata/lv.h b/lib/metadata/lv.h
-index 920bcb5..e2e640f 100644
---- a/lib/metadata/lv.h
-+++ b/lib/metadata/lv.h
-@@ -153,7 +153,7 @@ char *lvseg_kernel_discards_dup(struct dm_pool *mem, const struct lv_segment *se
- int lv_set_creation(struct logical_volume *lv,
- 		    const char *hostname, uint64_t timestamp);
- int lv_active_change(struct cmd_context *cmd, struct logical_volume *lv,
--		     enum activation_change activate, int needs_exclusive);
-+		     enum activation_change activate);
+-	_unlock_memory(cmd, lv_op);
+ 	_unblock_signals();
  
- /* LV dup functions */
- char *lv_attr_dup_with_info_and_seg_status(struct dm_pool *mem, const struct lv_with_info_and_seg_status *lvdm);
-diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
-index e023132..dad5953 100644
---- a/lib/metadata/lv_manip.c
-+++ b/lib/metadata/lv_manip.c
-@@ -4058,7 +4058,7 @@ static int _lv_extend_layered_lv(struct alloc_handle *ah,
- 			for (s = 0; !fail && s < seg->area_count; s++) {
- 				meta_lv = seg_metalv(seg, s);
+ 	return ret;
+@@ -205,28 +167,14 @@ out:
+ int lock_vol(struct cmd_context *cmd, const char *vol, uint32_t flags, const struct logical_volume *lv)
+ {
+ 	char resource[258] __attribute__((aligned(8)));
+-	lv_operation_t lv_op;
+ 	int lck_type = flags & LCK_TYPE_MASK;
  
--				if (!activate_lv_local(meta_lv->vg->cmd, meta_lv)) {
-+				if (!activate_lv(meta_lv->vg->cmd, meta_lv)) {
- 					log_error("Failed to activate %s for clearing.",
- 						  display_lvname(meta_lv));
- 					fail = 1;
-@@ -4228,7 +4228,7 @@ int lv_extend(struct logical_volume *lv,
- 		    (lv_is_not_synced(lv))) {
- 			dm_percent_t sync_percent = DM_PERCENT_INVALID;
- 
--			if (!lv_is_active_locally(lv)) {
-+			if (!lv_is_active(lv)) {
- 				log_error("Unable to read sync percent while LV %s "
- 					  "is not locally active.", display_lvname(lv));
- 				/* FIXME Support --force */
-@@ -4711,7 +4711,7 @@ static int _lvresize_adjust_policy(const struct logical_volume *lv,
- 		return 0;
- 	}
- 
--	if (!lv_is_active_locally(lv)) {
-+	if (!lv_is_active(lv)) {
- 		log_error("Can't read state of locally inactive LV %s.",
- 			  display_lvname(lv));
- 		return 0;
-@@ -5571,7 +5571,7 @@ int lv_resize(struct logical_volume *lv,
- 		 * then use suspend and resume and deactivate pool LV,
- 		 * instead of searching for an active thin volume.
- 		 */
--		if (!activate_lv_excl(cmd, lock_lv)) {
-+		if (!activate_lv(cmd, lock_lv)) {
- 			log_error("Failed to activate %s.", display_lvname(lock_lv));
- 			return 0;
- 		}
-@@ -6788,7 +6788,7 @@ struct logical_volume *insert_layer_for_lv(struct cmd_context *cmd,
- 	struct segment_type *segtype;
- 	struct lv_segment *mapseg;
- 	struct lv_names lv_names;
--	unsigned exclusive = 0, i;
-+	unsigned i;
- 
- 	/* create an empty layer LV */
- 	if (dm_snprintf(name, sizeof(name), "%s%s", lv_where->name, layer_suffix) < 0) {
-@@ -6804,9 +6804,6 @@ struct logical_volume *insert_layer_for_lv(struct cmd_context *cmd,
- 		return NULL;
- 	}
- 
--	if (lv_is_active_exclusive_locally(lv_where))
--		exclusive = 1;
+-	switch (flags & (LCK_SCOPE_MASK | LCK_TYPE_MASK)) {
+-		case LCK_LV_SUSPEND:
+-				lv_op = LV_SUSPEND;
+-				break;
+-		case LCK_LV_RESUME:
+-				lv_op = LV_RESUME;
+-				break;
+-		default:	lv_op = LV_NOOP;
+-	}
 -
- 	if (lv_is_active(lv_where) && strstr(name, MIRROR_SYNC_LAYER)) {
- 		log_very_verbose("Creating transient LV %s for mirror conversion in VG %s.", name, lv_where->vg->name);
- 
-@@ -6835,10 +6832,7 @@ struct logical_volume *insert_layer_for_lv(struct cmd_context *cmd,
- 			return NULL;
- 		}
- 
--		if (exclusive)
--			r = activate_lv_excl(cmd, layer_lv);
--		else
--			r = activate_lv(cmd, layer_lv);
-+		r = activate_lv(cmd, layer_lv);
- 
- 		if (!r) {
- 			log_error("Failed to resume transient LV"
-@@ -7125,7 +7119,7 @@ int wipe_lv(struct logical_volume *lv, struct wipe_params wp)
- 		/* nothing to do */
+-
+ 	if (flags == LCK_NONE) {
+ 		log_debug_locking(INTERNAL_ERROR "%s: LCK_NONE lock requested", vol);
  		return 1;
- 
--	if (!lv_is_active_locally(lv)) {
-+	if (!lv_is_active(lv)) {
- 		log_error("Volume \"%s/%s\" is not active locally (volume_list activation filter?).",
- 			  lv->vg->name, lv->name);
- 		return 0;
-@@ -7491,7 +7485,7 @@ static struct logical_volume *_lv_create_an_lv(struct volume_group *vg,
- 					return_NULL;
- 				/* New pool is now inactive */
- 			} else {
--				if (!activate_lv_excl_local(cmd, pool_lv)) {
-+				if (!activate_lv(cmd, pool_lv)) {
- 					log_error("Aborting. Failed to locally activate thin pool %s.",
- 						  display_lvname(pool_lv));
- 					return NULL;
-@@ -7783,7 +7777,7 @@ static struct logical_volume *_lv_create_an_lv(struct volume_group *vg,
- 	if (seg_is_cache(lp)) {
- 		if (vg_is_shared(vg)) {
- 			if (is_change_activating(lp->activate)) {
--				if (!lv_active_change(cmd, lv, CHANGE_AEY, 0)) {
-+				if (!lv_active_change(cmd, lv, CHANGE_AEY)) {
- 					log_error("Aborting. Failed to activate LV %s.",
- 						  display_lvname(lv));
- 					goto revert_new_lv;
-@@ -7794,7 +7788,7 @@ static struct logical_volume *_lv_create_an_lv(struct volume_group *vg,
- 		/* FIXME Support remote exclusive activation? */
- 		/* Not yet 'cache' LV, it is stripe volume for wiping */
- 
--		else if (is_change_activating(lp->activate) && !activate_lv_excl_local(cmd, lv)) {
-+		else if (is_change_activating(lp->activate) && !activate_lv(cmd, lv)) {
- 			log_error("Aborting. Failed to activate LV %s locally exclusively.",
- 				  display_lvname(lv));
- 			goto revert_new_lv;
-@@ -7827,7 +7821,7 @@ static struct logical_volume *_lv_create_an_lv(struct volume_group *vg,
- 				/* Avoid multiple thin-pool activations in this case */
- 				if (thin_pool_was_active < 0)
- 					thin_pool_was_active = 0;
--				if (!activate_lv_excl(cmd, pool_lv)) {
-+				if (!activate_lv(cmd, pool_lv)) {
- 					log_error("Failed to activate thin pool %s.",
- 						  display_lvname(pool_lv));
- 					goto revert_new_lv;
-@@ -7846,7 +7840,7 @@ static struct logical_volume *_lv_create_an_lv(struct volume_group *vg,
- 		}
- 		backup(vg);
- 
--		if (!lv_active_change(cmd, lv, lp->activate, 0)) {
-+		if (!lv_active_change(cmd, lv, lp->activate)) {
- 			log_error("Failed to activate thin %s.", lv->name);
- 			goto deactivate_and_revert_new_lv;
- 		}
-@@ -7860,13 +7854,13 @@ static struct logical_volume *_lv_create_an_lv(struct volume_group *vg,
- 		}
- 	} else if (lp->snapshot) {
- 		lv->status |= LV_TEMPORARY;
--		if (!activate_lv_local(cmd, lv)) {
-+		if (!activate_lv(cmd, lv)) {
- 			log_error("Aborting. Failed to activate snapshot "
- 				  "exception store.");
- 			goto revert_new_lv;
- 		}
- 		lv->status &= ~LV_TEMPORARY;
--	} else if (!lv_active_change(cmd, lv, lp->activate, 0)) {
-+	} else if (!lv_active_change(cmd, lv, lp->activate)) {
- 		log_error("Failed to activate new LV.");
- 		goto deactivate_and_revert_new_lv;
  	}
-@@ -7968,7 +7962,7 @@ static struct logical_volume *_lv_create_an_lv(struct volume_group *vg,
- 			 */
  
- 			/* Activate spare snapshot once it is a complete LV */
--			if (!lv_active_change(cmd, origin_lv, lp->activate, 1)) {
-+			if (!lv_active_change(cmd, origin_lv, lp->activate)) {
- 				log_error("Failed to activate sparce volume %s.",
- 					  display_lvname(origin_lv));
- 				return NULL;
-diff --git a/lib/metadata/mirror.c b/lib/metadata/mirror.c
-index 9c775c4..8de1440 100644
---- a/lib/metadata/mirror.c
-+++ b/lib/metadata/mirror.c
-@@ -354,7 +354,7 @@ static int _init_mirror_log(struct cmd_context *cmd,
- 	} else if (!lv_update_and_reload((struct logical_volume*) lock_holder))
+ 	switch (flags & LCK_SCOPE_MASK) {
+-	case LCK_ACTIVATION:
+-		break;
+ 	case LCK_VG:
+ 		if (!_blocking_supported)
+ 			flags |= LCK_NONBLOCK;
+@@ -235,10 +183,6 @@ int lock_vol(struct cmd_context *cmd, const char *vol, uint32_t flags, const str
+ 		if (is_orphan_vg(vol))
+ 			vol = VG_ORPHANS;
+ 		break;
+-	case LCK_LV:
+-		/* All LV locks are non-blocking. */
+-		flags |= LCK_NONBLOCK;
+-		break;
+ 	default:
+ 		log_error("Unrecognised lock scope: %d",
+ 			  flags & LCK_SCOPE_MASK);
+@@ -250,7 +194,7 @@ int lock_vol(struct cmd_context *cmd, const char *vol, uint32_t flags, const str
+ 		return 0;
+ 	}
+ 
+-	if (!_lock_vol(cmd, resource, flags, lv_op, lv))
++	if (!_lock_vol(cmd, resource, flags))
  		return_0;
- 
--	if (!activate_lv_excl_local(cmd, log_lv)) {
-+	if (!activate_lv(cmd, log_lv)) {
- 		log_error("Aborting. Failed to activate mirror log.");
- 		goto revert_new_lv;
- 	}
-@@ -427,15 +427,10 @@ static int _activate_lv_like_model(struct logical_volume *model,
- 	/* FIXME: run all cases through lv_active_change when clvm variants are gone. */
- 
- 	if (vg_is_shared(lv->vg))
--		return lv_active_change(lv->vg->cmd, lv, CHANGE_AEY, 0);
-+		return lv_active_change(lv->vg->cmd, lv, CHANGE_AEY);
- 
--	if (lv_is_active_exclusive(model)) {
--		if (!activate_lv_excl(lv->vg->cmd, lv))
--			return_0;
--	} else {
--		if (!activate_lv(lv->vg->cmd, lv))
--			return_0;
--	}
-+	if (!activate_lv(lv->vg->cmd, lv))
-+		return_0;
- 	return 1;
- }
- 
-@@ -610,14 +605,7 @@ static int _mirrored_lv_in_sync(struct logical_volume *lv)
- 
- 	if (!lv_mirror_percent(lv->vg->cmd, lv, 0, &sync_percent,
- 			       NULL)) {
--		if (lv_is_active_but_not_locally(lv))
--			log_error("Unable to determine mirror sync status of"
--				  " remotely active LV, %s",
--				  display_lvname(lv));
--		else
--			log_error("Unable to determine mirror "
--				  "sync status of %s.",
--				  display_lvname(lv));
-+		log_error("Unable to determine mirror sync status of %s.", display_lvname(lv));
- 		return 0;
- 	}
- 
-@@ -1668,7 +1656,6 @@ int remove_mirror_log(struct cmd_context *cmd,
- 		      int force)
- {
- 	dm_percent_t sync_percent;
--	struct volume_group *vg = lv->vg;
- 
- 	/* Unimplemented features */
- 	if (dm_list_size(&lv->segments) != 1) {
-@@ -1677,20 +1664,12 @@ int remove_mirror_log(struct cmd_context *cmd,
- 	}
- 
- 	/* Had disk log, switch to core. */
--	if (lv_is_active_locally(lv)) {
-+	if (lv_is_active(lv)) {
- 		if (!lv_mirror_percent(cmd, lv, 0, &sync_percent,
- 				       NULL)) {
- 			log_error("Unable to determine mirror sync status.");
- 			return 0;
- 		}
--	} else if (lv_is_active(lv)) {
--		log_error("Unable to determine sync status of "
--			  "remotely active mirror volume %s.", display_lvname(lv));
--		return 0;
--	} else if (vg_is_clustered(vg)) {
--		log_error("Unable to convert the log of an inactive "
--			  "cluster mirror volume %s.", display_lvname(lv));
--		return 0;
- 	} else if (force || yes_no_prompt("Full resync required to convert inactive "
- 					  "mirror volume %s to core log. "
- 					  "Proceed? [y/n]: ", display_lvname(lv)) == 'y')
-@@ -1910,22 +1889,11 @@ int add_mirror_log(struct cmd_context *cmd, struct logical_volume *lv,
- 	unsigned old_log_count;
- 	int r = 0;
- 
--	if (vg_is_clustered(lv->vg) && (log_count > 1)) {
--		log_error("Log type, \"mirrored\", is unavailable to cluster mirrors.");
--		return 0;
--	}
--
- 	if (dm_list_size(&lv->segments) != 1) {
- 		log_error("Multiple-segment mirror is not supported.");
- 		return 0;
- 	}
- 
--	if (lv_is_active_but_not_locally(lv)) {
--		log_error("Unable to convert the log of a mirror, %s, that is "
--			  "active remotely but not locally.", display_lvname(lv));
--		return 0;
--	}
--
- 	log_lv = first_seg(lv)->log_lv;
- 	old_log_count = (log_lv) ? lv_mirror_count(log_lv) : 0;
- 	if (old_log_count == log_count) {
-@@ -2079,27 +2047,6 @@ int lv_add_mirrors(struct cmd_context *cmd, struct logical_volume *lv,
- 		return 0;
- 	}
- 
--	if (vg_is_clustered(lv->vg)) {
--		/* FIXME: move this test out of this function */
--		/* Skip test for pvmove mirrors, it can use local mirror */
--		if (!lv_is_pvmove(lv) && !lv_is_locked(lv) &&
--		    lv_is_active(lv) &&
--		    !lv_is_active_exclusive_locally(lv) && /* lv_is_active_remotely */
--		    !cluster_mirror_is_available(lv->vg->cmd)) {
--			log_error("Shared cluster mirrors are not available.");
--			return 0;
--		}
--
--		/*
--		 * No mirrored logs for cluster mirrors until
--		 * log daemon is multi-threaded.
--		 */
--		if (log_count > 1) {
--			log_error("Log type, \"mirrored\", is unavailable to cluster mirrors.");
--			return 0;
--		}
--	}
--
- 	if (lv->vg->lock_type && !strcmp(lv->vg->lock_type, "dlm") && cmd->lockd_lv_sh) {
- 		if (!cluster_mirror_is_available(cmd)) {
- 			log_error("Shared cluster mirrors are not available.");
-diff --git a/lib/metadata/pool_manip.c b/lib/metadata/pool_manip.c
-index 20224d1..80d2e07 100644
---- a/lib/metadata/pool_manip.c
-+++ b/lib/metadata/pool_manip.c
-@@ -526,7 +526,7 @@ int create_pool(struct logical_volume *pool_lv,
- 		 * or directly converted to invisible device via suspend/resume
- 		 */
- 		pool_lv->status |= LV_TEMPORARY;
--		if (!activate_lv_excl_local(pool_lv->vg->cmd, pool_lv)) {
-+		if (!activate_lv(pool_lv->vg->cmd, pool_lv)) {
- 			log_error("Aborting. Failed to activate pool metadata %s.",
- 				  display_lvname(pool_lv));
- 			goto bad;
-diff --git a/lib/metadata/raid_manip.c b/lib/metadata/raid_manip.c
-index 53aa4f1..92e01a2 100644
---- a/lib/metadata/raid_manip.c
-+++ b/lib/metadata/raid_manip.c
-@@ -319,7 +319,7 @@ static int _deactivate_and_remove_lvs(struct volume_group *vg, struct dm_list *r
- 			return 0;
- 		}
- 		/* Must get a cluster lock on SubLVs that will be removed. */
--		if (!activate_lv_excl_local(vg->cmd, lvl->lv))
-+		if (!activate_lv(vg->cmd, lvl->lv))
- 			return_0;
- 	}
- 
-@@ -669,7 +669,7 @@ static int _lv_update_and_reload_list(struct logical_volume *lv, int origin_only
- 		dm_list_iterate_items(lvl, lv_list) {
- 			log_very_verbose("Activating logical volume %s before %s in kernel.",
- 					 display_lvname(lvl->lv), display_lvname(lock_lv));
--			if (!activate_lv_excl_local(vg->cmd, lvl->lv)) {
-+			if (!activate_lv(vg->cmd, lvl->lv)) {
- 				log_error("Failed to activate %s before resuming %s.",
- 					  display_lvname(lvl->lv), display_lvname(lock_lv));
- 				r = 0; /* But lets try with the rest */
-@@ -732,9 +732,9 @@ static int _clear_lvs(struct dm_list *lv_list)
- 	was_active = alloca(sz);
- 
- 	dm_list_iterate_items(lvl, lv_list)
--		if (!(was_active[i++] = lv_is_active_locally(lvl->lv))) {
-+		if (!(was_active[i++] = lv_is_active(lvl->lv))) {
- 			lvl->lv->status |= LV_TEMPORARY;
--			if (!activate_lv_excl_local(vg->cmd, lvl->lv)) {
-+			if (!activate_lv(vg->cmd, lvl->lv)) {
- 				log_error("Failed to activate localy %s for clearing.",
- 					  display_lvname(lvl->lv));
- 				r = 0;
-@@ -2276,7 +2276,7 @@ static int _vg_write_lv_suspend_vg_commit(struct logical_volume *lv, int origin_
- /* Helper: function to activate @lv exclusively local */
- static int _activate_sub_lv_excl_local(struct logical_volume *lv)
- {
--	if (lv && !activate_lv_excl_local(lv->vg->cmd, lv)) {
-+	if (lv && !activate_lv(lv->vg->cmd, lv)) {
- 		log_error("Failed to activate %s.", display_lvname(lv));
- 		return 0;
- 	}
-@@ -3258,16 +3258,6 @@ static int _lv_raid_change_image_count(struct logical_volume *lv, int yes, uint3
- 		return r;
- 	}
- 
--	/*
--	 * LV must be either in-active or exclusively active
--	 */
--	if (lv_is_active(lv_lock_holder(lv)) && vg_is_clustered(lv->vg) &&
--	    !lv_is_active_exclusive_locally(lv_lock_holder(lv))) {
--		log_error("%s must be active exclusive locally to "
--			  "perform this operation.", display_lvname(lv));
--		return 0;
--	}
--
- 	if (old_count > new_count)
- 		return _raid_remove_images(lv, yes, new_count, allocate_pvs, removal_lvs, commit);
- 
-@@ -3427,13 +3417,13 @@ int lv_raid_split(struct logical_volume *lv, int yes, const char *split_name,
- 	/* FIXME: run all cases through lv_active_change when clvm variants are gone. */
- 
- 	if (vg_is_shared(lvl->lv->vg)) {
--		if (!lv_active_change(lv->vg->cmd, lvl->lv, CHANGE_AEY, 0))
-+		if (!lv_active_change(lv->vg->cmd, lvl->lv, CHANGE_AEY))
- 			return_0;
--	} else if (!activate_lv_excl_local(cmd, lvl->lv))
-+	} else if (!activate_lv(cmd, lvl->lv))
- 		return_0;
- 
- 	dm_list_iterate_items(lvl, &removal_lvs)
--		if (!activate_lv_excl_local(cmd, lvl->lv))
-+		if (!activate_lv(cmd, lvl->lv))
- 			return_0;
- 
- 	if (!resume_lv(cmd, lv_lock_holder(lv))) {
-@@ -3539,7 +3529,7 @@ int lv_raid_split_and_track(struct logical_volume *lv,
- 
- 	/* Activate the split (and tracking) LV */
- 	/* Preserving exclusive local activation also for tracked LV */
--	if (!activate_lv_excl_local(lv->vg->cmd, seg_lv(seg, s)))
-+	if (!activate_lv(lv->vg->cmd, seg_lv(seg, s)))
- 		return_0;
- 
- 	if (seg->area_count == 2)
-@@ -5001,7 +4991,7 @@ static int _clear_meta_lvs(struct logical_volume *lv)
- 	/* Grab locks first in case of clustered VG */
- 	if (vg_is_clustered(lv->vg))
- 		dm_list_iterate_items(lvl, &meta_lvs)
--			if (!activate_lv_excl_local(lv->vg->cmd, lvl->lv))
-+			if (!activate_lv(lv->vg->cmd, lvl->lv))
- 				return_0;
- 	/*
- 	 * Now deactivate the MetaLVs before clearing, so
-@@ -6520,14 +6510,6 @@ int lv_raid_convert(struct logical_volume *lv,
- 		return 0;
- 	}
- 
--	if (vg_is_clustered(lv->vg) &&
--		   !lv_is_active_exclusive_locally(lv_lock_holder(lv))) {
--		/* In clustered VGs, the LV must be active on this node exclusively. */
--		log_error("%s must be active exclusive locally to "
--			  "perform this operation.", display_lvname(lv));
--		return 0;
--	}
--
- 	new_segtype = new_segtype ? : seg->segtype;
- 	if (!new_segtype) {
- 		log_error(INTERNAL_ERROR "New segtype not specified.");
-@@ -6810,10 +6792,8 @@ static int _lv_raid_rebuild_or_replace(struct logical_volume *lv,
- 	if (lv_is_partial(lv))
- 		lv->vg->cmd->partial_activation = 1;
- 
--	if (!lv_is_active_exclusive_locally(lv_lock_holder(lv))) {
--		log_error("%s must be active %sto perform this operation.",
--			  display_lvname(lv),
--			  vg_is_clustered(lv->vg) ? "exclusive locally " : "");
-+	if (!lv_is_active(lv_lock_holder(lv))) {
-+		log_error("%s must be active to perform this operation.", display_lvname(lv));
- 		return 0;
- 	}
- 
-@@ -7013,7 +6993,7 @@ try_again:
- 	 * of their new names.
- 	 */
- 	dm_list_iterate_items(lvl, &old_lvs)
--		if (!activate_lv_excl_local(lv->vg->cmd, lvl->lv))
-+		if (!activate_lv(lv->vg->cmd, lvl->lv))
- 			return_0;
  
  	/*
-diff --git a/lib/metadata/snapshot_manip.c b/lib/metadata/snapshot_manip.c
-index e3669ef..5ccf251 100644
---- a/lib/metadata/snapshot_manip.c
-+++ b/lib/metadata/snapshot_manip.c
-@@ -411,11 +411,5 @@ int validate_snapshot_origin(const struct logical_volume *origin_lv)
- 		return 0;
- 	}
- 
--	if (vg_is_clustered(origin_lv->vg) && lv_is_active(origin_lv) &&
--	    !lv_is_active_exclusive_locally(origin_lv)) {
--		log_error("Snapshot origin must be active exclusively.");
--		return 0;
--	}
--
- 	return 1;
- }
-diff --git a/lib/metadata/thin_manip.c b/lib/metadata/thin_manip.c
-index e1522d3..6b2b1e7 100644
---- a/lib/metadata/thin_manip.c
-+++ b/lib/metadata/thin_manip.c
-@@ -504,7 +504,7 @@ int update_pool_lv(struct logical_volume *lv, int activate)
- 			 *   as this version has major problem when it does not know
- 			 *   which Node has pool active.
- 			 */
--			if (!activate_lv_excl(lv->vg->cmd, lv)) {
-+			if (!activate_lv(lv->vg->cmd, lv)) {
- 				init_dmeventd_monitor(monitored);
- 				return_0;
- 			}
-@@ -857,7 +857,7 @@ int check_new_thin_pool(const struct logical_volume *pool_lv)
- 	uint64_t transaction_id;
- 
- 	/* For transaction_id check LOCAL activation is required */
--	if (!activate_lv_excl_local(cmd, pool_lv)) {
-+	if (!activate_lv(cmd, pool_lv)) {
- 		log_error("Aborting. Failed to locally activate thin pool %s.",
- 			  display_lvname(pool_lv));
- 		return 0;
-diff --git a/lib/report/report.c b/lib/report/report.c
-index 4a957a7..8039820 100644
---- a/lib/report/report.c
-+++ b/lib/report/report.c
-@@ -3559,11 +3559,7 @@ static int _lvactivelocally_disp(struct dm_report *rh, struct dm_pool *mem,
- 	if (!activation())
- 		return _binary_undef_disp(rh, mem, field, private);
- 
--	if (vg_is_clustered(lv->vg)) {
--		lv = lv_lock_holder(lv);
--		active_locally = lv_is_active_locally(lv);
--	} else
--		active_locally = lv_is_active(lv);
-+	active_locally = lv_is_active(lv);
- 
- 	return _binary_disp(rh, mem, field, active_locally, GET_FIRST_RESERVED_NAME(lv_active_locally_y), private);
- }
-@@ -3572,38 +3568,12 @@ static int _lvactiveremotely_disp(struct dm_report *rh, struct dm_pool *mem,
- 				  struct dm_report_field *field,
- 				  const void *data, void *private)
- {
--	const struct logical_volume *lv = (const struct logical_volume *) data;
- 	int active_remotely;
- 
- 	if (!activation())
- 		return _binary_undef_disp(rh, mem, field, private);
- 
--	if (vg_is_clustered(lv->vg)) {
--		lv = lv_lock_holder(lv);
--		/* FIXME: It seems we have no way to get this info correctly
--		 * 	  with current interface - we'd need to check number
--		 * 	  of responses from the cluster:
--		 * 	    - if number of nodes that responded == 1
--		 * 	    - and LV is active on local node
--		 * 	  ..then we may say that LV is *not* active remotely.
--		 *
--		 * 	  Otherwise ((responses > 1 && LV active locally) ||
--		 * 	  (responses == 1 && LV not active locally)), it's
--		 * 	  active remotely.
--		 *
--		 * 	  We have this info, but hidden underneath the
--		 * 	  locking interface (locking_type.query_resource fn).
--		 *
--		 * 	  For now, let's use 'unknown' for remote status if
--		 * 	  the LV is found active locally until we find a way to
--		 * 	  smuggle the proper information out of the interface.
--		 */
--		if (lv_is_active_locally(lv))
--			return _binary_undef_disp(rh, mem, field, private);
--
--		active_remotely = lv_is_active_but_not_locally(lv);
--	} else
--		active_remotely = 0;
-+	active_remotely = 0;
- 
- 	return _binary_disp(rh, mem, field, active_remotely, GET_FIRST_RESERVED_NAME(lv_active_remotely_y), private);
- }
-@@ -3618,11 +3588,7 @@ static int _lvactiveexclusively_disp(struct dm_report *rh, struct dm_pool *mem,
- 	if (!activation())
- 		return _binary_undef_disp(rh, mem, field, private);
- 
--	if (vg_is_clustered(lv->vg)) {
--		lv = lv_lock_holder(lv);
--		active_exclusively = lv_is_active_exclusive(lv);
--	} else
--		active_exclusively = lv_is_active(lv);
-+	active_exclusively = lv_is_active(lv);
- 
- 	return _binary_disp(rh, mem, field, active_exclusively, GET_FIRST_RESERVED_NAME(lv_active_exclusively_y), private);
- }
-diff --git a/tools/lvchange.c b/tools/lvchange.c
-index 481cb4c..a90174e 100644
---- a/tools/lvchange.c
-+++ b/tools/lvchange.c
-@@ -294,9 +294,6 @@ static int _reactivate_lv(struct logical_volume *lv,
- 	if (!active)
+@@ -261,7 +205,7 @@ int lock_vol(struct cmd_context *cmd, const char *vol, uint32_t flags, const str
+ 	    (flags & (LCK_CACHE | LCK_HOLD)))
  		return 1;
  
--	if (exclusive)
--		return activate_lv_excl_local(cmd, lv);
--
- 	return activate_lv(cmd, lv);
- }
- 
-@@ -318,7 +315,7 @@ static int _lvchange_resync(struct cmd_context *cmd, struct logical_volume *lv)
- 
- 	dm_list_init(&device_list);
- 
--	if (lv_is_active_locally(lv)) {
-+	if (lv_is_active(lv)) {
- 		if (!lv_check_not_in_use(lv, 1)) {
- 			log_error("Can't resync open logical volume %s.",
- 				  display_lvname(lv));
-@@ -335,7 +332,7 @@ static int _lvchange_resync(struct cmd_context *cmd, struct logical_volume *lv)
- 		}
- 
- 		active = 1;
--		if (lv_is_active_exclusive_locally(lv))
-+		if (lv_is_active(lv))
- 			exclusive = 1;
- 	}
- 
-@@ -411,7 +408,7 @@ static int _lvchange_resync(struct cmd_context *cmd, struct logical_volume *lv)
- 	memlock_unlock(lv->vg->cmd);
- 
- 	dm_list_iterate_items(lvl, &device_list) {
--		if (!activate_lv_excl_local(cmd, lvl->lv)) {
-+		if (!activate_lv(cmd, lvl->lv)) {
- 			log_error("Unable to activate %s for %s clearing.",
- 				  display_lvname(lvl->lv), (seg_is_raid(seg)) ?
- 				  "metadata area" : "mirror log");
-@@ -621,7 +618,7 @@ static int _lvchange_persistent(struct cmd_context *cmd,
- 
- 	if (activate != CHANGE_AN) {
- 		log_verbose("Re-activating logical volume %s.", display_lvname(lv));
--		if (!lv_active_change(cmd, lv, activate, 0)) {
-+		if (!lv_active_change(cmd, lv, activate)) {
- 			log_error("%s: reactivation failed.", display_lvname(lv));
- 			backup(lv->vg);
- 			return 0;
-diff --git a/tools/lvconvert.c b/tools/lvconvert.c
-index aebf3e9..11f7cee 100644
---- a/tools/lvconvert.c
-+++ b/tools/lvconvert.c
-@@ -1767,7 +1767,7 @@ static int _lvconvert_splitsnapshot(struct cmd_context *cmd, struct logical_volu
- 		return 0;
- 	}
- 
--	if (lv_is_active_locally(cow)) {
-+	if (lv_is_active(cow)) {
- 		if (!lv_check_not_in_use(cow, 1))
- 			return_0;
- 
-@@ -1950,7 +1950,7 @@ static int _lvconvert_snapshot(struct cmd_context *cmd,
- 		log_warn("WARNING: %s not zeroed.", snap_name);
- 	else {
- 		lv->status |= LV_TEMPORARY;
--		if (!activate_lv_excl_local(cmd, lv) ||
-+		if (!activate_lv(cmd, lv) ||
- 		    !wipe_lv(lv, (struct wipe_params) { .do_zero = 1 })) {
- 			log_error("Aborting. Failed to wipe snapshot exception store.");
- 			return 0;
-@@ -2037,7 +2037,7 @@ static int _lvconvert_merge_old_snapshot(struct cmd_context *cmd,
- 	 * constructor and DM should prevent appropriate devices from
- 	 * being open.
- 	 */
--	if (lv_is_active_locally(origin)) {
-+	if (lv_is_active(origin)) {
- 		if (!lv_check_not_in_use(origin, 0)) {
- 			log_print_unless_silent("Delaying merge since origin is open.");
- 			merge_on_activate = 1;
-@@ -2146,7 +2146,7 @@ static int _lvconvert_merge_thin_snapshot(struct cmd_context *cmd,
- 		log_print_unless_silent("Volume %s replaced origin %s.",
- 					display_lvname(origin), display_lvname(lv));
- 
--		if (origin_is_active && !activate_lv_excl_local(cmd, lv)) {
-+		if (origin_is_active && !activate_lv(cmd, lv)) {
- 			log_error("Failed to reactivate origin %s.",
- 				  display_lvname(lv));
- 			return 0;
-@@ -2254,13 +2254,13 @@ static int _lvconvert_thin_pool_repair(struct cmd_context *cmd,
- 		return 0;
- 	}
- 
--	if (!activate_lv_excl_local(cmd, pmslv)) {
-+	if (!activate_lv(cmd, pmslv)) {
- 		log_error("Cannot activate pool metadata spare volume %s.",
- 			  pmslv->name);
- 		return 0;
- 	}
- 
--	if (!activate_lv_excl_local(cmd, mlv)) {
-+	if (!activate_lv(cmd, mlv)) {
- 		log_error("Cannot activate thin pool metadata volume %s.",
- 			  mlv->name);
- 		goto deactivate_pmslv;
-@@ -2452,13 +2452,13 @@ static int _lvconvert_cache_repair(struct cmd_context *cmd,
- 		return 0;
- 	}
- 
--	if (!activate_lv_excl_local(cmd, pmslv)) {
-+	if (!activate_lv(cmd, pmslv)) {
- 		log_error("Cannot activate pool metadata spare volume %s.",
- 			  pmslv->name);
- 		return 0;
- 	}
- 
--	if (!activate_lv_excl_local(cmd, mlv)) {
-+	if (!activate_lv(cmd, mlv)) {
- 		log_error("Cannot activate cache pool metadata volume %s.",
- 			  mlv->name);
- 		goto deactivate_pmslv;
-@@ -3106,7 +3106,7 @@ static int _lvconvert_to_pool(struct cmd_context *cmd,
- 
- 		if (zero_metadata) {
- 			metadata_lv->status |= LV_TEMPORARY;
--			if (!activate_lv_excl_local(cmd, metadata_lv)) {
-+			if (!activate_lv(cmd, metadata_lv)) {
- 				log_error("Aborting. Failed to activate metadata lv.");
- 				goto bad;
- 			}
-@@ -3248,7 +3248,7 @@ static int _lvconvert_to_pool(struct cmd_context *cmd,
- 	}
- 
- 	if (activate_pool &&
--	    !activate_lv_excl(cmd, pool_lv)) {
-+	    !activate_lv(cmd, pool_lv)) {
- 		log_error("Failed to activate pool logical volume %s.",
- 			  display_lvname(pool_lv));
- 		/* Deactivate subvolumes */
-@@ -3461,11 +3461,8 @@ static int _lvconvert_repair_pvs_raid(struct cmd_context *cmd, struct logical_vo
- 	struct dm_list *failed_pvs;
- 	int do_it;
- 
--	if (!lv_is_active_exclusive_locally(lv_lock_holder(lv))) {
--		log_error("%s must be active %sto perform this operation.",
--			  display_lvname(lv),
--			  vg_is_clustered(lv->vg) ?
--			  "exclusive locally " : "");
-+	if (!lv_is_active(lv_lock_holder(lv))) {
-+		log_error("%s must be active to perform this operation.", display_lvname(lv));
- 		return 0;
- 	}
- 
-diff --git a/tools/lvcreate.c b/tools/lvcreate.c
-index 5c9d448..4009ea5 100644
---- a/tools/lvcreate.c
-+++ b/tools/lvcreate.c
-@@ -1232,13 +1232,13 @@ static int _determine_cache_argument(struct volume_group *vg,
- 				return 1;
- 
- 			} else if (vg_is_shared(vg)) {
--				if (!lv_active_change(cmd, lv, CHANGE_AEY, 0)) {
-+				if (!lv_active_change(cmd, lv, CHANGE_AEY)) {
- 					log_error("Cannot activate cache origin %s.",
- 						   display_lvname(lv));
- 					return 0;
- 				}
- 
--			} else if (!activate_lv_excl_local(cmd, lv)) {
-+			} else if (!activate_lv(cmd, lv)) {
- 				log_error("Cannot activate cache origin %s.",
- 					  display_lvname(lv));
- 				return 0;
-diff --git a/tools/polldaemon.c b/tools/polldaemon.c
-index bd99c7b..7ad45ca 100644
---- a/tools/polldaemon.c
-+++ b/tools/polldaemon.c
-@@ -200,7 +200,7 @@ int wait_for_single_lv(struct cmd_context *cmd, struct poll_operation_id *id,
- 		 * If the LV is not active locally, the kernel cannot be
- 		 * queried for its status.  We must exit in this case.
- 		 */
--		if (!lv_is_active_locally(lv)) {
-+		if (!lv_is_active(lv)) {
- 			log_print_unless_silent("%s: Interrupted: No longer active.", id->display_name);
- 			ret = 1;
- 			goto out;
-@@ -440,7 +440,7 @@ static int _report_progress(struct cmd_context *cmd, struct poll_operation_id *i
- 		goto out;
- 	}
- 
--	if (!lv_is_active_locally(lv)) {
-+	if (!lv_is_active(lv)) {
- 		log_verbose("%s: Interrupted: No longer active.", id->display_name);
- 		ret = 1;
- 		goto out;
-diff --git a/tools/pvmove.c b/tools/pvmove.c
-index 0fcabb3..c5e3929 100644
---- a/tools/pvmove.c
-+++ b/tools/pvmove.c
-@@ -466,8 +466,7 @@ static struct logical_volume *_set_up_pvmove_lv(struct cmd_context *cmd,
- 			 * in the case it's NOT active anywhere else, since LOCKED LVs cannot be
- 			 * later activated by user.
- 			 */
--			if (lv_is_active_remotely(holder) ||
--			    (!lv_is_active_locally(holder) && !activate_lv_excl_local(cmd, holder))) {
-+			if ((!lv_is_active(holder) && !activate_lv(cmd, holder))) {
- 				lv_skipped = 1;
- 				log_print_unless_silent("Skipping LV %s which is not locally exclusive%s.",
- 							display_lvname(lv),
-@@ -532,10 +531,7 @@ static int _activate_lv(struct cmd_context *cmd, struct logical_volume *lv_mirr,
- {
- 	int r = 0;
- 
--	if (exclusive || lv_is_active_exclusive(lv_mirr))
--		r = activate_lv_excl(cmd, lv_mirr);
--	else
--		r = activate_lv(cmd, lv_mirr);
-+	r = activate_lv(cmd, lv_mirr);
- 
- 	if (!r)
- 		stack;
-diff --git a/tools/toollib.c b/tools/toollib.c
-index baf84ad..236e2b1 100644
---- a/tools/toollib.c
-+++ b/tools/toollib.c
-@@ -1034,7 +1034,7 @@ int lv_change_activate(struct cmd_context *cmd, struct logical_volume *lv,
- 		return 0;
- 	}
- 
--	if (!lv_active_change(cmd, lv, activate, 0))
-+	if (!lv_active_change(cmd, lv, activate))
+-	if (!_lock_vol(cmd, resource, (flags & ~LCK_TYPE_MASK) | LCK_UNLOCK, lv_op, lv))
++	if (!_lock_vol(cmd, resource, (flags & ~LCK_TYPE_MASK) | LCK_UNLOCK))
  		return_0;
  
- 	set_lv_notify(lv->vg->cmd);
-@@ -1066,7 +1066,7 @@ int lv_refresh(struct cmd_context *cmd, struct logical_volume *lv)
- 	 * - fortunately: polldaemon will immediately shutdown if the
- 	 *   origin doesn't have a status with a snapshot percentage
- 	 */
--	if (background_polling() && lv_is_merging_origin(lv) && lv_is_active_locally(lv))
-+	if (background_polling() && lv_is_merging_origin(lv) && lv_is_active(lv))
- 		lv_spawn_background_polling(cmd, lv);
- 
  	return 1;
-diff --git a/tools/vgchange.c b/tools/vgchange.c
-index e87277f..a67c3be 100644
---- a/tools/vgchange.c
-+++ b/tools/vgchange.c
-@@ -63,7 +63,7 @@ static int _poll_lvs_in_vg(struct cmd_context *cmd,
- 	dm_list_iterate_items(lvl, &vg->lvs) {
- 		lv = lvl->lv;
+@@ -312,3 +256,4 @@ int sync_dev_names(struct cmd_context* cmd)
  
--		if (lv_is_active_locally(lv) &&
-+		if (lv_is_active(lv) &&
- 		    (lv_is_pvmove(lv) || lv_is_converting(lv) || lv_is_merging(lv))) {
- 			lv_spawn_background_polling(cmd, lv);
- 			count++;
-@@ -116,20 +116,8 @@ static int _activate_lvs_in_vg(struct cmd_context *cmd, struct volume_group *vg,
+ 	return lock_vol(cmd, VG_SYNC_NAMES, LCK_VG_SYNC, NULL);
+ }
++
+diff --git a/lib/locking/locking.h b/lib/locking/locking.h
+index f3956c2..6d7d8e8 100644
+--- a/lib/locking/locking.h
++++ b/lib/locking/locking.h
+@@ -94,8 +94,6 @@ int check_lvm1_vg_inactive(struct cmd_context *cmd, const char *vgname);
+  */
+ #define LCK_SCOPE_MASK	0x00001008U
+ #define LCK_VG		0x00000000U	/* Volume Group */
+-#define LCK_LV		0x00000008U	/* Logical Volume */
+-#define LCK_ACTIVATION  0x00001000U	/* Activation */
  
- 		expected_count++;
+ /*
+  * Lock bits.
+@@ -138,9 +136,6 @@ int check_lvm1_vg_inactive(struct cmd_context *cmd, const char *vgname);
+  */
+ #define LCK_NONE		(LCK_VG | LCK_NULL)
  
--		if (!lv_change_activate(cmd, lv, activate)) {
--			if (!lv_is_active_exclusive_remotely(lv))
--				stack;
--			else {
--				/*
--				 * If the LV is active exclusive remotely,
--				 * then ignore it here
--				 */
--				log_verbose("%s is exclusively active on a remote node.",
--					    display_lvname(lv));
--				expected_count--; /* not accounted */
--			}
-+		if (!lv_change_activate(cmd, lv, activate))
- 			continue;
--		}
+-#define LCK_ACTIVATE_LOCK	(LCK_ACTIVATION | LCK_WRITE | LCK_HOLD)
+-#define LCK_ACTIVATE_UNLOCK	(LCK_ACTIVATION | LCK_UNLOCK)
+-
+ #define LCK_VG_READ		(LCK_VG | LCK_READ | LCK_HOLD)
+ #define LCK_VG_WRITE		(LCK_VG | LCK_WRITE | LCK_HOLD)
+ #define LCK_VG_UNLOCK		(LCK_VG | LCK_UNLOCK)
+@@ -155,51 +150,8 @@ int check_lvm1_vg_inactive(struct cmd_context *cmd, const char *vgname);
+ #define LCK_VG_SYNC		(LCK_NONE | LCK_CACHE)
+ #define LCK_VG_SYNC_LOCAL	(LCK_NONE | LCK_CACHE | LCK_LOCAL)
  
- 		count++;
- 	}
+-#define LCK_LV_EXCLUSIVE	(LCK_LV | LCK_EXCL)
+-#define LCK_LV_SUSPEND		(LCK_LV | LCK_WRITE)
+-#define LCK_LV_RESUME		(LCK_LV | LCK_UNLOCK)
+-#define LCK_LV_ACTIVATE		(LCK_LV | LCK_READ)
+-#define LCK_LV_DEACTIVATE	(LCK_LV | LCK_NULL)
+-
+ #define LCK_MASK (LCK_TYPE_MASK | LCK_SCOPE_MASK)
+ 
+-#define lock_lv_vol(cmd, lv, flags) lock_vol(cmd, (lv)->lvid.s, flags, lv) 
+-
+-/*
+- * Activation locks are wrapped around activation commands that have to
+- * be processed atomically one-at-a-time.
+- * If a VG WRITE lock is held or clustered activation activates simple LV
+- * an activation lock is redundant.
+- *
+- * Some LV types do require taking a lock common for whole group of LVs.
+- * TODO: For simplicity reasons ATM take a VG activation global lock and
+- *       later more fine-grained component detection algorithm can be added
+- */
+-
+-#define lv_type_requires_activation_lock(lv) ((lv_is_thin_type(lv) || lv_is_cache_type(lv) || lv_is_mirror_type(lv) || lv_is_raid_type(lv) || lv_is_origin(lv) || lv_is_snapshot(lv)) ? 1 : 0)
+-
+-#define lv_activation_lock_name(lv) (lv_type_requires_activation_lock(lv) ? (lv)->vg->name : (lv)->lvid.s)
+-
+-#define lv_requires_activation_lock_now(lv) ((!vg_write_lock_held() && (!vg_is_clustered((lv)->vg) || !lv_type_requires_activation_lock(lv))) ? 1 : 0)
+-
+-#define lock_activation(cmd, lv)	(lv_requires_activation_lock_now(lv) ? lock_vol(cmd, lv_activation_lock_name(lv), LCK_ACTIVATE_LOCK, lv) : 1)
+-#define unlock_activation(cmd, lv)	(lv_requires_activation_lock_now(lv) ? lock_vol(cmd, lv_activation_lock_name(lv), LCK_ACTIVATE_UNLOCK, lv) : 1)
+-
+-/*
+- * Place temporary exclusive 'activation' lock around an LV locking operation
+- * to serialise it.
+- */
+-#define lock_lv_vol_serially(cmd, lv, flags) \
+-({ \
+-	int rr = 0; \
+-\
+-	if (lock_activation((cmd), (lv))) { \
+-		rr = lock_lv_vol((cmd), (lv), (flags)); \
+-		unlock_activation((cmd), (lv)); \
+-	} \
+-	rr; \
+-})
+-
+ #define unlock_vg(cmd, vg, vol)	\
+ 	do { \
+ 		if (vg && !lvmetad_vg_update_finish(vg)) \
+@@ -215,34 +167,6 @@ int check_lvm1_vg_inactive(struct cmd_context *cmd, const char *vgname);
+ 		release_vg(vg); \
+ 	} while (0)
+ 
+-#define resume_lv(cmd, lv)	\
+-({ \
+-	int rr = lock_lv_vol((cmd), (lv), LCK_LV_RESUME); \
+-	unlock_activation((cmd), (lv)); \
+-	rr; \
+-})
+-#define resume_lv_origin(cmd, lv)	lock_lv_vol(cmd, lv, LCK_LV_RESUME | LCK_ORIGIN_ONLY)
+-#define revert_lv(cmd, lv)	\
+-({ \
+-	int rr = lock_lv_vol((cmd), (lv), LCK_LV_RESUME | LCK_REVERT); \
+-\
+-	unlock_activation((cmd), (lv)); \
+-	rr; \
+-})
+-#define suspend_lv(cmd, lv)	\
+-	(lock_activation((cmd), (lv)) ? lock_lv_vol((cmd), (lv), LCK_LV_SUSPEND | LCK_HOLD) : 0)
+-
+-#define suspend_lv_origin(cmd, lv)	lock_lv_vol(cmd, lv, LCK_LV_SUSPEND | LCK_HOLD | LCK_ORIGIN_ONLY)
+-
+-#define deactivate_lv(cmd, lv)	lock_lv_vol_serially(cmd, lv, LCK_LV_DEACTIVATE)
+-
+-#define activate_lv(cmd, lv)	lock_lv_vol_serially(cmd, lv, LCK_LV_ACTIVATE | LCK_HOLD)
+-
+-struct logical_volume;
+-
+-#define deactivate_lv_local(cmd, lv)	\
+-	lock_lv_vol_serially(cmd, lv, LCK_LV_DEACTIVATE | LCK_LOCAL)
+-
+ #define drop_cached_metadata(vg)	\
+ 	lock_vol((vg)->cmd, (vg)->name, LCK_VG_DROP_CACHE, NULL)
+ 
 
 
