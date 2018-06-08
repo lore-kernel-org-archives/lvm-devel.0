@@ -1,40 +1,9606 @@
 From: Joe Thornber <thornber@sourceware.org>
-Date: Fri, 1 Jun 2018 12:21:22 -0400
-Subject: master - build: Link with -lrt
-Message-ID: <201806011621.w51GLM2L018928@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Fri, 8 Jun 2018 04:45:19 -0400
+Subject: master - liblvm: remove lvmapi
+Message-ID: <201806080845.w588jJWk003318@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=c4497ee9e849d2d6c74412de21c6c3823d4de5f1
-Commit:        c4497ee9e849d2d6c74412de21c6c3823d4de5f1
-Parent:        15a8142f6df6d7ce26ca71f2434d6cd44ef2265c
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=0d22b58172808f050abeacdb5d6a7b7132b91a8c
+Commit:        0d22b58172808f050abeacdb5d6a7b7132b91a8c
+Parent:        e6bb780d24246666fa05948ec449a8137280b443
 Author:        Joe Thornber <ejt@redhat.com>
-AuthorDate:    Fri Jun 1 17:20:48 2018 +0100
+AuthorDate:    Fri Jun 8 09:38:05 2018 +0100
 Committer:     Joe Thornber <ejt@redhat.com>
-CommitterDate: Fri Jun 1 17:20:48 2018 +0100
+CommitterDate: Fri Jun 8 09:38:05 2018 +0100
 
-build: Link with -lrt
+liblvm: remove lvmapi
 
-Needed for older version of glibc
+This has been deprecated for a while.
 ---
- make.tmpl.in |    2 +-
- 1 files changed, 1 insertions(+), 1 deletions(-)
+ Makefile.in              |   21 +-
+ aclocal.m4               |   91 ++-
+ configure                | 1996 +---------------------------------------------
+ configure.ac             |   63 +--
+ include/configure.h.in   |   66 +--
+ liblvm/Doxyfile          |  254 ------
+ liblvm/Makefile.in       |   81 --
+ liblvm/liblvm2app.pc.in  |   11 -
+ liblvm/lvm2app.h         | 1983 ---------------------------------------------
+ liblvm/lvm_base.c        |  216 -----
+ liblvm/lvm_lv.c          |  820 -------------------
+ liblvm/lvm_misc.c        |  168 ----
+ liblvm/lvm_misc.h        |   46 --
+ liblvm/lvm_prop.c        |   74 --
+ liblvm/lvm_prop.h        |   49 --
+ liblvm/lvm_prop_fields.h |   22 -
+ liblvm/lvm_pv.c          |  474 -----------
+ liblvm/lvm_vg.c          |  564 -------------
+ liblvm/test/vgadd.c      |   90 ---
+ liblvm/test/vgshow.c     |   95 ---
+ test/api/Makefile.in     |   33 -
+ test/api/lvtest.c        |   64 --
+ test/api/pe_start.c      |   47 --
+ test/api/percent.c       |   63 --
+ test/api/test.c          | 1110 --------------------------
+ test/api/thin_percent.c  |   78 --
+ test/api/vglist.c        |   73 --
+ test/api/vgtest.c        |  164 ----
+ 28 files changed, 108 insertions(+), 8708 deletions(-)
 
-diff --git a/make.tmpl.in b/make.tmpl.in
-index c2d81c0..ad927b0 100644
---- a/make.tmpl.in
-+++ b/make.tmpl.in
-@@ -58,7 +58,7 @@ PYTHON3 = @PYTHON3@
- PYCOMPILE = $(top_srcdir)/autoconf/py-compile
+diff --git a/Makefile.in b/Makefile.in
+index 7eb6460..ed00696 100644
+--- a/Makefile.in
++++ b/Makefile.in
+@@ -28,10 +28,6 @@ ifeq ("@INTL@", "yes")
+   SUBDIRS += po
+ endif
  
- LIBS = @LIBS@
--LIBS += $(SELINUX_LIBS) $(UDEV_LIBS) $(BLKID_LIBS)
-+LIBS += $(SELINUX_LIBS) $(UDEV_LIBS) $(BLKID_LIBS) $(RT_LIBS)
- # Extra libraries always linked with static binaries
- STATIC_LIBS = $(SELINUX_LIBS) $(UDEV_LIBS) $(BLKID_LIBS)
- DEFS += @DEFS@
+-ifeq ("@APPLIB@", "yes")
+-  SUBDIRS += liblvm
+-endif
+-
+ ifeq ("@PYTHON_BINDINGS@", "yes")
+   SUBDIRS += python
+ endif
+@@ -43,7 +39,7 @@ endif
+ ifeq ($(MAKECMDGOALS),distclean)
+   SUBDIRS = conf include man test scripts \
+     libdaemon lib tools daemons libdm \
+-    udev po liblvm python
++    udev po python
+ tools.distclean: test.distclean
+ endif
+ DISTCLEAN_DIRS += lcov_reports*
+@@ -54,18 +50,16 @@ include make.tmpl
+ libdm: include
+ libdaemon: include
+ lib: libdm libdaemon
+-liblvm: lib
+ daemons: lib libdaemon tools
+ tools: lib libdaemon device-mapper
+ po: tools daemons
+ man: tools
+ all_man: tools
+-scripts: liblvm libdm
++scripts: libdm
+ test: tools daemons
+ 
+ lib.device-mapper: include.device-mapper
+ libdm.device-mapper: include.device-mapper
+-liblvm.device-mapper: include.device-mapper
+ daemons.device-mapper: libdm.device-mapper
+ tools.device-mapper: libdm.device-mapper
+ scripts.device-mapper: include.device-mapper
+@@ -79,10 +73,6 @@ po.pofile: tools.pofile daemons.pofile
+ pofile: po.pofile
+ endif
+ 
+-ifeq ("@PYTHON_BINDINGS@", "yes")
+-python: liblvm
+-endif
+-
+ ifneq ("$(CFLOW_CMD)", "")
+ tools.cflow: libdm.cflow lib.cflow
+ daemons.cflow: tools.cflow
+@@ -159,15 +149,10 @@ install_systemd_units:
+ install_all_man:
+ 	$(MAKE) -C man install_all_man
+ 
+-ifeq ("@PYTHON_BINDINGS@", "yes")
+-install_python_bindings:
+-	$(MAKE) -C liblvm/python install_python_bindings
+-endif
+-
+ install_tmpfiles_configuration:
+ 	$(MAKE) -C scripts install_tmpfiles_configuration
+ 
+-LCOV_TRACES = libdm.info lib.info liblvm.info tools.info \
++LCOV_TRACES = libdm.info lib.info tools.info \
+ 	libdaemon/client.info libdaemon/server.info \
+ 	test/unit.info \
+ 	daemons/clvmd.info \
+diff --git a/aclocal.m4 b/aclocal.m4
+index 07ea0b6..c57b129 100644
+--- a/aclocal.m4
++++ b/aclocal.m4
+@@ -1,6 +1,6 @@
+-# generated automatically by aclocal 1.15 -*- Autoconf -*-
++# generated automatically by aclocal 1.15.1 -*- Autoconf -*-
+ 
+-# Copyright (C) 1996-2014 Free Software Foundation, Inc.
++# Copyright (C) 1996-2017 Free Software Foundation, Inc.
+ 
+ # This file is free software; the Free Software Foundation
+ # gives unlimited permission to copy and/or distribute it,
+@@ -13,7 +13,7 @@
+ 
+ m4_ifndef([AC_CONFIG_MACRO_DIRS], [m4_defun([_AM_CONFIG_MACRO_DIRS], [])m4_defun([AC_CONFIG_MACRO_DIRS], [_AM_CONFIG_MACRO_DIRS($@)])])
+ # ===========================================================================
+-#     http://www.gnu.org/software/autoconf-archive/ax_python_module.html
++#     https://www.gnu.org/software/autoconf-archive/ax_python_module.html
+ # ===========================================================================
+ #
+ # SYNOPSIS
+@@ -37,7 +37,7 @@ m4_ifndef([AC_CONFIG_MACRO_DIRS], [m4_defun([_AM_CONFIG_MACRO_DIRS], [])m4_defun
+ #   and this notice are preserved. This file is offered as-is, without any
+ #   warranty.
+ 
+-#serial 8
++#serial 9
+ 
+ AU_ALIAS([AC_PYTHON_MODULE], [AX_PYTHON_MODULE])
+ AC_DEFUN([AX_PYTHON_MODULE],[
+@@ -69,9 +69,9 @@ AC_DEFUN([AX_PYTHON_MODULE],[
+     fi
+ ])
+ 
+-dnl pkg.m4 - Macros to locate and utilise pkg-config.   -*- Autoconf -*-
+-dnl serial 11 (pkg-config-0.29)
+-dnl
++# pkg.m4 - Macros to locate and utilise pkg-config.   -*- Autoconf -*-
++# serial 11 (pkg-config-0.29.1)
++
+ dnl Copyright ?? 2004 Scott James Remnant <scott@netsplit.com>.
+ dnl Copyright ?? 2012-2015 Dan Nicholson <dbn.lists@gmail.com>
+ dnl
+@@ -112,7 +112,7 @@ dnl
+ dnl See the "Since" comment for each macro you use to see what version
+ dnl of the macros you require.
+ m4_defun([PKG_PREREQ],
+-[m4_define([PKG_MACROS_VERSION], [0.29])
++[m4_define([PKG_MACROS_VERSION], [0.29.1])
+ m4_if(m4_version_compare(PKG_MACROS_VERSION, [$1]), -1,
+     [m4_fatal([pkg.m4 version $1 or higher is required but ]PKG_MACROS_VERSION[ found])])
+ ])dnl PKG_PREREQ
+@@ -345,7 +345,75 @@ AS_VAR_COPY([$1], [pkg_cv_][$1])
+ AS_VAR_IF([$1], [""], [$5], [$4])dnl
+ ])dnl PKG_CHECK_VAR
+ 
+-# Copyright (C) 1999-2014 Free Software Foundation, Inc.
++dnl PKG_WITH_MODULES(VARIABLE-PREFIX, MODULES,
++dnl   [ACTION-IF-FOUND],[ACTION-IF-NOT-FOUND],
++dnl   [DESCRIPTION], [DEFAULT])
++dnl ------------------------------------------
++dnl
++dnl Prepare a "--with-" configure option using the lowercase
++dnl [VARIABLE-PREFIX] name, merging the behaviour of AC_ARG_WITH and
++dnl PKG_CHECK_MODULES in a single macro.
++AC_DEFUN([PKG_WITH_MODULES],
++[
++m4_pushdef([with_arg], m4_tolower([$1]))
++
++m4_pushdef([description],
++           [m4_default([$5], [build with ]with_arg[ support])])
++
++m4_pushdef([def_arg], [m4_default([$6], [auto])])
++m4_pushdef([def_action_if_found], [AS_TR_SH([with_]with_arg)=yes])
++m4_pushdef([def_action_if_not_found], [AS_TR_SH([with_]with_arg)=no])
++
++m4_case(def_arg,
++            [yes],[m4_pushdef([with_without], [--without-]with_arg)],
++            [m4_pushdef([with_without],[--with-]with_arg)])
++
++AC_ARG_WITH(with_arg,
++     AS_HELP_STRING(with_without, description[ @<:@default=]def_arg[@:>@]),,
++    [AS_TR_SH([with_]with_arg)=def_arg])
++
++AS_CASE([$AS_TR_SH([with_]with_arg)],
++            [yes],[PKG_CHECK_MODULES([$1],[$2],$3,$4)],
++            [auto],[PKG_CHECK_MODULES([$1],[$2],
++                                        [m4_n([def_action_if_found]) $3],
++                                        [m4_n([def_action_if_not_found]) $4])])
++
++m4_popdef([with_arg])
++m4_popdef([description])
++m4_popdef([def_arg])
++
++])dnl PKG_WITH_MODULES
++
++dnl PKG_HAVE_WITH_MODULES(VARIABLE-PREFIX, MODULES,
++dnl   [DESCRIPTION], [DEFAULT])
++dnl -----------------------------------------------
++dnl
++dnl Convenience macro to trigger AM_CONDITIONAL after PKG_WITH_MODULES
++dnl check._[VARIABLE-PREFIX] is exported as make variable.
++AC_DEFUN([PKG_HAVE_WITH_MODULES],
++[
++PKG_WITH_MODULES([$1],[$2],,,[$3],[$4])
++
++AM_CONDITIONAL([HAVE_][$1],
++               [test "$AS_TR_SH([with_]m4_tolower([$1]))" = "yes"])
++])dnl PKG_HAVE_WITH_MODULES
++
++dnl PKG_HAVE_DEFINE_WITH_MODULES(VARIABLE-PREFIX, MODULES,
++dnl   [DESCRIPTION], [DEFAULT])
++dnl ------------------------------------------------------
++dnl
++dnl Convenience macro to run AM_CONDITIONAL and AC_DEFINE after
++dnl PKG_WITH_MODULES check. HAVE_[VARIABLE-PREFIX] is exported as make
++dnl and preprocessor variable.
++AC_DEFUN([PKG_HAVE_DEFINE_WITH_MODULES],
++[
++PKG_HAVE_WITH_MODULES([$1],[$2],[$3],[$4])
++
++AS_IF([test "$AS_TR_SH([with_]m4_tolower([$1]))" = "yes"],
++        [AC_DEFINE([HAVE_][$1], 1, [Enable ]m4_tolower([$1])[ support])])
++])dnl PKG_HAVE_DEFINE_WITH_MODULES
++
++# Copyright (C) 1999-2017 Free Software Foundation, Inc.
+ #
+ # This file is free software; the Free Software Foundation
+ # gives unlimited permission to copy and/or distribute it,
+@@ -378,8 +446,9 @@ AC_DEFUN([AM_PATH_PYTHON],
+  [
+   dnl Find a Python interpreter.  Python versions prior to 2.0 are not
+   dnl supported. (2.0 was released on October 16, 2000).
++  dnl FIXME: Remove the need to hard-code Python versions here.
+   m4_define_default([_AM_PYTHON_INTERPRETER_LIST],
+-[python python2 python3 python3.3 python3.2 python3.1 python3.0 python2.7 dnl
++[python python2 python3 python3.5 python3.4 python3.3 python3.2 python3.1 python3.0 python2.7 dnl
+  python2.6 python2.5 python2.4 python2.3 python2.2 python2.1 python2.0])
+ 
+   AC_ARG_VAR([PYTHON], [the Python interpreter])
+@@ -580,7 +649,7 @@ for i in list(range(0, 4)): minverhex = (minverhex << 8) + minver[[i]]
+ sys.exit(sys.hexversion < minverhex)"
+   AS_IF([AM_RUN_LOG([$1 -c "$prog"])], [$3], [$4])])
+ 
+-# Copyright (C) 2001-2014 Free Software Foundation, Inc.
++# Copyright (C) 2001-2017 Free Software Foundation, Inc.
+ #
+ # This file is free software; the Free Software Foundation
+ # gives unlimited permission to copy and/or distribute it,
+diff --git a/configure b/configure
+index 38ee4dc..09d20af 100755
+--- a/configure
++++ b/configure
+@@ -636,7 +636,6 @@ missingkernel
+ kerneldir
+ interface
+ CMIRRORD_PIDFILE
+-CLVMD_PIDFILE
+ LVMLOCKD_PIDFILE
+ LVMPOLLD_PIDFILE
+ LVMETAD_PIDFILE
+@@ -660,9 +659,15 @@ SYSCONFDIR
+ SELINUX_PC
+ SELINUX_LIBS
+ SBINDIR
++SALCK_LIBS
++SALCK_CFLAGS
++SACKPT_LIBS
++SACKPT_CFLAGS
+ REPLICATORS
+ READLINE_LIBS
+ RT_LIBS
++QUORUM_LIBS
++QUORUM_CFLAGS
+ PYTHON3DIR
+ PYTHON2DIR
+ PYTHON3_LIBDIRS
+@@ -673,6 +678,7 @@ PYTHON3_BINDINGS
+ PYTHON2_BINDINGS
+ PYTHON_BINDINGS
+ PYTHON3
++PYTHON2
+ PTHREAD_LIBS
+ M_LIBS
+ PKGCONFIG
+@@ -703,6 +709,8 @@ ELDFLAGS
+ DM_LIB_PATCHLEVEL
+ DMEVENTD_PATH
+ DL_LIBS
++DLM_LIBS
++DLM_CFLAGS
+ DEVMAPPER
+ DEFAULT_USE_LVMLOCKD
+ DEFAULT_USE_LVMPOLLD
+@@ -725,11 +733,9 @@ DEFAULT_ARCHIVE_SUBDIR
+ DEBUG
+ COPTIMISE_FLAG
+ CONFDIR
++CONFDB_LIBS
++CONFDB_CFLAGS
+ CMDLIB
+-CLVMD_PATH
+-CLVMD_CMANAGERS
+-CLVMD
+-CLUSTER
+ CLDWHOLEARCHIVE
+ CLDNOWHOLEARCHIVE
+ CLDFLAGS
+@@ -744,12 +750,9 @@ BUILD_LVMDBUSD
+ BUILD_DMEVENTD
+ BUILD_CMIRRORD
+ BLKID_PC
+-APPLIB
+ MODPROBE_CMD
+ MSGFMT
+ PYTHON3_CONFIG
+-PYTHON2_CONFIG
+-PYTHON2
+ pkgpyexecdir
+ pyexecdir
+ pkgpythondir
+@@ -760,7 +763,6 @@ PYTHON_PREFIX
+ PYTHON_VERSION
+ PYTHON
+ LVM2CMD_LIB
+-LVM2APP_LIB
+ UDEV_LIBS
+ UDEV_CFLAGS
+ SYSTEMD_LIBS
+@@ -781,24 +783,8 @@ LCOV
+ HAVE_WSYNCNAND
+ HAVE_WCLOBBERED
+ HAVE_WJUMP
+-SACKPT_LIBS
+-SACKPT_CFLAGS
+-DLM_LIBS
+-DLM_CFLAGS
+ CPG_LIBS
+ CPG_CFLAGS
+-CMAP_LIBS
+-CMAP_CFLAGS
+-CONFDB_LIBS
+-CONFDB_CFLAGS
+-SALCK_LIBS
+-SALCK_CFLAGS
+-QUORUM_LIBS
+-QUORUM_CFLAGS
+-COROSYNC_LIBS
+-COROSYNC_CFLAGS
+-CMAN_LIBS
+-CMAN_CFLAGS
+ PKGCONFIGINIT_LIBS
+ PKGCONFIGINIT_CFLAGS
+ PKG_CONFIG_LIBDIR
+@@ -876,7 +862,6 @@ infodir
+ docdir
+ oldincludedir
+ includedir
+-runstatedir
+ localstatedir
+ sharedstatedir
+ sysconfdir
+@@ -908,7 +893,6 @@ with_device_gid
+ with_device_mode
+ with_device_nodes_on
+ with_default_name_mangling
+-with_cluster
+ with_snapshots
+ with_mirrors
+ with_default_mirror_segtype
+@@ -933,8 +917,6 @@ with_ocfdir
+ with_default_pid_dir
+ with_default_dm_run_dir
+ with_default_run_dir
+-with_clvmd
+-with_clvmd_pidfile
+ enable_cmirrord
+ with_cmirrord_pidfile
+ enable_debug
+@@ -963,12 +945,8 @@ enable_compat
+ enable_units_compat
+ enable_ioctl
+ enable_o_direct
+-enable_applib
+ enable_cmdlib
+ enable_dbus_service
+-enable_python_bindings
+-enable_python2_bindings
+-enable_python3_bindings
+ enable_pkgconfig
+ enable_write_install
+ enable_fsadm
+@@ -1013,24 +991,8 @@ PKG_CONFIG_PATH
+ PKG_CONFIG_LIBDIR
+ PKGCONFIGINIT_CFLAGS
+ PKGCONFIGINIT_LIBS
+-CMAN_CFLAGS
+-CMAN_LIBS
+-COROSYNC_CFLAGS
+-COROSYNC_LIBS
+-QUORUM_CFLAGS
+-QUORUM_LIBS
+-SALCK_CFLAGS
+-SALCK_LIBS
+-CONFDB_CFLAGS
+-CONFDB_LIBS
+-CMAP_CFLAGS
+-CMAP_LIBS
+ CPG_CFLAGS
+ CPG_LIBS
+-DLM_CFLAGS
+-DLM_LIBS
+-SACKPT_CFLAGS
+-SACKPT_LIBS
+ VALGRIND_CFLAGS
+ VALGRIND_LIBS
+ LOCKD_SANLOCK_CFLAGS
+@@ -1084,7 +1046,6 @@ datadir='${datarootdir}'
+ sysconfdir='${prefix}/etc'
+ sharedstatedir='${prefix}/com'
+ localstatedir='${prefix}/var'
+-runstatedir='${localstatedir}/run'
+ includedir='${prefix}/include'
+ oldincludedir='/usr/include'
+ docdir='${datarootdir}/doc/${PACKAGE}'
+@@ -1337,15 +1298,6 @@ do
+   | -silent | --silent | --silen | --sile | --sil)
+     silent=yes ;;
+ 
+-  -runstatedir | --runstatedir | --runstatedi | --runstated \
+-  | --runstate | --runstat | --runsta | --runst | --runs \
+-  | --run | --ru | --r)
+-    ac_prev=runstatedir ;;
+-  -runstatedir=* | --runstatedir=* | --runstatedi=* | --runstated=* \
+-  | --runstate=* | --runstat=* | --runsta=* | --runst=* | --runs=* \
+-  | --run=* | --ru=* | --r=*)
+-    runstatedir=$ac_optarg ;;
+-
+   -sbindir | --sbindir | --sbindi | --sbind | --sbin | --sbi | --sb)
+     ac_prev=sbindir ;;
+   -sbindir=* | --sbindir=* | --sbindi=* | --sbind=* | --sbin=* \
+@@ -1483,7 +1435,7 @@ fi
+ for ac_var in	exec_prefix prefix bindir sbindir libexecdir datarootdir \
+ 		datadir sysconfdir sharedstatedir localstatedir includedir \
+ 		oldincludedir docdir infodir htmldir dvidir pdfdir psdir \
+-		libdir localedir mandir runstatedir
++		libdir localedir mandir
+ do
+   eval ac_val=\$$ac_var
+   # Remove trailing slashes.
+@@ -1636,7 +1588,6 @@ Fine tuning of the installation directories:
+   --sysconfdir=DIR        read-only single-machine data [PREFIX/etc]
+   --sharedstatedir=DIR    modifiable architecture-independent data [PREFIX/com]
+   --localstatedir=DIR     modifiable single-machine data [PREFIX/var]
+-  --runstatedir=DIR       modifiable per-process data [LOCALSTATEDIR/run]
+   --libdir=DIR            object code libraries [EPREFIX/lib]
+   --includedir=DIR        C header files [PREFIX/include]
+   --oldincludedir=DIR     C header files for non-gcc [/usr/include]
+@@ -1710,15 +1661,8 @@ Optional Features:
+                           that do not use KiB-style unit suffixes
+   --disable-ioctl         disable ioctl calls to device-mapper in the kernel
+   --disable-o_direct      disable O_DIRECT
+-  --enable-applib         build application library
+   --enable-cmdlib         build shared command library
+   --enable-dbus-service   install D-Bus support
+-  --enable-python_bindings
+-                          build default Python applib bindings
+-  --enable-python2_bindings
+-                          build Python2 applib bindings
+-  --enable-python3_bindings
+-                          build Python3 applib bindings
+   --enable-pkgconfig      install pkgconfig support
+   --enable-write_install  install user writable files
+   --disable-fsadm         disable fsadm
+@@ -1739,8 +1683,6 @@ Optional Packages:
+                           create nodes on resume or create [ON=resume]
+   --with-default-name-mangling=MANGLING
+                           default name mangling: auto/none/hex [auto]
+-  --with-cluster=TYPE     cluster LVM locking support: internal/shared/none
+-                          [internal]
+   --with-snapshots=TYPE   snapshot support: internal/shared/none [internal]
+   --with-mirrors=TYPE     mirror support: internal/shared/none [internal]
+   --with-default-mirror-segtype=TYPE
+@@ -1771,16 +1713,6 @@ Optional Packages:
+                           Default DM run directory. [autodetect]
+   --with-default-run-dir=RUN_DIR
+                           Default LVM run directory. [autodetect_run_dir/lvm]
+-  --with-clvmd=TYPE       build cluster LVM Daemon
+-                          The following cluster manager combinations are valid:
+-                           * cman                  (RHEL5 or equivalent)
+-                           * cman,corosync,openais (or selection of them)
+-                           * singlenode            (localhost only)
+-                           * all                   (autodetect)
+-                           * none                  (disable build)
+-                          [none]
+-  --with-clvmd-pidfile=PATH
+-                          clvmd pidfile [PID_DIR/clvmd.pid]
+   --with-cmirrord-pidfile=PATH
+                           cmirrord pidfile [PID_DIR/cmirrord.pid]
+   --with-optimisation=OPT C optimisation flag [OPT=-O2]
+@@ -1843,30 +1775,8 @@ Some influential environment variables:
+               C compiler flags for PKGCONFIGINIT, overriding pkg-config
+   PKGCONFIGINIT_LIBS
+               linker flags for PKGCONFIGINIT, overriding pkg-config
+-  CMAN_CFLAGS C compiler flags for CMAN, overriding pkg-config
+-  CMAN_LIBS   linker flags for CMAN, overriding pkg-config
+-  COROSYNC_CFLAGS
+-              C compiler flags for COROSYNC, overriding pkg-config
+-  COROSYNC_LIBS
+-              linker flags for COROSYNC, overriding pkg-config
+-  QUORUM_CFLAGS
+-              C compiler flags for QUORUM, overriding pkg-config
+-  QUORUM_LIBS linker flags for QUORUM, overriding pkg-config
+-  SALCK_CFLAGS
+-              C compiler flags for SALCK, overriding pkg-config
+-  SALCK_LIBS  linker flags for SALCK, overriding pkg-config
+-  CONFDB_CFLAGS
+-              C compiler flags for CONFDB, overriding pkg-config
+-  CONFDB_LIBS linker flags for CONFDB, overriding pkg-config
+-  CMAP_CFLAGS C compiler flags for CMAP, overriding pkg-config
+-  CMAP_LIBS   linker flags for CMAP, overriding pkg-config
+   CPG_CFLAGS  C compiler flags for CPG, overriding pkg-config
+   CPG_LIBS    linker flags for CPG, overriding pkg-config
+-  DLM_CFLAGS  C compiler flags for DLM, overriding pkg-config
+-  DLM_LIBS    linker flags for DLM, overriding pkg-config
+-  SACKPT_CFLAGS
+-              C compiler flags for SACKPT, overriding pkg-config
+-  SACKPT_LIBS linker flags for SACKPT, overriding pkg-config
+   VALGRIND_CFLAGS
+               C compiler flags for VALGRIND, overriding pkg-config
+   VALGRIND_LIBS
+@@ -3172,7 +3082,6 @@ case "$host_os" in
+ 		ODIRECT=yes
+ 		DM_IOCTLS=yes
+ 		SELINUX=yes
+-		CLUSTER=internal
+ 		FSADM=yes
+ 		BLKDEACTIVATE=yes
+ 		;;
+@@ -3187,7 +3096,6 @@ case "$host_os" in
+ 		ODIRECT=no
+ 		DM_IOCTLS=no
+ 		SELINUX=no
+-		CLUSTER=none
+ 		FSADM=no
+ 		BLKDEACTIVATE=no
+ 		;;
+@@ -8372,26 +8280,6 @@ _ACEOF
+ 
+ 
+ ################################################################################
+-{ $as_echo "$as_me:${as_lineno-$LINENO}: checking whether to include support for cluster locking" >&5
+-$as_echo_n "checking whether to include support for cluster locking... " >&6; }
+-
+-# Check whether --with-cluster was given.
+-if test "${with_cluster+set}" = set; then :
+-  withval=$with_cluster; CLUSTER=$withval
+-fi
+-
+-{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $CLUSTER" >&5
+-$as_echo "$CLUSTER" >&6; }
+-
+-case "$CLUSTER" in
+-  none|shared) ;;
+-  internal)
+-$as_echo "#define CLUSTER_LOCKING_INTERNAL 1" >>confdefs.h
+- ;;
+-  *) as_fn_error $? "--with-cluster parameter invalid" "$LINENO" 5 ;;
+-esac
+-
+-################################################################################
+ { $as_echo "$as_me:${as_lineno-$LINENO}: checking whether to include snapshots" >&5
+ $as_echo_n "checking whether to include snapshots... " >&6; }
+ 
+@@ -9893,915 +9781,6 @@ _ACEOF
+ 
+ 
+ ################################################################################
+-{ $as_echo "$as_me:${as_lineno-$LINENO}: checking whether to build cluster LVM daemon" >&5
+-$as_echo_n "checking whether to build cluster LVM daemon... " >&6; }
+-
+-# Check whether --with-clvmd was given.
+-if test "${with_clvmd+set}" = set; then :
+-  withval=$with_clvmd; CLVMD=$withval
+-else
+-  CLVMD=none
+-fi
+-
+-test "$CLVMD" = yes && CLVMD=all
+-{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $CLVMD" >&5
+-$as_echo "$CLVMD" >&6; }
+-
+-test "$CLVMD" != none -a "$CLUSTER" = none && CLUSTER=internal
+-
+-test "$CLVMD" != none && pkg_config_init
+-
+-CLVMD_CMANAGERS=""
+-CLVMD_NEEDS_QDISKD=no
+-
+-if [ `expr x"$CLVMD" : '.*gulm.*'` != 0 ]; then
+-	as_fn_error $? "Since version 2.02.87 GULM locking is no longer supported." "$LINENO" 5;
+-fi
+-if [ `expr x"$CLVMD" : '.*cman.*'` != 0 ]; then
+-	BUILDCMAN=yes
+-	CLVMD_CMANAGERS="$CLVMD_CMANAGERS cman"
+-	CLVMD_NEEDS_QDISKD=yes
+-fi
+-if [ `expr x"$CLVMD" : '.*corosync.*'` != 0 ]; then
+-	BUILDCOROSYNC=yes
+-	CLVMD_CMANAGERS="$CLVMD_CMANAGERS corosync"
+-fi
+-if [ `expr x"$CLVMD" : '.*openais.*'` != 0 ]; then
+-	BUILDOPENAIS=yes
+-	CLVMD_CMANAGERS="$CLVMD_CMANAGERS openais"
+-fi
+-test "$CLVMD_NEEDS_QDISKD" != no && CLVMD_CMANAGERS="$CLVMD_CMANAGERS qdiskd"
+-
+-soft_bailout() {
+-	NOTFOUND=1
+-}
+-
+-hard_bailout() {
+-	as_fn_error $? "bailing out" "$LINENO" 5
+-}
+-
+-if test "$CLVMD" = all; then
+-	bailout=soft_bailout
+-	BUILDCMAN=yes
+-	BUILDCOROSYNC=yes
+-	BUILDOPENAIS=yes
+-else
+-	bailout=hard_bailout
+-fi
+-
+-check_lib_no_libs() {
+-	lib_no_libs_arg1=$1
+-	shift
+-	lib_no_libs_arg2=$1
+-	shift
+-	lib_no_libs_args=$@
+-	as_ac_Lib=`$as_echo "ac_cv_lib_$lib_no_libs_arg1''_$lib_no_libs_arg2" | $as_tr_sh`
+-{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for $lib_no_libs_arg2 in -l$lib_no_libs_arg1" >&5
+-$as_echo_n "checking for $lib_no_libs_arg2 in -l$lib_no_libs_arg1... " >&6; }
+-if eval \${$as_ac_Lib+:} false; then :
+-  $as_echo_n "(cached) " >&6
+-else
+-  ac_check_lib_save_LIBS=$LIBS
+-LIBS="-l$lib_no_libs_arg1 $lib_no_libs_args $LIBS"
+-cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+-/* end confdefs.h.  */
+-
+-/* Override any GCC internal prototype to avoid an error.
+-   Use char because int might match the return type of a GCC
+-   builtin and then its argument prototype would still apply.  */
+-#ifdef __cplusplus
+-extern "C"
+-#endif
+-char $lib_no_libs_arg2 ();
+-int
+-main ()
+-{
+-return $lib_no_libs_arg2 ();
+-  ;
+-  return 0;
+-}
+-_ACEOF
+-if ac_fn_c_try_link "$LINENO"; then :
+-  eval "$as_ac_Lib=yes"
+-else
+-  eval "$as_ac_Lib=no"
+-fi
+-rm -f core conftest.err conftest.$ac_objext \
+-    conftest$ac_exeext conftest.$ac_ext
+-LIBS=$ac_check_lib_save_LIBS
+-fi
+-eval ac_res=\$$as_ac_Lib
+-	       { $as_echo "$as_me:${as_lineno-$LINENO}: result: $ac_res" >&5
+-$as_echo "$ac_res" >&6; }
+-if eval test \"x\$"$as_ac_Lib"\" = x"yes"; then :
+-  cat >>confdefs.h <<_ACEOF
+-#define `$as_echo "HAVE_LIB$lib_no_libs_arg1" | $as_tr_cpp` 1
+-_ACEOF
+-
+-  LIBS="-l$lib_no_libs_arg1 $LIBS"
+-
+-else
+-  $bailout
+-fi
+-
+-	LIBS=$ac_check_lib_save_LIBS
+-}
+-
+-if test "$BUILDCMAN" = yes; then
+-
+-pkg_failed=no
+-{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for CMAN" >&5
+-$as_echo_n "checking for CMAN... " >&6; }
+-
+-if test -n "$CMAN_CFLAGS"; then
+-    pkg_cv_CMAN_CFLAGS="$CMAN_CFLAGS"
+- elif test -n "$PKG_CONFIG"; then
+-    if test -n "$PKG_CONFIG" && \
+-    { { $as_echo "$as_me:${as_lineno-$LINENO}: \$PKG_CONFIG --exists --print-errors \"libcman\""; } >&5
+-  ($PKG_CONFIG --exists --print-errors "libcman") 2>&5
+-  ac_status=$?
+-  $as_echo "$as_me:${as_lineno-$LINENO}: \$? = $ac_status" >&5
+-  test $ac_status = 0; }; then
+-  pkg_cv_CMAN_CFLAGS=`$PKG_CONFIG --cflags "libcman" 2>/dev/null`
+-		      test "x$?" != "x0" && pkg_failed=yes
+-else
+-  pkg_failed=yes
+-fi
+- else
+-    pkg_failed=untried
+-fi
+-if test -n "$CMAN_LIBS"; then
+-    pkg_cv_CMAN_LIBS="$CMAN_LIBS"
+- elif test -n "$PKG_CONFIG"; then
+-    if test -n "$PKG_CONFIG" && \
+-    { { $as_echo "$as_me:${as_lineno-$LINENO}: \$PKG_CONFIG --exists --print-errors \"libcman\""; } >&5
+-  ($PKG_CONFIG --exists --print-errors "libcman") 2>&5
+-  ac_status=$?
+-  $as_echo "$as_me:${as_lineno-$LINENO}: \$? = $ac_status" >&5
+-  test $ac_status = 0; }; then
+-  pkg_cv_CMAN_LIBS=`$PKG_CONFIG --libs "libcman" 2>/dev/null`
+-		      test "x$?" != "x0" && pkg_failed=yes
+-else
+-  pkg_failed=yes
+-fi
+- else
+-    pkg_failed=untried
+-fi
+-
+-
+-
+-if test $pkg_failed = yes; then
+-   	{ $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
+-$as_echo "no" >&6; }
+-
+-if $PKG_CONFIG --atleast-pkgconfig-version 0.20; then
+-        _pkg_short_errors_supported=yes
+-else
+-        _pkg_short_errors_supported=no
+-fi
+-        if test $_pkg_short_errors_supported = yes; then
+-	        CMAN_PKG_ERRORS=`$PKG_CONFIG --short-errors --print-errors --cflags --libs "libcman" 2>&1`
+-        else
+-	        CMAN_PKG_ERRORS=`$PKG_CONFIG --print-errors --cflags --libs "libcman" 2>&1`
+-        fi
+-	# Put the nasty error message in config.log where it belongs
+-	echo "$CMAN_PKG_ERRORS" >&5
+-
+-	NOTFOUND=0
+-		for ac_header in libcman.h
+-do :
+-  ac_fn_c_check_header_mongrel "$LINENO" "libcman.h" "ac_cv_header_libcman_h" "$ac_includes_default"
+-if test "x$ac_cv_header_libcman_h" = xyes; then :
+-  cat >>confdefs.h <<_ACEOF
+-#define HAVE_LIBCMAN_H 1
+-_ACEOF
+-
+-else
+-  $bailout
+-fi
+-
+-done
+-
+-		check_lib_no_libs cman cman_init
+-		if test $NOTFOUND = 0; then
+-			{ $as_echo "$as_me:${as_lineno-$LINENO}: result: no pkg for libcman, using -lcman" >&5
+-$as_echo "no pkg for libcman, using -lcman" >&6; }
+-			CMAN_LIBS="-lcman"
+-			HAVE_CMAN=yes
+-		fi
+-elif test $pkg_failed = untried; then
+-     	{ $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
+-$as_echo "no" >&6; }
+-	NOTFOUND=0
+-		for ac_header in libcman.h
+-do :
+-  ac_fn_c_check_header_mongrel "$LINENO" "libcman.h" "ac_cv_header_libcman_h" "$ac_includes_default"
+-if test "x$ac_cv_header_libcman_h" = xyes; then :
+-  cat >>confdefs.h <<_ACEOF
+-#define HAVE_LIBCMAN_H 1
+-_ACEOF
+-
+-else
+-  $bailout
+-fi
+-
+-done
+-
+-		check_lib_no_libs cman cman_init
+-		if test $NOTFOUND = 0; then
+-			{ $as_echo "$as_me:${as_lineno-$LINENO}: result: no pkg for libcman, using -lcman" >&5
+-$as_echo "no pkg for libcman, using -lcman" >&6; }
+-			CMAN_LIBS="-lcman"
+-			HAVE_CMAN=yes
+-		fi
+-else
+-	CMAN_CFLAGS=$pkg_cv_CMAN_CFLAGS
+-	CMAN_LIBS=$pkg_cv_CMAN_LIBS
+-        { $as_echo "$as_me:${as_lineno-$LINENO}: result: yes" >&5
+-$as_echo "yes" >&6; }
+-	HAVE_CMAN=yes
+-fi
+-	CHECKCONFDB=yes
+-	CHECKDLM=yes
+-fi
+-
+-if test "$BUILDCOROSYNC" = yes -o "$BUILDOPENAIS" = yes; then
+-
+-pkg_failed=no
+-{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for COROSYNC" >&5
+-$as_echo_n "checking for COROSYNC... " >&6; }
+-
+-if test -n "$COROSYNC_CFLAGS"; then
+-    pkg_cv_COROSYNC_CFLAGS="$COROSYNC_CFLAGS"
+- elif test -n "$PKG_CONFIG"; then
+-    if test -n "$PKG_CONFIG" && \
+-    { { $as_echo "$as_me:${as_lineno-$LINENO}: \$PKG_CONFIG --exists --print-errors \"corosync\""; } >&5
+-  ($PKG_CONFIG --exists --print-errors "corosync") 2>&5
+-  ac_status=$?
+-  $as_echo "$as_me:${as_lineno-$LINENO}: \$? = $ac_status" >&5
+-  test $ac_status = 0; }; then
+-  pkg_cv_COROSYNC_CFLAGS=`$PKG_CONFIG --cflags "corosync" 2>/dev/null`
+-		      test "x$?" != "x0" && pkg_failed=yes
+-else
+-  pkg_failed=yes
+-fi
+- else
+-    pkg_failed=untried
+-fi
+-if test -n "$COROSYNC_LIBS"; then
+-    pkg_cv_COROSYNC_LIBS="$COROSYNC_LIBS"
+- elif test -n "$PKG_CONFIG"; then
+-    if test -n "$PKG_CONFIG" && \
+-    { { $as_echo "$as_me:${as_lineno-$LINENO}: \$PKG_CONFIG --exists --print-errors \"corosync\""; } >&5
+-  ($PKG_CONFIG --exists --print-errors "corosync") 2>&5
+-  ac_status=$?
+-  $as_echo "$as_me:${as_lineno-$LINENO}: \$? = $ac_status" >&5
+-  test $ac_status = 0; }; then
+-  pkg_cv_COROSYNC_LIBS=`$PKG_CONFIG --libs "corosync" 2>/dev/null`
+-		      test "x$?" != "x0" && pkg_failed=yes
+-else
+-  pkg_failed=yes
+-fi
+- else
+-    pkg_failed=untried
+-fi
+-
+-
+-
+-if test $pkg_failed = yes; then
+-   	{ $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
+-$as_echo "no" >&6; }
+-
+-if $PKG_CONFIG --atleast-pkgconfig-version 0.20; then
+-        _pkg_short_errors_supported=yes
+-else
+-        _pkg_short_errors_supported=no
+-fi
+-        if test $_pkg_short_errors_supported = yes; then
+-	        COROSYNC_PKG_ERRORS=`$PKG_CONFIG --short-errors --print-errors --cflags --libs "corosync" 2>&1`
+-        else
+-	        COROSYNC_PKG_ERRORS=`$PKG_CONFIG --print-errors --cflags --libs "corosync" 2>&1`
+-        fi
+-	# Put the nasty error message in config.log where it belongs
+-	echo "$COROSYNC_PKG_ERRORS" >&5
+-
+-	$bailout
+-elif test $pkg_failed = untried; then
+-     	{ $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
+-$as_echo "no" >&6; }
+-	$bailout
+-else
+-	COROSYNC_CFLAGS=$pkg_cv_COROSYNC_CFLAGS
+-	COROSYNC_LIBS=$pkg_cv_COROSYNC_LIBS
+-        { $as_echo "$as_me:${as_lineno-$LINENO}: result: yes" >&5
+-$as_echo "yes" >&6; }
+-	HAVE_COROSYNC=yes
+-fi
+-	CHECKCONFDB=yes
+-	CHECKCMAP=yes
+-fi
+-
+-if test "$BUILDCOROSYNC" = yes; then
+-
+-pkg_failed=no
+-{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for QUORUM" >&5
+-$as_echo_n "checking for QUORUM... " >&6; }
+-
+-if test -n "$QUORUM_CFLAGS"; then
+-    pkg_cv_QUORUM_CFLAGS="$QUORUM_CFLAGS"
+- elif test -n "$PKG_CONFIG"; then
+-    if test -n "$PKG_CONFIG" && \
+-    { { $as_echo "$as_me:${as_lineno-$LINENO}: \$PKG_CONFIG --exists --print-errors \"libquorum\""; } >&5
+-  ($PKG_CONFIG --exists --print-errors "libquorum") 2>&5
+-  ac_status=$?
+-  $as_echo "$as_me:${as_lineno-$LINENO}: \$? = $ac_status" >&5
+-  test $ac_status = 0; }; then
+-  pkg_cv_QUORUM_CFLAGS=`$PKG_CONFIG --cflags "libquorum" 2>/dev/null`
+-		      test "x$?" != "x0" && pkg_failed=yes
+-else
+-  pkg_failed=yes
+-fi
+- else
+-    pkg_failed=untried
+-fi
+-if test -n "$QUORUM_LIBS"; then
+-    pkg_cv_QUORUM_LIBS="$QUORUM_LIBS"
+- elif test -n "$PKG_CONFIG"; then
+-    if test -n "$PKG_CONFIG" && \
+-    { { $as_echo "$as_me:${as_lineno-$LINENO}: \$PKG_CONFIG --exists --print-errors \"libquorum\""; } >&5
+-  ($PKG_CONFIG --exists --print-errors "libquorum") 2>&5
+-  ac_status=$?
+-  $as_echo "$as_me:${as_lineno-$LINENO}: \$? = $ac_status" >&5
+-  test $ac_status = 0; }; then
+-  pkg_cv_QUORUM_LIBS=`$PKG_CONFIG --libs "libquorum" 2>/dev/null`
+-		      test "x$?" != "x0" && pkg_failed=yes
+-else
+-  pkg_failed=yes
+-fi
+- else
+-    pkg_failed=untried
+-fi
+-
+-
+-
+-if test $pkg_failed = yes; then
+-   	{ $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
+-$as_echo "no" >&6; }
+-
+-if $PKG_CONFIG --atleast-pkgconfig-version 0.20; then
+-        _pkg_short_errors_supported=yes
+-else
+-        _pkg_short_errors_supported=no
+-fi
+-        if test $_pkg_short_errors_supported = yes; then
+-	        QUORUM_PKG_ERRORS=`$PKG_CONFIG --short-errors --print-errors --cflags --libs "libquorum" 2>&1`
+-        else
+-	        QUORUM_PKG_ERRORS=`$PKG_CONFIG --print-errors --cflags --libs "libquorum" 2>&1`
+-        fi
+-	# Put the nasty error message in config.log where it belongs
+-	echo "$QUORUM_PKG_ERRORS" >&5
+-
+-	$bailout
+-elif test $pkg_failed = untried; then
+-     	{ $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
+-$as_echo "no" >&6; }
+-	$bailout
+-else
+-	QUORUM_CFLAGS=$pkg_cv_QUORUM_CFLAGS
+-	QUORUM_LIBS=$pkg_cv_QUORUM_LIBS
+-        { $as_echo "$as_me:${as_lineno-$LINENO}: result: yes" >&5
+-$as_echo "yes" >&6; }
+-	HAVE_QUORUM=yes
+-fi
+-	CHECKCPG=yes
+-	CHECKDLM=yes
+-fi
+-
+-if test "$BUILDOPENAIS" = yes; then
+-
+-pkg_failed=no
+-{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for SALCK" >&5
+-$as_echo_n "checking for SALCK... " >&6; }
+-
+-if test -n "$SALCK_CFLAGS"; then
+-    pkg_cv_SALCK_CFLAGS="$SALCK_CFLAGS"
+- elif test -n "$PKG_CONFIG"; then
+-    if test -n "$PKG_CONFIG" && \
+-    { { $as_echo "$as_me:${as_lineno-$LINENO}: \$PKG_CONFIG --exists --print-errors \"libSaLck\""; } >&5
+-  ($PKG_CONFIG --exists --print-errors "libSaLck") 2>&5
+-  ac_status=$?
+-  $as_echo "$as_me:${as_lineno-$LINENO}: \$? = $ac_status" >&5
+-  test $ac_status = 0; }; then
+-  pkg_cv_SALCK_CFLAGS=`$PKG_CONFIG --cflags "libSaLck" 2>/dev/null`
+-		      test "x$?" != "x0" && pkg_failed=yes
+-else
+-  pkg_failed=yes
+-fi
+- else
+-    pkg_failed=untried
+-fi
+-if test -n "$SALCK_LIBS"; then
+-    pkg_cv_SALCK_LIBS="$SALCK_LIBS"
+- elif test -n "$PKG_CONFIG"; then
+-    if test -n "$PKG_CONFIG" && \
+-    { { $as_echo "$as_me:${as_lineno-$LINENO}: \$PKG_CONFIG --exists --print-errors \"libSaLck\""; } >&5
+-  ($PKG_CONFIG --exists --print-errors "libSaLck") 2>&5
+-  ac_status=$?
+-  $as_echo "$as_me:${as_lineno-$LINENO}: \$? = $ac_status" >&5
+-  test $ac_status = 0; }; then
+-  pkg_cv_SALCK_LIBS=`$PKG_CONFIG --libs "libSaLck" 2>/dev/null`
+-		      test "x$?" != "x0" && pkg_failed=yes
+-else
+-  pkg_failed=yes
+-fi
+- else
+-    pkg_failed=untried
+-fi
+-
+-
+-
+-if test $pkg_failed = yes; then
+-   	{ $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
+-$as_echo "no" >&6; }
+-
+-if $PKG_CONFIG --atleast-pkgconfig-version 0.20; then
+-        _pkg_short_errors_supported=yes
+-else
+-        _pkg_short_errors_supported=no
+-fi
+-        if test $_pkg_short_errors_supported = yes; then
+-	        SALCK_PKG_ERRORS=`$PKG_CONFIG --short-errors --print-errors --cflags --libs "libSaLck" 2>&1`
+-        else
+-	        SALCK_PKG_ERRORS=`$PKG_CONFIG --print-errors --cflags --libs "libSaLck" 2>&1`
+-        fi
+-	# Put the nasty error message in config.log where it belongs
+-	echo "$SALCK_PKG_ERRORS" >&5
+-
+-	$bailout
+-elif test $pkg_failed = untried; then
+-     	{ $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
+-$as_echo "no" >&6; }
+-	$bailout
+-else
+-	SALCK_CFLAGS=$pkg_cv_SALCK_CFLAGS
+-	SALCK_LIBS=$pkg_cv_SALCK_LIBS
+-        { $as_echo "$as_me:${as_lineno-$LINENO}: result: yes" >&5
+-$as_echo "yes" >&6; }
+-	HAVE_SALCK=yes
+-fi
+-	CHECKCPG=yes
+-fi
+-
+-
+-
+-if test "$CHECKCONFDB" = yes; then
+-
+-pkg_failed=no
+-{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for CONFDB" >&5
+-$as_echo_n "checking for CONFDB... " >&6; }
+-
+-if test -n "$CONFDB_CFLAGS"; then
+-    pkg_cv_CONFDB_CFLAGS="$CONFDB_CFLAGS"
+- elif test -n "$PKG_CONFIG"; then
+-    if test -n "$PKG_CONFIG" && \
+-    { { $as_echo "$as_me:${as_lineno-$LINENO}: \$PKG_CONFIG --exists --print-errors \"libconfdb\""; } >&5
+-  ($PKG_CONFIG --exists --print-errors "libconfdb") 2>&5
+-  ac_status=$?
+-  $as_echo "$as_me:${as_lineno-$LINENO}: \$? = $ac_status" >&5
+-  test $ac_status = 0; }; then
+-  pkg_cv_CONFDB_CFLAGS=`$PKG_CONFIG --cflags "libconfdb" 2>/dev/null`
+-		      test "x$?" != "x0" && pkg_failed=yes
+-else
+-  pkg_failed=yes
+-fi
+- else
+-    pkg_failed=untried
+-fi
+-if test -n "$CONFDB_LIBS"; then
+-    pkg_cv_CONFDB_LIBS="$CONFDB_LIBS"
+- elif test -n "$PKG_CONFIG"; then
+-    if test -n "$PKG_CONFIG" && \
+-    { { $as_echo "$as_me:${as_lineno-$LINENO}: \$PKG_CONFIG --exists --print-errors \"libconfdb\""; } >&5
+-  ($PKG_CONFIG --exists --print-errors "libconfdb") 2>&5
+-  ac_status=$?
+-  $as_echo "$as_me:${as_lineno-$LINENO}: \$? = $ac_status" >&5
+-  test $ac_status = 0; }; then
+-  pkg_cv_CONFDB_LIBS=`$PKG_CONFIG --libs "libconfdb" 2>/dev/null`
+-		      test "x$?" != "x0" && pkg_failed=yes
+-else
+-  pkg_failed=yes
+-fi
+- else
+-    pkg_failed=untried
+-fi
+-
+-
+-
+-if test $pkg_failed = yes; then
+-   	{ $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
+-$as_echo "no" >&6; }
+-
+-if $PKG_CONFIG --atleast-pkgconfig-version 0.20; then
+-        _pkg_short_errors_supported=yes
+-else
+-        _pkg_short_errors_supported=no
+-fi
+-        if test $_pkg_short_errors_supported = yes; then
+-	        CONFDB_PKG_ERRORS=`$PKG_CONFIG --short-errors --print-errors --cflags --libs "libconfdb" 2>&1`
+-        else
+-	        CONFDB_PKG_ERRORS=`$PKG_CONFIG --print-errors --cflags --libs "libconfdb" 2>&1`
+-        fi
+-	# Put the nasty error message in config.log where it belongs
+-	echo "$CONFDB_PKG_ERRORS" >&5
+-
+-	HAVE_CONFDB=no
+-elif test $pkg_failed = untried; then
+-     	{ $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
+-$as_echo "no" >&6; }
+-	HAVE_CONFDB=no
+-else
+-	CONFDB_CFLAGS=$pkg_cv_CONFDB_CFLAGS
+-	CONFDB_LIBS=$pkg_cv_CONFDB_LIBS
+-        { $as_echo "$as_me:${as_lineno-$LINENO}: result: yes" >&5
+-$as_echo "yes" >&6; }
+-	HAVE_CONFDB=yes
+-fi
+-
+-	for ac_header in corosync/confdb.h
+-do :
+-  ac_fn_c_check_header_mongrel "$LINENO" "corosync/confdb.h" "ac_cv_header_corosync_confdb_h" "$ac_includes_default"
+-if test "x$ac_cv_header_corosync_confdb_h" = xyes; then :
+-  cat >>confdefs.h <<_ACEOF
+-#define HAVE_COROSYNC_CONFDB_H 1
+-_ACEOF
+- HAVE_CONFDB_H=yes
+-else
+-  HAVE_CONFDB_H=no
+-fi
+-
+-done
+-
+-
+-	if test "$HAVE_CONFDB" != yes -a "$HAVE_CONFDB_H" = yes; then
+-		check_lib_no_libs confdb confdb_initialize
+-		{ $as_echo "$as_me:${as_lineno-$LINENO}: result: no pkg for confdb, using -lconfdb" >&5
+-$as_echo "no pkg for confdb, using -lconfdb" >&6; }
+-		CONFDB_LIBS="-lconfdb"
+-		HAVE_CONFDB=yes
+-	fi
+-fi
+-
+-
+-if test "$CHECKCMAP" = yes; then
+-
+-pkg_failed=no
+-{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for CMAP" >&5
+-$as_echo_n "checking for CMAP... " >&6; }
+-
+-if test -n "$CMAP_CFLAGS"; then
+-    pkg_cv_CMAP_CFLAGS="$CMAP_CFLAGS"
+- elif test -n "$PKG_CONFIG"; then
+-    if test -n "$PKG_CONFIG" && \
+-    { { $as_echo "$as_me:${as_lineno-$LINENO}: \$PKG_CONFIG --exists --print-errors \"libcmap\""; } >&5
+-  ($PKG_CONFIG --exists --print-errors "libcmap") 2>&5
+-  ac_status=$?
+-  $as_echo "$as_me:${as_lineno-$LINENO}: \$? = $ac_status" >&5
+-  test $ac_status = 0; }; then
+-  pkg_cv_CMAP_CFLAGS=`$PKG_CONFIG --cflags "libcmap" 2>/dev/null`
+-		      test "x$?" != "x0" && pkg_failed=yes
+-else
+-  pkg_failed=yes
+-fi
+- else
+-    pkg_failed=untried
+-fi
+-if test -n "$CMAP_LIBS"; then
+-    pkg_cv_CMAP_LIBS="$CMAP_LIBS"
+- elif test -n "$PKG_CONFIG"; then
+-    if test -n "$PKG_CONFIG" && \
+-    { { $as_echo "$as_me:${as_lineno-$LINENO}: \$PKG_CONFIG --exists --print-errors \"libcmap\""; } >&5
+-  ($PKG_CONFIG --exists --print-errors "libcmap") 2>&5
+-  ac_status=$?
+-  $as_echo "$as_me:${as_lineno-$LINENO}: \$? = $ac_status" >&5
+-  test $ac_status = 0; }; then
+-  pkg_cv_CMAP_LIBS=`$PKG_CONFIG --libs "libcmap" 2>/dev/null`
+-		      test "x$?" != "x0" && pkg_failed=yes
+-else
+-  pkg_failed=yes
+-fi
+- else
+-    pkg_failed=untried
+-fi
+-
+-
+-
+-if test $pkg_failed = yes; then
+-   	{ $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
+-$as_echo "no" >&6; }
+-
+-if $PKG_CONFIG --atleast-pkgconfig-version 0.20; then
+-        _pkg_short_errors_supported=yes
+-else
+-        _pkg_short_errors_supported=no
+-fi
+-        if test $_pkg_short_errors_supported = yes; then
+-	        CMAP_PKG_ERRORS=`$PKG_CONFIG --short-errors --print-errors --cflags --libs "libcmap" 2>&1`
+-        else
+-	        CMAP_PKG_ERRORS=`$PKG_CONFIG --print-errors --cflags --libs "libcmap" 2>&1`
+-        fi
+-	# Put the nasty error message in config.log where it belongs
+-	echo "$CMAP_PKG_ERRORS" >&5
+-
+-	HAVE_CMAP=no
+-elif test $pkg_failed = untried; then
+-     	{ $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
+-$as_echo "no" >&6; }
+-	HAVE_CMAP=no
+-else
+-	CMAP_CFLAGS=$pkg_cv_CMAP_CFLAGS
+-	CMAP_LIBS=$pkg_cv_CMAP_LIBS
+-        { $as_echo "$as_me:${as_lineno-$LINENO}: result: yes" >&5
+-$as_echo "yes" >&6; }
+-	HAVE_CMAP=yes
+-fi
+-
+-	for ac_header in corosync/cmap.h
+-do :
+-  ac_fn_c_check_header_mongrel "$LINENO" "corosync/cmap.h" "ac_cv_header_corosync_cmap_h" "$ac_includes_default"
+-if test "x$ac_cv_header_corosync_cmap_h" = xyes; then :
+-  cat >>confdefs.h <<_ACEOF
+-#define HAVE_COROSYNC_CMAP_H 1
+-_ACEOF
+- HAVE_CMAP_H=yes
+-else
+-  HAVE_CMAP_H=no
+-fi
+-
+-done
+-
+-
+-	if test "$HAVE_CMAP" != yes -a "$HAVE_CMAP_H" = yes; then
+-		check_lib_no_libs cmap cmap_initialize
+-		{ $as_echo "$as_me:${as_lineno-$LINENO}: result: no pkg for cmap, using -lcmap" >&5
+-$as_echo "no pkg for cmap, using -lcmap" >&6; }
+-		CMAP_LIBS="-lcmap"
+-		HAVE_CMAP=yes
+-	fi
+-fi
+-
+-if test "$BUILDCOROSYNC" = yes -a \
+-	"$HAVE_CMAP" != yes -a "$HAVE_CONFDB" != yes -a "$CLVMD" != all; then
+-	as_fn_error $? "bailing out... cmap (corosync >= 2.0) or confdb (corosync < 2.0) library is required" "$LINENO" 5
+-fi
+-
+-if test "$CHECKCPG" = yes; then
+-
+-pkg_failed=no
+-{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for CPG" >&5
+-$as_echo_n "checking for CPG... " >&6; }
+-
+-if test -n "$CPG_CFLAGS"; then
+-    pkg_cv_CPG_CFLAGS="$CPG_CFLAGS"
+- elif test -n "$PKG_CONFIG"; then
+-    if test -n "$PKG_CONFIG" && \
+-    { { $as_echo "$as_me:${as_lineno-$LINENO}: \$PKG_CONFIG --exists --print-errors \"libcpg\""; } >&5
+-  ($PKG_CONFIG --exists --print-errors "libcpg") 2>&5
+-  ac_status=$?
+-  $as_echo "$as_me:${as_lineno-$LINENO}: \$? = $ac_status" >&5
+-  test $ac_status = 0; }; then
+-  pkg_cv_CPG_CFLAGS=`$PKG_CONFIG --cflags "libcpg" 2>/dev/null`
+-		      test "x$?" != "x0" && pkg_failed=yes
+-else
+-  pkg_failed=yes
+-fi
+- else
+-    pkg_failed=untried
+-fi
+-if test -n "$CPG_LIBS"; then
+-    pkg_cv_CPG_LIBS="$CPG_LIBS"
+- elif test -n "$PKG_CONFIG"; then
+-    if test -n "$PKG_CONFIG" && \
+-    { { $as_echo "$as_me:${as_lineno-$LINENO}: \$PKG_CONFIG --exists --print-errors \"libcpg\""; } >&5
+-  ($PKG_CONFIG --exists --print-errors "libcpg") 2>&5
+-  ac_status=$?
+-  $as_echo "$as_me:${as_lineno-$LINENO}: \$? = $ac_status" >&5
+-  test $ac_status = 0; }; then
+-  pkg_cv_CPG_LIBS=`$PKG_CONFIG --libs "libcpg" 2>/dev/null`
+-		      test "x$?" != "x0" && pkg_failed=yes
+-else
+-  pkg_failed=yes
+-fi
+- else
+-    pkg_failed=untried
+-fi
+-
+-
+-
+-if test $pkg_failed = yes; then
+-   	{ $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
+-$as_echo "no" >&6; }
+-
+-if $PKG_CONFIG --atleast-pkgconfig-version 0.20; then
+-        _pkg_short_errors_supported=yes
+-else
+-        _pkg_short_errors_supported=no
+-fi
+-        if test $_pkg_short_errors_supported = yes; then
+-	        CPG_PKG_ERRORS=`$PKG_CONFIG --short-errors --print-errors --cflags --libs "libcpg" 2>&1`
+-        else
+-	        CPG_PKG_ERRORS=`$PKG_CONFIG --print-errors --cflags --libs "libcpg" 2>&1`
+-        fi
+-	# Put the nasty error message in config.log where it belongs
+-	echo "$CPG_PKG_ERRORS" >&5
+-
+-	$bailout
+-elif test $pkg_failed = untried; then
+-     	{ $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
+-$as_echo "no" >&6; }
+-	$bailout
+-else
+-	CPG_CFLAGS=$pkg_cv_CPG_CFLAGS
+-	CPG_LIBS=$pkg_cv_CPG_LIBS
+-        { $as_echo "$as_me:${as_lineno-$LINENO}: result: yes" >&5
+-$as_echo "yes" >&6; }
+-	HAVE_CPG=yes
+-fi
+-fi
+-
+-if test "$CHECKDLM" = yes; then
+-
+-pkg_failed=no
+-{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for DLM" >&5
+-$as_echo_n "checking for DLM... " >&6; }
+-
+-if test -n "$DLM_CFLAGS"; then
+-    pkg_cv_DLM_CFLAGS="$DLM_CFLAGS"
+- elif test -n "$PKG_CONFIG"; then
+-    if test -n "$PKG_CONFIG" && \
+-    { { $as_echo "$as_me:${as_lineno-$LINENO}: \$PKG_CONFIG --exists --print-errors \"libdlm\""; } >&5
+-  ($PKG_CONFIG --exists --print-errors "libdlm") 2>&5
+-  ac_status=$?
+-  $as_echo "$as_me:${as_lineno-$LINENO}: \$? = $ac_status" >&5
+-  test $ac_status = 0; }; then
+-  pkg_cv_DLM_CFLAGS=`$PKG_CONFIG --cflags "libdlm" 2>/dev/null`
+-		      test "x$?" != "x0" && pkg_failed=yes
+-else
+-  pkg_failed=yes
+-fi
+- else
+-    pkg_failed=untried
+-fi
+-if test -n "$DLM_LIBS"; then
+-    pkg_cv_DLM_LIBS="$DLM_LIBS"
+- elif test -n "$PKG_CONFIG"; then
+-    if test -n "$PKG_CONFIG" && \
+-    { { $as_echo "$as_me:${as_lineno-$LINENO}: \$PKG_CONFIG --exists --print-errors \"libdlm\""; } >&5
+-  ($PKG_CONFIG --exists --print-errors "libdlm") 2>&5
+-  ac_status=$?
+-  $as_echo "$as_me:${as_lineno-$LINENO}: \$? = $ac_status" >&5
+-  test $ac_status = 0; }; then
+-  pkg_cv_DLM_LIBS=`$PKG_CONFIG --libs "libdlm" 2>/dev/null`
+-		      test "x$?" != "x0" && pkg_failed=yes
+-else
+-  pkg_failed=yes
+-fi
+- else
+-    pkg_failed=untried
+-fi
+-
+-
+-
+-if test $pkg_failed = yes; then
+-   	{ $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
+-$as_echo "no" >&6; }
+-
+-if $PKG_CONFIG --atleast-pkgconfig-version 0.20; then
+-        _pkg_short_errors_supported=yes
+-else
+-        _pkg_short_errors_supported=no
+-fi
+-        if test $_pkg_short_errors_supported = yes; then
+-	        DLM_PKG_ERRORS=`$PKG_CONFIG --short-errors --print-errors --cflags --libs "libdlm" 2>&1`
+-        else
+-	        DLM_PKG_ERRORS=`$PKG_CONFIG --print-errors --cflags --libs "libdlm" 2>&1`
+-        fi
+-	# Put the nasty error message in config.log where it belongs
+-	echo "$DLM_PKG_ERRORS" >&5
+-
+-	NOTFOUND=0
+-		for ac_header in libdlm.h
+-do :
+-  ac_fn_c_check_header_mongrel "$LINENO" "libdlm.h" "ac_cv_header_libdlm_h" "$ac_includes_default"
+-if test "x$ac_cv_header_libdlm_h" = xyes; then :
+-  cat >>confdefs.h <<_ACEOF
+-#define HAVE_LIBDLM_H 1
+-_ACEOF
+-
+-else
+-  $bailout
+-fi
+-
+-done
+-
+-		check_lib_no_libs dlm dlm_lock -lpthread
+-		if test $NOTFOUND = 0; then
+-			{ $as_echo "$as_me:${as_lineno-$LINENO}: result: no pkg for libdlm, using -ldlm" >&5
+-$as_echo "no pkg for libdlm, using -ldlm" >&6; }
+-			DLM_LIBS="-ldlm -lpthread"
+-			HAVE_DLM=yes
+-		fi
+-elif test $pkg_failed = untried; then
+-     	{ $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
+-$as_echo "no" >&6; }
+-	NOTFOUND=0
+-		for ac_header in libdlm.h
+-do :
+-  ac_fn_c_check_header_mongrel "$LINENO" "libdlm.h" "ac_cv_header_libdlm_h" "$ac_includes_default"
+-if test "x$ac_cv_header_libdlm_h" = xyes; then :
+-  cat >>confdefs.h <<_ACEOF
+-#define HAVE_LIBDLM_H 1
+-_ACEOF
+-
+-else
+-  $bailout
+-fi
+-
+-done
+-
+-		check_lib_no_libs dlm dlm_lock -lpthread
+-		if test $NOTFOUND = 0; then
+-			{ $as_echo "$as_me:${as_lineno-$LINENO}: result: no pkg for libdlm, using -ldlm" >&5
+-$as_echo "no pkg for libdlm, using -ldlm" >&6; }
+-			DLM_LIBS="-ldlm -lpthread"
+-			HAVE_DLM=yes
+-		fi
+-else
+-	DLM_CFLAGS=$pkg_cv_DLM_CFLAGS
+-	DLM_LIBS=$pkg_cv_DLM_LIBS
+-        { $as_echo "$as_me:${as_lineno-$LINENO}: result: yes" >&5
+-$as_echo "yes" >&6; }
+-	HAVE_DLM=yes
+-fi
+-fi
+-
+-if test "$CLVMD" = all; then
+-	CLVMD=none
+-	CLVMD_CMANAGERS=""
+-	CLVMD_NEEDS_QDISKD=no
+-	if test "$HAVE_CMAN" = yes -a \
+-		"$HAVE_DLM" = yes; then
+-		{ $as_echo "$as_me:${as_lineno-$LINENO}: result: Enabling clvmd cman cluster manager" >&5
+-$as_echo "Enabling clvmd cman cluster manager" >&6; }
+-		CLVMD="$CLVMD,cman"
+-		CLVMD_CMANAGERS="$CLVMD_CMANAGERS cman"
+-		CLVMD_NEEDS_QDISKD=yes
+-	fi
+-	if test "$HAVE_COROSYNC" = yes -a \
+-		"$HAVE_QUORUM" = yes -a \
+-		"$HAVE_CPG" = yes -a \
+-		"$HAVE_DLM" = yes; then
+-	   if test "$HAVE_CONFDB" = yes -o "$HAVE_CMAP" = yes; then
+-		{ $as_echo "$as_me:${as_lineno-$LINENO}: result: Enabling clvmd corosync cluster manager" >&5
+-$as_echo "Enabling clvmd corosync cluster manager" >&6; }
+-		CLVMD="$CLVMD,corosync"
+-		CLVMD_CMANAGERS="$CLVMD_CMANAGERS corosync"
+-	   fi
+-	fi
+-	if test "$HAVE_COROSYNC" = yes -a \
+-		"$HAVE_CPG" = yes -a \
+-		"$HAVE_SALCK" = yes; then
+-		{ $as_echo "$as_me:${as_lineno-$LINENO}: result: Enabling clvmd openais cluster manager" >&5
+-$as_echo "Enabling clvmd openais cluster manager" >&6; }
+-		CLVMD="$CLVMD,openais"
+-		CLVMD_CMANAGERS="$CLVMD_CMANAGERS openais"
+-	fi
+-	test "$CLVMD_NEEDS_QDISKD" != no && CLVMD_CMANAGERS="$CLVMD_CMANAGERS qdiskd"
+-	test "$CLVMD" = none && { $as_echo "$as_me:${as_lineno-$LINENO}: result: Disabling clvmd build. No cluster manager detected." >&5
+-$as_echo "Disabling clvmd build. No cluster manager detected." >&6; }
+-fi
+-
+-if [ `expr x"$CLVMD" : '.*corosync.*'` != 0 ]; then
+-   test "$HAVE_CMAP" = yes && CLVMD_CMANAGERS="$CLVMD_CMANAGERS dlm"
+-fi
+-
+-################################################################################
+-if test "$CLVMD" != none; then
+-
+-# Check whether --with-clvmd-pidfile was given.
+-if test "${with_clvmd_pidfile+set}" = set; then :
+-  withval=$with_clvmd_pidfile; CLVMD_PIDFILE=$withval
+-else
+-  CLVMD_PIDFILE="$DEFAULT_PID_DIR/clvmd.pid"
+-fi
+-
+-
+-cat >>confdefs.h <<_ACEOF
+-#define CLVMD_PIDFILE "$CLVMD_PIDFILE"
+-_ACEOF
+-
+-fi
+-
+-################################################################################
+ { $as_echo "$as_me:${as_lineno-$LINENO}: checking whether to build cluster mirror log daemon" >&5
+ $as_echo_n "checking whether to build cluster mirror log daemon... " >&6; }
+ # Check whether --enable-cmirrord was given.
+@@ -10837,89 +9816,6 @@ fi
+ if [ "$BUILD_CMIRRORD" = yes ]; then
+ 	pkg_config_init
+ 
+-
+-$as_echo "#define CMIRROR_HAS_CHECKPOINT 1" >>confdefs.h
+-
+-
+-pkg_failed=no
+-{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for SACKPT" >&5
+-$as_echo_n "checking for SACKPT... " >&6; }
+-
+-if test -n "$SACKPT_CFLAGS"; then
+-    pkg_cv_SACKPT_CFLAGS="$SACKPT_CFLAGS"
+- elif test -n "$PKG_CONFIG"; then
+-    if test -n "$PKG_CONFIG" && \
+-    { { $as_echo "$as_me:${as_lineno-$LINENO}: \$PKG_CONFIG --exists --print-errors \"libSaCkpt\""; } >&5
+-  ($PKG_CONFIG --exists --print-errors "libSaCkpt") 2>&5
+-  ac_status=$?
+-  $as_echo "$as_me:${as_lineno-$LINENO}: \$? = $ac_status" >&5
+-  test $ac_status = 0; }; then
+-  pkg_cv_SACKPT_CFLAGS=`$PKG_CONFIG --cflags "libSaCkpt" 2>/dev/null`
+-		      test "x$?" != "x0" && pkg_failed=yes
+-else
+-  pkg_failed=yes
+-fi
+- else
+-    pkg_failed=untried
+-fi
+-if test -n "$SACKPT_LIBS"; then
+-    pkg_cv_SACKPT_LIBS="$SACKPT_LIBS"
+- elif test -n "$PKG_CONFIG"; then
+-    if test -n "$PKG_CONFIG" && \
+-    { { $as_echo "$as_me:${as_lineno-$LINENO}: \$PKG_CONFIG --exists --print-errors \"libSaCkpt\""; } >&5
+-  ($PKG_CONFIG --exists --print-errors "libSaCkpt") 2>&5
+-  ac_status=$?
+-  $as_echo "$as_me:${as_lineno-$LINENO}: \$? = $ac_status" >&5
+-  test $ac_status = 0; }; then
+-  pkg_cv_SACKPT_LIBS=`$PKG_CONFIG --libs "libSaCkpt" 2>/dev/null`
+-		      test "x$?" != "x0" && pkg_failed=yes
+-else
+-  pkg_failed=yes
+-fi
+- else
+-    pkg_failed=untried
+-fi
+-
+-
+-
+-if test $pkg_failed = yes; then
+-   	{ $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
+-$as_echo "no" >&6; }
+-
+-if $PKG_CONFIG --atleast-pkgconfig-version 0.20; then
+-        _pkg_short_errors_supported=yes
+-else
+-        _pkg_short_errors_supported=no
+-fi
+-        if test $_pkg_short_errors_supported = yes; then
+-	        SACKPT_PKG_ERRORS=`$PKG_CONFIG --short-errors --print-errors --cflags --libs "libSaCkpt" 2>&1`
+-        else
+-	        SACKPT_PKG_ERRORS=`$PKG_CONFIG --print-errors --cflags --libs "libSaCkpt" 2>&1`
+-        fi
+-	# Put the nasty error message in config.log where it belongs
+-	echo "$SACKPT_PKG_ERRORS" >&5
+-
+-	{ $as_echo "$as_me:${as_lineno-$LINENO}: result: no libSaCkpt, compiling without it" >&5
+-$as_echo "no libSaCkpt, compiling without it" >&6; }
+-
+-$as_echo "#define CMIRROR_HAS_CHECKPOINT 0" >>confdefs.h
+-
+-elif test $pkg_failed = untried; then
+-     	{ $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
+-$as_echo "no" >&6; }
+-	{ $as_echo "$as_me:${as_lineno-$LINENO}: result: no libSaCkpt, compiling without it" >&5
+-$as_echo "no libSaCkpt, compiling without it" >&6; }
+-
+-$as_echo "#define CMIRROR_HAS_CHECKPOINT 0" >>confdefs.h
+-
+-else
+-	SACKPT_CFLAGS=$pkg_cv_SACKPT_CFLAGS
+-	SACKPT_LIBS=$pkg_cv_SACKPT_LIBS
+-        { $as_echo "$as_me:${as_lineno-$LINENO}: result: yes" >&5
+-$as_echo "yes" >&6; }
+-	HAVE_SACKPT=yes
+-fi
+-
+ 	if test "$HAVE_CPG" != yes; then
+ 
+ pkg_failed=no
+@@ -12550,27 +11446,6 @@ $as_echo "#define O_DIRECT_SUPPORT 1" >>confdefs.h
+ fi
+ 
+ ################################################################################
+-{ $as_echo "$as_me:${as_lineno-$LINENO}: checking whether to build liblvm2app.so application library" >&5
+-$as_echo_n "checking whether to build liblvm2app.so application library... " >&6; }
+-# Check whether --enable-applib was given.
+-if test "${enable_applib+set}" = set; then :
+-  enableval=$enable_applib; APPLIB=$enableval
+-else
+-  APPLIB=no
+-fi
+-
+-{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $APPLIB" >&5
+-$as_echo "$APPLIB" >&6; }
+-
+-test "$APPLIB" = yes \
+-  && LVM2APP_LIB=-llvm2app \
+-  || LVM2APP_LIB=
+-if test "$APPLIB"; then :
+-  { $as_echo "$as_me:${as_lineno-$LINENO}: WARNING: liblvm2app is deprecated. Use D-Bus API" >&5
+-$as_echo "$as_me: WARNING: liblvm2app is deprecated. Use D-Bus API" >&2;}
+-fi
+-
+-################################################################################
+ { $as_echo "$as_me:${as_lineno-$LINENO}: checking whether to compile liblvm2cmd.so" >&5
+ $as_echo_n "checking whether to compile liblvm2cmd.so... " >&6; }
+ # Check whether --enable-cmdlib was given.
+@@ -12605,612 +11480,8 @@ $as_echo "$as_me: WARNING: Building D-Bus support without D-Bus notifications."
+ fi
+ 
+ ################################################################################
+-{ $as_echo "$as_me:${as_lineno-$LINENO}: checking whether to build Python wrapper for liblvm2app.so" >&5
+-$as_echo_n "checking whether to build Python wrapper for liblvm2app.so... " >&6; }
+-# Check whether --enable-python_bindings was given.
+-if test "${enable_python_bindings+set}" = set; then :
+-  enableval=$enable_python_bindings; PYTHON_BINDINGS=$enableval
+-else
+-  PYTHON_BINDINGS=no
+-fi
+-
+-{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $PYTHON_BINDINGS" >&5
+-$as_echo "$PYTHON_BINDINGS" >&6; }
+-
+-{ $as_echo "$as_me:${as_lineno-$LINENO}: checking whether to build Python2 wrapper for liblvm2app.so" >&5
+-$as_echo_n "checking whether to build Python2 wrapper for liblvm2app.so... " >&6; }
+-# Check whether --enable-python2_bindings was given.
+-if test "${enable_python2_bindings+set}" = set; then :
+-  enableval=$enable_python2_bindings; PYTHON2_BINDINGS=$enableval
+-else
+-  PYTHON2_BINDINGS=no
+-fi
+-
+-{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $PYTHON2_BINDINGS" >&5
+-$as_echo "$PYTHON2_BINDINGS" >&6; }
+-
+-
+-{ $as_echo "$as_me:${as_lineno-$LINENO}: checking whether to build Python3 wrapper for liblvm2app.so" >&5
+-$as_echo_n "checking whether to build Python3 wrapper for liblvm2app.so... " >&6; }
+-# Check whether --enable-python3_bindings was given.
+-if test "${enable_python3_bindings+set}" = set; then :
+-  enableval=$enable_python3_bindings; PYTHON3_BINDINGS=$enableval
+-else
+-  PYTHON3_BINDINGS=no
+-fi
+-
+-{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $PYTHON3_BINDINGS" >&5
+-$as_echo "$PYTHON3_BINDINGS" >&6; }
+-
+-if test "$PYTHON_BINDINGS" = yes; then
+-	as_fn_error $? "--enable-python-bindings is replaced by --enable-python2-bindings and --enable-python3-bindings" "$LINENO" 5
+-fi
+-
+-if test "$PYTHON2_BINDINGS" = yes; then
+-
+-
+-
+-
+-
+-
+-        if test -n "$PYTHON"; then
+-      # If the user set $PYTHON, use it and don't search something else.
+-      { $as_echo "$as_me:${as_lineno-$LINENO}: checking whether $PYTHON version is >= 2" >&5
+-$as_echo_n "checking whether $PYTHON version is >= 2... " >&6; }
+-      prog="import sys
+-# split strings by '.' and convert to numeric.  Append some zeros
+-# because we need at least 4 digits for the hex conversion.
+-# map returns an iterator in Python 3.0 and a list in 2.x
+-minver = list(map(int, '2'.split('.'))) + [0, 0, 0]
+-minverhex = 0
+-# xrange is not present in Python 3.0 and range returns an iterator
+-for i in list(range(0, 4)): minverhex = (minverhex << 8) + minver[i]
+-sys.exit(sys.hexversion < minverhex)"
+-  if { echo "$as_me:$LINENO: $PYTHON -c "$prog"" >&5
+-   ($PYTHON -c "$prog") >&5 2>&5
+-   ac_status=$?
+-   echo "$as_me:$LINENO: \$? = $ac_status" >&5
+-   (exit $ac_status); }; then :
+-  { $as_echo "$as_me:${as_lineno-$LINENO}: result: yes" >&5
+-$as_echo "yes" >&6; }
+-else
+-  { $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
+-$as_echo "no" >&6; }
+-			       as_fn_error $? "Python interpreter is too old" "$LINENO" 5
+-fi
+-      am_display_PYTHON=$PYTHON
+-    else
+-      # Otherwise, try each interpreter until we find one that satisfies
+-      # VERSION.
+-      { $as_echo "$as_me:${as_lineno-$LINENO}: checking for a Python interpreter with version >= 2" >&5
+-$as_echo_n "checking for a Python interpreter with version >= 2... " >&6; }
+-if ${am_cv_pathless_PYTHON+:} false; then :
+-  $as_echo_n "(cached) " >&6
+-else
+-
+-	for am_cv_pathless_PYTHON in python python2 python3 python3.3 python3.2 python3.1 python3.0 python2.7  python2.6 python2.5 python2.4 python2.3 python2.2 python2.1 python2.0 none; do
+-	  test "$am_cv_pathless_PYTHON" = none && break
+-	  prog="import sys
+-# split strings by '.' and convert to numeric.  Append some zeros
+-# because we need at least 4 digits for the hex conversion.
+-# map returns an iterator in Python 3.0 and a list in 2.x
+-minver = list(map(int, '2'.split('.'))) + [0, 0, 0]
+-minverhex = 0
+-# xrange is not present in Python 3.0 and range returns an iterator
+-for i in list(range(0, 4)): minverhex = (minverhex << 8) + minver[i]
+-sys.exit(sys.hexversion < minverhex)"
+-  if { echo "$as_me:$LINENO: $am_cv_pathless_PYTHON -c "$prog"" >&5
+-   ($am_cv_pathless_PYTHON -c "$prog") >&5 2>&5
+-   ac_status=$?
+-   echo "$as_me:$LINENO: \$? = $ac_status" >&5
+-   (exit $ac_status); }; then :
+-  break
+-fi
+-	done
+-fi
+-{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $am_cv_pathless_PYTHON" >&5
+-$as_echo "$am_cv_pathless_PYTHON" >&6; }
+-      # Set $PYTHON to the absolute path of $am_cv_pathless_PYTHON.
+-      if test "$am_cv_pathless_PYTHON" = none; then
+-	PYTHON=:
+-      else
+-        # Extract the first word of "$am_cv_pathless_PYTHON", so it can be a program name with args.
+-set dummy $am_cv_pathless_PYTHON; ac_word=$2
+-{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for $ac_word" >&5
+-$as_echo_n "checking for $ac_word... " >&6; }
+-if ${ac_cv_path_PYTHON+:} false; then :
+-  $as_echo_n "(cached) " >&6
+-else
+-  case $PYTHON in
+-  [\\/]* | ?:[\\/]*)
+-  ac_cv_path_PYTHON="$PYTHON" # Let the user override the test with a path.
+-  ;;
+-  *)
+-  as_save_IFS=$IFS; IFS=$PATH_SEPARATOR
+-for as_dir in $PATH
+-do
+-  IFS=$as_save_IFS
+-  test -z "$as_dir" && as_dir=.
+-    for ac_exec_ext in '' $ac_executable_extensions; do
+-  if as_fn_executable_p "$as_dir/$ac_word$ac_exec_ext"; then
+-    ac_cv_path_PYTHON="$as_dir/$ac_word$ac_exec_ext"
+-    $as_echo "$as_me:${as_lineno-$LINENO}: found $as_dir/$ac_word$ac_exec_ext" >&5
+-    break 2
+-  fi
+-done
+-  done
+-IFS=$as_save_IFS
+-
+-  ;;
+-esac
+-fi
+-PYTHON=$ac_cv_path_PYTHON
+-if test -n "$PYTHON"; then
+-  { $as_echo "$as_me:${as_lineno-$LINENO}: result: $PYTHON" >&5
+-$as_echo "$PYTHON" >&6; }
+-else
+-  { $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
+-$as_echo "no" >&6; }
+-fi
+-
+-
+-      fi
+-      am_display_PYTHON=$am_cv_pathless_PYTHON
+-    fi
+-
+-
+-  if test "$PYTHON" = :; then
+-      as_fn_error $? "no suitable Python interpreter found" "$LINENO" 5
+-  else
+-
+-
+-  { $as_echo "$as_me:${as_lineno-$LINENO}: checking for $am_display_PYTHON version" >&5
+-$as_echo_n "checking for $am_display_PYTHON version... " >&6; }
+-if ${am_cv_python_version+:} false; then :
+-  $as_echo_n "(cached) " >&6
+-else
+-  am_cv_python_version=`$PYTHON -c "import sys; sys.stdout.write(sys.version[:3])"`
+-fi
+-{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $am_cv_python_version" >&5
+-$as_echo "$am_cv_python_version" >&6; }
+-  PYTHON_VERSION=$am_cv_python_version
+-
+-
+-
+-  PYTHON_PREFIX='${prefix}'
+-
+-  PYTHON_EXEC_PREFIX='${exec_prefix}'
+-
+-
+-
+-  { $as_echo "$as_me:${as_lineno-$LINENO}: checking for $am_display_PYTHON platform" >&5
+-$as_echo_n "checking for $am_display_PYTHON platform... " >&6; }
+-if ${am_cv_python_platform+:} false; then :
+-  $as_echo_n "(cached) " >&6
+-else
+-  am_cv_python_platform=`$PYTHON -c "import sys; sys.stdout.write(sys.platform)"`
+-fi
+-{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $am_cv_python_platform" >&5
+-$as_echo "$am_cv_python_platform" >&6; }
+-  PYTHON_PLATFORM=$am_cv_python_platform
+-
+-
+-  # Just factor out some code duplication.
+-  am_python_setup_sysconfig="\
+-import sys
+-# Prefer sysconfig over distutils.sysconfig, for better compatibility
+-# with python 3.x.  See automake bug#10227.
+-try:
+-    import sysconfig
+-except ImportError:
+-    can_use_sysconfig = 0
+-else:
+-    can_use_sysconfig = 1
+-# Can't use sysconfig in CPython 2.7, since it's broken in virtualenvs:
+-# <https://github.com/pypa/virtualenv/issues/118>
+-try:
+-    from platform import python_implementation
+-    if python_implementation() == 'CPython' and sys.version[:3] == '2.7':
+-        can_use_sysconfig = 0
+-except ImportError:
+-    pass"
+-
+-
+-            { $as_echo "$as_me:${as_lineno-$LINENO}: checking for $am_display_PYTHON script directory" >&5
+-$as_echo_n "checking for $am_display_PYTHON script directory... " >&6; }
+-if ${am_cv_python_pythondir+:} false; then :
+-  $as_echo_n "(cached) " >&6
+-else
+-  if test "x$prefix" = xNONE
+-     then
+-       am_py_prefix=$ac_default_prefix
+-     else
+-       am_py_prefix=$prefix
+-     fi
+-     am_cv_python_pythondir=`$PYTHON -c "
+-$am_python_setup_sysconfig
+-if can_use_sysconfig:
+-    sitedir = sysconfig.get_path('purelib', vars={'base':'$am_py_prefix'})
+-else:
+-    from distutils import sysconfig
+-    sitedir = sysconfig.get_python_lib(0, 0, prefix='$am_py_prefix')
+-sys.stdout.write(sitedir)"`
+-     case $am_cv_python_pythondir in
+-     $am_py_prefix*)
+-       am__strip_prefix=`echo "$am_py_prefix" | sed 's|.|.|g'`
+-       am_cv_python_pythondir=`echo "$am_cv_python_pythondir" | sed "s,^$am__strip_prefix,$PYTHON_PREFIX,"`
+-       ;;
+-     *)
+-       case $am_py_prefix in
+-         /usr|/System*) ;;
+-         *)
+-	  am_cv_python_pythondir=$PYTHON_PREFIX/lib/python$PYTHON_VERSION/site-packages
+-	  ;;
+-       esac
+-       ;;
+-     esac
+-
+-fi
+-{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $am_cv_python_pythondir" >&5
+-$as_echo "$am_cv_python_pythondir" >&6; }
+-  pythondir=$am_cv_python_pythondir
+-
+-
+-
+-  pkgpythondir=\${pythondir}/$PACKAGE
+-
+-
+-        { $as_echo "$as_me:${as_lineno-$LINENO}: checking for $am_display_PYTHON extension module directory" >&5
+-$as_echo_n "checking for $am_display_PYTHON extension module directory... " >&6; }
+-if ${am_cv_python_pyexecdir+:} false; then :
+-  $as_echo_n "(cached) " >&6
+-else
+-  if test "x$exec_prefix" = xNONE
+-     then
+-       am_py_exec_prefix=$am_py_prefix
+-     else
+-       am_py_exec_prefix=$exec_prefix
+-     fi
+-     am_cv_python_pyexecdir=`$PYTHON -c "
+-$am_python_setup_sysconfig
+-if can_use_sysconfig:
+-    sitedir = sysconfig.get_path('platlib', vars={'platbase':'$am_py_prefix'})
+-else:
+-    from distutils import sysconfig
+-    sitedir = sysconfig.get_python_lib(1, 0, prefix='$am_py_prefix')
+-sys.stdout.write(sitedir)"`
+-     case $am_cv_python_pyexecdir in
+-     $am_py_exec_prefix*)
+-       am__strip_prefix=`echo "$am_py_exec_prefix" | sed 's|.|.|g'`
+-       am_cv_python_pyexecdir=`echo "$am_cv_python_pyexecdir" | sed "s,^$am__strip_prefix,$PYTHON_EXEC_PREFIX,"`
+-       ;;
+-     *)
+-       case $am_py_exec_prefix in
+-         /usr|/System*) ;;
+-         *)
+-	   am_cv_python_pyexecdir=$PYTHON_EXEC_PREFIX/lib/python$PYTHON_VERSION/site-packages
+-	   ;;
+-       esac
+-       ;;
+-     esac
+-
+-fi
+-{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $am_cv_python_pyexecdir" >&5
+-$as_echo "$am_cv_python_pyexecdir" >&6; }
+-  pyexecdir=$am_cv_python_pyexecdir
+-
+-
+-
+-  pkgpyexecdir=\${pyexecdir}/$PACKAGE
+-
+-
+-
+-  fi
+-
+-
+-	if test -n "$ac_tool_prefix"; then
+-  # Extract the first word of "${ac_tool_prefix}python2", so it can be a program name with args.
+-set dummy ${ac_tool_prefix}python2; ac_word=$2
+-{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for $ac_word" >&5
+-$as_echo_n "checking for $ac_word... " >&6; }
+-if ${ac_cv_path_PYTHON2+:} false; then :
+-  $as_echo_n "(cached) " >&6
+-else
+-  case $PYTHON2 in
+-  [\\/]* | ?:[\\/]*)
+-  ac_cv_path_PYTHON2="$PYTHON2" # Let the user override the test with a path.
+-  ;;
+-  *)
+-  as_save_IFS=$IFS; IFS=$PATH_SEPARATOR
+-for as_dir in $PATH
+-do
+-  IFS=$as_save_IFS
+-  test -z "$as_dir" && as_dir=.
+-    for ac_exec_ext in '' $ac_executable_extensions; do
+-  if as_fn_executable_p "$as_dir/$ac_word$ac_exec_ext"; then
+-    ac_cv_path_PYTHON2="$as_dir/$ac_word$ac_exec_ext"
+-    $as_echo "$as_me:${as_lineno-$LINENO}: found $as_dir/$ac_word$ac_exec_ext" >&5
+-    break 2
+-  fi
+-done
+-  done
+-IFS=$as_save_IFS
+-
+-  ;;
+-esac
+-fi
+-PYTHON2=$ac_cv_path_PYTHON2
+-if test -n "$PYTHON2"; then
+-  { $as_echo "$as_me:${as_lineno-$LINENO}: result: $PYTHON2" >&5
+-$as_echo "$PYTHON2" >&6; }
+-else
+-  { $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
+-$as_echo "no" >&6; }
+-fi
+-
+-
+-fi
+-if test -z "$ac_cv_path_PYTHON2"; then
+-  ac_pt_PYTHON2=$PYTHON2
+-  # Extract the first word of "python2", so it can be a program name with args.
+-set dummy python2; ac_word=$2
+-{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for $ac_word" >&5
+-$as_echo_n "checking for $ac_word... " >&6; }
+-if ${ac_cv_path_ac_pt_PYTHON2+:} false; then :
+-  $as_echo_n "(cached) " >&6
+-else
+-  case $ac_pt_PYTHON2 in
+-  [\\/]* | ?:[\\/]*)
+-  ac_cv_path_ac_pt_PYTHON2="$ac_pt_PYTHON2" # Let the user override the test with a path.
+-  ;;
+-  *)
+-  as_save_IFS=$IFS; IFS=$PATH_SEPARATOR
+-for as_dir in $PATH
+-do
+-  IFS=$as_save_IFS
+-  test -z "$as_dir" && as_dir=.
+-    for ac_exec_ext in '' $ac_executable_extensions; do
+-  if as_fn_executable_p "$as_dir/$ac_word$ac_exec_ext"; then
+-    ac_cv_path_ac_pt_PYTHON2="$as_dir/$ac_word$ac_exec_ext"
+-    $as_echo "$as_me:${as_lineno-$LINENO}: found $as_dir/$ac_word$ac_exec_ext" >&5
+-    break 2
+-  fi
+-done
+-  done
+-IFS=$as_save_IFS
+-
+-  ;;
+-esac
+-fi
+-ac_pt_PYTHON2=$ac_cv_path_ac_pt_PYTHON2
+-if test -n "$ac_pt_PYTHON2"; then
+-  { $as_echo "$as_me:${as_lineno-$LINENO}: result: $ac_pt_PYTHON2" >&5
+-$as_echo "$ac_pt_PYTHON2" >&6; }
+-else
+-  { $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
+-$as_echo "no" >&6; }
+-fi
+-
+-  if test "x$ac_pt_PYTHON2" = x; then
+-    PYTHON2=""
+-  else
+-    case $cross_compiling:$ac_tool_warned in
+-yes:)
+-{ $as_echo "$as_me:${as_lineno-$LINENO}: WARNING: using cross tools not prefixed with host triplet" >&5
+-$as_echo "$as_me: WARNING: using cross tools not prefixed with host triplet" >&2;}
+-ac_tool_warned=yes ;;
+-esac
+-    PYTHON2=$ac_pt_PYTHON2
+-  fi
+-else
+-  PYTHON2="$ac_cv_path_PYTHON2"
+-fi
+-
+-	test -z "$PYTHON2" && as_fn_error $? "python2 is required for --enable-python2_bindings but cannot be found" "$LINENO" 5
+-	if test -n "$ac_tool_prefix"; then
+-  # Extract the first word of "${ac_tool_prefix}python2-config", so it can be a program name with args.
+-set dummy ${ac_tool_prefix}python2-config; ac_word=$2
+-{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for $ac_word" >&5
+-$as_echo_n "checking for $ac_word... " >&6; }
+-if ${ac_cv_path_PYTHON2_CONFIG+:} false; then :
+-  $as_echo_n "(cached) " >&6
+-else
+-  case $PYTHON2_CONFIG in
+-  [\\/]* | ?:[\\/]*)
+-  ac_cv_path_PYTHON2_CONFIG="$PYTHON2_CONFIG" # Let the user override the test with a path.
+-  ;;
+-  *)
+-  as_save_IFS=$IFS; IFS=$PATH_SEPARATOR
+-for as_dir in $PATH
+-do
+-  IFS=$as_save_IFS
+-  test -z "$as_dir" && as_dir=.
+-    for ac_exec_ext in '' $ac_executable_extensions; do
+-  if as_fn_executable_p "$as_dir/$ac_word$ac_exec_ext"; then
+-    ac_cv_path_PYTHON2_CONFIG="$as_dir/$ac_word$ac_exec_ext"
+-    $as_echo "$as_me:${as_lineno-$LINENO}: found $as_dir/$ac_word$ac_exec_ext" >&5
+-    break 2
+-  fi
+-done
+-  done
+-IFS=$as_save_IFS
+-
+-  ;;
+-esac
+-fi
+-PYTHON2_CONFIG=$ac_cv_path_PYTHON2_CONFIG
+-if test -n "$PYTHON2_CONFIG"; then
+-  { $as_echo "$as_me:${as_lineno-$LINENO}: result: $PYTHON2_CONFIG" >&5
+-$as_echo "$PYTHON2_CONFIG" >&6; }
+-else
+-  { $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
+-$as_echo "no" >&6; }
+-fi
+-
+-
+-fi
+-if test -z "$ac_cv_path_PYTHON2_CONFIG"; then
+-  ac_pt_PYTHON2_CONFIG=$PYTHON2_CONFIG
+-  # Extract the first word of "python2-config", so it can be a program name with args.
+-set dummy python2-config; ac_word=$2
+-{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for $ac_word" >&5
+-$as_echo_n "checking for $ac_word... " >&6; }
+-if ${ac_cv_path_ac_pt_PYTHON2_CONFIG+:} false; then :
+-  $as_echo_n "(cached) " >&6
+-else
+-  case $ac_pt_PYTHON2_CONFIG in
+-  [\\/]* | ?:[\\/]*)
+-  ac_cv_path_ac_pt_PYTHON2_CONFIG="$ac_pt_PYTHON2_CONFIG" # Let the user override the test with a path.
+-  ;;
+-  *)
+-  as_save_IFS=$IFS; IFS=$PATH_SEPARATOR
+-for as_dir in $PATH
+-do
+-  IFS=$as_save_IFS
+-  test -z "$as_dir" && as_dir=.
+-    for ac_exec_ext in '' $ac_executable_extensions; do
+-  if as_fn_executable_p "$as_dir/$ac_word$ac_exec_ext"; then
+-    ac_cv_path_ac_pt_PYTHON2_CONFIG="$as_dir/$ac_word$ac_exec_ext"
+-    $as_echo "$as_me:${as_lineno-$LINENO}: found $as_dir/$ac_word$ac_exec_ext" >&5
+-    break 2
+-  fi
+-done
+-  done
+-IFS=$as_save_IFS
+-
+-  ;;
+-esac
+-fi
+-ac_pt_PYTHON2_CONFIG=$ac_cv_path_ac_pt_PYTHON2_CONFIG
+-if test -n "$ac_pt_PYTHON2_CONFIG"; then
+-  { $as_echo "$as_me:${as_lineno-$LINENO}: result: $ac_pt_PYTHON2_CONFIG" >&5
+-$as_echo "$ac_pt_PYTHON2_CONFIG" >&6; }
+-else
+-  { $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
+-$as_echo "no" >&6; }
+-fi
+-
+-  if test "x$ac_pt_PYTHON2_CONFIG" = x; then
+-    PYTHON2_CONFIG=""
+-  else
+-    case $cross_compiling:$ac_tool_warned in
+-yes:)
+-{ $as_echo "$as_me:${as_lineno-$LINENO}: WARNING: using cross tools not prefixed with host triplet" >&5
+-$as_echo "$as_me: WARNING: using cross tools not prefixed with host triplet" >&2;}
+-ac_tool_warned=yes ;;
+-esac
+-    PYTHON2_CONFIG=$ac_pt_PYTHON2_CONFIG
+-  fi
+-else
+-  PYTHON2_CONFIG="$ac_cv_path_PYTHON2_CONFIG"
+-fi
+-
+-	test -z "$PYTHON2_CONFIG" && if test -n "$ac_tool_prefix"; then
+-  # Extract the first word of "${ac_tool_prefix}python-config", so it can be a program name with args.
+-set dummy ${ac_tool_prefix}python-config; ac_word=$2
+-{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for $ac_word" >&5
+-$as_echo_n "checking for $ac_word... " >&6; }
+-if ${ac_cv_path_PYTHON2_CONFIG+:} false; then :
+-  $as_echo_n "(cached) " >&6
+-else
+-  case $PYTHON2_CONFIG in
+-  [\\/]* | ?:[\\/]*)
+-  ac_cv_path_PYTHON2_CONFIG="$PYTHON2_CONFIG" # Let the user override the test with a path.
+-  ;;
+-  *)
+-  as_save_IFS=$IFS; IFS=$PATH_SEPARATOR
+-for as_dir in $PATH
+-do
+-  IFS=$as_save_IFS
+-  test -z "$as_dir" && as_dir=.
+-    for ac_exec_ext in '' $ac_executable_extensions; do
+-  if as_fn_executable_p "$as_dir/$ac_word$ac_exec_ext"; then
+-    ac_cv_path_PYTHON2_CONFIG="$as_dir/$ac_word$ac_exec_ext"
+-    $as_echo "$as_me:${as_lineno-$LINENO}: found $as_dir/$ac_word$ac_exec_ext" >&5
+-    break 2
+-  fi
+-done
+-  done
+-IFS=$as_save_IFS
+-
+-  ;;
+-esac
+-fi
+-PYTHON2_CONFIG=$ac_cv_path_PYTHON2_CONFIG
+-if test -n "$PYTHON2_CONFIG"; then
+-  { $as_echo "$as_me:${as_lineno-$LINENO}: result: $PYTHON2_CONFIG" >&5
+-$as_echo "$PYTHON2_CONFIG" >&6; }
+-else
+-  { $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
+-$as_echo "no" >&6; }
+-fi
+-
+ 
+-fi
+-if test -z "$ac_cv_path_PYTHON2_CONFIG"; then
+-  ac_pt_PYTHON2_CONFIG=$PYTHON2_CONFIG
+-  # Extract the first word of "python-config", so it can be a program name with args.
+-set dummy python-config; ac_word=$2
+-{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for $ac_word" >&5
+-$as_echo_n "checking for $ac_word... " >&6; }
+-if ${ac_cv_path_ac_pt_PYTHON2_CONFIG+:} false; then :
+-  $as_echo_n "(cached) " >&6
+-else
+-  case $ac_pt_PYTHON2_CONFIG in
+-  [\\/]* | ?:[\\/]*)
+-  ac_cv_path_ac_pt_PYTHON2_CONFIG="$ac_pt_PYTHON2_CONFIG" # Let the user override the test with a path.
+-  ;;
+-  *)
+-  as_save_IFS=$IFS; IFS=$PATH_SEPARATOR
+-for as_dir in $PATH
+-do
+-  IFS=$as_save_IFS
+-  test -z "$as_dir" && as_dir=.
+-    for ac_exec_ext in '' $ac_executable_extensions; do
+-  if as_fn_executable_p "$as_dir/$ac_word$ac_exec_ext"; then
+-    ac_cv_path_ac_pt_PYTHON2_CONFIG="$as_dir/$ac_word$ac_exec_ext"
+-    $as_echo "$as_me:${as_lineno-$LINENO}: found $as_dir/$ac_word$ac_exec_ext" >&5
+-    break 2
+-  fi
+-done
+-  done
+-IFS=$as_save_IFS
+-
+-  ;;
+-esac
+-fi
+-ac_pt_PYTHON2_CONFIG=$ac_cv_path_ac_pt_PYTHON2_CONFIG
+-if test -n "$ac_pt_PYTHON2_CONFIG"; then
+-  { $as_echo "$as_me:${as_lineno-$LINENO}: result: $ac_pt_PYTHON2_CONFIG" >&5
+-$as_echo "$ac_pt_PYTHON2_CONFIG" >&6; }
+-else
+-  { $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
+-$as_echo "no" >&6; }
+-fi
+-
+-  if test "x$ac_pt_PYTHON2_CONFIG" = x; then
+-    PYTHON2_CONFIG=""
+-  else
+-    case $cross_compiling:$ac_tool_warned in
+-yes:)
+-{ $as_echo "$as_me:${as_lineno-$LINENO}: WARNING: using cross tools not prefixed with host triplet" >&5
+-$as_echo "$as_me: WARNING: using cross tools not prefixed with host triplet" >&2;}
+-ac_tool_warned=yes ;;
+-esac
+-    PYTHON2_CONFIG=$ac_pt_PYTHON2_CONFIG
+-  fi
+-else
+-  PYTHON2_CONFIG="$ac_cv_path_PYTHON2_CONFIG"
+-fi
+-
+-	test -z "$PYTHON2_CONFIG" && as_fn_error $? "python headers are required for --enable-python2_bindings but cannot be found" "$LINENO" 5
+-	PYTHON2_INCDIRS=`"$PYTHON2_CONFIG" --includes`
+-	PYTHON2_LIBDIRS=`"$PYTHON2_CONFIG" --libs`
+-	PYTHON2DIR=$pythondir
+-	PYTHON_BINDINGS=yes
+-fi
+-
+-if test "$PYTHON3_BINDINGS" = yes -o "$BUILD_LVMDBUSD" = yes; then
++if test "$BUILD_LVMDBUSD" = yes; then
+ 	unset PYTHON PYTHON_CONFIG
+ 	unset am_cv_pathless_PYTHON ac_cv_path_PYTHON am_cv_python_platform
+ 	unset am_cv_python_pythondir am_cv_python_version am_cv_python_pyexecdir
+@@ -13256,7 +11527,7 @@ if ${am_cv_pathless_PYTHON+:} false; then :
+   $as_echo_n "(cached) " >&6
+ else
+ 
+-	for am_cv_pathless_PYTHON in python python2 python3 python3.3 python3.2 python3.1 python3.0 python2.7  python2.6 python2.5 python2.4 python2.3 python2.2 python2.1 python2.0 none; do
++	for am_cv_pathless_PYTHON in python python2 python3 python3.5 python3.4 python3.3 python3.2 python3.1 python3.0 python2.7  python2.6 python2.5 python2.4 python2.3 python2.2 python2.1 python2.0 none; do
+ 	  test "$am_cv_pathless_PYTHON" = none && break
+ 	  prog="import sys
+ # split strings by '.' and convert to numeric.  Append some zeros
+@@ -13581,9 +11852,7 @@ fi
+ 	PYTHON3_LIBDIRS=`"$PYTHON3_CONFIG" --libs`
+ 	PYTHON3DIR=$pythondir
+ 	test "$PYTHON3_BINDINGS" = yes && PYTHON_BINDINGS=yes
+-fi
+ 
+-if test "$BUILD_LVMDBUSD" = yes; then
+ 	# To get this macro, install autoconf-archive package then run autoreconf
+ 
+     if test -z $PYTHON;
+@@ -13649,12 +11918,6 @@ $as_echo "no" >&6; }
+ 
+ fi
+ 
+-if test "$PYTHON_BINDINGS" = yes -o "$PYTHON2_BINDINGS" = yes -o "$PYTHON3_BINDINGS" = yes; then
+-	{ $as_echo "$as_me:${as_lineno-$LINENO}: WARNING: Python bindings are deprecated. Use D-Bus API" >&5
+-$as_echo "$as_me: WARNING: Python bindings are deprecated. Use D-Bus API" >&2;}
+-	test "$APPLIB" != yes && as_fn_error $? "Python_bindings require --enable-applib" "$LINENO" 5
+-fi
+-
+ ################################################################################
+ # Check whether --enable-pkgconfig was given.
+ if test "${enable_pkgconfig+set}" = set; then :
+@@ -13861,7 +12124,7 @@ fi
+ 
+ 
+ ################################################################################
+-if [ \( "$LVM1" = shared -o "$POOL" = shared -o "$CLUSTER" = shared \
++if [ \( "$LVM1" = shared -o "$POOL" = shared \
+       \) -a "$STATIC_LINK" = yes ]; then
+ 	as_fn_error $? "Features cannot be 'shared' when building statically" "$LINENO" 5
+ fi
+@@ -14794,208 +13057,6 @@ fi
+ 
+ fi
+ 
+-if test "$CLVMD" != none; then
+-	for ac_header in mntent.h netdb.h netinet/in.h pthread.h search.h sys/mount.h sys/socket.h sys/uio.h sys/un.h utmpx.h
+-do :
+-  as_ac_Header=`$as_echo "ac_cv_header_$ac_header" | $as_tr_sh`
+-ac_fn_c_check_header_mongrel "$LINENO" "$ac_header" "$as_ac_Header" "$ac_includes_default"
+-if eval test \"x\$"$as_ac_Header"\" = x"yes"; then :
+-  cat >>confdefs.h <<_ACEOF
+-#define `$as_echo "HAVE_$ac_header" | $as_tr_cpp` 1
+-_ACEOF
+-
+-else
+-  as_fn_error $? "bailing out" "$LINENO" 5
+-fi
+-
+-done
+-
+-	for ac_func in dup2 getmntent memmove select socket
+-do :
+-  as_ac_var=`$as_echo "ac_cv_func_$ac_func" | $as_tr_sh`
+-ac_fn_c_check_func "$LINENO" "$ac_func" "$as_ac_var"
+-if eval test \"x\$"$as_ac_var"\" = x"yes"; then :
+-  cat >>confdefs.h <<_ACEOF
+-#define `$as_echo "HAVE_$ac_func" | $as_tr_cpp` 1
+-_ACEOF
+-
+-else
+-  hard_bailout
+-fi
+-done
+-
+-	# getmntent is in the standard C library on UNICOS, in -lsun on Irix 4,
+-# -lseq on Dynix/PTX, -lgen on Unixware.
+-{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for library containing getmntent" >&5
+-$as_echo_n "checking for library containing getmntent... " >&6; }
+-if ${ac_cv_search_getmntent+:} false; then :
+-  $as_echo_n "(cached) " >&6
+-else
+-  ac_func_search_save_LIBS=$LIBS
+-cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+-/* end confdefs.h.  */
+-
+-/* Override any GCC internal prototype to avoid an error.
+-   Use char because int might match the return type of a GCC
+-   builtin and then its argument prototype would still apply.  */
+-#ifdef __cplusplus
+-extern "C"
+-#endif
+-char getmntent ();
+-int
+-main ()
+-{
+-return getmntent ();
+-  ;
+-  return 0;
+-}
+-_ACEOF
+-for ac_lib in '' sun seq gen; do
+-  if test -z "$ac_lib"; then
+-    ac_res="none required"
+-  else
+-    ac_res=-l$ac_lib
+-    LIBS="-l$ac_lib  $ac_func_search_save_LIBS"
+-  fi
+-  if ac_fn_c_try_link "$LINENO"; then :
+-  ac_cv_search_getmntent=$ac_res
+-fi
+-rm -f core conftest.err conftest.$ac_objext \
+-    conftest$ac_exeext
+-  if ${ac_cv_search_getmntent+:} false; then :
+-  break
+-fi
+-done
+-if ${ac_cv_search_getmntent+:} false; then :
+-
+-else
+-  ac_cv_search_getmntent=no
+-fi
+-rm conftest.$ac_ext
+-LIBS=$ac_func_search_save_LIBS
+-fi
+-{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $ac_cv_search_getmntent" >&5
+-$as_echo "$ac_cv_search_getmntent" >&6; }
+-ac_res=$ac_cv_search_getmntent
+-if test "$ac_res" != no; then :
+-  test "$ac_res" = "none required" || LIBS="$ac_res $LIBS"
+-  ac_cv_func_getmntent=yes
+-
+-$as_echo "#define HAVE_GETMNTENT 1" >>confdefs.h
+-
+-else
+-  ac_cv_func_getmntent=no
+-fi
+-
+-
+-	for ac_header in sys/select.h sys/socket.h
+-do :
+-  as_ac_Header=`$as_echo "ac_cv_header_$ac_header" | $as_tr_sh`
+-ac_fn_c_check_header_mongrel "$LINENO" "$ac_header" "$as_ac_Header" "$ac_includes_default"
+-if eval test \"x\$"$as_ac_Header"\" = x"yes"; then :
+-  cat >>confdefs.h <<_ACEOF
+-#define `$as_echo "HAVE_$ac_header" | $as_tr_cpp` 1
+-_ACEOF
+-
+-fi
+-
+-done
+-
+-{ $as_echo "$as_me:${as_lineno-$LINENO}: checking types of arguments for select" >&5
+-$as_echo_n "checking types of arguments for select... " >&6; }
+-if ${ac_cv_func_select_args+:} false; then :
+-  $as_echo_n "(cached) " >&6
+-else
+-  for ac_arg234 in 'fd_set *' 'int *' 'void *'; do
+- for ac_arg1 in 'int' 'size_t' 'unsigned long int' 'unsigned int'; do
+-  for ac_arg5 in 'struct timeval *' 'const struct timeval *'; do
+-   cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+-/* end confdefs.h.  */
+-$ac_includes_default
+-#ifdef HAVE_SYS_SELECT_H
+-# include <sys/select.h>
+-#endif
+-#ifdef HAVE_SYS_SOCKET_H
+-# include <sys/socket.h>
+-#endif
+-
+-int
+-main ()
+-{
+-extern int select ($ac_arg1,
+-					    $ac_arg234, $ac_arg234, $ac_arg234,
+-					    $ac_arg5);
+-  ;
+-  return 0;
+-}
+-_ACEOF
+-if ac_fn_c_try_compile "$LINENO"; then :
+-  ac_cv_func_select_args="$ac_arg1,$ac_arg234,$ac_arg5"; break 3
+-fi
+-rm -f core conftest.err conftest.$ac_objext conftest.$ac_ext
+-  done
+- done
+-done
+-# Provide a safe default value.
+-: "${ac_cv_func_select_args=int,int *,struct timeval *}"
+-
+-fi
+-{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $ac_cv_func_select_args" >&5
+-$as_echo "$ac_cv_func_select_args" >&6; }
+-ac_save_IFS=$IFS; IFS=','
+-set dummy `echo "$ac_cv_func_select_args" | sed 's/\*/\*/g'`
+-IFS=$ac_save_IFS
+-shift
+-
+-cat >>confdefs.h <<_ACEOF
+-#define SELECT_TYPE_ARG1 $1
+-_ACEOF
+-
+-
+-cat >>confdefs.h <<_ACEOF
+-#define SELECT_TYPE_ARG234 ($2)
+-_ACEOF
+-
+-
+-cat >>confdefs.h <<_ACEOF
+-#define SELECT_TYPE_ARG5 ($3)
+-_ACEOF
+-
+-rm -f conftest*
+-
+-fi
+-
+-if test "$CLUSTER" != none; then
+-	for ac_header in sys/socket.h sys/un.h
+-do :
+-  as_ac_Header=`$as_echo "ac_cv_header_$ac_header" | $as_tr_sh`
+-ac_fn_c_check_header_mongrel "$LINENO" "$ac_header" "$as_ac_Header" "$ac_includes_default"
+-if eval test \"x\$"$as_ac_Header"\" = x"yes"; then :
+-  cat >>confdefs.h <<_ACEOF
+-#define `$as_echo "HAVE_$ac_header" | $as_tr_cpp` 1
+-_ACEOF
+-
+-else
+-  hard_bailout
+-fi
+-
+-done
+-
+-	for ac_func in socket
+-do :
+-  ac_fn_c_check_func "$LINENO" "socket" "ac_cv_func_socket"
+-if test "x$ac_cv_func_socket" = xyes; then :
+-  cat >>confdefs.h <<_ACEOF
+-#define HAVE_SOCKET 1
+-_ACEOF
+-
+-else
+-  hard_bailout
+-fi
+-done
+-
+-fi
+-
+ if test "$BUILD_DMEVENTD" = yes; then
+ 	for ac_header in arpa/inet.h
+ do :
+@@ -15200,14 +13261,15 @@ cat >>confdefs.h <<_ACEOF
+ _ACEOF
+ 
+ 
+-USRSBINDIR="$(eval echo $(eval echo $usrsbindir))"
+-CLVMD_PATH="$USRSBINDIR/clvmd"
++LVMCONFIG_PATH="$$BINDIR/lvmconfig"
+ 
+ cat >>confdefs.h <<_ACEOF
+-#define CLVMD_PATH "$CLVMD_PATH"
++#define LVMCONFIG_PATH "$LVMCONFIG_PATH"
+ _ACEOF
+ 
+ 
++USRSBINDIR="$(eval echo $(eval echo $usrsbindir))"
++
+ FSADM_PATH="$SBINDIR/fsadm"
+ 
+ cat >>confdefs.h <<_ACEOF
+@@ -15548,18 +13610,8 @@ _ACEOF
+ 
+ 
+ 
+-
+-
+-
+-
+-
+-
+-
+-
+-
+-
+ ################################################################################
+-ac_config_files="$ac_config_files Makefile make.tmpl libdm/make.tmpl daemons/Makefile daemons/clvmd/Makefile daemons/cmirrord/Makefile daemons/dmeventd/Makefile daemons/dmeventd/libdevmapper-event.pc daemons/dmeventd/plugins/Makefile daemons/dmeventd/plugins/lvm2/Makefile daemons/dmeventd/plugins/raid/Makefile daemons/dmeventd/plugins/mirror/Makefile daemons/dmeventd/plugins/snapshot/Makefile daemons/dmeventd/plugins/thin/Makefile daemons/dmfilemapd/Makefile daemons/lvmdbusd/Makefile daemons/lvmdbusd/lvmdbusd daemons/lvmdbusd/lvmdb.py daemons/lvmdbusd/lvm_shell_proxy.py daemons/lvmdbusd/path.py daemons/lvmetad/Makefile daemons/lvmpolld/Makefile daemons/lvmlockd/Makefile conf/Makefile conf/example.conf conf/lvmlocal.conf conf/command_profile_template.profile conf/metadata_profile_template.profile include/Makefile lib/Makefile lib/locking/Makefile include/lvm-version.h libdaemon/Makefile libdaemon/client/Makefile libdaemon/server/Makefile libdm/Makefile libdm/libdevmapper.pc liblvm/Ma
+ kefile liblvm/liblvm2app.pc man/Makefile po/Makefile python/Makefile python/setup.py scripts/blkdeactivate.sh scripts/blk_availability_init_red_hat scripts/blk_availability_systemd_red_hat.service scripts/clvmd_init_red_hat scripts/cmirrord_init_red_hat scripts/com.redhat.lvmdbus1.service scripts/dm_event_systemd_red_hat.service scripts/dm_event_systemd_red_hat.socket scripts/lvm2_cluster_activation_red_hat.sh scripts/lvm2_cluster_activation_systemd_red_hat.service scripts/lvm2_clvmd_systemd_red_hat.service scripts/lvm2_cmirrord_systemd_red_hat.service scripts/lvm2_lvmdbusd_systemd_red_hat.service scripts/lvm2_lvmetad_init_red_hat scripts/lvm2_lvmetad_systemd_red_hat.service scripts/lvm2_lvmetad_systemd_red_hat.socket scripts/lvm2_lvmpolld_init_red_hat scripts/lvm2_lvmpolld_systemd_red_hat.service scripts/lvm2_lvmpolld_systemd_red_hat.socket scripts/lvm2_lvmlockd_systemd_red_hat.service scripts/lvm2_lvmlocking_systemd_red_hat.service scripts/lvm2_monitoring_init_red_hat scripts/lvm2
+ _monitoring_systemd_red_hat.service scripts/lvm2_pvscan_systemd_red_hat at .service scripts/lvm2_tmpfiles_red_hat.conf scripts/lvmdump.sh scripts/Makefile test/Makefile test/api/Makefile test/api/python_lvm_unit.py test/unit/Makefile tools/Makefile udev/Makefile"
++ac_config_files="$ac_config_files Makefile make.tmpl libdm/make.tmpl daemons/Makefile daemons/cmirrord/Makefile daemons/dmeventd/Makefile daemons/dmeventd/libdevmapper-event.pc daemons/dmeventd/plugins/Makefile daemons/dmeventd/plugins/lvm2/Makefile daemons/dmeventd/plugins/raid/Makefile daemons/dmeventd/plugins/mirror/Makefile daemons/dmeventd/plugins/snapshot/Makefile daemons/dmeventd/plugins/thin/Makefile daemons/dmfilemapd/Makefile daemons/lvmdbusd/Makefile daemons/lvmdbusd/lvmdbusd daemons/lvmdbusd/lvmdb.py daemons/lvmdbusd/lvm_shell_proxy.py daemons/lvmdbusd/path.py daemons/lvmetad/Makefile daemons/lvmpolld/Makefile daemons/lvmlockd/Makefile conf/Makefile conf/example.conf conf/lvmlocal.conf conf/command_profile_template.profile conf/metadata_profile_template.profile include/Makefile lib/Makefile include/lvm-version.h libdaemon/Makefile libdaemon/client/Makefile libdaemon/server/Makefile libdm/Makefile libdm/libdevmapper.pc man/Makefile po/Makefile python/Makefile python/setup
+ .py scripts/blkdeactivate.sh scripts/blk_availability_init_red_hat scripts/blk_availability_systemd_red_hat.service scripts/cmirrord_init_red_hat scripts/com.redhat.lvmdbus1.service scripts/dm_event_systemd_red_hat.service scripts/dm_event_systemd_red_hat.socket scripts/lvm2_cmirrord_systemd_red_hat.service scripts/lvm2_lvmdbusd_systemd_red_hat.service scripts/lvm2_lvmetad_init_red_hat scripts/lvm2_lvmetad_systemd_red_hat.service scripts/lvm2_lvmetad_systemd_red_hat.socket scripts/lvm2_lvmpolld_init_red_hat scripts/lvm2_lvmpolld_systemd_red_hat.service scripts/lvm2_lvmpolld_systemd_red_hat.socket scripts/lvm2_lvmlockd_systemd_red_hat.service scripts/lvm2_lvmlocking_systemd_red_hat.service scripts/lvm2_monitoring_init_red_hat scripts/lvm2_monitoring_systemd_red_hat.service scripts/lvm2_pvscan_systemd_red_hat@.service scripts/lvm2_tmpfiles_red_hat.conf scripts/lvmdump.sh scripts/Makefile test/Makefile test/api/Makefile test/api/python_lvm_unit.py test/unit/Makefile tools/Makefile udev
+ /Makefile"
+ 
+ cat >confcache <<\_ACEOF
+ # This file is a shell script that caches the results of configure
+@@ -16258,7 +14310,6 @@ do
+     "make.tmpl") CONFIG_FILES="$CONFIG_FILES make.tmpl" ;;
+     "libdm/make.tmpl") CONFIG_FILES="$CONFIG_FILES libdm/make.tmpl" ;;
+     "daemons/Makefile") CONFIG_FILES="$CONFIG_FILES daemons/Makefile" ;;
+-    "daemons/clvmd/Makefile") CONFIG_FILES="$CONFIG_FILES daemons/clvmd/Makefile" ;;
+     "daemons/cmirrord/Makefile") CONFIG_FILES="$CONFIG_FILES daemons/cmirrord/Makefile" ;;
+     "daemons/dmeventd/Makefile") CONFIG_FILES="$CONFIG_FILES daemons/dmeventd/Makefile" ;;
+     "daemons/dmeventd/libdevmapper-event.pc") CONFIG_FILES="$CONFIG_FILES daemons/dmeventd/libdevmapper-event.pc" ;;
+@@ -16284,15 +14335,12 @@ do
+     "conf/metadata_profile_template.profile") CONFIG_FILES="$CONFIG_FILES conf/metadata_profile_template.profile" ;;
+     "include/Makefile") CONFIG_FILES="$CONFIG_FILES include/Makefile" ;;
+     "lib/Makefile") CONFIG_FILES="$CONFIG_FILES lib/Makefile" ;;
+-    "lib/locking/Makefile") CONFIG_FILES="$CONFIG_FILES lib/locking/Makefile" ;;
+     "include/lvm-version.h") CONFIG_FILES="$CONFIG_FILES include/lvm-version.h" ;;
+     "libdaemon/Makefile") CONFIG_FILES="$CONFIG_FILES libdaemon/Makefile" ;;
+     "libdaemon/client/Makefile") CONFIG_FILES="$CONFIG_FILES libdaemon/client/Makefile" ;;
+     "libdaemon/server/Makefile") CONFIG_FILES="$CONFIG_FILES libdaemon/server/Makefile" ;;
+     "libdm/Makefile") CONFIG_FILES="$CONFIG_FILES libdm/Makefile" ;;
+     "libdm/libdevmapper.pc") CONFIG_FILES="$CONFIG_FILES libdm/libdevmapper.pc" ;;
+-    "liblvm/Makefile") CONFIG_FILES="$CONFIG_FILES liblvm/Makefile" ;;
+-    "liblvm/liblvm2app.pc") CONFIG_FILES="$CONFIG_FILES liblvm/liblvm2app.pc" ;;
+     "man/Makefile") CONFIG_FILES="$CONFIG_FILES man/Makefile" ;;
+     "po/Makefile") CONFIG_FILES="$CONFIG_FILES po/Makefile" ;;
+     "python/Makefile") CONFIG_FILES="$CONFIG_FILES python/Makefile" ;;
+@@ -16300,14 +14348,10 @@ do
+     "scripts/blkdeactivate.sh") CONFIG_FILES="$CONFIG_FILES scripts/blkdeactivate.sh" ;;
+     "scripts/blk_availability_init_red_hat") CONFIG_FILES="$CONFIG_FILES scripts/blk_availability_init_red_hat" ;;
+     "scripts/blk_availability_systemd_red_hat.service") CONFIG_FILES="$CONFIG_FILES scripts/blk_availability_systemd_red_hat.service" ;;
+-    "scripts/clvmd_init_red_hat") CONFIG_FILES="$CONFIG_FILES scripts/clvmd_init_red_hat" ;;
+     "scripts/cmirrord_init_red_hat") CONFIG_FILES="$CONFIG_FILES scripts/cmirrord_init_red_hat" ;;
+     "scripts/com.redhat.lvmdbus1.service") CONFIG_FILES="$CONFIG_FILES scripts/com.redhat.lvmdbus1.service" ;;
+     "scripts/dm_event_systemd_red_hat.service") CONFIG_FILES="$CONFIG_FILES scripts/dm_event_systemd_red_hat.service" ;;
+     "scripts/dm_event_systemd_red_hat.socket") CONFIG_FILES="$CONFIG_FILES scripts/dm_event_systemd_red_hat.socket" ;;
+-    "scripts/lvm2_cluster_activation_red_hat.sh") CONFIG_FILES="$CONFIG_FILES scripts/lvm2_cluster_activation_red_hat.sh" ;;
+-    "scripts/lvm2_cluster_activation_systemd_red_hat.service") CONFIG_FILES="$CONFIG_FILES scripts/lvm2_cluster_activation_systemd_red_hat.service" ;;
+-    "scripts/lvm2_clvmd_systemd_red_hat.service") CONFIG_FILES="$CONFIG_FILES scripts/lvm2_clvmd_systemd_red_hat.service" ;;
+     "scripts/lvm2_cmirrord_systemd_red_hat.service") CONFIG_FILES="$CONFIG_FILES scripts/lvm2_cmirrord_systemd_red_hat.service" ;;
+     "scripts/lvm2_lvmdbusd_systemd_red_hat.service") CONFIG_FILES="$CONFIG_FILES scripts/lvm2_lvmdbusd_systemd_red_hat.service" ;;
+     "scripts/lvm2_lvmetad_init_red_hat") CONFIG_FILES="$CONFIG_FILES scripts/lvm2_lvmetad_init_red_hat" ;;
+diff --git a/configure.ac b/configure.ac
+index 365df25..9b5d055 100644
+--- a/configure.ac
++++ b/configure.ac
+@@ -1109,20 +1109,6 @@ if test "$ODIRECT" = yes; then
+ fi
+ 
+ ################################################################################
+-dnl -- Enable liblvm2app.so
+-AC_MSG_CHECKING(whether to build liblvm2app.so application library)
+-AC_ARG_ENABLE(applib,
+-	      AC_HELP_STRING([--enable-applib], [build application library]),
+-	      APPLIB=$enableval, APPLIB=no)
+-AC_MSG_RESULT($APPLIB)
+-AC_SUBST([LVM2APP_LIB])
+-test "$APPLIB" = yes \
+-  && LVM2APP_LIB=-llvm2app \
+-  || LVM2APP_LIB=
+-AS_IF([test "$APPLIB"],
+-      [AC_MSG_WARN([liblvm2app is deprecated. Use D-Bus API])])
+-
+-################################################################################
+ dnl -- Enable cmdlib
+ AC_MSG_CHECKING(whether to compile liblvm2cmd.so)
+ AC_ARG_ENABLE(cmdlib,
+@@ -1145,44 +1131,9 @@ AS_IF([test "$NOTIFYDBUS_SUPPORT" = yes && test "BUILD_LVMDBUSD" = yes],
+       [AC_MSG_WARN([Building D-Bus support without D-Bus notifications.])])
+ 
+ ################################################################################
+-dnl -- Enable Python liblvm2app bindings
+-AC_MSG_CHECKING(whether to build Python wrapper for liblvm2app.so)
+-AC_ARG_ENABLE(python_bindings,
+-	      AC_HELP_STRING([--enable-python_bindings], [build default Python applib bindings]),
+-	      PYTHON_BINDINGS=$enableval, PYTHON_BINDINGS=no)
+-AC_MSG_RESULT($PYTHON_BINDINGS)
+-
+-AC_MSG_CHECKING(whether to build Python2 wrapper for liblvm2app.so)
+-AC_ARG_ENABLE(python2_bindings,
+-	      AC_HELP_STRING([--enable-python2_bindings], [build Python2 applib bindings]),
+-	      PYTHON2_BINDINGS=$enableval, PYTHON2_BINDINGS=no)
+-AC_MSG_RESULT($PYTHON2_BINDINGS)
+-
+-
+-AC_MSG_CHECKING(whether to build Python3 wrapper for liblvm2app.so)
+-AC_ARG_ENABLE(python3_bindings,
+-	      AC_HELP_STRING([--enable-python3_bindings], [build Python3 applib bindings]),
+-	      PYTHON3_BINDINGS=$enableval, PYTHON3_BINDINGS=no)
+-AC_MSG_RESULT($PYTHON3_BINDINGS)
+-
+-if test "$PYTHON_BINDINGS" = yes; then
+-	AC_MSG_ERROR([--enable-python-bindings is replaced by --enable-python2-bindings and --enable-python3-bindings])
+-fi
++dnl -- Enable Python dbus library
+ 
+-if test "$PYTHON2_BINDINGS" = yes; then
+-	AM_PATH_PYTHON([2])
+-	AC_PATH_TOOL(PYTHON2, python2)
+-	test -z "$PYTHON2" && AC_MSG_ERROR([python2 is required for --enable-python2_bindings but cannot be found])
+-	AC_PATH_TOOL(PYTHON2_CONFIG, python2-config)
+-	test -z "$PYTHON2_CONFIG" && AC_PATH_TOOL(PYTHON2_CONFIG, python-config)
+-	test -z "$PYTHON2_CONFIG" && AC_MSG_ERROR([python headers are required for --enable-python2_bindings but cannot be found])
+-	PYTHON2_INCDIRS=`"$PYTHON2_CONFIG" --includes`
+-	PYTHON2_LIBDIRS=`"$PYTHON2_CONFIG" --libs`
+-	PYTHON2DIR=$pythondir
+-	PYTHON_BINDINGS=yes
+-fi
+-	
+-if test "$PYTHON3_BINDINGS" = yes -o "$BUILD_LVMDBUSD" = yes; then
++if test "$BUILD_LVMDBUSD" = yes; then
+ 	unset PYTHON PYTHON_CONFIG
+ 	unset am_cv_pathless_PYTHON ac_cv_path_PYTHON am_cv_python_platform
+ 	unset am_cv_python_pythondir am_cv_python_version am_cv_python_pyexecdir
+@@ -1196,19 +1147,12 @@ if test "$PYTHON3_BINDINGS" = yes -o "$BUILD_LVMDBUSD" = yes; then
+ 	PYTHON3_LIBDIRS=`"$PYTHON3_CONFIG" --libs`
+ 	PYTHON3DIR=$pythondir
+ 	test "$PYTHON3_BINDINGS" = yes && PYTHON_BINDINGS=yes
+-fi
+ 
+-if test "$BUILD_LVMDBUSD" = yes; then
+ 	# To get this macro, install autoconf-archive package then run autoreconf
+ 	AC_PYTHON_MODULE([pyudev], [Required], python3)
+ 	AC_PYTHON_MODULE([dbus], [Required], python3)
+ fi
+ 
+-if test "$PYTHON_BINDINGS" = yes -o "$PYTHON2_BINDINGS" = yes -o "$PYTHON3_BINDINGS" = yes; then
+-	AC_MSG_WARN([Python bindings are deprecated. Use D-Bus API])
+-	test "$APPLIB" != yes && AC_MSG_ERROR([Python_bindings require --enable-applib])
+-fi
+-
+ ################################################################################
+ dnl -- Enable pkg-config
+ AC_ARG_ENABLE(pkgconfig,
+@@ -1656,7 +1600,6 @@ LVM_LIBAPI=`echo "$VER" | $AWK -F '[[()]]' '{print $2}'`
+ AC_DEFINE_UNQUOTED(LVM_CONFIGURE_LINE, "$CONFIGURE_LINE", [configure command line used])
+ 
+ ################################################################################
+-AC_SUBST(APPLIB)
+ AC_SUBST(AWK)
+ AC_SUBST(BLKID_PC)
+ AC_SUBST(BUILD_CMIRRORD)
+@@ -1843,8 +1786,6 @@ libdaemon/client/Makefile
+ libdaemon/server/Makefile
+ libdm/Makefile
+ libdm/libdevmapper.pc
+-liblvm/Makefile
+-liblvm/liblvm2app.pc
+ man/Makefile
+ po/Makefile
+ python/Makefile
+diff --git a/include/configure.h.in b/include/configure.h.in
+index 65a2a6a..b1b2db3 100644
+--- a/include/configure.h.in
++++ b/include/configure.h.in
+@@ -28,9 +28,6 @@
+ /* Path to cmirrord pidfile. */
+ #undef CMIRRORD_PIDFILE
+ 
+-/* Define to 0 to exclude libSaCkpt. */
+-#undef CMIRROR_HAS_CHECKPOINT
+-
+ /* Define to one of `_getb67', `GETB67', `getb67' for Cray-2 and Cray-YMP
+    systems. This function is required for `alloca.c' support on those systems.
+    */
+@@ -185,9 +182,6 @@
+ /* Define to 1 if you don't have `vprintf' but do have `_doprnt.' */
+ #undef HAVE_DOPRNT
+ 
+-/* Define to 1 if you have the `dup2' function. */
+-#undef HAVE_DUP2
+-
+ /* Define to 1 if you have the <errno.h> header file. */
+ #undef HAVE_ERRNO_H
+ 
+@@ -209,9 +203,6 @@
+ /* Define to 1 if getline is available. */
+ #undef HAVE_GETLINE
+ 
+-/* Define to 1 if you have the `getmntent' function. */
+-#undef HAVE_GETMNTENT
+-
+ /* Define to 1 if getopt_long is available. */
+ #undef HAVE_GETOPTLONG
+ 
+@@ -236,9 +227,6 @@
+ /* Define to 1 if dynamic libraries are available. */
+ #undef HAVE_LIBDL
+ 
+-/* Define to 1 if you have the <libdlm.h> header file. */
+-#undef HAVE_LIBDLM_H
+-
+ /* Define to 1 if you have the <libgen.h> header file. */
+ #undef HAVE_LIBGEN_H
+ 
+@@ -283,9 +271,6 @@
+ /* Define to 1 if you have the `memchr' function. */
+ #undef HAVE_MEMCHR
+ 
+-/* Define to 1 if you have the `memmove' function. */
+-#undef HAVE_MEMMOVE
+-
+ /* Define to 1 if you have the <memory.h> header file. */
+ #undef HAVE_MEMORY_H
+ 
+@@ -301,30 +286,18 @@
+ /* Define to 1 if you have a working `mmap' system call. */
+ #undef HAVE_MMAP
+ 
+-/* Define to 1 if you have the <mntent.h> header file. */
+-#undef HAVE_MNTENT_H
+-
+ /* Define to 1 if you have the `munmap' function. */
+ #undef HAVE_MUNMAP
+ 
+ /* Define to 1 if you have the <ndir.h> header file, and it defines `DIR'. */
+ #undef HAVE_NDIR_H
+ 
+-/* Define to 1 if you have the <netdb.h> header file. */
+-#undef HAVE_NETDB_H
+-
+-/* Define to 1 if you have the <netinet/in.h> header file. */
+-#undef HAVE_NETINET_IN_H
+-
+ /* Define to 1 if you have the `nl_langinfo' function. */
+ #undef HAVE_NL_LANGINFO
+ 
+ /* Define to 1 if you have the <paths.h> header file. */
+ #undef HAVE_PATHS_H
+ 
+-/* Define to 1 if you have the <pthread.h> header file. */
+-#undef HAVE_PTHREAD_H
+-
+ /* Define to 1 if the system has the type `ptrdiff_t'. */
+ #undef HAVE_PTRDIFF_T
+ 
+@@ -350,12 +323,6 @@
+ /* Define to 1 if you have the `rmdir' function. */
+ #undef HAVE_RMDIR
+ 
+-/* Define to 1 if you have the <search.h> header file. */
+-#undef HAVE_SEARCH_H
+-
+-/* Define to 1 if you have the `select' function. */
+-#undef HAVE_SELECT
+-
+ /* Define to 1 to include support for selinux. */
+ #undef HAVE_SELINUX
+ 
+@@ -377,9 +344,6 @@
+ /* Define to 1 if you have the <signal.h> header file. */
+ #undef HAVE_SIGNAL_H
+ 
+-/* Define to 1 if you have the `socket' function. */
+-#undef HAVE_SOCKET
+-
+ /* Define to 1 if `stat' has the bug that it succeeds when given the
+    zero-length file name argument. */
+ #undef HAVE_STAT_EMPTY_STRING_BUG
+@@ -491,9 +455,6 @@
+ /* Define to 1 if you have the <sys/mman.h> header file. */
+ #undef HAVE_SYS_MMAN_H
+ 
+-/* Define to 1 if you have the <sys/mount.h> header file. */
+-#undef HAVE_SYS_MOUNT_H
+-
+ /* Define to 1 if you have the <sys/ndir.h> header file, and it defines `DIR'.
+    */
+ #undef HAVE_SYS_NDIR_H
+@@ -504,15 +465,9 @@
+ /* Define to 1 if you have the <sys/resource.h> header file. */
+ #undef HAVE_SYS_RESOURCE_H
+ 
+-/* Define to 1 if you have the <sys/select.h> header file. */
+-#undef HAVE_SYS_SELECT_H
+-
+ /* Define to 1 if you have the <sys/sem.h> header file. */
+ #undef HAVE_SYS_SEM_H
+ 
+-/* Define to 1 if you have the <sys/socket.h> header file. */
+-#undef HAVE_SYS_SOCKET_H
+-
+ /* Define to 1 if you have the <sys/statvfs.h> header file. */
+ #undef HAVE_SYS_STATVFS_H
+ 
+@@ -528,12 +483,6 @@
+ /* Define to 1 if you have the <sys/types.h> header file. */
+ #undef HAVE_SYS_TYPES_H
+ 
+-/* Define to 1 if you have the <sys/uio.h> header file. */
+-#undef HAVE_SYS_UIO_H
+-
+-/* Define to 1 if you have the <sys/un.h> header file. */
+-#undef HAVE_SYS_UN_H
+-
+ /* Define to 1 if you have the <sys/utsname.h> header file. */
+ #undef HAVE_SYS_UTSNAME_H
+ 
+@@ -555,9 +504,6 @@
+ /* Define to 1 if you have the <unistd.h> header file. */
+ #undef HAVE_UNISTD_H
+ 
+-/* Define to 1 if you have the <utmpx.h> header file. */
+-#undef HAVE_UTMPX_H
+-
+ /* valgrind.h found */
+ #undef HAVE_VALGRIND
+ 
+@@ -598,6 +544,9 @@
+    slash. */
+ #undef LSTAT_FOLLOWS_SLASHED_SYMLINK
+ 
++/* Path to lvmconfig binary. */
++#undef LVMCONFIG_PATH
++
+ /* Path to lvmetad pidfile. */
+ #undef LVMETAD_PIDFILE
+ 
+@@ -669,15 +618,6 @@
+ /* Define as the return type of signal handlers (`int' or `void'). */
+ #undef RETSIGTYPE
+ 
+-/* Define to the type of arg 1 for `select'. */
+-#undef SELECT_TYPE_ARG1
+-
+-/* Define to the type of args 2, 3 and 4 for `select'. */
+-#undef SELECT_TYPE_ARG234
+-
+-/* Define to the type of arg 5 for `select'. */
+-#undef SELECT_TYPE_ARG5
+-
+ /* Define to 1 to include built-in support for snapshots. */
+ #undef SNAPSHOT_INTERNAL
+ 
+diff --git a/liblvm/.exported_symbols b/liblvm/.exported_symbols
+deleted file mode 100644
+index e69de29..0000000
+diff --git a/liblvm/Doxyfile b/liblvm/Doxyfile
+deleted file mode 100644
+index 3d2e8e4..0000000
+--- a/liblvm/Doxyfile
++++ /dev/null
+@@ -1,254 +0,0 @@
+-# Doxyfile 1.5.7.1
+-
+-#---------------------------------------------------------------------------
+-# Project related configuration options
+-#---------------------------------------------------------------------------
+-DOXYFILE_ENCODING      = UTF-8
+-PROJECT_NAME           =
+-PROJECT_NUMBER         =
+-OUTPUT_DIRECTORY       = doxygen-output
+-CREATE_SUBDIRS         = NO
+-OUTPUT_LANGUAGE        = English
+-BRIEF_MEMBER_DESC      = YES
+-REPEAT_BRIEF           = YES
+-ABBREVIATE_BRIEF       =
+-ALWAYS_DETAILED_SEC    = NO
+-INLINE_INHERITED_MEMB  = NO
+-FULL_PATH_NAMES        = YES
+-STRIP_FROM_PATH        =
+-STRIP_FROM_INC_PATH    =
+-SHORT_NAMES            = NO
+-JAVADOC_AUTOBRIEF      = NO
+-QT_AUTOBRIEF           = NO
+-MULTILINE_CPP_IS_BRIEF = NO
+-INHERIT_DOCS           = YES
+-SEPARATE_MEMBER_PAGES  = NO
+-TAB_SIZE               = 8
+-ALIASES                =
+-OPTIMIZE_OUTPUT_FOR_C  = NO
+-OPTIMIZE_OUTPUT_JAVA   = NO
+-OPTIMIZE_FOR_FORTRAN   = NO
+-OPTIMIZE_OUTPUT_VHDL   = NO
+-BUILTIN_STL_SUPPORT    = NO
+-CPP_CLI_SUPPORT        = NO
+-SIP_SUPPORT            = NO
+-IDL_PROPERTY_SUPPORT   = YES
+-DISTRIBUTE_GROUP_DOC   = NO
+-SUBGROUPING            = YES
+-TYPEDEF_HIDES_STRUCT   = NO
+-SYMBOL_CACHE_SIZE      = 0
+-#---------------------------------------------------------------------------
+-# Build related configuration options
+-#---------------------------------------------------------------------------
+-EXTRACT_ALL            = YES
+-EXTRACT_PRIVATE        = YES
+-EXTRACT_STATIC         = NO
+-EXTRACT_LOCAL_CLASSES  = YES
+-EXTRACT_LOCAL_METHODS  = NO
+-EXTRACT_ANON_NSPACES   = NO
+-HIDE_UNDOC_MEMBERS     = NO
+-HIDE_UNDOC_CLASSES     = NO
+-HIDE_FRIEND_COMPOUNDS  = NO
+-HIDE_IN_BODY_DOCS      = NO
+-INTERNAL_DOCS          = NO
+-CASE_SENSE_NAMES       = YES
+-HIDE_SCOPE_NAMES       = NO
+-SHOW_INCLUDE_FILES     = YES
+-INLINE_INFO            = YES
+-SORT_MEMBER_DOCS       = YES
+-SORT_BRIEF_DOCS        = NO
+-SORT_GROUP_NAMES       = NO
+-SORT_BY_SCOPE_NAME     = NO
+-GENERATE_TODOLIST      = YES
+-GENERATE_TESTLIST      = YES
+-GENERATE_BUGLIST       = YES
+-GENERATE_DEPRECATEDLIST= YES
+-ENABLED_SECTIONS       =
+-MAX_INITIALIZER_LINES  = 30
+-SHOW_USED_FILES        = YES
+-SHOW_DIRECTORIES       = NO
+-SHOW_FILES             = YES
+-SHOW_NAMESPACES        = YES
+-FILE_VERSION_FILTER    =
+-LAYOUT_FILE            =
+-#---------------------------------------------------------------------------
+-# configuration options related to warning and progress messages
+-#---------------------------------------------------------------------------
+-QUIET                  = NO
+-WARNINGS               = YES
+-WARN_IF_UNDOCUMENTED   = YES
+-WARN_IF_DOC_ERROR      = YES
+-WARN_NO_PARAMDOC       = NO
+-WARN_FORMAT            = "$file:$line: $text"
+-WARN_LOGFILE           =
+-#---------------------------------------------------------------------------
+-# configuration options related to the input files
+-#---------------------------------------------------------------------------
+-INPUT                  = ./
+-INPUT_ENCODING         = UTF-8
+-FILE_PATTERNS          = *.c \
+-                         *.h
+-RECURSIVE              = NO
+-EXCLUDE                =
+-EXCLUDE_SYMLINKS       = NO
+-EXCLUDE_PATTERNS       =
+-EXCLUDE_SYMBOLS        =
+-EXAMPLE_PATH           = ../test/api
+-EXAMPLE_PATTERNS       =
+-EXAMPLE_RECURSIVE      = NO
+-IMAGE_PATH             =
+-INPUT_FILTER           =
+-FILTER_PATTERNS        =
+-FILTER_SOURCE_FILES    = NO
+-#---------------------------------------------------------------------------
+-# configuration options related to source browsing
+-#---------------------------------------------------------------------------
+-SOURCE_BROWSER         = NO
+-INLINE_SOURCES         = NO
+-STRIP_CODE_COMMENTS    = YES
+-REFERENCED_BY_RELATION = NO
+-REFERENCES_RELATION    = NO
+-REFERENCES_LINK_SOURCE = YES
+-USE_HTAGS              = NO
+-VERBATIM_HEADERS       = YES
+-#---------------------------------------------------------------------------
+-# configuration options related to the alphabetical class index
+-#---------------------------------------------------------------------------
+-ALPHABETICAL_INDEX     = NO
+-COLS_IN_ALPHA_INDEX    = 5
+-IGNORE_PREFIX          =
+-#---------------------------------------------------------------------------
+-# configuration options related to the HTML output
+-#---------------------------------------------------------------------------
+-GENERATE_HTML          = YES
+-HTML_OUTPUT            = html
+-HTML_FILE_EXTENSION    = .html
+-HTML_HEADER            =
+-HTML_FOOTER            =
+-HTML_STYLESHEET        =
+-HTML_ALIGN_MEMBERS     = YES
+-HTML_DYNAMIC_SECTIONS  = NO
+-GENERATE_DOCSET        = NO
+-DOCSET_FEEDNAME        = "Doxygen generated docs"
+-DOCSET_BUNDLE_ID       = org.doxygen.Project
+-GENERATE_HTMLHELP      = NO
+-CHM_FILE               =
+-HHC_LOCATION           =
+-GENERATE_CHI           = NO
+-CHM_INDEX_ENCODING     =
+-BINARY_TOC             = NO
+-TOC_EXPAND             = NO
+-GENERATE_QHP           = NO
+-QCH_FILE               =
+-QHP_NAMESPACE          = org.doxygen.Project
+-QHP_VIRTUAL_FOLDER     = doc
+-QHG_LOCATION           =
+-DISABLE_INDEX          = NO
+-ENUM_VALUES_PER_LINE   = 4
+-GENERATE_TREEVIEW      = NONE
+-TREEVIEW_WIDTH         = 250
+-FORMULA_FONTSIZE       = 10
+-#---------------------------------------------------------------------------
+-# configuration options related to the LaTeX output
+-#---------------------------------------------------------------------------
+-GENERATE_LATEX         = YES
+-LATEX_OUTPUT           = latex
+-LATEX_CMD_NAME         = latex
+-MAKEINDEX_CMD_NAME     = makeindex
+-COMPACT_LATEX          = NO
+-PAPER_TYPE             = a4wide
+-EXTRA_PACKAGES         =
+-LATEX_HEADER           =
+-PDF_HYPERLINKS         = YES
+-USE_PDFLATEX           = YES
+-LATEX_BATCHMODE        = NO
+-LATEX_HIDE_INDICES     = NO
+-#---------------------------------------------------------------------------
+-# configuration options related to the RTF output
+-#---------------------------------------------------------------------------
+-GENERATE_RTF           = NO
+-RTF_OUTPUT             = rtf
+-COMPACT_RTF            = NO
+-RTF_HYPERLINKS         = NO
+-RTF_STYLESHEET_FILE    =
+-RTF_EXTENSIONS_FILE    =
+-#---------------------------------------------------------------------------
+-# configuration options related to the man page output
+-#---------------------------------------------------------------------------
+-GENERATE_MAN           = YES
+-MAN_OUTPUT             = man
+-MAN_EXTENSION          = .3
+-MAN_LINKS              = NO
+-#---------------------------------------------------------------------------
+-# configuration options related to the XML output
+-#---------------------------------------------------------------------------
+-GENERATE_XML           = NO
+-XML_OUTPUT             = xml
+-XML_SCHEMA             =
+-XML_DTD                =
+-XML_PROGRAMLISTING     = YES
+-#---------------------------------------------------------------------------
+-# configuration options for the AutoGen Definitions output
+-#---------------------------------------------------------------------------
+-GENERATE_AUTOGEN_DEF   = NO
+-#---------------------------------------------------------------------------
+-# configuration options related to the Perl module output
+-#---------------------------------------------------------------------------
+-GENERATE_PERLMOD       = NO
+-PERLMOD_LATEX          = NO
+-PERLMOD_PRETTY         = YES
+-PERLMOD_MAKEVAR_PREFIX =
+-#---------------------------------------------------------------------------
+-# Configuration options related to the preprocessor
+-#---------------------------------------------------------------------------
+-ENABLE_PREPROCESSING   = YES
+-MACRO_EXPANSION        = NO
+-EXPAND_ONLY_PREDEF     = NO
+-SEARCH_INCLUDES        = YES
+-INCLUDE_PATH           = ../libdm
+-INCLUDE_FILE_PATTERNS  =
+-PREDEFINED             =
+-EXPAND_AS_DEFINED      =
+-SKIP_FUNCTION_MACROS   = YES
+-#---------------------------------------------------------------------------
+-# Configuration::additions related to external references
+-#---------------------------------------------------------------------------
+-TAGFILES               =
+-GENERATE_TAGFILE       =
+-ALLEXTERNALS           = NO
+-EXTERNAL_GROUPS        = YES
+-PERL_PATH              = /usr/bin/perl
+-#---------------------------------------------------------------------------
+-# Configuration options related to the dot tool
+-#---------------------------------------------------------------------------
+-CLASS_DIAGRAMS         = YES
+-MSCGEN_PATH            =
+-HIDE_UNDOC_RELATIONS   = YES
+-HAVE_DOT               = NO
+-DOT_FONTNAME           = FreeSans
+-DOT_FONTSIZE           = 10
+-DOT_FONTPATH           =
+-CLASS_GRAPH            = YES
+-COLLABORATION_GRAPH    = YES
+-GROUP_GRAPHS           = YES
+-UML_LOOK               = NO
+-TEMPLATE_RELATIONS     = NO
+-INCLUDE_GRAPH          = YES
+-INCLUDED_BY_GRAPH      = YES
+-CALL_GRAPH             = YES
+-CALLER_GRAPH           = NO
+-GRAPHICAL_HIERARCHY    = YES
+-DIRECTORY_GRAPH        = YES
+-DOT_IMAGE_FORMAT       = png
+-DOT_PATH               =
+-DOTFILE_DIRS           =
+-DOT_GRAPH_MAX_NODES    = 50
+-MAX_DOT_GRAPH_DEPTH    = 0
+-DOT_TRANSPARENT        = NO
+-DOT_MULTI_TARGETS      = NO
+-GENERATE_LEGEND        = YES
+-DOT_CLEANUP            = YES
+-#---------------------------------------------------------------------------
+-# Configuration::additions related to the search engine
+-#---------------------------------------------------------------------------
+-SEARCHENGINE           = NO
+diff --git a/liblvm/Makefile.in b/liblvm/Makefile.in
+deleted file mode 100644
+index 210ee37..0000000
+--- a/liblvm/Makefile.in
++++ /dev/null
+@@ -1,81 +0,0 @@
+-#
+-# Copyright (C) 2001-2004 Sistina Software, Inc. All rights reserved.
+-# Copyright (C) 2004-2013 Red Hat, Inc. All rights reserved.
+-#
+-# This file is part of LVM2.
+-#
+-# This copyrighted material is made available to anyone wishing to use,
+-# modify, copy, or redistribute it subject to the terms and conditions
+-# of the GNU General Public License v.2.
+-#
+-# You should have received a copy of the GNU General Public License
+-# along with this program; if not, write to the Free Software Foundation,
+-# Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
+-
+-srcdir = @srcdir@
+-top_srcdir = @top_srcdir@
+-top_builddir = @top_builddir@
+-
+-SOURCES =\
+-	lvm_misc.c \
+-	lvm_prop.c \
+-	lvm_base.c \
+-	lvm_lv.c \
+-	lvm_pv.c \
+-	lvm_vg.c
+-
+-LIB_NAME = liblvm2app
+-LIB_VERSION = $(LIB_VERSION_APP)
+-
+-ifeq ("@STATIC_LINK@", "yes")
+-  LIB_STATIC = $(LIB_NAME).a
+-endif
+-
+-LIB_SHARED = $(LIB_NAME).$(LIB_SUFFIX)
+-
+-CLEAN_TARGETS += liblvm.cflow $(LIB_NAME).a
+-
+-EXPORTED_HEADER = $(srcdir)/lvm2app.h
+-EXPORTED_FN_PREFIX = lvm
+-
+-LDDEPS += $(top_builddir)/lib/liblvm-internal.a
+-
+-include $(top_builddir)/make.tmpl
+-
+-LDFLAGS += -L$(top_builddir)/lib -L$(top_builddir)/daemons/dmeventd
+-LIBS += $(LVMINTERNAL_LIBS) -laio
+-
+-.PHONY: install_dynamic install_static install_include install_pkgconfig
+-
+-INSTALL_TYPE = install_dynamic
+-
+-ifeq ("@STATIC_LINK@", "yes")
+-  INSTALL_TYPE += install_static
+-endif
+-
+-ifeq ("@PKGCONFIG@", "yes")
+-  INSTALL_TYPE += install_pkgconfig
+-endif
+-
+-install: $(INSTALL_TYPE) install_include
+-
+-install_include: $(srcdir)/lvm2app.h
+-	$(INSTALL_DATA) -D $< $(includedir)/$(<F)
+-
+-install_dynamic: install_lib_shared
+-
+-install_static: $(LIB_STATIC)
+-	$(INSTALL_DATA) -D $< $(usrlibdir)/$(<F)
+-
+-install_pkgconfig: $(LIB_NAME).pc
+-	$(INSTALL_DATA) -D $< $(pkgconfigdir)/lvm2app.pc
+-
+-liblvm.cflow: $(SOURCES)
+-	set -e; (echo -n "SOURCES += "; \
+-		 echo $(SOURCES) | \
+-		 sed "s/^/ /;s/ / $(top_srcdir)\/liblvm\//g;s/$$//"; \
+-		 ) > $@
+-
+-cflow: liblvm.cflow
+-
+-DISTCLEAN_TARGETS += $(LIB_NAME).pc
+diff --git a/liblvm/liblvm2app.pc.in b/liblvm/liblvm2app.pc.in
+deleted file mode 100644
+index 7d7fd3d..0000000
+--- a/liblvm/liblvm2app.pc.in
++++ /dev/null
+@@ -1,11 +0,0 @@
+-prefix=@prefix@
+-exec_prefix=@exec_prefix@
+-libdir=@libdir@
+-includedir=@includedir@
+-
+-Name: lvm2app
+-Description: lvm2 application library
+-Version: @LVM_MAJOR at .@LVM_LIBAPI@
+-Cflags: -I${includedir} 
+-Libs: -L${libdir} -llvm2app
+-Requires.private: devmapper @BLKID_PC@
+diff --git a/liblvm/lvm2app.h b/liblvm/lvm2app.h
+deleted file mode 100644
+index 10ecd2e..0000000
+--- a/liblvm/lvm2app.h
++++ /dev/null
+@@ -1,1983 +0,0 @@
+-/*
+- * Copyright (C) 2008-2013 Red Hat, Inc. All rights reserved.
+- *
+- * This file is part of LVM2.
+- *
+- * This copyrighted material is made available to anyone wishing to use,
+- * modify, copy, or redistribute it subject to the terms and conditions
+- * of the GNU Lesser General Public License v.2.1.
+- *
+- * You should have received a copy of the GNU Lesser General Public License
+- * along with this program; if not, write to the Free Software Foundation,
+- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
+- */
+-#ifndef _LIB_LVM2APP_H
+-#define _LIB_LVM2APP_H
+-
+-#include <libdevmapper.h>
+-
+-#include <stdint.h>
+-
+-#ifndef _BUILDING_LVM
+-#warning "liblvm2app is deprecated, use D-Bus API instead."
+-#endif
+-
+-#ifdef __cplusplus
+-extern "C" {
+-#endif
+-
+-/******************************** WARNING ***********************************
+- *
+- * NOTE: This API is under development and subject to change at any time.
+- *
+- * Please send feedback to lvm-devel at redhat.com
+- *
+- *********************************** WARNING ********************************/
+-
+-/*************************** Design Overview ********************************/
+-
+-/**
+- * \mainpage LVM library API
+- *
+- * The API is designed around the following basic LVM objects:
+- * 1) Physical Volume (pv_t) 2) Volume Group (vg_t) 3) Logical Volume (lv_t).
+- *
+- * The library provides functions to list the objects in a system,
+- * get and set object properties (such as names, UUIDs, and sizes), as well
+- * as create/remove objects and perform more complex operations and
+- * transformations. Each object instance is represented by a handle, and
+- * handles are passed to and from the functions to perform the operations.
+- *
+- * A central object in the library is the Volume Group, represented by the
+- * VG handle, vg_t. Performing an operation on a PV or LV object first
+- * requires obtaining a VG handle. Once the vg_t has been obtained, it can
+- * be used to enumerate the pv_t and lv_t objects within that vg_t. Attributes
+- * of these objects can then be queried or changed.
+- *
+- * A volume group handle may be obtained with read or write permission.
+- * Any attempt to change a property of a pv_t, vg_t, or lv_t without
+- * obtaining write permission on the vg_t will fail with EPERM.
+- *
+- * An application first opening a VG read-only, then later wanting to change
+- * a property of an object must first close the VG and re-open with write
+- * permission. Currently liblvm provides no mechanism to determine whether
+- * the VG has changed on-disk in between these operations - this is the
+- * application's responsiblity. One way the application can ensure the VG
+- * has not changed is to save the "vg_seqno" field after opening the VG with
+- * READ permission. If the application later needs to modify the VG, it can
+- * close the VG and re-open with WRITE permission. It should then check
+- * whether the original "vg_seqno" obtained with READ permission matches
+- * the new one obtained with WRITE permission.
+- */
+-
+-/**
+- * Retrieve the library version.
+- *
+- * The library version is the same format as the full LVM version.
+- * The format is as follows:
+- *    LVM_MAJOR.LVM_MINOR.LVM_PATCHLEVEL(LVM_LIBAPI)[-LVM_RELEASE]
+- * An application wishing to determine compatibility with a particular version
+- * of the library should check at least the LVM_MAJOR, LVM_MINOR, and
+- * LVM_LIBAPI numbers.  For example, assume the full LVM version is
+- * 2.02.50(1)-1.  The application should verify the "2.02" and the "(1)".
+- *
+- * \return  A string describing the library version.
+- */
+-const char *lvm_library_get_version(void);
+-
+-/******************************** structures ********************************/
+-
+-/**
+- * Opaque C pointers - Internal structures may change without notice between
+- * releases, whereas this API will be changed much less frequently.  Backwards
+- * compatibility will normally be preserved in future releases.  On any occasion
+- * when the developers do decide to break backwards compatibility in any
+- * significant way, the LVM_LIBAPI number (included in the library's soname)
+- * will be incremented.
+- */
+-
+-/**
+- * \class lvm_t
+- *
+- * This is the base handle that is needed to open and create objects such as
+- * volume groups and logical volumes.  In addition, this handle provides a
+- * context for error handling information, saving any error number (see
+- * lvm_errno()) and error message (see lvm_errmsg()) that any function may
+- * generate.
+- */
+-typedef struct lvm *lvm_t;
+-
+-/**
+- * \class vg_t
+- *
+- * The volume group object is a central object in the library, and can be
+- * either a read-only object or a read-write object depending on the function
+- * used to obtain the object handle. For example, lvm_vg_create() always
+- * returns a read/write handle, while lvm_vg_open() has a "mode" argument
+- * to define the read/write mode of the handle.
+- */
+-typedef struct volume_group *vg_t;
+-
+-/**
+- * \class lv_t
+- *
+- * This logical volume object is bound to a vg_t and has the same
+- * read/write mode as the vg_t.  Changes will be written to disk
+- * when the vg_t gets committed to disk by calling lvm_vg_write().
+- */
+-typedef struct logical_volume *lv_t;
+-
+-/**
+- * \class pv_t
+- *
+- * This physical volume object is bound to a vg_t and has the same
+- * read/write mode as the vg_t.  Changes will be written to disk
+- * when the vg_t gets committed to disk by calling lvm_vg_write().
+- */
+-typedef struct physical_volume *pv_t;
+-
+-/**
+- * \class lvseg_t
+- *
+- * This lv segment object is bound to a lv_t.
+- */
+-typedef struct lv_segment *lvseg_t;
+-
+-/**
+- * \class pvseg_t
+- *
+- * This pv segment object is bound to a pv_t.
+- */
+-typedef struct pv_segment *pvseg_t;
+-
+-/**
+- * \class lv_create_params
+- *
+- * This lv_create_params represents the plethora of available options when
+- * creating a logical volume
+- */
+-typedef struct lvm_lv_create_params *lv_create_params_t;
+-
+-/**
+- * \class pv_create_params
+- *
+- * This pv_create_params represents the plethora of available options when
+- * creating a physical volume
+- */
+-typedef struct lvm_pv_create_params *pv_create_params_t;
+-
+-/**
+- * Logical Volume object list.
+- *
+- * Lists of these structures are returned by lvm_vg_list_lvs().
+- */
+-typedef struct lvm_lv_list {
+-	struct dm_list list;
+-	lv_t lv;
+-} lv_list_t;
+-
+-/**
+- * Logical Volume Segment object list.
+- *
+- * Lists of these structures are returned by lvm_lv_list_lvsegs().
+- */
+-typedef struct lvm_lvseg_list {
+-	struct dm_list list;
+-	lvseg_t lvseg;
+-} lvseg_list_t;
+-
+-/**
+- * Physical volume object list.
+- *
+- * Lists of these structures are returned by lvm_vg_list_pvs().
+- */
+-typedef struct lvm_pv_list {
+-	struct dm_list list;
+-	pv_t pv;
+-} pv_list_t;
+-
+-/**
+- * Physical Volume Segment object list.
+- *
+- * Lists of these structures are returned by lvm_pv_list_pvsegs().
+- */
+-typedef struct lvm_pvseg_list {
+-	struct dm_list list;
+-	pvseg_t pvseg;
+-} pvseg_list_t;
+-
+-/**
+- * String list.
+- *
+- * This string list contains read-only strings.
+- * Lists of these structures are returned by functions such as
+- * lvm_list_vg_names() and lvm_list_vg_uuids().
+- */
+-typedef struct lvm_str_list {
+-	struct dm_list list;
+-	const char *str;
+-} lvm_str_list_t;
+-
+-/**
+- * Property Value
+- *
+- * This structure defines a single LVM property value for an LVM object.
+- * The structures are returned by functions such as
+- * lvm_vg_get_property().
+- *
+- * is_settable: indicates whether a 'set' function exists for this property
+- * is_string: indicates whether this property is a string (1) or not (0)
+- * is_integer: indicates whether this property is an integer (1) or not (0)
+- * is_valid: indicates whether 'value' is valid (1) or not (0)
+- */
+-typedef struct lvm_property_value {
+-	uint32_t is_settable:1;
+-	uint32_t is_string:1;
+-	uint32_t is_integer:1;
+-	uint32_t is_valid:1;
+-	uint32_t is_signed:1;
+-	uint32_t padding:27;
+-	union {
+-		const char *string;
+-		uint64_t integer;
+-		int64_t signed_integer;
+-	} value;
+-} lvm_property_value_t;
+-
+-/*************************** generic lvm handling ***************************/
+-/**
+- * Create a LVM handle.
+- *
+- * \memberof lvm_t
+- *
+- * Once all LVM operations have been completed, use lvm_quit() to release
+- * the handle and any associated resources.
+- *
+- * \param system_dir
+- * Set an alternative LVM system directory. Use NULL to use the
+- * default value. If the environment variable LVM_SYSTEM_DIR is set,
+- * it will override any system_dir setting.
+- *
+- * \return
+- * A valid LVM handle is returned or NULL if there has been a
+- * memory allocation problem. You have to check if an error occured
+- * with the lvm_error() function.
+- */
+-lvm_t lvm_init(const char *system_dir);
+-
+-/**
+- * Destroy a LVM handle allocated with lvm_init().
+- *
+- * \memberof lvm_t
+- *
+- * This function should be used after all LVM operations are complete or after
+- * an unrecoverable error.  Destroying the LVM handle frees the memory and
+- * other resources associated with the handle.  Once destroyed, the handle
+- * cannot be used subsequently.
+- *
+- * \param   libh
+- * Handle obtained from lvm_init().
+- */
+-void lvm_quit(lvm_t libh);
+-
+-/**
+- * Reload the original configuration from the system directory.
+- *
+- * \memberof lvm_t
+- *
+- * This function should be used when any LVM configuration changes in the LVM
+- * system_dir or by another lvm_config* function, and the change is needed by
+- * the application.
+- *
+- * \param   libh
+- * Handle obtained from lvm_init().
+- *
+- * \return
+- * 0 (success) or -1 (failure).
+- */
+-int lvm_config_reload(lvm_t libh);
+-
+-/**
+- * Override the LVM configuration with a configuration string.
+- *
+- * \memberof lvm_t
+- *
+- * This function is equivalent to the --config option on lvm commands.
+- * Once this API has been used to over-ride the configuration,
+- * use lvm_config_reload() to apply the new settings.
+- *
+- * \param   libh
+- * Handle obtained from lvm_init().
+- *
+- * \param   config_string
+- * LVM configuration string to apply.  See the lvm.conf file man page
+- * for the format of the config string.
+- *
+- * \return
+- * 0 (success) or -1 (failure).
+- */
+-int lvm_config_override(lvm_t libh, const char *config_string);
+-
+-/**
+- * Find a boolean value in the LVM configuration.
+- *
+- * \memberof lvm_t
+- *
+- * This function finds a boolean value associated with a path
+- * in current LVM configuration.
+- *
+- * \param   libh
+- * Handle obtained from lvm_init().
+- *
+- * \param   config_path
+- * A path in LVM configuration
+- *
+- * \param   fail
+- * Value to return if the path is not found.
+- *
+- * \return
+- * boolean value for 'config_path' (success) or the value of 'fail' (error)
+- */
+-int lvm_config_find_bool(lvm_t libh, const char *config_path, int fail);
+-
+-/**
+- * Return stored error no describing last LVM API error.
+- *
+- * \memberof lvm_t
+- *
+- * Users of liblvm should use lvm_errno to determine the details of a any
+- * failure of the last call.  A basic success or fail is always returned by
+- * every function, either by returning a 0 or -1, or a non-NULL / NULL.
+- * If a function has failed, lvm_errno may be used to get a more specific
+- * error code describing the failure.  In this way, lvm_errno may be used
+- * after every function call, even after a 'get' function call that simply
+- * returns a value.
+- *
+- * \param   libh
+- * Handle obtained from lvm_init().
+- *
+- * \return
+- * An errno value describing the last LVM error.
+- */
+-int lvm_errno(lvm_t libh);
+-
+-/**
+- * Return stored error message describing last LVM error.
+- *
+- * \memberof lvm_t
+- *
+- * This function may be used in conjunction with lvm_errno() to obtain more
+- * specific error information for a function that is known to have failed.
+- *
+- * \param   libh
+- * Handle obtained from lvm_init().
+- *
+- * \return
+- * An error string describing the last LVM error.
+- */
+-const char *lvm_errmsg(lvm_t libh);
+-
+-/**
+- * Scan all devices on the system for VGs and LVM metadata.
+- *
+- * \memberof lvm_t
+- *
+- * \return
+- * 0 (success) or -1 (failure).
+- */
+-int lvm_scan(lvm_t libh);
+-
+-/**
+- * Return the list of volume group names.
+- *
+- * \memberof lvm_t
+- *
+- * The memory allocated for the list is tied to the lvm_t handle and will be
+- * released when lvm_quit() is called.
+- *
+- * NOTE: This function normally does not scan devices in the system for LVM
+- * metadata.  To scan the system, use lvm_scan().
+- *
+- * To process the list, use the dm_list iterator functions.  For example:
+- *      vg_t vg;
+- *      struct dm_list *vgnames;
+- *      struct lvm_str_list *strl;
+- *
+- *      vgnames = lvm_list_vg_names(libh);
+- *	dm_list_iterate_items(strl, vgnames) {
+- *		vgname = strl->str;
+- *              vg = lvm_vg_open(libh, vgname, "r");
+- *              // do something with vg
+- *              lvm_vg_close(vg);
+- *      }
+- *
+- *
+- * \return
+- * A list with entries of type struct lvm_str_list, containing the
+- * VG name strings of the Volume Groups known to the system.
+- * NULL is returned if unable to allocate memory.
+- * An empty list (verify with dm_list_empty) is returned if no VGs
+- * exist on the system.
+- */
+-struct dm_list *lvm_list_vg_names(lvm_t libh);
+-
+-/**
+- * Return the list of volume group uuids.
+- *
+- * \memberof lvm_t
+- *
+- * The memory allocated for the list is tied to the lvm_t handle and will be
+- * released when lvm_quit() is called.
+- *
+- * NOTE: This function normally does not scan devices in the system for LVM
+- * metadata.  To scan the system, use lvm_scan().
+- *
+- * \param   libh
+- * Handle obtained from lvm_init().
+- *
+- * \return
+- * A list with entries of type struct lvm_str_list, containing the
+- * VG UUID strings of the Volume Groups known to the system.
+- * NULL is returned if unable to allocate memory.
+- * An empty list (verify with dm_list_empty) is returned if no VGs
+- * exist on the system.
+- */
+-struct dm_list *lvm_list_vg_uuids(lvm_t libh);
+-
+-/**
+- * Return the volume group name given a PV UUID
+- *
+- * \memberof lvm_t
+- *
+- * The memory allocated for the name is tied to the lvm_t handle and will be
+- * released when lvm_quit() is called.
+- *
+- * NOTE: This function may scan devices in the system for LVM metadata.
+- *
+- * \param   libh
+- * Handle obtained from lvm_init().
+- *
+- * \return
+- * The volume group name for the given PV UUID.
+- * NULL is returned if the PV UUID is not associated with a volume group.
+- */
+-const char *lvm_vgname_from_pvid(lvm_t libh, const char *pvid);
+-
+-/**
+- * Return the volume group name given a device name
+- *
+- * \memberof lvm_t
+- *
+- * The memory allocated for the name is tied to the lvm_t handle and will be
+- * released when lvm_quit() is called.
+- *
+- * NOTE: This function may scan devices in the system for LVM metadata.
+- *
+- * \param   libh
+- * Handle obtained from lvm_init().
+- *
+- * \return
+- * The volume group name for the given device name.
+- * NULL is returned if the device is not an LVM device.
+- *
+- */
+-const char *lvm_vgname_from_device(lvm_t libh, const char *device);
+-
+-/**
+- * Open an existing VG.
+- *
+- * Open a VG for reading or writing.
+- *
+- * \memberof lvm_t
+- *
+- * \param   libh
+- * Handle obtained from lvm_init().
+- *
+- * \param   vgname
+- * Name of the VG to open.
+- *
+- * \param   mode
+- * Open mode - either "r" (read) or "w" (read/write).
+- * Any other character results in an error with EINVAL set.
+- *
+- * \param   flags
+- * Open flags - currently ignored.
+- *
+- * \return  non-NULL VG handle (success) or NULL (failure).
+- */
+-vg_t lvm_vg_open(lvm_t libh, const char *vgname, const char *mode,
+-		  uint32_t flags);
+-
+-/**
+- * Validate a name to be used for new VG construction.
+- *
+- * This function checks that the name has no invalid characters,
+- * the length doesn't exceed maximum and that the VG name isn't already in use
+- * and that the name adheres to any other limitations.
+- *
+- * \param libh
+- * Valid library handle
+- *
+- * \param name
+- * Name to validate for new VG create.
+- */
+-int lvm_vg_name_validate(lvm_t libh, const char *vg_name);
+-
+-/**
+- * Create a VG with default parameters.
+- *
+- * \memberof lvm_t
+- *
+- * This function creates a Volume Group object in memory.
+- * Upon success, other APIs may be used to set non-default parameters.
+- * For example, to set a non-default extent size, use lvm_vg_set_extent_size().
+- * Next, to add physical storage devices to the volume group, use
+- * lvm_vg_extend() for each device.
+- * Once all parameters are set appropriately and all devices are added to the
+- * VG, use lvm_vg_write() to commit the new VG to disk, and lvm_vg_close() to
+- * release the VG handle.
+- *
+- * \param   libh
+- * Handle obtained from lvm_init().
+- *
+- * \param   vg_name
+- * Name of the VG to open.
+- *
+- * \return
+- * non-NULL vg handle (success) or NULL (failure)
+- */
+-vg_t lvm_vg_create(lvm_t libh, const char *vg_name);
+-
+-/*************************** volume group handling **************************/
+-
+-/**
+- * Return a list of LV handles for a given VG handle.
+- *
+- * \memberof vg_t
+- *
+- * \param   vg
+- * VG handle obtained from lvm_vg_create() or lvm_vg_open().
+- *
+- * \return
+- * A list of lvm_lv_list structures containing lv handles for this vg.
+- * If no LVs exist on the given VG, NULL is returned.
+- */
+-struct dm_list *lvm_vg_list_lvs(vg_t vg);
+-
+-/**
+- * Return a list of PV handles for all.
+- *
+- * \memberof lvm_t
+- *
+- * \param   libh
+- * Library handle retrieved from lvm_init
+- *
+- * \return
+- * A list of lvm_pv_list structures containing pv handles for all physical
+- * volumes. If no PVs exist or a global lock was unable to be obtained a
+- * NULL is returned.  Do not attempt to remove one of the PVs until after the
+- * call to lvm_list_pvs_free has been made.
+- */
+-struct dm_list *lvm_list_pvs(lvm_t libh);
+-
+-/**
+- * Free the resources used by acquiring the pvlist.  This should be called as
+- * soon as possible after processing the needed information from the pv list as
+- * a global lock is held.
+- *
+- * \param	pvlist
+- * PV list to be freed
+- *
+- * \return
+- * 0 on success, else -1 with library errno and text set.
+- */
+-int lvm_list_pvs_free(struct dm_list *pvlist);
+-
+-/**
+- *  Create a physical volume.
+- *  \param	libh	Library handle
+- *  \param	pv_name	The physical volume name
+- *  \param	size	Size of physical volume, 0 = use all available.
+- *  \return
+- *  0 on success, else -1 with library errno and text set.
+- */
+-int lvm_pv_create(lvm_t libh, const char *pv_name, uint64_t size);
+-
+-/**
+- * Create a physical volume parameter object for PV creation.
+- *
+- * \param	libh	Library handle
+- * \param	pv_name	Device name
+- *
+- * \return
+- * NULL on error, else valid parameter object to use.
+- */
+-pv_create_params_t lvm_pv_params_create(lvm_t libh, const char *pv_name);
+-
+-/**
+- * Create a parameter object to use in function lvm_pv_create_adv
+- *
+- * 	\param 	params	The params object to get property value from
+- * 	\param	name	The name of the property to retrieve
+- *
+- * 	Available properties:
+- *
+- * 	size					zero indicates use detected size of device
+- * 							(recommended and default)
+- *	pvmetadatacopies		Number of metadata copies (0,1,2)
+- *	pvmetadatasize			The approx. size to be to be set aside for metadata
+- *	data_alignment			Align the start of the data to a multiple of
+- *							this number
+- *	data_alignment_offset	Shift the start of the data area by this addl.
+- *							offset
+- *	zero					Set to 1 to zero out first 2048 bytes of
+- *							device, 0 to not (default is 1)
+- *
+- * 	\return
+- * 	lvm_property_value
+- */
+-struct lvm_property_value lvm_pv_params_get_property(
+-						const pv_create_params_t params,
+-						const char *name);
+-
+-/**
+- * Sets a property of a PV parameter create object.
+- *
+- * \param	params		The parameter object
+- * \param	name		The name of the property to set (see get prop list)
+- * \param	prop		The property to set the value on.
+- */
+-int lvm_pv_params_set_property(pv_create_params_t params, const char *name,
+-								struct lvm_property_value *prop);
+-/**
+- * Creates a physical volume using the supplied params object.
+- *
+- * \param	params		The parameters to use for physical volume creation
+- *
+- * \return
+- * -1 on error, 0 on success.
+- */
+-int lvm_pv_create_adv(pv_create_params_t params);
+-
+-/**
+- *  Remove a physical volume.
+- *  Note: You cannot remove a PV while iterating through the list of PVs as
+- *  locks are held for the PV list.
+- *  \param	libh	Library handle
+- *  \param	pv_name	The physical volume name
+- *  \return
+- *  0 on success, else -1 with library errno and text set.
+- */
+-int lvm_pv_remove(lvm_t libh, const char *pv_name);
+-
+-/**
+- * Return a list of PV handles for a given VG handle.
+- *
+- * \memberof vg_t
+- *
+- * \param   vg
+- * VG handle obtained from lvm_vg_create() or lvm_vg_open().
+- *
+- * \return
+- * A list of lvm_pv_list structures containing pv handles for this vg.
+- * If no PVs exist on the given VG, NULL is returned.
+- */
+-struct dm_list *lvm_vg_list_pvs(vg_t vg);
+-
+-/**
+- * Write a VG to disk.
+- *
+- * \memberof vg_t
+- *
+- * This function commits the Volume Group object referenced by the VG handle
+- * to disk. Upon failure, retry the operation and/or release the VG handle
+- * with lvm_vg_close().
+- *
+- * \param   vg
+- * VG handle obtained from lvm_vg_create() or lvm_vg_open().
+- *
+- * \return
+- * 0 (success) or -1 (failure).
+- */
+-int lvm_vg_write(vg_t vg);
+-
+-/**
+- * Remove a VG from the system.
+- *
+- * \memberof vg_t
+- *
+- * This function removes a Volume Group object in memory, and requires
+- * calling lvm_vg_write() to commit the removal to disk.
+- *
+- * \param   vg
+- * VG handle obtained from lvm_vg_create() or lvm_vg_open().
+- *
+- * \return
+- * 0 (success) or -1 (failure).
+- */
+-int lvm_vg_remove(vg_t vg);
+-
+-/**
+- * Close a VG opened with lvm_vg_create or lvm_vg_open().
+- *
+- * \memberof vg_t
+- *
+- * This function releases a VG handle and any resources associated with the
+- * handle.
+- *
+- * \param   vg
+- * VG handle obtained from lvm_vg_create() or lvm_vg_open().
+- *
+- * \return
+- * 0 (success) or -1 (failure).
+- */
+-int lvm_vg_close(vg_t vg);
+-
+-/**
+- * Extend a VG by adding a device.
+- *
+- * \memberof vg_t
+- *
+- * This function requires calling lvm_vg_write() to commit the change to disk.
+- * After successfully adding a device, use lvm_vg_write() to commit the new VG
+- * to disk.  Upon failure, retry the operation or release the VG handle with
+- * lvm_vg_close().
+- * If the device is not initialized for LVM use, it will be initialized
+- * before adding to the VG.  Although some internal checks are done,
+- * the caller should be sure the device is not in use by other subsystems
+- * before calling lvm_vg_extend().
+- *
+- * \param   vg
+- * VG handle obtained from lvm_vg_create() or lvm_vg_open().
+- *
+- * \param   device
+- * Absolute pathname of device to add to VG.
+- *
+- * \return
+- * 0 (success) or -1 (failure).
+- */
+-int lvm_vg_extend(vg_t vg, const char *device);
+-
+-/**
+- * Reduce a VG by removing an unused device.
+- *
+- * \memberof vg_t
+- *
+- * This function requires calling lvm_vg_write() to commit the change to disk.
+- * After successfully removing a device, use lvm_vg_write() to commit the new VG
+- * to disk.  Upon failure, retry the operation or release the VG handle with
+- * lvm_vg_close().
+- *
+- * \param   vg
+- * VG handle obtained from lvm_vg_create() or lvm_vg_open().
+- *
+- * \param   device
+- * Name of device to remove from VG.
+- *
+- * \return
+- * 0 (success) or -1 (failure).
+- */
+-int lvm_vg_reduce(vg_t vg, const char *device);
+-
+-/**
+- * Add a tag to a VG.
+- *
+- * \memberof vg_t
+- *
+- * This function requires calling lvm_vg_write() to commit the change to disk.
+- * After successfully adding a tag, use lvm_vg_write() to commit the
+- * new VG to disk.  Upon failure, retry the operation or release the VG handle
+- * with lvm_vg_close().
+- *
+- * \param   vg
+- * VG handle obtained from lvm_vg_create() or lvm_vg_open().
+- *
+- * \param   tag
+- * Tag to add to the VG.
+- *
+- * \return
+- * 0 (success) or -1 (failure).
+- */
+-int lvm_vg_add_tag(vg_t vg, const char *tag);
+-
+-/**
+- * Remove a tag from a VG.
+- *
+- * \memberof vg_t
+- *
+- * This function requires calling lvm_vg_write() to commit the change to disk.
+- * After successfully removing a tag, use lvm_vg_write() to commit the
+- * new VG to disk.  Upon failure, retry the operation or release the VG handle
+- * with lvm_vg_close().
+- *
+- * \param   vg
+- * VG handle obtained from lvm_vg_create() or lvm_vg_open().
+- *
+- * \param   tag
+- * Tag to remove from VG.
+- *
+- * \return
+- * 0 (success) or -1 (failure).
+- */
+-int lvm_vg_remove_tag(vg_t vg, const char *tag);
+-
+-/**
+- * Set the extent size of a VG.
+- *
+- * \memberof vg_t
+- *
+- * This function requires calling lvm_vg_write() to commit the change to disk.
+- * After successfully setting a new extent size, use lvm_vg_write() to commit
+- * the new VG to disk.  Upon failure, retry the operation or release the VG
+- * handle with lvm_vg_close().
+- *
+- * \param   vg
+- * VG handle obtained from lvm_vg_create() or lvm_vg_open().
+- *
+- * \param   new_size
+- * New extent size in bytes.
+- *
+- * \return
+- * 0 (success) or -1 (failure).
+- */
+-int lvm_vg_set_extent_size(vg_t vg, uint32_t new_size);
+-
+-/**
+- * Get whether or not a volume group is clustered.
+- *
+- * \memberof vg_t
+- *
+- * \param   vg
+- * VG handle obtained from lvm_vg_create() or lvm_vg_open().
+- *
+- * \return
+- * 1 if the VG is clustered, 0 if not
+- */
+-uint64_t lvm_vg_is_clustered(vg_t vg);
+-
+-/**
+- * Get whether or not a volume group is exported.
+- *
+- * \memberof vg_t
+- *
+- * \param   vg
+- * VG handle obtained from lvm_vg_create() or lvm_vg_open().
+- *
+- * \return
+- * 1 if the VG is exported, 0 if not
+- */
+-uint64_t lvm_vg_is_exported(vg_t vg);
+-
+-/**
+- * Get whether or not a volume group is a partial volume group.
+- *
+- * \memberof vg_t
+- *
+- * When one or more physical volumes belonging to the volume group
+- * are missing from the system the volume group is a partial volume
+- * group.
+- *
+- * \param   vg
+- * VG handle obtained from lvm_vg_create() or lvm_vg_open().
+- *
+- * \return
+- * 1 if the VG is PVs, 0 if not
+- */
+-uint64_t lvm_vg_is_partial(vg_t vg);
+-
+-/**
+- * Get the current metadata sequence number of a volume group.
+- *
+- * \memberof vg_t
+- *
+- * The metadata sequence number is incrented for each metadata change.
+- * Applications may use the sequence number to determine if any LVM objects
+- * have changed from a prior query.
+- *
+- * \param   vg
+- * VG handle obtained from lvm_vg_create() or lvm_vg_open().
+- *
+- * \return
+- * Metadata sequence number.
+- */
+-uint64_t lvm_vg_get_seqno(const vg_t vg);
+-
+-/**
+- * Get the current uuid of a volume group.
+- *
+- * \memberof vg_t
+- *
+- * The memory allocated for the uuid is tied to the vg_t handle and will be
+- * released when lvm_vg_close() is called.
+- *
+- * \param   vg
+- * VG handle obtained from lvm_vg_create() or lvm_vg_open().
+- *
+- * \return
+- * Copy of the uuid string.
+- */
+-const char *lvm_vg_get_uuid(const vg_t vg);
+-
+-/**
+- * Get the current name of a volume group.
+- *
+- * \memberof vg_t
+- *
+- * The memory allocated for the name is tied to the vg_t handle and will be
+- * released when lvm_vg_close() is called.
+- *
+- * \param   vg
+- * VG handle obtained from lvm_vg_create() or lvm_vg_open().
+- *
+- * \return
+- * Copy of the name.
+- */
+-const char *lvm_vg_get_name(const vg_t vg);
+-
+-/**
+- * Get the current size in bytes of a volume group.
+- *
+- * \memberof vg_t
+- *
+- * \param   vg
+- * VG handle obtained from lvm_vg_create() or lvm_vg_open().
+- *
+- * \return
+- * Size in bytes.
+- */
+-uint64_t lvm_vg_get_size(const vg_t vg);
+-
+-/**
+- * Get the current unallocated space in bytes of a volume group.
+- *
+- * \memberof vg_t
+- *
+- * \param   vg
+- * VG handle obtained from lvm_vg_create() or lvm_vg_open().
+- *
+- * \return
+- * Free size in bytes.
+- */
+-uint64_t lvm_vg_get_free_size(const vg_t vg);
+-
+-/**
+- * Get the current extent size in bytes of a volume group.
+- *
+- * \memberof vg_t
+- *
+- * \param   vg
+- * VG handle obtained from lvm_vg_create() or lvm_vg_open().
+- *
+- * \return
+- * Extent size in bytes.
+- */
+-uint64_t lvm_vg_get_extent_size(const vg_t vg);
+-
+-/**
+- * Get the current number of total extents of a volume group.
+- *
+- * \memberof vg_t
+- *
+- * \param   vg
+- * VG handle obtained from lvm_vg_create() or lvm_vg_open().
+- *
+- * \return
+- * Extent count.
+- */
+-uint64_t lvm_vg_get_extent_count(const vg_t vg);
+-
+-/**
+- * Get the current number of free extents of a volume group.
+- *
+- * \memberof vg_t
+- *
+- * \param   vg
+- * VG handle obtained from lvm_vg_create() or lvm_vg_open().
+- *
+- * \return
+- * Free extent count.
+- */
+-uint64_t lvm_vg_get_free_extent_count(const vg_t vg);
+-
+-/**
+- * Get the current number of physical volumes of a volume group.
+- *
+- * \memberof vg_t
+- *
+- * \param   vg
+- * VG handle obtained from lvm_vg_create() or lvm_vg_open().
+- *
+- * \return
+- * Physical volume count.
+- */
+-uint64_t lvm_vg_get_pv_count(const vg_t vg);
+-
+-/**
+- * Get the maximum number of physical volumes allowed in a volume group.
+- *
+- * \memberof vg_t
+- *
+- * \param   vg
+- * VG handle obtained from lvm_vg_create() or lvm_vg_open().
+- *
+- * \return
+- * Maximum number of physical volumes allowed in a volume group.
+- */
+-uint64_t lvm_vg_get_max_pv(const vg_t vg);
+-
+-/**
+- * Get the maximum number of logical volumes allowed in a volume group.
+- *
+- * \memberof vg_t
+- *
+- * \param   vg
+- * VG handle obtained from lvm_vg_create() or lvm_vg_open().
+- *
+- * \return
+- * Maximum number of logical volumes allowed in a volume group.
+- */
+-uint64_t lvm_vg_get_max_lv(const vg_t vg);
+-
+-/**
+- * Return the list of volume group tags.
+- *
+- * \memberof vg_t
+- *
+- * The memory allocated for the list is tied to the vg_t handle and will be
+- * released when lvm_vg_close() is called.
+- *
+- * To process the list, use the dm_list iterator functions.  For example:
+- *      vg_t vg;
+- *      struct dm_list *tags;
+- *      struct lvm_str_list *strl;
+- *
+- *      tags = lvm_vg_get_tags(vg);
+- *	dm_list_iterate_items(strl, tags) {
+- *		tag = strl->str;
+- *              // do something with tag
+- *      }
+- *
+- *
+- * \return
+- * A list with entries of type struct lvm_str_list, containing the
+- * tag strings attached to volume group.
+- * If no tags are attached to the given VG, an empty list is returned
+- * (check with dm_list_empty()).
+- * If there is a problem obtaining the list of tags, NULL is returned.
+- */
+-struct dm_list *lvm_vg_get_tags(const vg_t vg);
+-
+-/**
+- * Get the value of a VG property
+- *
+- * \memberof vg_t
+- *
+- * \param   vg
+- * VG handle obtained from lvm_vg_create() or lvm_vg_open().
+- *
+- * \param   name
+- * Name of property to query.  See vgs man page for full list of properties
+- * that may be queried.
+- *
+- * The memory allocated for a string property value is tied to the vg_t
+- * handle and will be released when lvm_vg_close() is called.
+- *
+- * Example:
+- *      lvm_property_value v;
+- *      char *prop_name = "vg_mda_count";
+- *
+- *      v = lvm_vg_get_property(vg, prop_name);
+- *      if (!v.is_valid) {
+- *           printf("Invalid property name or unable to query"
+- *                  "'%s', errno = %d.\n", prop_name, lvm_errno(libh));
+- *           return;
+- *      }
+- *      if (v.is_string)
+- *           printf(", value = %s\n", v.value.string);
+- *	if (v.is_integer)
+- *           printf(", value = %"PRIu64"\n", v.value.integer);
+- *
+- *
+- * \return
+- * lvm_property_value structure that will contain the current
+- * value of the property.  Caller should check 'is_valid' flag before using
+- * the value.  If 'is_valid' is not set, caller should check lvm_errno()
+- * for specific error.
+- */
+-struct lvm_property_value lvm_vg_get_property(const vg_t vg, const char *name);
+-
+-/**
+- * Set the value of a VG property.  Note that the property must be
+- * a 'settable' property, as evidenced by the 'is_settable' flag
+- * when querying the property.
+- *
+- * \memberof vg_t
+- *
+- * The memory allocated for a string property value is tied to the vg_t
+- * handle and will be released when lvm_vg_close() is called.
+- *
+- * Example (integer):
+- *      lvm_property_value copies;
+- *
+- *      if (lvm_vg_get_property(vg, "vg_mda_copies", &copies) < 0) {
+- *              // Error - unable to query property
+- *      }
+- *      if (!copies.is_settable) {
+- *              // Error - property not settable
+- *      }
+- *      copies.value.integer = 2;
+- *      if (lvm_vg_set_property(vg, "vg_mda_copies", &copies) < 0) {
+- *              // handle error
+- *      }
+- *
+- * \return
+- * 0 (success) or -1 (failure).
+- */
+-int lvm_vg_set_property(const vg_t vg, const char *name,
+-			struct lvm_property_value *value);
+-
+-/************************** logical volume handling *************************/
+-
+-/**
+- * Create a linear logical volume.
+- * This function commits the change to disk and does _not_ require calling
+- * lvm_vg_write().
+- * NOTE: The commit behavior of this function is subject to change
+- * as the API is developed.
+- *
+- * \param   vg
+- * VG handle obtained from lvm_vg_create() or lvm_vg_open().
+- *
+- * \param   name
+- * Name of logical volume to create.
+- *
+- * \param   size
+- * Size of logical volume in extents.
+- *
+- * \return
+- * non-NULL handle to an LV object created, or NULL if creation fails.
+- *
+- */
+-lv_t lvm_vg_create_lv_linear(vg_t vg, const char *name, uint64_t size);
+-
+-/**
+- * Return a list of lvseg handles for a given LV handle.
+- *
+- * \memberof lv_t
+- *
+- * \param   lv
+- * Logical volume handle.
+- *
+- * \return
+- * A list of lvm_lvseg_list structures containing lvseg handles for this lv.
+- */
+-struct dm_list *lvm_lv_list_lvsegs(lv_t lv);
+-
+-/**
+- * Lookup an LV handle in a VG by the LV name.
+- *
+- * \memberof lv_t
+- *
+- * \param   vg
+- * VG handle obtained from lvm_vg_create() or lvm_vg_open().
+- *
+- * \param   name
+- * Name of LV to lookup.
+- *
+- * \return
+- * non-NULL handle to the LV 'name' attached to the VG.
+- * NULL is returned if the LV name is not associated with the VG handle.
+- */
+-lv_t lvm_lv_from_name(vg_t vg, const char *name);
+-
+-/**
+- * Lookup an LV handle in a VG by the LV uuid.
+- * The form of the uuid may be either the formatted, human-readable form,
+- * or the non-formatted form.
+- *
+- * \memberof lv_t
+- *
+- * \param   vg
+- * VG handle obtained from lvm_vg_create() or lvm_vg_open().
+- *
+- * \param   uuid
+- * UUID of LV to lookup.
+- *
+- * \return
+- * non-NULL handle to the LV with 'uuid' attached to the VG.
+- * NULL is returned if the LV uuid is not associated with the VG handle.
+- */
+-lv_t lvm_lv_from_uuid(vg_t vg, const char *uuid);
+-
+-/**
+- * Activate a logical volume.
+- *
+- * \memberof lv_t
+- *
+- * This function is the equivalent of the lvm command "lvchange -ay".
+- *
+- * NOTE: This function cannot currently handle LVs with an in-progress pvmove or
+- * lvconvert.
+- *
+- * \param   lv
+- * Logical volume handle.
+- *
+- * \return
+- * 0 (success) or -1 (failure).
+- */
+-int lvm_lv_activate(lv_t lv);
+-
+-/**
+- * Deactivate a logical volume.
+- *
+- * \memberof lv_t
+- *
+- * This function is the equivalent of the lvm command "lvchange -an".
+- *
+- * \param   lv
+- * Logical volume handle.
+- *
+- * \return
+- * 0 (success) or -1 (failure).
+- */
+-int lvm_lv_deactivate(lv_t lv);
+-
+-/**
+- * Remove a logical volume from a volume group.
+- *
+- * \memberof lv_t
+- *
+- * This function commits the change to disk and does _not_ require calling
+- * lvm_vg_write().
+- * NOTE: The commit behavior of this function is subject to change
+- * as the API is developed.
+- * Currently only removing linear LVs are possible.
+- *
+- * \param   lv
+- * Logical volume handle.
+- *
+- * \return
+- * 0 (success) or -1 (failure).
+- */
+-int lvm_vg_remove_lv(lv_t lv);
+-
+-/**
+- * Get the current name of a logical volume.
+- *
+- * \memberof lv_t
+- *
+- * The memory allocated for the uuid is tied to the vg_t handle and will be
+- * released when lvm_vg_close() is called.
+- *
+- * \param   lv
+- * Logical volume handle.
+- *
+- * \return
+- * Copy of the uuid string.
+- */
+-const char *lvm_lv_get_uuid(const lv_t lv);
+-
+-/**
+- * Get the current uuid of a logical volume.
+- *
+- * \memberof lv_t
+- *
+- * The memory allocated for the name is tied to the vg_t handle and will be
+- * released when lvm_vg_close() is called.
+- *
+- * \param   lv
+- * Logical volume handle.
+- *
+- * \return
+- * Copy of the name.
+- */
+-const char *lvm_lv_get_name(const lv_t lv);
+-
+-/**
+- * Get the attributes of a logical volume.
+- *
+- * \memberof lv_t
+- *
+- * The memory allocated for the name is tied to the vg_t handle and will be
+- * released when lvm_vg_close() is called.
+- *
+- * \param   lv
+- * Logical volume handle.
+- *
+- * \return
+- * Copy of the attributes for the logical volume
+- */
+-const char *lvm_lv_get_attr(const lv_t lv);
+-
+-/**
+- * Get the origin of a snapshot.
+- *
+- * \memberof lv_t
+- *
+- * The memory allocated for the name is tied to the vg_t handle and will be
+- * released when lvm_vg_close() is called.
+- *
+- * \param   lv
+- * Logical volume handle.
+- *
+- * \return
+- * Null if the logical volume is not a snapshot, else origin name.
+- */
+-const char *lvm_lv_get_origin(const lv_t lv);
+-
+-/**
+- * Get the current size in bytes of a logical volume.
+- *
+- * \memberof lv_t
+- *
+- * \param   lv
+- * Logical volume handle.
+- *
+- * \return
+- * Size in bytes.
+- */
+-uint64_t lvm_lv_get_size(const lv_t lv);
+-
+-/**
+- * Get the value of a LV property
+- *
+- * \memberof lv_t
+- *
+- * \param   lv
+- * Logical volume handle.
+- *
+- * \param   name
+- * Name of property to query.  See lvs man page for full list of properties
+- * that may be queried.
+- *
+- * The memory allocated for a string property value is tied to the vg_t
+- * handle and will be released when lvm_vg_close() is called.
+- *
+- * Example:
+- *      lvm_property_value v;
+- *      char *prop_name = "seg_count";
+- *
+- *      v = lvm_lv_get_property(lv, prop_name);
+- *      if (!v.is_valid) {
+- *           printf("Invalid property name or unable to query"
+- *                  "'%s', errno = %d.\n", prop_name, lvm_errno(libh));
+- *           return;
+- *      }
+- *      if (v.is_string)
+- *           printf(", value = %s\n", v.value.string);
+- *	if (v.is_integer)
+- *           printf(", value = %"PRIu64"\n", v.value.integer);
+- *
+- * \return
+- * lvm_property_value structure that will contain the current
+- * value of the property.  Caller should check 'is_valid' flag before using
+- * the value.  If 'is_valid' is not set, caller should check lvm_errno()
+- * for specific error.
+- */
+-struct lvm_property_value lvm_lv_get_property(const lv_t lv, const char *name);
+-
+-/**
+- * Get the value of a LV segment property
+- *
+- * \memberof lv_t
+- *
+- * \param   lvseg
+- * Logical volume segment handle.
+- *
+- * \param   name
+- * Name of property to query.  See lvs man page for full list of properties
+- * that may be queried.
+- *
+- * The memory allocated for a string property value is tied to the vg_t
+- * handle and will be released when lvm_vg_close() is called.
+- *
+- * Example:
+- *      lvm_property_value v;
+- *      char *prop_name = "seg_start_pe";
+- *
+- *      v = lvm_lvseg_get_property(lvseg, prop_name);
+- *      if (lvm_errno(libh) || !v.is_valid) {
+- *           // handle error
+- *           printf("Invalid property name or unable to query"
+- *                  "'%s'.\n", prop_name);
+- *           return;
+- *      }
+- *      if (v.is_string)
+- *           printf(", value = %s\n", v.value.string);
+- *	else
+- *           printf(", value = %"PRIu64"\n", v.value.integer);
+- *
+- * \return
+- * lvm_property_value structure that will contain the current
+- * value of the property.  Caller should check lvm_errno() as well
+- * as 'is_valid' flag before using the value.
+- */
+-struct lvm_property_value lvm_lvseg_get_property(const lvseg_t lvseg,
+-						 const char *name);
+-
+-/**
+- * Get the current activation state of a logical volume.
+- *
+- * \memberof lv_t
+- *
+- * \param   lv
+- * Logical volume handle.
+- *
+- * \return
+- * 1 if the LV is active in the kernel, 0 if not
+- */
+-uint64_t lvm_lv_is_active(const lv_t lv);
+-
+-/**
+- * Get the current suspended state of a logical volume.
+- *
+- * \memberof lv_t
+- *
+- * \param   lv
+- * Logical volume handle.
+- *
+- * \return
+- * 1 if the LV is suspended in the kernel, 0 if not
+- */
+-uint64_t lvm_lv_is_suspended(const lv_t lv);
+-
+-/**
+- * Add a tag to an LV.
+- *
+- * \memberof lv_t
+- *
+- * This function requires calling lvm_vg_write() to commit the change to disk.
+- * After successfully adding a tag, use lvm_vg_write() to commit the
+- * new VG to disk.  Upon failure, retry the operation or release the VG handle
+- * with lvm_vg_close().
+- *
+- * \param   lv
+- * Logical volume handle.
+- *
+- * \param   tag
+- * Tag to add to an LV.
+- *
+- * \return
+- * 0 (success) or -1 (failure).
+- */
+-int lvm_lv_add_tag(lv_t lv, const char *tag);
+-
+-/**
+- * Remove a tag from an LV.
+- *
+- * \memberof lv_t
+- *
+- * This function requires calling lvm_vg_write() to commit the change to disk.
+- * After successfully removing a tag, use lvm_vg_write() to commit the
+- * new VG to disk.  Upon failure, retry the operation or release the VG handle
+- * with lvm_vg_close().
+- *
+- * \param   lv
+- * Logical volume handle.
+- *
+- * \param   tag
+- * Tag to remove from LV.
+- *
+- * \return
+- * 0 (success) or -1 (failure).
+- */
+-int lvm_lv_remove_tag(lv_t lv, const char *tag);
+-
+-/**
+- * Return the list of logical volume tags.
+- *
+- * \memberof lv_t
+- *
+- * The memory allocated for the list is tied to the vg_t handle and will be
+- * released when lvm_vg_close() is called.
+- *
+- * To process the list, use the dm_list iterator functions.  For example:
+- *      lv_t lv;
+- *      struct dm_list *tags;
+- *      struct lvm_str_list *strl;
+- *
+- *      tags = lvm_lv_get_tags(lv);
+- *	dm_list_iterate_items(strl, tags) {
+- *		tag = strl->str;
+- *              // do something with tag
+- *      }
+- *
+- *
+- * \return
+- * A list with entries of type struct lvm_str_list, containing the
+- * tag strings attached to volume group.
+- * If no tags are attached to the LV, an empty list is returned
+- * (check with dm_list_empty()).
+- * If there is a problem obtaining the list of tags, NULL is returned.
+- */
+-struct dm_list *lvm_lv_get_tags(const lv_t lv);
+-
+-/**
+- * Rename logical volume to new_name.
+- *
+- * \memberof lv_t
+- *
+- * \param   lv
+- * Logical volume handle.
+- *
+- * \param   new_name
+- * New name of logical volume.
+- *
+- * \return
+- * 0 (success) or -1 (failure).
+- *
+- */
+-int lvm_lv_rename(lv_t lv, const char *new_name);
+-
+-/**
+- * Resize logical volume to new_size bytes.
+- *
+- * \memberof lv_t
+- *
+- * \param   lv
+- * Logical volume handle.
+- *
+- * \param   new_size
+- * New size in bytes.
+- *
+- * \return
+- * 0 (success) or -1 (failure).
+- *
+- */
+-int lvm_lv_resize(const lv_t lv, uint64_t new_size);
+-
+-/**
+- * Create a snapshot of a logical volume
+- *
+- * \memberof lv_t
+- *
+- * \param   lv
+- * Logical volume handle.
+- *
+- * \param   snap_name
+- * Name of the snapshot.
+- *
+- * \param   max_snap_size
+- * Max snapshot space to use. If you pass zero the same amount of space as
+- * the origin will be used.
+- *
+- * \return
+- * Valid lv pointer on success, else NULL on error.
+- *
+- */
+-lv_t lvm_lv_snapshot(const lv_t lv, const char *snap_name, uint64_t max_snap_size);
+-
+-/**
+- * Validate a name to be used for LV creation.
+- *
+- * Validates that the name does not contain any invalid characters, max length
+- * and that the LV name doesn't already exist for this VG.
+- *
+- * Note: You can have the same LV name in different VGs, thus the reason this
+- * function requires that you specify a VG to check against.
+- *
+- * \param lv
+- * Volume group handle.
+- *
+- * \param name
+- * Name to validate
+- */
+-int lvm_lv_name_validate(const vg_t vg, const char *lv_name);
+-
+-/**
+- * Thin provisioning discard policies
+- */
+-typedef enum {
+-	LVM_THIN_DISCARDS_IGNORE,
+-	LVM_THIN_DISCARDS_NO_PASSDOWN,
+-	LVM_THIN_DISCARDS_PASSDOWN,
+-} lvm_thin_discards_t;
+-
+-/**
+- * Create a thinpool parameter passing object for the specified VG
+- *
+- * \param   vg
+- * Volume Group handle.
+- *
+- * \param   pool_name
+- * Name of the pool.
+- *
+- * \param   size
+- * size of the pool
+- *
+- * \param   chunk_size
+- * data block size of the pool
+- * Default value is DEFAULT_THIN_POOL_CHUNK_SIZE * 2 when 0 passed as chunk_size
+- * DM_THIN_MIN_DATA_BLOCK_SIZE < chunk_size < DM_THIN_MAX_DATA_BLOCK_SIZE
+- *
+- * \param meta_size
+- * Size of thin pool's metadata logical volume. Allowed range is 2MB-16GB.
+- * Default value (ie if 0) pool size / pool chunk size * 64
+- *
+- * \param discard
+- * Thin discard policy
+- * Note: THIN_DISCARDS_PASSDOWN is the default.
+- *
+- * \return
+- * Valid lv_create_params pointer on success, else NULL on error.
+- * Note: Memory is associated with the vg, it will get reclaimed when vg is
+- * closed.
+- *
+- */
+-lv_create_params_t lvm_lv_params_create_thin_pool(vg_t vg,
+-		const char *pool_name, uint64_t size, uint32_t chunk_size,
+-		uint64_t meta_size, lvm_thin_discards_t discard);
+-
+-#define lvm_lv_params_create_thin_pool_default(vg, pool_name, size) \
+-			lvm_lv_params_create_thin_pool((vg), (pool_name), (size), 0, 0, \
+-			LVM_THIN_DISCARDS_PASSDOWN)
+-
+-/**
+- * Creates the snapshot parameter passing object for the specified lv.
+- *
+- * \param	lv
+- * The logical volume to snapshot
+- *
+- * \param	snap_name
+- * Name of snapshot
+- *
+- * \param	max_snap_size
+- * Used for old snap shots max size, set to zero for thinp
+- *
+- * \return
+- * Valid lv_create_params pointer on success, else NULL on error.
+- * Note: Memory is associated with the vg, it will get reclaimed when vg is
+- * closed.
+- */
+-lv_create_params_t lvm_lv_params_create_snapshot(const lv_t lv,
+-													const char *snap_name,
+-													uint64_t max_snap_size);
+-/**
+- * Get the specific value of a lv create parameter by name
+- *
+- * \param	params		lv create parameters
+- *
+- * \param	name		name of parameter
+- *
+- * \return
+- * lvm_property_value structure that will contain the current
+- * value of the property.  Caller should check 'is_valid' flag before using
+- * the value.  If 'is_valid' is not set, caller should check lvm_errno()
+- * for specific error.
+- */
+-struct lvm_property_value lvm_lv_params_get_property(
+-											const lv_create_params_t params,
+-											const char *name);
+-
+-
+-/**
+- * Set the specific value of a lv create parameter by name
+- *
+- * Note that the property must be a 'settable' property, as evidenced '
+- * by the 'is_settable' flag when querying the property.
+- *
+- * The memory allocated for a string property value is tied to the vg_t
+- * handle associated with the lv_create_params_t and will be released when
+- * lvm_vg_close() is called.
+- *
+- * \param	params		lv create parameters
+- *
+- * \param	name		name of parameter
+- *
+- * \param	prop		Property value to use for setting
+- *
+- * \return
+- * 0 on success, -1 on error.
+- */
+-int lvm_lv_params_set_property(lv_create_params_t params,
+-								const char *name,
+-								struct lvm_property_value *prop);
+-
+-/**
+- * Create a thin LV creation parameters in a given VG & thin pool
+- *
+- * \param   vg
+- * Volume Group handle.
+- *
+- * \param   pool_name
+- * Name of the pool.
+- *
+- * \param lvname
+- * Name of the LV to create
+- *
+- * \param   size
+- * Size of logical volume
+- *
+- * \return
+- * Valid lv_create_params pointer on success, else NULL on error.
+- * Note: Memory is associated with the vg, it will get reclaimed when vg is
+- * closed.
+- *
+- */
+-lv_create_params_t lvm_lv_params_create_thin(const vg_t vg, const char *pool_name,
+-									const char *lvname, uint64_t size);
+-/**
+- * Create the actual logical volume.
+- *
+- * \param	params		The parameters object for lv creation
+- *
+- * \return
+- * Valid lv pointer on success, else NULL on error.
+- */
+-lv_t lvm_lv_create(lv_create_params_t params);
+-
+-/************************** physical volume handling ************************/
+-
+-/**
+- * Physical volume handling should not be needed anymore. Only physical volumes
+- * bound to a vg contain useful information. Therefore the creation,
+- * modification and the removal of orphan physical volumes is not suported.
+- */
+-
+-/**
+- * Get the current uuid of a physical volume.
+- *
+- * \memberof pv_t
+- *
+- * The memory allocated for the uuid is tied to the vg_t handle and will be
+- * released when lvm_vg_close() is called.
+- *
+- * \param   pv
+- * Physical volume handle.
+- *
+- * \return
+- * Copy of the uuid string.
+- */
+-const char *lvm_pv_get_uuid(const pv_t pv);
+-
+-/**
+- * Get the current name of a physical volume.
+- *
+- * \memberof pv_t
+- *
+- * The memory allocated for the name is tied to the vg_t handle and will be
+- * released when lvm_vg_close() is called.
+- *
+- * \param   pv
+- * Physical volume handle.
+- *
+- * \return
+- * Copy of the name.
+- */
+-const char *lvm_pv_get_name(const pv_t pv);
+-
+-/**
+- * Get the current number of metadata areas in the physical volume.
+- *
+- * \memberof pv_t
+- *
+- * \param   pv
+- * Physical volume handle.
+- *
+- * \return
+- * Number of metadata areas in the PV.
+- */
+-uint64_t lvm_pv_get_mda_count(const pv_t pv);
+-
+-/**
+- * Get the current size in bytes of a device underlying a
+- * physical volume.
+- *
+- * \memberof pv_t
+- *
+- * \param   pv
+- * Physical volume handle.
+- *
+- * \return
+- * Size in bytes.
+- */
+-uint64_t lvm_pv_get_dev_size(const pv_t pv);
+-
+-/**
+- * Get the current size in bytes of a physical volume.
+- *
+- * \memberof pv_t
+- *
+- * \param   pv
+- * Physical volume handle.
+- *
+- * \return
+- * Size in bytes.
+- */
+-uint64_t lvm_pv_get_size(const pv_t pv);
+-
+-/**
+- * Get the current unallocated space in bytes of a physical volume.
+- *
+- * \memberof pv_t
+- *
+- * \param   pv
+- * Physical volume handle.
+- *
+- * \return
+- * Free size in bytes.
+- */
+-uint64_t lvm_pv_get_free(const pv_t pv);
+-
+-/**
+- * Get the value of a PV property
+- *
+- * \memberof pv_t
+- *
+- * \param   pv
+- * Physical volume handle.
+- *
+- * \param   name
+- * Name of property to query.  See pvs man page for full list of properties
+- * that may be queried.
+- *
+- * The memory allocated for a string property value is tied to the vg_t handle
+- * and will be released when lvm_vg_close() is called. For "percent" values
+- * (those obtained for copy_percent and snap_percent properties), please see
+- * dm_percent_range_t and lvm_percent_to_float().
+- *
+- * Example:
+- *      lvm_property_value value;
+- *      char *prop_name = "pv_mda_count";
+- *
+- *      v = lvm_pv_get_property(pv, prop_name);
+- *      if (!v.is_valid) {
+- *           printf("Invalid property name or unable to query"
+- *                  "'%s', errno = %d.\n", prop_name, lvm_errno(libh));
+- *           return;
+- *      }
+- *      if (v.is_string)
+- *           printf(", value = %s\n", v.value.string);
+- *	if (v.is_integer)
+- *           printf(", value = %"PRIu64"\n", v.value.integer);
+- *
+- * \return
+- * lvm_property_value structure that will contain the current
+- * value of the property.  Caller should check 'is_valid' flag before using
+- * the value.  If 'is_valid' is not set, caller should check lvm_errno()
+- * for specific error.
+- */
+-struct lvm_property_value lvm_pv_get_property(const pv_t pv, const char *name);
+-
+-/**
+- * Get the value of a PV segment property
+- *
+- * \memberof pv_t
+- *
+- * \param   pvseg
+- * Physical volume segment handle.
+- *
+- * \param   name
+- * Name of property to query.  See pvs man page for full list of properties
+- * that may be queried.
+- *
+- * The memory allocated for a string property value is tied to the vg_t
+- * handle and will be released when lvm_vg_close() is called.
+- *
+- * Example:
+- *      lvm_property_value v;
+- *      char *prop_name = "pvseg_start";
+- *
+- *      v = lvm_pvseg_get_property(pvseg, prop_name);
+- *      if (lvm_errno(libh) || !v.is_valid) {
+- *           // handle error
+- *           printf("Invalid property name or unable to query"
+- *                  "'%s'.\n", prop_name);
+- *           return;
+- *      }
+- *      if (v.is_string)
+- *           printf(", value = %s\n", v.value.string);
+- *	else
+- *           printf(", value = %"PRIu64"\n", v.value.integer);
+- *
+- * \return
+- * lvm_property_value structure that will contain the current
+- * value of the property.  Caller should check lvm_errno() as well
+- * as 'is_valid' flag before using the value.
+- */
+-struct lvm_property_value lvm_pvseg_get_property(const pvseg_t pvseg,
+-						 const char *name);
+-
+-/**
+- * Return a list of pvseg handles for a given PV handle.
+- *
+- * \memberof pv_t
+- *
+- * \param   pv
+- * Physical volume handle.
+- *
+- * \return
+- * A list of lvm_pvseg_list structures containing pvseg handles for this pv.
+- */
+-struct dm_list *lvm_pv_list_pvsegs(pv_t pv);
+-
+-/**
+- * Lookup an PV handle in a VG by the PV name.
+- *
+- * \memberof pv_t
+- *
+- * \param   vg
+- * VG handle obtained from lvm_vg_create() or lvm_vg_open().
+- *
+- * \param   name
+- * Name of PV to lookup.
+- *
+- * \return
+- * non-NULL handle to the PV 'name' attached to the VG.
+- * NULL is returned if the PV name is not associated with the VG handle.
+- */
+-pv_t lvm_pv_from_name(vg_t vg, const char *name);
+-
+-/**
+- * Lookup an PV handle in a VG by the PV uuid.
+- * The form of the uuid may be either the formatted, human-readable form,
+- * or the non-formatted form.
+- *
+- * \memberof pv_t
+- *
+- * \param   vg
+- * VG handle obtained from lvm_vg_create() or lvm_vg_open().
+- *
+- * \param   uuid
+- * UUID of PV to lookup.
+- *
+- * \return
+- * non-NULL handle to the PV with 'uuid' attached to the VG.
+- * NULL is returned if the PV uuid is not associated with the VG handle.
+- */
+-pv_t lvm_pv_from_uuid(vg_t vg, const char *uuid);
+-
+-/**
+- * Resize physical volume to new_size bytes.
+- *
+- * \memberof pv_t
+- *
+- * \param   pv
+- * Physical volume handle.
+- *
+- * \param   new_size
+- * New size in bytes.
+- *
+- * \return
+- * 0 (success) or -1 (failure).
+- */
+-int lvm_pv_resize(const pv_t pv, uint64_t new_size);
+-
+-#define PERCENT_0 DM_PERCENT_0
+-#define PERCENT_1 DM_PERCENT_1
+-#define PERCENT_100 DM_PERCENT_100
+-#define PERCENT_INVALID DM_PERCENT_INVALID
+-#define PERCENT_MERGE_FAILED DM_PERCENT_FAILED
+-
+-typedef dm_percent_t percent_t;
+-
+-/**
+- * Convert a (fixed-point) value obtained from the percent-denominated
+- * *_get_property functions into a floating-point value.
+- */
+-float lvm_percent_to_float(percent_t v);
+-
+-#ifdef __cplusplus
+-}
+-#endif
+-#endif /* _LIB_LVM2APP_H */
+diff --git a/liblvm/lvm_base.c b/liblvm/lvm_base.c
+deleted file mode 100644
+index 791c629..0000000
+--- a/liblvm/lvm_base.c
++++ /dev/null
+@@ -1,216 +0,0 @@
+-/*
+- * Copyright (C) 2008,2009 Red Hat, Inc. All rights reserved.
+- *
+- * This file is part of LVM2.
+- *
+- * This copyrighted material is made available to anyone wishing to use,
+- * modify, copy, or redistribute it subject to the terms and conditions
+- * of the GNU Lesser General Public License v.2.1.
+- *
+- * You should have received a copy of the GNU Lesser General Public License
+- * along with this program; if not, write to the Free Software Foundation,
+- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
+- */
+-
+-#include "lib/misc/lib.h"
+-#include "lib/commands/toolcontext.h"
+-#include "lib/locking/locking.h"
+-#include "lvm-version.h"
+-#include "lib/metadata/metadata-exported.h"
+-#include "liblvm/lvm2app.h"
+-#include "lvm_misc.h"
+-
+-const char *lvm_library_get_version(void)
+-{
+-	return LVM_VERSION;
+-}
+-
+-static lvm_t _lvm_init(const char *system_dir)
+-{
+-	struct cmd_context *cmd;
+-
+-	/* FIXME: logging bound to handle
+-	 */
+-
+-	if (!udev_init_library_context())
+-		stack;
+-
+-	/*
+-	 * It's not necessary to use name mangling for LVM:
+-	 *   - the character set used for VG-LV names is subset of udev character set
+-	 *   - when we check other devices (e.g. device_is_usable fn), we use major:minor, not dm names
+-	 */
+-	dm_set_name_mangling_mode(DM_STRING_MANGLING_NONE);
+-
+-	/* create context */
+-	/* FIXME: split create_toolcontext */
+-	/* FIXME: make all globals configurable */
+-	cmd = create_toolcontext(0, system_dir, 0, 0, 1, 1);
+-	if (!cmd)
+-		return NULL;
+-
+-	/*
+-	 * FIXME: if an non memory error occured, return the cmd (maybe some
+-	 * cleanup needed).
+-	 */
+-
+-	/* initialization from lvm_run_command */
+-	init_error_message_produced(0);
+-
+-	/* FIXME: locking_type config option needed? */
+-	/* initialize locking */
+-	if (!init_locking(-1, cmd, 0)) {
+-		/* FIXME: use EAGAIN as error code here */
+-		lvm_quit((lvm_t) cmd);
+-		return NULL;
+-	}
+-	/*
+-	 * FIXME: Use cmd->cmd_line as audit trail for liblvm calls.  Used in
+-	 * archive() call.  Possible example:
+-	 * cmd_line = "lvm_vg_create: vg1\nlvm_vg_extend vg1 /dev/sda1\n"
+-	 */
+-	cmd->cmd_line = "liblvm";
+-
+-	/*
+-	 * Turn off writing to stdout/stderr.
+-	 * FIXME Fix lib/ to support a non-interactive mode instead.
+-	 */
+-	log_suppress(1);
+-
+-	return (lvm_t) cmd;
+-}
+-
+-
+-lvm_t lvm_init(const char *system_dir)
+-{
+-	lvm_t h = NULL;
+-	struct saved_env e = store_user_env(NULL);
+-	h = _lvm_init(system_dir);
+-	restore_user_env(&e);
+-	return h;
+-}
+-
+-void lvm_quit(lvm_t libh)
+-{
+-	struct saved_env e = store_user_env((struct cmd_context *)libh);
+-	fin_locking();
+-	destroy_toolcontext((struct cmd_context *)libh);
+-	udev_fin_library_context();
+-	restore_user_env(&e);
+-}
+-
+-int lvm_config_reload(lvm_t libh)
+-{
+-	int rc = 0;
+-
+-	/* FIXME: re-init locking needed here? */
+-	struct saved_env e = store_user_env((struct cmd_context *)libh);
+-	if (!refresh_toolcontext((struct cmd_context *)libh))
+-		rc = -1;
+-	restore_user_env(&e);
+-	return rc;
+-}
+-
+-/*
+- * FIXME: submit a patch to document the --config option
+- */
+-int lvm_config_override(lvm_t libh, const char *config_settings)
+-{
+-	int rc = 0;
+-	struct cmd_context *cmd = (struct cmd_context *)libh;
+-	struct saved_env e = store_user_env((struct cmd_context *)libh);
+-
+-	if (!override_config_tree_from_string(cmd, config_settings))
+-		rc = -1;
+-	restore_user_env(&e);
+-	return rc;
+-}
+-
+-/*
+- * When full lvm connection is not being used, libh can be NULL
+- * and this command will internally create a single-use, light-weight
+- * cmd struct that only has cmd->cft populated from lvm.conf.
+- */
+-int lvm_config_find_bool(lvm_t libh, const char *config_path, int fail)
+-{
+-	int rc = 0;
+-	struct cmd_context *cmd;
+-	struct saved_env e;
+-
+-	if (libh) {
+-		cmd = (struct cmd_context *)libh;
+-		e = store_user_env((struct cmd_context *)libh);
+-	} else {
+-		if (!(cmd = create_config_context()))
+-			return 0;
+-	}
+-
+-	rc = dm_config_tree_find_bool(cmd->cft, config_path, fail);
+-
+-	if (libh)
+-		restore_user_env(&e);
+-	else
+-		destroy_config_context(cmd);
+-	return rc;
+-}
+-
+-int lvm_errno(lvm_t libh)
+-{
+-	int rc;
+-	struct saved_env e = store_user_env((struct cmd_context *)libh);
+-	rc = stored_errno();
+-	restore_user_env(&e);
+-	return rc;
+-}
+-
+-const char *lvm_errmsg(lvm_t libh)
+-{
+-	const char *rc = NULL;
+-	struct cmd_context *cmd = (struct cmd_context *)libh;
+-	struct saved_env e = store_user_env((struct cmd_context *)libh);
+-
+-	const char *msg = stored_errmsg_with_clear();
+-	if (msg) {
+-		rc = dm_pool_strdup(cmd->mem, msg);
+-		free((void *)msg);
+-	}
+-
+-	restore_user_env(&e);
+-	return rc;
+-}
+-
+-const char *lvm_vgname_from_pvid(lvm_t libh, const char *pvid)
+-{
+-	const char *rc = NULL;
+-	struct cmd_context *cmd = (struct cmd_context *)libh;
+-	struct id id;
+-	struct saved_env e = store_user_env((struct cmd_context *)libh);
+-
+-	if (id_read_format(&id, pvid)) {
+-		rc = find_vgname_from_pvid(cmd, (char *)id.uuid);
+-	} else {
+-		log_error(INTERNAL_ERROR "Unable to convert uuid");
+-	}
+-
+-	restore_user_env(&e);
+-	return rc;
+-}
+-
+-const char *lvm_vgname_from_device(lvm_t libh, const char *device)
+-{
+-	const char *rc = NULL;
+-	struct cmd_context *cmd = (struct cmd_context *)libh;
+-	struct saved_env e = store_user_env(cmd);
+-	rc = find_vgname_from_pvname(cmd, device);
+-	restore_user_env(&e);
+-	return rc;
+-}
+-
+-/*
+- * No context to work with, so no ability to save off and restore env is not
+- * available and is not needed.
+- */
+-float lvm_percent_to_float(percent_t v)
+-{
+-	return dm_percent_to_float(v);
+-}
+diff --git a/liblvm/lvm_lv.c b/liblvm/lvm_lv.c
+deleted file mode 100644
+index 48774df..0000000
+--- a/liblvm/lvm_lv.c
++++ /dev/null
+@@ -1,820 +0,0 @@
+-/*
+- * Copyright (C) 2008-2013 Red Hat, Inc. All rights reserved.
+- *
+- * This file is part of LVM2.
+- *
+- * This copyrighted material is made available to anyone wishing to use,
+- * modify, copy, or redistribute it subject to the terms and conditions
+- * of the GNU Lesser General Public License v.2.1.
+- *
+- * You should have received a copy of the GNU Lesser General Public License
+- * along with this program; if not, write to the Free Software Foundation,
+- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
+- */
+-
+-#include "lib/misc/lib.h"
+-#include "lib/metadata/metadata-exported.h"
+-#include "lib/misc/lvm-string.h"
+-#include "lib/config/defaults.h"
+-#include "lib/metadata/segtype.h"
+-#include "lib/locking/locking.h"
+-#include "lib/activate/activate.h"
+-#include "lvm_misc.h"
+-#include "liblvm/lvm2app.h"
+-
+-/* FIXME Improve all the log messages to include context. Which VG/LV as a minimum? */
+-
+-struct lvm_lv_create_params
+-{
+-	uint32_t magic;
+-	vg_t vg;
+-	struct lvcreate_params lvp;
+-};
+-
+-#define LV_CREATE_PARAMS_MAGIC 0xFEED0001
+-
+-static int _lv_check_handle(const lv_t lv, const int vg_writeable)
+-{
+-	if (!lv || !lv->vg || vg_read_error(lv->vg))
+-		return -1;
+-	if (vg_writeable && !vg_check_write_mode(lv->vg))
+-		return -1;
+-	return 0;
+-}
+-
+-/* FIXME: have lib/report/report.c _disp function call lv_size()? */
+-uint64_t lvm_lv_get_size(const lv_t lv)
+-{
+-	uint64_t rc;
+-	struct saved_env e = store_user_env(lv->vg->cmd);
+-	rc = SECTOR_SIZE * lv_size(lv);
+-	restore_user_env(&e);
+-	return rc;
+-}
+-
+-const char *lvm_lv_get_uuid(const lv_t lv)
+-{
+-	const char *rc;
+-	struct saved_env e = store_user_env(lv->vg->cmd);
+-	rc = lv_uuid_dup(lv->vg->vgmem, lv);
+-	restore_user_env(&e);
+-	return rc;
+-}
+-
+-const char *lvm_lv_get_name(const lv_t lv)
+-{
+-	const char *rc;
+-	struct saved_env e = store_user_env(lv->vg->cmd);
+-	rc = dm_pool_strndup(lv->vg->vgmem, lv->name, NAME_LEN+1);
+-	restore_user_env(&e);
+-	return rc;
+-}
+-
+-const char *lvm_lv_get_attr(const lv_t lv)
+-{
+-	const char *rc;
+-	struct saved_env e = store_user_env(lv->vg->cmd);
+-	rc = lv_attr_dup(lv->vg->vgmem, lv);
+-	restore_user_env(&e);
+-	return rc;
+-}
+-
+-const char *lvm_lv_get_origin(const lv_t lv)
+-{
+-	const char *rc;
+-	struct saved_env e = store_user_env(lv->vg->cmd);
+-	rc = lv_origin_dup(lv->vg->vgmem, lv);
+-	restore_user_env(&e);
+-	return rc;
+-}
+-
+-struct lvm_property_value lvm_lv_get_property(const lv_t lv, const char *name)
+-{
+-	struct lvm_property_value rc;
+-	struct saved_env e = store_user_env(lv->vg->cmd);
+-	rc = get_property(NULL, NULL, lv, NULL, NULL, NULL, NULL, name);
+-	restore_user_env(&e);
+-	return rc;
+-}
+-
+-struct lvm_property_value lvm_lvseg_get_property(const lvseg_t lvseg,
+-						 const char *name)
+-{
+-	struct lvm_property_value rc;
+-	struct saved_env e = store_user_env(lvseg->lv->vg->cmd);
+-	rc = get_property(NULL, NULL, NULL, lvseg, NULL, NULL, NULL, name);
+-	restore_user_env(&e);
+-	return rc;
+-}
+-
+-uint64_t lvm_lv_is_active(const lv_t lv)
+-{
+-	uint64_t rc = 0;
+-	struct lvinfo info;
+-
+-	struct saved_env e = store_user_env(lv->vg->cmd);
+-
+-	if (lv_info(lv->vg->cmd, lv, 0, &info, 0, 0) &&
+-	    info.exists && info.live_table)
+-		rc = 1;
+-
+-	restore_user_env(&e);
+-	return rc;
+-}
+-
+-uint64_t lvm_lv_is_suspended(const lv_t lv)
+-{
+-	uint64_t rc = 0;
+-	struct lvinfo info;
+-	struct saved_env e = store_user_env(lv->vg->cmd);
+-
+-	if (lv_info(lv->vg->cmd, lv, 0, &info, 0, 0) &&
+-	    info.exists && info.suspended)
+-		rc = 1;
+-
+-	restore_user_env(&e);
+-	return rc;
+-}
+-
+-static int _lvm_lv_add_tag(lv_t lv, const char *tag)
+-{
+-	if (_lv_check_handle(lv, 1))
+-		return -1;
+-	if (!lv_change_tag(lv, tag, 1))
+-		return -1;
+-	return 0;
+-}
+-
+-int lvm_lv_add_tag(lv_t lv, const char *tag)
+-{
+-	int rc;
+-	struct saved_env e = store_user_env(lv->vg->cmd);
+-	rc = _lvm_lv_add_tag(lv, tag);
+-	restore_user_env(&e);
+-	return rc;
+-}
+-
+-
+-static int _lvm_lv_remove_tag(lv_t lv, const char *tag)
+-{
+-	if (_lv_check_handle(lv, 1))
+-		return -1;
+-	if (!lv_change_tag(lv, tag, 0))
+-		return -1;
+-	return 0;
+-}
+-
+-int lvm_lv_remove_tag(lv_t lv, const char *tag)
+-{
+-	int rc;
+-	struct saved_env e = store_user_env(lv->vg->cmd);
+-	rc = _lvm_lv_remove_tag(lv, tag);
+-	restore_user_env(&e);
+-	return rc;
+-}
+-
+-
+-struct dm_list *lvm_lv_get_tags(const lv_t lv)
+-{
+-	struct dm_list *rc;
+-	struct saved_env e = store_user_env(lv->vg->cmd);
+-	rc = tag_list_copy(lv->vg->vgmem, &lv->tags);
+-	restore_user_env(&e);
+-	return rc;
+-}
+-
+-/* Set defaults for non-segment specific LV parameters */
+-static void _lv_set_default_params(struct lvcreate_params *lp,
+-				   vg_t vg, const char *lvname,
+-				   uint64_t extents)
+-{
+-	lp->zero = 1;
+-	lp->wipe_signatures = 0;
+-	lp->major = -1;
+-	lp->minor = -1;
+-	lp->activate = CHANGE_AY;
+-	lp->lv_name = lvname; /* FIXME: check this for safety */
+-	lp->pvh = &vg->pvs;
+-
+-	lp->extents = extents;
+-	lp->permission = LVM_READ | LVM_WRITE;
+-	lp->read_ahead = DM_READ_AHEAD_NONE;
+-	lp->alloc = ALLOC_INHERIT;
+-	dm_list_init(&lp->tags);
+-}
+-
+-static struct segment_type * _get_segtype(struct cmd_context *cmd) {
+-	struct segment_type *rc = get_segtype_from_string(cmd, SEG_TYPE_NAME_STRIPED);
+-	if (!rc) {
+-		log_error(INTERNAL_ERROR "Segtype striped not found.");
+-	}
+-	return rc;
+-}
+-
+-/* Set default for linear segment specific LV parameters */
+-static int _lv_set_default_linear_params(struct cmd_context *cmd,
+-					  struct lvcreate_params *lp)
+-{
+-	if (!(lp->segtype = _get_segtype(cmd))) {
+-		return 0;
+-	}
+-
+-	lp->stripes = 1;
+-
+-	return 1;
+-}
+-
+-/*
+- * FIXME: This function should probably not commit to disk but require calling
+- * lvm_vg_write.  However, this appears to be non-trivial change until
+- * lv_create_single is refactored by segtype.
+- */
+-static lv_t _lvm_vg_create_lv_linear(vg_t vg, const char *name, uint64_t size)
+-{
+-	struct lvcreate_params lp = { 0 };
+-	uint64_t extents;
+-	struct logical_volume *lv;
+-
+-	if (vg_read_error(vg))
+-		return NULL;
+-	if (!vg_check_write_mode(vg))
+-		return NULL;
+-
+-	if (!(extents = extents_from_size(vg->cmd, size / SECTOR_SIZE,
+-					  vg->extent_size))) {
+-		log_error("Unable to create LV without size.");
+-		return NULL;
+-	}
+-
+-	_lv_set_default_params(&lp, vg, name, extents);
+-	if (!_lv_set_default_linear_params(vg->cmd, &lp))
+-		return_NULL;
+-	if (!(lv = lv_create_single(vg, &lp)))
+-		return_NULL;
+-	return (lv_t) lv;
+-}
+-
+-lv_t lvm_vg_create_lv_linear(vg_t vg, const char *name, uint64_t size)
+-{
+-	lv_t rc;
+-	struct saved_env e = store_user_env(vg->cmd);
+-	rc = _lvm_vg_create_lv_linear(vg, name, size);
+-	restore_user_env(&e);
+-	return rc;
+-}
+-
+-/*
+- * FIXME: This function should probably not commit to disk but require calling
+- * lvm_vg_write.
+- */
+-static int _lvm_vg_remove_lv(lv_t lv)
+-{
+-	if (!lv || !lv->vg || vg_read_error(lv->vg))
+-		return -1;
+-	if (!vg_check_write_mode(lv->vg))
+-		return -1;
+-	if (!lv_remove_single(lv->vg->cmd, lv, DONT_PROMPT, 0))
+-		return -1;
+-	return 0;
+-}
+-
+-int lvm_vg_remove_lv(lv_t lv)
+-{
+-	int rc;
+-	struct saved_env e = store_user_env(lv->vg->cmd);
+-	rc = _lvm_vg_remove_lv(lv);
+-	restore_user_env(&e);
+-	return rc;
+-}
+-
+-static int _lvm_lv_activate(lv_t lv)
+-{
+-	if (!lv || !lv->vg || vg_read_error(lv->vg) || !lv->vg->cmd)
+-		return -1;
+-
+-	/* FIXME: handle pvmove stuff later */
+-	if (lv_is_locked(lv)) {
+-		log_error("Unable to activate locked LV");
+-		return -1;
+-	}
+-
+-	/* FIXME: handle lvconvert stuff later */
+-	if (lv_is_converting(lv)) {
+-		log_error("Unable to activate LV with in-progress lvconvert");
+-		return -1;
+-	}
+-
+-	if (lv_is_origin(lv) ||
+-	    lv_is_pvmove(lv) ||
+-	    seg_only_exclusive(first_seg(lv))) {
+-		log_verbose("Activating logical volume \"%s\" "
+-			    "exclusively", lv->name);
+-		if (!activate_lv_excl(lv->vg->cmd, lv)) {
+-			/* FIXME Improve msg */
+-			log_error("Activate exclusive failed.");
+-			return -1;
+-		}
+-	} else {
+-		log_verbose("Activating logical volume \"%s\"",
+-			    lv->name);
+-		if (!activate_lv(lv->vg->cmd, lv)) {
+-			/* FIXME Improve msg */
+-			log_error("Activate failed.");
+-			return -1;
+-		}
+-	}
+-	return 0;
+-}
+-
+-int lvm_lv_activate(lv_t lv)
+-{
+-	int rc;
+-	struct saved_env e = store_user_env(lv->vg->cmd);
+-	rc = _lvm_lv_activate(lv);
+-	restore_user_env(&e);
+-	return rc;
+-}
+-
+-static int _lvm_lv_deactivate(lv_t lv)
+-{
+-	if (!lv || !lv->vg || vg_read_error(lv->vg) || !lv->vg->cmd)
+-		return -1;
+-
+-	log_verbose("Deactivating logical volume \"%s\"", lv->name);
+-	if (!deactivate_lv(lv->vg->cmd, lv)) {
+-		log_error("Deactivate failed.");
+-		return -1;
+-	}
+-	return 0;
+-}
+-
+-int lvm_lv_deactivate(lv_t lv)
+-{
+-	int rc;
+-	struct saved_env e = store_user_env(lv->vg->cmd);
+-	rc = _lvm_lv_deactivate(lv);
+-	restore_user_env(&e);
+-	return rc;
+-}
+-
+-static struct dm_list *_lvm_lv_list_lvsegs(lv_t lv)
+-{
+-	struct dm_list *list;
+-	lvseg_list_t *lvseg;
+-	struct lv_segment *lvl;
+-
+-	if (dm_list_empty(&lv->segments))
+-		return NULL;
+-
+-	if (!(list = dm_pool_zalloc(lv->vg->vgmem, sizeof(*list)))) {
+-		log_errno(ENOMEM, "Memory allocation fail for dm_list.");
+-		return NULL;
+-	}
+-	dm_list_init(list);
+-
+-	dm_list_iterate_items(lvl, &lv->segments) {
+-		if (!(lvseg = dm_pool_zalloc(lv->vg->vgmem, sizeof(*lvseg)))) {
+-			log_errno(ENOMEM,
+-				"Memory allocation fail for lvm_lvseg_list.");
+-			return NULL;
+-		}
+-		lvseg->lvseg = lvl;
+-		dm_list_add(list, &lvseg->list);
+-	}
+-	return list;
+-}
+-
+-struct dm_list *lvm_lv_list_lvsegs(lv_t lv)
+-{
+-	struct dm_list *rc;
+-	struct saved_env e = store_user_env(lv->vg->cmd);
+-	rc = _lvm_lv_list_lvsegs(lv);
+-	restore_user_env(&e);
+-	return rc;
+-}
+-
+-lv_t lvm_lv_from_name(vg_t vg, const char *name)
+-{
+-	lv_t rc = NULL;
+-	struct lv_list *lvl;
+-
+-	struct saved_env e = store_user_env(vg->cmd);
+-	dm_list_iterate_items(lvl, &vg->lvs) {
+-		if (!strcmp(name, lvl->lv->name)) {
+-			rc = lvl->lv;
+-			break;
+-		}
+-	}
+-	restore_user_env(&e);
+-	return rc;
+-}
+-
+-static lv_t _lvm_lv_from_uuid(vg_t vg, const char *uuid)
+-{
+-	struct lv_list *lvl;
+-	struct id id;
+-
+-	if (strlen(uuid) < ID_LEN) {
+-		log_errno (EINVAL, "Invalid UUID string length");
+-		return NULL;
+-	}
+-
+-	if (!id_read_format(&id, uuid)) {
+-		log_errno(EINVAL, "Invalid UUID format.");
+-		return NULL;
+-	}
+-
+-	dm_list_iterate_items(lvl, &vg->lvs) {
+-		if (id_equal(&vg->id, &lvl->lv->lvid.id[0]) &&
+-		    id_equal(&id, &lvl->lv->lvid.id[1]))
+-			return lvl->lv;
+-	}
+-	return NULL;
+-}
+-
+-lv_t lvm_lv_from_uuid(vg_t vg, const char *uuid)
+-{
+-	lv_t rc;
+-	struct saved_env e = store_user_env(vg->cmd);
+-	rc = _lvm_lv_from_uuid(vg, uuid);
+-	restore_user_env(&e);
+-	return rc;
+-}
+-
+-int lvm_lv_rename(lv_t lv, const char *new_name)
+-{
+-	int rc = 0;
+-	struct saved_env e = store_user_env(lv->vg->cmd);
+-	if (!lv_rename(lv->vg->cmd, lv, new_name)) {
+-		/* FIXME Improve msg */
+-		log_error("LV rename failed.");
+-		rc = -1;
+-	}
+-	restore_user_env(&e);
+-	return rc;
+-}
+-
+-int lvm_lv_resize(const lv_t lv, uint64_t new_size)
+-{
+-	int rc = 0;
+-	struct lvresize_params lp = {
+-		.sign = SIGN_NONE,
+-		.percent = PERCENT_NONE,
+-		.resize = LV_ANY,
+-		.size = new_size >> SECTOR_SHIFT,
+-		.force = 1,	/* Assume the user has a good backup? */
+-	};
+-	struct saved_env e = store_user_env(lv->vg->cmd);
+-
+-	if (!lv_resize(lv, &lp, &lv->vg->pvs)) {
+-		/* FIXME Improve msg */
+-		log_error("LV resize failed.");
+-		/* FIXME Define consistent symbolic return codes */
+-		rc = -1;
+-	}
+-	restore_user_env(&e);
+-	return rc;
+-}
+-
+-lv_t lvm_lv_snapshot(const lv_t lv, const char *snap_name,
+-						uint64_t max_snap_size)
+-{
+-	lv_t rc = NULL;
+-	struct lvm_lv_create_params *lvcp = NULL;
+-	struct saved_env e = store_user_env(lv->vg->cmd);
+-
+-	lvcp = lvm_lv_params_create_snapshot(lv, snap_name, max_snap_size);
+-	if (lvcp) {
+-		rc = lvm_lv_create(lvcp);
+-	}
+-	restore_user_env(&e);
+-	return rc;
+-}
+-
+-/* Set defaults for thin pool specific LV parameters */
+-static int _lv_set_pool_params(struct lvcreate_params *lp,
+-				vg_t vg, const char *pool_name,
+-				uint64_t extents, uint64_t meta_size)
+-{
+-	uint64_t pool_metadata_size;
+-
+-	_lv_set_default_params(lp, vg, pool_name, extents);
+-
+-	lp->create_pool = 1;
+-	lp->segtype = get_segtype_from_string(vg->cmd, SEG_TYPE_NAME_THIN_POOL);
+-	lp->stripes = 1;
+-
+-	if (!meta_size) {
+-		pool_metadata_size = extents * vg->extent_size /
+-			(lp->chunk_size * (SECTOR_SIZE / 64));
+-		while ((pool_metadata_size >
+-			(DEFAULT_THIN_POOL_OPTIMAL_METADATA_SIZE * 2)) &&
+-		       lp->chunk_size < DM_THIN_MAX_DATA_BLOCK_SIZE) {
+-			lp->chunk_size <<= 1;
+-			pool_metadata_size >>= 1;
+-	         }
+-	} else
+-		pool_metadata_size = meta_size;
+-
+-	if (pool_metadata_size % vg->extent_size)
+-		pool_metadata_size +=
+-			vg->extent_size - pool_metadata_size % vg->extent_size;
+-
+-	if (!(lp->pool_metadata_extents =
+-	      extents_from_size(vg->cmd, pool_metadata_size / SECTOR_SIZE,
+-				vg->extent_size)))
+-		return_0;
+-
+-	return 1;
+-}
+-
+-static lv_create_params_t _lvm_lv_params_create_thin_pool(vg_t vg,
+-		const char *pool_name, uint64_t size, uint32_t chunk_size,
+-		uint64_t meta_size, lvm_thin_discards_t discard)
+-{
+-	uint64_t extents = 0;
+-	struct lvm_lv_create_params *lvcp = NULL;
+-
+-	if (meta_size > (2 * DEFAULT_THIN_POOL_MAX_METADATA_SIZE)) {
+-		log_error("Invalid metadata size");
+-		return NULL;
+-	}
+-
+-	if (meta_size &&
+-		meta_size < (2 * DEFAULT_THIN_POOL_MIN_METADATA_SIZE)) {
+-		log_error("Invalid metadata size");
+-		return NULL;
+-	}
+-
+-	if (vg_read_error(vg))
+-		return NULL;
+-
+-	if (!vg_check_write_mode(vg))
+-		return NULL;
+-
+-	if (pool_name == NULL || !strlen(pool_name)) {
+-		log_error("pool_name invalid");
+-		return NULL;
+-	}
+-
+-	if (!(extents = extents_from_size(vg->cmd, size / SECTOR_SIZE,
+-					  vg->extent_size))) {
+-		log_error("Unable to create LV thin pool without size.");
+-		return NULL;
+-	}
+-
+-	lvcp = dm_pool_zalloc(vg->vgmem, sizeof (struct lvm_lv_create_params));
+-
+-	if (lvcp) {
+-		lvcp->vg = vg;
+-		switch (discard) {
+-		case LVM_THIN_DISCARDS_IGNORE:
+-			lvcp->lvp.discards = THIN_DISCARDS_IGNORE;
+-			break;
+-		case LVM_THIN_DISCARDS_NO_PASSDOWN:
+-			lvcp->lvp.discards = THIN_DISCARDS_NO_PASSDOWN;
+-			break;
+-		case LVM_THIN_DISCARDS_PASSDOWN:
+-			lvcp->lvp.discards = THIN_DISCARDS_PASSDOWN;
+-			break;
+-		default:
+-			log_error("Invalid discard argument %d for thin pool creation.", discard);
+-			return NULL;
+-		}
+-		lvcp->lvp.zero_new_blocks = THIN_ZERO_YES;
+-
+-		if (chunk_size)
+-			lvcp->lvp.chunk_size = chunk_size;
+-		else
+-			lvcp->lvp.chunk_size = DEFAULT_THIN_POOL_CHUNK_SIZE * 2;
+-
+-		if (lvcp->lvp.chunk_size < DM_THIN_MIN_DATA_BLOCK_SIZE ||
+-				lvcp->lvp.chunk_size > DM_THIN_MAX_DATA_BLOCK_SIZE) {
+-			log_error("Invalid chunk_size");
+-			return NULL;
+-		}
+-
+-		if (!_lv_set_pool_params(&lvcp->lvp, vg, pool_name, extents, meta_size))
+-			return_NULL;
+-
+-		lvcp->magic = LV_CREATE_PARAMS_MAGIC;
+-	}
+-	return lvcp;
+-}
+-
+-lv_create_params_t lvm_lv_params_create_thin_pool(vg_t vg,
+-		const char *pool_name, uint64_t size, uint32_t chunk_size,
+-		uint64_t meta_size, lvm_thin_discards_t discard)
+-{
+-	lv_create_params_t rc;
+-	struct saved_env e = store_user_env(vg->cmd);
+-	rc = _lvm_lv_params_create_thin_pool(vg, pool_name, size, chunk_size,
+-										meta_size, discard);
+-	restore_user_env(&e);
+-	return rc;
+-}
+-
+-/* Set defaults for thin LV specific parameters */
+-static int _lv_set_thin_params(struct lvcreate_params *lp,
+-			       vg_t vg, const char *pool_name,
+-			       const char *lvname,
+-			       uint32_t extents)
+-{
+-	_lv_set_default_params(lp, vg, lvname, 0);
+-
+-	lp->pool_name = pool_name;
+-	lp->segtype = get_segtype_from_string(vg->cmd, SEG_TYPE_NAME_THIN);
+-	lp->virtual_extents = extents;
+-	lp->stripes = 1;
+-
+-	return 1;
+-}
+-
+-static lv_create_params_t _lvm_lv_params_create_snapshot(const lv_t lv,
+-							 const char *snap_name,
+-							 uint64_t max_snap_size)
+-{
+-	uint64_t size = 0;
+-	uint64_t extents = 0;
+-	struct lvm_lv_create_params *lvcp = NULL;
+-
+-	if (vg_read_error(lv->vg)) {
+-		return NULL;
+-	}
+-
+-	if (!vg_check_write_mode(lv->vg))
+-			return NULL;
+-
+-	if (snap_name == NULL || !strlen(snap_name)) {
+-		log_error("snap_name invalid");
+-		return NULL;
+-	}
+-
+-	if (max_snap_size) {
+-		size = max_snap_size >> SECTOR_SHIFT;
+-		if (!(extents = extents_from_size(lv->vg->cmd, size, lv->vg->extent_size)))
+-			return_NULL;
+-	}
+-
+-	if (!size && !lv_is_thin_volume(lv) ) {
+-		log_error("Origin is not thin, specify size of snapshot");
+-		return NULL;
+-	}
+-
+-	lvcp = dm_pool_zalloc(lv->vg->vgmem, sizeof (struct lvm_lv_create_params));
+-	if (lvcp) {
+-		lvcp->vg = lv->vg;
+-		_lv_set_default_params(&lvcp->lvp, lv->vg, snap_name, extents);
+-
+-		if (size) {
+-			if (!(lvcp->lvp.segtype = get_segtype_from_string(lv->vg->cmd, SEG_TYPE_NAME_SNAPSHOT))) {
+-				log_error("Segtype snapshot not found.");
+-				return NULL;
+-			}
+-			lvcp->lvp.chunk_size = 8;
+-			lvcp->lvp.snapshot = 1;
+-		} else {
+-			if (!(lvcp->lvp.segtype = get_segtype_from_string(lv->vg->cmd, SEG_TYPE_NAME_THIN))) {
+-				log_error("Segtype thin not found.");
+-				return NULL;
+-			}
+-
+-			lvcp->lvp.pool_name = first_seg(lv)->pool_lv->name;
+-		}
+-
+-		lvcp->lvp.stripes = 1;
+-		lvcp->lvp.origin_name = lv->name;
+-
+-		lvcp->magic = LV_CREATE_PARAMS_MAGIC;
+-	}
+-
+-	return lvcp;
+-}
+-
+-lv_create_params_t lvm_lv_params_create_snapshot(const lv_t lv,
+-						 const char *snap_name,
+-						 uint64_t max_snap_size)
+-{
+-	lv_create_params_t rc;
+-	struct saved_env e = store_user_env(lv->vg->cmd);
+-	rc = _lvm_lv_params_create_snapshot(lv, snap_name, max_snap_size);
+-	restore_user_env(&e);
+-	return rc;
+-}
+-
+-static lv_create_params_t _lvm_lv_params_create_thin(const vg_t vg,
+-									const char *pool_name,
+-									const char *lvname, uint64_t size)
+-{
+-	struct lvm_lv_create_params *lvcp = NULL;
+-	uint32_t extents = 0;
+-
+-	/* precondition checks */
+-	if (vg_read_error(vg))
+-		return NULL;
+-
+-	if (!vg_check_write_mode(vg))
+-		return NULL;
+-
+-	if (pool_name == NULL || !strlen(pool_name)) {
+-		log_error("pool_name invalid");
+-		return NULL;
+-	}
+-
+-	if (lvname == NULL || !strlen(lvname)) {
+-		log_error("lvname invalid");
+-		return NULL;
+-	}
+-
+-	if (!(extents = extents_from_size(vg->cmd, size / SECTOR_SIZE,
+-			vg->extent_size))) {
+-		log_error("Unable to create thin LV without size.");
+-		return NULL;
+-	}
+-
+-	lvcp = dm_pool_zalloc(vg->vgmem, sizeof (struct lvm_lv_create_params));
+-	if (lvcp) {
+-		lvcp->vg = vg;
+-		if (!_lv_set_thin_params(&lvcp->lvp, vg, pool_name, lvname, extents))
+-			return_NULL;
+-
+-		lvcp->magic = LV_CREATE_PARAMS_MAGIC;
+-	}
+-
+-	return lvcp;
+-}
+-
+-lv_create_params_t lvm_lv_params_create_thin(const vg_t vg, const char *pool_name,
+-									const char *lvname, uint64_t size)
+-{
+-	lv_create_params_t rc;
+-	struct saved_env e = store_user_env(vg->cmd);
+-	rc = _lvm_lv_params_create_thin(vg, pool_name, lvname, size);
+-	restore_user_env(&e);
+-	return rc;
+-}
+-
+-struct lvm_property_value lvm_lv_params_get_property(
+-						const lv_create_params_t params,
+-						const char *name)
+-{
+-	struct lvm_property_value rc = { .is_valid = 0 };
+-
+-	if (params && params->magic == LV_CREATE_PARAMS_MAGIC) {
+-		struct saved_env e = store_user_env(params->vg->cmd);
+-		rc = get_property(NULL, NULL, NULL, NULL, NULL, &params->lvp, NULL, name);
+-		restore_user_env(&e);
+-	} else
+-		log_error("Invalid lv_create_params parameter");
+-
+-	return rc;
+-}
+-
+-int lvm_lv_params_set_property(lv_create_params_t params, const char *name,
+-								struct lvm_property_value *prop)
+-{
+-	int rc = -1;
+-
+-	if (params && params->magic == LV_CREATE_PARAMS_MAGIC) {
+-		struct saved_env e = store_user_env(params->vg->cmd);
+-		rc = set_property(NULL, NULL, NULL, &params->lvp, NULL, name, prop);
+-		restore_user_env(&e);
+-	} else
+-		log_error("Invalid lv_create_params parameter");
+-
+-	return rc;
+-}
+-
+-static lv_t _lvm_lv_create(lv_create_params_t params)
+-{
+-	struct lv_list *lvl = NULL;
+-
+-	if (params && params->magic == LV_CREATE_PARAMS_MAGIC) {
+-		if (!params->lvp.segtype) {
+-			log_error("segtype parameter is NULL");
+-			return_NULL;
+-		}
+-		if (!lv_create_single(params->vg, &params->lvp))
+-				return_NULL;
+-
+-		/*
+-		 * In some case we are making a thin pool so lv_name is not valid, but
+-		 * pool is.
+-		 */
+-		if (!(lvl = find_lv_in_vg(params->vg,
+-				(params->lvp.lv_name) ? params->lvp.lv_name : params->lvp.pool_name)))
+-			return_NULL;
+-		return (lv_t) lvl->lv;
+-	}
+-	log_error("Invalid lv_create_params parameter");
+-	return NULL;
+-}
+-
+-lv_t lvm_lv_create(lv_create_params_t params)
+-{
+-	lv_t rc;
+-	struct saved_env e = store_user_env(params->vg->cmd);
+-	rc = _lvm_lv_create(params);
+-	restore_user_env(&e);
+-	return rc;
+-}
+diff --git a/liblvm/lvm_misc.c b/liblvm/lvm_misc.c
+deleted file mode 100644
+index 2b24de2..0000000
+--- a/liblvm/lvm_misc.c
++++ /dev/null
+@@ -1,168 +0,0 @@
+-/*
+- * Copyright (C) 2008-2013 Red Hat, Inc. All rights reserved.
+- *
+- * This file is part of LVM2.
+- *
+- * This copyrighted material is made available to anyone wishing to use,
+- * modify, copy, or redistribute it subject to the terms and conditions
+- * of the GNU Lesser General Public License v.2.1.
+- *
+- * You should have received a copy of the GNU Lesser General Public License
+- * along with this program; if not, write to the Free Software Foundation,
+- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
+- */
+-
+-#include "lib/misc/lib.h"
+-#include "lib/report/properties.h"
+-#include "lvm_misc.h"
+-#include "liblvm/lvm2app.h"
+-#include "lvm_prop.h"
+-
+-struct dm_list *tag_list_copy(struct dm_pool *p, struct dm_list *tag_list)
+-{
+-	struct dm_list *list;
+-	lvm_str_list_t *lsl;
+-	struct dm_str_list *sl;
+-
+-	if (!(list = dm_pool_zalloc(p, sizeof(*list)))) {
+-		log_errno(ENOMEM, "Memory allocation fail for dm_list.");
+-		return NULL;
+-	}
+-	dm_list_init(list);
+-
+-	dm_list_iterate_items(sl, tag_list) {
+-		if (!(lsl = dm_pool_zalloc(p, sizeof(*lsl)))) {
+-			log_errno(ENOMEM,
+-				"Memory allocation fail for lvm_lv_list.");
+-			return NULL;
+-		}
+-		if (!(lsl->str = dm_pool_strdup(p, sl->str))) {
+-			log_errno(ENOMEM,
+-				"Memory allocation fail for lvm_lv_list->str.");
+-			return NULL;
+-		}
+-		dm_list_add(list, &lsl->list);
+-	}
+-	return list;
+-}
+-
+-struct lvm_property_value get_property(const pv_t pv, const vg_t vg,
+-				       const lv_t lv,
+-				       const lvseg_t lvseg,
+-				       const pvseg_t pvseg,
+-				       const struct lvcreate_params *lvcp,
+-				       const struct pvcreate_params *pvcp,
+-				       const char *name)
+-{
+-	struct lvm_property_type prop;
+-	struct lvm_property_value v = { 0 };
+-
+-	prop.id = name;
+-
+-	if (pv) {
+-		if (!pv_get_property(pv, &prop))
+-			return v;
+-	} else if (vg) {
+-		if (!vg_get_property(vg, &prop))
+-			return v;
+-	} else if (lv) {
+-		if (!lv_get_property(lv, &prop))
+-			return v;
+-	} else if (lvseg) {
+-		if (!lvseg_get_property(lvseg, &prop))
+-			return v;
+-	} else if (pvseg) {
+-		if (!pvseg_get_property(pvseg, &prop))
+-			return v;
+-	} else if (lvcp) {
+-		if (!lv_create_param_get_property(lvcp, &prop))
+-			return v;
+-	} else if (pvcp) {
+-		if (!pv_create_param_get_property(pvcp, &prop))
+-			return v;
+-	} else {
+-		log_errno(EINVAL, "Invalid NULL handle passed to library function.");
+-		return v;
+-	}
+-
+-	v.is_settable = prop.is_settable;
+-	v.is_string = prop.is_string;
+-	v.is_integer = prop.is_integer;
+-	v.is_signed = prop.is_signed;
+-	if (v.is_string)
+-		v.value.string = prop.value.string;
+-	if (v.is_integer)
+-		v.value.integer = prop.value.integer;
+-	v.is_valid = 1;
+-	return v;
+-}
+-
+-
+-int set_property(const pv_t pv, const vg_t vg, const lv_t lv,
+-		struct lvcreate_params *lvcp,
+-		struct pvcreate_params *pvcp,
+-		const char *name,
+-		struct lvm_property_value *v)
+-{
+-	struct lvm_property_type prop;
+-
+-	prop.id = name;
+-	if (v->is_string)
+-		prop.value.string = v->value.string;
+-	else
+-		prop.value.integer = v->value.integer;
+-	if (pv) {
+-		if (!pv_set_property(pv, &prop)) {
+-			v->is_valid = 0;
+-			return -1;
+-		}
+-	} else if (vg) {
+-		if (!vg_set_property(vg, &prop)) {
+-			v->is_valid = 0;
+-			return -1;
+-		}
+-	} else if (lv) {
+-		if (!lv_set_property(lv, &prop)) {
+-			v->is_valid = 0;
+-			return -1;
+-		}
+-	} else if (lvcp) {
+-		if (!lv_create_param_set_property(lvcp, &prop)) {
+-			v->is_valid = 0;
+-			return -1;
+-		}
+-	} else if (pvcp) {
+-		if (!pv_create_param_set_property(pvcp, &prop)) {
+-			v->is_valid = 0;
+-			return -1;
+-		}
+-	} else {
+-		return -1;
+-	}
+-	return 0;
+-}
+-
+-/*
+- * Store anything that may need to be restored back to the user on library
+- * call exit.  Currently the only thing we are preserving is the users umask.
+- */
+-struct saved_env store_user_env(struct cmd_context *cmd)
+-{
+-	struct saved_env env = {0};
+-
+-	if (cmd) {
+-		env.user_umask = umask(cmd->default_settings.umask);
+-	} else {
+-		env.user_umask = umask(0);
+-		umask(env.user_umask);
+-	}
+-
+-	return env;
+-}
+-
+-void restore_user_env(const struct saved_env *env)
+-{
+-	if (env) {
+-		umask(env->user_umask);
+-	}
+-}
+diff --git a/liblvm/lvm_misc.h b/liblvm/lvm_misc.h
+deleted file mode 100644
+index b83a443..0000000
+--- a/liblvm/lvm_misc.h
++++ /dev/null
+@@ -1,46 +0,0 @@
+-/*
+- * Copyright (C) 2008-2013 Red Hat, Inc. All rights reserved.
+- *
+- * This file is part of LVM2.
+- *
+- * This copyrighted material is made available to anyone wishing to use,
+- * modify, copy, or redistribute it subject to the terms and conditions
+- * of the GNU Lesser General Public License v.2.1.
+- *
+- * You should have received a copy of the GNU Lesser General Public License
+- * along with this program; if not, write to the Free Software Foundation,
+- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
+- */
+-#ifndef _LVM2APP_MISC_H
+-#define _LVM2APP_MISC_H
+-
+-#include "device_mapper/libdevmapper.h"
+-#include "liblvm/lvm2app.h"
+-#include "lib/metadata/metadata-exported.h"
+-#include "lib/commands/toolcontext.h"
+-
+-#include <sys/types.h>
+-#include <sys/stat.h>
+-
+-struct saved_env
+-{
+-	mode_t user_umask;
+-};
+-
+-struct saved_env store_user_env(struct cmd_context *cmd);
+-void restore_user_env(const struct saved_env *env);
+-
+-struct dm_list *tag_list_copy(struct dm_pool *p, struct dm_list *tag_list);
+-struct lvm_property_value get_property(const pv_t pv, const vg_t vg,
+-				       const lv_t lv, const lvseg_t lvseg,
+-				       const pvseg_t pvseg,
+-				       const struct lvcreate_params *lvcp,
+-				       const struct pvcreate_params *pvcp,
+-				       const char *name);
+-int set_property(const pv_t pv, const vg_t vg, const lv_t lv,
+-			struct lvcreate_params *lvcp,
+-			struct pvcreate_params *pvcp,
+-			const char *name,
+-			struct lvm_property_value *value);
+-
+-#endif
+diff --git a/liblvm/lvm_prop.c b/liblvm/lvm_prop.c
+deleted file mode 100644
+index 5d274a6..0000000
+--- a/liblvm/lvm_prop.c
++++ /dev/null
+@@ -1,74 +0,0 @@
+-/*
+- * Copyright (C) 2013 Red Hat, Inc. All rights reserved.
+- *
+- * This file is part of LVM2.
+- *
+- * This copyrighted material is made available to anyone wishing to use,
+- * modify, copy, or redistribute it subject to the terms and conditions
+- * of the GNU Lesser General Public License v.2.1.
+- *
+- * You should have received a copy of the GNU Lesser General Public License
+- * along with this program; if not, write to the Free Software Foundation,
+- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
+- */
+-
+-#include "lvm_prop.h"
+-#include "device_mapper/libdevmapper.h"
+-#include "lib/metadata/metadata.h"
+-
+-/* lv create parameters */
+-GET_LVCREATEPARAMS_NUM_PROPERTY_FN(skip_zero, lvcp->zero)
+-SET_LVCREATEPARAMS_NUM_PROPERTY_FN(skip_zero, lvcp->zero)
+-
+-/* PV create parameters */
+-GET_PVCREATEPARAMS_NUM_PROPERTY_FN(size, pvcp->pva.size)
+-SET_PVCREATEPARAMS_NUM_PROPERTY_FN(size, pvcp->pva.size)
+-
+-GET_PVCREATEPARAMS_NUM_PROPERTY_FN(pvmetadatacopies, pvcp->pva.pvmetadatacopies)
+-SET_PVCREATEPARAMS_NUM_PROPERTY_FN(pvmetadatacopies, pvcp->pva.pvmetadatacopies)
+-
+-GET_PVCREATEPARAMS_NUM_PROPERTY_FN(pvmetadatasize, pvcp->pva.pvmetadatasize)
+-SET_PVCREATEPARAMS_NUM_PROPERTY_FN(pvmetadatasize, pvcp->pva.pvmetadatasize)
+-
+-GET_PVCREATEPARAMS_NUM_PROPERTY_FN(data_alignment, pvcp->pva.data_alignment)
+-SET_PVCREATEPARAMS_NUM_PROPERTY_FN(data_alignment, pvcp->pva.data_alignment)
+-
+-GET_PVCREATEPARAMS_NUM_PROPERTY_FN(data_alignment_offset, pvcp->pva.data_alignment_offset)
+-SET_PVCREATEPARAMS_NUM_PROPERTY_FN(data_alignment_offset, pvcp->pva.data_alignment_offset)
+-
+-GET_PVCREATEPARAMS_NUM_PROPERTY_FN(zero, pvcp->zero)
+-SET_PVCREATEPARAMS_NUM_PROPERTY_FN(zero, pvcp->zero)
+-
+-struct lvm_property_type _lib_properties[] = {
+-#include "lvm_prop_fields.h"
+-	{ 0, "", 0, 0, 0, 0, { .integer = 0 }, prop_not_implemented_get,
+-			prop_not_implemented_set },
+-};
+-
+-#undef STR
+-#undef NUM
+-#undef FIELD
+-
+-int lv_create_param_get_property(const struct lvcreate_params *lvcp,
+-		struct lvm_property_type *prop)
+-{
+-	return prop_get_property(_lib_properties, lvcp, prop, LV_CREATE_PARAMS);
+-}
+-
+-int lv_create_param_set_property(struct lvcreate_params *lvcp,
+-		    struct lvm_property_type *prop)
+-{
+-	return prop_set_property(_lib_properties, lvcp, prop, LV_CREATE_PARAMS);
+-}
+-
+-int pv_create_param_get_property(const struct pvcreate_params *pvcp,
+-		struct lvm_property_type *prop)
+-{
+-	return prop_get_property(_lib_properties, pvcp, prop, PV_CREATE_PARAMS);
+-}
+-
+-int pv_create_param_set_property(struct pvcreate_params *pvcp,
+-		    struct lvm_property_type *prop)
+-{
+-	return prop_set_property(_lib_properties, pvcp, prop, PV_CREATE_PARAMS);
+-}
+diff --git a/liblvm/lvm_prop.h b/liblvm/lvm_prop.h
+deleted file mode 100644
+index 5a30a76..0000000
+--- a/liblvm/lvm_prop.h
++++ /dev/null
+@@ -1,49 +0,0 @@
+-/*
+- * Copyright (C) 2013 Red Hat, Inc. All rights reserved.
+- *
+- * This file is part of LVM2.
+- *
+- * This copyrighted material is made available to anyone wishing to use,
+- * modify, copy, or redistribute it subject to the terms and conditions
+- * of the GNU Lesser General Public License v.2.1.
+- *
+- * You should have received a copy of the GNU Lesser General Public License
+- * along with this program; if not, write to the Free Software Foundation,
+- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
+- */
+-#include "lib/properties/prop_common.h"
+-
+-#ifndef _LIB_LVM_PROP_H
+-#define _LIB_LVM_PROP_H
+-
+-typedef struct lvcreate_params type_lvcreate_params;
+-typedef struct pvcreate_params type_pvcreate_params;
+-
+-#define LV_CREATE_PARAMS 1
+-#define PV_CREATE_PARAMS 2
+-
+-#define GET_LVCREATEPARAMS_NUM_PROPERTY_FN(NAME, VALUE)\
+-	GET_NUM_PROPERTY_FN(NAME, VALUE, lvcreate_params, lvcp)
+-
+-#define SET_LVCREATEPARAMS_NUM_PROPERTY_FN(NAME, VALUE) \
+-	SET_NUM_PROPERTY(NAME, VALUE, lvcreate_params, lvcp)
+-
+-#define GET_PVCREATEPARAMS_NUM_PROPERTY_FN(NAME, VALUE)\
+-	GET_NUM_PROPERTY_FN(NAME, VALUE, pvcreate_params, pvcp)
+-
+-#define SET_PVCREATEPARAMS_NUM_PROPERTY_FN(NAME, VALUE) \
+-	SET_NUM_PROPERTY(NAME, VALUE, pvcreate_params, pvcp)
+-
+-int lv_create_param_get_property(const struct lvcreate_params *lvcp,
+-		struct lvm_property_type *prop);
+-
+-int lv_create_param_set_property(struct lvcreate_params *lvcp,
+-		    struct lvm_property_type *prop);
+-
+-int pv_create_param_get_property(const struct pvcreate_params *pvcp,
+-		struct lvm_property_type *prop);
+-
+-int pv_create_param_set_property(struct pvcreate_params *pvcp,
+-		    struct lvm_property_type *prop);
+-
+-#endif
+diff --git a/liblvm/lvm_prop_fields.h b/liblvm/lvm_prop_fields.h
+deleted file mode 100644
+index 10f1290..0000000
+--- a/liblvm/lvm_prop_fields.h
++++ /dev/null
+@@ -1,22 +0,0 @@
+-/*
+- * Copyright (C) 2013 Red Hat, Inc. All rights reserved.
+- *
+- * This file is part of LVM2.
+- *
+- * This copyrighted material is made available to anyone wishing to use,
+- * modify, copy, or redistribute it subject to the terms and conditions
+- * of the GNU Lesser General Public License v.2.1.
+- *
+- * You should have received a copy of the GNU Lesser General Public License
+- * along with this program; if not, write to the Free Software Foundation,
+- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
+- */
+-
+-FIELD(LV_CREATE_PARAMS, lvcreate_params, NUM, "skip_zero", zero, 2, uint32, skip_zero, "Skip zeroing on lv creation", 1)
+-
+-FIELD(PV_CREATE_PARAMS, pvcreate_params, NUM, "size",      size, 2, uint64_t, size, "PV size", 1)
+-FIELD(PV_CREATE_PARAMS, pvcreate_params, NUM, "pvmetadatacopies", pvmetadatacopies, 2, uint64_t, pvmetadatacopies, "PV Metadata copies", 1)
+-FIELD(PV_CREATE_PARAMS, pvcreate_params, NUM, "pvmetadatasize", pvmetadatasize, 2, uint64_t, pvmetadatasize, "PV Metadata size", 1)
+-FIELD(PV_CREATE_PARAMS, pvcreate_params, NUM, "data_alignment", data_alignment, 2, uint64_t, data_alignment, "Start data to a multiple of value", 1)
+-FIELD(PV_CREATE_PARAMS, pvcreate_params, NUM, "data_alignment_offset", data_alignment_offset, 2, uint64_t, data_alignment_offset, "Shift the start of the data area", 1)
+-FIELD(PV_CREATE_PARAMS, pvcreate_params, NUM, "zero", zero, 2, uint64_t, zero, "Zero first 2048 bytes of device", 1)
+diff --git a/liblvm/lvm_pv.c b/liblvm/lvm_pv.c
+deleted file mode 100644
+index bd6ee4f..0000000
+--- a/liblvm/lvm_pv.c
++++ /dev/null
+@@ -1,474 +0,0 @@
+-/*
+- * Copyright (C) 2008-2013 Red Hat, Inc. All rights reserved.
+- *
+- * This file is part of LVM2.
+- *
+- * This copyrighted material is made available to anyone wishing to use,
+- * modify, copy, or redistribute it subject to the terms and conditions
+- * of the GNU Lesser General Public License v.2.1.
+- *
+- * You should have received a copy of the GNU Lesser General Public License
+- * along with this program; if not, write to the Free Software Foundation,
+- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
+- */
+-
+-#include <stddef.h>
+-#include "lib/misc/lib.h"
+-#include "lib/metadata/metadata-exported.h"
+-#include "lib/misc/lvm-string.h"
+-#include "lib/datastruct/str_list.h"
+-#include "lvm_misc.h"
+-#include "liblvm/lvm2app.h"
+-#include "lib/locking/locking.h"
+-#include "lib/commands/toolcontext.h"
+-#include "lvm_misc.h"
+-#include "lib/cache/lvmetad.h"
+-
+-struct lvm_pv_create_params
+-{
+-	uint32_t magic;
+-	lvm_t libh;
+-	const char *pv_name;
+-	struct pvcreate_params pv_p;
+-};
+-
+-#define PV_CREATE_PARAMS_MAGIC 0xFEED0002
+-
+-const char *lvm_pv_get_uuid(const pv_t pv)
+-{
+-	const char *rc;
+-	struct saved_env e = store_user_env(pv->vg->cmd);
+-	rc = pv_uuid_dup(pv->vg->vgmem, pv);
+-	restore_user_env(&e);
+-	return rc;
+-}
+-
+-const char *lvm_pv_get_name(const pv_t pv)
+-{
+-	const char *rc;
+-	struct saved_env e = store_user_env(pv->vg->cmd);
+-	rc = dm_pool_strndup(pv->vg->vgmem, pv_dev_name(pv), NAME_LEN);
+-	restore_user_env(&e);
+-	return rc;
+-}
+-
+-uint64_t lvm_pv_get_mda_count(const pv_t pv)
+-{
+-	uint64_t rc;
+-	struct saved_env e = store_user_env(pv->vg->cmd);
+-	rc = (uint64_t) pv_mda_count(pv);
+-	restore_user_env(&e);
+-	return rc;
+-}
+-
+-uint64_t lvm_pv_get_dev_size(const pv_t pv)
+-{
+-	uint64_t rc;
+-	struct saved_env e = store_user_env(pv->vg->cmd);
+-	rc = SECTOR_SIZE * pv_dev_size(pv);
+-	restore_user_env(&e);
+-	return rc;
+-}
+-
+-uint64_t lvm_pv_get_size(const pv_t pv)
+-{
+-	uint64_t rc;
+-	struct saved_env e = store_user_env(pv->vg->cmd);
+-	rc = SECTOR_SIZE * pv_size_field(pv);
+-	restore_user_env(&e);
+-	return rc;
+-}
+-
+-uint64_t lvm_pv_get_free(const pv_t pv)
+-{
+-	uint64_t rc;
+-	struct saved_env e = store_user_env(pv->vg->cmd);
+-	rc = SECTOR_SIZE * pv_free(pv);
+-	restore_user_env(&e);
+-	return rc;
+-}
+-
+-struct lvm_property_value lvm_pv_get_property(const pv_t pv, const char *name)
+-{
+-	struct lvm_property_value rc;
+-	struct saved_env e = store_user_env(pv->vg->cmd);
+-	rc = get_property(pv, NULL, NULL, NULL, NULL, NULL, NULL, name);
+-	restore_user_env(&e);
+-	return rc;
+-}
+-
+-struct lvm_property_value lvm_pvseg_get_property(const pvseg_t pvseg,
+-						 const char *name)
+-{
+-	struct lvm_property_value rc;
+-	struct saved_env e = store_user_env(pvseg->pv->vg->cmd);
+-	rc = get_property(NULL, NULL, NULL, NULL, pvseg, NULL, NULL, name);
+-	restore_user_env(&e);
+-	return rc;
+-}
+-
+-struct lvm_list_wrapper
+-{
+-	unsigned long magic;
+-	struct cmd_context *cmd;
+-	struct dm_list pvslist;
+-	struct dm_list vgslist;
+-};
+-
+-int lvm_pv_remove(lvm_t libh, const char *pv_name)
+-{
+-	int rc = 0;
+-	struct cmd_context *cmd = (struct cmd_context *)libh;
+-	struct saved_env e = store_user_env(cmd);
+-	struct dm_list pv_names;
+-
+-	dm_list_init(&pv_names);
+-
+-	if (!str_list_add(cmd->mem, &pv_names, pv_name))
+-		rc = -1;
+-
+-	if (rc >= 0 && !pvremove_many(cmd, &pv_names, 0, 0))
+-		rc = -1;
+-
+-	restore_user_env(&e);
+-	return rc;
+-}
+-
+-#define PV_LIST_MAGIC 4026907153U
+-
+-static struct dm_list *_lvm_list_pvs(lvm_t libh)
+-{
+-	struct lvm_list_wrapper *rc = NULL;
+-	struct cmd_context *cmd = (struct cmd_context *)libh;
+-
+-	/*
+-	 * This memory will get cleared when the library handle
+-	 * gets closed, don't try to free is as it doesn't work
+-	 * like malloc/free do.
+-	 */
+-	if (!(rc = dm_pool_zalloc(cmd->mem, sizeof(*rc)))) {
+-		log_errno(ENOMEM, "Memory allocation fail for pv list.");
+-		return NULL;
+-	}
+-
+-	if (!lock_vol(cmd, VG_GLOBAL, LCK_VG_WRITE, NULL)) {
+-		log_errno(ENOLCK, "Unable to obtain global lock.");
+-	} else {
+-		dm_list_init(&rc->pvslist);
+-		dm_list_init(&rc->vgslist);
+-		if (!get_pvs_perserve_vg(cmd, &rc->pvslist, &rc->vgslist))
+-			return_NULL;
+-
+-		/*
+-		 * If we have no PVs we still need to have access to cmd
+-		 * pointer in the free call.
+-		 */
+-		rc->cmd = cmd;
+-		rc->magic = PV_LIST_MAGIC;
+-	}
+-
+-	return &rc->pvslist;
+-}
+-
+-struct dm_list *lvm_list_pvs(lvm_t libh)
+-{
+-	struct dm_list *rc;
+-	struct saved_env e = store_user_env((struct cmd_context *)libh);
+-	rc = _lvm_list_pvs(libh);
+-	restore_user_env(&e);
+-	return rc;
+-}
+-
+-int lvm_list_pvs_free(struct dm_list *pvlist)
+-{
+-	struct lvm_list_wrapper *to_delete;
+-	struct vg_list *vgl;
+-	struct pv_list *pvl;
+-	struct saved_env e;
+-
+-	if (pvlist) {
+-		to_delete = dm_list_struct_base(pvlist, struct lvm_list_wrapper, pvslist);
+-		if (to_delete->magic != PV_LIST_MAGIC) {
+-			log_errno(EINVAL, "Not a correct pvlist structure");
+-			return -1;
+-		}
+-
+-		/*
+-		 * Need to ensure that pointer is valid before we can use reference to
+-		 * cmd.
+-		 */
+-		e = store_user_env(to_delete->cmd);
+-
+-		dm_list_iterate_items(vgl, &to_delete->vgslist) {
+-			release_vg(vgl->vg);
+-		}
+-
+-		dm_list_iterate_items(pvl, &to_delete->pvslist)
+-			free_pv_fid(pvl->pv);
+-
+-		unlock_vg(to_delete->cmd, NULL, VG_GLOBAL);
+-		to_delete->magic = 0xA5A5A5A5;
+-
+-		restore_user_env(&e);
+-	}
+-
+-	return 0;
+-}
+-
+-static struct dm_list *_lvm_pv_list_pvsegs(pv_t pv)
+-{
+-	struct dm_list *list;
+-	pvseg_list_t *pvseg;
+-	struct pv_segment *pvl;
+-
+-	if (dm_list_empty(&pv->segments))
+-		return NULL;
+-
+-	if (!(list = dm_pool_zalloc(pv->vg->vgmem, sizeof(*list)))) {
+-		log_errno(ENOMEM, "Memory allocation fail for dm_list.");
+-		return NULL;
+-	}
+-
+-	dm_list_init(list);
+-
+-	dm_list_iterate_items(pvl, &pv->segments) {
+-		if (!(pvseg = dm_pool_zalloc(pv->vg->vgmem, sizeof(*pvseg)))) {
+-			log_errno(ENOMEM,
+-				"Memory allocation fail for lvm_pvseg_list.");
+-			return NULL;
+-		}
+-		pvseg->pvseg = pvl;
+-		dm_list_add(list, &pvseg->list);
+-	}
+-
+-	return list;
+-}
+-
+-struct dm_list *lvm_pv_list_pvsegs(pv_t pv)
+-{
+-	struct dm_list *rc;
+-	struct saved_env e = store_user_env(pv->vg->cmd);
+-	rc = _lvm_pv_list_pvsegs(pv);
+-	restore_user_env(&e);
+-	return rc;
+-}
+-
+-pv_t lvm_pv_from_name(vg_t vg, const char *name)
+-{
+-	pv_t rc = NULL;
+-	struct pv_list *pvl;
+-	struct saved_env e = store_user_env(vg->cmd);
+-
+-	dm_list_iterate_items(pvl, &vg->pvs)
+-		if (!strcmp(name, pv_dev_name(pvl->pv))) {
+-			rc = pvl->pv;
+-			break;
+-		}
+-
+-	restore_user_env(&e);
+-	return rc;
+-}
+-
+-static pv_t _lvm_pv_from_uuid(vg_t vg, const char *uuid)
+-{
+-	struct pv_list *pvl;
+-	struct id id;
+-
+-	if (strlen(uuid) < ID_LEN) {
+-		log_errno (EINVAL, "Invalid UUID string length");
+-		return NULL;
+-	}
+-
+-	if (!id_read_format(&id, uuid)) {
+-		log_errno(EINVAL, "Invalid UUID format.");
+-		return NULL;
+-	}
+-
+-	dm_list_iterate_items(pvl, &vg->pvs)
+-		if (id_equal(&id, &pvl->pv->id))
+-			return pvl->pv;
+-
+-	return NULL;
+-}
+-
+-pv_t lvm_pv_from_uuid(vg_t vg, const char *uuid)
+-{
+-	pv_t rc;
+-	struct saved_env e = store_user_env(vg->cmd);
+-	rc = _lvm_pv_from_uuid(vg, uuid);
+-	restore_user_env(&e);
+-	return rc;
+-}
+-
+-static int _lvm_pv_resize(const pv_t pv, uint64_t new_size)
+-{
+-	uint64_t size = new_size >> SECTOR_SHIFT;
+-
+-	if (new_size % SECTOR_SIZE) {
+-		log_errno(EINVAL, "Size not a multiple of 512");
+-		return -1;
+-	}
+-
+-	if (!vg_check_write_mode(pv->vg))
+-		return -1;
+-
+-	if (!pv_resize_single(pv->vg->cmd, pv->vg, pv, size, 1)) {
+-		log_error("PV re-size failed!");
+-		return -1;
+-	}
+-
+-	return 0;
+-}
+-
+-int lvm_pv_resize(const pv_t pv, uint64_t new_size)
+-{
+-	int rc;
+-	struct saved_env e = store_user_env(pv->vg->cmd);
+-	rc = _lvm_pv_resize(pv, new_size);
+-	restore_user_env(&e);
+-	return rc;
+-}
+-
+-/*
+- * Common internal code to create a parameter passing object
+- */
+-static struct lvm_pv_create_params *_lvm_pv_params_create(
+-		lvm_t libh,
+-		const char *pv_name,
+-		struct lvm_pv_create_params *pvcp_in)
+-{
+-	struct lvm_pv_create_params *pvcp = NULL;
+-	const char *dev = NULL;
+-	struct cmd_context *cmd = (struct cmd_context *)libh;
+-
+-	if (!pv_name || strlen(pv_name) == 0) {
+-		log_error("Invalid pv_name");
+-		return NULL;
+-	}
+-
+-	if (!pvcp_in) {
+-		pvcp = dm_pool_zalloc(cmd->libmem, sizeof(struct lvm_pv_create_params));
+-	} else {
+-		pvcp = pvcp_in;
+-	}
+-
+-	if (!pvcp) {
+-		return NULL;
+-	}
+-
+-	dev = dm_pool_strdup(cmd->libmem, pv_name);
+-	if (!dev) {
+-		return NULL;
+-	}
+-
+-	pvcreate_params_set_defaults(&pvcp->pv_p);
+-	pvcp->pv_p.yes = 1;
+-	pvcp->pv_p.force = DONT_PROMPT;
+-	pvcp->pv_name = dev;
+-	pvcp->libh = libh;
+-	pvcp->magic = PV_CREATE_PARAMS_MAGIC;
+-
+-	return pvcp;
+-}
+-
+-pv_create_params_t lvm_pv_params_create(lvm_t libh, const char *pv_name)
+-{
+-	pv_create_params_t rc;
+-	struct saved_env e = store_user_env((struct cmd_context *)libh);
+-	rc = _lvm_pv_params_create(libh, pv_name, NULL);
+-	restore_user_env(&e);
+-	return rc;
+-}
+-
+-struct lvm_property_value lvm_pv_params_get_property(
+-						const pv_create_params_t params,
+-						const char *name)
+-{
+-	struct lvm_property_value rc = {
+-		.is_valid = 0
+-	};
+-	struct saved_env e;
+-
+-	if (params && params->magic == PV_CREATE_PARAMS_MAGIC) {
+-		e = store_user_env((struct cmd_context *)(params->libh));
+-		rc = get_property(NULL, NULL, NULL, NULL, NULL, NULL, &params->pv_p,
+-							name);
+-		restore_user_env(&e);
+-	} else {
+-		log_error("Invalid pv_create_params parameter");
+-	}
+-
+-	return rc;
+-}
+-
+-int lvm_pv_params_set_property(pv_create_params_t params, const char *name,
+-								struct lvm_property_value *prop)
+-{
+-	int rc = -1;
+-	struct saved_env e;
+-
+-	if (params && params->magic == PV_CREATE_PARAMS_MAGIC) {
+-		e = store_user_env((struct cmd_context *)(params->libh));
+-		rc = set_property(NULL, NULL, NULL, NULL, &params->pv_p, name, prop);
+-		restore_user_env(&e);
+-	} else {
+-		log_error("Invalid pv_create_params parameter");
+-	}
+-	return rc;
+-}
+-
+-static int _pv_create(pv_create_params_t params)
+-{
+-	struct cmd_context *cmd = (struct cmd_context *)params->libh;
+-	int rc = 0;
+-
+-	if (params->pv_p.pva.size) {
+-		if (params->pv_p.pva.size % SECTOR_SIZE) {
+-			log_errno(EINVAL, "Size not a multiple of 512");
+-			return -1;
+-		}
+-		params->pv_p.pva.size = params->pv_p.pva.size >> SECTOR_SHIFT;
+-	}
+-
+-	if (!lock_vol(cmd, VG_ORPHANS, LCK_VG_WRITE, NULL)) {
+-		log_errno(EINVAL, "Can't get lock for orphan PVs");
+-		return -1;
+-	}
+-
+-	if (!(pvcreate_vol(cmd, params->pv_name, &params->pv_p, 1)))
+-		rc = -1;
+-
+-	unlock_vg(cmd, NULL, VG_ORPHANS);
+-	return rc;
+-}
+-
+-int lvm_pv_create(lvm_t libh, const char *pv_name, uint64_t size)
+-{
+-	struct lvm_pv_create_params pp;
+-	int rc = -1;
+-	struct saved_env e = store_user_env((struct cmd_context *)libh);
+-
+-	if (_lvm_pv_params_create(libh, pv_name, &pp)) {
+-		pp.pv_p.pva.size = size;
+-		rc = _pv_create(&pp);
+-	}
+-
+-	restore_user_env(&e);
+-	return rc;
+-}
+-
+-int lvm_pv_create_adv(pv_create_params_t params)
+-{
+-	int rc = -1;
+-	struct saved_env e;
+-
+-	if (params && params->magic == PV_CREATE_PARAMS_MAGIC) {
+-		e = store_user_env((struct cmd_context *)(params->libh));
+-		rc = _pv_create(params);
+-		restore_user_env(&e);
+-	} else {
+-		log_error("Invalid pv_create_params parameter");
+-	}
+-
+-	return rc;
+-}
+diff --git a/liblvm/lvm_vg.c b/liblvm/lvm_vg.c
+deleted file mode 100644
+index b55d195..0000000
+--- a/liblvm/lvm_vg.c
++++ /dev/null
+@@ -1,564 +0,0 @@
+-/*
+- * Copyright (C) 2008-2013 Red Hat, Inc. All rights reserved.
+- *
+- * This file is part of LVM2.
+- *
+- * This copyrighted material is made available to anyone wishing to use,
+- * modify, copy, or redistribute it subject to the terms and conditions
+- * of the GNU Lesser General Public License v.2.1.
+- *
+- * You should have received a copy of the GNU Lesser General Public License
+- * along with this program; if not, write to the Free Software Foundation,
+- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
+- */
+-
+-#include "lib/misc/lib.h"
+-#include "lib/commands/toolcontext.h"
+-#include "lib/metadata/metadata.h"
+-#include "lib/format_text/archiver.h"
+-#include "lib/locking/locking.h"
+-#include "lib/cache/lvmcache.h"
+-#include "lib/cache/lvmetad.h"
+-#include "lvm_misc.h"
+-#include "liblvm/lvm2app.h"
+-#include "lib/display/display.h"
+-#include "lib/cache/lvmetad.h"
+-
+-int lvm_vg_add_tag(vg_t vg, const char *tag)
+-{
+-	int rc = -1;
+-	struct saved_env e = store_user_env(vg->cmd);
+-
+-	if (!vg_read_error(vg) && vg_check_write_mode(vg) &&
+-		vg_change_tag(vg, tag, 1))
+-		rc = 0;
+-	restore_user_env(&e);
+-	return rc;
+-}
+-
+-
+-int lvm_vg_remove_tag(vg_t vg, const char *tag)
+-{
+-	int rc = -1;
+-	struct saved_env e = store_user_env(vg->cmd);
+-
+-	if (!vg_read_error(vg) && vg_check_write_mode(vg) &&
+-		vg_change_tag(vg, tag, 0))
+-		rc = 0;
+-	restore_user_env(&e);
+-	return rc;
+-}
+-
+-
+-vg_t lvm_vg_create(lvm_t libh, const char *vg_name)
+-{
+-	struct volume_group *vg = NULL;
+-	struct saved_env e = store_user_env((struct cmd_context *)libh);
+-
+-	vg = vg_lock_and_create((struct cmd_context *)libh, vg_name);
+-	/* FIXME: error handling is still TBD */
+-	if (vg_read_error(vg)) {
+-		release_vg(vg);
+-		vg = NULL;
+-	} else {
+-		vg->open_mode = 'w';
+-	}
+-
+-	restore_user_env(&e);
+-	return (vg_t) vg;
+-}
+-
+-static int _lvm_vg_extend(vg_t vg, const char *device)
+-{
+-	struct pvcreate_params pp;
+-
+-	if (vg_read_error(vg))
+-		return -1;
+-
+-	if (!vg_check_write_mode(vg))
+-		return -1;
+-
+-	if (!lock_vol(vg->cmd, VG_ORPHANS, LCK_VG_WRITE, NULL)) {
+-		log_error("Can't get lock for orphan PVs");
+-		return -1;
+-	}
+-
+-	pvcreate_params_set_defaults(&pp);
+-	if (!vg_extend(vg, 1, &device, &pp)) {
+-		unlock_vg(vg->cmd, NULL, VG_ORPHANS);
+-		return -1;
+-	}
+-	/*
+-	 * FIXME: Either commit to disk, or keep holding VG_ORPHANS and
+-	 * release in lvm_vg_close().
+-	 */
+-	unlock_vg(vg->cmd, NULL, VG_ORPHANS);
+-	return 0;
+-}
+-
+-int lvm_vg_extend(vg_t vg, const char *device)
+-{
+-	int rc = 0;
+-	struct saved_env e = store_user_env(vg->cmd);
+-	rc = _lvm_vg_extend(vg, device);
+-	restore_user_env(&e);
+-	return rc;
+-}
+-
+-int lvm_vg_reduce(vg_t vg, const char *device)
+-{
+-	int rc = -1;
+-	struct saved_env e = store_user_env(vg->cmd);
+-
+-	if (!vg_read_error(vg) && vg_check_write_mode(vg) && vg_reduce(vg, device))
+-		rc = 0;
+-
+-	restore_user_env(&e);
+-	return rc;
+-}
+-
+-int lvm_vg_set_extent_size(vg_t vg, uint32_t new_size)
+-{
+-	int rc = -1;
+-	struct saved_env e = store_user_env(vg->cmd);
+-
+-	if (!vg_read_error(vg) && vg_check_write_mode(vg) &&
+-		vg_set_extent_size(vg, new_size / SECTOR_SIZE))
+-		rc = 0;
+-
+-	restore_user_env(&e);
+-	return rc;
+-}
+-
+-static int _lvm_vg_write(vg_t vg)
+-{
+-	struct pv_list *pvl;
+-
+-	if (vg_read_error(vg))
+-		return -1;
+-	if (!vg_check_write_mode(vg))
+-		return -1;
+-
+-	if (dm_list_empty(&vg->pvs)) {
+-		if (!vg_remove(vg))
+-			return -1;
+-		return 0;
+-	}
+-
+-	if (! dm_list_empty(&vg->removed_pvs)) {
+-		if (!lock_vol(vg->cmd, VG_ORPHANS, LCK_VG_WRITE, NULL)) {
+-			log_error("Can't get lock for orphan PVs");
+-			return 0;
+-		}
+-	}
+-
+-	if (!archive(vg))
+-		return -1;
+-
+-	/* Store VG on disk(s) */
+-	if (!vg_write(vg) || !vg_commit(vg))
+-		return -1;
+-
+-	if (! dm_list_empty(&vg->removed_pvs)) {
+-		dm_list_iterate_items(pvl, &vg->removed_pvs) {
+-			pv_write_orphan(vg->cmd, pvl->pv);
+-			pv_set_fid(pvl->pv, NULL);
+-			/* FIXME: do pvremove / label_remove()? */
+-		}
+-		dm_list_init(&vg->removed_pvs);
+-		unlock_vg(vg->cmd, NULL, VG_ORPHANS);
+-	}
+-
+-	return 0;
+-}
+-
+-int lvm_vg_write(vg_t vg)
+-{
+-	int rc;
+-	struct saved_env e = store_user_env(vg->cmd);
+-	rc = _lvm_vg_write(vg);
+-	restore_user_env(&e);
+-	return rc;
+-}
+-
+-int lvm_vg_close(vg_t vg)
+-{
+-	struct saved_env e = store_user_env(vg->cmd);
+-	if (vg_read_error(vg) == FAILED_LOCKING)
+-		release_vg(vg);
+-	else if (!lvmcache_vgname_is_locked(vg->name))
+-		release_vg(vg);
+-	else
+-		unlock_and_release_vg(vg->cmd, vg, vg->name);
+-	restore_user_env(&e);
+-	return 0;
+-}
+-
+-int lvm_vg_remove(vg_t vg)
+-{
+-	int rc = -1;
+-	struct saved_env e = store_user_env(vg->cmd);
+-
+-	if (!vg_read_error(vg) && vg_check_write_mode(vg) && vg_remove_check(vg)) {
+-		vg_remove_pvs(vg);
+-		rc = 0;
+-	}
+-
+-	restore_user_env(&e);
+-	return rc;
+-}
+-
+-static vg_t _lvm_vg_open(lvm_t libh, const char *vgname, const char *mode,
+-		  uint32_t flags)
+-{
+-	uint32_t internal_flags = 0;
+-	struct volume_group *vg;
+-
+-	if (!strncmp(mode, "w", 1))
+-		internal_flags |= READ_FOR_UPDATE;
+-	else if (strncmp(mode, "r", 1)) {
+-		log_errno(EINVAL, "Invalid VG open mode");
+-		return NULL;
+-	}
+-
+-	lvmcache_label_scan((struct cmd_context *)libh);
+-
+-	vg = vg_read((struct cmd_context *)libh, vgname, NULL, internal_flags, 0);
+-	if (vg_read_error(vg)) {
+-		/* FIXME: use log_errno either here in inside vg_read */
+-		release_vg(vg);
+-		return NULL;
+-	}
+-	/* FIXME: combine this with locking ? */
+-	vg->open_mode = mode[0];
+-
+-	return (vg_t) vg;
+-}
+-
+-vg_t lvm_vg_open(lvm_t libh, const char *vgname, const char *mode,
+-		  uint32_t flags)
+-{
+-	vg_t rc;
+-	struct saved_env e = store_user_env((struct cmd_context*)libh);
+-	rc = _lvm_vg_open(libh, vgname, mode, flags);
+-	restore_user_env(&e);
+-	return rc;
+-}
+-
+-static struct dm_list *_lvm_vg_list_pvs(vg_t vg)
+-{
+-	struct dm_list *list;
+-	pv_list_t *pvs;
+-	struct pv_list *pvl;
+-
+-	if (dm_list_empty(&vg->pvs))
+-		return NULL;
+-
+-	if (!(list = dm_pool_zalloc(vg->vgmem, sizeof(*list)))) {
+-		log_errno(ENOMEM, "Memory allocation fail for dm_list.");
+-		return NULL;
+-	}
+-	dm_list_init(list);
+-
+-	dm_list_iterate_items(pvl, &vg->pvs) {
+-		if (!(pvs = dm_pool_zalloc(vg->vgmem, sizeof(*pvs)))) {
+-			log_errno(ENOMEM,
+-				"Memory allocation fail for lvm_pv_list.");
+-			return NULL;
+-		}
+-		pvs->pv = pvl->pv;
+-		dm_list_add(list, &pvs->list);
+-	}
+-	return list;
+-}
+-
+-struct dm_list *lvm_vg_list_pvs(vg_t vg)
+-{
+-	struct dm_list *rc;
+-	struct saved_env e = store_user_env(vg->cmd);
+-	rc = _lvm_vg_list_pvs(vg);
+-	restore_user_env(&e);
+-	return rc;
+-}
+-
+-static struct dm_list *_lvm_vg_list_lvs(vg_t vg)
+-{
+-	struct dm_list *list;
+-	lv_list_t *lvs;
+-	struct lv_list *lvl;
+-
+-	if (dm_list_empty(&vg->lvs))
+-		return NULL;
+-
+-	if (!(list = dm_pool_zalloc(vg->vgmem, sizeof(*list)))) {
+-		log_errno(ENOMEM, "Memory allocation fail for dm_list.");
+-		return NULL;
+-	}
+-	dm_list_init(list);
+-
+-	dm_list_iterate_items(lvl, &vg->lvs) {
+-		if (!(lvs = dm_pool_zalloc(vg->vgmem, sizeof(*lvs)))) {
+-			log_errno(ENOMEM,
+-				"Memory allocation fail for lvm_lv_list.");
+-			return NULL;
+-		}
+-		lvs->lv = lvl->lv;
+-		dm_list_add(list, &lvs->list);
+-	}
+-	return list;
+-}
+-
+-struct dm_list *lvm_vg_list_lvs(vg_t vg)
+-{
+-	struct dm_list *rc;
+-	struct saved_env e = store_user_env(vg->cmd);
+-	rc = _lvm_vg_list_lvs(vg);
+-	restore_user_env(&e);
+-	return rc;
+-}
+-
+-struct dm_list *lvm_vg_get_tags(const vg_t vg)
+-{
+-	struct dm_list *rc;
+-	struct saved_env e = store_user_env(vg->cmd);
+-	rc = tag_list_copy(vg->vgmem, &vg->tags);
+-	restore_user_env(&e);
+-	return rc;
+-}
+-
+-uint64_t lvm_vg_get_seqno(const vg_t vg)
+-{
+-	uint64_t rc;
+-	struct saved_env e = store_user_env(vg->cmd);
+-	rc = vg_seqno(vg);
+-	restore_user_env(&e);
+-	return rc;
+-}
+-
+-uint64_t lvm_vg_is_clustered(const vg_t vg)
+-{
+-	uint64_t rc;
+-	struct saved_env e = store_user_env(vg->cmd);
+-	rc = vg_is_clustered(vg);
+-	restore_user_env(&e);
+-	return rc;
+-}
+-
+-uint64_t lvm_vg_is_exported(const vg_t vg)
+-{
+-	uint64_t rc;
+-	struct saved_env e = store_user_env(vg->cmd);
+-	rc = vg_is_exported(vg);
+-	restore_user_env(&e);
+-	return rc;
+-}
+-
+-uint64_t lvm_vg_is_partial(const vg_t vg)
+-{
+-	uint64_t rc;
+-	struct saved_env e = store_user_env(vg->cmd);
+-	rc = (vg_missing_pv_count(vg) != 0);
+-	restore_user_env(&e);
+-	return rc;
+-}
+-
+-/* FIXME: invalid handle? return INTMAX? */
+-uint64_t lvm_vg_get_size(const vg_t vg)
+-{
+-	uint64_t rc;
+-	struct saved_env e = store_user_env(vg->cmd);
+-	rc = SECTOR_SIZE * vg_size(vg);
+-	restore_user_env(&e);
+-	return rc;
+-}
+-
+-uint64_t lvm_vg_get_free_size(const vg_t vg)
+-{
+-	uint64_t rc;
+-	struct saved_env e = store_user_env(vg->cmd);
+-	rc = SECTOR_SIZE * vg_free(vg);
+-	restore_user_env(&e);
+-	return rc;
+-}
+-
+-uint64_t lvm_vg_get_extent_size(const vg_t vg)
+-{
+-	uint64_t rc;
+-	struct saved_env e = store_user_env(vg->cmd);
+-	rc = SECTOR_SIZE * vg_extent_size(vg);
+-	restore_user_env(&e);
+-	return rc;
+-}
+-
+-uint64_t lvm_vg_get_extent_count(const vg_t vg)
+-{
+-	uint64_t rc;
+-	struct saved_env e = store_user_env(vg->cmd);
+-	rc = vg_extent_count(vg);
+-	restore_user_env(&e);
+-	return rc;
+-}
+-
+-uint64_t lvm_vg_get_free_extent_count(const vg_t vg)
+-{
+-	uint64_t rc;
+-	struct saved_env e = store_user_env(vg->cmd);
+-	rc = vg_free_count(vg);
+-	restore_user_env(&e);
+-	return rc;
+-}
+-
+-uint64_t lvm_vg_get_pv_count(const vg_t vg)
+-{
+-	uint64_t rc;
+-	struct saved_env e = store_user_env(vg->cmd);
+-	rc = vg_pv_count(vg);
+-	restore_user_env(&e);
+-	return rc;
+-}
+-
+-uint64_t lvm_vg_get_max_pv(const vg_t vg)
+-{
+-	uint64_t rc;
+-	struct saved_env e = store_user_env(vg->cmd);
+-	rc = vg_max_pv(vg);
+-	restore_user_env(&e);
+-	return rc;
+-}
+-
+-uint64_t lvm_vg_get_max_lv(const vg_t vg)
+-{
+-	uint64_t rc;
+-	struct saved_env e = store_user_env(vg->cmd);
+-	rc = vg_max_lv(vg);
+-	restore_user_env(&e);
+-	return rc;
+-}
+-
+-const char *lvm_vg_get_uuid(const vg_t vg)
+-{
+-	const char *rc;
+-	struct saved_env e = store_user_env(vg->cmd);
+-	rc = vg_uuid_dup(vg);
+-	restore_user_env(&e);
+-	return rc;
+-}
+-
+-const char *lvm_vg_get_name(const vg_t vg)
+-{
+-	const char *rc;
+-	struct saved_env e = store_user_env(vg->cmd);
+-	rc = dm_pool_strndup(vg->vgmem, vg->name, NAME_LEN+1);
+-	restore_user_env(&e);
+-	return rc;
+-}
+-
+-
+-struct lvm_property_value lvm_vg_get_property(const vg_t vg, const char *name)
+-{
+-	struct lvm_property_value rc;
+-	struct saved_env e = store_user_env(vg->cmd);
+-	rc = get_property(NULL, vg, NULL, NULL, NULL, NULL, NULL, name);
+-	restore_user_env(&e);
+-	return rc;
+-}
+-
+-int lvm_vg_set_property(const vg_t vg, const char *name,
+-			struct lvm_property_value *value)
+-{
+-	/* At this point it is unknown if all property set paths make the
+-	 * appropriate copy of the string.  We will allocate a copy on the vg so
+-	 * that worst case we have two copies which will get freed when the vg gets
+-	 * released.
+-	 */
+-	int rc;
+-	struct saved_env e = store_user_env(vg->cmd);
+-
+-	if (value->is_valid && value->is_string && value->value.string) {
+-		value->value.string = dm_pool_strndup(vg->vgmem, value->value.string,
+-				strlen(value->value.string) + 1);
+-	}
+-
+-	rc = set_property(NULL, vg, NULL, NULL, NULL, name, value);
+-	restore_user_env(&e);
+-	return rc;
+-}
+-
+-struct dm_list *lvm_list_vg_names(lvm_t libh)
+-{
+-	struct dm_list *rc = NULL;
+-	struct saved_env e = store_user_env((struct cmd_context *)libh);
+-
+-	if (lvmetad_vg_list_to_lvmcache((struct cmd_context *)libh)) {
+-		rc = get_vgnames((struct cmd_context *)libh, 0);
+-	}
+-	restore_user_env(&e);
+-	return rc;
+-}
+-
+-struct dm_list *lvm_list_vg_uuids(lvm_t libh)
+-{
+-	struct dm_list *rc = NULL;
+-	struct saved_env e = store_user_env((struct cmd_context *)libh);
+-
+-	if (lvmetad_vg_list_to_lvmcache((struct cmd_context *)libh)) {
+-		rc = get_vgids((struct cmd_context *)libh, 0);
+-	}
+-	restore_user_env(&e);
+-	return rc;
+-}
+-
+-/*
+- * FIXME: Elaborate on when to use, side-effects, .cache file, etc
+- */
+-int lvm_scan(lvm_t libh)
+-{
+-	int rc = 0;
+-	struct saved_env e = store_user_env((struct cmd_context *)libh);
+-
+-	if (!lvmcache_label_scan((struct cmd_context *)libh))
+-		rc = -1;
+-
+-	restore_user_env(&e);
+-	return rc;
+-}
+-
+-int lvm_lv_name_validate(const vg_t vg, const char *name)
+-{
+-	int rc = -1;
+-	name_error_t name_error;
+-	int historical;
+-
+-	struct saved_env e = store_user_env(vg->cmd);
+-
+-	name_error = validate_name_detailed(name);
+-
+-	if (NAME_VALID == name_error) {
+-		if (apply_lvname_restrictions(name)) {
+-			if (!lv_name_is_used_in_vg(vg, name, &historical)) {
+-				rc = 0;
+-			} else {
+-				log_errno(EINVAL, "%sLV name exists in VG",
+-					  historical ? "historical " : "");
+-			}
+-		}
+-	} else {
+-		display_name_error(name_error);
+-	}
+-
+-	restore_user_env(&e);
+-	return rc;
+-}
+-
+-int lvm_vg_name_validate(lvm_t libh, const char *name)
+-{
+-	int rc = -1;
+-	struct cmd_context *cmd = (struct cmd_context *)libh;
+-	struct saved_env e = store_user_env(cmd);
+-
+-	if (validate_new_vg_name(cmd, name))
+-		rc = 0;
+-
+-	restore_user_env(&e);
+-	return rc;
+-}
+diff --git a/liblvm/test/vgadd.c b/liblvm/test/vgadd.c
+deleted file mode 100644
+index c96baa7..0000000
+--- a/liblvm/test/vgadd.c
++++ /dev/null
+@@ -1,90 +0,0 @@
+-/*
+- * Copyright (C) 2009 Red Hat, Inc. All rights reserved.
+- *
+- * This file is part of LVM2.
+- *
+- * This copyrighted material is made available to anyone wishing to use,
+- * modify, copy, or redistribute it subject to the terms and conditions
+- * of the GNU Lesser General Public License v.2.1.
+- *
+- * You should have received a copy of the GNU Lesser General Public License
+- * along with this program; if not, write to the Free Software Foundation,
+- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
+- */
+-
+-#include <stdio.h>
+-#include <unistd.h>
+-#include <inttypes.h>
+-#include <assert.h>
+-
+-#include "lvm2app.h"
+-
+-int main(int argc, char *argv[])
+-{
+-	char *vgname = NULL;
+-	lvm_t handle;
+-	vg_t vg;
+-	lv_t lv;
+-	lvm_str_list_t *sl;
+-	pv_list_t *pvl;
+-	lv_list_t *lvl;
+-	struct dm_list *vgnames;
+-	struct dm_list *vgids;
+-	struct dm_list *pvlist;
+-	struct dm_list *lvlist;
+-	int added = 0;
+-	int ret;
+-	int i;
+-
+-	vgname = argv[1];
+-
+-	handle = lvm_init(NULL);
+-	if (!handle) {
+-		printf("lvm_init failed\n");
+-		return -1;
+-	}
+-
+-	vg = lvm_vg_create(handle, vgname);
+-
+-	for (i = 2; i < argc; i++) {
+-		printf("adding %s to vg\n", argv[i]);
+-		ret = lvm_vg_extend(vg, argv[i]);
+-
+-		if (ret) {
+-			printf("Failed to add %s to vg\n", argv[i]);
+-			goto out;
+-		}
+-
+-		added++;
+-	}
+-
+-	if (!added) {
+-		printf("No PVs added, not writing VG.\n");
+-		goto out;
+-	}
+-
+-	printf("writing vg\n");
+-	ret = lvm_vg_write(vg);
+-
+-	lvm_vg_close(vg);
+-
+-	sleep(1);
+-
+-	vg = lvm_vg_open(handle, vgname, "w", 0);
+-	if (!vg) {
+-		printf("vg open %s failed\n", vgname);
+-		goto out;
+-	}
+-
+-	lv = lvm_vg_create_lv_linear(vg, "lv0", 1024*1024);
+-	if (!lv) {
+-		printf("lv create failed\n");
+-		goto out;
+-	}
+-
+-	lvm_vg_close(vg);
+-out:
+-	lvm_quit(handle);
+-
+-	return 0;
+-}
+diff --git a/liblvm/test/vgshow.c b/liblvm/test/vgshow.c
+deleted file mode 100644
+index 519f3dd..0000000
+--- a/liblvm/test/vgshow.c
++++ /dev/null
+@@ -1,95 +0,0 @@
+-/*
+- * Copyright (C) 2009 Red Hat, Inc. All rights reserved.
+- *
+- * This file is part of LVM2.
+- *
+- * This copyrighted material is made available to anyone wishing to use,
+- * modify, copy, or redistribute it subject to the terms and conditions
+- * of the GNU Lesser General Public License v.2.1.
+- *
+- * You should have received a copy of the GNU Lesser General Public License
+- * along with this program; if not, write to the Free Software Foundation,
+- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
+- */
+-
+-#include <stdio.h>
+-#include <unistd.h>
+-#include <inttypes.h>
+-#include <assert.h>
+-
+-#include "lvm2app.h"
+-
+-int main(int argc, char *argv[])
+-{
+-	char *vgname = NULL;
+-	lvm_t handle;
+-	vg_t vg;
+-	lvm_str_list_t *sl;
+-	pv_list_t *pvl;
+-	lv_list_t *lvl;
+-	struct dm_list *vgnames;
+-	struct dm_list *vgids;
+-	struct dm_list *pvlist;
+-	struct dm_list *lvlist;
+-	uint64_t val;
+-
+-	vgname = argv[1];
+-
+-	handle = lvm_init(NULL);
+-	if (!handle) {
+-		printf("lvm_init failed\n");
+-		return -1;
+-	}
+-
+-	vgnames = lvm_list_vg_names(handle);
+-
+-	dm_list_iterate_items(sl, vgnames)
+-		printf("vg name %s\n", sl->str);
+-
+-	vgids = lvm_list_vg_uuids(handle);
+-
+-	dm_list_iterate_items(sl, vgids)
+-		printf("vg uuid %s\n", sl->str);
+-
+-	if (!vgname) {
+-		printf("No vg name arg\n");
+-		goto out;
+-	}
+-
+-	vg = lvm_vg_open(handle, vgname, "r", 0);
+-
+-	if (!vg) {
+-		printf("vg open %s failed\n", vgname);
+-		goto out;
+-	}
+-
+-	val = lvm_vg_get_seqno(vg);
+-
+-	printf("vg seqno %llu\n", (unsigned long long)val);
+-
+-	pvlist = lvm_vg_list_pvs(vg);
+-	
+-	dm_list_iterate_items(pvl, pvlist) {
+-		printf("vg pv name %s\n", lvm_pv_get_name(pvl->pv));
+-
+-		val = lvm_pv_get_dev_size(pvl->pv);
+-
+-		printf("vg pv size %llu\n", (unsigned long long)val);
+-	}
+-
+-	lvlist = lvm_vg_list_lvs(vg);
+-	
+-	dm_list_iterate_items(lvl, lvlist) {
+-		printf("vg lv name %s\n", lvm_lv_get_name(lvl->lv));
+-
+-		val = lvm_lv_get_size(lvl->lv);
+-
+-		printf("vg lv size %llu\n", (unsigned long long)val);
+-	}
+-
+-	lvm_vg_close(vg);
+-out:
+-	lvm_quit(handle);
+-
+-	return 0;
+-}
+diff --git a/test/api/Makefile.in b/test/api/Makefile.in
+index 6872095..c8d9fc0 100644
+--- a/test/api/Makefile.in
++++ b/test/api/Makefile.in
+@@ -16,47 +16,14 @@ top_srcdir = @top_srcdir@
+ top_builddir = @top_builddir@
+ 
+ TARGETS =
+-ifeq ("@APPLIB@", "yes")
+-TARGETS += test
+-SOURCES = test.c
+-
+-TARGETS += \
+-	lvtest.t \
+-	vglist.t \
+-	percent.t \
+-	pe_start.t \
+-	thin_percent.t \
+-	vgtest.t
+-
+-SOURCES2 = \
+-	lvtest.c \
+-	vglist.c \
+-	percent.c \
+-	pe_start.c \
+-	thin_percent.c \
+-	vgtest.c
+-
+-endif
+-
+ PYTEST = python_lvm_unit.py
+ 
+ include $(top_builddir)/make.tmpl
+ 
+ DEFS += -D_REENTRANT
+-DEPLIBS += $(top_builddir)/liblvm/liblvm2app.so
+-LDFLAGS+=\
+-	-L$(top_builddir)/liblvm \
+-	-L$(top_builddir)/daemons/dmeventd
+-LIBS += @LVM2APP_LIB@ $(DMEVENT_LIBS)
+-
+-%.t: %.o $(DEPLIBS)
+-	$(CC) -o $@ $(<) $(CFLAGS) $(LDFLAGS) $(ELDFLAGS) $(LIBS)
+ 
+ all:
+ 	test -x $(PYTEST) || chmod 755 $(PYTEST)
+ 
+-test: $(OBJECTS) $(DEPLIBS)
+-	$(CC) -o $@ $(OBJECTS) $(CFLAGS) $(LDFLAGS) $(ELDFLAGS) $(LIBS) $(READLINE_LIBS)
+-
+ Makefile: $(srcdir)/Makefile.in $(top_builddir)/config.status
+ 	cd $(top_builddir) && $(SHELL) ./config.status test/api/Makefile
+diff --git a/test/api/lvtest.c b/test/api/lvtest.c
+deleted file mode 100644
+index 9a5fc22..0000000
+--- a/test/api/lvtest.c
++++ /dev/null
+@@ -1,64 +0,0 @@
+-/*
+- * Copyright (C) 2010 Red Hat, Inc. All rights reserved.
+- *
+- * This file is part of LVM2.
+- *
+- * This copyrighted material is made available to anyone wishing to use,
+- * modify, copy, or redistribute it subject to the terms and conditions
+- * of the GNU Lesser General Public License v.2.1.
+- *
+- * You should have received a copy of the GNU Lesser General Public License
+- * along with this program; if not, write to the Free Software Foundation,
+- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
+- */
+-
+-#undef NDEBUG
+-
+-#include "liblvm/lvm2app.h"
+-#include "assert.h"
+-
+-#define err(args...) \
+-	do { fprintf(stderr, args); goto bad; } while (0)
+-
+-int main(int argc, char *argv[])
+-{
+-	lvm_t handle;
+-	vg_t vg;
+-	lv_t lv;
+-	int r = -1;
+-
+-	if (!(handle = lvm_init(NULL)))
+-                return -1;
+-
+-	if (!(vg = lvm_vg_open(handle, argv[1], "w", 0)))
+-		err("VG open %s failed.\n", argv[1]);
+-
+-	if (!(lv = lvm_lv_from_name(vg, "test")))
+-                err("LV test not found.\n");
+-
+-	if (lvm_lv_deactivate(lv))
+-                err("LV test deactivation failed.\n");
+-
+-	if (lvm_lv_activate(lv))
+-                err("LV test activation failed.\n");
+-
+-	if (lvm_lv_activate(lv))
+-                err("LV test repeated activation failed.\n");
+-
+-	if (lvm_lv_rename(lv, "test1"))
+-		err("LV test rename to test1 failed.\n");
+-
+-	if (lvm_lv_rename(lv, "test2"))
+-		err("LV test1 rename to test2 failed.\n");
+-
+-	if (lvm_lv_rename(lv, "test"))
+-		err("LV test2 rename to test failed.\n");
+-
+-	if (lvm_vg_close(vg))
+-		err("VG close failed.\n");
+-
+-        r = 0;
+-bad:
+-	lvm_quit(handle);
+-	return r;
+-}
+diff --git a/test/api/pe_start.c b/test/api/pe_start.c
+deleted file mode 100644
+index 16b4c0d..0000000
+--- a/test/api/pe_start.c
++++ /dev/null
+@@ -1,47 +0,0 @@
+-/*
+- * Copyright (C) 2011 Red Hat, Inc. All rights reserved.
+- *
+- * This file is part of LVM2.
+- *
+- * This copyrighted material is made available to anyone wishing to use,
+- * modify, copy, or redistribute it subject to the terms and conditions
+- * of the GNU Lesser General Public License v.2.1.
+- *
+- * You should have received a copy of the GNU Lesser General Public License
+- * along with this program; if not, write to the Free Software Foundation,
+- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
+- */
+-
+-#undef NDEBUG
+-
+-#include "liblvm/lvm2app.h"
+-#include "assert.h"
+-
+-int main(int argc, char *argv[])
+-{
+-	lvm_t handle;
+-	vg_t vg = NULL;
+-	pv_t pv;
+-	struct lvm_property_value v;
+-
+-	handle = lvm_init(NULL);
+-        assert(handle);
+-
+-	vg = lvm_vg_create(handle, argv[1]);
+-        assert(vg);
+-
+-	if (lvm_vg_extend(vg, argv[2]))
+-		abort();
+-
+-	pv = lvm_pv_from_name(vg, argv[2]);
+-	assert(pv);
+-
+-        v = lvm_pv_get_property(pv, "pe_start");
+-        assert(v.is_valid);
+-	fprintf(stderr, "pe_start = %d\n", (int)v.value.integer);
+-        assert(v.value.integer == 2048 * 512);
+-
+-        lvm_vg_close(vg);
+-	lvm_quit(handle);
+-        return 0;
+-}
+diff --git a/test/api/percent.c b/test/api/percent.c
+deleted file mode 100644
+index afc361c..0000000
+--- a/test/api/percent.c
++++ /dev/null
+@@ -1,63 +0,0 @@
+-/*
+- * Copyright (C) 2010 Red Hat, Inc. All rights reserved.
+- *
+- * This file is part of LVM2.
+- *
+- * This copyrighted material is made available to anyone wishing to use,
+- * modify, copy, or redistribute it subject to the terms and conditions
+- * of the GNU Lesser General Public License v.2.1.
+- *
+- * You should have received a copy of the GNU Lesser General Public License
+- * along with this program; if not, write to the Free Software Foundation,
+- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
+- */
+-
+-#undef NDEBUG
+-
+-#include "liblvm/lvm2app.h"
+-#include "assert.h"
+-
+-int main(int argc, char *argv[])
+-{
+-	lvm_t handle;
+-	vg_t vg = NULL;
+-	lv_t lv;
+-	struct lvm_property_value v;
+-	struct lvm_property_value d;
+-
+-	handle = lvm_init(NULL);
+-        assert(handle);
+-
+-	vg = lvm_vg_open(handle, argv[1], "r", 0);
+-        assert(vg);
+-
+-	lv = lvm_lv_from_name(vg, "snap");
+-        assert(lv);
+-
+-        v = lvm_lv_get_property(lv, "snap_percent");
+-        assert(v.is_valid);
+-        assert(v.value.integer == PERCENT_0);
+-
+-	lv = lvm_lv_from_name(vg, "mirr");
+-        assert(lv);
+-
+-        v = lvm_lv_get_property(lv, "copy_percent");
+-        assert(v.is_valid);
+-        assert(v.value.integer == PERCENT_100);
+-
+-        lv = lvm_lv_from_name(vg, "snap2");
+-        assert(lv);
+-
+-        v = lvm_lv_get_property(lv, "snap_percent");
+-        assert(v.is_valid);
+-        assert(v.value.integer == 50 * PERCENT_1);
+-
+-	d = lvm_lv_get_property(lv, "data_percent");
+-	assert(d.is_valid);
+-	assert(d.value.integer == v.value.integer);
+-
+-        lvm_vg_close(vg);
+-
+-	lvm_quit(handle);
+-        return 0;
+-}
+diff --git a/test/api/test.c b/test/api/test.c
+deleted file mode 100644
+index a4d200b..0000000
+--- a/test/api/test.c
++++ /dev/null
+@@ -1,1110 +0,0 @@
+-/*
+- * Copyright (C) 2001-2004 Sistina Software, Inc. All rights reserved.
+- * Copyright (C) 2004-2011 Red Hat, Inc. All rights reserved.
+- *
+- * This file is part of LVM2.
+- *
+- * This copyrighted material is made available to anyone wishing to use,
+- * modify, copy, or redistribute it subject to the terms and conditions
+- * of the GNU Lesser General Public License v.2.1.
+- *
+- * You should have received a copy of the GNU Lesser General Public License
+- * along with this program; if not, write to the Free Software Foundation,
+- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
+- */
+-
+-#include <stdio.h>
+-#include <string.h>
+-#include <stdlib.h>
+-#include <ctype.h>
+-
+-#include "configure.h"
+-#include "liblvm/lvm2app.h"
+-
+-#ifdef READLINE_SUPPORT
+-#include <readline/readline.h>
+-
+-#define MAX_ARGS 64
+-
+-static int lvm_split(char *str, int *argc, char **argv, int max)
+-{
+-	char *b = str, *e;
+-	*argc = 0;
+-
+-	while (*b) {
+-		while (*b && isspace(*b))
+-			b++;
+-
+-		if ((!*b) || ((*argc == 0)&&(*b == '#')))
+-			break;
+-
+-		e = b;
+-		while (*e && !isspace(*e))
+-			e++;
+-
+-		argv[(*argc)++] = b;
+-		if (!*e)
+-			break;
+-		*e++ = '\0';
+-		b = e;
+-		if (*argc == max)
+-			break;
+-	}
+-
+-	if (*argc < max)
+-		argv[*argc] = NULL;
+-
+-	return *argc;
+-}
+-
+-static void _show_help(void)
+-{
+-	printf("'lv_activate vgname lvname: "
+-	       "Activate an LV\n");
+-	printf("'lv_deactivate vgname lvname: "
+-	       "Deactivate an LV\n");
+-	printf("'vg_remove_lv vgname lvname': "
+-	       "Remove a LV\n");
+-	printf("'vg_create_lv_linear vgname lvname size_in_bytes': "
+-	       "Create a linear LV\n");
+-	printf("'scan_vgs': "
+-	       "Scan the system for LVM metadata\n");
+-	printf("'list_vg_names': "
+-	       "List the names of the VGs that exist in the system\n");
+-	printf("'list_vg_ids': "
+-	       "List the uuids of the VGs that exist in the system\n");
+-	printf("'vg_list_pvs vgname': "
+-	       "List the PVs that exist in VG vgname\n");
+-	printf("'pv_list_pvsegs pvname': "
+-	       "List the PV segments that exist in PV pvname\n");
+-	printf("'vg_list_lvs vgname': "
+-	       "List the LVs that exist in VG vgname\n");
+-	printf("'lv_list_lvsegs vgname lvname': "
+-	       "List the LV segments that exist in LV vgname/lvname\n");
+-	printf("'vgs_open': "
+-	       "List the VGs that are currently open\n");
+-	printf("'vgs': "
+-	       "List all VGs known to the system\n");
+-	printf("'vg_extend vgname device: "
+-	       "Issue a lvm_vg_extend() API call on VG 'vgname'\n");
+-	printf("'vg_reduce vgname device: "
+-	       "Issue a lvm_vg_reduce() API call on VG 'vgname'\n");
+-	printf("'vg_open vgname ['r' | 'w']': "
+-	       "Issue a lvm_vg_open() API call on VG 'vgname'\n");
+-	printf("'vg_close vgname': "
+-	       "Issue a lvm_vg_close() API call on VG 'vgname'\n");
+-	printf("'vg_create vgname: "
+-	       "Issue a lvm_vg_create() to create VG 'vgname'\n");
+-	printf("'vg_remove vgname: "
+-	       "Issue a lvm_vg_remove() to remove VG 'vgname'\n");
+-	printf("'config_reload': "
+-	       "Issue a lvm_config_reload() API to reload LVM config\n");
+-	printf("'config_override' device: "
+-	       "Issue a lvm_config_override() with accept device filter\n");
+-	printf("'vg_get_tags vgname': "
+-	       "List the tags of a VG\n");
+-	printf("'lv_get_property vgname lvname property_name': "
+-	       "Display the value of LV property\n");
+-	printf("'vg_get_property vgname property_name': "
+-	       "Display the value of VG property\n");
+-	printf("'pv_get_property pvname property_name': "
+-	       "Display the value of PV property\n");
+-	printf("'vg_set_property vgname property_name': "
+-	       "Set the value of VG property\n");
+-	printf("'lv_get_tags vgname lvname': "
+-	       "List the tags of a LV\n");
+-	printf("'vg_{add|remove}_tag vgname tag': "
+-	       "Add/remove a tag from a VG\n");
+-	printf("'lv_{add|remove}_tag vgname lvname tag': "
+-	       "Add/remove a tag from a LV\n");
+-	printf("'vgname_from_devname device': "
+-	       "Lookup a vgname from a device name\n");
+-	printf("'vgname_from_pvid pvid': "
+-	       "Lookup a vgname from a pvid\n");
+-	printf("'lv_from_uuid vgname lvuuid': "
+-	       "Lookup an LV from an LV uuid\n");
+-	printf("'lv_from_name vgname lvname': "
+-	       "Lookup an LV from an LV name\n");
+-	printf("'pv_from_uuid vgname pvuuid': "
+-	       "Lookup an LV from an LV uuid\n");
+-	printf("'pv_from_name vgname pvname': "
+-	       "Lookup an LV from an LV name\n");
+-	printf("'quit': exit the program\n");
+-}
+-
+-static struct dm_hash_table *_vgid_hash = NULL;
+-static struct dm_hash_table *_vgname_hash = NULL;
+-static struct dm_hash_table *_pvname_hash = NULL;
+-static struct dm_hash_table *_lvname_hash = NULL;
+-
+-static void _hash_destroy_single(struct dm_hash_table **htable)
+-{
+-	if (htable && *htable) {
+-		dm_hash_destroy(*htable);
+-		*htable = NULL;
+-	}
+-}
+-
+-static void _hash_destroy(void)
+-{
+-	_hash_destroy_single(&_vgname_hash);
+-	_hash_destroy_single(&_vgid_hash);
+-	_hash_destroy_single(&_pvname_hash);
+-	_hash_destroy_single(&_lvname_hash);
+-}
+-
+-static int _hash_create(void)
+-{
+-	if (!(_vgname_hash = dm_hash_create(128)))
+-		return 0;
+-	if (!(_pvname_hash = dm_hash_create(128))) {
+-		_hash_destroy_single(&_vgname_hash);
+-		return 0;
+-	}
+-	if (!(_lvname_hash = dm_hash_create(128))) {
+-		_hash_destroy_single(&_vgname_hash);
+-		_hash_destroy_single(&_pvname_hash);
+-		return 0;
+-	}
+-	if (!(_vgid_hash = dm_hash_create(128))) {
+-		_hash_destroy_single(&_vgname_hash);
+-		_hash_destroy_single(&_pvname_hash);
+-		_hash_destroy_single(&_lvname_hash);
+-		return 0;
+-	}
+-	return 1;
+-}
+-
+-/* FIXME: this should be per vg */
+-static lv_t _lookup_lv_by_name(const char *name)
+-{
+-	lv_t lv;
+-
+-	if (!name) {
+-		printf ("Invalid LV name\n");
+-		return NULL;
+-	}
+-	if (!(lv = dm_hash_lookup(_lvname_hash, name))) {
+-		printf ("Can't find %s in LVs - run vg_create_lv first\n",
+-			name);
+-		return NULL;
+-	}
+-	return lv;
+-}
+-
+-static vg_t _lookup_vg_by_name(char **argv, int argc)
+-{
+-	vg_t vg;
+-
+-	if (argc < 2) {
+-		printf ("Please enter vg_name\n");
+-		return NULL;
+-	}
+-	if (!(vg = dm_hash_lookup(_vgid_hash, argv[1])) &&
+-	    !(vg = dm_hash_lookup(_vgname_hash, argv[1]))) {
+-		printf ("Can't find %s in open VGs - run vg_open first\n",
+-			argv[1]);
+-		return NULL;
+-	}
+-	return vg;
+-}
+-
+-static pv_t _lookup_pv_by_name(const char *name)
+-{
+-	pv_t pv;
+-
+-	if (!(pv = dm_hash_lookup(_pvname_hash, name))) {
+-		printf ("Can't find %s in open PVs - run vg_open first\n",
+-			name);
+-		return NULL;
+-	}
+-	return pv;
+-}
+-
+-static void _add_lvs_to_lvname_hash(struct dm_list *lvs)
+-{
+-	struct lvm_lv_list *lvl;
+-	dm_list_iterate_items(lvl, lvs) {
+-		/* Concatenate VG name with LV name */
+-		dm_hash_insert(_lvname_hash, lvm_lv_get_name(lvl->lv), lvl->lv);
+-	}
+-}
+-
+-static void _add_pvs_to_pvname_hash(struct dm_list *pvs)
+-{
+-	struct lvm_pv_list *pvl;
+-	dm_list_iterate_items(pvl, pvs) {
+-		dm_hash_insert(_pvname_hash, lvm_pv_get_name(pvl->pv), pvl->pv);
+-	}
+-}
+-
+-static void _remove_device_from_pvname_hash(struct dm_list *pvs, const char *name)
+-{
+-	struct lvm_pv_list *pvl;
+-	dm_list_iterate_items(pvl, pvs) {
+-		if (!strncmp(lvm_pv_get_name(pvl->pv), name, strlen(name)))
+-			dm_hash_remove(_pvname_hash, name);
+-	}
+-}
+-static void _add_device_to_pvname_hash(struct dm_list *pvs, const char *name)
+-{
+-	struct lvm_pv_list *pvl;
+-	dm_list_iterate_items(pvl, pvs) {
+-		if (!strncmp(lvm_pv_get_name(pvl->pv), name, strlen(name)))
+-			dm_hash_insert(_pvname_hash, name, pvl->pv);
+-	}
+-}
+-
+-static void _vg_reduce(char **argv, int argc, lvm_t libh)
+-{
+-	vg_t vg;
+-	struct dm_list *pvs;
+-
+-	if (argc < 2) {
+-		printf ("Please enter vg_name\n");
+-		return;
+-	}
+-	if (!(vg = dm_hash_lookup(_vgid_hash, argv[1])) &&
+-	    !(vg = dm_hash_lookup(_vgname_hash, argv[1]))) {
+-		printf ("VG not open\n");
+-		return;
+-	}
+-	if (lvm_vg_reduce(vg, argv[2])) {
+-		printf("Error reducing %s by %s\n", argv[1], argv[2]);
+-		return;
+-	}
+-
+-	printf("Success reducing vg %s by %s\n", argv[1], argv[2]);
+-
+-	/*
+-	 * Add the device into the hashes for lookups
+-	 */
+-	pvs = lvm_vg_list_pvs(vg);
+-	if (pvs && !dm_list_empty(pvs))
+-		_remove_device_from_pvname_hash(pvs, argv[2]);
+-}
+-
+-/* Print "Error" or "Success" depending on lvm status */
+-static int _lvm_status_to_pass_fail(int rc)
+-{
+-	if (rc)
+-		printf("Error ");
+-	else
+-		printf("Success ");
+-	return rc;
+-}
+-static void _config_override(char **argv, int argc, lvm_t libh)
+-{
+-	int rc;
+-	char tmp[64];
+-
+-	if (argc < 2) {
+-		printf ("Please enter device\n");
+-		return;
+-	}
+-	snprintf(tmp, 63, "devices{filter=[\"a|%s|\", \"r|.*|\"]}", argv[1]);
+-	rc = lvm_config_override(libh, tmp);
+-	_lvm_status_to_pass_fail(rc);
+-	printf("overriding LVM configuration\n");
+-}
+-
+-static void _config_reload(char **argv, int argc, lvm_t libh)
+-{
+-	int rc;
+-	rc = lvm_config_reload(libh);
+-	_lvm_status_to_pass_fail(rc);
+-	printf("reloading LVM configuration\n");
+-}
+-
+-static void _vg_extend(char **argv, int argc, lvm_t libh)
+-{
+-	vg_t vg;
+-	struct dm_list *pvs;
+-
+-	if (argc < 2) {
+-		printf ("Please enter vg_name\n");
+-		return;
+-	}
+-	if (!(vg = dm_hash_lookup(_vgid_hash, argv[1])) &&
+-	    !(vg = dm_hash_lookup(_vgname_hash, argv[1]))) {
+-		printf ("VG not open\n");
+-		return;
+-	}
+-	if (lvm_vg_extend(vg, argv[2])) {
+-		printf("Error extending %s with %s\n", argv[1], argv[2]);
+-		return;
+-	}
+-
+-	printf("Success extending vg %s with %s\n", argv[1], argv[2]);
+-
+-	/*
+-	 * Add the device into the hashes for lookups
+-	 */
+-	pvs = lvm_vg_list_pvs(vg);
+-	if (pvs && !dm_list_empty(pvs))
+-		_add_device_to_pvname_hash(pvs, argv[2]);
+-}
+-
+-static void _vg_open(char **argv, int argc, lvm_t libh)
+-{
+-	vg_t vg;
+-	struct dm_list *lvs;
+-	struct dm_list *pvs;
+-
+-	if (argc < 2) {
+-		printf ("Please enter vg_name\n");
+-		return;
+-	}
+-	if ((vg = dm_hash_lookup(_vgid_hash, argv[1])) ||
+-	    (vg = dm_hash_lookup(_vgname_hash, argv[1]))) {
+-		printf ("VG already open\n");
+-		return;
+-	}
+-	if (argc < 3)
+-		vg = lvm_vg_open(libh, argv[1], "r", 0);
+-	else
+-		vg = lvm_vg_open(libh, argv[1], argv[2], 0);
+-	if (!vg || !lvm_vg_get_name(vg)) {
+-		printf("Error opening %s\n", argv[1]);
+-		return;
+-	}
+-
+-	printf("Success opening vg %s\n", argv[1]);
+-	dm_hash_insert(_vgname_hash, lvm_vg_get_name(vg), vg);
+-	dm_hash_insert(_vgid_hash, lvm_vg_get_uuid(vg), vg);
+-
+-	/*
+-	 * Add the LVs and PVs into the hashes for lookups
+-	 */
+-	lvs = lvm_vg_list_lvs(vg);
+-	if (lvs && !dm_list_empty(lvs))
+-		_add_lvs_to_lvname_hash(lvs);
+-	pvs = lvm_vg_list_pvs(vg);
+-	if (pvs && !dm_list_empty(pvs))
+-		_add_pvs_to_pvname_hash(pvs);
+-}
+-/* Lookup the vg and remove it from the vgname and vgid hashes */
+-static vg_t _lookup_and_remove_vg(const char *vgname)
+-{
+-	vg_t vg=NULL;
+-
+-	if ((vg = dm_hash_lookup(_vgname_hash, vgname))) {
+-		dm_hash_remove(_vgid_hash, lvm_vg_get_uuid(vg));
+-		dm_hash_remove(_vgname_hash, lvm_vg_get_name(vg));
+-	}
+-	if (!vg && (vg = dm_hash_lookup(_vgid_hash, vgname))) {
+-		dm_hash_remove(_vgid_hash, lvm_vg_get_uuid(vg));
+-		dm_hash_remove(_vgname_hash, lvm_vg_get_name(vg));
+-	}
+-	return vg;
+-}
+-
+-static void _vg_write(char **argv, int argc)
+-{
+-	vg_t vg;
+-	int rc = 0;
+-
+-	if (argc < 2) {
+-		printf ("Please enter vg_name\n");
+-		return;
+-	}
+-	vg = _lookup_vg_by_name(argv, argc);
+-	if (!vg) {
+-		printf("Can't find vg_name %s\n", argv[1]);
+-		return;
+-	}
+-	rc = lvm_vg_write(vg);
+-	_lvm_status_to_pass_fail(rc);
+-	printf("writing VG %s\n", lvm_vg_get_name(vg));
+-}
+-
+-static void _vg_create(char **argv, int argc, lvm_t libh)
+-{
+-	vg_t vg;
+-
+-	if (argc < 2) {
+-		printf ("Please enter vg_name\n");
+-		return;
+-	}
+-	vg = lvm_vg_create(libh, argv[1]);
+-	if (!vg || !lvm_vg_get_name(vg)) {
+-		printf("Error creating %s\n", argv[1]);
+-		return;
+-	}
+-
+-	printf("Success creating vg %s\n", argv[1]);
+-	dm_hash_insert(_vgname_hash, lvm_vg_get_name(vg), vg);
+-	dm_hash_insert(_vgid_hash, lvm_vg_get_uuid(vg), vg);
+-}
+-
+-static void _vg_remove(char **argv, int argc)
+-{
+-	vg_t vg;
+-	int rc = 0;
+-
+-	if (argc < 2) {
+-		printf ("Please enter vg_name\n");
+-		return;
+-	}
+-	vg = _lookup_vg_by_name(argv, argc);
+-	if (!vg) {
+-		printf("Can't find vg_name %s\n", argv[1]);
+-		return;
+-	}
+-	rc = lvm_vg_remove(vg);
+-	_lvm_status_to_pass_fail(rc);
+-	printf("removing VG\n");
+-}
+-
+-static void _vg_close(char **argv, int argc)
+-{
+-	vg_t vg;
+-	int rc = 0;
+-
+-	if (argc < 2) {
+-		printf ("Please enter vg_name\n");
+-		return;
+-	}
+-	vg = _lookup_and_remove_vg(argv[1]);
+-	if (!vg) {
+-		printf("Can't find vg_name %s\n", argv[1]);
+-		return;
+-	}
+-	rc = lvm_vg_close(vg);
+-	_lvm_status_to_pass_fail(rc);
+-	printf("closing VG\n");
+-}
+-
+-static void _show_one_vg(vg_t vg)
+-{
+-	printf("%s (%s): sz=%"PRIu64", free=%"PRIu64", #pv=%"PRIu64
+-		", seq#=%"PRIu64"\n",
+-		lvm_vg_get_name(vg), lvm_vg_get_uuid(vg),
+-		lvm_vg_get_size(vg), lvm_vg_get_free_size(vg),
+-		lvm_vg_get_pv_count(vg), lvm_vg_get_seqno(vg));
+-}
+-
+-static void _print_pv(pv_t pv)
+-{
+-	if (!pv)
+-		return;
+-	printf("%s (%s): size=%"PRIu64", free=%"PRIu64
+-	       ", dev_size=%"PRIu64", mda_count=%"PRIu64"\n",
+-	       lvm_pv_get_name(pv), lvm_pv_get_uuid(pv),
+-	       lvm_pv_get_size(pv), lvm_pv_get_free(pv),
+-	       lvm_pv_get_dev_size(pv),
+-	       lvm_pv_get_mda_count(pv));
+-}
+-
+-static void _print_lv(vg_t vg, lv_t lv)
+-{
+-	if (!lv)
+-		return;
+-	printf("%s/%s (%s): size=%"PRIu64", %sACTIVE / %sSUSPENDED\n",
+-	       lvm_vg_get_name(vg),
+-	       lvm_lv_get_name(lv), lvm_lv_get_uuid(lv),
+-	       lvm_lv_get_size(lv),
+-	       lvm_lv_is_active(lv) ? "" : "IN",
+-	       lvm_lv_is_suspended(lv) ? "" : "NOT ");
+-}
+-
+-static void _list_open_vgs(void)
+-{
+-	dm_hash_iter(_vgid_hash, (dm_hash_iterate_fn) _show_one_vg);
+-}
+-
+-static void _pvs_in_vg(char **argv, int argc)
+-{
+-	struct dm_list *pvs;
+-	struct lvm_pv_list *pvl;
+-	vg_t vg;
+-
+-	if (!(vg = _lookup_vg_by_name(argv, argc)))
+-		return;
+-	pvs = lvm_vg_list_pvs(vg);
+-	if (!pvs || dm_list_empty(pvs)) {
+-		printf("No PVs in VG %s\n", lvm_vg_get_name(vg));
+-		return;
+-	}
+-	printf("PVs in VG %s:\n", lvm_vg_get_name(vg));
+-	dm_list_iterate_items(pvl, pvs) {
+-		_print_pv(pvl->pv);
+-	}
+-}
+-
+-static void _print_property_value(const char *name,
+-				  struct lvm_property_value v)
+-{
+-	if (!v.is_valid)
+-		printf("%s = INVALID\n", name);
+-	else if (v.is_string)
+-		printf("%s = %s\n", name, v.value.string);
+-	else
+-		printf("%s = %"PRIu64"\n", name, v.value.integer);
+-}
+-
+-static void _pvsegs_in_pv(char **argv, int argc)
+-{
+-	struct dm_list *pvsegs;
+-	struct lvm_pvseg_list *pvl;
+-	pv_t pv;
+-
+-	if (!(pv = _lookup_pv_by_name(argv[1])))
+-		return;
+-	pvsegs = lvm_pv_list_pvsegs(pv);
+-	if (!pvsegs || dm_list_empty(pvsegs)) {
+-		printf("No PV segments in pv %s\n", argv[1]);
+-		return;
+-	}
+-	printf("PV segments in pv %s:\n", argv[1]);
+-	dm_list_iterate_items(pvl, pvsegs) {
+-		struct lvm_property_value v;
+-		v = lvm_pvseg_get_property(pvl->pvseg, "pvseg_start");
+-		_print_property_value("pvseg_start", v);
+-		v = lvm_pvseg_get_property(pvl->pvseg, "pvseg_size");
+-		_print_property_value("pvseg_size", v);
+-	}
+-}
+-
+-static void _scan_vgs(lvm_t libh)
+-{
+-	lvm_scan(libh);
+-}
+-
+-static void _list_vg_names(lvm_t libh)
+-{
+-	struct dm_list *list;
+-	struct lvm_str_list *strl;
+-
+-	list = lvm_list_vg_names(libh);
+-	printf("VG names:\n");
+-	dm_list_iterate_items(strl, list) {
+-		printf("%s\n", strl->str);
+-	}
+-}
+-
+-static void _list_vg_ids(lvm_t libh)
+-{
+-	struct dm_list *list;
+-	struct lvm_str_list *strl;
+-
+-	list = lvm_list_vg_uuids(libh);
+-	printf("VG uuids:\n");
+-	dm_list_iterate_items(strl, list) {
+-		printf("%s\n", strl->str);
+-	}
+-}
+-
+-static void _display_tags(struct dm_list *list)
+-{
+-	struct lvm_str_list *strl;
+-	if (dm_list_empty(list)) {
+-		printf("No tags exist\n");
+-		return;
+-	} else if (!list) {
+-		printf("Error obtaining tags\n");
+-		return;
+-	}
+-	dm_list_iterate_items(strl, list) {
+-		printf("%s\n", strl->str);
+-	}
+-}
+-
+-static void _vg_get_tags(char **argv, int argc)
+-{
+-	vg_t vg;
+-
+-	if (!(vg = _lookup_vg_by_name(argv, argc)))
+-		return;
+-	printf("VG tags:\n");
+-	_display_tags(lvm_vg_get_tags(vg));
+-}
+-
+-static void _vg_tag(char **argv, int argc, int add)
+-{
+-	vg_t vg;
+-
+-	if (argc < 3) {
+-		printf("Please enter vgname, tag\n");
+-		return;
+-	}
+-	if (!(vg = _lookup_vg_by_name(argv, argc)))
+-		return;
+-	if (add && lvm_vg_add_tag(vg, argv[2]))
+-		printf("Error ");
+-	else if (!add && lvm_vg_remove_tag(vg, argv[2])){
+-		printf("Error ");
+-	} else {
+-		printf("Success ");
+-	}
+-	printf("%s tag %s to VG %s\n",
+-	       add ? "adding":"removing", argv[2], argv[1]);
+-}
+-
+-static void _pv_get_property(char **argv, int argc)
+-{
+-	pv_t pv;
+-	struct lvm_property_value v;
+-
+-	if (argc < 3) {
+-		printf("Please enter pvname, field_id\n");
+-		return;
+-	}
+-	if (!(pv = _lookup_pv_by_name(argv[1])))
+-		return;
+-	v = lvm_pv_get_property(pv, argv[2]);
+-	_print_property_value(argv[2], v);
+-}
+-
+-static void _vg_get_property(char **argv, int argc)
+-{
+-	vg_t vg;
+-	struct lvm_property_value v;
+-
+-	if (argc < 3) {
+-		printf("Please enter vgname, field_id\n");
+-		return;
+-	}
+-	if (!(vg = _lookup_vg_by_name(argv, argc)))
+-		return;
+-	v =  lvm_vg_get_property(vg, argv[2]);
+-	_print_property_value(argv[2], v);
+-}
+-
+-static void _lv_get_property(char **argv, int argc)
+-{
+-	lv_t lv;
+-	struct lvm_property_value v;
+-
+-	if (argc < 4) {
+-		printf("Please enter vgname, lvname, field_id\n");
+-		return;
+-	}
+-	if (!(lv = _lookup_lv_by_name(argv[2])))
+-		return;
+-	v = lvm_lv_get_property(lv, argv[3]);
+-	_print_property_value(argv[3], v);
+-}
+-
+-static void _vg_set_property(char **argv, int argc)
+-{
+-	vg_t vg;
+-	struct lvm_property_value value;
+-	int rc;
+-
+-	if (argc < 4) {
+-		printf("Please enter vgname, field_id, value\n");
+-		return;
+-	}
+-	if (!(vg = _lookup_vg_by_name(argv, argc)))
+-		return;
+-	value = lvm_vg_get_property(vg, argv[2]);
+-	if (!value.is_valid) {
+-		printf("Error obtaining property value\n");
+-		return;
+-	}
+-	if (value.is_string)
+-		value.value.string = argv[3];
+-	else
+-		value.value.integer = atoi(argv[3]);
+-	rc = lvm_vg_set_property(vg, argv[2], &value);
+-	if (rc)
+-		printf("Error ");
+-	else
+-		printf("Success ");
+-	printf("setting value of property %s in VG %s\n",
+-	       argv[2], argv[1]);
+-}
+-
+-static void _lv_get_tags(char **argv, int argc)
+-{
+-	lv_t lv;
+-
+-	if (argc < 3) {
+-		printf("Please enter vgname, lvname\n");
+-		return;
+-	}
+-	if (!(lv = _lookup_lv_by_name(argv[2])))
+-		return;
+-	printf("LV tags:\n");
+-	_display_tags(lvm_lv_get_tags(lv));
+-}
+-
+-static void _lv_tag(char **argv, int argc, int add)
+-{
+-	lv_t lv;
+-
+-	if (argc < 3) {
+-		printf("Please enter vgname, lvname\n");
+-		return;
+-	}
+-	if (!(lv = _lookup_lv_by_name(argv[2])))
+-		return;
+-	if (add && lvm_lv_add_tag(lv, argv[3]))
+-		printf("Error ");
+-	else if (!add && lvm_lv_remove_tag(lv, argv[3])){
+-		printf("Error ");
+-	} else {
+-		printf("Success ");
+-	}
+-	printf("%s tag %s to LV %s\n",
+-	       add ? "adding":"removing", argv[3], argv[2]);
+-}
+-
+-static void _lv_from_uuid(char **argv, int argc)
+-{
+-	vg_t vg;
+-
+-	if (argc < 3) {
+-		printf("Please enter vgname, lv_uuid\n");
+-		return;
+-	}
+-	if (!(vg = _lookup_vg_by_name(argv, argc)))
+-		return;
+-	_print_lv(vg, lvm_lv_from_uuid(vg, argv[2]));
+-}
+-
+-static void _lv_from_name(char **argv, int argc)
+-{
+-	vg_t vg;
+-
+-	if (argc < 3) {
+-		printf("Please enter vgname, lv_uuid\n");
+-		return;
+-	}
+-	if (!(vg = _lookup_vg_by_name(argv, argc)))
+-		return;
+-	_print_lv(vg, lvm_lv_from_name(vg, argv[2]));
+-}
+-
+-static void _pv_from_uuid(char **argv, int argc)
+-{
+-	vg_t vg;
+-
+-	if (argc < 3) {
+-		printf("Please enter vgname, pv_uuid\n");
+-		return;
+-	}
+-	if (!(vg = _lookup_vg_by_name(argv, argc)))
+-		return;
+-	_print_pv(lvm_pv_from_uuid(vg, argv[2]));
+-}
+-
+-static void _pv_from_name(char **argv, int argc)
+-{
+-	vg_t vg;
+-
+-	if (argc < 3) {
+-		printf("Please enter vgname, pv_uuid\n");
+-		return;
+-	}
+-	if (!(vg = _lookup_vg_by_name(argv, argc)))
+-		return;
+-	_print_pv(lvm_pv_from_name(vg, argv[2]));
+-}
+-
+-static void _vgname_from_pvid(char **argv, int argc, lvm_t libh)
+-{
+-	const char *vgname;
+-
+-	if (argc < 1) {
+-		printf("Please enter pvid\n");
+-		return;
+-	}
+-	if (!(vgname = lvm_vgname_from_pvid(libh, argv[1]))) {
+-		printf("Error ");
+-	} else {
+-		printf("Success ");
+-	}
+-	printf("looking up vgname=%s from PVID=%s\n",
+-	       vgname, argv[1]);
+-}
+-static void _vgname_from_devname(char **argv, int argc, lvm_t libh)
+-{
+-	const char *vgname;
+-
+-	if (argc < 1) {
+-		printf("Please enter device\n");
+-		return;
+-	}
+-	if (!(vgname = lvm_vgname_from_device(libh, argv[1]))) {
+-		printf("Error ");
+-	} else {
+-		printf("Success ");
+-	}
+-	printf("looking up vgname=%s from device name=%s\n",
+-	       vgname, argv[1]);
+-}
+-static void _lvs_in_vg(char **argv, int argc)
+-{
+-	struct dm_list *lvs;
+-	struct lvm_lv_list *lvl;
+-	vg_t vg;
+-
+-	if (!(vg = _lookup_vg_by_name(argv, argc)))
+-		return;
+-	lvs = lvm_vg_list_lvs(vg);
+-	if (!lvs || dm_list_empty(lvs)) {
+-		printf("No LVs in VG %s\n", lvm_vg_get_name(vg));
+-		return;
+-	}
+-	printf("LVs in VG %s:\n", lvm_vg_get_name(vg));
+-	dm_list_iterate_items(lvl, lvs) {
+-		_print_lv(vg, lvl->lv);
+-	}
+-}
+-
+-static void _lvsegs_in_lv(char **argv, int argc)
+-{
+-	struct dm_list *lvsegs;
+-	struct lvm_lvseg_list *lvl;
+-	lv_t lv;
+-
+-	if (!(lv = _lookup_lv_by_name(argv[2])))
+-		return;
+-	lvsegs = lvm_lv_list_lvsegs(lv);
+-	if (!lvsegs || dm_list_empty(lvsegs)) {
+-		printf("No LV segments in lv %s\n", lvm_lv_get_name(lv));
+-		return;
+-	}
+-	printf("LV segments in lv %s:\n", lvm_lv_get_name(lv));
+-	dm_list_iterate_items(lvl, lvsegs) {
+-		struct lvm_property_value v;
+-		v = lvm_lvseg_get_property(lvl->lvseg, "segtype");
+-		_print_property_value("segtype", v);
+-		v = lvm_lvseg_get_property(lvl->lvseg, "seg_start_pe");
+-		_print_property_value("seg_start_pe", v);
+-		v = lvm_lvseg_get_property(lvl->lvseg, "seg_size");
+-		_print_property_value("seg_size", v);
+-		v = lvm_lvseg_get_property(lvl->lvseg, "devices");
+-		_print_property_value("devices", v);
+-		v = lvm_lvseg_get_property(lvl->lvseg, "seg_pe_ranges");
+-		_print_property_value("seg_pe_ranges", v);
+-	}
+-}
+-
+-static void _lv_deactivate(char **argv, int argc)
+-{
+-	lv_t lv;
+-	int rc=0;
+-
+-	if (argc < 3) {
+-		printf("Please enter vgname, lvname\n");
+-		return;
+-	}
+-	if (!(lv = _lookup_lv_by_name(argv[2])))
+-		return;
+-	rc = lvm_lv_deactivate(lv);
+-	_lvm_status_to_pass_fail(rc);
+-	printf("De-activating LV %s in VG %s\n",
+-		argv[2], argv[1]);
+-}
+-static void _lv_activate(char **argv, int argc)
+-{
+-	lv_t lv;
+-	int rc=0;
+-
+-	if (argc < 3) {
+-		printf("Please enter vgname, lvname\n");
+-		return;
+-	}
+-	if (!(lv = _lookup_lv_by_name(argv[2])))
+-		return;
+-	rc = lvm_lv_activate(lv);
+-	_lvm_status_to_pass_fail(rc);
+-	printf("activating LV %s in VG %s\n",
+-		argv[2], argv[1]);
+-}
+-
+-static void _vg_remove_lv(char **argv, int argc)
+-{
+-	lv_t lv;
+-
+-	if (argc < 3) {
+-		printf("Please enter vgname, lvname\n");
+-		return;
+-	}
+-	if (!(lv = _lookup_lv_by_name(argv[2])))
+-		return;
+-	if (lvm_vg_remove_lv(lv))
+-		printf("Error ");
+-	else {
+-		printf("Success ");
+-		dm_hash_remove(_lvname_hash, argv[2]);
+-	}
+-	printf("removing LV %s in VG %s\n",
+-		argv[2], argv[1]);
+-}
+-
+-static void _vg_create_lv_linear(char **argv, int argc)
+-{
+-	vg_t vg;
+-	lv_t lv;
+-
+-	if (argc < 4) {
+-		printf("Please enter vgname, lvname, and size\n");
+-		return;
+-	}
+-	if (!(vg = _lookup_vg_by_name(argv, argc)))
+-		return;
+-	lv = lvm_vg_create_lv_linear(vg, argv[2], atol(argv[3]));
+-	if (!lv)
+-		printf("Error ");
+-	else {
+-		printf("Success ");
+-		dm_hash_insert(_lvname_hash, argv[2], lv);
+-	}
+-	printf("creating LV %s in VG %s\n",
+-		argv[2], argv[1]);
+-}
+-
+-static int lvmapi_test_shell(lvm_t libh)
+-{
+-	int argc;
+-	char *input = NULL, *args[MAX_ARGS], **argv;
+-
+-	_hash_create();
+-	argc=0;
+-	while (1) {
+-		free(input);
+-		input = readline("liblvm> ");
+-
+-		/* EOF */
+-		if (!input) {
+-			printf("\n");
+-			break;
+-		}
+-
+-		/* empty line */
+-		if (!*input)
+-			continue;
+-
+-		argv = args;
+-
+-		if (lvm_split(input, &argc, argv, MAX_ARGS) == MAX_ARGS) {
+-			printf("Too many arguments, sorry.");
+-			continue;
+-		}
+-
+-		if (!strcmp(argv[0], "lvm")) {
+-			argv++;
+-			argc--;
+-		}
+-
+-		if (!argc)
+-			continue;
+-
+-		if (!strcmp(argv[0], "quit") || !strcmp(argv[0], "exit")) {
+-			printf("Exiting.\n");
+-			break;
+-		} else if (!strcmp(argv[0], "?") || !strcmp(argv[0], "help")) {
+-			_show_help();
+-		} else if (!strcmp(argv[0], "config_reload")) {
+-			_config_reload(argv, argc, libh);
+-		} else if (!strcmp(argv[0], "config_override")) {
+-			_config_override(argv, argc, libh);
+-		} else if (!strcmp(argv[0], "vg_extend")) {
+-			_vg_extend(argv, argc, libh);
+-		} else if (!strcmp(argv[0], "vg_reduce")) {
+-			_vg_reduce(argv, argc, libh);
+-		} else if (!strcmp(argv[0], "vg_write")) {
+-			_vg_write(argv, argc);
+-		} else if (!strcmp(argv[0], "vg_open")) {
+-			_vg_open(argv, argc, libh);
+-		} else if (!strcmp(argv[0], "vg_close")) {
+-			_vg_close(argv, argc);
+-		} else if (!strcmp(argv[0], "vg_create")) {
+-			_vg_create(argv, argc, libh);
+-		} else if (!strcmp(argv[0], "vg_remove")) {
+-			_vg_remove(argv, argc);
+-		} else if (!strcmp(argv[0], "lv_activate")) {
+-			_lv_activate(argv, argc);
+-		} else if (!strcmp(argv[0], "lv_deactivate")) {
+-			_lv_deactivate(argv, argc);
+-		} else if (!strcmp(argv[0], "vg_remove_lv")) {
+-			_vg_remove_lv(argv, argc);
+-		} else if (!strcmp(argv[0], "vgs_open")) {
+-			_list_open_vgs();
+-		} else if (!strcmp(argv[0], "vg_list_pvs")) {
+-			_pvs_in_vg(argv, argc);
+-		} else if (!strcmp(argv[0], "pv_list_pvsegs")) {
+-			_pvsegs_in_pv(argv, argc);
+-		} else if (!strcmp(argv[0], "vg_list_lvs")) {
+-			_lvs_in_vg(argv, argc);
+-		} else if (!strcmp(argv[0], "lv_list_lvsegs")) {
+-			_lvsegs_in_lv(argv, argc);
+-		} else if (!strcmp(argv[0], "list_vg_names")) {
+-			_list_vg_names(libh);
+-		} else if (!strcmp(argv[0], "list_vg_ids")) {
+-			_list_vg_ids(libh);
+-		} else if (!strcmp(argv[0], "scan_vgs")) {
+-			_scan_vgs(libh);
+-		} else if (!strcmp(argv[0], "vg_create_lv_linear")) {
+-			_vg_create_lv_linear(argv, argc);
+-		} else if (!strcmp(argv[0], "vg_add_tag")) {
+-			_vg_tag(argv, argc, 1);
+-		} else if (!strcmp(argv[0], "vg_remove_tag")) {
+-			_vg_tag(argv, argc, 0);
+-		} else if (!strcmp(argv[0], "vg_get_tags")) {
+-			_vg_get_tags(argv, argc);
+-		} else if (!strcmp(argv[0], "lv_get_property")) {
+-			_lv_get_property(argv, argc);
+-		} else if (!strcmp(argv[0], "vg_get_property")) {
+-			_vg_get_property(argv, argc);
+-		} else if (!strcmp(argv[0], "pv_get_property")) {
+-			_pv_get_property(argv, argc);
+-		} else if (!strcmp(argv[0], "vg_set_property")) {
+-			_vg_set_property(argv, argc);
+-		} else if (!strcmp(argv[0], "lv_add_tag")) {
+-			_lv_tag(argv, argc, 1);
+-		} else if (!strcmp(argv[0], "lv_remove_tag")) {
+-			_lv_tag(argv, argc, 0);
+-		} else if (!strcmp(argv[0], "lv_get_tags")) {
+-			_lv_get_tags(argv, argc);
+-		} else if (!strcmp(argv[0], "vgname_from_devname")) {
+-			_vgname_from_devname(argv, argc, libh);
+-		} else if (!strcmp(argv[0], "vgname_from_pvid")) {
+-			_vgname_from_pvid(argv, argc, libh);
+-		} else if (!strcmp(argv[0], "lv_from_uuid")) {
+-			_lv_from_uuid(argv, argc);
+-		} else if (!strcmp(argv[0], "lv_from_name")) {
+-			_lv_from_name(argv, argc);
+-		} else if (!strcmp(argv[0], "pv_from_uuid")) {
+-			_pv_from_uuid(argv, argc);
+-		} else if (!strcmp(argv[0], "pv_from_name")) {
+-			_pv_from_name(argv, argc);
+-		} else {
+-			printf ("Unrecognized command %s\n", argv[0]);
+-		}
+-	}
+-
+-	dm_hash_iter(_vgname_hash, (dm_hash_iterate_fn) lvm_vg_close);
+-	_hash_destroy();
+-	free(input);
+-	return 0;
+-}
+-#else /* !READLINE_SUPPORT */
+-static int lvmapi_test_shell(lvm_t libh)
+-{
+-	printf("Build without readline library, no interactive testing.\n");
+-	return 1;
+-}
+-#endif
+-
+-int main (int argc, char *argv[])
+-{
+-	lvm_t libh;
+-
+-	libh = lvm_init(NULL);
+-	if (!libh) {
+-		printf("Unable to open lvm library instance\n");
+-		return 1;
+-	}
+-
+-	printf("Library version: %s\n", lvm_library_get_version());
+-	lvmapi_test_shell(libh);
+-
+-	lvm_quit(libh);
+-	return 0;
+-}
+-
+diff --git a/test/api/thin_percent.c b/test/api/thin_percent.c
+deleted file mode 100644
+index 7f99abf..0000000
+--- a/test/api/thin_percent.c
++++ /dev/null
+@@ -1,78 +0,0 @@
+-/*
+- * Copyright (C) 2012 Red Hat, Inc. All rights reserved.
+- *
+- * This file is part of LVM2.
+- *
+- * This copyrighted material is made available to anyone wishing to use,
+- * modify, copy, or redistribute it subject to the terms and conditions
+- * of the GNU Lesser General Public License v.2.1.
+- *
+- * You should have received a copy of the GNU Lesser General Public License
+- * along with this program; if not, write to the Free Software Foundation,
+- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
+- */
+-
+-#undef NDEBUG
+-
+-#include "liblvm/lvm2app.h"
+-#include "assert.h"
+-
+-int main(int argc, char *argv[])
+-{
+-	lvm_t handle;
+-	vg_t vg;
+-	lv_t lv;
+-	struct lvm_property_value v;
+-	struct dm_list *lvsegs;
+-	struct lvm_lvseg_list *lvl;
+-
+-	handle = lvm_init(NULL);
+-	assert(handle);
+-
+-	vg = lvm_vg_open(handle, argv[1], "r", 0);
+-	assert(vg);
+-
+-	lv = lvm_lv_from_name(vg, "pool");
+-	assert(lv);
+-
+-	lvsegs = lvm_lv_list_lvsegs(lv);
+-	assert(lvsegs && (dm_list_size(lvsegs) == 1));
+-	dm_list_iterate_items(lvl, lvsegs) {
+-		v = lvm_lvseg_get_property(lvl->lvseg, "discards");
+-		assert(v.is_valid && v.is_string);
+-		assert(strcmp(v.value.string, "passdown") == 0);
+-	}
+-
+-	v = lvm_lv_get_property(lv, "data_percent");
+-	assert(v.is_valid);
+-	assert(v.value.integer == 25 * PERCENT_1);
+-
+-
+-	lv = lvm_lv_from_name(vg, "thin");
+-	assert(lv);
+-
+-	v = lvm_lv_get_property(lv, "data_percent");
+-	assert(v.is_valid);
+-	assert(v.value.integer == 50 * PERCENT_1);
+-
+-
+-	lv = lvm_lv_from_name(vg, "snap");
+-	assert(lv);
+-
+-	v = lvm_lv_get_property(lv, "data_percent");
+-	assert(v.is_valid);
+-	assert(v.value.integer == 75 * PERCENT_1);
+-
+-	v = lvm_lv_get_property(lv, "snap_percent");
+-	assert(v.is_valid);
+-	assert(v.value.integer == (uint64_t) DM_PERCENT_INVALID);
+-
+-	v = lvm_lv_get_property(lv, "origin");
+-	assert(v.is_valid);
+-	assert(strcmp(v.value.string, "thin") == 0);
+-
+-	lvm_vg_close(vg);
+-	lvm_quit(handle);
+-
+-	return 0;
+-}
+diff --git a/test/api/vglist.c b/test/api/vglist.c
+deleted file mode 100644
+index daa21c2..0000000
+--- a/test/api/vglist.c
++++ /dev/null
+@@ -1,73 +0,0 @@
+-/*
+- * Copyright (C) 2009 Red Hat, Inc. All rights reserved.
+- *
+- * This file is part of LVM2.
+- *
+- * This copyrighted material is made available to anyone wishing to use,
+- * modify, copy, or redistribute it subject to the terms and conditions
+- * of the GNU Lesser General Public License v.2.1.
+- *
+- * You should have received a copy of the GNU Lesser General Public License
+- * along with this program; if not, write to the Free Software Foundation,
+- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
+- */
+-
+-#include <stdio.h>
+-#include <unistd.h>
+-#include <inttypes.h>
+-#include <assert.h>
+-
+-#include "liblvm/lvm2app.h"
+-
+-lvm_t handle;
+-vg_t vg;
+-
+-static void start(void) {
+-	handle = lvm_init(NULL);
+-	if (!handle) {
+-		fprintf(stderr, "Unable to lvm_init\n");
+-		abort();
+-	}
+-}
+-
+-static void done(int ok) {
+-	if (handle && lvm_errno(handle)) {
+-		fprintf(stderr, "LVM Error: %s\n", lvm_errmsg(handle));
+-		ok = 0;
+-	}
+-	if (handle)
+-		lvm_quit(handle);
+-	if (!ok)
+-		abort();
+-}
+-
+-int main(int argc, char *argv[])
+-{
+-	lvm_str_list_t *str;
+-	int i = 0;
+-	struct dm_list *vgnames;
+-	struct dm_list *vgids;
+-
+-	if (argc != 3)
+-		abort();
+-
+-	start();
+-	vgnames = lvm_list_vg_names(handle);
+-	dm_list_iterate_items(str, vgnames) {
+-		assert(++i <= 1);
+-		assert(!strcmp(str->str, argv[1]));
+-	}
+-	assert(i == 1);
+-	done(1);
+-
+-	i = 0;
+-	start();
+-	vgids = lvm_list_vg_uuids(handle);
+-	dm_list_iterate_items(str, vgids) {
+-		assert(++i <= 1);
+-		assert(!strcmp(str->str, argv[2]));
+-	}
+-	assert(i == 1);
+-	done(1);
+-	return 0;
+-}
+diff --git a/test/api/vgtest.c b/test/api/vgtest.c
+deleted file mode 100644
+index 6a438d1..0000000
+--- a/test/api/vgtest.c
++++ /dev/null
+@@ -1,164 +0,0 @@
+-/*
+- * Copyright (C) 2009 Red Hat, Inc. All rights reserved.
+- *
+- * This file is part of LVM2.
+- *
+- * This copyrighted material is made available to anyone wishing to use,
+- * modify, copy, or redistribute it subject to the terms and conditions
+- * of the GNU Lesser General Public License v.2.1.
+- *
+- * You should have received a copy of the GNU Lesser General Public License
+- * along with this program; if not, write to the Free Software Foundation,
+- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
+- */
+-/*
+- * Unit test case for vgcreate and related APIs.
+- * # gcc -g vgcreate.c -I../../liblvm -I../../include -L../../liblvm \
+- *   -L../../libdm -ldevmapper -llvm2app
+- * # export LD_LIBRARY_PATH=`pwd`/../../libdm:`pwd`/../../liblvm
+- */
+-#include <stdio.h>
+-#include <unistd.h>
+-#include <inttypes.h>
+-
+-#include "liblvm/lvm2app.h"
+-
+-lvm_t handle;
+-vg_t vg;
+-const char *vg_name;
+-#define MAX_DEVICES 16
+-const char *device[MAX_DEVICES];
+-uint64_t size = 4096;
+-
+-#define vg_create(vg_name) \
+-	printf("Creating VG %s\n", vg_name); \
+-	vg = lvm_vg_create(handle, vg_name); \
+-	if (!vg) { \
+-		fprintf(stderr, "Error creating volume group %s\n", vg_name); \
+-		goto bad; \
+-	}
+-#define vg_extend(vg, dev) \
+-	printf("Extending VG %s by %s\n", vg_name, dev); \
+-	status = lvm_vg_extend(vg, dev); \
+-	if (status) { \
+-		fprintf(stderr, "Error extending volume group %s " \
+-			"with device %s\n", vg_name, dev); \
+-		goto bad; \
+-	}
+-#define vg_commit(vg) \
+-	printf("Committing VG %s to disk\n", vg_name); \
+-	status = lvm_vg_write(vg); \
+-	if (status) { \
+-		fprintf(stderr, "Commit of volume group '%s' failed\n", \
+-			lvm_vg_get_name(vg)); \
+-		goto bad; \
+-	}
+-#define vg_open(vg_name, mode) \
+-	printf("Opening VG %s %s\n", vg_name, mode); \
+-	vg = lvm_vg_open(handle, vg_name, mode, 0); \
+-	if (!vg) { \
+-		fprintf(stderr, "Error opening volume group %s\n", vg_name); \
+-		goto bad; \
+-	}
+-#define vg_close(vg) \
+-	printf("Closing VG %s\n", vg_name); \
+-	if (lvm_vg_close(vg)) { \
+-		fprintf(stderr, "Error closing volume group %s\n", vg_name); \
+-		goto bad; \
+-	}
+-#define vg_reduce(vg, dev) \
+-	printf("Reducing VG %s by %s\n", vg_name, dev); \
+-	status = lvm_vg_reduce(vg, dev); \
+-	if (status) { \
+-		fprintf(stderr, "Error reducing volume group %s " \
+-			"by device %s\n", vg_name, dev); \
+-		goto bad; \
+-	}
+-#define vg_remove(vg) \
+-	printf("Removing VG %s from system\n", vg_name); \
+-	status = lvm_vg_remove(vg); \
+-	if (status) { \
+-		fprintf(stderr, "Revmoval of volume group '%s' failed\n", \
+-			vg_name); \
+-		goto bad; \
+-	}
+-
+-static int init_vgtest(int argc, char *argv[])
+-{
+-	int i;
+-
+-	if (argc < 4) {
+-		fprintf(stderr, "Usage: %s <vgname> <pv1> <pv2> [... <pvN> ]",
+-			argv[0]);
+-		return -1;
+-	}
+-	vg_name = argv[1];
+-	for(i=2; i<MAX_DEVICES && i < argc; i++) {
+-		device[i-2] = argv[i];
+-	}
+-	return 0;
+-}
+-
+-int main(int argc, char *argv[])
+-{
+-	int status;
+-
+-	if (init_vgtest(argc, argv) < 0)
+-		goto bad;
+-
+-	/* FIXME: make the below messages verbose-only and print PASS/FAIL*/
+-	printf("Opening LVM\n");
+-	handle = lvm_init(NULL);
+-	if (!handle) {
+-		fprintf(stderr, "Unable to lvm_init\n");
+-		goto bad;
+-	}
+-
+-	printf("Library version: %s\n", lvm_library_get_version());
+-	vg_create(vg_name);
+-	vg_extend(vg, device[0]);
+-
+-	printf("Setting VG %s extent_size to %"PRIu64"\n", vg_name, size);
+-	status = lvm_vg_set_extent_size(vg, size);
+-	if (status) {
+-		fprintf(stderr, "Can not set physical extent "
+-			"size '%"PRIu64"' for '%s'\n",
+-			size, vg_name);
+-		goto bad;
+-	}
+-
+-	vg_commit(vg);
+-	vg_close(vg);
+-
+-	vg_open(vg_name, "r");
+-	vg_close(vg);
+-
+-	vg_open(vg_name, "w");
+-	vg_extend(vg, device[1]);
+-	vg_reduce(vg, device[0]);
+-	vg_commit(vg);
+-	vg_close(vg);
+-
+-	vg_open(vg_name, "w");
+-	vg_extend(vg, device[0]);
+-	vg_commit(vg);
+-	vg_close(vg);
+-
+-	vg_open(vg_name, "w");
+-	vg_remove(vg);
+-	vg_commit(vg);
+-	vg_close(vg);
+-
+-	lvm_quit(handle);
+-	printf("liblvm vgcreate unit test PASS\n");
+-	_exit(0);
+-bad:
+-	printf("liblvm vgcreate unit test FAIL\n");
+-	if (handle && lvm_errno(handle))
+-		fprintf(stderr, "LVM Error: %s\n", lvm_errmsg(handle));
+-	if (vg)
+-		lvm_vg_close(vg);
+-	if (handle)
+-		lvm_quit(handle);
+-	_exit(-1);
+-}
 
 
