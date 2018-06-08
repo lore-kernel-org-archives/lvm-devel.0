@@ -1,273 +1,3896 @@
-From: Joe Thornber <thornber@sourceware.org>
-Date: Fri, 1 Jun 2018 10:31:55 -0400
-Subject: master - Merge branch 'master' into 2018-05-11-fork-libdm
-Message-ID: <201806011431.w51EVtvc024988@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: David Teigland <teigland@sourceware.org>
+Date: Fri, 8 Jun 2018 11:41:40 -0400
+Subject: master - Remove python bindings for liblvm2app
+Message-ID: <201806081541.w58FfeXx005387@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=89fdc0b5889d24fe785e7fa4c2be13659d1ed0b2
-Commit:        89fdc0b5889d24fe785e7fa4c2be13659d1ed0b2
-Parent:        ccc35e2647b3b78f2fb0d62c25f21fcccbf58950 7c852c75c3b3e719d57d3410bf0c2a5e61d67f4e
-Author:        Joe Thornber <ejt@redhat.com>
-AuthorDate:    Wed May 16 13:43:02 2018 +0100
-Committer:     Joe Thornber <ejt@redhat.com>
-CommitterDate: Wed May 16 13:43:02 2018 +0100
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=ae961a192a85c54bcf193a132bcb7c91c8dd8a79
+Commit:        ae961a192a85c54bcf193a132bcb7c91c8dd8a79
+Parent:        669b1295aef917e5f811f448b88c9592944cf18a
+Author:        David Teigland <teigland@redhat.com>
+AuthorDate:    Fri Jun 8 10:33:47 2018 -0500
+Committer:     David Teigland <teigland@redhat.com>
+CommitterDate: Fri Jun 8 10:33:47 2018 -0500
 
-Merge branch 'master' into 2018-05-11-fork-libdm
+Remove python bindings for liblvm2app
 
+---
+ Makefile.in                    |    6 +-
+ configure.ac                   |    4 -
+ python/.gitignore              |    2 -
+ python/Makefile.in             |   56 --
+ python/example.py              |  120 ---
+ python/liblvm.c                | 2095 ----------------------------------------
+ python/setup.py.in             |   35 -
+ test/Makefile.in               |   11 +-
+ test/api/Makefile.in           |   29 -
+ test/api/lvtest.sh             |   25 -
+ test/api/pe_start.sh           |   23 -
+ test/api/percent.sh            |   34 -
+ test/api/pytest.sh             |  115 ---
+ test/api/python_lvm_unit.py.in | 1048 --------------------
+ test/api/thin_percent.sh       |   38 -
+ test/api/vglist.sh             |   17 -
+ test/api/vgtest.sh             |   23 -
+ test/lib/aux.sh                |    5 -
+ 18 files changed, 5 insertions(+), 3681 deletions(-)
 
- Makefile.in                          |    8 +-
- WHATS_NEW                            |    4 +
- conf/example.conf.in                 |   27 +-
- configure                            |    5 +-
- configure.ac                         |    3 +-
- daemons/lvmlockd/Makefile.in         |    2 +
- doc/lvm-disk-reading.txt             |  107 ++++
- include/configure.h.in               |    3 +
- lib/cache/lvmcache.c                 |   68 ++-
- lib/cache/lvmcache.h                 |    1 -
- lib/config/config_settings.h         |    2 +-
- lib/device/bcache.c                  |    3 +-
- lib/device/dev-cache.c               |    1 -
- lib/device/dev-io.c                  |   35 +-
- lib/device/dev-md.c                  |   10 +-
- lib/device/dev-type.c                |    3 +
- lib/device/device.h                  |    2 -
- lib/label/label.c                    |  205 ++++---
- lib/label/label.h                    |    4 +-
- lib/metadata/metadata-liblvm.c       |    3 +-
- lib/metadata/metadata.c              |    4 +-
- lib/misc/lvm-exec.c                  |    1 -
- liblvm/lvm_vg.c                      |    2 +
- man/lvconvert.8_pregen               |    8 +-
- man/pvcreate.8_pregen                |    7 +-
- man/vgcfgrestore.8_pregen            |    9 +-
- man/vgconvert.8_pregen               |   14 +-
- man/vgcreate.8_pregen                |    7 +-
- man/vgextend.8_pregen                |    7 +-
- man/vgsplit.8_pregen                 |    7 +-
- python/setup.py.in                   |    2 +-
- test/Makefile.in                     |   15 +-
- test/api/pytest.sh                   |    4 +-
- test/api/python_lvm_unit.py          | 1048 ----------------------------------
- test/api/python_lvm_unit.py.in       | 1048 ++++++++++++++++++++++++++++++++++
- test/lib/aux.sh                      |   76 +++-
- test/lib/check.sh                    |    3 +-
- test/lib/inittest.sh                 |   20 +-
- test/shell/fsadm-crypt.sh            |    4 +
- test/shell/fsadm-renamed.sh          |    2 +-
- test/shell/lvconvert-mirror.sh       |   22 +-
- test/shell/lvconvert-raid-reshape.sh |    2 +-
- test/shell/lvconvert-snapshot.sh     |    2 +-
- test/shell/lvcreate-small-snap.sh    |   12 +-
- test/shell/lvmetad-disabled.sh       |    6 +-
- test/shell/mirror-names.sh           |   16 +-
- test/shell/pvmove-abort-all.sh       |   21 +-
- test/shell/pvmove-abort.sh           |   21 +-
- test/shell/snapshot-maxsize.sh       |    2 +-
- test/shell/snapshot-usage.sh         |   26 +-
- test/shell/thin-merge.sh             |    1 +
- test/shell/topology-support.sh       |    2 +-
- test/shell/vgcreate-usage.sh         |    6 +-
- test/unit/Makefile.in                |    6 +-
- test/unit/bcache_t.c                 |   43 ++-
- test/unit/bcache_utils_t.c           |   31 +-
- test/unit/io_engine_t.c              |    7 +-
- test/unit/unit-test.sh               |   23 +
- tools/polldaemon.c                   |   11 +-
- tools/pvck.c                         |   28 +-
- tools/toollib.c                      |    3 +-
- 61 files changed, 1692 insertions(+), 1383 deletions(-)
-
-diff --cc Makefile.in
-index a1c8746,e2f5a84..00b4f1e
+diff --git a/Makefile.in b/Makefile.in
+index ed00696..ae05aea 100644
 --- a/Makefile.in
 +++ b/Makefile.in
-@@@ -61,6 -61,9 +61,7 @@@ po: tools daemon
-  man: tools
-  all_man: tools
-  scripts: liblvm libdm
-+ test: tools daemons
- -unit-test: lib
- -run-unit-test: unit-test
-  
-  lib.device-mapper: include.device-mapper
-  libdm.device-mapper: include.device-mapper
-@@@ -96,7 -99,7 +97,7 @@@ endi
-  DISTCLEAN_TARGETS += cscope.out
-  CLEAN_DIRS += autom4te.cache
-  
-- check check_system check_cluster check_local check_lvmetad check_lvmpolld check_lvmlockd_test check_lvmlockd_dlm check_lvmlockd_sanlock: all
- -check check_system check_cluster check_local check_lvmetad check_lvmpolld check_lvmlockd_test check_lvmlockd_dlm check_lvmlockd_sanlock unit-test run-unit-test: test
-++check check_system check_cluster check_local check_lvmetad check_lvmpolld check_lvmlockd_test check_lvmlockd_dlm check_lvmlockd_sanlock: test
-  	$(MAKE) -C test $(@)
-  
-  conf.generate man.generate: tools
-diff --cc configure
-index 60f51d6,7d945df..38ee4dc
---- a/configure
-+++ b/configure
-@@@ -15559,7 -15559,7 +15559,7 @@@ _ACEO
-  
-  
-  ################################################################################
-- ac_config_files="$ac_config_files Makefile make.tmpl libdm/make.tmpl daemons/Makefile daemons/clvmd/Makefile daemons/cmirrord/Makefile daemons/dmeventd/Makefile daemons/dmeventd/libdevmapper-event.pc daemons/dmeventd/plugins/Makefile daemons/dmeventd/plugins/lvm2/Makefile daemons/dmeventd/plugins/raid/Makefile daemons/dmeventd/plugins/mirror/Makefile daemons/dmeventd/plugins/snapshot/Makefile daemons/dmeventd/plugins/thin/Makefile daemons/dmfilemapd/Makefile daemons/lvmdbusd/Makefile daemons/lvmdbusd/lvmdbusd daemons/lvmdbusd/lvmdb.py daemons/lvmdbusd/lvm_shell_proxy.py daemons/lvmdbusd/path.py daemons/lvmetad/Makefile daemons/lvmpolld/Makefile daemons/lvmlockd/Makefile conf/Makefile conf/example.conf conf/lvmlocal.conf conf/command_profile_template.profile conf/metadata_profile_template.profile include/Makefile lib/Makefile lib/locking/Makefile include/lvm-version.h libdaemon/Makefile libdaemon/client/Makefile libdaemon/server/Makefile libdm/Makefile libdm/libdevmapper.pc liblvm/M
- akefile liblvm/liblvm2app.pc man/Makefile po/Makefile python/Makefile python/setup.py scripts/blkdeactivate.sh scripts/blk_availability_init_red_hat scripts/blk_availability_systemd_red_hat.service scripts/clvmd_init_red_hat scripts/cmirrord_init_red_hat scripts/com.redhat.lvmdbus1.service scripts/dm_event_systemd_red_hat.service scripts/dm_event_systemd_red_hat.socket scripts/lvm2_cluster_activation_red_hat.sh scripts/lvm2_cluster_activation_systemd_red_hat.service scripts/lvm2_clvmd_systemd_red_hat.service scripts/lvm2_cmirrord_systemd_red_hat.service scripts/lvm2_lvmdbusd_systemd_red_hat.service scripts/lvm2_lvmetad_init_red_hat scripts/lvm2_lvmetad_systemd_red_hat.service scripts/lvm2_lvmetad_systemd_red_hat.socket scripts/lvm2_lvmpolld_init_red_hat scripts/lvm2_lvmpolld_systemd_red_hat.service scripts/lvm2_lvmpolld_systemd_red_hat.socket scripts/lvm2_lvmlockd_systemd_red_hat.service scripts/lvm2_lvmlocking_systemd_red_hat.service scripts/lvm2_monitoring_init_red_hat scripts/lvm
- 2_monitoring_systemd_red_hat.service scripts/lvm2_pvscan_systemd_red_hat at .service scripts/lvm2_tmpfiles_red_hat.conf scripts/lvmdump.sh scripts/Makefile test/Makefile test/api/Makefile test/unit/Makefile tools/Makefile udev/Makefile"
- -ac_config_files="$ac_config_files Makefile make.tmpl daemons/Makefile daemons/clvmd/Makefile daemons/cmirrord/Makefile daemons/dmeventd/Makefile daemons/dmeventd/libdevmapper-event.pc daemons/dmeventd/plugins/Makefile daemons/dmeventd/plugins/lvm2/Makefile daemons/dmeventd/plugins/raid/Makefile daemons/dmeventd/plugins/mirror/Makefile daemons/dmeventd/plugins/snapshot/Makefile daemons/dmeventd/plugins/thin/Makefile daemons/dmfilemapd/Makefile daemons/lvmdbusd/Makefile daemons/lvmdbusd/lvmdbusd daemons/lvmdbusd/lvmdb.py daemons/lvmdbusd/lvm_shell_proxy.py daemons/lvmdbusd/path.py daemons/lvmetad/Makefile daemons/lvmpolld/Makefile daemons/lvmlockd/Makefile device_mapper/Makefile conf/Makefile conf/example.conf conf/lvmlocal.conf conf/command_profile_template.profile conf/metadata_profile_template.profile include/.symlinks include/Makefile lib/Makefile lib/locking/Makefile include/lvm-version.h libdaemon/Makefile libdaemon/client/Makefile libdaemon/server/Makefile libdm/Makefile libdm
- /libdevmapper.pc liblvm/Makefile liblvm/liblvm2app.pc man/Makefile po/Makefile python/Makefile python/setup.py scripts/blkdeactivate.sh scripts/blk_availability_init_red_hat scripts/blk_availability_systemd_red_hat.service scripts/clvmd_init_red_hat scripts/cmirrord_init_red_hat scripts/com.redhat.lvmdbus1.service scripts/dm_event_systemd_red_hat.service scripts/dm_event_systemd_red_hat.socket scripts/lvm2_cluster_activation_red_hat.sh scripts/lvm2_cluster_activation_systemd_red_hat.service scripts/lvm2_clvmd_systemd_red_hat.service scripts/lvm2_cmirrord_systemd_red_hat.service scripts/lvm2_lvmdbusd_systemd_red_hat.service scripts/lvm2_lvmetad_init_red_hat scripts/lvm2_lvmetad_systemd_red_hat.service scripts/lvm2_lvmetad_systemd_red_hat.socket scripts/lvm2_lvmpolld_init_red_hat scripts/lvm2_lvmpolld_systemd_red_hat.service scripts/lvm2_lvmpolld_systemd_red_hat.socket scripts/lvm2_lvmlockd_systemd_red_hat.service scripts/lvm2_lvmlocking_systemd_red_hat.service scripts/lvm2_monitoring
- _init_red_hat scripts/lvm2_monitoring_systemd_red_hat.service scripts/lvm2_pvscan_systemd_red_hat at .service scripts/lvm2_tmpfiles_red_hat.conf scripts/lvmdump.sh scripts/Makefile test/Makefile test/api/Makefile test/api/python_lvm_unit.py test/unit/Makefile tools/Makefile udev/Makefile"
-++ac_config_files="$ac_config_files Makefile make.tmpl libdm/make.tmpl daemons/Makefile daemons/clvmd/Makefile daemons/cmirrord/Makefile daemons/dmeventd/Makefile daemons/dmeventd/libdevmapper-event.pc daemons/dmeventd/plugins/Makefile daemons/dmeventd/plugins/lvm2/Makefile daemons/dmeventd/plugins/raid/Makefile daemons/dmeventd/plugins/mirror/Makefile daemons/dmeventd/plugins/snapshot/Makefile daemons/dmeventd/plugins/thin/Makefile daemons/dmfilemapd/Makefile daemons/lvmdbusd/Makefile daemons/lvmdbusd/lvmdbusd daemons/lvmdbusd/lvmdb.py daemons/lvmdbusd/lvm_shell_proxy.py daemons/lvmdbusd/path.py daemons/lvmetad/Makefile daemons/lvmpolld/Makefile daemons/lvmlockd/Makefile conf/Makefile conf/example.conf conf/lvmlocal.conf conf/command_profile_template.profile conf/metadata_profile_template.profile include/Makefile lib/Makefile lib/locking/Makefile include/lvm-version.h libdaemon/Makefile libdaemon/client/Makefile libdaemon/server/Makefile libdm/Makefile libdm/libdevmapper.pc liblvm/M
- akefile liblvm/liblvm2app.pc man/Makefile po/Makefile python/Makefile python/setup.py scripts/blkdeactivate.sh scripts/blk_availability_init_red_hat scripts/blk_availability_systemd_red_hat.service scripts/clvmd_init_red_hat scripts/cmirrord_init_red_hat scripts/com.redhat.lvmdbus1.service scripts/dm_event_systemd_red_hat.service scripts/dm_event_systemd_red_hat.socket scripts/lvm2_cluster_activation_red_hat.sh scripts/lvm2_cluster_activation_systemd_red_hat.service scripts/lvm2_clvmd_systemd_red_hat.service scripts/lvm2_cmirrord_systemd_red_hat.service scripts/lvm2_lvmdbusd_systemd_red_hat.service scripts/lvm2_lvmetad_init_red_hat scripts/lvm2_lvmetad_systemd_red_hat.service scripts/lvm2_lvmetad_systemd_red_hat.socket scripts/lvm2_lvmpolld_init_red_hat scripts/lvm2_lvmpolld_systemd_red_hat.service scripts/lvm2_lvmpolld_systemd_red_hat.socket scripts/lvm2_lvmlockd_systemd_red_hat.service scripts/lvm2_lvmlocking_systemd_red_hat.service scripts/lvm2_monitoring_init_red_hat scripts/lvm
- 2_monitoring_systemd_red_hat.service scripts/lvm2_pvscan_systemd_red_hat at .service scripts/lvm2_tmpfiles_red_hat.conf scripts/lvmdump.sh scripts/Makefile test/Makefile test/api/Makefile test/api/python_lvm_unit.py test/unit/Makefile tools/Makefile udev/Makefile"
-  
-  cat >confcache <<\_ACEOF
-  # This file is a shell script that caches the results of configure
-diff --cc lib/device/bcache.c
-index d213758e7,30df54a..d224436
---- a/lib/device/bcache.c
-+++ b/lib/device/bcache.c
-@@@ -14,9 -14,9 +14,9 @@@
-  
-  #define _GNU_SOURCE
-  
- -#include "bcache.h"
- -#include "lvm-logging.h"
- -#include "log.h"
- +#include "lib/device/bcache.h"
-- #include "device_mapper/misc/dm-logging.h"
-++#include "lib/log/lvm-logging.h"
- +#include "lib/log/log.h"
-  
-  #include <errno.h>
-  #include <fcntl.h>
-diff --cc lib/device/dev-io.c
-index 225fb36,9a03d3a..65b3db4
---- a/lib/device/dev-io.c
-+++ b/lib/device/dev-io.c
-@@@ -13,12 -13,11 +13,11 @@@
-   * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
-   */
-  
- -#include "lib.h"
- -#include "device.h"
- -#include "metadata.h"
- -#include "memlock.h"
- -#include "locking.h"
- +#include "lib/misc/lib.h"
- +#include "lib/device/device.h"
- +#include "lib/metadata/metadata.h"
-- #include "lib/cache/lvmcache.h"
- +#include "lib/mm/memlock.h"
- +#include "lib/locking/locking.h"
-  
-  #include <limits.h>
-  #include <sys/stat.h>
-diff --cc test/unit/Makefile.in
-index 54b7d72,cb92fb1..ca36c57
---- a/test/unit/Makefile.in
-+++ b/test/unit/Makefile.in
-@@@ -10,38 -10,49 +10,38 @@@
-  # along with this program; if not, write to the Free Software Foundation,
-  # Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
-  
- -srcdir = @srcdir@
- -top_srcdir = @top_srcdir@
- -top_builddir = @top_builddir@
- -
- -SOURCES=\
- -	radix-tree.c \
- -	status.c \
- +UNIT_SOURCE=\
- +	base/data-struct/radix-tree.c \
- +	device_mapper/vdo/status.c \
-  	\
- -	bcache_t.c \
- -	bcache_utils_t.c \
- -	bitset_t.c \
- -	config_t.c \
- -	dmlist_t.c \
- -	dmstatus_t.c \
- -	framework.c \
- -	io_engine_t.c \
- -	matcher_t.c \
- -	percent_t.c \
- -	radix_tree_t.c \
- -	run.c \
- -	string_t.c \
- -	vdo_t.c
- -
- -TARGETS += unit-test
- -
- -# Using vpath for other src dirs
- -# FIXME: hopefully later we will just link libs without need to extract sources
- -# via usage of vpath
- -vpath %.c \
- -	$(top_srcdir)/base/data-struct \
- -	$(top_srcdir)/device_mapper/vdo
- -
- -include $(top_builddir)/make.tmpl
- -
- -UNIT_LDLIBS += $(LVMINTERNAL_LIBS) -ldevmapper -laio
- -INCLUDES += -I$(top_srcdir)
- -
- -unit-test: $(OBJECTS) $(top_builddir)/libdm/libdevmapper.$(LIB_SUFFIX) $(top_builddir)/lib/liblvm-internal.a
- +	test/unit/bcache_t.c \
- +	test/unit/bcache_utils_t.c \
- +	test/unit/bitset_t.c \
- +	test/unit/config_t.c \
- +	test/unit/dmlist_t.c \
- +	test/unit/dmstatus_t.c \
- +	test/unit/io_engine_t.c \
- +	test/unit/radix_tree_t.c \
- +	test/unit/matcher_t.c \
- +	test/unit/framework.c \
- +	test/unit/percent_t.c \
- +	test/unit/run.c \
- +	test/unit/string_t.c \
- +	test/unit/vdo_t.c
- +
- +UNIT_DEPENDS=$(subst .c,.d,$(UNIT_SOURCE))
- +UNIT_OBJECTS=$(UNIT_SOURCE:%.c=%.o)
- +CLEAN_TARGETS+=$(UNIT_DEPENDS) $(UNIT_OBJECTS)
- +UNIT_LDLIBS += $(LVMINTERNAL_LIBS) -laio
- +
-- test/unit/unit-test: $(UNIT_OBJECTS) device_mapper/libdevice-mapper.a lib/liblvm-internal.a
-++test/unit/unit-test: $(UNIT_OBJECTS) lib/liblvm-internal.a device_mapper/libdevice-mapper.a
-  	@echo "    [LD] $@"
---	$(Q) $(CC) $(CFLAGS) $(LDFLAGS) $(EXTRA_EXEC_LDFLAGS) -L$(top_builddir)/libdm \
-- 	      -o $@ $(UNIT_OBJECTS) $(UNIT_LDLIBS)
- -	      -o $@ $(OBJECTS) $(UNIT_LDLIBS)
-++	$(Q) $(CC) $(CFLAGS) $(LDFLAGS) $(EXTRA_EXEC_LDFLAGS) \
-++	      -o $@ $+ $(UNIT_LDLIBS) -lm
-  
- -.PHONY: run-unit-test
- -run-unit-test: unit-test
- +.PHONEY: run-unit-test
- +run-unit-test: test/unit/unit-test
-  	@echo Running unit tests
- -	LD_LIBRARY_PATH=$(top_builddir)/libdm ./unit-test run
- +	LD_LIBRARY_PATH=libdm test/unit/unit-test run
- +
- +-include $(UNIT_DEPENDS)
-diff --cc test/unit/bcache_utils_t.c
-index 2c3bb0e,9ddc194..66780ea
---- a/test/unit/bcache_utils_t.c
-+++ b/test/unit/bcache_utils_t.c
-@@@ -14,6 -14,10 +14,10 @@@
-  
-  #define _GNU_SOURCE
-  
- -#include "bcache.h"
-++#include "lib/device/bcache.h"
-+ #include "framework.h"
-+ #include "units.h"
-+ 
-  #include <errno.h>
-  #include <stdio.h>
-  #include <stdlib.h>
+@@ -28,10 +28,6 @@ ifeq ("@INTL@", "yes")
+   SUBDIRS += po
+ endif
+ 
+-ifeq ("@PYTHON_BINDINGS@", "yes")
+-  SUBDIRS += python
+-endif
+-
+ ifeq ($(MAKECMDGOALS),clean)
+   SUBDIRS += test
+ endif
+@@ -39,7 +35,7 @@ endif
+ ifeq ($(MAKECMDGOALS),distclean)
+   SUBDIRS = conf include man test scripts \
+     libdaemon lib tools daemons libdm \
+-    udev po python
++    udev po
+ tools.distclean: test.distclean
+ endif
+ DISTCLEAN_DIRS += lcov_reports*
+diff --git a/configure.ac b/configure.ac
+index d8bfb47..7d490f6 100644
+--- a/configure.ac
++++ b/configure.ac
+@@ -1788,8 +1788,6 @@ libdm/Makefile
+ libdm/libdevmapper.pc
+ man/Makefile
+ po/Makefile
+-python/Makefile
+-python/setup.py
+ scripts/blkdeactivate.sh
+ scripts/blk_availability_init_red_hat
+ scripts/blk_availability_systemd_red_hat.service
+@@ -1814,8 +1812,6 @@ scripts/lvm2_tmpfiles_red_hat.conf
+ scripts/lvmdump.sh
+ scripts/Makefile
+ test/Makefile
+-test/api/Makefile
+-test/api/python_lvm_unit.py
+ tools/Makefile
+ udev/Makefile
+ ])
+diff --git a/python/.gitignore b/python/.gitignore
+deleted file mode 100644
+index c87e43e..0000000
+--- a/python/.gitignore
++++ /dev/null
+@@ -1,2 +0,0 @@
+-.liblvm_built
+-setup.py
+diff --git a/python/Makefile.in b/python/Makefile.in
+deleted file mode 100644
+index 3dc5664..0000000
+--- a/python/Makefile.in
++++ /dev/null
+@@ -1,56 +0,0 @@
+-#
+-# Copyright (C) 2011-2016 Red Hat, Inc.
+-#
+-# This file is part of LVM2.
+-#
+-# This copyrighted material is made available to anyone wishing to use,
+-# modify, copy, or redistribute it subject to the terms and conditions
+-# of the GNU Lesser General Public License v.2.1.
+-#
+-# You should have received a copy of the GNU Lesser General Public License
+-# along with this program; if not, write to the Free Software Foundation,
+-# Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
+-
+-srcdir = @srcdir@
+-top_srcdir = @top_srcdir@
+-top_builddir = @top_builddir@
+-
+-TARGETS = .liblvm_built
+-
+-include $(top_builddir)/make.tmpl
+-
+-.liblvm_built: liblvm_python.c
+-ifeq ("@PYTHON2_BINDINGS@", "yes")
+-	$(PYTHON2) setup.py build
+-endif
+-ifeq ("@PYTHON3_BINDINGS@", "yes")
+-	$(PYTHON3) setup.py build
+-endif
+-	touch $@
+-
+-liblvm_python.c:
+-	$(LN_S) $(srcdir)/liblvm.c $@
+-
+-install_python_bindings: $(TARGETS)
+-ifeq ("@PYTHON2_BINDINGS@", "yes")
+-	$(PYTHON2) setup.py install --skip-build --prefix $(pythonprefix)
+-endif
+-ifeq ("@PYTHON3_BINDINGS@", "yes")
+-	$(PYTHON3) setup.py install --skip-build --prefix $(pythonprefix)
+-endif
+-
+-install_lvm2: install_python_bindings
+-
+-install: install_lvm2
+-
+-.PHONY: install_python_bindings
+-.INTERMEDIATE: liblvm_python.c
+-
+-clean:
+-	$(RM) -r build
+-
+-distclean: clean
+-
+-CLEAN_TARGETS += liblvm_python.c
+-
+-DISTCLEAN_TARGETS += setup.py
+diff --git a/python/example.py b/python/example.py
+deleted file mode 100644
+index 07ebbf2..0000000
+--- a/python/example.py
++++ /dev/null
+@@ -1,120 +0,0 @@
+-#
+-# Copyright (C) 2012 Red Hat, Inc. All rights reserved.
+-#
+-# This file is part of LVM2.
+-#
+-# This program is free software: you can redistribute it and/or modify
+-# it under the terms of the GNU Lesser General Public License as published by
+-# the Free Software Foundation, either version 2.1 of the License, or
+-# (at your option) any later version.
+-#
+-# This program is distributed in the hope that it will be useful,
+-# but WITHOUT ANY WARRANTY; without even the implied warranty of
+-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+-# GNU Lesser General Public License for more details.
+-#
+-# You should have received a copy of the GNU Lesser General Public License
+-# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+-#
+-#-----------------------------
+-# Python example code:
+-#-----------------------------
+-
+-import lvm
+-
+-# Note: This example will create a logical unit, tag it and
+-# 	delete it, don't run this on production box!
+-
+-#Dump information about PV
+-def print_pv(pv):
+-    print('PV name: ', pv.getName(), ' ID: ', pv.getUuid(), 'Size: ', pv.getSize())
+-
+-
+-#Dump some information about a specific volume group
+-def print_vg(vg_name):
+-    #Open read only
+-    vg = lvm.vgOpen(vg_name, 'r')
+-
+-    print('Volume group:', vg_name, 'Size: ', vg.getSize())
+-
+-    #Retrieve a list of Physical volumes for this volume group
+-    pv_list = vg.listPVs()
+-
+-    #Print out the physical volumes
+-    for p in pv_list:
+-        print_pv(p)
+-
+-    #Get a list of logical volumes in this volume group
+-    lv_list = vg.listLVs()
+-    if len(lv_list):
+-        for l in lv_list:
+-            print('LV name: ', l.getName(), ' ID: ', l.getUuid())
+-    else:
+-        print('No logical volumes present!')
+-
+-    vg.close()
+-
+-#Returns the name of a vg with space available
+-def find_vg_with_free_space():
+-    free_space = 0
+-    rc = None
+-
+-    vg_names = lvm.listVgNames()
+-    for v in vg_names:
+-        vg = lvm.vgOpen(v, 'r')
+-        c_free = vg.getFreeSize()
+-        if c_free > free_space:
+-            free_space = c_free
+-            rc = v
+-        vg.close()
+-
+-    return rc
+-
+-#Walk through the volume groups and fine one with space in which we can
+-#create a new logical volume
+-def create_delete_logical_volume():
+-    vg_name = find_vg_with_free_space()
+-
+-    print('Using volume group ', vg_name, ' for example')
+-
+-    if vg_name:
+-        vg = lvm.vgOpen(vg_name, 'w')
+-        lv = vg.createLvLinear('python_lvm_ok_to_delete', vg.getFreeSize())
+-
+-        if lv:
+-            print('New lv, id= ', lv.getUuid())
+-
+-            #Create a tag
+-            lv.addTag('Demo_tag')
+-
+-            #Get the tags
+-            tags = lv.getTags()
+-            for t in tags:
+-                #Remove tag
+-                lv.removeTag(t)
+-
+-            lv.deactivate()
+-
+-            #Try to rename
+-            lv.rename("python_lvm_renamed")
+-            print('LV name= ', lv.getName())
+-            lv.remove()
+-
+-        vg.close()
+-    else:
+-        print('No free space available to create demo lv!')
+-
+-if __name__ == '__main__':
+-    #What version
+-    print('lvm version=', lvm.getVersion())
+-
+-    #Get a list of volume group names
+-    vg_names = lvm.listVgNames()
+-
+-    #For each volume group display some information about each of them
+-    for vg_i in vg_names:
+-        print_vg(vg_i)
+-
+-    #Demo creating a logical volume
+-    create_delete_logical_volume()
+-
+diff --git a/python/liblvm.c b/python/liblvm.c
+deleted file mode 100644
+index ea9697a..0000000
+--- a/python/liblvm.c
++++ /dev/null
+@@ -1,2095 +0,0 @@
+-/*
+- * Liblvm -- Python interface to LVM2 API.
+- *
+- * Copyright (C) 2010, 2013 Red Hat, Inc. All rights reserved.
+- *
+- * This program is free software: you can redistribute it and/or modify
+- * it under the terms of the GNU Lesser General Public License as published by
+- * the Free Software Foundation, either version 2.1 of the License, or
+- * (at your option) any later version.
+-
+- * This program is distributed in the hope that it will be useful,
+- * but WITHOUT ANY WARRANTY; without even the implied warranty of
+- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+- * GNU Lesser General Public License for more details.
+-
+- * You should have received a copy of the GNU Lesser General Public License
+- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+- *
+- * Authors: Lars Sjostrom (lars sjostrom redhat com)
+- *	    Andy Grover (agrover redhat com)
+- *	    Tony Asleson (tasleson redhat com)
+- */
+-
+-#include <Python.h>
+-#define _BUILDING_LVM
+-#include "liblvm/lvm2app.h"
+-#include "lib/config/defaults.h"
+-
+-#if PY_MAJOR_VERSION >= 3
+-#define IS_PY3K
+-#define PYINTTYPE_CHECK PyLong_Check
+-#define PYINTTYPE_ASLONG PyLong_AsLong
+-#define PYINTTYPE_FROMLONG PyLong_FromLong
+-#define PYSTRYPE_CHECK PyUnicode_Check
+-#define PYSTRTYPE_ASSTRING PyUnicode_AsUTF8
+-#define PYSTRTYPE_FROMSTRING PyUnicode_FromString
+-#else
+-#define PYINTTYPE_CHECK PyInt_Check
+-#define PYINTTYPE_ASLONG PyInt_AsLong
+-#define PYINTTYPE_FROMLONG PyInt_FromLong
+-#define PYSTRYPE_CHECK PyString_Check
+-#define PYSTRTYPE_ASSTRING PyString_AsString
+-#define PYSTRTYPE_FROMSTRING PyString_FromString
+-#endif
+-
+-static lvm_t _libh;
+-
+-
+-typedef struct {
+-	PyObject_HEAD
+-	vg_t vg;		/* vg handle */
+-	lvm_t libh_copy;
+-} vgobject;
+-
+-typedef struct {
+-	PyObject_HEAD
+-	struct dm_list *pvslist;
+-	lvm_t libh_copy;
+-} pvslistobject;
+-
+-typedef struct {
+-	PyObject_HEAD
+-	lv_t lv;		/* lv handle */
+-	vgobject *parent_vgobj;
+-} lvobject;
+-
+-typedef struct {
+-	PyObject_HEAD
+-	pv_t pv;		/* pv handle */
+-	vgobject *parent_vgobj;
+-	pvslistobject *parent_pvslistobj;
+-} pvobject;
+-
+-typedef struct {
+-	PyObject_HEAD
+-	lvseg_t lv_seg;		/* lv segment handle */
+-	lvobject *parent_lvobj;
+-} lvsegobject;
+-
+-typedef struct {
+-	PyObject_HEAD
+-	pvseg_t pv_seg;		/* pv segment handle */
+-	pvobject *parent_pvobj;
+-} pvsegobject;
+-
+-static PyTypeObject _LibLVMvgType;
+-static PyTypeObject _LibLVMlvType;
+-static PyTypeObject _LibLVMpvlistType;
+-static PyTypeObject _LibLVMpvType;
+-static PyTypeObject _LibLVMlvsegType;
+-static PyTypeObject _LibLVMpvsegType;
+-
+-static PyObject *_LibLVMError;
+-
+-#define LVM_VALID(ptr) \
+-	do { \
+-		if (!_libh) { \
+-			_libh = lvm_init(NULL); \
+-		} \
+-		if (ptr && _libh) { \
+-			if (ptr != _libh) { \
+-				PyErr_SetString(PyExc_UnboundLocalError, "LVM handle reference stale"); \
+-				return NULL; \
+-			} \
+-		} else if (!_libh) { \
+-			PyErr_SetString(PyExc_UnboundLocalError, "LVM handle invalid"); \
+-			return NULL; \
+-		} \
+-	} while (0)
+-
+-/**
+- * Ensure that we initialize all the bits to a sane state.
+- */
+-static pvobject *_create_py_pv(void)
+-{
+-	pvobject * pvobj = PyObject_New(pvobject, &_LibLVMpvType);
+-
+-	if (pvobj) {
+-		pvobj->pv = NULL;
+-		pvobj->parent_vgobj = NULL;
+-		pvobj->parent_pvslistobj = NULL;
+-	}
+-
+-	return pvobj;
+-}
+-
+-static vgobject *_create_py_vg(void)
+-{
+-	vgobject *vgobj = PyObject_New(vgobject, &_LibLVMvgType);
+-
+-	if (vgobj) {
+-		vgobj->vg = NULL;
+-		vgobj->libh_copy = _libh;
+-	}
+-
+-	return vgobj;
+-}
+-
+-static pvslistobject *_create_py_pvlist(void)
+-{
+-	pvslistobject *pvlistobj = PyObject_New(pvslistobject, &_LibLVMpvlistType);
+-
+-	if (pvlistobj) {
+-		pvlistobj->pvslist = NULL;
+-		pvlistobj->libh_copy = _libh;
+-	}
+-
+-	return pvlistobj;
+-}
+-
+-static lvobject *_create_py_lv(vgobject *parent, lv_t lv)
+-{
+-	lvobject * lvobj = PyObject_New(lvobject, &_LibLVMlvType);
+-	if (lvobj) {
+-		lvobj->parent_vgobj = parent;
+-		Py_INCREF(lvobj->parent_vgobj);
+-		lvobj->lv = lv;
+-	}
+-	return lvobj;
+-}
+-
+-static PyObject *_liblvm_get_last_error(void)
+-{
+-	PyObject *info;
+-	const char *msg = NULL;
+-
+-	LVM_VALID(NULL);
+-
+-	if (!(info = PyTuple_New(2)))
+-		return NULL;
+-
+-	PyTuple_SetItem(info, 0, PYINTTYPE_FROMLONG((long) lvm_errno(_libh)));
+-	msg = lvm_errmsg(_libh);
+-	PyTuple_SetItem(info, 1, ((msg) ? PYSTRTYPE_FROMSTRING(msg) :
+-			PYSTRTYPE_FROMSTRING("Memory error while retrieving error message")));
+-
+-	return info;
+-}
+-
+-static PyObject *_liblvm_library_get_version(void)
+-{
+-	return Py_BuildValue("s", lvm_library_get_version());
+-}
+-
+-static const char _gc_doc[] = "Garbage collect the C library";
+-
+-static PyObject *_liblvm_lvm_gc(void)
+-{
+-	if (_libh) {
+-		lvm_quit(_libh);
+-		_libh = NULL;
+-	}
+-
+-	Py_INCREF(Py_None);
+-
+-	return Py_None;
+-}
+-
+-static PyObject *_liblvm_lvm_list_vg_names(void)
+-{
+-	struct dm_list *vgnames;
+-	struct lvm_str_list *strl;
+-	PyObject * pytuple;
+-	int i = 0;
+-
+-	LVM_VALID(NULL);
+-
+-	if (!(vgnames = lvm_list_vg_names(_libh))) {
+-		PyErr_SetObject(_LibLVMError, _liblvm_get_last_error());
+-		return NULL;
+-	}
+-
+-	if (!(pytuple = PyTuple_New(dm_list_size(vgnames))))
+-		return NULL;
+-
+-	dm_list_iterate_items(strl, vgnames) {
+-		PyTuple_SET_ITEM(pytuple, i, PYSTRTYPE_FROMSTRING(strl->str));
+-		i++;
+-	}
+-
+-	return pytuple;
+-}
+-
+-static PyObject *_liblvm_lvm_list_vg_uuids(void)
+-{
+-	struct dm_list *uuids;
+-	struct lvm_str_list *strl;
+-	PyObject * pytuple;
+-	int i = 0;
+-
+-	LVM_VALID(NULL);
+-
+-	if (!(uuids = lvm_list_vg_uuids(_libh))) {
+-		PyErr_SetObject(_LibLVMError, _liblvm_get_last_error());
+-		return NULL;
+-	}
+-
+-	if (!(pytuple = PyTuple_New(dm_list_size(uuids))))
+-		return NULL;
+-
+-	dm_list_iterate_items(strl, uuids) {
+-		PyTuple_SET_ITEM(pytuple, i, PYSTRTYPE_FROMSTRING(strl->str));
+-		i++;
+-	}
+-
+-	return pytuple;
+-}
+-
+-static PyObject *_liblvm_lvm_pvlist_get(pvslistobject *pvsobj)
+-{
+-	struct lvm_pv_list *pvl;
+-	PyObject * pytuple;
+-	pvobject * pvobj;
+-	int i = 0;
+-
+-	/* unlike other LVM api calls, if there are no results, we get NULL */
+-	pvsobj->pvslist = lvm_list_pvs(_libh);
+-
+-	if (!pvsobj->pvslist)
+-		return Py_BuildValue("()");
+-
+-	if (!(pytuple = PyTuple_New(dm_list_size(pvsobj->pvslist))))
+-		return NULL;
+-
+-	dm_list_iterate_items(pvl, pvsobj->pvslist) {
+-		/* Create and initialize the object */
+-		if (!(pvobj = _create_py_pv())) {
+-			Py_DECREF(pytuple);
+-			return NULL;
+-		}
+-
+-		/* We don't have a parent vg object to be concerned about */
+-		pvobj->parent_vgobj = NULL;
+-		pvobj->parent_pvslistobj = pvsobj;
+-		Py_INCREF(pvobj->parent_pvslistobj);
+-
+-		pvobj->pv = pvl->pv;
+-		PyTuple_SET_ITEM(pytuple, i, (PyObject *) pvobj);
+-		i++;
+-	}
+-
+-	return pytuple;
+-}
+-
+-static PyObject *_liblvm_lvm_pvlist_put(pvslistobject *self)
+-{
+-	if (self->pvslist) {
+-		if (lvm_list_pvs_free(self->pvslist)) {
+-			PyErr_SetObject(_LibLVMError, _liblvm_get_last_error());
+-			return NULL;
+-		}
+-
+-		self->pvslist = NULL;
+-		Py_INCREF(Py_None);
+-
+-		return Py_None;
+-	}
+-
+-	return NULL;
+-}
+-
+-static PyObject *_liblvm_pvlist_dealloc(pvslistobject *self)
+-{
+-	if (self->pvslist)
+-		_liblvm_lvm_pvlist_put(self);
+-
+-	PyObject_Del(self);
+-	Py_INCREF(Py_None);
+-
+-	return Py_None;
+-}
+-
+-static PyObject *_liblvm_lvm_list_pvs(void)
+-{
+-	LVM_VALID(NULL);
+-
+-	return (PyObject *)_create_py_pvlist();
+-}
+-
+-static PyObject *_liblvm_lvm_pv_remove(PyObject *self, PyObject *arg)
+-{
+-	const char *pv_name;
+-
+-	LVM_VALID(NULL);
+-
+-	if (!PyArg_ParseTuple(arg, "s", &pv_name))
+-		return NULL;
+-
+-	if (lvm_pv_remove(_libh, pv_name) == -1) {
+-		PyErr_SetObject(_LibLVMError, _liblvm_get_last_error());
+-		return NULL;
+-	}
+-
+-	Py_INCREF(Py_None);
+-
+-	return Py_None;
+-}
+-
+-static int _set_pv_numeric_prop(pv_create_params_t pv_params, const char *name,
+-								unsigned long long value)
+-{
+-	struct lvm_property_value prop_value = {
+-		.is_integer = 1,
+-		.value.integer = value,
+-	};
+-
+-	return lvm_pv_params_set_property(pv_params, name, &prop_value);
+-}
+-
+-#define SET_PV_PROP(params, name, value) \
+-	do { \
+-		if (_set_pv_numeric_prop(params, name, value) == -1) \
+-			goto error; \
+-	} while(0)\
+-
+-static PyObject *_liblvm_lvm_pv_create(PyObject *self, PyObject *arg)
+-{
+-	const char *pv_name;
+-	unsigned long long size = 0;
+-	unsigned long long pvmetadatacopies = DEFAULT_PVMETADATACOPIES;
+-	unsigned long long pvmetadatasize = DEFAULT_PVMETADATASIZE;
+-	unsigned long long data_alignment = 0;
+-	unsigned long long data_alignment_offset = 0;
+-	unsigned long long zero = 1;
+-	pv_create_params_t pv_params = NULL;
+-
+-	LVM_VALID(NULL);
+-
+-	if (!PyArg_ParseTuple(arg, "s|KKKKKK", &pv_name, &size, &pvmetadatacopies,
+-							&pvmetadatasize, &data_alignment,
+-							&data_alignment_offset, &zero))
+-		return NULL;
+-
+-	pv_params = lvm_pv_params_create(_libh, pv_name);
+-	if (!pv_params) {
+-		goto error;
+-	}
+-
+-	SET_PV_PROP(pv_params, "size", size);
+-	SET_PV_PROP(pv_params, "pvmetadatacopies", pvmetadatacopies);
+-	SET_PV_PROP(pv_params, "pvmetadatasize", pvmetadatasize);
+-	SET_PV_PROP(pv_params, "data_alignment", data_alignment);
+-	SET_PV_PROP(pv_params, "data_alignment_offset", data_alignment_offset);
+-	SET_PV_PROP(pv_params, "zero", zero);
+-
+-	if (lvm_pv_create_adv(pv_params)) {
+-		goto error;
+-	}
+-
+-	Py_INCREF(Py_None);
+-	return Py_None;
+-
+-error:
+-	PyErr_SetObject(_LibLVMError, _liblvm_get_last_error());
+-	return NULL;
+-}
+-
+-static PyObject *_liblvm_lvm_percent_to_float(PyObject *self, PyObject *arg)
+-{
+-	double converted;
+-	int percent;
+-
+-	LVM_VALID(NULL);
+-
+-	if (!PyArg_ParseTuple(arg, "i", &percent))
+-		return NULL;
+-
+-	converted = lvm_percent_to_float(percent);
+-
+-	return Py_BuildValue("d", converted);
+-}
+-
+-static PyObject *_liblvm_lvm_vg_name_validate(PyObject *self, PyObject *arg)
+-{
+-	const char *name;
+-
+-	LVM_VALID(NULL);
+-
+-	if (!PyArg_ParseTuple(arg, "s", &name))
+-		return NULL;
+-
+-	if (lvm_vg_name_validate(_libh, name) < 0) {
+-		PyErr_SetObject(_LibLVMError, _liblvm_get_last_error());
+-		return NULL;
+-	}
+-
+-	Py_INCREF(Py_None);
+-
+-	return Py_None;
+-}
+-
+-static PyObject *_liblvm_lvm_vgname_from_pvid(PyObject *self, PyObject *arg)
+-{
+-	const char *pvid;
+-	const char *vgname;
+-
+-	LVM_VALID(NULL);
+-
+-	if (!PyArg_ParseTuple(arg, "s", &pvid))
+-		return NULL;
+-
+-	if (!(vgname = lvm_vgname_from_pvid(_libh, pvid))) {
+-		PyErr_SetObject(_LibLVMError, _liblvm_get_last_error());
+-		return NULL;
+-	}
+-
+-	return Py_BuildValue("s", vgname);
+-}
+-
+-static PyObject *_liblvm_lvm_vgname_from_device(PyObject *self, PyObject *arg)
+-{
+-	const char *device;
+-	const char *vgname;
+-
+-	LVM_VALID(NULL);
+-
+-	if (!PyArg_ParseTuple(arg, "s", &device))
+-		return NULL;
+-
+-	if (!(vgname = lvm_vgname_from_device(_libh, device))) {
+-		PyErr_SetObject(_LibLVMError, _liblvm_get_last_error());
+-		return NULL;
+-	}
+-
+-	return Py_BuildValue("s", vgname);
+-}
+-
+-
+-static PyObject *_liblvm_lvm_config_find_bool(PyObject *self, PyObject *arg)
+-{
+-	const char *config;
+-	int rval;
+-	PyObject *rc;
+-
+-	LVM_VALID(NULL);
+-
+-	if (!PyArg_ParseTuple(arg, "s", &config))
+-		return NULL;
+-
+-	if ((rval = lvm_config_find_bool(_libh, config, -10)) == -10) {
+-		/* Retrieving error information yields no error in this case */
+-		PyErr_Format(PyExc_ValueError, "config path not found");
+-		return NULL;
+-	}
+-
+-	rc = (rval) ? Py_True: Py_False;
+-
+-	Py_INCREF(rc);
+-
+-	return rc;
+-}
+-
+-static PyObject *_liblvm_lvm_config_reload(void)
+-{
+-	LVM_VALID(NULL);
+-
+-	if (lvm_config_reload(_libh) == -1) {
+-		PyErr_SetObject(_LibLVMError, _liblvm_get_last_error());
+-		return NULL;
+-	}
+-
+-	Py_INCREF(Py_None);
+-
+-	return Py_None;
+-}
+-
+-
+-static PyObject *_liblvm_lvm_scan(void)
+-{
+-	LVM_VALID(NULL);
+-
+-	if (lvm_scan(_libh) == -1) {
+-		PyErr_SetObject(_LibLVMError, _liblvm_get_last_error());
+-		return NULL;
+-	}
+-
+-	Py_INCREF(Py_None);
+-
+-	return Py_None;
+-}
+-
+-static PyObject *_liblvm_lvm_config_override(PyObject *self, PyObject *arg)
+-{
+-	const char *config;
+-
+-	LVM_VALID(NULL);
+-
+-	if (!PyArg_ParseTuple(arg, "s", &config))
+-		return NULL;
+-
+-	if (lvm_config_override(_libh, config) == -1) {
+-		PyErr_SetObject(_LibLVMError, _liblvm_get_last_error());
+-		return NULL;
+-	}
+-
+-	Py_INCREF(Py_None);
+-
+-	return Py_None;
+-}
+-/* ----------------------------------------------------------------------
+- * VG object initialization/deallocation
+- */
+-
+-
+-static PyObject *_liblvm_lvm_vg_open(PyObject *self, PyObject *args)
+-{
+-	const char *vgname;
+-	const char *mode = NULL;
+-
+-	vgobject *vgobj;
+-
+-	LVM_VALID(NULL);
+-
+-	if (!PyArg_ParseTuple(args, "s|s", &vgname, &mode))
+-		return NULL;
+-
+-	if (mode == NULL)
+-		mode = "r";
+-
+-	if (!(vgobj = _create_py_vg()))
+-		return NULL;
+-
+-	if (!(vgobj->vg = lvm_vg_open(_libh, vgname, mode, 0))) {
+-		PyErr_SetObject(_LibLVMError, _liblvm_get_last_error());
+-		Py_DECREF(vgobj);
+-		return NULL;
+-	}
+-
+-	return (PyObject *)vgobj;
+-}
+-
+-static PyObject *_liblvm_lvm_vg_create(PyObject *self, PyObject *args)
+-{
+-	const char *vgname;
+-	vgobject *vgobj;
+-
+-	LVM_VALID(NULL);
+-
+-	if (!PyArg_ParseTuple(args, "s", &vgname))
+-		return NULL;
+-
+-	if (!(vgobj = _create_py_vg()))
+-		return NULL;
+-
+-	if (!(vgobj->vg = lvm_vg_create(_libh, vgname))) {
+-		PyErr_SetObject(_LibLVMError, _liblvm_get_last_error());
+-		Py_DECREF(vgobj);
+-		return NULL;
+-	}
+-
+-	return (PyObject *)vgobj;
+-}
+-
+-static void liblvm_vg_dealloc(vgobject *self)
+-{
+-	/* if already closed, don't reclose it */
+-	if (self->vg != NULL) {
+-		lvm_vg_close(self->vg);
+-		self->vg = NULL;
+-		self->libh_copy = NULL;
+-	}
+-
+-	PyObject_Del(self);
+-}
+-
+-/* VG Methods */
+-
+-#define VG_VALID(vgobject) \
+-	do { \
+-		if (!vgobject || !vgobject->vg) { \
+-			PyErr_SetString(PyExc_UnboundLocalError, "VG object invalid"); \
+-			return NULL; \
+-		} \
+-		LVM_VALID(vgobject->libh_copy); \
+-	} while (0)
+-
+-#define PVSLIST_VALID(pvslistobject) \
+-	do { \
+-		if (!pvslistobject || !pvslistobject->pvslist) { \
+-			PyErr_SetString(PyExc_UnboundLocalError, "PVS object invalid"); \
+-			return NULL; \
+-		} \
+-		LVM_VALID(pvslistobject->libh_copy); \
+-	} while (0)
+-
+-static PyObject *_liblvm_lvm_vg_close(vgobject *self)
+-{
+-	/* if already closed, don't reclose it */
+-	if (self->vg) {
+-		if (lvm_vg_close(self->vg) == -1) {
+-			PyErr_SetObject(_LibLVMError, _liblvm_get_last_error());
+-			return NULL;
+-		}
+-		self->vg = NULL;
+-		self->libh_copy = NULL;
+-	}
+-
+-	Py_INCREF(Py_None);
+-
+-	return Py_None;
+-}
+-
+-static PyObject *_liblvm_lvm_vg_get_name(vgobject *self)
+-{
+-	VG_VALID(self);
+-
+-	return Py_BuildValue("s", lvm_vg_get_name(self->vg));
+-}
+-
+-
+-static PyObject *_liblvm_lvm_vg_get_uuid(vgobject *self)
+-{
+-	VG_VALID(self);
+-
+-	return Py_BuildValue("s", lvm_vg_get_uuid(self->vg));
+-}
+-
+-static PyObject *_liblvm_lvm_vg_remove(vgobject *self)
+-{
+-	VG_VALID(self);
+-
+-	if (lvm_vg_remove(self->vg) == -1)
+-		goto error;
+-
+-	if (lvm_vg_write(self->vg) == -1)
+-		goto error;
+-
+-	/* Not much you can do with a vg that is removed so close it */
+-	return _liblvm_lvm_vg_close(self);
+-
+-error:
+-	PyErr_SetObject(_LibLVMError, _liblvm_get_last_error());
+-
+-	return NULL;
+-}
+-
+-static PyObject *_liblvm_lvm_vg_extend(vgobject *self, PyObject *args)
+-{
+-	const char *device;
+-
+-	VG_VALID(self);
+-
+-	if (!PyArg_ParseTuple(args, "s", &device)) {
+-		return NULL;
+-	}
+-
+-	if (lvm_vg_extend(self->vg, device) == -1)
+-		goto error;
+-
+-	if (lvm_vg_write(self->vg) == -1)
+-		goto error;
+-
+-	Py_INCREF(Py_None);
+-	return Py_None;
+-
+-error:
+-	PyErr_SetObject(_LibLVMError, _liblvm_get_last_error());
+-
+-	return NULL;
+-}
+-
+-static PyObject *_liblvm_lvm_vg_reduce(vgobject *self, PyObject *args)
+-{
+-	const char *device;
+-
+-	VG_VALID(self);
+-
+-	if (!PyArg_ParseTuple(args, "s", &device))
+-		return NULL;
+-
+-	if (lvm_vg_reduce(self->vg, device) == -1)
+-		goto error;
+-
+-	if (lvm_vg_write(self->vg) == -1)
+-		goto error;
+-
+-	Py_INCREF(Py_None);
+-
+-	return Py_None;
+-
+-error:
+-	PyErr_SetObject(_LibLVMError, _liblvm_get_last_error());
+-
+-	return NULL;
+-}
+-
+-static PyObject *_liblvm_lvm_vg_add_tag(vgobject *self, PyObject *args)
+-{
+-	const char *tag;
+-	int rval;
+-
+-	VG_VALID(self);
+-
+-	if (!PyArg_ParseTuple(args, "s", &tag)) {
+-		return NULL;
+-	}
+-	if ((rval = lvm_vg_add_tag(self->vg, tag)) == -1)
+-		goto error;
+-
+-	if (lvm_vg_write(self->vg) == -1)
+-		goto error;
+-
+-	return Py_BuildValue("i", rval);
+-
+-error:
+-	PyErr_SetObject(_LibLVMError, _liblvm_get_last_error());
+-
+-	return NULL;
+-}
+-
+-static PyObject *_liblvm_lvm_vg_remove_tag(vgobject *self, PyObject *args)
+-{
+-	const char *tag;
+-
+-	VG_VALID(self);
+-
+-	if (!PyArg_ParseTuple(args, "s", &tag))
+-		return NULL;
+-
+-	if (lvm_vg_remove_tag(self->vg, tag) == -1)
+-		goto error;
+-
+-	if (lvm_vg_write(self->vg) == -1)
+-		goto error;
+-
+-	Py_INCREF(Py_None);
+-
+-	return Py_None;
+-
+-error:
+-	PyErr_SetObject(_LibLVMError, _liblvm_get_last_error());
+-
+-	return NULL;
+-}
+-
+-static PyObject *_liblvm_lvm_vg_is_clustered(vgobject *self)
+-{
+-	PyObject *rval;
+-
+-	VG_VALID(self);
+-
+-	rval = ( lvm_vg_is_clustered(self->vg) == 1) ? Py_True : Py_False;
+-
+-	Py_INCREF(rval);
+-
+-	return rval;
+-}
+-
+-static PyObject *_liblvm_lvm_vg_is_exported(vgobject *self)
+-{
+-	PyObject *rval;
+-
+-	VG_VALID(self);
+-
+-	rval = ( lvm_vg_is_exported(self->vg) == 1) ? Py_True : Py_False;
+-
+-	Py_INCREF(rval);
+-
+-	return rval;
+-}
+-
+-static PyObject *_liblvm_lvm_vg_is_partial(vgobject *self)
+-{
+-	PyObject *rval;
+-
+-	VG_VALID(self);
+-
+-	rval = ( lvm_vg_is_partial(self->vg) == 1) ? Py_True : Py_False;
+-
+-	Py_INCREF(rval);
+-
+-	return rval;
+-}
+-
+-static PyObject *_liblvm_lvm_vg_get_seqno(vgobject *self)
+-{
+-	VG_VALID(self);
+-
+-	return Py_BuildValue("K", (unsigned long long)lvm_vg_get_seqno(self->vg));
+-}
+-
+-static PyObject *_liblvm_lvm_vg_get_size(vgobject *self)
+-{
+-	VG_VALID(self);
+-
+-	return Py_BuildValue("K", (unsigned long long)lvm_vg_get_size(self->vg));
+-}
+-
+-static PyObject *_liblvm_lvm_vg_get_free_size(vgobject *self)
+-{
+-	VG_VALID(self);
+-
+-	return Py_BuildValue("K", (unsigned long long)lvm_vg_get_free_size(self->vg));
+-}
+-
+-static PyObject *_liblvm_lvm_vg_get_extent_size(vgobject *self)
+-{
+-	VG_VALID(self);
+-
+-	return Py_BuildValue("K", (unsigned long long)lvm_vg_get_extent_size(self->vg));
+-}
+-
+-static PyObject *_liblvm_lvm_vg_get_extent_count(vgobject *self)
+-{
+-	VG_VALID(self);
+-
+-	return Py_BuildValue("K", (unsigned long long)lvm_vg_get_extent_count(self->vg));
+-}
+-
+-static PyObject *_liblvm_lvm_vg_get_free_extent_count(vgobject *self)
+-{
+-	VG_VALID(self);
+-
+-	return Py_BuildValue("K", (unsigned long long)lvm_vg_get_free_extent_count(self->vg));
+-}
+-
+-/* Builds a python tuple ([string|number], bool) from a struct lvm_property_value */
+-static PyObject *get_property(struct lvm_property_value *prop)
+-{
+-	PyObject *pytuple;
+-	PyObject *setable;
+-
+-	if (!prop->is_valid) {
+-		PyErr_SetObject(_LibLVMError, _liblvm_get_last_error());
+-		return NULL;
+-	}
+-
+-	if (!(pytuple = PyTuple_New(2)))
+-		return NULL;
+-
+-	if (prop->is_integer) {
+-		if (prop->is_signed) {
+-			PyTuple_SET_ITEM(pytuple, 0, Py_BuildValue("L", prop->value.signed_integer));
+-		} else {
+-			PyTuple_SET_ITEM(pytuple, 0, Py_BuildValue("K", prop->value.integer));
+-		}
+-	} else {
+-		if ( prop->value.string ) {
+-			PyTuple_SET_ITEM(pytuple, 0, PYSTRTYPE_FROMSTRING(prop->value.string));
+-		} else {
+-			PyTuple_SET_ITEM(pytuple, 0, Py_None);
+-		}
+-	}
+-
+-	if (prop->is_settable)
+-		setable = Py_True;
+-	else
+-		setable = Py_False;
+-
+-	Py_INCREF(setable);
+-	PyTuple_SET_ITEM(pytuple, 1, setable);
+-
+-	return pytuple;
+-}
+-
+-/* This will return a tuple of (value, bool) with the value being a string or
+-   integer and bool indicating if property is settable */
+-static PyObject *_liblvm_lvm_vg_get_property(vgobject *self, PyObject *args)
+-{
+-	const char *name;
+-	struct lvm_property_value prop_value;
+-
+-	VG_VALID(self);
+-
+-	if (!PyArg_ParseTuple(args, "s", &name))
+-		return NULL;
+-
+-	prop_value = lvm_vg_get_property(self->vg, name);
+-
+-	return get_property(&prop_value);
+-}
+-
+-static PyObject *_liblvm_lvm_vg_set_property(vgobject *self, PyObject *args)
+-{
+-	const char *property_name = NULL;
+-	PyObject *variant_type_arg = NULL;
+-	struct lvm_property_value lvm_property;
+-	char *string_value = NULL;
+-	int temp_py_int;
+-	unsigned long long temp_py_long;
+-
+-	VG_VALID(self);
+-
+-	if (!PyArg_ParseTuple(args, "sO", &property_name, &variant_type_arg))
+-		return NULL;
+-
+-	lvm_property = lvm_vg_get_property(self->vg, property_name);
+-	if (!lvm_property.is_valid)
+-		goto lvmerror;
+-
+-	if (PYSTRYPE_CHECK(variant_type_arg)) {
+-
+-		if (!lvm_property.is_string) {
+-			PyErr_Format(PyExc_ValueError, "Property requires string value");
+-			goto bail;
+-		}
+-
+-		if (!(string_value = PYSTRTYPE_ASSTRING(variant_type_arg))) {
+-			PyErr_NoMemory();
+-			goto bail;
+-		}
+-
+-		lvm_property.value.string = string_value;
+-	} else {
+-
+-		if (!lvm_property.is_integer) {
+-			PyErr_Format(PyExc_ValueError, "Property requires numeric value");
+-			goto bail;
+-		}
+-
+-		if (PYINTTYPE_CHECK(variant_type_arg)) {
+-			temp_py_int = PYINTTYPE_ASLONG(variant_type_arg);
+-
+-			/* -1 could be valid, need to see if an exception was gen. */
+-			if (temp_py_int == -1 && PyErr_Occurred())
+-				goto bail;
+-
+-			if (temp_py_int < 0) {
+-				PyErr_Format(PyExc_ValueError, "Positive integers only!");
+-				goto bail;
+-			}
+-
+-			lvm_property.value.integer = temp_py_int;
+-		} else if (PyObject_IsInstance(variant_type_arg, (PyObject*)&PyLong_Type)){
+-			/* If PyLong_AsUnsignedLongLong function fails an OverflowError is
+-			 * raised and (unsigned long long)-1 is returned
+-			 */
+-			if ((temp_py_long = PyLong_AsUnsignedLongLong(variant_type_arg)) == ~0ULL)
+-				goto bail;
+-
+-			lvm_property.value.integer = temp_py_long;
+-		} else {
+-			PyErr_Format(PyExc_ValueError, "supported value types are numeric and string");
+-			goto bail;
+-		}
+-	}
+-
+-	if (lvm_vg_set_property(self->vg, property_name, &lvm_property) == -1)
+-		goto lvmerror;
+-
+-	if (lvm_vg_write(self->vg) == -1)
+-		goto lvmerror;
+-
+-	Py_INCREF(Py_None);
+-
+-	return Py_None;
+-
+-lvmerror:
+-	PyErr_SetObject(_LibLVMError, _liblvm_get_last_error());
+-bail:
+-	return NULL;
+-}
+-
+-static PyObject *_liblvm_lvm_vg_get_pv_count(vgobject *self)
+-{
+-	VG_VALID(self);
+-
+-	return Py_BuildValue("K", (unsigned long long)lvm_vg_get_pv_count(self->vg));
+-}
+-
+-static PyObject *_liblvm_lvm_vg_get_max_pv(vgobject *self)
+-{
+-	VG_VALID(self);
+-
+-	return Py_BuildValue("K", (unsigned long long)lvm_vg_get_max_pv(self->vg));
+-}
+-
+-static PyObject *_liblvm_lvm_vg_get_max_lv(vgobject *self)
+-{
+-	VG_VALID(self);
+-
+-	return Py_BuildValue("K", (unsigned long long)lvm_vg_get_max_lv(self->vg));
+-}
+-
+-static PyObject *_liblvm_lvm_vg_set_extent_size(vgobject *self, PyObject *args)
+-{
+-	unsigned int new_size;
+-
+-	VG_VALID(self);
+-
+-	if (!PyArg_ParseTuple(args, "I", &new_size))
+-		return NULL;
+-
+-	if (lvm_vg_set_extent_size(self->vg, new_size) == -1) {
+-		PyErr_SetObject(_LibLVMError, _liblvm_get_last_error());
+-		return NULL;
+-	}
+-
+-	Py_INCREF(Py_None);
+-
+-	return Py_None;
+-}
+-
+-static PyObject *_liblvm_lvm_vg_list_lvs(vgobject *self)
+-{
+-	struct dm_list *lvs;
+-	struct lvm_lv_list *lvl;
+-	PyObject * pytuple;
+-	lvobject * lvobj;
+-	int i = 0;
+-
+-	VG_VALID(self);
+-
+-	/* unlike other LVM api calls, if there are no results, we get NULL */
+-	if (!(lvs = lvm_vg_list_lvs(self->vg)))
+-		return Py_BuildValue("()");
+-
+-	if (!(pytuple = PyTuple_New(dm_list_size(lvs))))
+-		return NULL;
+-
+-	dm_list_iterate_items(lvl, lvs) {
+-		/* Create and initialize the object */
+-		if (!(lvobj = _create_py_lv(self, lvl->lv))) {
+-			Py_DECREF(pytuple);
+-			return NULL;
+-		}
+-
+-		PyTuple_SET_ITEM(pytuple, i, (PyObject *) lvobj);
+-		i++;
+-	}
+-
+-	return pytuple;
+-}
+-
+-static PyObject *_liblvm_lvm_vg_get_tags(vgobject *self)
+-{
+-	struct dm_list *tagsl;
+-	struct lvm_str_list *strl;
+-	PyObject * pytuple;
+-	int i = 0;
+-
+-	VG_VALID(self);
+-
+-	if (!(tagsl = lvm_vg_get_tags(self->vg))) {
+-		PyErr_SetObject(_LibLVMError, _liblvm_get_last_error());
+-		return NULL;
+-	}
+-
+-	if (!(pytuple = PyTuple_New(dm_list_size(tagsl))))
+-		return NULL;
+-
+-	dm_list_iterate_items(strl, tagsl) {
+-		PyTuple_SET_ITEM(pytuple, i, PYSTRTYPE_FROMSTRING(strl->str));
+-		i++;
+-	}
+-
+-	return pytuple;
+-}
+-
+-static PyObject *_liblvm_lvm_vg_create_lv_linear(vgobject *self, PyObject *args)
+-{
+-	const char *vgname;
+-	unsigned long long size;
+-	lv_t lv;
+-
+-	VG_VALID(self);
+-
+-	if (!PyArg_ParseTuple(args, "sK", &vgname, &size))
+-		return NULL;
+-
+-	if (!(lv = lvm_vg_create_lv_linear(self->vg, vgname, size))) {
+-		PyErr_SetObject(_LibLVMError, _liblvm_get_last_error());
+-		return NULL;
+-	}
+-
+-	return (PyObject *)_create_py_lv(self, lv);
+-}
+-
+-static PyObject *_liblvm_lvm_vg_create_lv_thinpool(vgobject *self, PyObject *args)
+-{
+-	unsigned long long size = 0;
+-	unsigned long long meta_size = 0;
+-	const char *pool_name;
+-	unsigned long chunk_size = 0;
+-	int skip_zero = 0;
+-	lvm_thin_discards_t discard = LVM_THIN_DISCARDS_PASSDOWN;
+-	lv_t lv;
+-	lv_create_params_t lvp = NULL;
+-	struct lvm_property_value prop_value;
+-
+-	VG_VALID(self);
+-
+-	if (!PyArg_ParseTuple(args, "sK|kKii", &pool_name, &size, &chunk_size,
+-			      &meta_size, &discard, &skip_zero))
+-		return NULL;
+-
+-	if (!(lvp = lvm_lv_params_create_thin_pool(self->vg, pool_name, size, chunk_size,
+-						   meta_size, discard))) {
+-
+-		PyErr_SetObject(_LibLVMError, _liblvm_get_last_error());
+-		return NULL;
+-	}
+-
+-	if (skip_zero) {
+-		prop_value = lvm_lv_params_get_property(lvp, "skip_zero");
+-
+-		if (prop_value.is_valid) {
+-			prop_value.value.integer = 1;
+-
+-			if (lvm_lv_params_set_property(lvp, "skip_zero",
+-						       &prop_value) == -1) {
+-				goto error;
+-			}
+-		}
+-	}
+-
+-	if (!(lv = lvm_lv_create(lvp))) {
+-		goto error;
+-	}
+-
+-	return (PyObject *)_create_py_lv(self, lv);
+-
+-error:
+-	PyErr_SetObject(_LibLVMError, _liblvm_get_last_error());
+-	return NULL;
+-}
+-
+-static PyObject *_liblvm_lvm_vg_create_lv_thin(vgobject *self, PyObject *args)
+-{
+-	const char *pool_name;
+-	const char *lv_name;
+-	unsigned long long size = 0;
+-	lv_t lv;
+-	lv_create_params_t lvp = NULL;
+-
+-	VG_VALID(self);
+-
+-	if (!PyArg_ParseTuple(args, "ssK", &pool_name, &lv_name, &size))
+-		return NULL;
+-
+-	if (!(lvp = lvm_lv_params_create_thin(self->vg, pool_name, lv_name,size))) {
+-		PyErr_SetObject(_LibLVMError, _liblvm_get_last_error());
+-		return NULL;
+-	}
+-
+-	if (!(lv = lvm_lv_create(lvp))) {
+-		PyErr_SetObject(_LibLVMError, _liblvm_get_last_error());
+-		return NULL;
+-	}
+-
+-	return (PyObject *)_create_py_lv(self, lv);
+-}
+-
+-static void liblvm_lv_dealloc(lvobject *self)
+-{
+-	/* We can dealloc an object that didn't get fully created */
+-	if (self->parent_vgobj) {
+-		Py_DECREF(self->parent_vgobj);
+-	}
+-
+-	PyObject_Del(self);
+-}
+-
+-static PyObject *_liblvm_lvm_vg_list_pvs(vgobject *self)
+-{
+-	struct dm_list *pvs;
+-	struct lvm_pv_list *pvl;
+-	PyObject * pytuple;
+-	pvobject * pvobj;
+-	int i = 0;
+-
+-	VG_VALID(self);
+-
+-	/* unlike other LVM api calls, if there are no results, we get NULL */
+-	if (!(pvs = lvm_vg_list_pvs(self->vg)))
+-		return Py_BuildValue("()");
+-
+-	if (!(pytuple = PyTuple_New(dm_list_size(pvs))))
+-		return NULL;
+-
+-	dm_list_iterate_items(pvl, pvs) {
+-		/* Create and initialize the object */
+-		if (!(pvobj = _create_py_pv())) {
+-			Py_DECREF(pytuple);
+-			return NULL;
+-		}
+-
+-		pvobj->parent_vgobj = self;
+-		Py_INCREF(pvobj->parent_vgobj);
+-
+-		pvobj->pv = pvl->pv;
+-		PyTuple_SET_ITEM(pytuple, i, (PyObject *) pvobj);
+-		i++;
+-	}
+-
+-	return pytuple;
+-}
+-
+-typedef lv_t (*lv_fetch_by_N)(vg_t vg, const char *id);
+-typedef pv_t (*pv_fetch_by_N)(vg_t vg, const char *id);
+-
+-static PyObject *_liblvm_lvm_lv_from_N(vgobject *self, PyObject *arg, lv_fetch_by_N method)
+-{
+-	const char *id;
+-	lv_t lv = NULL;
+-
+-	VG_VALID(self);
+-
+-	if (!PyArg_ParseTuple(arg, "s", &id))
+-		return NULL;
+-
+-	if (!(lv = method(self->vg, id))) {
+-		PyErr_SetObject(_LibLVMError, _liblvm_get_last_error());
+-		return NULL;
+-	}
+-
+-	return (PyObject *)_create_py_lv(self, lv);
+-}
+-
+-static PyObject *_liblvm_lvm_lv_from_name(vgobject *self, PyObject *arg)
+-{
+-	return _liblvm_lvm_lv_from_N(self, arg, lvm_lv_from_name);
+-}
+-
+-static PyObject *_liblvm_lvm_lv_from_uuid(vgobject *self, PyObject *arg)
+-{
+-	return _liblvm_lvm_lv_from_N(self, arg, lvm_lv_from_uuid);
+-}
+-
+-static PyObject *_liblvm_lvm_lv_name_validate(vgobject *self, PyObject *args)
+-{
+-	const char *name;
+-
+-	VG_VALID(self);
+-
+-	if (!PyArg_ParseTuple(args, "s", &name))
+-		return NULL;
+-
+-	if (lvm_lv_name_validate(self->vg, name) < 0) {
+-		PyErr_SetObject(_LibLVMError, _liblvm_get_last_error());
+-		return NULL;
+-	}
+-
+-	Py_INCREF(Py_None);
+-
+-	return Py_None;
+-}
+-
+-static PyObject *_liblvm_lvm_pv_from_N(vgobject *self, PyObject *arg, pv_fetch_by_N method)
+-{
+-	const char *id;
+-	pvobject *rc;
+-	pv_t pv = NULL;
+-
+-	VG_VALID(self);
+-
+-	if (!PyArg_ParseTuple(arg, "s", &id))
+-		return NULL;
+-
+-	if (!(pv = method(self->vg, id))) {
+-		PyErr_SetObject(_LibLVMError, _liblvm_get_last_error());
+-		return NULL;
+-	}
+-
+-	if (!(rc = _create_py_pv()))
+-		return NULL;
+-
+-	Py_INCREF(self);
+-	rc->pv = pv;
+-
+-	return (PyObject *)rc;
+-}
+-
+-static PyObject *_liblvm_lvm_pv_from_name(vgobject *self, PyObject *arg)
+-{
+-	return _liblvm_lvm_pv_from_N(self, arg, lvm_pv_from_name);
+-}
+-
+-static PyObject *_liblvm_lvm_pv_from_uuid(vgobject *self, PyObject *arg)
+-{
+-	return _liblvm_lvm_pv_from_N(self, arg, lvm_pv_from_uuid);
+-}
+-
+-static void _liblvm_pv_dealloc(pvobject *self)
+-{
+-	if (self->parent_vgobj) {
+-		Py_DECREF(self->parent_vgobj);
+-	}
+-
+-	if (self->parent_pvslistobj) {
+-		Py_DECREF(self->parent_pvslistobj);
+-	}
+-
+-	self->parent_vgobj = NULL;
+-	self->parent_pvslistobj = NULL;
+-	PyObject_Del(self);
+-}
+-
+-/* LV Methods */
+-
+-#define LV_VALID(lvobject) \
+-	do {					\
+-		if (!lvobject || !lvobject->lv) { 	\
+-			PyErr_SetString(PyExc_UnboundLocalError, "LV object invalid"); \
+-			return NULL;	\
+-		}\
+-		VG_VALID(lvobject->parent_vgobj); \
+-	} while (0)
+-
+-static PyObject *_liblvm_lvm_lv_get_attr(lvobject *self)
+-{
+-	LV_VALID(self);
+-
+-	return Py_BuildValue("s", lvm_lv_get_attr(self->lv));
+-}
+-
+-static PyObject *_liblvm_lvm_lv_get_origin(lvobject *self)
+-{
+-	LV_VALID(self);
+-
+-	return Py_BuildValue("s", lvm_lv_get_origin(self->lv));
+-}
+-
+-static PyObject *_liblvm_lvm_lv_get_name(lvobject *self)
+-{
+-	LV_VALID(self);
+-
+-	return Py_BuildValue("s", lvm_lv_get_name(self->lv));
+-}
+-
+-static PyObject *_liblvm_lvm_lv_get_uuid(lvobject *self)
+-{
+-	LV_VALID(self);
+-
+-	return Py_BuildValue("s", lvm_lv_get_uuid(self->lv));
+-}
+-
+-static PyObject *_liblvm_lvm_lv_activate(lvobject *self)
+-{
+-	LV_VALID(self);
+-
+-	if (lvm_lv_activate(self->lv) == -1) {
+-		PyErr_SetObject(_LibLVMError, _liblvm_get_last_error());
+-		return NULL;
+-	}
+-
+-	Py_INCREF(Py_None);
+-
+-	return Py_None;
+-}
+-
+-static PyObject *_liblvm_lvm_lv_deactivate(lvobject *self)
+-{
+-	LV_VALID(self);
+-
+-	if (lvm_lv_deactivate(self->lv) == -1) {
+-		PyErr_SetObject(_LibLVMError, _liblvm_get_last_error());
+-		return NULL;
+-	}
+-
+-	Py_INCREF(Py_None);
+-
+-	return Py_None;
+-}
+-
+-static PyObject *_liblvm_lvm_vg_remove_lv(lvobject *self)
+-{
+-	LV_VALID(self);
+-
+-	if (lvm_vg_remove_lv(self->lv) == -1) {
+-		PyErr_SetObject(_LibLVMError, _liblvm_get_last_error());
+-		return NULL;
+-	}
+-
+-	self->lv = NULL;
+-
+-	Py_INCREF(Py_None);
+-
+-	return Py_None;
+-}
+-
+-/* This will return a tuple of (value, bool) with the value being a string or
+-   integer and bool indicating if property is settable */
+-static PyObject * _liblvm_lvm_lv_get_property(lvobject *self, PyObject *args)
+-{
+-	const char *name;
+-	struct lvm_property_value prop_value;
+-
+-	LV_VALID(self);
+-
+-	if (!PyArg_ParseTuple(args, "s", &name))
+-		return NULL;
+-
+-	prop_value = lvm_lv_get_property(self->lv, name);
+-
+-	return get_property(&prop_value);
+-}
+-
+-static PyObject *_liblvm_lvm_lv_get_size(lvobject *self)
+-{
+-	LV_VALID(self);
+-
+-	return Py_BuildValue("K", (unsigned long long)lvm_lv_get_size(self->lv));
+-}
+-
+-static PyObject *_liblvm_lvm_lv_is_active(lvobject *self)
+-{
+-	PyObject *rval;
+-
+-	LV_VALID(self);
+-
+-	rval = (lvm_lv_is_active(self->lv) == 1) ? Py_True : Py_False;
+-
+-	Py_INCREF(rval);
+-
+-	return rval;
+-}
+-
+-static PyObject *_liblvm_lvm_lv_is_suspended(lvobject *self)
+-{
+-	PyObject *rval;
+-
+-	LV_VALID(self);
+-
+-	rval = (lvm_lv_is_suspended(self->lv) == 1) ? Py_True : Py_False;
+-
+-	Py_INCREF(rval);
+-
+-	return rval;
+-}
+-
+-static PyObject *_liblvm_lvm_lv_add_tag(lvobject *self, PyObject *args)
+-{
+-	const char *tag;
+-
+-	LV_VALID(self);
+-
+-	if (!PyArg_ParseTuple(args, "s", &tag))
+-		return NULL;
+-
+-	if (lvm_lv_add_tag(self->lv, tag) == -1)
+-		goto error;
+-
+-	if (lvm_vg_write(self->parent_vgobj->vg) == -1)
+-		goto error;
+-
+-	Py_INCREF(Py_None);
+-	return Py_None;
+-
+-error:
+-	PyErr_SetObject(_LibLVMError, _liblvm_get_last_error());
+-	return NULL;
+-}
+-
+-static PyObject *_liblvm_lvm_lv_remove_tag(lvobject *self, PyObject *args)
+-{
+-	const char *tag;
+-
+-	LV_VALID(self);
+-
+-	if (!PyArg_ParseTuple(args, "s", &tag))
+-		return NULL;
+-
+-	if (lvm_lv_remove_tag(self->lv, tag) == -1)
+-		goto error;
+-
+-	if (lvm_vg_write(self->parent_vgobj->vg) == -1)
+-		goto error;
+-
+-	Py_INCREF(Py_None);
+-	return Py_None;
+-
+-error:
+-	PyErr_SetObject(_LibLVMError, _liblvm_get_last_error());
+-	return NULL;
+-}
+-
+-static PyObject *_liblvm_lvm_lv_get_tags(lvobject *self)
+-{
+-	struct dm_list *tagsl;
+-	struct lvm_str_list *strl;
+-	PyObject * pytuple;
+-	int i = 0;
+-
+-	LV_VALID(self);
+-
+-	if (!(tagsl = lvm_lv_get_tags(self->lv))) {
+-		PyErr_SetObject(_LibLVMError, _liblvm_get_last_error());
+-		return NULL;
+-	}
+-
+-	if (!(pytuple = PyTuple_New(dm_list_size(tagsl))))
+-		return NULL;
+-
+-	dm_list_iterate_items(strl, tagsl) {
+-		PyTuple_SET_ITEM(pytuple, i, PYSTRTYPE_FROMSTRING(strl->str));
+-		i++;
+-	}
+-
+-	return pytuple;
+-}
+-
+-static PyObject *_liblvm_lvm_lv_rename(lvobject *self, PyObject *args)
+-{
+-	const char *new_name;
+-
+-	LV_VALID(self);
+-
+-	if (!PyArg_ParseTuple(args, "s", &new_name))
+-		return NULL;
+-
+-	if (lvm_lv_rename(self->lv, new_name) == -1) {
+-		PyErr_SetObject(_LibLVMError, _liblvm_get_last_error());
+-		return NULL;
+-	}
+-
+-	Py_INCREF(Py_None);
+-
+-	return Py_None;
+-}
+-
+-static PyObject *_liblvm_lvm_lv_resize(lvobject *self, PyObject *args)
+-{
+-	unsigned long long new_size;
+-
+-	LV_VALID(self);
+-
+-	if (!PyArg_ParseTuple(args, "K", &new_size))
+-		return NULL;
+-
+-	if (lvm_lv_resize(self->lv, new_size) == -1) {
+-		PyErr_SetObject(_LibLVMError, _liblvm_get_last_error());
+-		return NULL;
+-	}
+-
+-	Py_INCREF(Py_None);
+-
+-	return Py_None;
+-}
+-
+-static PyObject *_liblvm_lvm_lv_list_lvsegs(lvobject *self)
+-{
+-	struct dm_list *lvsegs;
+-	lvseg_list_t *lvsegl;
+-	PyObject * pytuple;
+-	lvsegobject *lvsegobj;
+-	int i = 0;
+-
+-	LV_VALID(self);
+-
+-	if (!(lvsegs = lvm_lv_list_lvsegs(self->lv)))
+-		return Py_BuildValue("()");
+-
+-	if (!(pytuple = PyTuple_New(dm_list_size(lvsegs))))
+-		return NULL;
+-
+-	dm_list_iterate_items(lvsegl, lvsegs) {
+-		/* Create and initialize the object */
+-		if (!(lvsegobj = PyObject_New(lvsegobject, &_LibLVMlvsegType))) {
+-			Py_DECREF(pytuple);
+-			return NULL;
+-		}
+-
+-		lvsegobj->parent_lvobj = self;
+-		Py_INCREF(lvsegobj->parent_lvobj);
+-
+-		lvsegobj->lv_seg = lvsegl->lvseg;
+-		PyTuple_SET_ITEM(pytuple, i, (PyObject *) lvsegobj);
+-		i++;
+-	}
+-
+-	return pytuple;
+-}
+-
+-static PyObject *_liblvm_lvm_lv_snapshot(lvobject *self, PyObject *args)
+-{
+-	const char *snap_name;
+-	unsigned long long size = 0;
+-	lv_t lv;
+-	lv_create_params_t lvp = NULL;
+-
+-	LV_VALID(self);
+-
+-	if (!PyArg_ParseTuple(args, "s|K", &snap_name, &size))
+-		return NULL;
+-
+-	if (!(lvp = lvm_lv_params_create_snapshot(self->lv, snap_name, size))) {
+-		PyErr_SetObject(_LibLVMError, _liblvm_get_last_error());
+-		return NULL;
+-	}
+-
+-	if (!(lv = lvm_lv_create(lvp))) {
+-		PyErr_SetObject(_LibLVMError, _liblvm_get_last_error());
+-		return NULL;
+-	}
+-
+-	return (PyObject *)_create_py_lv(self->parent_vgobj, lv);
+-}
+-
+-/* PV Methods */
+-
+-#define PV_VALID(pvobject) \
+-	do { \
+-		if (!pvobject || !pvobject->pv) { \
+-			PyErr_SetString(PyExc_UnboundLocalError, "PV object invalid"); \
+-			return NULL; \
+-		} \
+-		if (pvobject->parent_vgobj) { \
+-			VG_VALID(pvobject->parent_vgobj); \
+-		} \
+-		if (pvobject->parent_pvslistobj) { \
+-			PVSLIST_VALID(pvobject->parent_pvslistobj); \
+-		} \
+-	} while (0)
+-
+-static PyObject *_liblvm_lvm_pv_get_name(pvobject *self)
+-{
+-	PV_VALID(self);
+-
+-	return Py_BuildValue("s", lvm_pv_get_name(self->pv));
+-}
+-
+-static PyObject *_liblvm_lvm_pv_get_uuid(pvobject *self)
+-{
+-	PV_VALID(self);
+-
+-	return Py_BuildValue("s", lvm_pv_get_uuid(self->pv));
+-}
+-
+-static PyObject *_liblvm_lvm_pv_get_mda_count(pvobject *self)
+-{
+-	PV_VALID(self);
+-
+-	return Py_BuildValue("K", (unsigned long long)lvm_pv_get_mda_count(self->pv));
+-}
+-
+-static PyObject *_liblvm_lvm_pv_get_property(pvobject *self, PyObject *args)
+-{
+-	const char *name;
+-	struct lvm_property_value prop_value;
+-
+-	PV_VALID(self);
+-
+-	if (!PyArg_ParseTuple(args, "s", &name))
+-		return NULL;
+-
+-	prop_value = lvm_pv_get_property(self->pv, name);
+-
+-	return get_property(&prop_value);
+-}
+-
+-static PyObject *_liblvm_lvm_pv_get_dev_size(pvobject *self)
+-{
+-	PV_VALID(self);
+-
+-	return Py_BuildValue("K", (unsigned long long)lvm_pv_get_dev_size(self->pv));
+-}
+-
+-static PyObject *_liblvm_lvm_pv_get_size(pvobject *self)
+-{
+-	PV_VALID(self);
+-
+-	return Py_BuildValue("K", (unsigned long long)lvm_pv_get_size(self->pv));
+-}
+-
+-static PyObject *_liblvm_lvm_pv_get_free(pvobject *self)
+-{
+-	PV_VALID(self);
+-
+-	return Py_BuildValue("K", (unsigned long long)lvm_pv_get_free(self->pv));
+-}
+-
+-static PyObject *_liblvm_lvm_pv_resize(pvobject *self, PyObject *args)
+-{
+-	unsigned long long new_size;
+-
+-	PV_VALID(self);
+-
+-	if (!PyArg_ParseTuple(args, "K", &new_size))
+-		return NULL;
+-
+-	if (lvm_pv_resize(self->pv, new_size) == -1) {
+-		PyErr_SetObject(_LibLVMError, _liblvm_get_last_error());
+-		return NULL;
+-	}
+-
+-	Py_INCREF(Py_None);
+-
+-	return Py_None;
+-}
+-
+-static PyObject *_liblvm_lvm_pv_list_pvsegs(pvobject *self)
+-{
+-	struct dm_list *pvsegs;
+-	pvseg_list_t *pvsegl;
+-	PyObject *pytuple;
+-	pvsegobject *pvsegobj;
+-	int i = 0;
+-
+-	PV_VALID(self);
+-
+-	if (!(pvsegs = lvm_pv_list_pvsegs(self->pv)))
+-		return Py_BuildValue("()");
+-
+-	if (!(pytuple = PyTuple_New(dm_list_size(pvsegs))))
+-		return NULL;
+-
+-	dm_list_iterate_items(pvsegl, pvsegs) {
+-		/* Create and initialize the object */
+-		if (!(pvsegobj = PyObject_New(pvsegobject, &_LibLVMpvsegType))) {
+-			Py_DECREF(pytuple);
+-			return NULL;
+-		}
+-
+-		pvsegobj->parent_pvobj = self;
+-		Py_INCREF(pvsegobj->parent_pvobj);
+-
+-		pvsegobj->pv_seg = pvsegl->pvseg;
+-		PyTuple_SET_ITEM(pytuple, i, (PyObject *) pvsegobj);
+-		i++;
+-	}
+-
+-	return pytuple;
+-}
+-
+-/* LV seg methods */
+-
+-/*
+- * No way to close/destroy an lvseg, just need to make sure parents are
+- * still good
+- */
+-#define LVSEG_VALID(lvsegobject) \
+-	do { \
+-		if ( !lvsegobject || !lvsegobject->parent_lvobj ) { \
+-			PyErr_SetString(PyExc_UnboundLocalError, "LV segment object invalid"); \
+-			return NULL; \
+-		} \
+-		LV_VALID(lvsegobject->parent_lvobj); \
+-	} while(0)
+-
+-static void _liblvm_lvseg_dealloc(lvsegobject *self)
+-{
+-	Py_DECREF(self->parent_lvobj);
+-	PyObject_Del(self);
+-}
+-
+-static PyObject *_liblvm_lvm_lvseg_get_property(lvsegobject *self, PyObject *args)
+-{
+-	const char *name;
+-	struct lvm_property_value prop_value;
+-
+-	LVSEG_VALID(self);
+-
+-	if (!PyArg_ParseTuple(args, "s", &name))
+-		return NULL;
+-
+-	prop_value = lvm_lvseg_get_property(self->lv_seg, name);
+-
+-	return get_property(&prop_value);
+-}
+-
+-/* PV seg methods */
+-
+-/*
+- * No way to close/destroy a pvseg, just need to make sure parents are
+- * still good
+- */
+-#define PVSEG_VALID(pvsegobject) \
+-	do { \
+-		if (!pvsegobject || !pvsegobject->parent_pvobj) { \
+-			PyErr_SetString(PyExc_UnboundLocalError, "PV segment object invalid"); \
+-			return NULL; \
+-		} \
+-		PV_VALID(pvsegobject->parent_pvobj); \
+-	} while(0)
+-
+-static void _liblvm_pvseg_dealloc(pvsegobject *self)
+-{
+-	Py_DECREF(self->parent_pvobj);
+-	PyObject_Del(self);
+-}
+-
+-static PyObject *_liblvm_lvm_pvseg_get_property(pvsegobject *self, PyObject *args)
+-{
+-	const char *name;
+-	struct lvm_property_value prop_value;
+-
+-	PVSEG_VALID(self);
+-
+-	if (!PyArg_ParseTuple(args, "s", &name))
+-		return NULL;
+-
+-	prop_value = lvm_pvseg_get_property(self->pv_seg, name);
+-
+-	return get_property(&prop_value);
+-}
+-
+-/* ----------------------------------------------------------------------
+- * Method tables and other bureaucracy
+- */
+-
+-static PyMethodDef _Liblvm_methods[] = {
+-	/* LVM methods */
+-	{ "getVersion",		(PyCFunction)_liblvm_library_get_version, METH_NOARGS },
+-	{ "gc",			(PyCFunction)_liblvm_lvm_gc, METH_NOARGS, _gc_doc },
+-	{ "vgOpen",		(PyCFunction)_liblvm_lvm_vg_open, METH_VARARGS },
+-	{ "vgCreate",		(PyCFunction)_liblvm_lvm_vg_create, METH_VARARGS },
+-	{ "configFindBool",	(PyCFunction)_liblvm_lvm_config_find_bool, METH_VARARGS },
+-	{ "configReload",	(PyCFunction)_liblvm_lvm_config_reload, METH_NOARGS },
+-	{ "configOverride",	(PyCFunction)_liblvm_lvm_config_override, METH_VARARGS },
+-	{ "scan",		(PyCFunction)_liblvm_lvm_scan, METH_NOARGS },
+-	{ "listVgNames",	(PyCFunction)_liblvm_lvm_list_vg_names, METH_NOARGS },
+-	{ "listVgUuids",	(PyCFunction)_liblvm_lvm_list_vg_uuids, METH_NOARGS },
+-	{ "listPvs",		(PyCFunction)_liblvm_lvm_list_pvs, METH_NOARGS },
+-	{ "pvCreate",		(PyCFunction)_liblvm_lvm_pv_create, METH_VARARGS },
+-	{ "pvRemove",		(PyCFunction)_liblvm_lvm_pv_remove, METH_VARARGS },
+-	{ "percentToFloat",	(PyCFunction)_liblvm_lvm_percent_to_float, METH_VARARGS },
+-	{ "vgNameValidate",	(PyCFunction)_liblvm_lvm_vg_name_validate, METH_VARARGS },
+-	{ "vgNameFromPvid",	(PyCFunction)_liblvm_lvm_vgname_from_pvid, METH_VARARGS },
+-	{ "vgNameFromDevice",	(PyCFunction)_liblvm_lvm_vgname_from_device, METH_VARARGS },
+-	{ NULL, NULL }		/* sentinel */
+-};
+-
+-static PyMethodDef _liblvm_vg_methods[] = {
+-	/* vg methods */
+-	{ "getName",		(PyCFunction)_liblvm_lvm_vg_get_name, METH_NOARGS },
+-	{ "getUuid",		(PyCFunction)_liblvm_lvm_vg_get_uuid, METH_NOARGS },
+-	{ "close",		(PyCFunction)_liblvm_lvm_vg_close, METH_NOARGS },
+-	{ "remove",		(PyCFunction)_liblvm_lvm_vg_remove, METH_NOARGS },
+-	{ "extend",		(PyCFunction)_liblvm_lvm_vg_extend, METH_VARARGS },
+-	{ "reduce",		(PyCFunction)_liblvm_lvm_vg_reduce, METH_VARARGS },
+-	{ "addTag",		(PyCFunction)_liblvm_lvm_vg_add_tag, METH_VARARGS },
+-	{ "removeTag",		(PyCFunction)_liblvm_lvm_vg_remove_tag, METH_VARARGS },
+-	{ "setExtentSize",	(PyCFunction)_liblvm_lvm_vg_set_extent_size, METH_VARARGS },
+-	{ "isClustered",	(PyCFunction)_liblvm_lvm_vg_is_clustered, METH_NOARGS },
+-	{ "isExported",		(PyCFunction)_liblvm_lvm_vg_is_exported, METH_NOARGS },
+-	{ "isPartial",		(PyCFunction)_liblvm_lvm_vg_is_partial, METH_NOARGS },
+-	{ "getSeqno",		(PyCFunction)_liblvm_lvm_vg_get_seqno, METH_NOARGS },
+-	{ "getSize",		(PyCFunction)_liblvm_lvm_vg_get_size, METH_NOARGS },
+-	{ "getFreeSize",	(PyCFunction)_liblvm_lvm_vg_get_free_size, METH_NOARGS },
+-	{ "getExtentSize",	(PyCFunction)_liblvm_lvm_vg_get_extent_size, METH_NOARGS },
+-	{ "getExtentCount",	(PyCFunction)_liblvm_lvm_vg_get_extent_count, METH_NOARGS },
+-	{ "getFreeExtentCount",	(PyCFunction)_liblvm_lvm_vg_get_free_extent_count, METH_NOARGS },
+-	{ "getProperty",	(PyCFunction)_liblvm_lvm_vg_get_property, METH_VARARGS },
+-	{ "setProperty",	(PyCFunction)_liblvm_lvm_vg_set_property, METH_VARARGS },
+-	{ "getPvCount",		(PyCFunction)_liblvm_lvm_vg_get_pv_count, METH_NOARGS },
+-	{ "getMaxPv",		(PyCFunction)_liblvm_lvm_vg_get_max_pv, METH_NOARGS },
+-	{ "getMaxLv",		(PyCFunction)_liblvm_lvm_vg_get_max_lv, METH_NOARGS },
+-	{ "listLVs",		(PyCFunction)_liblvm_lvm_vg_list_lvs, METH_NOARGS },
+-	{ "listPVs",		(PyCFunction)_liblvm_lvm_vg_list_pvs, METH_NOARGS },
+-	{ "lvFromName", 	(PyCFunction)_liblvm_lvm_lv_from_name, METH_VARARGS },
+-	{ "lvFromUuid", 	(PyCFunction)_liblvm_lvm_lv_from_uuid, METH_VARARGS },
+-	{ "lvNameValidate",	(PyCFunction)_liblvm_lvm_lv_name_validate, METH_VARARGS },
+-	{ "pvFromName", 	(PyCFunction)_liblvm_lvm_pv_from_name, METH_VARARGS },
+-	{ "pvFromUuid", 	(PyCFunction)_liblvm_lvm_pv_from_uuid, METH_VARARGS },
+-	{ "getTags",		(PyCFunction)_liblvm_lvm_vg_get_tags, METH_NOARGS },
+-	{ "createLvLinear",	(PyCFunction)_liblvm_lvm_vg_create_lv_linear, METH_VARARGS },
+-	{ "createLvThinpool",	(PyCFunction)_liblvm_lvm_vg_create_lv_thinpool, METH_VARARGS },
+-	{ "createLvThin", 	(PyCFunction)_liblvm_lvm_vg_create_lv_thin, METH_VARARGS },
+-	{ NULL, NULL }		/* sentinel */
+-};
+-
+-static PyMethodDef _liblvm_lv_methods[] = {
+-	/* lv methods */
+-	{ "getAttr",		(PyCFunction)_liblvm_lvm_lv_get_attr, METH_NOARGS },
+-	{ "getName",		(PyCFunction)_liblvm_lvm_lv_get_name, METH_NOARGS },
+-	{ "getOrigin",		(PyCFunction)_liblvm_lvm_lv_get_origin, METH_NOARGS },
+-	{ "getUuid",		(PyCFunction)_liblvm_lvm_lv_get_uuid, METH_NOARGS },
+-	{ "activate",		(PyCFunction)_liblvm_lvm_lv_activate, METH_NOARGS },
+-	{ "deactivate",		(PyCFunction)_liblvm_lvm_lv_deactivate, METH_NOARGS },
+-	{ "remove",		(PyCFunction)_liblvm_lvm_vg_remove_lv, METH_NOARGS },
+-	{ "getProperty",	(PyCFunction)_liblvm_lvm_lv_get_property, METH_VARARGS },
+-	{ "getSize",		(PyCFunction)_liblvm_lvm_lv_get_size, METH_NOARGS },
+-	{ "isActive",		(PyCFunction)_liblvm_lvm_lv_is_active, METH_NOARGS },
+-	{ "isSuspended",	(PyCFunction)_liblvm_lvm_lv_is_suspended, METH_NOARGS },
+-	{ "addTag",		(PyCFunction)_liblvm_lvm_lv_add_tag, METH_VARARGS },
+-	{ "removeTag",		(PyCFunction)_liblvm_lvm_lv_remove_tag, METH_VARARGS },
+-	{ "getTags",		(PyCFunction)_liblvm_lvm_lv_get_tags, METH_NOARGS },
+-	{ "rename",		(PyCFunction)_liblvm_lvm_lv_rename, METH_VARARGS },
+-	{ "resize",		(PyCFunction)_liblvm_lvm_lv_resize, METH_VARARGS },
+-	{ "listLVsegs",		(PyCFunction)_liblvm_lvm_lv_list_lvsegs, METH_NOARGS },
+-	{ "snapshot",		(PyCFunction)_liblvm_lvm_lv_snapshot, METH_VARARGS },
+-	{ NULL, NULL }		/* sentinel */
+-};
+-
+-static PyMethodDef _liblvm_pv_list_methods[] = {
+-	/* pv list methods */
+-	{ "__enter__", 		(PyCFunction)_liblvm_lvm_pvlist_get, METH_VARARGS },
+-	{ "__exit__", 		(PyCFunction)_liblvm_lvm_pvlist_put, METH_VARARGS },
+-	{ "open",		(PyCFunction)_liblvm_lvm_pvlist_get, METH_VARARGS },
+-	{ "close",		(PyCFunction)_liblvm_lvm_pvlist_put, METH_VARARGS },
+-	{ NULL, NULL }
+-};
+-
+-static PyMethodDef _liblvm_pv_methods[] = {
+-	/* pv methods */
+-	{ "getName",		(PyCFunction)_liblvm_lvm_pv_get_name, METH_NOARGS },
+-	{ "getUuid",		(PyCFunction)_liblvm_lvm_pv_get_uuid, METH_NOARGS },
+-	{ "getMdaCount",	(PyCFunction)_liblvm_lvm_pv_get_mda_count, METH_NOARGS },
+-	{ "getProperty",	(PyCFunction)_liblvm_lvm_pv_get_property, METH_VARARGS },
+-	{ "getSize",		(PyCFunction)_liblvm_lvm_pv_get_size, METH_NOARGS },
+-	{ "getDevSize",		(PyCFunction)_liblvm_lvm_pv_get_dev_size, METH_NOARGS },
+-	{ "getFree",		(PyCFunction)_liblvm_lvm_pv_get_free, METH_NOARGS },
+-	{ "resize",		(PyCFunction)_liblvm_lvm_pv_resize, METH_VARARGS },
+-	{ "listPVsegs", 	(PyCFunction)_liblvm_lvm_pv_list_pvsegs, METH_NOARGS },
+-	{ NULL, NULL }		/* sentinel */
+-};
+-
+-static PyMethodDef _liblvm_lvseg_methods[] = {
+-	{ "getProperty", 	(PyCFunction)_liblvm_lvm_lvseg_get_property, METH_VARARGS },
+-	{ NULL, NULL }		/* sentinel */
+-};
+-
+-static PyMethodDef _liblvm_pvseg_methods[] = {
+-	{ "getProperty", 	(PyCFunction)_liblvm_lvm_pvseg_get_property, METH_VARARGS },
+-	{ NULL, NULL }		/* sentinel */
+-};
+-
+-static PyTypeObject _LibLVMvgType = {
+-	PyVarObject_HEAD_INIT(&PyType_Type, 0)
+-	.tp_name = "lvm.Liblvm_vg",
+-	.tp_basicsize = sizeof(vgobject),
+-	.tp_new = PyType_GenericNew,
+-	.tp_dealloc = (destructor)liblvm_vg_dealloc,
+-	.tp_flags = Py_TPFLAGS_DEFAULT,
+-	.tp_doc = "LVM Volume Group object",
+-	.tp_methods = _liblvm_vg_methods,
+-};
+-
+-static PyTypeObject _LibLVMlvType = {
+-	PyVarObject_HEAD_INIT(&PyType_Type, 0)
+-	.tp_name = "lvm.Liblvm_lv",
+-	.tp_basicsize = sizeof(lvobject),
+-	.tp_new = PyType_GenericNew,
+-	.tp_dealloc = (destructor)liblvm_lv_dealloc,
+-	.tp_flags = Py_TPFLAGS_DEFAULT,
+-	.tp_doc = "LVM Logical Volume object",
+-	.tp_methods = _liblvm_lv_methods,
+-};
+-
+-static PyTypeObject _LibLVMpvlistType = {
+-	PyVarObject_HEAD_INIT(&PyType_Type, 0)
+-	.tp_name = "lvm.Liblvm_pvlist",
+-	.tp_basicsize = sizeof(pvslistobject),
+-	.tp_new = PyType_GenericNew,
+-	.tp_dealloc = (destructor)_liblvm_pvlist_dealloc,
+-	.tp_flags = Py_TPFLAGS_DEFAULT,
+-	.tp_doc = "LVM Physical Volume list object",
+-	.tp_methods = _liblvm_pv_list_methods,
+-};
+-
+-static PyTypeObject _LibLVMpvType = {
+-	PyVarObject_HEAD_INIT(&PyType_Type, 0)
+-	.tp_name = "lvm.Liblvm_pv",
+-	.tp_basicsize = sizeof(pvobject),
+-	.tp_new = PyType_GenericNew,
+-	.tp_dealloc = (destructor)_liblvm_pv_dealloc,
+-	.tp_flags = Py_TPFLAGS_DEFAULT,
+-	.tp_doc = "LVM Physical Volume object",
+-	.tp_methods = _liblvm_pv_methods,
+-};
+-
+-static PyTypeObject _LibLVMlvsegType = {
+-	PyVarObject_HEAD_INIT(&PyType_Type, 0)
+-	.tp_name = "lvm.Liblvm_lvseg",
+-	.tp_basicsize = sizeof(lvsegobject),
+-	.tp_new = PyType_GenericNew,
+-	.tp_dealloc = (destructor)_liblvm_lvseg_dealloc,
+-	.tp_flags = Py_TPFLAGS_DEFAULT,
+-	.tp_doc = "LVM Logical Volume Segment object",
+-	.tp_methods = _liblvm_lvseg_methods,
+-};
+-
+-static PyTypeObject _LibLVMpvsegType = {
+-	PyVarObject_HEAD_INIT(&PyType_Type, 0)
+-	.tp_name = "lvm.Liblvm_pvseg",
+-	.tp_basicsize = sizeof(pvsegobject),
+-	.tp_new = PyType_GenericNew,
+-	.tp_dealloc = (destructor)_liblvm_pvseg_dealloc,
+-	.tp_flags = Py_TPFLAGS_DEFAULT,
+-	.tp_doc = "LVM Physical Volume Segment object",
+-	.tp_methods = _liblvm_pvseg_methods,
+-};
+-
+-static void _liblvm_cleanup(void)
+-{
+-	if (_libh) {
+-		lvm_quit(_libh);
+-		_libh = NULL;
+-	}
+-}
+-
+-#ifdef IS_PY3K
+-static struct PyModuleDef moduledef = {
+-	PyModuleDef_HEAD_INIT,
+-	"lvm",
+-	"Liblvm module",
+-	-1,
+-	_Liblvm_methods,
+-	NULL,
+-	NULL,
+-	NULL,
+-	NULL
+-};
+-
+-#define MODINITERROR return NULL
+-PyObject *
+-PyInit_lvm(void)
+-
+-#else
+-#define MODINITERROR return
+-PyMODINIT_FUNC initlvm(void);
+-PyMODINIT_FUNC initlvm(void)
+-#endif
+-{
+-	PyObject *m;
+-
+-	if (PyType_Ready(&_LibLVMvgType) < 0)
+-		MODINITERROR;
+-	if (PyType_Ready(&_LibLVMlvType) < 0)
+-		MODINITERROR;
+-	if (PyType_Ready(&_LibLVMpvType) < 0)
+-		MODINITERROR;
+-	if (PyType_Ready(&_LibLVMlvsegType) < 0)
+-		MODINITERROR;
+-	if (PyType_Ready(&_LibLVMpvsegType) < 0)
+-		MODINITERROR;
+-	if (PyType_Ready(&_LibLVMpvlistType) < 0)
+-		MODINITERROR;
+-
+-#ifdef IS_PY3K
+-	m = PyModule_Create(&moduledef);
+-#else
+-	m = Py_InitModule3("lvm", _Liblvm_methods, "Liblvm module");
+-#endif
+-	if (m == NULL)
+-		MODINITERROR;
+-
+-	if (PyModule_AddIntConstant(m, "THIN_DISCARDS_IGNORE",
+-				    LVM_THIN_DISCARDS_IGNORE) < 0)
+-		MODINITERROR;
+-
+-	if (PyModule_AddIntConstant(m, "THIN_DISCARDS_NO_PASSDOWN",
+-				    LVM_THIN_DISCARDS_NO_PASSDOWN) < 0)
+-		MODINITERROR;
+-
+-	if (PyModule_AddIntConstant(m, "THIN_DISCARDS_PASSDOWN",
+-				    LVM_THIN_DISCARDS_PASSDOWN) < 0)
+-		MODINITERROR;
+-
+-	if ((_LibLVMError = PyErr_NewException((char*)"lvm.LibLVMError", NULL, NULL))) {
+-		/* Each call to PyModule_AddObject decrefs it; compensate: */
+-		Py_INCREF(_LibLVMError);
+-		Py_INCREF(_LibLVMError);
+-		PyModule_AddObject(m, "error", _LibLVMError);
+-		PyModule_AddObject(m, "LibLVMError", _LibLVMError);
+-	}
+-
+-	PyErr_Warn(PyExc_DeprecationWarning, "Python API is deprecated, use D-Bus API instead.");
+-
+-	Py_AtExit(_liblvm_cleanup);
+-#ifdef IS_PY3K
+-	return m;
+-#endif
+-}
+diff --git a/python/setup.py.in b/python/setup.py.in
+deleted file mode 100644
+index 07b79df..0000000
+--- a/python/setup.py.in
++++ /dev/null
+@@ -1,35 +0,0 @@
+-#
+-# Copyright (C) 2012-2018 Red Hat, Inc. All rights reserved.
+-#
+-# This file is part of LVM2.
+-#
+-# This program is free software: you can redistribute it and/or modify
+-# it under the terms of the GNU Lesser General Public License as published by
+-# the Free Software Foundation, either version 2.1 of the License, or
+-# (at your option) any later version.
+-#
+-# This program is distributed in the hope that it will be useful,
+-# but WITHOUT ANY WARRANTY; without even the implied warranty of
+-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+-# GNU Lesser General Public License for more details.
+-#
+-# You should have received a copy of the GNU Lesser General Public License
+-# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+-
+-from distutils.core import setup, Extension
+-
+-liblvm = Extension('lvm',
+-                    sources = ['liblvm_python.c'],
+-                    libraries= ['lvm2app', 'devmapper'],
+-                    library_dirs= ['@top_builddir@/liblvm', '@top_builddir@/libdm'],
+-                    include_dirs= ['@top_builddir@/include', '@top_srcdir@'])
+-
+-setup (name='lvm',
+-       version=@LVM_VERSION@,
+-       description='Python bindings for liblvm2',
+-       license="LGPLv2+",
+-       maintainer='LVM2 maintainers',
+-       maintainer_email='linux-lvm at redhat.com',
+-       url='http://sourceware.org/lvm2/',
+-       ext_modules=[liblvm],
+-)
+diff --git a/test/Makefile.in b/test/Makefile.in
+index 65ba900..4c3c715 100644
+--- a/test/Makefile.in
++++ b/test/Makefile.in
+@@ -27,7 +27,6 @@ datarootdir = @datarootdir@
+ 
+ LVM_TEST_RESULTS ?= results
+ 
+-SUBDIRS = api
+ # FIXME: resolve testing of: unit
+ SOURCES = lib/not.c lib/harness.c
+ CXXSOURCES = lib/runner.cpp
+@@ -50,9 +49,9 @@ include $(top_builddir)/make.tmpl
+ T ?= .
+ S ?= @ # never match anything by default
+ VERBOSE ?= 0
+-ALL := $(shell find -L $(srcdir) \( -path \*/shell/\*.sh -or -path \*/api/\*.sh -or -path \*/unit/\*.sh \) | $(SORT))
++ALL := $(shell find -L $(srcdir) \( -path \*/shell/\*.sh -or -path \*/unit/\*.sh \) | $(SORT))
+ comma = ,
+-RUN := $(shell find -L $(srcdir) -regextype posix-egrep \( -path \*/shell/\*.sh -or -path \*/api/\*.sh -or -path \*/unit/\*.sh \) -and -regex "$(srcdir)/.*($(subst $(comma),|,$(T))).*" -and -not -regex "$(srcdir)/.*($(subst $(comma),|,$(S))).*" | $(SORT))
++RUN := $(shell find -L $(srcdir) -regextype posix-egrep \( -path \*/shell/\*.sh -or -path \*/unit/\*.sh \) -and -regex "$(srcdir)/.*($(subst $(comma),|,$(T))).*" -and -not -regex "$(srcdir)/.*($(subst $(comma),|,$(S))).*" | $(SORT))
+ RUN_BASE = $(subst $(srcdir)/,,$(RUN))
+ 
+ ifeq ("@BUILD_LVMETAD@", "yes")
+@@ -248,12 +247,10 @@ LIB_SHARED = check aux inittest utils get lvm-wrapper
+ 
+ install: .tests-stamp lib/paths-installed
+ 	@echo $(srcdir)
+-	$(INSTALL_DIR) $(DATADIR)/{shell,api,unit,lib,dbus} $(EXECDIR)
++	$(INSTALL_DIR) $(DATADIR)/{shell,unit,lib,dbus} $(EXECDIR)
+ 	$(INSTALL_DATA) shell/*.sh $(DATADIR)/shell
+-	$(INSTALL_DATA) api/*.sh $(DATADIR)/api
+ 	$(INSTALL_DATA) unit/*.sh $(DATADIR)/unit
+ 	$(INSTALL_DATA) lib/mke2fs.conf $(DATADIR)/lib
+-	$(INSTALL_PROGRAM) api/*.{t,py} $(DATADIR)/api
+ 	$(INSTALL_PROGRAM) unit/unit-test $(DATADIR)/unit
+ 	$(INSTALL_PROGRAM) dbus/*.py $(DATADIR)/dbus/
+ 	$(INSTALL_DATA) lib/paths-installed $(DATADIR)/lib/paths
+@@ -326,7 +323,7 @@ lib/paths-installed: lib/paths-common
+ 	$(RM) $@-t
+ 	cat lib/paths-common > $@-t
+ 	echo 'installed_testsuite=1' >> $@-t
+-	echo 'export PATH=@libexecdir@/lvm2-testsuite:@datadir@/lvm2-testsuite/lib:@datadir@/lvm2-testsuite/api:$$PATH' >> $@-t
++	echo 'export PATH=@libexecdir@/lvm2-testsuite:@datadir@/lvm2-testsuite/lib:$$PATH' >> $@-t
+ 	mv $@-t $@
+ 
+ lib/paths: lib/paths-common
+diff --git a/test/api/Makefile.in b/test/api/Makefile.in
+deleted file mode 100644
+index c8d9fc0..0000000
+--- a/test/api/Makefile.in
++++ /dev/null
+@@ -1,29 +0,0 @@
+-#
+-# Copyright (C) 2009-2012 Red Hat, Inc. All rights reserved.
+-#
+-# This file is part of LVM2.
+-#
+-# This copyrighted material is made available to anyone wishing to use,
+-# modify, copy, or redistribute it subject to the terms and conditions
+-# of the GNU General Public License v.2.
+-#
+-# You should have received a copy of the GNU General Public License
+-# along with this program; if not, write to the Free Software Foundation,
+-# Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
+-
+-srcdir = @srcdir@
+-top_srcdir = @top_srcdir@
+-top_builddir = @top_builddir@
+-
+-TARGETS =
+-PYTEST = python_lvm_unit.py
+-
+-include $(top_builddir)/make.tmpl
+-
+-DEFS += -D_REENTRANT
+-
+-all:
+-	test -x $(PYTEST) || chmod 755 $(PYTEST)
+-
+-Makefile: $(srcdir)/Makefile.in $(top_builddir)/config.status
+-	cd $(top_builddir) && $(SHELL) ./config.status test/api/Makefile
+diff --git a/test/api/lvtest.sh b/test/api/lvtest.sh
+deleted file mode 100644
+index 8cba14c..0000000
+--- a/test/api/lvtest.sh
++++ /dev/null
+@@ -1,25 +0,0 @@
+-#!/bin/sh
+-# Copyright (C) 2011 Red Hat, Inc. All rights reserved.
+-#
+-# This file is part of LVM2.
+-#
+-# This copyrighted material is made available to anyone wishing to use,
+-# modify, copy, or redistribute it subject to the terms and conditions
+-# of the GNU General Public License v.2.
+-#
+-# You should have received a copy of the GNU General Public License
+-# along with this program; if not, write to the Free Software Foundation,
+-# Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
+-
+-SKIP_WITH_LVMPOLLD=1
+-
+-. lib/inittest
+-
+-aux prepare_vg 1
+-
+-lvcreate -n test -l 5 $vg
+-aux apitest lvtest $vg
+-
+-check lv_field $vg/test lv_name test
+-
+-vgremove -ff $vg
+diff --git a/test/api/pe_start.sh b/test/api/pe_start.sh
+deleted file mode 100644
+index 88d4d01..0000000
+--- a/test/api/pe_start.sh
++++ /dev/null
+@@ -1,23 +0,0 @@
+-#!/bin/sh
+-# Copyright (C) 2011 Red Hat, Inc. All rights reserved.
+-#
+-# This file is part of LVM2.
+-#
+-# This copyrighted material is made available to anyone wishing to use,
+-# modify, copy, or redistribute it subject to the terms and conditions
+-# of the GNU General Public License v.2.
+-#
+-# You should have received a copy of the GNU General Public License
+-# along with this program; if not, write to the Free Software Foundation,
+-# Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
+-
+-SKIP_WITH_LVMPOLLD=1
+-
+-. lib/inittest
+-
+-aux prepare_devs 2
+-
+-aux apitest pe_start test_vg $dev1
+-
+-not vgs test_vg
+-not pvs $dev1
+diff --git a/test/api/percent.sh b/test/api/percent.sh
+deleted file mode 100644
+index 32c0892..0000000
+--- a/test/api/percent.sh
++++ /dev/null
+@@ -1,34 +0,0 @@
+-#!/bin/sh
+-# Copyright (C) 2010-2013 Red Hat, Inc. All rights reserved.
+-#
+-# This file is part of LVM2.
+-#
+-# This copyrighted material is made available to anyone wishing to use,
+-# modify, copy, or redistribute it subject to the terms and conditions
+-# of the GNU General Public License v.2.
+-#
+-# You should have received a copy of the GNU General Public License
+-# along with this program; if not, write to the Free Software Foundation,
+-# Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
+-
+-SKIP_WITH_LVMPOLLD=1
+-
+-. lib/inittest
+-
+-aux kernel_at_least 2 6 33 || skip
+-
+-aux prepare_pvs 2
+-get_devs
+-
+-vgcreate -s 4k "$vg" "${DEVICES[@]}"
+-lvcreate -aey -l 5 -n foo $vg
+-lvcreate -s -n snap $vg/foo -l 3 -c 4k
+-lvcreate -s -n snap2 $vg/foo -l 6 -c 4k
+-dd if=/dev/zero of="$DM_DEV_DIR/$vg/snap2" count=1 bs=1024 oflag=direct
+-# skip test with broken kernel
+-check lv_field $vg/snap2 data_percent "50.00" || skip
+-lvcreate -aey --type mirror -m 1 -n mirr $vg -l 1 --mirrorlog core
+-lvs -a $vg
+-aux apitest percent $vg
+-
+-vgremove -ff $vg
+diff --git a/test/api/pytest.sh b/test/api/pytest.sh
+deleted file mode 100644
+index ed9df5e..0000000
+--- a/test/api/pytest.sh
++++ /dev/null
+@@ -1,115 +0,0 @@
+-#!/bin/bash
+-# Copyright (C) 2012-2015 Red Hat, Inc. All rights reserved.
+-#
+-# This file is part of LVM2.
+-#
+-# This copyrighted material is made available to anyone wishing to use,
+-# modify, copy, or redistribute it subject to the terms and conditions
+-# of the GNU General Public License v.2.
+-#
+-# You should have received a copy of the GNU General Public License
+-# along with this program; if not, write to the Free Software Foundation,
+-# Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
+-
+-SKIP_WITH_LVMETAD=1
+-SKIP_WITH_CLVMD=1
+-
+-. lib/inittest
+-
+-aux prepare_dmeventd
+-
+-#
+-# TODO:
+-# lvm2app is not yet capable to respect many lvm.conf options
+-# since a lot of them is set in /tools/liblvmline
+-# Until fixed - testing always runs with enabled monitoring
+-# thus it needs dmeventd
+-#
+-
+-# Example of using 'gdb' with python:
+-# gdb -ex r --args python FULL_PATH/lvm2/test/api/python_lvm_unit.py -v TestLvm.test_lv_active_inactive
+-
+-#Locate the python binding library to use.
+-if [[ -n "${abs_top_builddir+varset}" ]]; then
+-  # For python2 look for  lvm.so, python3 uses some lengthy names
+-  case "$(head -1 $(which python_lvm_unit.py) )" in
+-  *2) python_lib=($(find "$abs_top_builddir" -name lvm.so)) ;;
+-  *) python_lib=($(find "$abs_top_builddir" -name lvm*gnu.so)) ;;
+-  esac
+-  if [[ ${#python_lib[*]} -ne 1 ]]; then
+-    if [[ ${#python_lib[*]} -gt 1 ]]; then
+-      # Unable to test python bindings if multiple libraries found:
+-      echo "Found left over lvm.so: ${python_lib[*]}"
+-      false
+-    else
+-      # Unable to test python bindings if library not available
+-      skip "lvm2-python-libs not built"
+-    fi
+-  fi
+-
+-  PYTHONPATH=$(dirname "${python_lib[*]}"):${PYTHONPATH-}
+-  export PYTHONPATH
+-elif rpm -q lvm2-python-libs &>/dev/null; then
+-  true
+-else
+-  skip "lvm2-python-libs neither built nor installed"
+-fi
+-
+-#If you change this change the unit test case too.
+-aux prepare_pvs 6
+-
+-#Setup which devices the unit test can use.
+-PY_UNIT_PVS=$(cat DEVICES)
+-export PY_UNIT_PVS
+-
+-#When needed to run 1 single individual python test
+-#python_lvm_unit.py -v -f TestLvm.test_lv_persistence
+-#exit
+-
+-# Run individual tests for shorter error trace
+-for i in \
+- lv_persistence \
+- config_find_bool \
+- config_override \
+- config_reload  \
+- dupe_lv_create \
+- get_set_extend_size \
+- lv_active_inactive \
+- lv_property \
+- lv_rename \
+- lv_resize \
+- lv_seg \
+- lv_size \
+- lv_snapshot \
+- lv_suspend \
+- lv_tags \
+- percent_to_float \
+- pv_create \
+- pv_empty_listing \
+- pv_getters \
+- pv_life_cycle \
+- pv_lookup_from_vg \
+- pv_property \
+- pv_resize \
+- pv_segs \
+- scan \
+- version \
+- vg_from_pv_lookups \
+- vg_getters \
+- vg_get_name \
+- vg_get_set_prop \
+- vg_get_uuid \
+- vg_lv_name_validate \
+- vg_names \
+- vg_reduce \
+- vg_remove_restore \
+- vg_tags \
+- vg_uuids
+-do
+-	python_lvm_unit.py -v TestLvm.test_$i
+-	rm -f debug.log_DEBUG*
+-done
+-
+-# CHECKME: not for testing?
+-#python_lvm_unit.py -v TestLvm.test_listing
+-#python_lvm_unit.py -v TestLvm.test_pv_methods
+diff --git a/test/api/python_lvm_unit.py.in b/test/api/python_lvm_unit.py.in
+deleted file mode 100755
+index 78ced7e..0000000
+--- a/test/api/python_lvm_unit.py.in
++++ /dev/null
+@@ -1,1048 +0,0 @@
+-#!@PYTHON@
+-
+-# Copyright (C) 2012-2013 Red Hat, Inc. All rights reserved.
+-#
+-# This file is part of LVM2.
+-#
+-# This copyrighted material is made available to anyone wishing to use,
+-# modify, copy, or redistribute it subject to the terms and conditions
+-# of the GNU General Public License v.2.
+-#
+-# You should have received a copy of the GNU General Public License
+-# along with this program; if not, write to the Free Software Foundation,
+-# Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
+-
+-import unittest
+-import random
+-import string
+-import lvm
+-import os
+-import itertools
+-import sys
+-
+-if sys.version_info[0] > 2:
+-	long = int
+-
+-# Set of basic unit tests for the python bindings.
+-#
+-# *** WARNING ***
+-#
+-# This test tries to only modify configuration for the list of allowed
+-# PVs, but an error in it could potentially cause data loss if run on a
+-# production system.  Therefore it is strongly advised that this unit test
+-# not be run on a system that contains data of value.
+-
+-fh = None
+-
+-
+-def l(txt):
+-	if os.environ.get('PY_UNIT_LOG') is not None:
+-		global fh
+-		if fh is None:
+-			fh = open('/tmp/lvm_py_unit_test_' + rs(10), "a")
+-		fh.write(txt + "\n")
+-		fh.flush()
+-
+-
+-def rs(rand_len=10):
+-	"""
+-	Generate a random string
+-	"""
+-	return ''.join(
+-		random.choice(string.ascii_uppercase)for x in range(rand_len))
+-
+-
+-def _get_allowed_devices():
+-	rc = os.environ.get('PY_UNIT_PVS')
+-	if rc is not None:
+-		rc = rc.splitlines()
+-		rc.sort()
+-	return rc
+-
+-
+-class AllowedPVS(object):
+-	"""
+-	We are only allowed to muck with certain PV, filter to only
+-	the ones we can use.
+-	"""
+-
+-	def __init__(self):
+-		self.handle = None
+-		self.pvs_all = None
+-
+-	def __enter__(self):
+-		rc = []
+-
+-		allowed_dev = _get_allowed_devices()
+-
+-		if allowed_dev:
+-			self.handle = lvm.listPvs()
+-			self.pvs_all = self.handle.open()
+-
+-			for p in self.pvs_all:
+-				if p.getName() in allowed_dev:
+-					rc.append(p)
+-
+-		#Sort them consistently
+-		rc.sort(key=lambda x: x.getName())
+-		return rc
+-
+-	def __exit__(self, t_type, value, traceback):
+-		if self.handle:
+-			self.pvs_all = None
+-			self.handle.close()
+-
+-
+-class TestLvm(unittest.TestCase):
+-
+-	VG_P = os.environ.get('PREFIX')
+-
+-	@staticmethod
+-	def _get_pv_device_names():
+-		rc = []
+-		with AllowedPVS() as pvs:
+-			for p in pvs:
+-				rc.append(p.getName())
+-		return rc
+-
+-	@staticmethod
+-	def _create_thick_lv(device_list, name):
+-		vg = lvm.vgCreate(TestLvm.VG_P + "_" + name)
+-
+-		for d in device_list:
+-			vg.extend(d)
+-
+-		vg.createLvLinear(name, vg.getSize() // 2)
+-		vg.close()
+-		vg = None
+-
+-	@staticmethod
+-	def _create_thin_pool(device_list, pool_name):
+-		vg = lvm.vgCreate(TestLvm.VG_P + "_" + pool_name)
+-
+-		for d in device_list:
+-			vg.extend(d)
+-
+-		vg.createLvThinpool(
+-			pool_name, vg.getSize() // 2, 0, 0, lvm.THIN_DISCARDS_PASSDOWN, 1)
+-		return vg
+-
+-	@staticmethod
+-	def _create_thin_lv(pv_devices, name):
+-		thin_pool_name = 'thin_vg_pool_' + rs(4)
+-		vg = TestLvm._create_thin_pool(pv_devices, thin_pool_name)
+-		vg.createLvThin(thin_pool_name, name, vg.getSize() // 8)
+-		vg.close()
+-		vg = None
+-
+-	@staticmethod
+-	def _vg_names():
+-		rc = []
+-		vg_names = lvm.listVgNames()
+-
+-		for i in vg_names:
+-			if i[0:len(TestLvm.VG_P)] == TestLvm.VG_P:
+-				rc.append(i)
+-
+-		return rc
+-
+-	@staticmethod
+-	def _get_lv(lv_vol_type=None, lv_name=None):
+-		vg_name_list = TestLvm._vg_names()
+-		for vg_name in vg_name_list:
+-			vg = lvm.vgOpen(vg_name, "w")
+-			lvs = vg.listLVs()
+-
+-			for lv in lvs:
+-				attr = lv.getAttr()
+-				if lv_vol_type or lv_name:
+-					if lv_vol_type is not None and attr[0] == lv_vol_type:
+-						return lv, vg
+-					elif lv_name is not None and lv_name == lv.getName():
+-						return lv, vg
+-				else:
+-					return lv, vg
+-			vg.close()
+-		return None, None
+-
+-	@staticmethod
+-	def _remove_vg(vg_name):
+-		vg = lvm.vgOpen(vg_name, 'w')
+-
+-		pvs = vg.listPVs()
+-
+-		pe_devices = []
+-
+-		#Remove old snapshots first, then lv
+-		for lv in vg.listLVs():
+-			attr = lv.getAttr()
+-			if attr[0] == 's':
+-				lv.remove()
+-
+-		lvs = vg.listLVs()
+-
+-		#Now remove any thin lVs
+-		for lv in vg.listLVs():
+-			attr = lv.getAttr()
+-			if attr[0] == 'V':
+-				lv.remove()
+-
+-		#now remove the rest
+-		for lv in vg.listLVs():
+-			name = lv.getName()
+-
+-			#Don't remove the hidden ones
+-			if '_tmeta' not in name and '_tdata' not in name:
+-				lv.remove()
+-
+-		for p in pvs:
+-			pe_devices.append(p.getName())
+-
+-		for pv in pe_devices[:-1]:
+-			vg.reduce(pv)
+-
+-		vg.remove()
+-		vg.close()
+-
+-	@staticmethod
+-	def _clean_up():
+-		#Clear out the testing PVs, but only if they contain stuff
+-		#this unit test created
+-		for vg_n in TestLvm._vg_names():
+-			TestLvm._remove_vg(vg_n)
+-
+-		for d in TestLvm._get_pv_device_names():
+-			lvm.pvRemove(d)
+-			lvm.pvCreate(d)
+-
+-	def setUp(self):
+-		device_list = TestLvm._get_pv_device_names()
+-
+-		#Make sure we have an adequate number of PVs to use
+-		self.assertTrue(len(device_list) >= 4)
+-		TestLvm._clean_up()
+-
+-	def tearDown(self):
+-		TestLvm._clean_up()
+-
+-	def test_pv_resize(self):
+-		with AllowedPVS() as pvs:
+-			pv = pvs[0]
+-			curr_size = pv.getSize()
+-			dev_size = pv.getDevSize()
+-			self.assertTrue(curr_size == dev_size)
+-			pv.resize(curr_size // 2)
+-		with AllowedPVS() as pvs:
+-			pv = pvs[0]
+-			resized_size = pv.getSize()
+-			self.assertTrue(resized_size != curr_size)
+-			pv.resize(dev_size)
+-
+-	def test_pv_life_cycle(self):
+-		"""
+-		Test removing and re-creating a PV
+-		"""
+-		target_name = None
+-
+-		with AllowedPVS() as pvs:
+-			pv = pvs[0]
+-			target_name = pv.getName()
+-			lvm.pvRemove(target_name)
+-
+-		with AllowedPVS() as pvs:
+-			for p in pvs:
+-				self.assertTrue(p.getName() != target_name)
+-
+-		lvm.pvCreate(target_name, 0)
+-
+-		with AllowedPVS() as pvs:
+-			found = False
+-			for p in pvs:
+-				if p.getName() == target_name:
+-					found = True
+-
+-		self.assertTrue(found)
+-
+-	@staticmethod
+-	def _test_pv_methods():
+-		with AllowedPVS() as pvs:
+-			for p in pvs:
+-				p.getName()
+-				p.getUuid()
+-				p.getMdaCount()
+-				p.getSize()
+-				p.getDevSize()
+-				p.getFree()
+-				p = None
+-
+-	def test_version(self):
+-		version = lvm.getVersion()
+-		self.assertNotEquals(version, None)
+-		self.assertEquals(type(version), str)
+-		self.assertTrue(len(version) > 0)
+-
+-	def test_pv_getters(self):
+-		with AllowedPVS() as pvs:
+-			pv = pvs[0]
+-			self.assertEqual(type(pv.getName()), str)
+-			self.assertTrue(len(pv.getName()) > 0)
+-
+-			self.assertEqual(type(pv.getUuid()), str)
+-			self.assertTrue(len(pv.getUuid()) > 0)
+-
+-			self.assertTrue(
+-				type(pv.getMdaCount()) == int or
+-				type(pv.getMdaCount()) == long)
+-
+-			self.assertTrue(
+-				type(pv.getSize()) == int or
+-				type(pv.getSize()) == long)
+-
+-			self.assertTrue(
+-				type(pv.getDevSize()) == int or
+-				type(pv.getSize()) == long)
+-
+-			self.assertTrue(
+-				type(pv.getFree()) == int or
+-				type(pv.getFree()) == long)
+-
+-	def _test_prop(self, prop_obj, prop, var_type, settable):
+-		result = prop_obj.getProperty(prop)
+-
+-		#If we have no string value we can get a None type back
+-		if result[0] is not None:
+-			self.assertEqual(type(result[0]), var_type)
+-		else:
+-			self.assertTrue(str == var_type)
+-		self.assertEqual(type(result[1]), bool)
+-		self.assertTrue(result[1] == settable)
+-
+-	def test_pv_segs(self):
+-		with AllowedPVS() as pvs:
+-			pv = pvs[0]
+-			pv_segs = pv.listPVsegs()
+-
+-			#LVsegs returns a tuple, (value, bool settable)
+-			#TODO: Test other properties of pv_seg
+-			for i in pv_segs:
+-				self._test_prop(i, 'pvseg_start', long, False)
+-
+-	def test_pv_property(self):
+-		with AllowedPVS() as pvs:
+-			pv = pvs[0]
+-			self._test_prop(pv, 'pv_mda_count', long, False)
+-
+-	def test_lv_property(self):
+-		lv_name = 'lv_test'
+-		TestLvm._create_thin_lv(TestLvm._get_pv_device_names(), lv_name)
+-		lv, vg = TestLvm._get_lv(None, lv_name)
+-
+-		lv_seg_properties = [
+-			('chunk_size', long, False), ('devices', str, False),
+-			('discards', str, False), ('region_size', long, False),
+-			('segtype', str, False), ('seg_pe_ranges', str, False),
+-			('seg_size', long, False), ('seg_size_pe', long, False),
+-			('seg_start', long, False), ('seg_start_pe', long, False),
+-			('seg_tags', str, False), ('stripes', long, False),
+-			('stripe_size', long, False), ('thin_count', long, False),
+-			('transaction_id', long, False), ('zero', long, False)]
+-
+-		lv_properties = [
+-			('convert_lv', str, False), ('copy_percent', long, False),
+-			('data_lv', str, False), ('lv_attr', str, False),
+-			('lv_host', str, False), ('lv_kernel_major', long, False),
+-			('lv_kernel_minor', long, False),
+-			('lv_kernel_read_ahead', long, False),
+-			('lv_major', long, False), ('lv_minor', long, False),
+-			('lv_name', str, False), ('lv_path', str, False),
+-			('lv_profile', str, False), ('lv_read_ahead', long, False),
+-			('lv_size', long, False), ('lv_tags', str, False),
+-			('lv_time', str, False), ('lv_uuid', str, False),
+-			('metadata_lv', str, False), ('mirror_log', str, False),
+-			('lv_modules', str, False), ('move_pv', str, False),
+-			('origin', str, False), ('origin_size', long, False),
+-			('pool_lv', str, False), ('raid_max_recovery_rate', long, False),
+-			('raid_min_recovery_rate', long, False),
+-			('raid_mismatch_count', long, False),
+-			('raid_sync_action', str, False),
+-			('raid_write_behind', long, False), ('seg_count', long, False),
+-			('snap_percent', long, False), ('sync_percent', long, False)]
+-
+-		# Generic test case, make sure we get what we expect
+-		for t in lv_properties:
+-			self._test_prop(lv, *t)
+-
+-		segments = lv.listLVsegs()
+-		if segments and len(segments):
+-			for s in segments:
+-				for t in lv_seg_properties:
+-					self._test_prop(s, *t)
+-
+-		# Test specific cases
+-		tag = 'hello_world'
+-		lv.addTag(tag)
+-		tags = lv.getProperty('lv_tags')
+-		self.assertTrue(tag in tags[0])
+-		vg.close()
+-
+-	def test_lv_tags(self):
+-		lv_name = 'lv_test'
+-		TestLvm._create_thin_lv(TestLvm._get_pv_device_names(), lv_name)
+-		lv, vg = TestLvm._get_lv(None, lv_name)
+-		self._test_tags(lv)
+-		vg.close()
+-
+-	def test_lv_active_inactive(self):
+-		lv_name = 'lv_test'
+-		TestLvm._create_thin_lv(TestLvm._get_pv_device_names(), lv_name)
+-		lv, vg = TestLvm._get_lv(None, lv_name)
+-		lv.deactivate()
+-		self.assertTrue(lv.isActive() is False)
+-		lv.activate()
+-		self.assertTrue(lv.isActive() is True)
+-		vg.close()
+-
+-	def test_lv_rename(self):
+-		lv_name = 'lv_test'
+-		TestLvm._create_thin_lv(TestLvm._get_pv_device_names(), lv_name)
+-		lv, vg = TestLvm._get_lv(None, lv_name)
+-
+-		current_name = lv.getName()
+-		new_name = rs()
+-		lv.rename(new_name)
+-		self.assertEqual(lv.getName(), new_name)
+-		lv.rename(current_name)
+-		vg.close()
+-
+-	def test_lv_persistence(self):
+-		# Make changes to the lv, close the vg and re-open to make sure that
+-		# the changes persist
+-		lv_name = 'lv_test_persist'
+-		TestLvm._create_thick_lv(TestLvm._get_pv_device_names(), lv_name)
+-
+-		# Test rename
+-		lv, vg = TestLvm._get_lv(None, lv_name)
+-		current_name = lv.getName()
+-		new_name = rs()
+-		lv.rename(new_name)
+-
+-		vg.close()
+-		vg = None
+-
+-		lv, vg = TestLvm._get_lv(None, new_name)
+-
+-		self.assertTrue(lv is not None)
+-
+-		if lv and vg:
+-			lv.rename(lv_name)
+-			vg.close()
+-			vg = None
+-
+-		# Test lv tag add
+-		tag = 'hello_world'
+-
+-		lv, vg = TestLvm._get_lv(None, lv_name)
+-		lv.addTag(tag)
+-		vg.close()
+-		vg = None
+-
+-		lv, vg = TestLvm._get_lv(None, lv_name)
+-		tags = lv.getTags()
+-
+-		self.assertTrue(tag in tags)
+-		vg.close()
+-		vg = None
+-
+-		# Test lv tag delete
+-		lv, vg = TestLvm._get_lv(None, lv_name)
+-		self.assertTrue(lv is not None and vg is not None)
+-
+-		if lv and vg:
+-			tags = lv.getTags()
+-
+-			for t in tags:
+-				lv.removeTag(t)
+-
+-			vg.close()
+-			vg = None
+-
+-		lv, vg = TestLvm._get_lv(None, lv_name)
+-		self.assertTrue(lv is not None and vg is not None)
+-
+-		if lv and vg:
+-			tags = lv.getTags()
+-
+-			if tags:
+-				self.assertEqual(len(tags), 0)
+-			vg.close()
+-			vg = None
+-
+-		# Test lv deactivate
+-		lv, vg = TestLvm._get_lv(None, lv_name)
+-		self.assertTrue(lv is not None and vg is not None)
+-
+-		if lv and vg:
+-			lv.deactivate()
+-			vg.close()
+-			vg = None
+-
+-		lv, vg = TestLvm._get_lv(None, lv_name)
+-		self.assertTrue(lv is not None and vg is not None)
+-		if lv and vg:
+-			self.assertFalse(lv.isActive())
+-			vg.close()
+-			vg = None
+-
+-		# Test lv activate
+-		lv, vg = TestLvm._get_lv(None, lv_name)
+-		self.assertTrue(lv is not None and vg is not None)
+-		if lv and vg:
+-			lv.activate()
+-			vg.close()
+-			vg = None
+-
+-		lv, vg = TestLvm._get_lv(None, lv_name)
+-		self.assertTrue(lv is not None and vg is not None)
+-		if lv and vg:
+-			self.assertTrue(lv.isActive())
+-			vg.close()
+-			vg = None
+-
+-	def test_lv_snapshot(self):
+-
+-		thin_lv = 'thin_lv'
+-		thick_lv = 'thick_lv'
+-
+-		device_names = TestLvm._get_pv_device_names()
+-
+-		TestLvm._create_thin_lv(device_names[0:2], thin_lv)
+-		TestLvm._create_thick_lv(device_names[2:4], thick_lv)
+-
+-		lv, vg = TestLvm._get_lv(None, thick_lv)
+-# FIXME		lv.snapshot('thick_snap_shot', 1024*1024)
+-		vg.close()
+-
+-# FIXME		thick_ss, vg = TestLvm._get_lv(None, 'thick_snap_shot')
+-# FIXME		self.assertTrue(thick_ss is not None)
+-# FIXME		vg.close()
+-
+-		thin_lv, vg = TestLvm._get_lv(None, thin_lv)
+-		thin_lv.snapshot('thin_snap_shot')
+-		vg.close()
+-
+-		thin_ss, vg = TestLvm._get_lv(None, 'thin_snap_shot')
+-		self.assertTrue(thin_ss is not None)
+-
+-		origin = thin_ss.getOrigin()
+-		self.assertTrue(thin_lv, origin)
+-
+-		vg.close()
+-
+-	def test_lv_suspend(self):
+-		lv_name = 'lv_test'
+-		TestLvm._create_thin_lv(TestLvm._get_pv_device_names(), lv_name)
+-		lv, vg = TestLvm._get_lv(None, lv_name)
+-
+-		result = lv.isSuspended()
+-		self.assertTrue(type(result) == bool)
+-		vg.close()
+-
+-	def test_lv_size(self):
+-		lv_name = 'lv_test'
+-		TestLvm._create_thin_lv(TestLvm._get_pv_device_names(), lv_name)
+-		lv, vg = TestLvm._get_lv(None, lv_name)
+-
+-		result = lv.getSize()
+-		self.assertTrue(type(result) == int or type(result) == long)
+-		vg.close()
+-
+-	def test_lv_resize(self):
+-		lv_name = 'lv_test'
+-		TestLvm._create_thin_lv(TestLvm._get_pv_device_names(), lv_name)
+-		lv, vg = TestLvm._get_lv(None, lv_name)
+-
+-		curr_size = lv.getSize()
+-		lv.resize(curr_size + (1024 * 1024))
+-		latest = lv.getSize()
+-		self.assertTrue(curr_size != latest)
+-
+-	def test_lv_seg(self):
+-		lv_name = 'lv_test'
+-		TestLvm._create_thin_lv(TestLvm._get_pv_device_names(), lv_name)
+-		lv, vg = TestLvm._get_lv(None, lv_name)
+-
+-		lv_segs = lv.listLVsegs()
+-
+-		#LVsegs returns a tuple, (value, bool settable)
+-		#TODO: Test other properties of lv_seg
+-		for i in lv_segs:
+-			self._test_prop(i, 'seg_start_pe', long, False)
+-
+-		vg.close()
+-
+-	def test_get_set_extend_size(self):
+-		thick_lv = 'get_set_prop'
+-		device_names = TestLvm._get_pv_device_names()
+-		TestLvm._create_thick_lv(device_names[0:2], thick_lv)
+-		lv, vg = TestLvm._get_lv(None, thick_lv)
+-
+-		new_extent = 1024 * 1024 * 4
+-
+-		self.assertFalse(
+-			vg.getExtentSize() != new_extent,
+-			"Cannot determine if it works if they are the same")
+-
+-		vg.setExtentSize(new_extent)
+-		self.assertEqual(vg.getExtentSize(), new_extent)
+-		vg.close()
+-
+-	def test_vg_get_set_prop(self):
+-		thick_lv = 'get_set_prop'
+-		device_names = TestLvm._get_pv_device_names()
+-		TestLvm._create_thick_lv(device_names[0:2], thick_lv)
+-		lv, vg = TestLvm._get_lv(None, thick_lv)
+-
+-		self.assertTrue(vg is not None)
+-		if vg:
+-			vg_mda_copies = vg.getProperty('vg_mda_copies')
+-			vg.setProperty('vg_mda_copies', vg_mda_copies[0])
+-			vg.close()
+-
+-	def test_vg_remove_restore(self):
+-		#Store off the list of physical devices
+-		pv_devices = []
+-
+-		thick_lv = 'get_set_prop'
+-		device_names = TestLvm._get_pv_device_names()
+-		TestLvm._create_thick_lv(device_names[0:2], thick_lv)
+-		lv, vg = TestLvm._get_lv(None, thick_lv)
+-
+-		vg_name = vg.getName()
+-
+-		pvs = vg.listPVs()
+-		for p in pvs:
+-			pv_devices.append(p.getName())
+-		vg.close()
+-
+-		TestLvm._remove_vg(vg_name)
+-		self._create_thick_lv(pv_devices, thick_lv)
+-
+-	def test_vg_names(self):
+-		vg = lvm.listVgNames()
+-		self.assertTrue(isinstance(vg, tuple))
+-
+-	def test_dupe_lv_create(self):
+-		"""
+-		Try to create a lv with the same name expecting a failure
+-		Note: This was causing a seg. fault previously
+-		"""
+-		thick_lv = 'dupe_name'
+-		device_names = TestLvm._get_pv_device_names()
+-		TestLvm._create_thick_lv(device_names[0:2], thick_lv)
+-		lv, vg = TestLvm._get_lv(None, thick_lv)
+-
+-		self.assertTrue(vg is not None)
+-
+-		if vg:
+-			lvs = vg.listLVs()
+-
+-			if len(lvs):
+-				lv = lvs[0]
+-				lv_name = lv.getName()
+-				self.assertRaises(
+-					lvm.LibLVMError, vg.createLvLinear, lv_name, lv.getSize())
+-			vg.close()
+-
+-	def test_vg_uuids(self):
+-
+-		device_names = TestLvm._get_pv_device_names()
+-		TestLvm._create_thin_lv(device_names[0:2], 'thin')
+-		TestLvm._create_thick_lv(device_names[2:4], 'thick')
+-
+-		vgs_uuids = lvm.listVgUuids()
+-
+-		self.assertTrue(len(vgs_uuids) > 0)
+-		self.assertTrue(isinstance(vgs_uuids, tuple))
+-
+-		vgs_uuids = list(vgs_uuids)
+-		vgs_names = lvm.listVgNames()
+-
+-		for vg_name in vgs_names:
+-			vg = lvm.vgOpen(vg_name, "r")
+-
+-			#TODO Write/fix BUG, vg uuid don't match between
+-			#lvm.listVgUuids and vg.getUuid()
+-			vg_uuid_search = vg.getUuid().replace('-', '')
+-
+-			self.assertTrue(vg_uuid_search in vgs_uuids)
+-			vgs_uuids.remove(vg_uuid_search)
+-			vg.close()
+-
+-		self.assertTrue(len(vgs_uuids) == 0)
+-
+-	def test_pv_lookup_from_vg(self):
+-		device_names = TestLvm._get_pv_device_names()
+-		TestLvm._create_thin_lv(device_names[0:2], 'thin')
+-		TestLvm._create_thick_lv(device_names[2:4], 'thick')
+-
+-		vg_names = TestLvm._vg_names()
+-
+-		self.assertTrue(len(vg_names) > 0)
+-
+-		for vg_name in vg_names:
+-			vg = lvm.vgOpen(vg_name, 'w')
+-			pvs = vg.listPVs()
+-
+-			for p in pvs:
+-				name = p.getName()
+-				uuid = p.getUuid()
+-
+-				pv_name_lookup = vg.pvFromName(name)
+-				pv_uuid_lookup = vg.pvFromUuid(uuid)
+-
+-				self.assertTrue(
+-					pv_name_lookup.getName() == pv_uuid_lookup.getName())
+-				self.assertTrue(
+-					pv_name_lookup.getUuid() == pv_uuid_lookup.getUuid())
+-
+-				self.assertTrue(name == pv_name_lookup.getName())
+-				self.assertTrue(uuid == pv_uuid_lookup.getUuid())
+-
+-				pv_name_lookup = None
+-				pv_uuid_lookup = None
+-				p = None
+-
+-			pvs = None
+-			vg.close()
+-
+-	def test_percent_to_float(self):
+-		self.assertEqual(lvm.percentToFloat(0), 0.0)
+-		self.assertEqual(lvm.percentToFloat(1000000), 1.0)
+-		self.assertEqual(lvm.percentToFloat(1000000 // 2), 0.5)
+-
+-	def test_scan(self):
+-		self.assertEqual(lvm.scan(), None)
+-
+-	def test_config_reload(self):
+-		self.assertEqual(lvm.configReload(), None)
+-
+-	def test_config_override(self):
+-		self.assertEquals(lvm.configOverride("global.test = 1"), None)
+-
+-	def test_config_find_bool(self):
+-		either_or = lvm.configFindBool("global/fallback_to_local_locking")
+-		self.assertTrue(type(either_or) == bool)
+-		self.assertTrue(lvm.configFindBool("global/locking_type"))
+-
+-	def test_vg_from_pv_lookups(self):
+-		device_names = TestLvm._get_pv_device_names()
+-		TestLvm._create_thin_lv(device_names[0:2], 'thin')
+-		TestLvm._create_thick_lv(device_names[2:4], 'thick')
+-
+-		vgname_list = TestLvm._vg_names()
+-
+-		self.assertTrue(len(vgname_list) > 0)
+-
+-		for vg_name in vgname_list:
+-			vg = lvm.vgOpen(vg_name, 'r')
+-
+-			vg_name = vg.getName()
+-
+-			pv_list = vg.listPVs()
+-			for pv in pv_list:
+-				vg_name_from_pv = lvm.vgNameFromPvid(pv.getUuid())
+-				self.assertEquals(vg_name, vg_name_from_pv)
+-				self.assertEqual(vg_name, lvm.vgNameFromDevice(pv.getName()))
+-			vg.close()
+-
+-	def test_vg_get_name(self):
+-		device_names = TestLvm._get_pv_device_names()
+-		TestLvm._create_thin_lv(device_names[0:2], 'thin')
+-		TestLvm._create_thick_lv(device_names[2:4], 'thick')
+-
+-		vgname_list = TestLvm._vg_names()
+-
+-		self.assertTrue(len(vgname_list) > 0)
+-
+-		for vg_name in vgname_list:
+-			vg = lvm.vgOpen(vg_name, 'r')
+-			self.assertEqual(vg.getName(), vg_name)
+-			vg.close()
+-
+-	def test_vg_get_uuid(self):
+-		device_names = TestLvm._get_pv_device_names()
+-		TestLvm._create_thin_lv(device_names[0:2], 'thin')
+-		TestLvm._create_thick_lv(device_names[2:4], 'thick')
+-
+-		vgname_list = TestLvm._vg_names()
+-
+-		self.assertTrue(len(vgname_list) > 0)
+-
+-		for vg_name in vgname_list:
+-			vg = lvm.vgOpen(vg_name, 'r')
+-			uuid = vg.getUuid()
+-			self.assertNotEqual(uuid, None)
+-			self.assertTrue(len(uuid) > 0)
+-			vg.close()
+-
+-	RETURN_NUMERIC = [
+-		"getSeqno", "getSize", "getFreeSize", "getFreeSize",
+-		"getExtentSize", "getExtentCount", "getFreeExtentCount",
+-		"getPvCount", "getMaxPv", "getMaxLv"]
+-
+-	def test_vg_getters(self):
+-		device_names = TestLvm._get_pv_device_names()
+-		TestLvm._create_thin_lv(device_names[0:2], 'thin')
+-		TestLvm._create_thick_lv(device_names[2:4], 'thick')
+-
+-		vg_name_list = TestLvm._vg_names()
+-
+-		self.assertTrue(len(vg_name_list) > 0)
+-
+-		for vg_name in vg_name_list:
+-			vg = lvm.vgOpen(vg_name, 'r')
+-			self.assertTrue(type(vg.isClustered()) == bool)
+-			self.assertTrue(type(vg.isExported()) == bool)
+-			self.assertTrue(type(vg.isPartial()) == bool)
+-
+-			#Loop through the list invoking the method
+-			for method_name in TestLvm.RETURN_NUMERIC:
+-				method = getattr(vg, method_name)
+-				result = method()
+-				self.assertTrue(type(result) == int or type(result) == long)
+-
+-			vg.close()
+-
+-	def _test_tags(self, tag_obj):
+-		existing_tags = tag_obj.getTags()
+-		self.assertTrue(type(existing_tags) == tuple)
+-
+-		num_tags = random.randint(2, 40)
+-		created_tags = []
+-
+-		for i in range(num_tags):
+-			tag_name = rs(random.randint(1, 128))
+-			tag_obj.addTag(tag_name)
+-			created_tags.append(tag_name)
+-
+-		tags = tag_obj.getTags()
+-		self.assertTrue(len(existing_tags) + len(created_tags) == len(tags))
+-
+-		num_remove = len(created_tags)
+-
+-		for i in range(num_remove):
+-			tag_to_remove = created_tags[
+-				random.randint(0, len(created_tags) - 1)]
+-
+-			created_tags.remove(tag_to_remove)
+-
+-			tag_obj.removeTag(tag_to_remove)
+-
+-			current_tags = tag_obj.getTags()
+-			self.assertFalse(tag_to_remove in current_tags)
+-
+-		current_tags = tag_obj.getTags()
+-		self.assertTrue(len(current_tags) == len(existing_tags))
+-		for e in existing_tags:
+-			self.assertTrue(e in current_tags)
+-
+-	def test_vg_tags(self):
+-		device_names = TestLvm._get_pv_device_names()
+-
+-		i = 0
+-		for d in device_names:
+-			if i % 2 == 0:
+-				TestLvm._create_thin_lv([d], "thin_lv%d" % i)
+-			else:
+-				TestLvm._create_thick_lv([d], "thick_lv%d" % i)
+-			i += 1
+-
+-		for vg_name in TestLvm._vg_names():
+-			vg = lvm.vgOpen(vg_name, 'w')
+-			self._test_tags(vg)
+-			vg.close()
+-
+-	@staticmethod
+-	def _test_listing():
+-
+-		env = os.environ
+-
+-		for k, v in env.items():
+-			l("%s:%s" % (k, v))
+-
+-		with lvm.listPvs() as pvs:
+-			for p in pvs:
+-				l('pv= %s' % p.getName())
+-
+-		l('Checking for VG')
+-		for v in lvm.listVgNames():
+-			l('vg= %s' % v)
+-
+-	def test_pv_empty_listing(self):
+-		#We had a bug where we would seg. fault if we had no PVs.
+-
+-		l('testPVemptylisting entry')
+-
+-		device_names = TestLvm._get_pv_device_names()
+-
+-		for d in device_names:
+-			l("Removing %s" % d)
+-			lvm.pvRemove(d)
+-
+-		count = 0
+-
+-		with lvm.listPvs() as pvs:
+-			for p in pvs:
+-				count += 1
+-				l('pv= %s' % p.getName())
+-
+-		self.assertTrue(count == 0)
+-
+-		for d in device_names:
+-			lvm.pvCreate(d)
+-
+-	def test_pv_create(self):
+-		size = [0, 1024 * 1024 * 8]
+-		pvmeta_copies = [0, 1, 2]
+-		pvmeta_size = [0, 255, 512, 1024]
+-		data_alignment = [0, 2048, 4096]
+-		zero = [0, 1]
+-
+-		device_names = TestLvm._get_pv_device_names()
+-
+-		for d in device_names:
+-			lvm.pvRemove(d)
+-
+-		d = device_names[0]
+-
+-		#Test some error cases
+-		self.assertRaises(TypeError, lvm.pvCreate, None)
+-		self.assertRaises(lvm.LibLVMError, lvm.pvCreate, '')
+-		self.assertRaises(lvm.LibLVMError, lvm.pvCreate, d, 4)
+-		self.assertRaises(lvm.LibLVMError, lvm.pvCreate, d, 0, 4)
+-		self.assertRaises(lvm.LibLVMError, lvm.pvCreate, d, 0, 0, 0, 2 ** 34)
+-		self.assertRaises(
+-			lvm.LibLVMError, lvm.pvCreate, d, 0, 0, 0, 4096, 2 ** 34)
+-
+-		#Try a number of combinations and permutations
+-		for s in size:
+-			for copies in pvmeta_copies:
+-				for pv_size in pvmeta_size:
+-					for align in data_alignment:
+-						for z in zero:
+-							lvm.pvCreate(d, s, copies, pv_size, align,
+-								     align, z)
+-							lvm.pvRemove(d)
+-
+-		#Restore
+-		for d in device_names:
+-			lvm.pvCreate(d)
+-
+-	def test_vg_reduce(self):
+-		# Test the case where we try to reduce a vg where the last PV has
+-		# no metadata copies.  In this case the reduce should fail.
+-		vg_name = TestLvm.VG_P + 'reduce_test'
+-
+-		device_names = TestLvm._get_pv_device_names()
+-
+-		for d in device_names:
+-			lvm.pvRemove(d)
+-
+-		lvm.pvCreate(device_names[0], 0, 0)  # Size all, pvmetadatacopies 0
+-		lvm.pvCreate(device_names[1])
+-		lvm.pvCreate(device_names[2])
+-		lvm.pvCreate(device_names[3])
+-
+-		vg = lvm.vgCreate(vg_name)
+-
+-		vg.extend(device_names[3])
+-		vg.extend(device_names[2])
+-		vg.extend(device_names[1])
+-		vg.extend(device_names[0])
+-		vg.close()
+-
+-		vg = None
+-
+-		vg = lvm.vgOpen(vg_name, 'w')
+-
+-		vg.reduce(device_names[3])
+-		vg.reduce(device_names[2])
+-
+-		self.assertRaises(lvm.LibLVMError, vg.reduce, device_names[1])
+-
+-		vg.close()
+-		vg = None
+-
+-		vg = lvm.vgOpen(vg_name, 'w')
+-		vg.remove()
+-		vg.close()
+-
+-	@staticmethod
+-	def _test_valid_names(method):
+-		sample = 'azAZ09._-+'
+-
+-		method('x' * 127)
+-		method('.X')
+-		method('..X')
+-
+-		for i in range(1, 7):
+-			tests = (''.join(i) for i in itertools.product(sample, repeat=i))
+-			for t in tests:
+-				if t == '.' or t == '..':
+-					t += 'X'
+-				elif t.startswith('-'):
+-					t = 'H' + t
+-				method(t)
+-
+-	def _test_bad_names(self, method, dupe_name):
+-		# Test for duplicate name
+-		self.assertRaises(lvm.LibLVMError, method, dupe_name)
+-
+-		# Test for too long a name
+-		self.assertRaises(lvm.LibLVMError, method, ('x' * 128))
+-
+-		# Test empty
+-		self.assertRaises(lvm.LibLVMError, method, '')
+-
+-		# Invalid characters
+-		self.assertRaises(lvm.LibLVMError, method, '&invalid^char')
+-
+-		# Cannot start with .. and no following characters
+-		self.assertRaises(lvm.LibLVMError, method, '..')
+-
+-		# Cannot start with . and no following characters
+-		self.assertRaises(lvm.LibLVMError, method, '.')
+-
+-		# Cannot start with a hyphen
+-		self.assertRaises(lvm.LibLVMError, method, '-not_good')
+-
+-	def _lv_reserved_names(self, method):
+-		prefixes = ['snapshot', 'pvmove']
+-		reserved = [
+-			'_mlog', '_mimage', '_pmspare', '_rimage', '_rmeta',
+-			'_vorigin', '_tdata', '_tmeta']
+-
+-		for p in prefixes:
+-			self.assertRaises(lvm.LibLVMError, method, p + rs(3))
+-
+-		for r in reserved:
+-			self.assertRaises(lvm.LibLVMError, method, rs(3) + r + rs(1))
+-			self.assertRaises(lvm.LibLVMError, method, r + rs(1))
+-
+-	def test_vg_lv_name_validate(self):
+-		lv_name = 'vg_lv_name_validate'
+-		TestLvm._create_thin_lv(TestLvm._get_pv_device_names(), lv_name)
+-		lv, vg = TestLvm._get_lv(None, lv_name)
+-
+-		self._test_bad_names(lvm.vgNameValidate, vg.getName())
+-		self._test_bad_names(vg.lvNameValidate, lv.getName())
+-
+-		# Test good values
+-		TestLvm._test_valid_names(lvm.vgNameValidate)
+-		TestLvm._test_valid_names(vg.lvNameValidate)
+-		self._lv_reserved_names(vg.lvNameValidate)
+-
+-		vg.close()
+-
+-if __name__ == "__main__":
+-	unittest.main()
+diff --git a/test/api/thin_percent.sh b/test/api/thin_percent.sh
+deleted file mode 100644
+index db4970f..0000000
+--- a/test/api/thin_percent.sh
++++ /dev/null
+@@ -1,38 +0,0 @@
+-#!/bin/sh
+-# Copyright (C) 2012 Red Hat, Inc. All rights reserved.
+-#
+-# This file is part of LVM2.
+-#
+-# This copyrighted material is made available to anyone wishing to use,
+-# modify, copy, or redistribute it subject to the terms and conditions
+-# of the GNU General Public License v.2.
+-#
+-# You should have received a copy of the GNU General Public License
+-# along with this program; if not, write to the Free Software Foundation,
+-# Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
+-
+-SKIP_WITH_LVMPOLLD=1
+-
+-export LVM_TEST_THIN_REPAIR_CMD=${LVM_TEST_THIN_REPAIR_CMD-/bin/false}
+-
+-. lib/inittest
+-
+-aux have_thin 1 0 0 || skip
+-
+-aux prepare_devs 2
+-
+-vgcreate -s 64k $vg $(cat DEVICES)
+-
+-lvcreate -L5M -T $vg/pool
+-
+-lvcreate -V1M -T $vg/pool -n thin
+-dd if=/dev/urandom of="$DM_DEV_DIR/$vg/thin" count=2 bs=256K
+-
+-lvcreate -s $vg/thin -K -n snap
+-dd if=/dev/urandom of="$DM_DEV_DIR/$vg/snap" count=3 bs=256K
+-
+-lvs -o+discards $vg
+-
+-aux apitest thin_percent $vg
+-
+-vgremove -ff $vg
+diff --git a/test/api/vglist.sh b/test/api/vglist.sh
+deleted file mode 100644
+index b07cac9..0000000
+--- a/test/api/vglist.sh
++++ /dev/null
+@@ -1,17 +0,0 @@
+-#!/bin/sh
+-# Copyright (C) 2013 Red Hat, Inc. All rights reserved.
+-#
+-# This copyrighted material is made available to anyone wishing to use,
+-# modify, copy, or redistribute it subject to the terms and conditions
+-# of the GNU General Public License v.2.
+-#
+-# You should have received a copy of the GNU General Public License
+-# along with this program; if not, write to the Free Software Foundation,
+-# Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
+-
+-SKIP_WITH_LVMPOLLD=1
+-
+-. lib/inittest
+-
+-aux prepare_vg 2
+-aux apitest vglist $vg "$(get vg_field $vg vg_uuid | sed -e s,-,,g)"
+diff --git a/test/api/vgtest.sh b/test/api/vgtest.sh
+deleted file mode 100644
+index 13bf505..0000000
+--- a/test/api/vgtest.sh
++++ /dev/null
+@@ -1,23 +0,0 @@
+-#!/bin/sh
+-# Copyright (C) 2008 Red Hat, Inc. All rights reserved.
+-#
+-# This copyrighted material is made available to anyone wishing to use,
+-# modify, copy, or redistribute it subject to the terms and conditions
+-# of the GNU General Public License v.2.
+-#
+-# You should have received a copy of the GNU General Public License
+-# along with this program; if not, write to the Free Software Foundation,
+-# Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
+-
+-#
+-# tests lvm2app library
+-#
+-
+-SKIP_WITH_LVMLOCKD=1
+-SKIP_WITH_LVMPOLLD=1
+-
+-. lib/inittest
+-
+-aux prepare_pvs 2
+-
+-aux apitest vgtest $vg1 "$dev1" "$dev2"
+diff --git a/test/lib/aux.sh b/test/lib/aux.sh
+index bd42f30..4eb9260 100644
+--- a/test/lib/aux.sh
++++ b/test/lib/aux.sh
+@@ -1364,11 +1364,6 @@ prepare_profiles() {
+ 	done
+ }
+ 
+-apitest() {
+-	test -x "$TESTOLDPWD/api/$1.t" || skip
+-	"$TESTOLDPWD/api/$1.t" "${@:2}" && rm -f debug.log strace.log
+-}
+-
+ unittest() {
+ 	test -x "$TESTOLDPWD/unit/unit-test" || skip
+ 	"$TESTOLDPWD/unit/unit-test" "${@}"
 
 
