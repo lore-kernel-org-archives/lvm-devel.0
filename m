@@ -1,102 +1,134 @@
 From: David Teigland <teigland@sourceware.org>
-Date: Fri, 8 Jun 2018 13:19:44 -0400
-Subject: master - Removing locking layer from sync_local_dev_names
-Message-ID: <201806081719.w58HJiPD020951@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Fri, 8 Jun 2018 15:02:15 -0400
+Subject: master - Remove unused cache management from locking
+Message-ID: <201806081902.w58J2FJe003633@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=5e672df6aefd5b61129636994d8b5cdc05f651ea
-Commit:        5e672df6aefd5b61129636994d8b5cdc05f651ea
-Parent:        8266b7e951427de997b5b89d8ac8af8bf011c52e
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=a8759dc7a6669b9ecfbc749d68beed2e0029903b
+Commit:        a8759dc7a6669b9ecfbc749d68beed2e0029903b
+Parent:        5e672df6aefd5b61129636994d8b5cdc05f651ea
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Fri Jun 8 12:15:22 2018 -0500
+AuthorDate:    Fri Jun 8 12:30:43 2018 -0500
 Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Fri Jun 8 12:18:57 2018 -0500
+CommitterDate: Fri Jun 8 12:30:43 2018 -0500
 
-Removing locking layer from sync_local_dev_names
+Remove unused cache management from locking
 
-the indirection is not needed without clvm
+This code was for managing lvmcache for clvm
+and it no longer does anything.
 ---
- lib/locking/file_locking.c |    3 ---
- lib/locking/locking.c      |   11 ++---------
- lib/locking/locking.h      |    7 +------
- 3 files changed, 3 insertions(+), 18 deletions(-)
+ lib/locking/locking.h   |    4 ----
+ lib/metadata/metadata.c |   20 --------------------
+ tools/vgmerge.c         |    3 ---
+ tools/vgrename.c        |    4 ----
+ 4 files changed, 0 insertions(+), 31 deletions(-)
 
-diff --git a/lib/locking/file_locking.c b/lib/locking/file_locking.c
-index 0bded0e..6b295e9 100644
---- a/lib/locking/file_locking.c
-+++ b/lib/locking/file_locking.c
-@@ -47,9 +47,6 @@ static int _file_lock_resource(struct cmd_context *cmd, const char *resource,
- 
- 	switch (flags & LCK_SCOPE_MASK) {
- 	case LCK_VG:
--		if (!strcmp(resource, VG_SYNC_NAMES))
--			fs_unlock();
--
- 		/* LCK_CACHE does not require a real lock */
- 		if (flags & LCK_CACHE)
- 			break;
-diff --git a/lib/locking/locking.c b/lib/locking/locking.c
-index 7e499bb..b6bd8d8 100644
---- a/lib/locking/locking.c
-+++ b/lib/locking/locking.c
-@@ -312,14 +312,7 @@ int locking_is_clustered(void)
- int sync_local_dev_names(struct cmd_context* cmd)
- {
- 	memlock_unlock(cmd);
--
--	return lock_vol(cmd, VG_SYNC_NAMES, LCK_VG_SYNC_LOCAL, NULL);
--}
--
--int sync_dev_names(struct cmd_context* cmd)
--{
--	memlock_unlock(cmd);
--
--	return lock_vol(cmd, VG_SYNC_NAMES, LCK_VG_SYNC, NULL);
-+	fs_unlock();
-+	return 1;
- }
- 
 diff --git a/lib/locking/locking.h b/lib/locking/locking.h
-index 96f7d86..f6a3859 100644
+index f6a3859..23636fc 100644
 --- a/lib/locking/locking.h
 +++ b/lib/locking/locking.h
-@@ -129,7 +129,6 @@ int check_lvm1_vg_inactive(struct cmd_context *cmd, const char *vgname);
-  */
- #define VG_ORPHANS	"#orphans"
- #define VG_GLOBAL	"#global"
--#define VG_SYNC_NAMES	"#sync_names"
+@@ -138,7 +138,6 @@ int check_lvm1_vg_inactive(struct cmd_context *cmd, const char *vgname);
+ #define LCK_VG_READ		(LCK_VG | LCK_READ | LCK_HOLD)
+ #define LCK_VG_WRITE		(LCK_VG | LCK_WRITE | LCK_HOLD)
+ #define LCK_VG_UNLOCK		(LCK_VG | LCK_UNLOCK)
+-#define LCK_VG_DROP_CACHE	(LCK_VG | LCK_WRITE | LCK_CACHE)
  
- /*
-  * Common combinations
-@@ -147,16 +146,13 @@ int check_lvm1_vg_inactive(struct cmd_context *cmd, const char *vgname);
+ /* FIXME: LCK_HOLD abused here */
+ #define LCK_VG_COMMIT		(LCK_VG | LCK_WRITE | LCK_CACHE | LCK_HOLD)
+@@ -163,9 +162,6 @@ int check_lvm1_vg_inactive(struct cmd_context *cmd, const char *vgname);
+ 		release_vg(vg); \
+ 	} while (0)
  
- #define LCK_VG_BACKUP		(LCK_VG | LCK_CACHE)
- 
--#define LCK_VG_SYNC		(LCK_NONE | LCK_CACHE)
--#define LCK_VG_SYNC_LOCAL	(LCK_NONE | LCK_CACHE | LCK_LOCAL)
+-#define drop_cached_metadata(vg)	\
+-	lock_vol((vg)->cmd, (vg)->name, LCK_VG_DROP_CACHE, NULL)
 -
- #define LCK_MASK (LCK_TYPE_MASK | LCK_SCOPE_MASK)
- 
- #define unlock_vg(cmd, vg, vol)	\
- 	do { \
- 		if (vg && !lvmetad_vg_update_finish(vg)) \
- 			stack; \
--		if (is_real_vg(vol) && !sync_dev_names(cmd)) \
-+		if (is_real_vg(vol) && !sync_local_dev_names(cmd)) \
- 			stack; \
- 		if (!lock_vol(cmd, vol, LCK_VG_UNLOCK, NULL)) \
- 			stack;	\
-@@ -171,7 +167,6 @@ int check_lvm1_vg_inactive(struct cmd_context *cmd, const char *vgname);
- 	lock_vol((vg)->cmd, (vg)->name, LCK_VG_DROP_CACHE, NULL)
- 
  int sync_local_dev_names(struct cmd_context* cmd);
--int sync_dev_names(struct cmd_context* cmd);
  
  /* Process list of LVs */
- struct volume_group;
+diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
+index b7a73c5..e45f5c1 100644
+--- a/lib/metadata/metadata.c
++++ b/lib/metadata/metadata.c
+@@ -2915,11 +2915,6 @@ int vg_write(struct volume_group *vg)
+ 		return 0;
+ 	}
+ 
+-	if (!drop_cached_metadata(vg)) {
+-		log_error("Unable to drop cached metadata for VG %s.", vg->name);
+-		return 0;
+-	}
+-
+ 	if (critical_section())
+ 		log_error(INTERNAL_ERROR
+ 			  "Writing metadata in critical section.");
+@@ -3077,11 +3072,6 @@ int vg_commit(struct volume_group *vg)
+ 		_vg_move_cached_precommitted_to_committed(vg);
+ 	}
+ 
+-	/* If update failed, remove any cached precommitted metadata. */
+-	if (!cache_updated && !drop_cached_metadata(vg))
+-		log_error("Attempt to drop cached metadata failed "
+-			  "after commit for VG %s.", vg->name);
+-
+ 	/* If at least one mda commit succeeded, it was committed */
+ 	return cache_updated;
+ }
+@@ -3115,10 +3105,6 @@ void vg_revert(struct volume_group *vg)
+ 			stack;
+ 		}
+ 	}
+-
+-	if (!drop_cached_metadata(vg))
+-		log_error("Attempt to drop cached metadata failed "
+-			  "after reverted update for VG %s.", vg->name);
+ }
+ 
+ static int _check_mda_in_use(struct metadata_area *mda, void *_in_use)
+@@ -3543,12 +3529,6 @@ static int _wipe_outdated_pvs(struct cmd_context *cmd, struct volume_group *vg,
+ 			 pv_dev_name(pvl->pv), uuid, vg->name);
+ 		if (!pv_write_orphan(cmd, pvl->pv))
+ 			return_0;
+-
+-		/* Refresh metadata after orphan write */
+-		if (!drop_cached_metadata(vg)) {
+-			log_error("Unable to drop cached metadata for VG %s while wiping outdated PVs.", vg->name);
+-			return 0;
+-		}
+ next_pv:
+ 		;
+ 	}
+diff --git a/tools/vgmerge.c b/tools/vgmerge.c
+index 920ed73..eab3d56 100644
+--- a/tools/vgmerge.c
++++ b/tools/vgmerge.c
+@@ -103,9 +103,6 @@ static int _vgmerge_single(struct cmd_context *cmd, const char *vg_name_to,
+ 	if (!archive(vg_from) || !archive(vg_to))
+ 		goto_bad;
+ 
+-	if (!drop_cached_metadata(vg_from))
+-		stack;
+-
+ 	if (!_vgmerge_select_pool_metadata_spare(cmd, vg_to, vg_from))
+ 		goto_bad;
+ 
+diff --git a/tools/vgrename.c b/tools/vgrename.c
+index bbc3087..2e6157f 100644
+--- a/tools/vgrename.c
++++ b/tools/vgrename.c
+@@ -108,10 +108,6 @@ static int _vgrename_single(struct cmd_context *cmd, const char *vg_name,
+ 	if (!archive(vg))
+ 		goto error;
+ 
+-	/* Remove references based on old name */
+-	if (!drop_cached_metadata(vg))
+-		stack;
+-
+ 	if (!lockd_rename_vg_before(cmd, vg)) {
+ 		stack;
+ 		goto error;
 
 
