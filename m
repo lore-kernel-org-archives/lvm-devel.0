@@ -1,71 +1,42 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Fri, 8 Jun 2018 08:38:43 -0400
-Subject: master - pvresize: add missing return
-Message-ID: <201806081238.w58CchIw006029@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Fri, 8 Jun 2018 08:38:48 -0400
+Subject: master - pvresize: update message
+Message-ID: <201806081238.w58Ccma9006040@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=fb171edd4520a91012eb6ce6652c241609f5f761
-Commit:        fb171edd4520a91012eb6ce6652c241609f5f761
-Parent:        0c62ae3f8920ebb53397b2a904aa2e3dd3e73bed
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=1f5f8382ae09e3ba95486903cf86b29641a0023d
+Commit:        1f5f8382ae09e3ba95486903cf86b29641a0023d
+Parent:        fb171edd4520a91012eb6ce6652c241609f5f761
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Jun 5 21:21:26 2018 +0200
+AuthorDate:    Tue Jun 5 23:09:55 2018 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Fri Jun 8 14:36:56 2018 +0200
+CommitterDate: Fri Jun 8 14:36:59 2018 +0200
 
-pvresize: add missing return
+pvresize: update message
 
-Log error path missed return 0.
-Also fix some unneded bactraces (since log_error already shows
-position).
+There is always at least PV header update even if the size
+of PV remains same (so it's not really resized).
+Try to make it a slightly less confusing.
 ---
- WHATS_NEW               |    1 +
- lib/metadata/pv_manip.c |    5 +++--
- 2 files changed, 4 insertions(+), 2 deletions(-)
+ tools/pvresize.c |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index a727a40..a17902d 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 3.0.0
- =============
-+  Fix check if resized PV can also fit metadata area.
-   Avoid showing internal error in lvs output or pvmoved LVs.
-   Remove clvmd
-   Remove lvmlib (api)
-diff --git a/lib/metadata/pv_manip.c b/lib/metadata/pv_manip.c
-index eaaa5e6..5fd80a2 100644
---- a/lib/metadata/pv_manip.c
-+++ b/lib/metadata/pv_manip.c
-@@ -566,6 +566,7 @@ static int _pv_resize(struct physical_volume *pv, struct volume_group *vg, uint6
- 		log_error("Size must exceed physical extent start "
- 			  "of %" PRIu64 " sectors on PV %s.",
- 			  pv_pe_start(pv), pv_dev_name(pv));
-+		return 0;
- 	}
+diff --git a/tools/pvresize.c b/tools/pvresize.c
+index 8a65952..e951f11 100644
+--- a/tools/pvresize.c
++++ b/tools/pvresize.c
+@@ -96,7 +96,7 @@ int pvresize(struct cmd_context *cmd, int argc, char **argv)
  
- 	old_pe_count = pv->pe_count;
-@@ -645,7 +646,7 @@ int pv_resize_single(struct cmd_context *cmd,
- 						  pv_name, display_size(cmd, new_size),
- 						  display_size(cmd, size)) == 'n') {
- 				log_error("Physical Volume %s not resized.", pv_name);
--				goto_out;
-+				goto out;
- 			}
+ 	ret = process_each_pv(cmd, argc, argv, NULL, 0, READ_FOR_UPDATE | READ_ALLOW_EXPORTED, handle, _pvresize_single);
  
- 		}  else if (new_size < size)
-@@ -653,7 +654,7 @@ int pv_resize_single(struct cmd_context *cmd,
- 						  pv_name, display_size(cmd, new_size),
- 						  display_size(cmd, size)) == 'n') {
- 				log_error("Physical Volume %s not resized.", pv_name);
--				goto_out;
-+				goto out;
- 			}
- 
- 		if (new_size == size)
+-	log_print_unless_silent("%d physical volume(s) resized / %d physical volume(s) "
++	log_print_unless_silent("%d physical volume(s) resized or updated / %d physical volume(s) "
+ 				"not resized", params.done, params.total - params.done);
+ out:
+ 	destroy_processing_handle(cmd, handle);
 
 
