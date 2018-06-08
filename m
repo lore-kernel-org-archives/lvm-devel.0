@@ -1,3251 +1,3637 @@
 From: Joe Thornber <thornber@sourceware.org>
-Date: Fri, 8 Jun 2018 04:45:19 -0400
-Subject: master - liblvm: remove lvmapi
-Message-ID: <201806080845.w588jJWk003318@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Fri, 8 Jun 2018 09:25:35 -0400
+Subject: master - device_mapper: rename libdevmapper.h -> all.h
+Message-ID: <201806081325.w58DPZ79015625@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=0d22b58172808f050abeacdb5d6a7b7132b91a8c
-Commit:        0d22b58172808f050abeacdb5d6a7b7132b91a8c
-Parent:        e6bb780d24246666fa05948ec449a8137280b443
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=286c1ba3369d1901480425e305e313e8ea365da4
+Commit:        286c1ba3369d1901480425e305e313e8ea365da4
+Parent:        88ae928ca3f950fa0ecb8b8e0aff118b7360a9d7
 Author:        Joe Thornber <ejt@redhat.com>
-AuthorDate:    Fri Jun 8 09:38:05 2018 +0100
+AuthorDate:    Fri Jun 8 12:31:45 2018 +0100
 Committer:     Joe Thornber <ejt@redhat.com>
-CommitterDate: Fri Jun 8 09:38:05 2018 +0100
+CommitterDate: Fri Jun 8 12:31:45 2018 +0100
 
-liblvm: remove lvmapi
+device_mapper: rename libdevmapper.h -> all.h
 
-This has been deprecated for a while.
+I'm paranoid a file will include the global one in /usr/include
+by accident.
 ---
- Makefile.in              |   21 +-
- aclocal.m4               |   91 ++-
- configure                | 1996 +---------------------------------------------
- configure.ac             |   63 +--
- include/configure.h.in   |   66 +--
- liblvm/Doxyfile          |  254 ------
- liblvm/Makefile.in       |   81 --
- liblvm/liblvm2app.pc.in  |   11 -
- liblvm/lvm2app.h         | 1983 ---------------------------------------------
- liblvm/lvm_base.c        |  216 -----
- liblvm/lvm_lv.c          |  820 -------------------
- liblvm/lvm_misc.c        |  168 ----
- liblvm/lvm_misc.h        |   46 --
- liblvm/lvm_prop.c        |   74 --
- liblvm/lvm_prop.h        |   49 --
- liblvm/lvm_prop_fields.h |   22 -
- liblvm/lvm_pv.c          |  474 -----------
- liblvm/lvm_vg.c          |  564 -------------
- liblvm/test/vgadd.c      |   90 ---
- liblvm/test/vgshow.c     |   95 ---
- test/api/Makefile.in     |   33 -
- test/api/lvtest.c        |   64 --
- test/api/pe_start.c      |   47 --
- test/api/percent.c       |   63 --
- test/api/test.c          | 1110 --------------------------
- test/api/thin_percent.c  |   78 --
- test/api/vglist.c        |   73 --
- test/api/vgtest.c        |  164 ----
- 28 files changed, 108 insertions(+), 8708 deletions(-)
+ daemons/cmirrord/cluster.h                         |    2 +-
+ device_mapper/all.h                                | 3554 ++++++++++++++++++++
+ device_mapper/libdevmapper.h                       | 3554 --------------------
+ device_mapper/libdm-common.h                       |    2 +-
+ device_mapper/misc/dm-logging.h                    |    2 +-
+ device_mapper/misc/dmlib.h                         |    2 +-
+ device_mapper/vdo/status.c                         |    2 +-
+ lib/config/config.h                                |    2 +-
+ lib/device/bcache.h                                |    2 +-
+ lib/metadata/pv.h                                  |    2 +-
+ lib/metadata/vg.h                                  |    2 +-
+ lib/misc/lib.h                                     |    2 +-
+ lib/report/properties.h                            |    2 +-
+ .../lvm2_activation_generator_systemd_red_hat.c    |    2 +-
+ test/unit/activation-generator_t.c                 |    2 +-
+ test/unit/bitset_t.c                               |    2 +-
+ test/unit/config_t.c                               |    2 +-
+ test/unit/dmlist_t.c                               |    2 +-
+ test/unit/dmstatus_t.c                             |    2 +-
+ test/unit/framework.h                              |    2 +-
+ test/unit/matcher_t.c                              |    2 +-
+ test/unit/percent_t.c                              |    2 +-
+ test/unit/string_t.c                               |    2 +-
+ tools/tool.h                                       |    2 +-
+ 24 files changed, 3576 insertions(+), 3576 deletions(-)
 
-diff --git a/Makefile.in b/Makefile.in
-index 7eb6460..ed00696 100644
---- a/Makefile.in
-+++ b/Makefile.in
-@@ -28,10 +28,6 @@ ifeq ("@INTL@", "yes")
-   SUBDIRS += po
- endif
- 
--ifeq ("@APPLIB@", "yes")
--  SUBDIRS += liblvm
--endif
--
- ifeq ("@PYTHON_BINDINGS@", "yes")
-   SUBDIRS += python
- endif
-@@ -43,7 +39,7 @@ endif
- ifeq ($(MAKECMDGOALS),distclean)
-   SUBDIRS = conf include man test scripts \
-     libdaemon lib tools daemons libdm \
--    udev po liblvm python
-+    udev po python
- tools.distclean: test.distclean
- endif
- DISTCLEAN_DIRS += lcov_reports*
-@@ -54,18 +50,16 @@ include make.tmpl
- libdm: include
- libdaemon: include
- lib: libdm libdaemon
--liblvm: lib
- daemons: lib libdaemon tools
- tools: lib libdaemon device-mapper
- po: tools daemons
- man: tools
- all_man: tools
--scripts: liblvm libdm
-+scripts: libdm
- test: tools daemons
- 
- lib.device-mapper: include.device-mapper
- libdm.device-mapper: include.device-mapper
--liblvm.device-mapper: include.device-mapper
- daemons.device-mapper: libdm.device-mapper
- tools.device-mapper: libdm.device-mapper
- scripts.device-mapper: include.device-mapper
-@@ -79,10 +73,6 @@ po.pofile: tools.pofile daemons.pofile
- pofile: po.pofile
- endif
- 
--ifeq ("@PYTHON_BINDINGS@", "yes")
--python: liblvm
--endif
--
- ifneq ("$(CFLOW_CMD)", "")
- tools.cflow: libdm.cflow lib.cflow
- daemons.cflow: tools.cflow
-@@ -159,15 +149,10 @@ install_systemd_units:
- install_all_man:
- 	$(MAKE) -C man install_all_man
- 
--ifeq ("@PYTHON_BINDINGS@", "yes")
--install_python_bindings:
--	$(MAKE) -C liblvm/python install_python_bindings
--endif
--
- install_tmpfiles_configuration:
- 	$(MAKE) -C scripts install_tmpfiles_configuration
- 
--LCOV_TRACES = libdm.info lib.info liblvm.info tools.info \
-+LCOV_TRACES = libdm.info lib.info tools.info \
- 	libdaemon/client.info libdaemon/server.info \
- 	test/unit.info \
- 	daemons/clvmd.info \
-diff --git a/aclocal.m4 b/aclocal.m4
-index 07ea0b6..c57b129 100644
---- a/aclocal.m4
-+++ b/aclocal.m4
-@@ -1,6 +1,6 @@
--# generated automatically by aclocal 1.15 -*- Autoconf -*-
-+# generated automatically by aclocal 1.15.1 -*- Autoconf -*-
- 
--# Copyright (C) 1996-2014 Free Software Foundation, Inc.
-+# Copyright (C) 1996-2017 Free Software Foundation, Inc.
- 
- # This file is free software; the Free Software Foundation
- # gives unlimited permission to copy and/or distribute it,
+diff --git a/daemons/cmirrord/cluster.h b/daemons/cmirrord/cluster.h
+index 54ddd79..01d4871 100644
+--- a/daemons/cmirrord/cluster.h
++++ b/daemons/cmirrord/cluster.h
 @@ -13,7 +13,7 @@
+ #define _LVM_CLOG_CLUSTER_H
  
- m4_ifndef([AC_CONFIG_MACRO_DIRS], [m4_defun([_AM_CONFIG_MACRO_DIRS], [])m4_defun([AC_CONFIG_MACRO_DIRS], [_AM_CONFIG_MACRO_DIRS($@)])])
- # ===========================================================================
--#     http://www.gnu.org/software/autoconf-archive/ax_python_module.html
-+#     https://www.gnu.org/software/autoconf-archive/ax_python_module.html
- # ===========================================================================
- #
- # SYNOPSIS
-@@ -37,7 +37,7 @@ m4_ifndef([AC_CONFIG_MACRO_DIRS], [m4_defun([_AM_CONFIG_MACRO_DIRS], [])m4_defun
- #   and this notice are preserved. This file is offered as-is, without any
- #   warranty.
+ #include "device_mapper/misc/dm-log-userspace.h"
+-#include "device_mapper/libdevmapper.h"
++#include "device_mapper/all.h"
  
--#serial 8
-+#serial 9
- 
- AU_ALIAS([AC_PYTHON_MODULE], [AX_PYTHON_MODULE])
- AC_DEFUN([AX_PYTHON_MODULE],[
-@@ -69,9 +69,9 @@ AC_DEFUN([AX_PYTHON_MODULE],[
-     fi
- ])
- 
--dnl pkg.m4 - Macros to locate and utilise pkg-config.   -*- Autoconf -*-
--dnl serial 11 (pkg-config-0.29)
--dnl
-+# pkg.m4 - Macros to locate and utilise pkg-config.   -*- Autoconf -*-
-+# serial 11 (pkg-config-0.29.1)
+ #define DM_ULOG_RESPONSE 0x1000U /* in last byte of 32-bit value */
+ #define DM_ULOG_CHECKPOINT_READY 21
+diff --git a/device_mapper/all.h b/device_mapper/all.h
+new file mode 100644
+index 0000000..f7ff4ce
+--- /dev/null
++++ b/device_mapper/all.h
+@@ -0,0 +1,3554 @@
++/*
++ * Copyright (C) 2001-2004 Sistina Software, Inc. All rights reserved.
++ * Copyright (C) 2004-2017 Red Hat, Inc. All rights reserved.
++ * Copyright (C) 2006 Rackable Systems All rights reserved.
++ *
++ * This file is part of the device-mapper userspace tools.
++ *
++ * This copyrighted material is made available to anyone wishing to use,
++ * modify, copy, or redistribute it subject to the terms and conditions
++ * of the GNU Lesser General Public License v.2.1.
++ *
++ * You should have received a copy of the GNU Lesser General Public License
++ * along with this program; if not, write to the Free Software Foundation,
++ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
++ */
 +
- dnl Copyright ?? 2004 Scott James Remnant <scott@netsplit.com>.
- dnl Copyright ?? 2012-2015 Dan Nicholson <dbn.lists@gmail.com>
- dnl
-@@ -112,7 +112,7 @@ dnl
- dnl See the "Since" comment for each macro you use to see what version
- dnl of the macros you require.
- m4_defun([PKG_PREREQ],
--[m4_define([PKG_MACROS_VERSION], [0.29])
-+[m4_define([PKG_MACROS_VERSION], [0.29.1])
- m4_if(m4_version_compare(PKG_MACROS_VERSION, [$1]), -1,
-     [m4_fatal([pkg.m4 version $1 or higher is required but ]PKG_MACROS_VERSION[ found])])
- ])dnl PKG_PREREQ
-@@ -345,7 +345,75 @@ AS_VAR_COPY([$1], [pkg_cv_][$1])
- AS_VAR_IF([$1], [""], [$5], [$4])dnl
- ])dnl PKG_CHECK_VAR
- 
--# Copyright (C) 1999-2014 Free Software Foundation, Inc.
-+dnl PKG_WITH_MODULES(VARIABLE-PREFIX, MODULES,
-+dnl   [ACTION-IF-FOUND],[ACTION-IF-NOT-FOUND],
-+dnl   [DESCRIPTION], [DEFAULT])
-+dnl ------------------------------------------
-+dnl
-+dnl Prepare a "--with-" configure option using the lowercase
-+dnl [VARIABLE-PREFIX] name, merging the behaviour of AC_ARG_WITH and
-+dnl PKG_CHECK_MODULES in a single macro.
-+AC_DEFUN([PKG_WITH_MODULES],
-+[
-+m4_pushdef([with_arg], m4_tolower([$1]))
++#ifndef LIB_DEVICE_MAPPER_H
++#define LIB_DEVICE_MAPPER_H
 +
-+m4_pushdef([description],
-+           [m4_default([$5], [build with ]with_arg[ support])])
++#include <inttypes.h>
++#include <stdarg.h>
++#include <sys/types.h>
++#include <sys/stat.h>
 +
-+m4_pushdef([def_arg], [m4_default([$6], [auto])])
-+m4_pushdef([def_action_if_found], [AS_TR_SH([with_]with_arg)=yes])
-+m4_pushdef([def_action_if_not_found], [AS_TR_SH([with_]with_arg)=no])
++#ifdef __linux__
++#  include <linux/types.h>
++#endif
 +
-+m4_case(def_arg,
-+            [yes],[m4_pushdef([with_without], [--without-]with_arg)],
-+            [m4_pushdef([with_without],[--with-]with_arg)])
++#include <limits.h>
++#include <string.h>
++#include <stdlib.h>
++#include <stdio.h>
 +
-+AC_ARG_WITH(with_arg,
-+     AS_HELP_STRING(with_without, description[ @<:@default=]def_arg[@:>@]),,
-+    [AS_TR_SH([with_]with_arg)=def_arg])
++#include "base/data-struct/list.h"
 +
-+AS_CASE([$AS_TR_SH([with_]with_arg)],
-+            [yes],[PKG_CHECK_MODULES([$1],[$2],$3,$4)],
-+            [auto],[PKG_CHECK_MODULES([$1],[$2],
-+                                        [m4_n([def_action_if_found]) $3],
-+                                        [m4_n([def_action_if_not_found]) $4])])
++#include "base/data-struct/list.h"
 +
-+m4_popdef([with_arg])
-+m4_popdef([description])
-+m4_popdef([def_arg])
++#ifndef __GNUC__
++# define __typeof__ typeof
++#endif
 +
-+])dnl PKG_WITH_MODULES
++/* Macros to make string defines */
++#define DM_TO_STRING_EXP(A) #A
++#define DM_TO_STRING(A) DM_TO_STRING_EXP(A)
 +
-+dnl PKG_HAVE_WITH_MODULES(VARIABLE-PREFIX, MODULES,
-+dnl   [DESCRIPTION], [DEFAULT])
-+dnl -----------------------------------------------
-+dnl
-+dnl Convenience macro to trigger AM_CONDITIONAL after PKG_WITH_MODULES
-+dnl check._[VARIABLE-PREFIX] is exported as make variable.
-+AC_DEFUN([PKG_HAVE_WITH_MODULES],
-+[
-+PKG_WITH_MODULES([$1],[$2],,,[$3],[$4])
++#define DM_ARRAY_SIZE(a) (sizeof(a) / sizeof((a)[0]))
 +
-+AM_CONDITIONAL([HAVE_][$1],
-+               [test "$AS_TR_SH([with_]m4_tolower([$1]))" = "yes"])
-+])dnl PKG_HAVE_WITH_MODULES
++#ifdef __cplusplus
++extern "C" {
++#endif
 +
-+dnl PKG_HAVE_DEFINE_WITH_MODULES(VARIABLE-PREFIX, MODULES,
-+dnl   [DESCRIPTION], [DEFAULT])
-+dnl ------------------------------------------------------
-+dnl
-+dnl Convenience macro to run AM_CONDITIONAL and AC_DEFINE after
-+dnl PKG_WITH_MODULES check. HAVE_[VARIABLE-PREFIX] is exported as make
-+dnl and preprocessor variable.
-+AC_DEFUN([PKG_HAVE_DEFINE_WITH_MODULES],
-+[
-+PKG_HAVE_WITH_MODULES([$1],[$2],[$3],[$4])
++/*****************************************************************
++ * The first section of this file provides direct access to the
++ * individual device-mapper ioctls.  Since it is quite laborious to
++ * build the ioctl arguments for the device-mapper, people are
++ * encouraged to use this library.
++ ****************************************************************/
 +
-+AS_IF([test "$AS_TR_SH([with_]m4_tolower([$1]))" = "yes"],
-+        [AC_DEFINE([HAVE_][$1], 1, [Enable ]m4_tolower([$1])[ support])])
-+])dnl PKG_HAVE_DEFINE_WITH_MODULES
++/*
++ * The library user may wish to register their own
++ * logging function.  By default errors go to stderr.
++ * Use dm_log_with_errno_init(NULL) to restore the default log fn.
++ * Error messages may have a non-zero errno.
++ * Debug messages may have a non-zero class.
++ * Aborts on internal error when env DM_ABORT_ON_INTERNAL_ERRORS is 1
++ */
 +
-+# Copyright (C) 1999-2017 Free Software Foundation, Inc.
- #
- # This file is free software; the Free Software Foundation
- # gives unlimited permission to copy and/or distribute it,
-@@ -378,8 +446,9 @@ AC_DEFUN([AM_PATH_PYTHON],
-  [
-   dnl Find a Python interpreter.  Python versions prior to 2.0 are not
-   dnl supported. (2.0 was released on October 16, 2000).
-+  dnl FIXME: Remove the need to hard-code Python versions here.
-   m4_define_default([_AM_PYTHON_INTERPRETER_LIST],
--[python python2 python3 python3.3 python3.2 python3.1 python3.0 python2.7 dnl
-+[python python2 python3 python3.5 python3.4 python3.3 python3.2 python3.1 python3.0 python2.7 dnl
-  python2.6 python2.5 python2.4 python2.3 python2.2 python2.1 python2.0])
- 
-   AC_ARG_VAR([PYTHON], [the Python interpreter])
-@@ -580,7 +649,7 @@ for i in list(range(0, 4)): minverhex = (minverhex << 8) + minver[[i]]
- sys.exit(sys.hexversion < minverhex)"
-   AS_IF([AM_RUN_LOG([$1 -c "$prog"])], [$3], [$4])])
- 
--# Copyright (C) 2001-2014 Free Software Foundation, Inc.
-+# Copyright (C) 2001-2017 Free Software Foundation, Inc.
- #
- # This file is free software; the Free Software Foundation
- # gives unlimited permission to copy and/or distribute it,
-diff --git a/configure b/configure
-index 38ee4dc..09d20af 100755
---- a/configure
-+++ b/configure
-@@ -636,7 +636,6 @@ missingkernel
- kerneldir
- interface
- CMIRRORD_PIDFILE
--CLVMD_PIDFILE
- LVMLOCKD_PIDFILE
- LVMPOLLD_PIDFILE
- LVMETAD_PIDFILE
-@@ -660,9 +659,15 @@ SYSCONFDIR
- SELINUX_PC
- SELINUX_LIBS
- SBINDIR
-+SALCK_LIBS
-+SALCK_CFLAGS
-+SACKPT_LIBS
-+SACKPT_CFLAGS
- REPLICATORS
- READLINE_LIBS
- RT_LIBS
-+QUORUM_LIBS
-+QUORUM_CFLAGS
- PYTHON3DIR
- PYTHON2DIR
- PYTHON3_LIBDIRS
-@@ -673,6 +678,7 @@ PYTHON3_BINDINGS
- PYTHON2_BINDINGS
- PYTHON_BINDINGS
- PYTHON3
-+PYTHON2
- PTHREAD_LIBS
- M_LIBS
- PKGCONFIG
-@@ -703,6 +709,8 @@ ELDFLAGS
- DM_LIB_PATCHLEVEL
- DMEVENTD_PATH
- DL_LIBS
-+DLM_LIBS
-+DLM_CFLAGS
- DEVMAPPER
- DEFAULT_USE_LVMLOCKD
- DEFAULT_USE_LVMPOLLD
-@@ -725,11 +733,9 @@ DEFAULT_ARCHIVE_SUBDIR
- DEBUG
- COPTIMISE_FLAG
- CONFDIR
-+CONFDB_LIBS
-+CONFDB_CFLAGS
- CMDLIB
--CLVMD_PATH
--CLVMD_CMANAGERS
--CLVMD
--CLUSTER
- CLDWHOLEARCHIVE
- CLDNOWHOLEARCHIVE
- CLDFLAGS
-@@ -744,12 +750,9 @@ BUILD_LVMDBUSD
- BUILD_DMEVENTD
- BUILD_CMIRRORD
- BLKID_PC
--APPLIB
- MODPROBE_CMD
- MSGFMT
- PYTHON3_CONFIG
--PYTHON2_CONFIG
--PYTHON2
- pkgpyexecdir
- pyexecdir
- pkgpythondir
-@@ -760,7 +763,6 @@ PYTHON_PREFIX
- PYTHON_VERSION
- PYTHON
- LVM2CMD_LIB
--LVM2APP_LIB
- UDEV_LIBS
- UDEV_CFLAGS
- SYSTEMD_LIBS
-@@ -781,24 +783,8 @@ LCOV
- HAVE_WSYNCNAND
- HAVE_WCLOBBERED
- HAVE_WJUMP
--SACKPT_LIBS
--SACKPT_CFLAGS
--DLM_LIBS
--DLM_CFLAGS
- CPG_LIBS
- CPG_CFLAGS
--CMAP_LIBS
--CMAP_CFLAGS
--CONFDB_LIBS
--CONFDB_CFLAGS
--SALCK_LIBS
--SALCK_CFLAGS
--QUORUM_LIBS
--QUORUM_CFLAGS
--COROSYNC_LIBS
--COROSYNC_CFLAGS
--CMAN_LIBS
--CMAN_CFLAGS
- PKGCONFIGINIT_LIBS
- PKGCONFIGINIT_CFLAGS
- PKG_CONFIG_LIBDIR
-@@ -876,7 +862,6 @@ infodir
- docdir
- oldincludedir
- includedir
--runstatedir
- localstatedir
- sharedstatedir
- sysconfdir
-@@ -908,7 +893,6 @@ with_device_gid
- with_device_mode
- with_device_nodes_on
- with_default_name_mangling
--with_cluster
- with_snapshots
- with_mirrors
- with_default_mirror_segtype
-@@ -933,8 +917,6 @@ with_ocfdir
- with_default_pid_dir
- with_default_dm_run_dir
- with_default_run_dir
--with_clvmd
--with_clvmd_pidfile
- enable_cmirrord
- with_cmirrord_pidfile
- enable_debug
-@@ -963,12 +945,8 @@ enable_compat
- enable_units_compat
- enable_ioctl
- enable_o_direct
--enable_applib
- enable_cmdlib
- enable_dbus_service
--enable_python_bindings
--enable_python2_bindings
--enable_python3_bindings
- enable_pkgconfig
- enable_write_install
- enable_fsadm
-@@ -1013,24 +991,8 @@ PKG_CONFIG_PATH
- PKG_CONFIG_LIBDIR
- PKGCONFIGINIT_CFLAGS
- PKGCONFIGINIT_LIBS
--CMAN_CFLAGS
--CMAN_LIBS
--COROSYNC_CFLAGS
--COROSYNC_LIBS
--QUORUM_CFLAGS
--QUORUM_LIBS
--SALCK_CFLAGS
--SALCK_LIBS
--CONFDB_CFLAGS
--CONFDB_LIBS
--CMAP_CFLAGS
--CMAP_LIBS
- CPG_CFLAGS
- CPG_LIBS
--DLM_CFLAGS
--DLM_LIBS
--SACKPT_CFLAGS
--SACKPT_LIBS
- VALGRIND_CFLAGS
- VALGRIND_LIBS
- LOCKD_SANLOCK_CFLAGS
-@@ -1084,7 +1046,6 @@ datadir='${datarootdir}'
- sysconfdir='${prefix}/etc'
- sharedstatedir='${prefix}/com'
- localstatedir='${prefix}/var'
--runstatedir='${localstatedir}/run'
- includedir='${prefix}/include'
- oldincludedir='/usr/include'
- docdir='${datarootdir}/doc/${PACKAGE}'
-@@ -1337,15 +1298,6 @@ do
-   | -silent | --silent | --silen | --sile | --sil)
-     silent=yes ;;
- 
--  -runstatedir | --runstatedir | --runstatedi | --runstated \
--  | --runstate | --runstat | --runsta | --runst | --runs \
--  | --run | --ru | --r)
--    ac_prev=runstatedir ;;
--  -runstatedir=* | --runstatedir=* | --runstatedi=* | --runstated=* \
--  | --runstate=* | --runstat=* | --runsta=* | --runst=* | --runs=* \
--  | --run=* | --ru=* | --r=*)
--    runstatedir=$ac_optarg ;;
--
-   -sbindir | --sbindir | --sbindi | --sbind | --sbin | --sbi | --sb)
-     ac_prev=sbindir ;;
-   -sbindir=* | --sbindir=* | --sbindi=* | --sbind=* | --sbin=* \
-@@ -1483,7 +1435,7 @@ fi
- for ac_var in	exec_prefix prefix bindir sbindir libexecdir datarootdir \
- 		datadir sysconfdir sharedstatedir localstatedir includedir \
- 		oldincludedir docdir infodir htmldir dvidir pdfdir psdir \
--		libdir localedir mandir runstatedir
-+		libdir localedir mandir
- do
-   eval ac_val=\$$ac_var
-   # Remove trailing slashes.
-@@ -1636,7 +1588,6 @@ Fine tuning of the installation directories:
-   --sysconfdir=DIR        read-only single-machine data [PREFIX/etc]
-   --sharedstatedir=DIR    modifiable architecture-independent data [PREFIX/com]
-   --localstatedir=DIR     modifiable single-machine data [PREFIX/var]
--  --runstatedir=DIR       modifiable per-process data [LOCALSTATEDIR/run]
-   --libdir=DIR            object code libraries [EPREFIX/lib]
-   --includedir=DIR        C header files [PREFIX/include]
-   --oldincludedir=DIR     C header files for non-gcc [/usr/include]
-@@ -1710,15 +1661,8 @@ Optional Features:
-                           that do not use KiB-style unit suffixes
-   --disable-ioctl         disable ioctl calls to device-mapper in the kernel
-   --disable-o_direct      disable O_DIRECT
--  --enable-applib         build application library
-   --enable-cmdlib         build shared command library
-   --enable-dbus-service   install D-Bus support
--  --enable-python_bindings
--                          build default Python applib bindings
--  --enable-python2_bindings
--                          build Python2 applib bindings
--  --enable-python3_bindings
--                          build Python3 applib bindings
-   --enable-pkgconfig      install pkgconfig support
-   --enable-write_install  install user writable files
-   --disable-fsadm         disable fsadm
-@@ -1739,8 +1683,6 @@ Optional Packages:
-                           create nodes on resume or create [ON=resume]
-   --with-default-name-mangling=MANGLING
-                           default name mangling: auto/none/hex [auto]
--  --with-cluster=TYPE     cluster LVM locking support: internal/shared/none
--                          [internal]
-   --with-snapshots=TYPE   snapshot support: internal/shared/none [internal]
-   --with-mirrors=TYPE     mirror support: internal/shared/none [internal]
-   --with-default-mirror-segtype=TYPE
-@@ -1771,16 +1713,6 @@ Optional Packages:
-                           Default DM run directory. [autodetect]
-   --with-default-run-dir=RUN_DIR
-                           Default LVM run directory. [autodetect_run_dir/lvm]
--  --with-clvmd=TYPE       build cluster LVM Daemon
--                          The following cluster manager combinations are valid:
--                           * cman                  (RHEL5 or equivalent)
--                           * cman,corosync,openais (or selection of them)
--                           * singlenode            (localhost only)
--                           * all                   (autodetect)
--                           * none                  (disable build)
--                          [none]
--  --with-clvmd-pidfile=PATH
--                          clvmd pidfile [PID_DIR/clvmd.pid]
-   --with-cmirrord-pidfile=PATH
-                           cmirrord pidfile [PID_DIR/cmirrord.pid]
-   --with-optimisation=OPT C optimisation flag [OPT=-O2]
-@@ -1843,30 +1775,8 @@ Some influential environment variables:
-               C compiler flags for PKGCONFIGINIT, overriding pkg-config
-   PKGCONFIGINIT_LIBS
-               linker flags for PKGCONFIGINIT, overriding pkg-config
--  CMAN_CFLAGS C compiler flags for CMAN, overriding pkg-config
--  CMAN_LIBS   linker flags for CMAN, overriding pkg-config
--  COROSYNC_CFLAGS
--              C compiler flags for COROSYNC, overriding pkg-config
--  COROSYNC_LIBS
--              linker flags for COROSYNC, overriding pkg-config
--  QUORUM_CFLAGS
--              C compiler flags for QUORUM, overriding pkg-config
--  QUORUM_LIBS linker flags for QUORUM, overriding pkg-config
--  SALCK_CFLAGS
--              C compiler flags for SALCK, overriding pkg-config
--  SALCK_LIBS  linker flags for SALCK, overriding pkg-config
--  CONFDB_CFLAGS
--              C compiler flags for CONFDB, overriding pkg-config
--  CONFDB_LIBS linker flags for CONFDB, overriding pkg-config
--  CMAP_CFLAGS C compiler flags for CMAP, overriding pkg-config
--  CMAP_LIBS   linker flags for CMAP, overriding pkg-config
-   CPG_CFLAGS  C compiler flags for CPG, overriding pkg-config
-   CPG_LIBS    linker flags for CPG, overriding pkg-config
--  DLM_CFLAGS  C compiler flags for DLM, overriding pkg-config
--  DLM_LIBS    linker flags for DLM, overriding pkg-config
--  SACKPT_CFLAGS
--              C compiler flags for SACKPT, overriding pkg-config
--  SACKPT_LIBS linker flags for SACKPT, overriding pkg-config
-   VALGRIND_CFLAGS
-               C compiler flags for VALGRIND, overriding pkg-config
-   VALGRIND_LIBS
-@@ -3172,7 +3082,6 @@ case "$host_os" in
- 		ODIRECT=yes
- 		DM_IOCTLS=yes
- 		SELINUX=yes
--		CLUSTER=internal
- 		FSADM=yes
- 		BLKDEACTIVATE=yes
- 		;;
-@@ -3187,7 +3096,6 @@ case "$host_os" in
- 		ODIRECT=no
- 		DM_IOCTLS=no
- 		SELINUX=no
--		CLUSTER=none
- 		FSADM=no
- 		BLKDEACTIVATE=no
- 		;;
-@@ -8372,26 +8280,6 @@ _ACEOF
- 
- 
- ################################################################################
--{ $as_echo "$as_me:${as_lineno-$LINENO}: checking whether to include support for cluster locking" >&5
--$as_echo_n "checking whether to include support for cluster locking... " >&6; }
--
--# Check whether --with-cluster was given.
--if test "${with_cluster+set}" = set; then :
--  withval=$with_cluster; CLUSTER=$withval
--fi
--
--{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $CLUSTER" >&5
--$as_echo "$CLUSTER" >&6; }
--
--case "$CLUSTER" in
--  none|shared) ;;
--  internal)
--$as_echo "#define CLUSTER_LOCKING_INTERNAL 1" >>confdefs.h
-- ;;
--  *) as_fn_error $? "--with-cluster parameter invalid" "$LINENO" 5 ;;
--esac
--
--################################################################################
- { $as_echo "$as_me:${as_lineno-$LINENO}: checking whether to include snapshots" >&5
- $as_echo_n "checking whether to include snapshots... " >&6; }
- 
-@@ -9893,915 +9781,6 @@ _ACEOF
- 
- 
- ################################################################################
--{ $as_echo "$as_me:${as_lineno-$LINENO}: checking whether to build cluster LVM daemon" >&5
--$as_echo_n "checking whether to build cluster LVM daemon... " >&6; }
--
--# Check whether --with-clvmd was given.
--if test "${with_clvmd+set}" = set; then :
--  withval=$with_clvmd; CLVMD=$withval
--else
--  CLVMD=none
--fi
--
--test "$CLVMD" = yes && CLVMD=all
--{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $CLVMD" >&5
--$as_echo "$CLVMD" >&6; }
--
--test "$CLVMD" != none -a "$CLUSTER" = none && CLUSTER=internal
--
--test "$CLVMD" != none && pkg_config_init
--
--CLVMD_CMANAGERS=""
--CLVMD_NEEDS_QDISKD=no
--
--if [ `expr x"$CLVMD" : '.*gulm.*'` != 0 ]; then
--	as_fn_error $? "Since version 2.02.87 GULM locking is no longer supported." "$LINENO" 5;
--fi
--if [ `expr x"$CLVMD" : '.*cman.*'` != 0 ]; then
--	BUILDCMAN=yes
--	CLVMD_CMANAGERS="$CLVMD_CMANAGERS cman"
--	CLVMD_NEEDS_QDISKD=yes
--fi
--if [ `expr x"$CLVMD" : '.*corosync.*'` != 0 ]; then
--	BUILDCOROSYNC=yes
--	CLVMD_CMANAGERS="$CLVMD_CMANAGERS corosync"
--fi
--if [ `expr x"$CLVMD" : '.*openais.*'` != 0 ]; then
--	BUILDOPENAIS=yes
--	CLVMD_CMANAGERS="$CLVMD_CMANAGERS openais"
--fi
--test "$CLVMD_NEEDS_QDISKD" != no && CLVMD_CMANAGERS="$CLVMD_CMANAGERS qdiskd"
--
--soft_bailout() {
--	NOTFOUND=1
--}
--
--hard_bailout() {
--	as_fn_error $? "bailing out" "$LINENO" 5
--}
--
--if test "$CLVMD" = all; then
--	bailout=soft_bailout
--	BUILDCMAN=yes
--	BUILDCOROSYNC=yes
--	BUILDOPENAIS=yes
--else
--	bailout=hard_bailout
--fi
--
--check_lib_no_libs() {
--	lib_no_libs_arg1=$1
--	shift
--	lib_no_libs_arg2=$1
--	shift
--	lib_no_libs_args=$@
--	as_ac_Lib=`$as_echo "ac_cv_lib_$lib_no_libs_arg1''_$lib_no_libs_arg2" | $as_tr_sh`
--{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for $lib_no_libs_arg2 in -l$lib_no_libs_arg1" >&5
--$as_echo_n "checking for $lib_no_libs_arg2 in -l$lib_no_libs_arg1... " >&6; }
--if eval \${$as_ac_Lib+:} false; then :
--  $as_echo_n "(cached) " >&6
--else
--  ac_check_lib_save_LIBS=$LIBS
--LIBS="-l$lib_no_libs_arg1 $lib_no_libs_args $LIBS"
--cat confdefs.h - <<_ACEOF >conftest.$ac_ext
--/* end confdefs.h.  */
--
--/* Override any GCC internal prototype to avoid an error.
--   Use char because int might match the return type of a GCC
--   builtin and then its argument prototype would still apply.  */
--#ifdef __cplusplus
--extern "C"
--#endif
--char $lib_no_libs_arg2 ();
--int
--main ()
--{
--return $lib_no_libs_arg2 ();
--  ;
--  return 0;
--}
--_ACEOF
--if ac_fn_c_try_link "$LINENO"; then :
--  eval "$as_ac_Lib=yes"
--else
--  eval "$as_ac_Lib=no"
--fi
--rm -f core conftest.err conftest.$ac_objext \
--    conftest$ac_exeext conftest.$ac_ext
--LIBS=$ac_check_lib_save_LIBS
--fi
--eval ac_res=\$$as_ac_Lib
--	       { $as_echo "$as_me:${as_lineno-$LINENO}: result: $ac_res" >&5
--$as_echo "$ac_res" >&6; }
--if eval test \"x\$"$as_ac_Lib"\" = x"yes"; then :
--  cat >>confdefs.h <<_ACEOF
--#define `$as_echo "HAVE_LIB$lib_no_libs_arg1" | $as_tr_cpp` 1
--_ACEOF
--
--  LIBS="-l$lib_no_libs_arg1 $LIBS"
--
--else
--  $bailout
--fi
--
--	LIBS=$ac_check_lib_save_LIBS
--}
--
--if test "$BUILDCMAN" = yes; then
--
--pkg_failed=no
--{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for CMAN" >&5
--$as_echo_n "checking for CMAN... " >&6; }
--
--if test -n "$CMAN_CFLAGS"; then
--    pkg_cv_CMAN_CFLAGS="$CMAN_CFLAGS"
-- elif test -n "$PKG_CONFIG"; then
--    if test -n "$PKG_CONFIG" && \
--    { { $as_echo "$as_me:${as_lineno-$LINENO}: \$PKG_CONFIG --exists --print-errors \"libcman\""; } >&5
--  ($PKG_CONFIG --exists --print-errors "libcman") 2>&5
--  ac_status=$?
--  $as_echo "$as_me:${as_lineno-$LINENO}: \$? = $ac_status" >&5
--  test $ac_status = 0; }; then
--  pkg_cv_CMAN_CFLAGS=`$PKG_CONFIG --cflags "libcman" 2>/dev/null`
--		      test "x$?" != "x0" && pkg_failed=yes
--else
--  pkg_failed=yes
--fi
-- else
--    pkg_failed=untried
--fi
--if test -n "$CMAN_LIBS"; then
--    pkg_cv_CMAN_LIBS="$CMAN_LIBS"
-- elif test -n "$PKG_CONFIG"; then
--    if test -n "$PKG_CONFIG" && \
--    { { $as_echo "$as_me:${as_lineno-$LINENO}: \$PKG_CONFIG --exists --print-errors \"libcman\""; } >&5
--  ($PKG_CONFIG --exists --print-errors "libcman") 2>&5
--  ac_status=$?
--  $as_echo "$as_me:${as_lineno-$LINENO}: \$? = $ac_status" >&5
--  test $ac_status = 0; }; then
--  pkg_cv_CMAN_LIBS=`$PKG_CONFIG --libs "libcman" 2>/dev/null`
--		      test "x$?" != "x0" && pkg_failed=yes
--else
--  pkg_failed=yes
--fi
-- else
--    pkg_failed=untried
--fi
--
--
--
--if test $pkg_failed = yes; then
--   	{ $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
--$as_echo "no" >&6; }
--
--if $PKG_CONFIG --atleast-pkgconfig-version 0.20; then
--        _pkg_short_errors_supported=yes
--else
--        _pkg_short_errors_supported=no
--fi
--        if test $_pkg_short_errors_supported = yes; then
--	        CMAN_PKG_ERRORS=`$PKG_CONFIG --short-errors --print-errors --cflags --libs "libcman" 2>&1`
--        else
--	        CMAN_PKG_ERRORS=`$PKG_CONFIG --print-errors --cflags --libs "libcman" 2>&1`
--        fi
--	# Put the nasty error message in config.log where it belongs
--	echo "$CMAN_PKG_ERRORS" >&5
--
--	NOTFOUND=0
--		for ac_header in libcman.h
--do :
--  ac_fn_c_check_header_mongrel "$LINENO" "libcman.h" "ac_cv_header_libcman_h" "$ac_includes_default"
--if test "x$ac_cv_header_libcman_h" = xyes; then :
--  cat >>confdefs.h <<_ACEOF
--#define HAVE_LIBCMAN_H 1
--_ACEOF
--
--else
--  $bailout
--fi
--
--done
--
--		check_lib_no_libs cman cman_init
--		if test $NOTFOUND = 0; then
--			{ $as_echo "$as_me:${as_lineno-$LINENO}: result: no pkg for libcman, using -lcman" >&5
--$as_echo "no pkg for libcman, using -lcman" >&6; }
--			CMAN_LIBS="-lcman"
--			HAVE_CMAN=yes
--		fi
--elif test $pkg_failed = untried; then
--     	{ $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
--$as_echo "no" >&6; }
--	NOTFOUND=0
--		for ac_header in libcman.h
--do :
--  ac_fn_c_check_header_mongrel "$LINENO" "libcman.h" "ac_cv_header_libcman_h" "$ac_includes_default"
--if test "x$ac_cv_header_libcman_h" = xyes; then :
--  cat >>confdefs.h <<_ACEOF
--#define HAVE_LIBCMAN_H 1
--_ACEOF
--
--else
--  $bailout
--fi
--
--done
--
--		check_lib_no_libs cman cman_init
--		if test $NOTFOUND = 0; then
--			{ $as_echo "$as_me:${as_lineno-$LINENO}: result: no pkg for libcman, using -lcman" >&5
--$as_echo "no pkg for libcman, using -lcman" >&6; }
--			CMAN_LIBS="-lcman"
--			HAVE_CMAN=yes
--		fi
--else
--	CMAN_CFLAGS=$pkg_cv_CMAN_CFLAGS
--	CMAN_LIBS=$pkg_cv_CMAN_LIBS
--        { $as_echo "$as_me:${as_lineno-$LINENO}: result: yes" >&5
--$as_echo "yes" >&6; }
--	HAVE_CMAN=yes
--fi
--	CHECKCONFDB=yes
--	CHECKDLM=yes
--fi
--
--if test "$BUILDCOROSYNC" = yes -o "$BUILDOPENAIS" = yes; then
--
--pkg_failed=no
--{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for COROSYNC" >&5
--$as_echo_n "checking for COROSYNC... " >&6; }
--
--if test -n "$COROSYNC_CFLAGS"; then
--    pkg_cv_COROSYNC_CFLAGS="$COROSYNC_CFLAGS"
-- elif test -n "$PKG_CONFIG"; then
--    if test -n "$PKG_CONFIG" && \
--    { { $as_echo "$as_me:${as_lineno-$LINENO}: \$PKG_CONFIG --exists --print-errors \"corosync\""; } >&5
--  ($PKG_CONFIG --exists --print-errors "corosync") 2>&5
--  ac_status=$?
--  $as_echo "$as_me:${as_lineno-$LINENO}: \$? = $ac_status" >&5
--  test $ac_status = 0; }; then
--  pkg_cv_COROSYNC_CFLAGS=`$PKG_CONFIG --cflags "corosync" 2>/dev/null`
--		      test "x$?" != "x0" && pkg_failed=yes
--else
--  pkg_failed=yes
--fi
-- else
--    pkg_failed=untried
--fi
--if test -n "$COROSYNC_LIBS"; then
--    pkg_cv_COROSYNC_LIBS="$COROSYNC_LIBS"
-- elif test -n "$PKG_CONFIG"; then
--    if test -n "$PKG_CONFIG" && \
--    { { $as_echo "$as_me:${as_lineno-$LINENO}: \$PKG_CONFIG --exists --print-errors \"corosync\""; } >&5
--  ($PKG_CONFIG --exists --print-errors "corosync") 2>&5
--  ac_status=$?
--  $as_echo "$as_me:${as_lineno-$LINENO}: \$? = $ac_status" >&5
--  test $ac_status = 0; }; then
--  pkg_cv_COROSYNC_LIBS=`$PKG_CONFIG --libs "corosync" 2>/dev/null`
--		      test "x$?" != "x0" && pkg_failed=yes
--else
--  pkg_failed=yes
--fi
-- else
--    pkg_failed=untried
--fi
--
--
--
--if test $pkg_failed = yes; then
--   	{ $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
--$as_echo "no" >&6; }
--
--if $PKG_CONFIG --atleast-pkgconfig-version 0.20; then
--        _pkg_short_errors_supported=yes
--else
--        _pkg_short_errors_supported=no
--fi
--        if test $_pkg_short_errors_supported = yes; then
--	        COROSYNC_PKG_ERRORS=`$PKG_CONFIG --short-errors --print-errors --cflags --libs "corosync" 2>&1`
--        else
--	        COROSYNC_PKG_ERRORS=`$PKG_CONFIG --print-errors --cflags --libs "corosync" 2>&1`
--        fi
--	# Put the nasty error message in config.log where it belongs
--	echo "$COROSYNC_PKG_ERRORS" >&5
--
--	$bailout
--elif test $pkg_failed = untried; then
--     	{ $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
--$as_echo "no" >&6; }
--	$bailout
--else
--	COROSYNC_CFLAGS=$pkg_cv_COROSYNC_CFLAGS
--	COROSYNC_LIBS=$pkg_cv_COROSYNC_LIBS
--        { $as_echo "$as_me:${as_lineno-$LINENO}: result: yes" >&5
--$as_echo "yes" >&6; }
--	HAVE_COROSYNC=yes
--fi
--	CHECKCONFDB=yes
--	CHECKCMAP=yes
--fi
--
--if test "$BUILDCOROSYNC" = yes; then
--
--pkg_failed=no
--{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for QUORUM" >&5
--$as_echo_n "checking for QUORUM... " >&6; }
--
--if test -n "$QUORUM_CFLAGS"; then
--    pkg_cv_QUORUM_CFLAGS="$QUORUM_CFLAGS"
-- elif test -n "$PKG_CONFIG"; then
--    if test -n "$PKG_CONFIG" && \
--    { { $as_echo "$as_me:${as_lineno-$LINENO}: \$PKG_CONFIG --exists --print-errors \"libquorum\""; } >&5
--  ($PKG_CONFIG --exists --print-errors "libquorum") 2>&5
--  ac_status=$?
--  $as_echo "$as_me:${as_lineno-$LINENO}: \$? = $ac_status" >&5
--  test $ac_status = 0; }; then
--  pkg_cv_QUORUM_CFLAGS=`$PKG_CONFIG --cflags "libquorum" 2>/dev/null`
--		      test "x$?" != "x0" && pkg_failed=yes
--else
--  pkg_failed=yes
--fi
-- else
--    pkg_failed=untried
--fi
--if test -n "$QUORUM_LIBS"; then
--    pkg_cv_QUORUM_LIBS="$QUORUM_LIBS"
-- elif test -n "$PKG_CONFIG"; then
--    if test -n "$PKG_CONFIG" && \
--    { { $as_echo "$as_me:${as_lineno-$LINENO}: \$PKG_CONFIG --exists --print-errors \"libquorum\""; } >&5
--  ($PKG_CONFIG --exists --print-errors "libquorum") 2>&5
--  ac_status=$?
--  $as_echo "$as_me:${as_lineno-$LINENO}: \$? = $ac_status" >&5
--  test $ac_status = 0; }; then
--  pkg_cv_QUORUM_LIBS=`$PKG_CONFIG --libs "libquorum" 2>/dev/null`
--		      test "x$?" != "x0" && pkg_failed=yes
--else
--  pkg_failed=yes
--fi
-- else
--    pkg_failed=untried
--fi
--
--
--
--if test $pkg_failed = yes; then
--   	{ $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
--$as_echo "no" >&6; }
--
--if $PKG_CONFIG --atleast-pkgconfig-version 0.20; then
--        _pkg_short_errors_supported=yes
--else
--        _pkg_short_errors_supported=no
--fi
--        if test $_pkg_short_errors_supported = yes; then
--	        QUORUM_PKG_ERRORS=`$PKG_CONFIG --short-errors --print-errors --cflags --libs "libquorum" 2>&1`
--        else
--	        QUORUM_PKG_ERRORS=`$PKG_CONFIG --print-errors --cflags --libs "libquorum" 2>&1`
--        fi
--	# Put the nasty error message in config.log where it belongs
--	echo "$QUORUM_PKG_ERRORS" >&5
--
--	$bailout
--elif test $pkg_failed = untried; then
--     	{ $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
--$as_echo "no" >&6; }
--	$bailout
--else
--	QUORUM_CFLAGS=$pkg_cv_QUORUM_CFLAGS
--	QUORUM_LIBS=$pkg_cv_QUORUM_LIBS
--        { $as_echo "$as_me:${as_lineno-$LINENO}: result: yes" >&5
--$as_echo "yes" >&6; }
--	HAVE_QUORUM=yes
--fi
--	CHECKCPG=yes
--	CHECKDLM=yes
--fi
--
--if test "$BUILDOPENAIS" = yes; then
--
--pkg_failed=no
--{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for SALCK" >&5
--$as_echo_n "checking for SALCK... " >&6; }
--
--if test -n "$SALCK_CFLAGS"; then
--    pkg_cv_SALCK_CFLAGS="$SALCK_CFLAGS"
-- elif test -n "$PKG_CONFIG"; then
--    if test -n "$PKG_CONFIG" && \
--    { { $as_echo "$as_me:${as_lineno-$LINENO}: \$PKG_CONFIG --exists --print-errors \"libSaLck\""; } >&5
--  ($PKG_CONFIG --exists --print-errors "libSaLck") 2>&5
--  ac_status=$?
--  $as_echo "$as_me:${as_lineno-$LINENO}: \$? = $ac_status" >&5
--  test $ac_status = 0; }; then
--  pkg_cv_SALCK_CFLAGS=`$PKG_CONFIG --cflags "libSaLck" 2>/dev/null`
--		      test "x$?" != "x0" && pkg_failed=yes
--else
--  pkg_failed=yes
--fi
-- else
--    pkg_failed=untried
--fi
--if test -n "$SALCK_LIBS"; then
--    pkg_cv_SALCK_LIBS="$SALCK_LIBS"
-- elif test -n "$PKG_CONFIG"; then
--    if test -n "$PKG_CONFIG" && \
--    { { $as_echo "$as_me:${as_lineno-$LINENO}: \$PKG_CONFIG --exists --print-errors \"libSaLck\""; } >&5
--  ($PKG_CONFIG --exists --print-errors "libSaLck") 2>&5
--  ac_status=$?
--  $as_echo "$as_me:${as_lineno-$LINENO}: \$? = $ac_status" >&5
--  test $ac_status = 0; }; then
--  pkg_cv_SALCK_LIBS=`$PKG_CONFIG --libs "libSaLck" 2>/dev/null`
--		      test "x$?" != "x0" && pkg_failed=yes
--else
--  pkg_failed=yes
--fi
-- else
--    pkg_failed=untried
--fi
--
--
--
--if test $pkg_failed = yes; then
--   	{ $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
--$as_echo "no" >&6; }
--
--if $PKG_CONFIG --atleast-pkgconfig-version 0.20; then
--        _pkg_short_errors_supported=yes
--else
--        _pkg_short_errors_supported=no
--fi
--        if test $_pkg_short_errors_supported = yes; then
--	        SALCK_PKG_ERRORS=`$PKG_CONFIG --short-errors --print-errors --cflags --libs "libSaLck" 2>&1`
--        else
--	        SALCK_PKG_ERRORS=`$PKG_CONFIG --print-errors --cflags --libs "libSaLck" 2>&1`
--        fi
--	# Put the nasty error message in config.log where it belongs
--	echo "$SALCK_PKG_ERRORS" >&5
--
--	$bailout
--elif test $pkg_failed = untried; then
--     	{ $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
--$as_echo "no" >&6; }
--	$bailout
--else
--	SALCK_CFLAGS=$pkg_cv_SALCK_CFLAGS
--	SALCK_LIBS=$pkg_cv_SALCK_LIBS
--        { $as_echo "$as_me:${as_lineno-$LINENO}: result: yes" >&5
--$as_echo "yes" >&6; }
--	HAVE_SALCK=yes
--fi
--	CHECKCPG=yes
--fi
--
--
--
--if test "$CHECKCONFDB" = yes; then
--
--pkg_failed=no
--{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for CONFDB" >&5
--$as_echo_n "checking for CONFDB... " >&6; }
--
--if test -n "$CONFDB_CFLAGS"; then
--    pkg_cv_CONFDB_CFLAGS="$CONFDB_CFLAGS"
-- elif test -n "$PKG_CONFIG"; then
--    if test -n "$PKG_CONFIG" && \
--    { { $as_echo "$as_me:${as_lineno-$LINENO}: \$PKG_CONFIG --exists --print-errors \"libconfdb\""; } >&5
--  ($PKG_CONFIG --exists --print-errors "libconfdb") 2>&5
--  ac_status=$?
--  $as_echo "$as_me:${as_lineno-$LINENO}: \$? = $ac_status" >&5
--  test $ac_status = 0; }; then
--  pkg_cv_CONFDB_CFLAGS=`$PKG_CONFIG --cflags "libconfdb" 2>/dev/null`
--		      test "x$?" != "x0" && pkg_failed=yes
--else
--  pkg_failed=yes
--fi
-- else
--    pkg_failed=untried
--fi
--if test -n "$CONFDB_LIBS"; then
--    pkg_cv_CONFDB_LIBS="$CONFDB_LIBS"
-- elif test -n "$PKG_CONFIG"; then
--    if test -n "$PKG_CONFIG" && \
--    { { $as_echo "$as_me:${as_lineno-$LINENO}: \$PKG_CONFIG --exists --print-errors \"libconfdb\""; } >&5
--  ($PKG_CONFIG --exists --print-errors "libconfdb") 2>&5
--  ac_status=$?
--  $as_echo "$as_me:${as_lineno-$LINENO}: \$? = $ac_status" >&5
--  test $ac_status = 0; }; then
--  pkg_cv_CONFDB_LIBS=`$PKG_CONFIG --libs "libconfdb" 2>/dev/null`
--		      test "x$?" != "x0" && pkg_failed=yes
--else
--  pkg_failed=yes
--fi
-- else
--    pkg_failed=untried
--fi
--
--
--
--if test $pkg_failed = yes; then
--   	{ $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
--$as_echo "no" >&6; }
--
--if $PKG_CONFIG --atleast-pkgconfig-version 0.20; then
--        _pkg_short_errors_supported=yes
--else
--        _pkg_short_errors_supported=no
--fi
--        if test $_pkg_short_errors_supported = yes; then
--	        CONFDB_PKG_ERRORS=`$PKG_CONFIG --short-errors --print-errors --cflags --libs "libconfdb" 2>&1`
--        else
--	        CONFDB_PKG_ERRORS=`$PKG_CONFIG --print-errors --cflags --libs "libconfdb" 2>&1`
--        fi
--	# Put the nasty error message in config.log where it belongs
--	echo "$CONFDB_PKG_ERRORS" >&5
--
--	HAVE_CONFDB=no
--elif test $pkg_failed = untried; then
--     	{ $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
--$as_echo "no" >&6; }
--	HAVE_CONFDB=no
--else
--	CONFDB_CFLAGS=$pkg_cv_CONFDB_CFLAGS
--	CONFDB_LIBS=$pkg_cv_CONFDB_LIBS
--        { $as_echo "$as_me:${as_lineno-$LINENO}: result: yes" >&5
--$as_echo "yes" >&6; }
--	HAVE_CONFDB=yes
--fi
--
--	for ac_header in corosync/confdb.h
--do :
--  ac_fn_c_check_header_mongrel "$LINENO" "corosync/confdb.h" "ac_cv_header_corosync_confdb_h" "$ac_includes_default"
--if test "x$ac_cv_header_corosync_confdb_h" = xyes; then :
--  cat >>confdefs.h <<_ACEOF
--#define HAVE_COROSYNC_CONFDB_H 1
--_ACEOF
-- HAVE_CONFDB_H=yes
--else
--  HAVE_CONFDB_H=no
--fi
--
--done
--
--
--	if test "$HAVE_CONFDB" != yes -a "$HAVE_CONFDB_H" = yes; then
--		check_lib_no_libs confdb confdb_initialize
--		{ $as_echo "$as_me:${as_lineno-$LINENO}: result: no pkg for confdb, using -lconfdb" >&5
--$as_echo "no pkg for confdb, using -lconfdb" >&6; }
--		CONFDB_LIBS="-lconfdb"
--		HAVE_CONFDB=yes
--	fi
--fi
--
--
--if test "$CHECKCMAP" = yes; then
--
--pkg_failed=no
--{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for CMAP" >&5
--$as_echo_n "checking for CMAP... " >&6; }
--
--if test -n "$CMAP_CFLAGS"; then
--    pkg_cv_CMAP_CFLAGS="$CMAP_CFLAGS"
-- elif test -n "$PKG_CONFIG"; then
--    if test -n "$PKG_CONFIG" && \
--    { { $as_echo "$as_me:${as_lineno-$LINENO}: \$PKG_CONFIG --exists --print-errors \"libcmap\""; } >&5
--  ($PKG_CONFIG --exists --print-errors "libcmap") 2>&5
--  ac_status=$?
--  $as_echo "$as_me:${as_lineno-$LINENO}: \$? = $ac_status" >&5
--  test $ac_status = 0; }; then
--  pkg_cv_CMAP_CFLAGS=`$PKG_CONFIG --cflags "libcmap" 2>/dev/null`
--		      test "x$?" != "x0" && pkg_failed=yes
--else
--  pkg_failed=yes
--fi
-- else
--    pkg_failed=untried
--fi
--if test -n "$CMAP_LIBS"; then
--    pkg_cv_CMAP_LIBS="$CMAP_LIBS"
-- elif test -n "$PKG_CONFIG"; then
--    if test -n "$PKG_CONFIG" && \
--    { { $as_echo "$as_me:${as_lineno-$LINENO}: \$PKG_CONFIG --exists --print-errors \"libcmap\""; } >&5
--  ($PKG_CONFIG --exists --print-errors "libcmap") 2>&5
--  ac_status=$?
--  $as_echo "$as_me:${as_lineno-$LINENO}: \$? = $ac_status" >&5
--  test $ac_status = 0; }; then
--  pkg_cv_CMAP_LIBS=`$PKG_CONFIG --libs "libcmap" 2>/dev/null`
--		      test "x$?" != "x0" && pkg_failed=yes
--else
--  pkg_failed=yes
--fi
-- else
--    pkg_failed=untried
--fi
--
--
--
--if test $pkg_failed = yes; then
--   	{ $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
--$as_echo "no" >&6; }
--
--if $PKG_CONFIG --atleast-pkgconfig-version 0.20; then
--        _pkg_short_errors_supported=yes
--else
--        _pkg_short_errors_supported=no
--fi
--        if test $_pkg_short_errors_supported = yes; then
--	        CMAP_PKG_ERRORS=`$PKG_CONFIG --short-errors --print-errors --cflags --libs "libcmap" 2>&1`
--        else
--	        CMAP_PKG_ERRORS=`$PKG_CONFIG --print-errors --cflags --libs "libcmap" 2>&1`
--        fi
--	# Put the nasty error message in config.log where it belongs
--	echo "$CMAP_PKG_ERRORS" >&5
--
--	HAVE_CMAP=no
--elif test $pkg_failed = untried; then
--     	{ $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
--$as_echo "no" >&6; }
--	HAVE_CMAP=no
--else
--	CMAP_CFLAGS=$pkg_cv_CMAP_CFLAGS
--	CMAP_LIBS=$pkg_cv_CMAP_LIBS
--        { $as_echo "$as_me:${as_lineno-$LINENO}: result: yes" >&5
--$as_echo "yes" >&6; }
--	HAVE_CMAP=yes
--fi
--
--	for ac_header in corosync/cmap.h
--do :
--  ac_fn_c_check_header_mongrel "$LINENO" "corosync/cmap.h" "ac_cv_header_corosync_cmap_h" "$ac_includes_default"
--if test "x$ac_cv_header_corosync_cmap_h" = xyes; then :
--  cat >>confdefs.h <<_ACEOF
--#define HAVE_COROSYNC_CMAP_H 1
--_ACEOF
-- HAVE_CMAP_H=yes
--else
--  HAVE_CMAP_H=no
--fi
--
--done
--
--
--	if test "$HAVE_CMAP" != yes -a "$HAVE_CMAP_H" = yes; then
--		check_lib_no_libs cmap cmap_initialize
--		{ $as_echo "$as_me:${as_lineno-$LINENO}: result: no pkg for cmap, using -lcmap" >&5
--$as_echo "no pkg for cmap, using -lcmap" >&6; }
--		CMAP_LIBS="-lcmap"
--		HAVE_CMAP=yes
--	fi
--fi
--
--if test "$BUILDCOROSYNC" = yes -a \
--	"$HAVE_CMAP" != yes -a "$HAVE_CONFDB" != yes -a "$CLVMD" != all; then
--	as_fn_error $? "bailing out... cmap (corosync >= 2.0) or confdb (corosync < 2.0) library is required" "$LINENO" 5
--fi
--
--if test "$CHECKCPG" = yes; then
--
--pkg_failed=no
--{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for CPG" >&5
--$as_echo_n "checking for CPG... " >&6; }
--
--if test -n "$CPG_CFLAGS"; then
--    pkg_cv_CPG_CFLAGS="$CPG_CFLAGS"
-- elif test -n "$PKG_CONFIG"; then
--    if test -n "$PKG_CONFIG" && \
--    { { $as_echo "$as_me:${as_lineno-$LINENO}: \$PKG_CONFIG --exists --print-errors \"libcpg\""; } >&5
--  ($PKG_CONFIG --exists --print-errors "libcpg") 2>&5
--  ac_status=$?
--  $as_echo "$as_me:${as_lineno-$LINENO}: \$? = $ac_status" >&5
--  test $ac_status = 0; }; then
--  pkg_cv_CPG_CFLAGS=`$PKG_CONFIG --cflags "libcpg" 2>/dev/null`
--		      test "x$?" != "x0" && pkg_failed=yes
--else
--  pkg_failed=yes
--fi
-- else
--    pkg_failed=untried
--fi
--if test -n "$CPG_LIBS"; then
--    pkg_cv_CPG_LIBS="$CPG_LIBS"
-- elif test -n "$PKG_CONFIG"; then
--    if test -n "$PKG_CONFIG" && \
--    { { $as_echo "$as_me:${as_lineno-$LINENO}: \$PKG_CONFIG --exists --print-errors \"libcpg\""; } >&5
--  ($PKG_CONFIG --exists --print-errors "libcpg") 2>&5
--  ac_status=$?
--  $as_echo "$as_me:${as_lineno-$LINENO}: \$? = $ac_status" >&5
--  test $ac_status = 0; }; then
--  pkg_cv_CPG_LIBS=`$PKG_CONFIG --libs "libcpg" 2>/dev/null`
--		      test "x$?" != "x0" && pkg_failed=yes
--else
--  pkg_failed=yes
--fi
-- else
--    pkg_failed=untried
--fi
--
--
--
--if test $pkg_failed = yes; then
--   	{ $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
--$as_echo "no" >&6; }
--
--if $PKG_CONFIG --atleast-pkgconfig-version 0.20; then
--        _pkg_short_errors_supported=yes
--else
--        _pkg_short_errors_supported=no
--fi
--        if test $_pkg_short_errors_supported = yes; then
--	        CPG_PKG_ERRORS=`$PKG_CONFIG --short-errors --print-errors --cflags --libs "libcpg" 2>&1`
--        else
--	        CPG_PKG_ERRORS=`$PKG_CONFIG --print-errors --cflags --libs "libcpg" 2>&1`
--        fi
--	# Put the nasty error message in config.log where it belongs
--	echo "$CPG_PKG_ERRORS" >&5
--
--	$bailout
--elif test $pkg_failed = untried; then
--     	{ $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
--$as_echo "no" >&6; }
--	$bailout
--else
--	CPG_CFLAGS=$pkg_cv_CPG_CFLAGS
--	CPG_LIBS=$pkg_cv_CPG_LIBS
--        { $as_echo "$as_me:${as_lineno-$LINENO}: result: yes" >&5
--$as_echo "yes" >&6; }
--	HAVE_CPG=yes
--fi
--fi
--
--if test "$CHECKDLM" = yes; then
--
--pkg_failed=no
--{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for DLM" >&5
--$as_echo_n "checking for DLM... " >&6; }
--
--if test -n "$DLM_CFLAGS"; then
--    pkg_cv_DLM_CFLAGS="$DLM_CFLAGS"
-- elif test -n "$PKG_CONFIG"; then
--    if test -n "$PKG_CONFIG" && \
--    { { $as_echo "$as_me:${as_lineno-$LINENO}: \$PKG_CONFIG --exists --print-errors \"libdlm\""; } >&5
--  ($PKG_CONFIG --exists --print-errors "libdlm") 2>&5
--  ac_status=$?
--  $as_echo "$as_me:${as_lineno-$LINENO}: \$? = $ac_status" >&5
--  test $ac_status = 0; }; then
--  pkg_cv_DLM_CFLAGS=`$PKG_CONFIG --cflags "libdlm" 2>/dev/null`
--		      test "x$?" != "x0" && pkg_failed=yes
--else
--  pkg_failed=yes
--fi
-- else
--    pkg_failed=untried
--fi
--if test -n "$DLM_LIBS"; then
--    pkg_cv_DLM_LIBS="$DLM_LIBS"
-- elif test -n "$PKG_CONFIG"; then
--    if test -n "$PKG_CONFIG" && \
--    { { $as_echo "$as_me:${as_lineno-$LINENO}: \$PKG_CONFIG --exists --print-errors \"libdlm\""; } >&5
--  ($PKG_CONFIG --exists --print-errors "libdlm") 2>&5
--  ac_status=$?
--  $as_echo "$as_me:${as_lineno-$LINENO}: \$? = $ac_status" >&5
--  test $ac_status = 0; }; then
--  pkg_cv_DLM_LIBS=`$PKG_CONFIG --libs "libdlm" 2>/dev/null`
--		      test "x$?" != "x0" && pkg_failed=yes
--else
--  pkg_failed=yes
--fi
-- else
--    pkg_failed=untried
--fi
--
--
--
--if test $pkg_failed = yes; then
--   	{ $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
--$as_echo "no" >&6; }
--
--if $PKG_CONFIG --atleast-pkgconfig-version 0.20; then
--        _pkg_short_errors_supported=yes
--else
--        _pkg_short_errors_supported=no
--fi
--        if test $_pkg_short_errors_supported = yes; then
--	        DLM_PKG_ERRORS=`$PKG_CONFIG --short-errors --print-errors --cflags --libs "libdlm" 2>&1`
--        else
--	        DLM_PKG_ERRORS=`$PKG_CONFIG --print-errors --cflags --libs "libdlm" 2>&1`
--        fi
--	# Put the nasty error message in config.log where it belongs
--	echo "$DLM_PKG_ERRORS" >&5
--
--	NOTFOUND=0
--		for ac_header in libdlm.h
--do :
--  ac_fn_c_check_header_mongrel "$LINENO" "libdlm.h" "ac_cv_header_libdlm_h" "$ac_includes_default"
--if test "x$ac_cv_header_libdlm_h" = xyes; then :
--  cat >>confdefs.h <<_ACEOF
--#define HAVE_LIBDLM_H 1
--_ACEOF
--
--else
--  $bailout
--fi
--
--done
--
--		check_lib_no_libs dlm dlm_lock -lpthread
--		if test $NOTFOUND = 0; then
--			{ $as_echo "$as_me:${as_lineno-$LINENO}: result: no pkg for libdlm, using -ldlm" >&5
--$as_echo "no pkg for libdlm, using -ldlm" >&6; }
--			DLM_LIBS="-ldlm -lpthread"
--			HAVE_DLM=yes
--		fi
--elif test $pkg_failed = untried; then
--     	{ $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
--$as_echo "no" >&6; }
--	NOTFOUND=0
--		for ac_header in libdlm.h
--do :
--  ac_fn_c_check_header_mongrel "$LINENO" "libdlm.h" "ac_cv_header_libdlm_h" "$ac_includes_default"
--if test "x$ac_cv_header_libdlm_h" = xyes; then :
--  cat >>confdefs.h <<_ACEOF
--#define HAVE_LIBDLM_H 1
--_ACEOF
--
--else
--  $bailout
--fi
--
--done
--
--		check_lib_no_libs dlm dlm_lock -lpthread
--		if test $NOTFOUND = 0; then
--			{ $as_echo "$as_me:${as_lineno-$LINENO}: result: no pkg for libdlm, using -ldlm" >&5
--$as_echo "no pkg for libdlm, using -ldlm" >&6; }
--			DLM_LIBS="-ldlm -lpthread"
--			HAVE_DLM=yes
--		fi
--else
--	DLM_CFLAGS=$pkg_cv_DLM_CFLAGS
--	DLM_LIBS=$pkg_cv_DLM_LIBS
--        { $as_echo "$as_me:${as_lineno-$LINENO}: result: yes" >&5
--$as_echo "yes" >&6; }
--	HAVE_DLM=yes
--fi
--fi
--
--if test "$CLVMD" = all; then
--	CLVMD=none
--	CLVMD_CMANAGERS=""
--	CLVMD_NEEDS_QDISKD=no
--	if test "$HAVE_CMAN" = yes -a \
--		"$HAVE_DLM" = yes; then
--		{ $as_echo "$as_me:${as_lineno-$LINENO}: result: Enabling clvmd cman cluster manager" >&5
--$as_echo "Enabling clvmd cman cluster manager" >&6; }
--		CLVMD="$CLVMD,cman"
--		CLVMD_CMANAGERS="$CLVMD_CMANAGERS cman"
--		CLVMD_NEEDS_QDISKD=yes
--	fi
--	if test "$HAVE_COROSYNC" = yes -a \
--		"$HAVE_QUORUM" = yes -a \
--		"$HAVE_CPG" = yes -a \
--		"$HAVE_DLM" = yes; then
--	   if test "$HAVE_CONFDB" = yes -o "$HAVE_CMAP" = yes; then
--		{ $as_echo "$as_me:${as_lineno-$LINENO}: result: Enabling clvmd corosync cluster manager" >&5
--$as_echo "Enabling clvmd corosync cluster manager" >&6; }
--		CLVMD="$CLVMD,corosync"
--		CLVMD_CMANAGERS="$CLVMD_CMANAGERS corosync"
--	   fi
--	fi
--	if test "$HAVE_COROSYNC" = yes -a \
--		"$HAVE_CPG" = yes -a \
--		"$HAVE_SALCK" = yes; then
--		{ $as_echo "$as_me:${as_lineno-$LINENO}: result: Enabling clvmd openais cluster manager" >&5
--$as_echo "Enabling clvmd openais cluster manager" >&6; }
--		CLVMD="$CLVMD,openais"
--		CLVMD_CMANAGERS="$CLVMD_CMANAGERS openais"
--	fi
--	test "$CLVMD_NEEDS_QDISKD" != no && CLVMD_CMANAGERS="$CLVMD_CMANAGERS qdiskd"
--	test "$CLVMD" = none && { $as_echo "$as_me:${as_lineno-$LINENO}: result: Disabling clvmd build. No cluster manager detected." >&5
--$as_echo "Disabling clvmd build. No cluster manager detected." >&6; }
--fi
--
--if [ `expr x"$CLVMD" : '.*corosync.*'` != 0 ]; then
--   test "$HAVE_CMAP" = yes && CLVMD_CMANAGERS="$CLVMD_CMANAGERS dlm"
--fi
--
--################################################################################
--if test "$CLVMD" != none; then
--
--# Check whether --with-clvmd-pidfile was given.
--if test "${with_clvmd_pidfile+set}" = set; then :
--  withval=$with_clvmd_pidfile; CLVMD_PIDFILE=$withval
--else
--  CLVMD_PIDFILE="$DEFAULT_PID_DIR/clvmd.pid"
--fi
--
--
--cat >>confdefs.h <<_ACEOF
--#define CLVMD_PIDFILE "$CLVMD_PIDFILE"
--_ACEOF
--
--fi
--
--################################################################################
- { $as_echo "$as_me:${as_lineno-$LINENO}: checking whether to build cluster mirror log daemon" >&5
- $as_echo_n "checking whether to build cluster mirror log daemon... " >&6; }
- # Check whether --enable-cmirrord was given.
-@@ -10837,89 +9816,6 @@ fi
- if [ "$BUILD_CMIRRORD" = yes ]; then
- 	pkg_config_init
- 
--
--$as_echo "#define CMIRROR_HAS_CHECKPOINT 1" >>confdefs.h
--
--
--pkg_failed=no
--{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for SACKPT" >&5
--$as_echo_n "checking for SACKPT... " >&6; }
--
--if test -n "$SACKPT_CFLAGS"; then
--    pkg_cv_SACKPT_CFLAGS="$SACKPT_CFLAGS"
-- elif test -n "$PKG_CONFIG"; then
--    if test -n "$PKG_CONFIG" && \
--    { { $as_echo "$as_me:${as_lineno-$LINENO}: \$PKG_CONFIG --exists --print-errors \"libSaCkpt\""; } >&5
--  ($PKG_CONFIG --exists --print-errors "libSaCkpt") 2>&5
--  ac_status=$?
--  $as_echo "$as_me:${as_lineno-$LINENO}: \$? = $ac_status" >&5
--  test $ac_status = 0; }; then
--  pkg_cv_SACKPT_CFLAGS=`$PKG_CONFIG --cflags "libSaCkpt" 2>/dev/null`
--		      test "x$?" != "x0" && pkg_failed=yes
--else
--  pkg_failed=yes
--fi
-- else
--    pkg_failed=untried
--fi
--if test -n "$SACKPT_LIBS"; then
--    pkg_cv_SACKPT_LIBS="$SACKPT_LIBS"
-- elif test -n "$PKG_CONFIG"; then
--    if test -n "$PKG_CONFIG" && \
--    { { $as_echo "$as_me:${as_lineno-$LINENO}: \$PKG_CONFIG --exists --print-errors \"libSaCkpt\""; } >&5
--  ($PKG_CONFIG --exists --print-errors "libSaCkpt") 2>&5
--  ac_status=$?
--  $as_echo "$as_me:${as_lineno-$LINENO}: \$? = $ac_status" >&5
--  test $ac_status = 0; }; then
--  pkg_cv_SACKPT_LIBS=`$PKG_CONFIG --libs "libSaCkpt" 2>/dev/null`
--		      test "x$?" != "x0" && pkg_failed=yes
--else
--  pkg_failed=yes
--fi
-- else
--    pkg_failed=untried
--fi
--
--
--
--if test $pkg_failed = yes; then
--   	{ $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
--$as_echo "no" >&6; }
--
--if $PKG_CONFIG --atleast-pkgconfig-version 0.20; then
--        _pkg_short_errors_supported=yes
--else
--        _pkg_short_errors_supported=no
--fi
--        if test $_pkg_short_errors_supported = yes; then
--	        SACKPT_PKG_ERRORS=`$PKG_CONFIG --short-errors --print-errors --cflags --libs "libSaCkpt" 2>&1`
--        else
--	        SACKPT_PKG_ERRORS=`$PKG_CONFIG --print-errors --cflags --libs "libSaCkpt" 2>&1`
--        fi
--	# Put the nasty error message in config.log where it belongs
--	echo "$SACKPT_PKG_ERRORS" >&5
--
--	{ $as_echo "$as_me:${as_lineno-$LINENO}: result: no libSaCkpt, compiling without it" >&5
--$as_echo "no libSaCkpt, compiling without it" >&6; }
--
--$as_echo "#define CMIRROR_HAS_CHECKPOINT 0" >>confdefs.h
--
--elif test $pkg_failed = untried; then
--     	{ $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
--$as_echo "no" >&6; }
--	{ $as_echo "$as_me:${as_lineno-$LINENO}: result: no libSaCkpt, compiling without it" >&5
--$as_echo "no libSaCkpt, compiling without it" >&6; }
--
--$as_echo "#define CMIRROR_HAS_CHECKPOINT 0" >>confdefs.h
--
--else
--	SACKPT_CFLAGS=$pkg_cv_SACKPT_CFLAGS
--	SACKPT_LIBS=$pkg_cv_SACKPT_LIBS
--        { $as_echo "$as_me:${as_lineno-$LINENO}: result: yes" >&5
--$as_echo "yes" >&6; }
--	HAVE_SACKPT=yes
--fi
--
- 	if test "$HAVE_CPG" != yes; then
- 
- pkg_failed=no
-@@ -12550,27 +11446,6 @@ $as_echo "#define O_DIRECT_SUPPORT 1" >>confdefs.h
- fi
- 
- ################################################################################
--{ $as_echo "$as_me:${as_lineno-$LINENO}: checking whether to build liblvm2app.so application library" >&5
--$as_echo_n "checking whether to build liblvm2app.so application library... " >&6; }
--# Check whether --enable-applib was given.
--if test "${enable_applib+set}" = set; then :
--  enableval=$enable_applib; APPLIB=$enableval
--else
--  APPLIB=no
--fi
--
--{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $APPLIB" >&5
--$as_echo "$APPLIB" >&6; }
--
--test "$APPLIB" = yes \
--  && LVM2APP_LIB=-llvm2app \
--  || LVM2APP_LIB=
--if test "$APPLIB"; then :
--  { $as_echo "$as_me:${as_lineno-$LINENO}: WARNING: liblvm2app is deprecated. Use D-Bus API" >&5
--$as_echo "$as_me: WARNING: liblvm2app is deprecated. Use D-Bus API" >&2;}
--fi
--
--################################################################################
- { $as_echo "$as_me:${as_lineno-$LINENO}: checking whether to compile liblvm2cmd.so" >&5
- $as_echo_n "checking whether to compile liblvm2cmd.so... " >&6; }
- # Check whether --enable-cmdlib was given.
-@@ -12605,612 +11480,8 @@ $as_echo "$as_me: WARNING: Building D-Bus support without D-Bus notifications."
- fi
- 
- ################################################################################
--{ $as_echo "$as_me:${as_lineno-$LINENO}: checking whether to build Python wrapper for liblvm2app.so" >&5
--$as_echo_n "checking whether to build Python wrapper for liblvm2app.so... " >&6; }
--# Check whether --enable-python_bindings was given.
--if test "${enable_python_bindings+set}" = set; then :
--  enableval=$enable_python_bindings; PYTHON_BINDINGS=$enableval
--else
--  PYTHON_BINDINGS=no
--fi
--
--{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $PYTHON_BINDINGS" >&5
--$as_echo "$PYTHON_BINDINGS" >&6; }
--
--{ $as_echo "$as_me:${as_lineno-$LINENO}: checking whether to build Python2 wrapper for liblvm2app.so" >&5
--$as_echo_n "checking whether to build Python2 wrapper for liblvm2app.so... " >&6; }
--# Check whether --enable-python2_bindings was given.
--if test "${enable_python2_bindings+set}" = set; then :
--  enableval=$enable_python2_bindings; PYTHON2_BINDINGS=$enableval
--else
--  PYTHON2_BINDINGS=no
--fi
--
--{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $PYTHON2_BINDINGS" >&5
--$as_echo "$PYTHON2_BINDINGS" >&6; }
--
--
--{ $as_echo "$as_me:${as_lineno-$LINENO}: checking whether to build Python3 wrapper for liblvm2app.so" >&5
--$as_echo_n "checking whether to build Python3 wrapper for liblvm2app.so... " >&6; }
--# Check whether --enable-python3_bindings was given.
--if test "${enable_python3_bindings+set}" = set; then :
--  enableval=$enable_python3_bindings; PYTHON3_BINDINGS=$enableval
--else
--  PYTHON3_BINDINGS=no
--fi
--
--{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $PYTHON3_BINDINGS" >&5
--$as_echo "$PYTHON3_BINDINGS" >&6; }
--
--if test "$PYTHON_BINDINGS" = yes; then
--	as_fn_error $? "--enable-python-bindings is replaced by --enable-python2-bindings and --enable-python3-bindings" "$LINENO" 5
--fi
--
--if test "$PYTHON2_BINDINGS" = yes; then
--
--
--
--
--
--
--        if test -n "$PYTHON"; then
--      # If the user set $PYTHON, use it and don't search something else.
--      { $as_echo "$as_me:${as_lineno-$LINENO}: checking whether $PYTHON version is >= 2" >&5
--$as_echo_n "checking whether $PYTHON version is >= 2... " >&6; }
--      prog="import sys
--# split strings by '.' and convert to numeric.  Append some zeros
--# because we need at least 4 digits for the hex conversion.
--# map returns an iterator in Python 3.0 and a list in 2.x
--minver = list(map(int, '2'.split('.'))) + [0, 0, 0]
--minverhex = 0
--# xrange is not present in Python 3.0 and range returns an iterator
--for i in list(range(0, 4)): minverhex = (minverhex << 8) + minver[i]
--sys.exit(sys.hexversion < minverhex)"
--  if { echo "$as_me:$LINENO: $PYTHON -c "$prog"" >&5
--   ($PYTHON -c "$prog") >&5 2>&5
--   ac_status=$?
--   echo "$as_me:$LINENO: \$? = $ac_status" >&5
--   (exit $ac_status); }; then :
--  { $as_echo "$as_me:${as_lineno-$LINENO}: result: yes" >&5
--$as_echo "yes" >&6; }
--else
--  { $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
--$as_echo "no" >&6; }
--			       as_fn_error $? "Python interpreter is too old" "$LINENO" 5
--fi
--      am_display_PYTHON=$PYTHON
--    else
--      # Otherwise, try each interpreter until we find one that satisfies
--      # VERSION.
--      { $as_echo "$as_me:${as_lineno-$LINENO}: checking for a Python interpreter with version >= 2" >&5
--$as_echo_n "checking for a Python interpreter with version >= 2... " >&6; }
--if ${am_cv_pathless_PYTHON+:} false; then :
--  $as_echo_n "(cached) " >&6
--else
--
--	for am_cv_pathless_PYTHON in python python2 python3 python3.3 python3.2 python3.1 python3.0 python2.7  python2.6 python2.5 python2.4 python2.3 python2.2 python2.1 python2.0 none; do
--	  test "$am_cv_pathless_PYTHON" = none && break
--	  prog="import sys
--# split strings by '.' and convert to numeric.  Append some zeros
--# because we need at least 4 digits for the hex conversion.
--# map returns an iterator in Python 3.0 and a list in 2.x
--minver = list(map(int, '2'.split('.'))) + [0, 0, 0]
--minverhex = 0
--# xrange is not present in Python 3.0 and range returns an iterator
--for i in list(range(0, 4)): minverhex = (minverhex << 8) + minver[i]
--sys.exit(sys.hexversion < minverhex)"
--  if { echo "$as_me:$LINENO: $am_cv_pathless_PYTHON -c "$prog"" >&5
--   ($am_cv_pathless_PYTHON -c "$prog") >&5 2>&5
--   ac_status=$?
--   echo "$as_me:$LINENO: \$? = $ac_status" >&5
--   (exit $ac_status); }; then :
--  break
--fi
--	done
--fi
--{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $am_cv_pathless_PYTHON" >&5
--$as_echo "$am_cv_pathless_PYTHON" >&6; }
--      # Set $PYTHON to the absolute path of $am_cv_pathless_PYTHON.
--      if test "$am_cv_pathless_PYTHON" = none; then
--	PYTHON=:
--      else
--        # Extract the first word of "$am_cv_pathless_PYTHON", so it can be a program name with args.
--set dummy $am_cv_pathless_PYTHON; ac_word=$2
--{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for $ac_word" >&5
--$as_echo_n "checking for $ac_word... " >&6; }
--if ${ac_cv_path_PYTHON+:} false; then :
--  $as_echo_n "(cached) " >&6
--else
--  case $PYTHON in
--  [\\/]* | ?:[\\/]*)
--  ac_cv_path_PYTHON="$PYTHON" # Let the user override the test with a path.
--  ;;
--  *)
--  as_save_IFS=$IFS; IFS=$PATH_SEPARATOR
--for as_dir in $PATH
--do
--  IFS=$as_save_IFS
--  test -z "$as_dir" && as_dir=.
--    for ac_exec_ext in '' $ac_executable_extensions; do
--  if as_fn_executable_p "$as_dir/$ac_word$ac_exec_ext"; then
--    ac_cv_path_PYTHON="$as_dir/$ac_word$ac_exec_ext"
--    $as_echo "$as_me:${as_lineno-$LINENO}: found $as_dir/$ac_word$ac_exec_ext" >&5
--    break 2
--  fi
--done
--  done
--IFS=$as_save_IFS
--
--  ;;
--esac
--fi
--PYTHON=$ac_cv_path_PYTHON
--if test -n "$PYTHON"; then
--  { $as_echo "$as_me:${as_lineno-$LINENO}: result: $PYTHON" >&5
--$as_echo "$PYTHON" >&6; }
--else
--  { $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
--$as_echo "no" >&6; }
--fi
--
--
--      fi
--      am_display_PYTHON=$am_cv_pathless_PYTHON
--    fi
--
--
--  if test "$PYTHON" = :; then
--      as_fn_error $? "no suitable Python interpreter found" "$LINENO" 5
--  else
--
--
--  { $as_echo "$as_me:${as_lineno-$LINENO}: checking for $am_display_PYTHON version" >&5
--$as_echo_n "checking for $am_display_PYTHON version... " >&6; }
--if ${am_cv_python_version+:} false; then :
--  $as_echo_n "(cached) " >&6
--else
--  am_cv_python_version=`$PYTHON -c "import sys; sys.stdout.write(sys.version[:3])"`
--fi
--{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $am_cv_python_version" >&5
--$as_echo "$am_cv_python_version" >&6; }
--  PYTHON_VERSION=$am_cv_python_version
--
--
--
--  PYTHON_PREFIX='${prefix}'
--
--  PYTHON_EXEC_PREFIX='${exec_prefix}'
--
--
--
--  { $as_echo "$as_me:${as_lineno-$LINENO}: checking for $am_display_PYTHON platform" >&5
--$as_echo_n "checking for $am_display_PYTHON platform... " >&6; }
--if ${am_cv_python_platform+:} false; then :
--  $as_echo_n "(cached) " >&6
--else
--  am_cv_python_platform=`$PYTHON -c "import sys; sys.stdout.write(sys.platform)"`
--fi
--{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $am_cv_python_platform" >&5
--$as_echo "$am_cv_python_platform" >&6; }
--  PYTHON_PLATFORM=$am_cv_python_platform
--
--
--  # Just factor out some code duplication.
--  am_python_setup_sysconfig="\
--import sys
--# Prefer sysconfig over distutils.sysconfig, for better compatibility
--# with python 3.x.  See automake bug#10227.
--try:
--    import sysconfig
--except ImportError:
--    can_use_sysconfig = 0
--else:
--    can_use_sysconfig = 1
--# Can't use sysconfig in CPython 2.7, since it's broken in virtualenvs:
--# <https://github.com/pypa/virtualenv/issues/118>
--try:
--    from platform import python_implementation
--    if python_implementation() == 'CPython' and sys.version[:3] == '2.7':
--        can_use_sysconfig = 0
--except ImportError:
--    pass"
--
--
--            { $as_echo "$as_me:${as_lineno-$LINENO}: checking for $am_display_PYTHON script directory" >&5
--$as_echo_n "checking for $am_display_PYTHON script directory... " >&6; }
--if ${am_cv_python_pythondir+:} false; then :
--  $as_echo_n "(cached) " >&6
--else
--  if test "x$prefix" = xNONE
--     then
--       am_py_prefix=$ac_default_prefix
--     else
--       am_py_prefix=$prefix
--     fi
--     am_cv_python_pythondir=`$PYTHON -c "
--$am_python_setup_sysconfig
--if can_use_sysconfig:
--    sitedir = sysconfig.get_path('purelib', vars={'base':'$am_py_prefix'})
--else:
--    from distutils import sysconfig
--    sitedir = sysconfig.get_python_lib(0, 0, prefix='$am_py_prefix')
--sys.stdout.write(sitedir)"`
--     case $am_cv_python_pythondir in
--     $am_py_prefix*)
--       am__strip_prefix=`echo "$am_py_prefix" | sed 's|.|.|g'`
--       am_cv_python_pythondir=`echo "$am_cv_python_pythondir" | sed "s,^$am__strip_prefix,$PYTHON_PREFIX,"`
--       ;;
--     *)
--       case $am_py_prefix in
--         /usr|/System*) ;;
--         *)
--	  am_cv_python_pythondir=$PYTHON_PREFIX/lib/python$PYTHON_VERSION/site-packages
--	  ;;
--       esac
--       ;;
--     esac
--
--fi
--{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $am_cv_python_pythondir" >&5
--$as_echo "$am_cv_python_pythondir" >&6; }
--  pythondir=$am_cv_python_pythondir
--
--
--
--  pkgpythondir=\${pythondir}/$PACKAGE
--
--
--        { $as_echo "$as_me:${as_lineno-$LINENO}: checking for $am_display_PYTHON extension module directory" >&5
--$as_echo_n "checking for $am_display_PYTHON extension module directory... " >&6; }
--if ${am_cv_python_pyexecdir+:} false; then :
--  $as_echo_n "(cached) " >&6
--else
--  if test "x$exec_prefix" = xNONE
--     then
--       am_py_exec_prefix=$am_py_prefix
--     else
--       am_py_exec_prefix=$exec_prefix
--     fi
--     am_cv_python_pyexecdir=`$PYTHON -c "
--$am_python_setup_sysconfig
--if can_use_sysconfig:
--    sitedir = sysconfig.get_path('platlib', vars={'platbase':'$am_py_prefix'})
--else:
--    from distutils import sysconfig
--    sitedir = sysconfig.get_python_lib(1, 0, prefix='$am_py_prefix')
--sys.stdout.write(sitedir)"`
--     case $am_cv_python_pyexecdir in
--     $am_py_exec_prefix*)
--       am__strip_prefix=`echo "$am_py_exec_prefix" | sed 's|.|.|g'`
--       am_cv_python_pyexecdir=`echo "$am_cv_python_pyexecdir" | sed "s,^$am__strip_prefix,$PYTHON_EXEC_PREFIX,"`
--       ;;
--     *)
--       case $am_py_exec_prefix in
--         /usr|/System*) ;;
--         *)
--	   am_cv_python_pyexecdir=$PYTHON_EXEC_PREFIX/lib/python$PYTHON_VERSION/site-packages
--	   ;;
--       esac
--       ;;
--     esac
--
--fi
--{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $am_cv_python_pyexecdir" >&5
--$as_echo "$am_cv_python_pyexecdir" >&6; }
--  pyexecdir=$am_cv_python_pyexecdir
--
--
--
--  pkgpyexecdir=\${pyexecdir}/$PACKAGE
--
--
--
--  fi
--
--
--	if test -n "$ac_tool_prefix"; then
--  # Extract the first word of "${ac_tool_prefix}python2", so it can be a program name with args.
--set dummy ${ac_tool_prefix}python2; ac_word=$2
--{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for $ac_word" >&5
--$as_echo_n "checking for $ac_word... " >&6; }
--if ${ac_cv_path_PYTHON2+:} false; then :
--  $as_echo_n "(cached) " >&6
--else
--  case $PYTHON2 in
--  [\\/]* | ?:[\\/]*)
--  ac_cv_path_PYTHON2="$PYTHON2" # Let the user override the test with a path.
--  ;;
--  *)
--  as_save_IFS=$IFS; IFS=$PATH_SEPARATOR
--for as_dir in $PATH
--do
--  IFS=$as_save_IFS
--  test -z "$as_dir" && as_dir=.
--    for ac_exec_ext in '' $ac_executable_extensions; do
--  if as_fn_executable_p "$as_dir/$ac_word$ac_exec_ext"; then
--    ac_cv_path_PYTHON2="$as_dir/$ac_word$ac_exec_ext"
--    $as_echo "$as_me:${as_lineno-$LINENO}: found $as_dir/$ac_word$ac_exec_ext" >&5
--    break 2
--  fi
--done
--  done
--IFS=$as_save_IFS
--
--  ;;
--esac
--fi
--PYTHON2=$ac_cv_path_PYTHON2
--if test -n "$PYTHON2"; then
--  { $as_echo "$as_me:${as_lineno-$LINENO}: result: $PYTHON2" >&5
--$as_echo "$PYTHON2" >&6; }
--else
--  { $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
--$as_echo "no" >&6; }
--fi
--
--
--fi
--if test -z "$ac_cv_path_PYTHON2"; then
--  ac_pt_PYTHON2=$PYTHON2
--  # Extract the first word of "python2", so it can be a program name with args.
--set dummy python2; ac_word=$2
--{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for $ac_word" >&5
--$as_echo_n "checking for $ac_word... " >&6; }
--if ${ac_cv_path_ac_pt_PYTHON2+:} false; then :
--  $as_echo_n "(cached) " >&6
--else
--  case $ac_pt_PYTHON2 in
--  [\\/]* | ?:[\\/]*)
--  ac_cv_path_ac_pt_PYTHON2="$ac_pt_PYTHON2" # Let the user override the test with a path.
--  ;;
--  *)
--  as_save_IFS=$IFS; IFS=$PATH_SEPARATOR
--for as_dir in $PATH
--do
--  IFS=$as_save_IFS
--  test -z "$as_dir" && as_dir=.
--    for ac_exec_ext in '' $ac_executable_extensions; do
--  if as_fn_executable_p "$as_dir/$ac_word$ac_exec_ext"; then
--    ac_cv_path_ac_pt_PYTHON2="$as_dir/$ac_word$ac_exec_ext"
--    $as_echo "$as_me:${as_lineno-$LINENO}: found $as_dir/$ac_word$ac_exec_ext" >&5
--    break 2
--  fi
--done
--  done
--IFS=$as_save_IFS
--
--  ;;
--esac
--fi
--ac_pt_PYTHON2=$ac_cv_path_ac_pt_PYTHON2
--if test -n "$ac_pt_PYTHON2"; then
--  { $as_echo "$as_me:${as_lineno-$LINENO}: result: $ac_pt_PYTHON2" >&5
--$as_echo "$ac_pt_PYTHON2" >&6; }
--else
--  { $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
--$as_echo "no" >&6; }
--fi
--
--  if test "x$ac_pt_PYTHON2" = x; then
--    PYTHON2=""
--  else
--    case $cross_compiling:$ac_tool_warned in
--yes:)
--{ $as_echo "$as_me:${as_lineno-$LINENO}: WARNING: using cross tools not prefixed with host triplet" >&5
--$as_echo "$as_me: WARNING: using cross tools not prefixed with host triplet" >&2;}
--ac_tool_warned=yes ;;
--esac
--    PYTHON2=$ac_pt_PYTHON2
--  fi
--else
--  PYTHON2="$ac_cv_path_PYTHON2"
--fi
--
--	test -z "$PYTHON2" && as_fn_error $? "python2 is required for --enable-python2_bindings but cannot be found" "$LINENO" 5
--	if test -n "$ac_tool_prefix"; then
--  # Extract the first word of "${ac_tool_prefix}python2-config", so it can be a program name with args.
--set dummy ${ac_tool_prefix}python2-config; ac_word=$2
--{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for $ac_word" >&5
--$as_echo_n "checking for $ac_word... " >&6; }
--if ${ac_cv_path_PYTHON2_CONFIG+:} false; then :
--  $as_echo_n "(cached) " >&6
--else
--  case $PYTHON2_CONFIG in
--  [\\/]* | ?:[\\/]*)
--  ac_cv_path_PYTHON2_CONFIG="$PYTHON2_CONFIG" # Let the user override the test with a path.
--  ;;
--  *)
--  as_save_IFS=$IFS; IFS=$PATH_SEPARATOR
--for as_dir in $PATH
--do
--  IFS=$as_save_IFS
--  test -z "$as_dir" && as_dir=.
--    for ac_exec_ext in '' $ac_executable_extensions; do
--  if as_fn_executable_p "$as_dir/$ac_word$ac_exec_ext"; then
--    ac_cv_path_PYTHON2_CONFIG="$as_dir/$ac_word$ac_exec_ext"
--    $as_echo "$as_me:${as_lineno-$LINENO}: found $as_dir/$ac_word$ac_exec_ext" >&5
--    break 2
--  fi
--done
--  done
--IFS=$as_save_IFS
--
--  ;;
--esac
--fi
--PYTHON2_CONFIG=$ac_cv_path_PYTHON2_CONFIG
--if test -n "$PYTHON2_CONFIG"; then
--  { $as_echo "$as_me:${as_lineno-$LINENO}: result: $PYTHON2_CONFIG" >&5
--$as_echo "$PYTHON2_CONFIG" >&6; }
--else
--  { $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
--$as_echo "no" >&6; }
--fi
--
--
--fi
--if test -z "$ac_cv_path_PYTHON2_CONFIG"; then
--  ac_pt_PYTHON2_CONFIG=$PYTHON2_CONFIG
--  # Extract the first word of "python2-config", so it can be a program name with args.
--set dummy python2-config; ac_word=$2
--{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for $ac_word" >&5
--$as_echo_n "checking for $ac_word... " >&6; }
--if ${ac_cv_path_ac_pt_PYTHON2_CONFIG+:} false; then :
--  $as_echo_n "(cached) " >&6
--else
--  case $ac_pt_PYTHON2_CONFIG in
--  [\\/]* | ?:[\\/]*)
--  ac_cv_path_ac_pt_PYTHON2_CONFIG="$ac_pt_PYTHON2_CONFIG" # Let the user override the test with a path.
--  ;;
--  *)
--  as_save_IFS=$IFS; IFS=$PATH_SEPARATOR
--for as_dir in $PATH
--do
--  IFS=$as_save_IFS
--  test -z "$as_dir" && as_dir=.
--    for ac_exec_ext in '' $ac_executable_extensions; do
--  if as_fn_executable_p "$as_dir/$ac_word$ac_exec_ext"; then
--    ac_cv_path_ac_pt_PYTHON2_CONFIG="$as_dir/$ac_word$ac_exec_ext"
--    $as_echo "$as_me:${as_lineno-$LINENO}: found $as_dir/$ac_word$ac_exec_ext" >&5
--    break 2
--  fi
--done
--  done
--IFS=$as_save_IFS
--
--  ;;
--esac
--fi
--ac_pt_PYTHON2_CONFIG=$ac_cv_path_ac_pt_PYTHON2_CONFIG
--if test -n "$ac_pt_PYTHON2_CONFIG"; then
--  { $as_echo "$as_me:${as_lineno-$LINENO}: result: $ac_pt_PYTHON2_CONFIG" >&5
--$as_echo "$ac_pt_PYTHON2_CONFIG" >&6; }
--else
--  { $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
--$as_echo "no" >&6; }
--fi
--
--  if test "x$ac_pt_PYTHON2_CONFIG" = x; then
--    PYTHON2_CONFIG=""
--  else
--    case $cross_compiling:$ac_tool_warned in
--yes:)
--{ $as_echo "$as_me:${as_lineno-$LINENO}: WARNING: using cross tools not prefixed with host triplet" >&5
--$as_echo "$as_me: WARNING: using cross tools not prefixed with host triplet" >&2;}
--ac_tool_warned=yes ;;
--esac
--    PYTHON2_CONFIG=$ac_pt_PYTHON2_CONFIG
--  fi
--else
--  PYTHON2_CONFIG="$ac_cv_path_PYTHON2_CONFIG"
--fi
--
--	test -z "$PYTHON2_CONFIG" && if test -n "$ac_tool_prefix"; then
--  # Extract the first word of "${ac_tool_prefix}python-config", so it can be a program name with args.
--set dummy ${ac_tool_prefix}python-config; ac_word=$2
--{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for $ac_word" >&5
--$as_echo_n "checking for $ac_word... " >&6; }
--if ${ac_cv_path_PYTHON2_CONFIG+:} false; then :
--  $as_echo_n "(cached) " >&6
--else
--  case $PYTHON2_CONFIG in
--  [\\/]* | ?:[\\/]*)
--  ac_cv_path_PYTHON2_CONFIG="$PYTHON2_CONFIG" # Let the user override the test with a path.
--  ;;
--  *)
--  as_save_IFS=$IFS; IFS=$PATH_SEPARATOR
--for as_dir in $PATH
--do
--  IFS=$as_save_IFS
--  test -z "$as_dir" && as_dir=.
--    for ac_exec_ext in '' $ac_executable_extensions; do
--  if as_fn_executable_p "$as_dir/$ac_word$ac_exec_ext"; then
--    ac_cv_path_PYTHON2_CONFIG="$as_dir/$ac_word$ac_exec_ext"
--    $as_echo "$as_me:${as_lineno-$LINENO}: found $as_dir/$ac_word$ac_exec_ext" >&5
--    break 2
--  fi
--done
--  done
--IFS=$as_save_IFS
--
--  ;;
--esac
--fi
--PYTHON2_CONFIG=$ac_cv_path_PYTHON2_CONFIG
--if test -n "$PYTHON2_CONFIG"; then
--  { $as_echo "$as_me:${as_lineno-$LINENO}: result: $PYTHON2_CONFIG" >&5
--$as_echo "$PYTHON2_CONFIG" >&6; }
--else
--  { $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
--$as_echo "no" >&6; }
--fi
--
- 
--fi
--if test -z "$ac_cv_path_PYTHON2_CONFIG"; then
--  ac_pt_PYTHON2_CONFIG=$PYTHON2_CONFIG
--  # Extract the first word of "python-config", so it can be a program name with args.
--set dummy python-config; ac_word=$2
--{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for $ac_word" >&5
--$as_echo_n "checking for $ac_word... " >&6; }
--if ${ac_cv_path_ac_pt_PYTHON2_CONFIG+:} false; then :
--  $as_echo_n "(cached) " >&6
--else
--  case $ac_pt_PYTHON2_CONFIG in
--  [\\/]* | ?:[\\/]*)
--  ac_cv_path_ac_pt_PYTHON2_CONFIG="$ac_pt_PYTHON2_CONFIG" # Let the user override the test with a path.
--  ;;
--  *)
--  as_save_IFS=$IFS; IFS=$PATH_SEPARATOR
--for as_dir in $PATH
--do
--  IFS=$as_save_IFS
--  test -z "$as_dir" && as_dir=.
--    for ac_exec_ext in '' $ac_executable_extensions; do
--  if as_fn_executable_p "$as_dir/$ac_word$ac_exec_ext"; then
--    ac_cv_path_ac_pt_PYTHON2_CONFIG="$as_dir/$ac_word$ac_exec_ext"
--    $as_echo "$as_me:${as_lineno-$LINENO}: found $as_dir/$ac_word$ac_exec_ext" >&5
--    break 2
--  fi
--done
--  done
--IFS=$as_save_IFS
--
--  ;;
--esac
--fi
--ac_pt_PYTHON2_CONFIG=$ac_cv_path_ac_pt_PYTHON2_CONFIG
--if test -n "$ac_pt_PYTHON2_CONFIG"; then
--  { $as_echo "$as_me:${as_lineno-$LINENO}: result: $ac_pt_PYTHON2_CONFIG" >&5
--$as_echo "$ac_pt_PYTHON2_CONFIG" >&6; }
--else
--  { $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
--$as_echo "no" >&6; }
--fi
--
--  if test "x$ac_pt_PYTHON2_CONFIG" = x; then
--    PYTHON2_CONFIG=""
--  else
--    case $cross_compiling:$ac_tool_warned in
--yes:)
--{ $as_echo "$as_me:${as_lineno-$LINENO}: WARNING: using cross tools not prefixed with host triplet" >&5
--$as_echo "$as_me: WARNING: using cross tools not prefixed with host triplet" >&2;}
--ac_tool_warned=yes ;;
--esac
--    PYTHON2_CONFIG=$ac_pt_PYTHON2_CONFIG
--  fi
--else
--  PYTHON2_CONFIG="$ac_cv_path_PYTHON2_CONFIG"
--fi
--
--	test -z "$PYTHON2_CONFIG" && as_fn_error $? "python headers are required for --enable-python2_bindings but cannot be found" "$LINENO" 5
--	PYTHON2_INCDIRS=`"$PYTHON2_CONFIG" --includes`
--	PYTHON2_LIBDIRS=`"$PYTHON2_CONFIG" --libs`
--	PYTHON2DIR=$pythondir
--	PYTHON_BINDINGS=yes
--fi
--
--if test "$PYTHON3_BINDINGS" = yes -o "$BUILD_LVMDBUSD" = yes; then
-+if test "$BUILD_LVMDBUSD" = yes; then
- 	unset PYTHON PYTHON_CONFIG
- 	unset am_cv_pathless_PYTHON ac_cv_path_PYTHON am_cv_python_platform
- 	unset am_cv_python_pythondir am_cv_python_version am_cv_python_pyexecdir
-@@ -13256,7 +11527,7 @@ if ${am_cv_pathless_PYTHON+:} false; then :
-   $as_echo_n "(cached) " >&6
- else
- 
--	for am_cv_pathless_PYTHON in python python2 python3 python3.3 python3.2 python3.1 python3.0 python2.7  python2.6 python2.5 python2.4 python2.3 python2.2 python2.1 python2.0 none; do
-+	for am_cv_pathless_PYTHON in python python2 python3 python3.5 python3.4 python3.3 python3.2 python3.1 python3.0 python2.7  python2.6 python2.5 python2.4 python2.3 python2.2 python2.1 python2.0 none; do
- 	  test "$am_cv_pathless_PYTHON" = none && break
- 	  prog="import sys
- # split strings by '.' and convert to numeric.  Append some zeros
-@@ -13581,9 +11852,7 @@ fi
- 	PYTHON3_LIBDIRS=`"$PYTHON3_CONFIG" --libs`
- 	PYTHON3DIR=$pythondir
- 	test "$PYTHON3_BINDINGS" = yes && PYTHON_BINDINGS=yes
--fi
- 
--if test "$BUILD_LVMDBUSD" = yes; then
- 	# To get this macro, install autoconf-archive package then run autoreconf
- 
-     if test -z $PYTHON;
-@@ -13649,12 +11918,6 @@ $as_echo "no" >&6; }
- 
- fi
- 
--if test "$PYTHON_BINDINGS" = yes -o "$PYTHON2_BINDINGS" = yes -o "$PYTHON3_BINDINGS" = yes; then
--	{ $as_echo "$as_me:${as_lineno-$LINENO}: WARNING: Python bindings are deprecated. Use D-Bus API" >&5
--$as_echo "$as_me: WARNING: Python bindings are deprecated. Use D-Bus API" >&2;}
--	test "$APPLIB" != yes && as_fn_error $? "Python_bindings require --enable-applib" "$LINENO" 5
--fi
--
- ################################################################################
- # Check whether --enable-pkgconfig was given.
- if test "${enable_pkgconfig+set}" = set; then :
-@@ -13861,7 +12124,7 @@ fi
- 
- 
- ################################################################################
--if [ \( "$LVM1" = shared -o "$POOL" = shared -o "$CLUSTER" = shared \
-+if [ \( "$LVM1" = shared -o "$POOL" = shared \
-       \) -a "$STATIC_LINK" = yes ]; then
- 	as_fn_error $? "Features cannot be 'shared' when building statically" "$LINENO" 5
- fi
-@@ -14794,208 +13057,6 @@ fi
- 
- fi
- 
--if test "$CLVMD" != none; then
--	for ac_header in mntent.h netdb.h netinet/in.h pthread.h search.h sys/mount.h sys/socket.h sys/uio.h sys/un.h utmpx.h
--do :
--  as_ac_Header=`$as_echo "ac_cv_header_$ac_header" | $as_tr_sh`
--ac_fn_c_check_header_mongrel "$LINENO" "$ac_header" "$as_ac_Header" "$ac_includes_default"
--if eval test \"x\$"$as_ac_Header"\" = x"yes"; then :
--  cat >>confdefs.h <<_ACEOF
--#define `$as_echo "HAVE_$ac_header" | $as_tr_cpp` 1
--_ACEOF
--
--else
--  as_fn_error $? "bailing out" "$LINENO" 5
--fi
--
--done
--
--	for ac_func in dup2 getmntent memmove select socket
--do :
--  as_ac_var=`$as_echo "ac_cv_func_$ac_func" | $as_tr_sh`
--ac_fn_c_check_func "$LINENO" "$ac_func" "$as_ac_var"
--if eval test \"x\$"$as_ac_var"\" = x"yes"; then :
--  cat >>confdefs.h <<_ACEOF
--#define `$as_echo "HAVE_$ac_func" | $as_tr_cpp` 1
--_ACEOF
--
--else
--  hard_bailout
--fi
--done
--
--	# getmntent is in the standard C library on UNICOS, in -lsun on Irix 4,
--# -lseq on Dynix/PTX, -lgen on Unixware.
--{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for library containing getmntent" >&5
--$as_echo_n "checking for library containing getmntent... " >&6; }
--if ${ac_cv_search_getmntent+:} false; then :
--  $as_echo_n "(cached) " >&6
--else
--  ac_func_search_save_LIBS=$LIBS
--cat confdefs.h - <<_ACEOF >conftest.$ac_ext
--/* end confdefs.h.  */
--
--/* Override any GCC internal prototype to avoid an error.
--   Use char because int might match the return type of a GCC
--   builtin and then its argument prototype would still apply.  */
--#ifdef __cplusplus
--extern "C"
--#endif
--char getmntent ();
--int
--main ()
--{
--return getmntent ();
--  ;
--  return 0;
--}
--_ACEOF
--for ac_lib in '' sun seq gen; do
--  if test -z "$ac_lib"; then
--    ac_res="none required"
--  else
--    ac_res=-l$ac_lib
--    LIBS="-l$ac_lib  $ac_func_search_save_LIBS"
--  fi
--  if ac_fn_c_try_link "$LINENO"; then :
--  ac_cv_search_getmntent=$ac_res
--fi
--rm -f core conftest.err conftest.$ac_objext \
--    conftest$ac_exeext
--  if ${ac_cv_search_getmntent+:} false; then :
--  break
--fi
--done
--if ${ac_cv_search_getmntent+:} false; then :
--
--else
--  ac_cv_search_getmntent=no
--fi
--rm conftest.$ac_ext
--LIBS=$ac_func_search_save_LIBS
--fi
--{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $ac_cv_search_getmntent" >&5
--$as_echo "$ac_cv_search_getmntent" >&6; }
--ac_res=$ac_cv_search_getmntent
--if test "$ac_res" != no; then :
--  test "$ac_res" = "none required" || LIBS="$ac_res $LIBS"
--  ac_cv_func_getmntent=yes
--
--$as_echo "#define HAVE_GETMNTENT 1" >>confdefs.h
--
--else
--  ac_cv_func_getmntent=no
--fi
--
--
--	for ac_header in sys/select.h sys/socket.h
--do :
--  as_ac_Header=`$as_echo "ac_cv_header_$ac_header" | $as_tr_sh`
--ac_fn_c_check_header_mongrel "$LINENO" "$ac_header" "$as_ac_Header" "$ac_includes_default"
--if eval test \"x\$"$as_ac_Header"\" = x"yes"; then :
--  cat >>confdefs.h <<_ACEOF
--#define `$as_echo "HAVE_$ac_header" | $as_tr_cpp` 1
--_ACEOF
--
--fi
--
--done
--
--{ $as_echo "$as_me:${as_lineno-$LINENO}: checking types of arguments for select" >&5
--$as_echo_n "checking types of arguments for select... " >&6; }
--if ${ac_cv_func_select_args+:} false; then :
--  $as_echo_n "(cached) " >&6
--else
--  for ac_arg234 in 'fd_set *' 'int *' 'void *'; do
-- for ac_arg1 in 'int' 'size_t' 'unsigned long int' 'unsigned int'; do
--  for ac_arg5 in 'struct timeval *' 'const struct timeval *'; do
--   cat confdefs.h - <<_ACEOF >conftest.$ac_ext
--/* end confdefs.h.  */
--$ac_includes_default
--#ifdef HAVE_SYS_SELECT_H
--# include <sys/select.h>
--#endif
--#ifdef HAVE_SYS_SOCKET_H
--# include <sys/socket.h>
--#endif
--
--int
--main ()
--{
--extern int select ($ac_arg1,
--					    $ac_arg234, $ac_arg234, $ac_arg234,
--					    $ac_arg5);
--  ;
--  return 0;
--}
--_ACEOF
--if ac_fn_c_try_compile "$LINENO"; then :
--  ac_cv_func_select_args="$ac_arg1,$ac_arg234,$ac_arg5"; break 3
--fi
--rm -f core conftest.err conftest.$ac_objext conftest.$ac_ext
--  done
-- done
--done
--# Provide a safe default value.
--: "${ac_cv_func_select_args=int,int *,struct timeval *}"
--
--fi
--{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $ac_cv_func_select_args" >&5
--$as_echo "$ac_cv_func_select_args" >&6; }
--ac_save_IFS=$IFS; IFS=','
--set dummy `echo "$ac_cv_func_select_args" | sed 's/\*/\*/g'`
--IFS=$ac_save_IFS
--shift
--
--cat >>confdefs.h <<_ACEOF
--#define SELECT_TYPE_ARG1 $1
--_ACEOF
--
--
--cat >>confdefs.h <<_ACEOF
--#define SELECT_TYPE_ARG234 ($2)
--_ACEOF
--
--
--cat >>confdefs.h <<_ACEOF
--#define SELECT_TYPE_ARG5 ($3)
--_ACEOF
--
--rm -f conftest*
--
--fi
--
--if test "$CLUSTER" != none; then
--	for ac_header in sys/socket.h sys/un.h
--do :
--  as_ac_Header=`$as_echo "ac_cv_header_$ac_header" | $as_tr_sh`
--ac_fn_c_check_header_mongrel "$LINENO" "$ac_header" "$as_ac_Header" "$ac_includes_default"
--if eval test \"x\$"$as_ac_Header"\" = x"yes"; then :
--  cat >>confdefs.h <<_ACEOF
--#define `$as_echo "HAVE_$ac_header" | $as_tr_cpp` 1
--_ACEOF
--
--else
--  hard_bailout
--fi
--
--done
--
--	for ac_func in socket
--do :
--  ac_fn_c_check_func "$LINENO" "socket" "ac_cv_func_socket"
--if test "x$ac_cv_func_socket" = xyes; then :
--  cat >>confdefs.h <<_ACEOF
--#define HAVE_SOCKET 1
--_ACEOF
--
--else
--  hard_bailout
--fi
--done
--
--fi
--
- if test "$BUILD_DMEVENTD" = yes; then
- 	for ac_header in arpa/inet.h
- do :
-@@ -15200,14 +13261,15 @@ cat >>confdefs.h <<_ACEOF
- _ACEOF
- 
- 
--USRSBINDIR="$(eval echo $(eval echo $usrsbindir))"
--CLVMD_PATH="$USRSBINDIR/clvmd"
-+LVMCONFIG_PATH="$$BINDIR/lvmconfig"
- 
- cat >>confdefs.h <<_ACEOF
--#define CLVMD_PATH "$CLVMD_PATH"
-+#define LVMCONFIG_PATH "$LVMCONFIG_PATH"
- _ACEOF
- 
- 
-+USRSBINDIR="$(eval echo $(eval echo $usrsbindir))"
++typedef void (*dm_log_with_errno_fn) (int level, const char *file, int line,
++				      int dm_errno_or_class, const char *f, ...)
++    __attribute__ ((format(printf, 5, 6)));
 +
- FSADM_PATH="$SBINDIR/fsadm"
- 
- cat >>confdefs.h <<_ACEOF
-@@ -15548,18 +13610,8 @@ _ACEOF
- 
- 
- 
--
--
--
--
--
--
--
--
--
--
- ################################################################################
--ac_config_files="$ac_config_files Makefile make.tmpl libdm/make.tmpl daemons/Makefile daemons/clvmd/Makefile daemons/cmirrord/Makefile daemons/dmeventd/Makefile daemons/dmeventd/libdevmapper-event.pc daemons/dmeventd/plugins/Makefile daemons/dmeventd/plugins/lvm2/Makefile daemons/dmeventd/plugins/raid/Makefile daemons/dmeventd/plugins/mirror/Makefile daemons/dmeventd/plugins/snapshot/Makefile daemons/dmeventd/plugins/thin/Makefile daemons/dmfilemapd/Makefile daemons/lvmdbusd/Makefile daemons/lvmdbusd/lvmdbusd daemons/lvmdbusd/lvmdb.py daemons/lvmdbusd/lvm_shell_proxy.py daemons/lvmdbusd/path.py daemons/lvmetad/Makefile daemons/lvmpolld/Makefile daemons/lvmlockd/Makefile conf/Makefile conf/example.conf conf/lvmlocal.conf conf/command_profile_template.profile conf/metadata_profile_template.profile include/Makefile lib/Makefile lib/locking/Makefile include/lvm-version.h libdaemon/Makefile libdaemon/client/Makefile libdaemon/server/Makefile libdm/Makefile libdm/libdevmapper.pc liblvm/Ma
- kefile liblvm/liblvm2app.pc man/Makefile po/Makefile python/Makefile python/setup.py scripts/blkdeactivate.sh scripts/blk_availability_init_red_hat scripts/blk_availability_systemd_red_hat.service scripts/clvmd_init_red_hat scripts/cmirrord_init_red_hat scripts/com.redhat.lvmdbus1.service scripts/dm_event_systemd_red_hat.service scripts/dm_event_systemd_red_hat.socket scripts/lvm2_cluster_activation_red_hat.sh scripts/lvm2_cluster_activation_systemd_red_hat.service scripts/lvm2_clvmd_systemd_red_hat.service scripts/lvm2_cmirrord_systemd_red_hat.service scripts/lvm2_lvmdbusd_systemd_red_hat.service scripts/lvm2_lvmetad_init_red_hat scripts/lvm2_lvmetad_systemd_red_hat.service scripts/lvm2_lvmetad_systemd_red_hat.socket scripts/lvm2_lvmpolld_init_red_hat scripts/lvm2_lvmpolld_systemd_red_hat.service scripts/lvm2_lvmpolld_systemd_red_hat.socket scripts/lvm2_lvmlockd_systemd_red_hat.service scripts/lvm2_lvmlocking_systemd_red_hat.service scripts/lvm2_monitoring_init_red_hat scripts/lvm2
- _monitoring_systemd_red_hat.service scripts/lvm2_pvscan_systemd_red_hat at .service scripts/lvm2_tmpfiles_red_hat.conf scripts/lvmdump.sh scripts/Makefile test/Makefile test/api/Makefile test/api/python_lvm_unit.py test/unit/Makefile tools/Makefile udev/Makefile"
-+ac_config_files="$ac_config_files Makefile make.tmpl libdm/make.tmpl daemons/Makefile daemons/cmirrord/Makefile daemons/dmeventd/Makefile daemons/dmeventd/libdevmapper-event.pc daemons/dmeventd/plugins/Makefile daemons/dmeventd/plugins/lvm2/Makefile daemons/dmeventd/plugins/raid/Makefile daemons/dmeventd/plugins/mirror/Makefile daemons/dmeventd/plugins/snapshot/Makefile daemons/dmeventd/plugins/thin/Makefile daemons/dmfilemapd/Makefile daemons/lvmdbusd/Makefile daemons/lvmdbusd/lvmdbusd daemons/lvmdbusd/lvmdb.py daemons/lvmdbusd/lvm_shell_proxy.py daemons/lvmdbusd/path.py daemons/lvmetad/Makefile daemons/lvmpolld/Makefile daemons/lvmlockd/Makefile conf/Makefile conf/example.conf conf/lvmlocal.conf conf/command_profile_template.profile conf/metadata_profile_template.profile include/Makefile lib/Makefile include/lvm-version.h libdaemon/Makefile libdaemon/client/Makefile libdaemon/server/Makefile libdm/Makefile libdm/libdevmapper.pc man/Makefile po/Makefile python/Makefile python/setup
- .py scripts/blkdeactivate.sh scripts/blk_availability_init_red_hat scripts/blk_availability_systemd_red_hat.service scripts/cmirrord_init_red_hat scripts/com.redhat.lvmdbus1.service scripts/dm_event_systemd_red_hat.service scripts/dm_event_systemd_red_hat.socket scripts/lvm2_cmirrord_systemd_red_hat.service scripts/lvm2_lvmdbusd_systemd_red_hat.service scripts/lvm2_lvmetad_init_red_hat scripts/lvm2_lvmetad_systemd_red_hat.service scripts/lvm2_lvmetad_systemd_red_hat.socket scripts/lvm2_lvmpolld_init_red_hat scripts/lvm2_lvmpolld_systemd_red_hat.service scripts/lvm2_lvmpolld_systemd_red_hat.socket scripts/lvm2_lvmlockd_systemd_red_hat.service scripts/lvm2_lvmlocking_systemd_red_hat.service scripts/lvm2_monitoring_init_red_hat scripts/lvm2_monitoring_systemd_red_hat.service scripts/lvm2_pvscan_systemd_red_hat@.service scripts/lvm2_tmpfiles_red_hat.conf scripts/lvmdump.sh scripts/Makefile test/Makefile test/api/Makefile test/api/python_lvm_unit.py test/unit/Makefile tools/Makefile udev
- /Makefile"
- 
- cat >confcache <<\_ACEOF
- # This file is a shell script that caches the results of configure
-@@ -16258,7 +14310,6 @@ do
-     "make.tmpl") CONFIG_FILES="$CONFIG_FILES make.tmpl" ;;
-     "libdm/make.tmpl") CONFIG_FILES="$CONFIG_FILES libdm/make.tmpl" ;;
-     "daemons/Makefile") CONFIG_FILES="$CONFIG_FILES daemons/Makefile" ;;
--    "daemons/clvmd/Makefile") CONFIG_FILES="$CONFIG_FILES daemons/clvmd/Makefile" ;;
-     "daemons/cmirrord/Makefile") CONFIG_FILES="$CONFIG_FILES daemons/cmirrord/Makefile" ;;
-     "daemons/dmeventd/Makefile") CONFIG_FILES="$CONFIG_FILES daemons/dmeventd/Makefile" ;;
-     "daemons/dmeventd/libdevmapper-event.pc") CONFIG_FILES="$CONFIG_FILES daemons/dmeventd/libdevmapper-event.pc" ;;
-@@ -16284,15 +14335,12 @@ do
-     "conf/metadata_profile_template.profile") CONFIG_FILES="$CONFIG_FILES conf/metadata_profile_template.profile" ;;
-     "include/Makefile") CONFIG_FILES="$CONFIG_FILES include/Makefile" ;;
-     "lib/Makefile") CONFIG_FILES="$CONFIG_FILES lib/Makefile" ;;
--    "lib/locking/Makefile") CONFIG_FILES="$CONFIG_FILES lib/locking/Makefile" ;;
-     "include/lvm-version.h") CONFIG_FILES="$CONFIG_FILES include/lvm-version.h" ;;
-     "libdaemon/Makefile") CONFIG_FILES="$CONFIG_FILES libdaemon/Makefile" ;;
-     "libdaemon/client/Makefile") CONFIG_FILES="$CONFIG_FILES libdaemon/client/Makefile" ;;
-     "libdaemon/server/Makefile") CONFIG_FILES="$CONFIG_FILES libdaemon/server/Makefile" ;;
-     "libdm/Makefile") CONFIG_FILES="$CONFIG_FILES libdm/Makefile" ;;
-     "libdm/libdevmapper.pc") CONFIG_FILES="$CONFIG_FILES libdm/libdevmapper.pc" ;;
--    "liblvm/Makefile") CONFIG_FILES="$CONFIG_FILES liblvm/Makefile" ;;
--    "liblvm/liblvm2app.pc") CONFIG_FILES="$CONFIG_FILES liblvm/liblvm2app.pc" ;;
-     "man/Makefile") CONFIG_FILES="$CONFIG_FILES man/Makefile" ;;
-     "po/Makefile") CONFIG_FILES="$CONFIG_FILES po/Makefile" ;;
-     "python/Makefile") CONFIG_FILES="$CONFIG_FILES python/Makefile" ;;
-@@ -16300,14 +14348,10 @@ do
-     "scripts/blkdeactivate.sh") CONFIG_FILES="$CONFIG_FILES scripts/blkdeactivate.sh" ;;
-     "scripts/blk_availability_init_red_hat") CONFIG_FILES="$CONFIG_FILES scripts/blk_availability_init_red_hat" ;;
-     "scripts/blk_availability_systemd_red_hat.service") CONFIG_FILES="$CONFIG_FILES scripts/blk_availability_systemd_red_hat.service" ;;
--    "scripts/clvmd_init_red_hat") CONFIG_FILES="$CONFIG_FILES scripts/clvmd_init_red_hat" ;;
-     "scripts/cmirrord_init_red_hat") CONFIG_FILES="$CONFIG_FILES scripts/cmirrord_init_red_hat" ;;
-     "scripts/com.redhat.lvmdbus1.service") CONFIG_FILES="$CONFIG_FILES scripts/com.redhat.lvmdbus1.service" ;;
-     "scripts/dm_event_systemd_red_hat.service") CONFIG_FILES="$CONFIG_FILES scripts/dm_event_systemd_red_hat.service" ;;
-     "scripts/dm_event_systemd_red_hat.socket") CONFIG_FILES="$CONFIG_FILES scripts/dm_event_systemd_red_hat.socket" ;;
--    "scripts/lvm2_cluster_activation_red_hat.sh") CONFIG_FILES="$CONFIG_FILES scripts/lvm2_cluster_activation_red_hat.sh" ;;
--    "scripts/lvm2_cluster_activation_systemd_red_hat.service") CONFIG_FILES="$CONFIG_FILES scripts/lvm2_cluster_activation_systemd_red_hat.service" ;;
--    "scripts/lvm2_clvmd_systemd_red_hat.service") CONFIG_FILES="$CONFIG_FILES scripts/lvm2_clvmd_systemd_red_hat.service" ;;
-     "scripts/lvm2_cmirrord_systemd_red_hat.service") CONFIG_FILES="$CONFIG_FILES scripts/lvm2_cmirrord_systemd_red_hat.service" ;;
-     "scripts/lvm2_lvmdbusd_systemd_red_hat.service") CONFIG_FILES="$CONFIG_FILES scripts/lvm2_lvmdbusd_systemd_red_hat.service" ;;
-     "scripts/lvm2_lvmetad_init_red_hat") CONFIG_FILES="$CONFIG_FILES scripts/lvm2_lvmetad_init_red_hat" ;;
-diff --git a/configure.ac b/configure.ac
-index 365df25..9b5d055 100644
---- a/configure.ac
-+++ b/configure.ac
-@@ -1109,20 +1109,6 @@ if test "$ODIRECT" = yes; then
- fi
- 
- ################################################################################
--dnl -- Enable liblvm2app.so
--AC_MSG_CHECKING(whether to build liblvm2app.so application library)
--AC_ARG_ENABLE(applib,
--	      AC_HELP_STRING([--enable-applib], [build application library]),
--	      APPLIB=$enableval, APPLIB=no)
--AC_MSG_RESULT($APPLIB)
--AC_SUBST([LVM2APP_LIB])
--test "$APPLIB" = yes \
--  && LVM2APP_LIB=-llvm2app \
--  || LVM2APP_LIB=
--AS_IF([test "$APPLIB"],
--      [AC_MSG_WARN([liblvm2app is deprecated. Use D-Bus API])])
--
--################################################################################
- dnl -- Enable cmdlib
- AC_MSG_CHECKING(whether to compile liblvm2cmd.so)
- AC_ARG_ENABLE(cmdlib,
-@@ -1145,44 +1131,9 @@ AS_IF([test "$NOTIFYDBUS_SUPPORT" = yes && test "BUILD_LVMDBUSD" = yes],
-       [AC_MSG_WARN([Building D-Bus support without D-Bus notifications.])])
- 
- ################################################################################
--dnl -- Enable Python liblvm2app bindings
--AC_MSG_CHECKING(whether to build Python wrapper for liblvm2app.so)
--AC_ARG_ENABLE(python_bindings,
--	      AC_HELP_STRING([--enable-python_bindings], [build default Python applib bindings]),
--	      PYTHON_BINDINGS=$enableval, PYTHON_BINDINGS=no)
--AC_MSG_RESULT($PYTHON_BINDINGS)
--
--AC_MSG_CHECKING(whether to build Python2 wrapper for liblvm2app.so)
--AC_ARG_ENABLE(python2_bindings,
--	      AC_HELP_STRING([--enable-python2_bindings], [build Python2 applib bindings]),
--	      PYTHON2_BINDINGS=$enableval, PYTHON2_BINDINGS=no)
--AC_MSG_RESULT($PYTHON2_BINDINGS)
--
--
--AC_MSG_CHECKING(whether to build Python3 wrapper for liblvm2app.so)
--AC_ARG_ENABLE(python3_bindings,
--	      AC_HELP_STRING([--enable-python3_bindings], [build Python3 applib bindings]),
--	      PYTHON3_BINDINGS=$enableval, PYTHON3_BINDINGS=no)
--AC_MSG_RESULT($PYTHON3_BINDINGS)
--
--if test "$PYTHON_BINDINGS" = yes; then
--	AC_MSG_ERROR([--enable-python-bindings is replaced by --enable-python2-bindings and --enable-python3-bindings])
--fi
-+dnl -- Enable Python dbus library
- 
--if test "$PYTHON2_BINDINGS" = yes; then
--	AM_PATH_PYTHON([2])
--	AC_PATH_TOOL(PYTHON2, python2)
--	test -z "$PYTHON2" && AC_MSG_ERROR([python2 is required for --enable-python2_bindings but cannot be found])
--	AC_PATH_TOOL(PYTHON2_CONFIG, python2-config)
--	test -z "$PYTHON2_CONFIG" && AC_PATH_TOOL(PYTHON2_CONFIG, python-config)
--	test -z "$PYTHON2_CONFIG" && AC_MSG_ERROR([python headers are required for --enable-python2_bindings but cannot be found])
--	PYTHON2_INCDIRS=`"$PYTHON2_CONFIG" --includes`
--	PYTHON2_LIBDIRS=`"$PYTHON2_CONFIG" --libs`
--	PYTHON2DIR=$pythondir
--	PYTHON_BINDINGS=yes
--fi
--	
--if test "$PYTHON3_BINDINGS" = yes -o "$BUILD_LVMDBUSD" = yes; then
-+if test "$BUILD_LVMDBUSD" = yes; then
- 	unset PYTHON PYTHON_CONFIG
- 	unset am_cv_pathless_PYTHON ac_cv_path_PYTHON am_cv_python_platform
- 	unset am_cv_python_pythondir am_cv_python_version am_cv_python_pyexecdir
-@@ -1196,19 +1147,12 @@ if test "$PYTHON3_BINDINGS" = yes -o "$BUILD_LVMDBUSD" = yes; then
- 	PYTHON3_LIBDIRS=`"$PYTHON3_CONFIG" --libs`
- 	PYTHON3DIR=$pythondir
- 	test "$PYTHON3_BINDINGS" = yes && PYTHON_BINDINGS=yes
--fi
- 
--if test "$BUILD_LVMDBUSD" = yes; then
- 	# To get this macro, install autoconf-archive package then run autoreconf
- 	AC_PYTHON_MODULE([pyudev], [Required], python3)
- 	AC_PYTHON_MODULE([dbus], [Required], python3)
- fi
- 
--if test "$PYTHON_BINDINGS" = yes -o "$PYTHON2_BINDINGS" = yes -o "$PYTHON3_BINDINGS" = yes; then
--	AC_MSG_WARN([Python bindings are deprecated. Use D-Bus API])
--	test "$APPLIB" != yes && AC_MSG_ERROR([Python_bindings require --enable-applib])
--fi
--
- ################################################################################
- dnl -- Enable pkg-config
- AC_ARG_ENABLE(pkgconfig,
-@@ -1656,7 +1600,6 @@ LVM_LIBAPI=`echo "$VER" | $AWK -F '[[()]]' '{print $2}'`
- AC_DEFINE_UNQUOTED(LVM_CONFIGURE_LINE, "$CONFIGURE_LINE", [configure command line used])
- 
- ################################################################################
--AC_SUBST(APPLIB)
- AC_SUBST(AWK)
- AC_SUBST(BLKID_PC)
- AC_SUBST(BUILD_CMIRRORD)
-@@ -1843,8 +1786,6 @@ libdaemon/client/Makefile
- libdaemon/server/Makefile
- libdm/Makefile
- libdm/libdevmapper.pc
--liblvm/Makefile
--liblvm/liblvm2app.pc
- man/Makefile
- po/Makefile
- python/Makefile
-diff --git a/include/configure.h.in b/include/configure.h.in
-index 65a2a6a..b1b2db3 100644
---- a/include/configure.h.in
-+++ b/include/configure.h.in
-@@ -28,9 +28,6 @@
- /* Path to cmirrord pidfile. */
- #undef CMIRRORD_PIDFILE
- 
--/* Define to 0 to exclude libSaCkpt. */
--#undef CMIRROR_HAS_CHECKPOINT
--
- /* Define to one of `_getb67', `GETB67', `getb67' for Cray-2 and Cray-YMP
-    systems. This function is required for `alloca.c' support on those systems.
-    */
-@@ -185,9 +182,6 @@
- /* Define to 1 if you don't have `vprintf' but do have `_doprnt.' */
- #undef HAVE_DOPRNT
- 
--/* Define to 1 if you have the `dup2' function. */
--#undef HAVE_DUP2
--
- /* Define to 1 if you have the <errno.h> header file. */
- #undef HAVE_ERRNO_H
- 
-@@ -209,9 +203,6 @@
- /* Define to 1 if getline is available. */
- #undef HAVE_GETLINE
- 
--/* Define to 1 if you have the `getmntent' function. */
--#undef HAVE_GETMNTENT
--
- /* Define to 1 if getopt_long is available. */
- #undef HAVE_GETOPTLONG
- 
-@@ -236,9 +227,6 @@
- /* Define to 1 if dynamic libraries are available. */
- #undef HAVE_LIBDL
- 
--/* Define to 1 if you have the <libdlm.h> header file. */
--#undef HAVE_LIBDLM_H
--
- /* Define to 1 if you have the <libgen.h> header file. */
- #undef HAVE_LIBGEN_H
- 
-@@ -283,9 +271,6 @@
- /* Define to 1 if you have the `memchr' function. */
- #undef HAVE_MEMCHR
- 
--/* Define to 1 if you have the `memmove' function. */
--#undef HAVE_MEMMOVE
--
- /* Define to 1 if you have the <memory.h> header file. */
- #undef HAVE_MEMORY_H
- 
-@@ -301,30 +286,18 @@
- /* Define to 1 if you have a working `mmap' system call. */
- #undef HAVE_MMAP
- 
--/* Define to 1 if you have the <mntent.h> header file. */
--#undef HAVE_MNTENT_H
--
- /* Define to 1 if you have the `munmap' function. */
- #undef HAVE_MUNMAP
- 
- /* Define to 1 if you have the <ndir.h> header file, and it defines `DIR'. */
- #undef HAVE_NDIR_H
- 
--/* Define to 1 if you have the <netdb.h> header file. */
--#undef HAVE_NETDB_H
--
--/* Define to 1 if you have the <netinet/in.h> header file. */
--#undef HAVE_NETINET_IN_H
--
- /* Define to 1 if you have the `nl_langinfo' function. */
- #undef HAVE_NL_LANGINFO
- 
- /* Define to 1 if you have the <paths.h> header file. */
- #undef HAVE_PATHS_H
- 
--/* Define to 1 if you have the <pthread.h> header file. */
--#undef HAVE_PTHREAD_H
--
- /* Define to 1 if the system has the type `ptrdiff_t'. */
- #undef HAVE_PTRDIFF_T
- 
-@@ -350,12 +323,6 @@
- /* Define to 1 if you have the `rmdir' function. */
- #undef HAVE_RMDIR
- 
--/* Define to 1 if you have the <search.h> header file. */
--#undef HAVE_SEARCH_H
--
--/* Define to 1 if you have the `select' function. */
--#undef HAVE_SELECT
--
- /* Define to 1 to include support for selinux. */
- #undef HAVE_SELINUX
- 
-@@ -377,9 +344,6 @@
- /* Define to 1 if you have the <signal.h> header file. */
- #undef HAVE_SIGNAL_H
- 
--/* Define to 1 if you have the `socket' function. */
--#undef HAVE_SOCKET
--
- /* Define to 1 if `stat' has the bug that it succeeds when given the
-    zero-length file name argument. */
- #undef HAVE_STAT_EMPTY_STRING_BUG
-@@ -491,9 +455,6 @@
- /* Define to 1 if you have the <sys/mman.h> header file. */
- #undef HAVE_SYS_MMAN_H
- 
--/* Define to 1 if you have the <sys/mount.h> header file. */
--#undef HAVE_SYS_MOUNT_H
--
- /* Define to 1 if you have the <sys/ndir.h> header file, and it defines `DIR'.
-    */
- #undef HAVE_SYS_NDIR_H
-@@ -504,15 +465,9 @@
- /* Define to 1 if you have the <sys/resource.h> header file. */
- #undef HAVE_SYS_RESOURCE_H
- 
--/* Define to 1 if you have the <sys/select.h> header file. */
--#undef HAVE_SYS_SELECT_H
--
- /* Define to 1 if you have the <sys/sem.h> header file. */
- #undef HAVE_SYS_SEM_H
- 
--/* Define to 1 if you have the <sys/socket.h> header file. */
--#undef HAVE_SYS_SOCKET_H
--
- /* Define to 1 if you have the <sys/statvfs.h> header file. */
- #undef HAVE_SYS_STATVFS_H
- 
-@@ -528,12 +483,6 @@
- /* Define to 1 if you have the <sys/types.h> header file. */
- #undef HAVE_SYS_TYPES_H
- 
--/* Define to 1 if you have the <sys/uio.h> header file. */
--#undef HAVE_SYS_UIO_H
--
--/* Define to 1 if you have the <sys/un.h> header file. */
--#undef HAVE_SYS_UN_H
--
- /* Define to 1 if you have the <sys/utsname.h> header file. */
- #undef HAVE_SYS_UTSNAME_H
- 
-@@ -555,9 +504,6 @@
- /* Define to 1 if you have the <unistd.h> header file. */
- #undef HAVE_UNISTD_H
- 
--/* Define to 1 if you have the <utmpx.h> header file. */
--#undef HAVE_UTMPX_H
--
- /* valgrind.h found */
- #undef HAVE_VALGRIND
- 
-@@ -598,6 +544,9 @@
-    slash. */
- #undef LSTAT_FOLLOWS_SLASHED_SYMLINK
- 
-+/* Path to lvmconfig binary. */
-+#undef LVMCONFIG_PATH
++void dm_log_with_errno_init(dm_log_with_errno_fn fn);
++void dm_log_init_verbose(int level);
 +
- /* Path to lvmetad pidfile. */
- #undef LVMETAD_PIDFILE
- 
-@@ -669,15 +618,6 @@
- /* Define as the return type of signal handlers (`int' or `void'). */
- #undef RETSIGTYPE
- 
--/* Define to the type of arg 1 for `select'. */
--#undef SELECT_TYPE_ARG1
--
--/* Define to the type of args 2, 3 and 4 for `select'. */
--#undef SELECT_TYPE_ARG234
--
--/* Define to the type of arg 5 for `select'. */
--#undef SELECT_TYPE_ARG5
--
- /* Define to 1 to include built-in support for snapshots. */
- #undef SNAPSHOT_INTERNAL
- 
-diff --git a/liblvm/.exported_symbols b/liblvm/.exported_symbols
++/*
++ * Original version of this function.
++ * dm_errno is set to 0.
++ *
++ * Deprecated: Use the _with_errno_ versions above instead.
++ */
++typedef void (*dm_log_fn) (int level, const char *file, int line,
++			   const char *f, ...)
++    __attribute__ ((format(printf, 4, 5)));
++
++void dm_log_init(dm_log_fn fn);
++/*
++ * For backward-compatibility, indicate that dm_log_init() was used
++ * to set a non-default value of dm_log().
++ */
++int dm_log_is_non_default(void);
++
++/*
++ * Number of devices currently in suspended state (via the library).
++ */
++int dm_get_suspended_counter(void);
++
++enum {
++	DM_DEVICE_CREATE,
++	DM_DEVICE_RELOAD,
++	DM_DEVICE_REMOVE,
++	DM_DEVICE_REMOVE_ALL,
++
++	DM_DEVICE_SUSPEND,
++	DM_DEVICE_RESUME,
++
++	DM_DEVICE_INFO,
++	DM_DEVICE_DEPS,
++	DM_DEVICE_RENAME,
++
++	DM_DEVICE_VERSION,
++
++	DM_DEVICE_STATUS,
++	DM_DEVICE_TABLE,
++	DM_DEVICE_WAITEVENT,
++
++	DM_DEVICE_LIST,
++
++	DM_DEVICE_CLEAR,
++
++	DM_DEVICE_MKNODES,
++
++	DM_DEVICE_LIST_VERSIONS,
++	
++	DM_DEVICE_TARGET_MSG,
++
++	DM_DEVICE_SET_GEOMETRY
++};
++
++/*
++ * You will need to build a struct dm_task for
++ * each ioctl command you want to execute.
++ */
++
++struct dm_pool;
++struct dm_task;
++struct dm_timestamp;
++
++struct dm_task *dm_task_create(int type);
++void dm_task_destroy(struct dm_task *dmt);
++
++int dm_task_set_name(struct dm_task *dmt, const char *name);
++int dm_task_set_uuid(struct dm_task *dmt, const char *uuid);
++
++/*
++ * Retrieve attributes after an info.
++ */
++struct dm_info {
++	int exists;
++	int suspended;
++	int live_table;
++	int inactive_table;
++	int32_t open_count;
++	uint32_t event_nr;
++	uint32_t major;
++	uint32_t minor;		/* minor device number */
++	int read_only;		/* 0:read-write; 1:read-only */
++
++	int32_t target_count;
++
++	int deferred_remove;
++	int internal_suspend;
++};
++
++struct dm_deps {
++	uint32_t count;
++	uint32_t filler;
++	uint64_t device[0];
++};
++
++struct dm_names {
++	uint64_t dev;
++	uint32_t next;		/* Offset to next struct from start of this struct */
++	char name[0];
++};
++
++struct dm_versions {
++	uint32_t next;		/* Offset to next struct from start of this struct */
++	uint32_t version[3];
++
++	char name[0];
++};
++
++int dm_get_library_version(char *version, size_t size);
++int dm_task_get_driver_version(struct dm_task *dmt, char *version, size_t size);
++int dm_task_get_info(struct dm_task *dmt, struct dm_info *dmi);
++
++/*
++ * This function returns dm device's UUID based on the value
++ * of the mangling mode set during preceding dm_task_run call:
++ *   - unmangled UUID for DM_STRING_MANGLING_{AUTO, HEX},
++ *   - UUID without any changes for DM_STRING_MANGLING_NONE.
++ *
++ * To get mangled or unmangled form of the UUID directly, use
++ * dm_task_get_uuid_mangled or dm_task_get_uuid_unmangled function.
++ */
++const char *dm_task_get_uuid(const struct dm_task *dmt);
++
++struct dm_deps *dm_task_get_deps(struct dm_task *dmt);
++struct dm_versions *dm_task_get_versions(struct dm_task *dmt);
++const char *dm_task_get_message_response(struct dm_task *dmt);
++
++/*
++ * These functions return device-mapper names based on the value
++ * of the mangling mode set during preceding dm_task_run call:
++ *   - unmangled name for DM_STRING_MANGLING_{AUTO, HEX},
++ *   - name without any changes for DM_STRING_MANGLING_NONE.
++ *
++ * To get mangled or unmangled form of the name directly, use
++ * dm_task_get_name_mangled or dm_task_get_name_unmangled function.
++ */
++const char *dm_task_get_name(const struct dm_task *dmt);
++struct dm_names *dm_task_get_names(struct dm_task *dmt);
++
++int dm_task_set_ro(struct dm_task *dmt);
++int dm_task_set_newname(struct dm_task *dmt, const char *newname);
++int dm_task_set_newuuid(struct dm_task *dmt, const char *newuuid);
++int dm_task_set_minor(struct dm_task *dmt, int minor);
++int dm_task_set_major(struct dm_task *dmt, int major);
++int dm_task_set_major_minor(struct dm_task *dmt, int major, int minor, int allow_default_major_fallback);
++int dm_task_set_uid(struct dm_task *dmt, uid_t uid);
++int dm_task_set_gid(struct dm_task *dmt, gid_t gid);
++int dm_task_set_mode(struct dm_task *dmt, mode_t mode);
++/* See also description for DM_UDEV_DISABLE_LIBRARY_FALLBACK flag! */
++int dm_task_set_cookie(struct dm_task *dmt, uint32_t *cookie, uint16_t flags);
++int dm_task_set_event_nr(struct dm_task *dmt, uint32_t event_nr);
++int dm_task_set_geometry(struct dm_task *dmt, const char *cylinders, const char *heads, const char *sectors, const char *start);
++int dm_task_set_message(struct dm_task *dmt, const char *message);
++int dm_task_set_sector(struct dm_task *dmt, uint64_t sector);
++int dm_task_no_flush(struct dm_task *dmt);
++int dm_task_no_open_count(struct dm_task *dmt);
++int dm_task_skip_lockfs(struct dm_task *dmt);
++int dm_task_query_inactive_table(struct dm_task *dmt);
++int dm_task_suppress_identical_reload(struct dm_task *dmt);
++int dm_task_secure_data(struct dm_task *dmt);
++int dm_task_retry_remove(struct dm_task *dmt);
++int dm_task_deferred_remove(struct dm_task *dmt);
++
++/*
++ * Record timestamp immediately after the ioctl returns.
++ */
++int dm_task_set_record_timestamp(struct dm_task *dmt);
++struct dm_timestamp *dm_task_get_ioctl_timestamp(struct dm_task *dmt);
++
++/*
++ * Enable checks for common mistakes such as issuing ioctls in an unsafe order.
++ */
++int dm_task_enable_checks(struct dm_task *dmt);
++
++typedef enum {
++	DM_ADD_NODE_ON_RESUME, /* add /dev/mapper node with dmsetup resume */
++	DM_ADD_NODE_ON_CREATE  /* add /dev/mapper node with dmsetup create */
++} dm_add_node_t;
++int dm_task_set_add_node(struct dm_task *dmt, dm_add_node_t add_node);
++
++/*
++ * Control read_ahead.
++ */
++#define DM_READ_AHEAD_AUTO UINT32_MAX	/* Use kernel default readahead */
++#define DM_READ_AHEAD_NONE 0		/* Disable readahead */
++
++#define DM_READ_AHEAD_MINIMUM_FLAG	0x1	/* Value supplied is minimum */
++
++/*
++ * Read ahead is set with DM_DEVICE_CREATE with a table or DM_DEVICE_RESUME.
++ */
++int dm_task_set_read_ahead(struct dm_task *dmt, uint32_t read_ahead,
++			   uint32_t read_ahead_flags);
++uint32_t dm_task_get_read_ahead(const struct dm_task *dmt,
++				uint32_t *read_ahead);
++
++/*
++ * Use these to prepare for a create or reload.
++ */
++int dm_task_add_target(struct dm_task *dmt,
++		       uint64_t start,
++		       uint64_t size, const char *ttype, const char *params);
++
++/*
++ * Format major/minor numbers correctly for input to driver.
++ */
++#define DM_FORMAT_DEV_BUFSIZE	13	/* Minimum bufsize to handle worst case. */
++int dm_format_dev(char *buf, int bufsize, uint32_t dev_major, uint32_t dev_minor);
++
++/* Use this to retrive target information returned from a STATUS call */
++void *dm_get_next_target(struct dm_task *dmt,
++			 void *next, uint64_t *start, uint64_t *length,
++			 char **target_type, char **params);
++
++/*
++ * Following dm_get_status_* functions will allocate approriate status structure
++ * from passed mempool together with the necessary character arrays.
++ * Destroying the mempool will release all asociated allocation.
++ */
++
++/* Parse params from STATUS call for mirror target */
++typedef enum {
++	DM_STATUS_MIRROR_ALIVE	      = 'A',/* No failures */
++	DM_STATUS_MIRROR_FLUSH_FAILED = 'F',/* Mirror out-of-sync */
++	DM_STATUS_MIRROR_WRITE_FAILED = 'D',/* Mirror out-of-sync */
++	DM_STATUS_MIRROR_SYNC_FAILED  = 'S',/* Mirror out-of-sync */
++	DM_STATUS_MIRROR_READ_FAILED  = 'R',/* Mirror data unaffected */
++	DM_STATUS_MIRROR_UNCLASSIFIED = 'U' /* Bug */
++} dm_status_mirror_health_t;
++
++struct dm_status_mirror {
++	uint64_t total_regions;
++	uint64_t insync_regions;
++	uint32_t dev_count;             /* # of devs[] elements (<= 8) */
++	struct {
++		dm_status_mirror_health_t health;
++		uint32_t major;
++		uint32_t minor;
++	} *devs;                        /* array with individual legs */
++	const char *log_type;           /* core, disk,.... */
++	uint32_t log_count;		/* # of logs[] elements */
++	struct {
++		dm_status_mirror_health_t health;
++		uint32_t major;
++		uint32_t minor;
++	} *logs;			/* array with individual logs */
++};
++
++int dm_get_status_mirror(struct dm_pool *mem, const char *params,
++			 struct dm_status_mirror **status);
++
++/* Parse params from STATUS call for raid target */
++struct dm_status_raid {
++	uint64_t reserved;
++	uint64_t total_regions;		/* sectors */
++	uint64_t insync_regions;	/* sectors */
++	uint64_t mismatch_count;
++	uint32_t dev_count;
++	char *raid_type;
++	/* A - alive,  a - alive not in-sync,  D - dead/failed */
++	char *dev_health;
++	/* idle, frozen, resync, recover, check, repair */
++	char *sync_action;
++	uint64_t data_offset; /* RAID out-of-place reshaping */
++};
++
++int dm_get_status_raid(struct dm_pool *mem, const char *params,
++		       struct dm_status_raid **status);
++
++/* Parse params from STATUS call for cache target */
++struct dm_status_cache {
++	uint64_t version;  /* zero for now */
++
++	uint32_t metadata_block_size;   /* in 512B sectors */
++	uint32_t block_size;            /* AKA 'chunk_size' */
++
++	uint64_t metadata_used_blocks;
++	uint64_t metadata_total_blocks;
++
++	uint64_t used_blocks;
++	uint64_t dirty_blocks;
++	uint64_t total_blocks;
++
++	uint64_t read_hits;
++	uint64_t read_misses;
++	uint64_t write_hits;
++	uint64_t write_misses;
++
++	uint64_t demotions;
++	uint64_t promotions;
++
++	uint64_t feature_flags;		/* DM_CACHE_FEATURE_? */
++
++	int core_argc;
++	char **core_argv;
++
++	char *policy_name;
++	int policy_argc;
++	char **policy_argv;
++
++	unsigned error : 1;		/* detected error (switches to fail soon) */
++	unsigned fail : 1;		/* all I/O fails */
++	unsigned needs_check : 1;	/* metadata needs check */
++	unsigned read_only : 1;		/* metadata may not be changed */
++	uint32_t reserved : 28;
++};
++
++int dm_get_status_cache(struct dm_pool *mem, const char *params,
++			struct dm_status_cache **status);
++
++/*
++ * Parse params from STATUS call for snapshot target
++ *
++ * Snapshot target's format:
++ * <= 1.7.0: <used_sectors>/<total_sectors>
++ * >= 1.8.0: <used_sectors>/<total_sectors> <metadata_sectors>
++ */
++struct dm_status_snapshot {
++	uint64_t used_sectors;          /* in 512b units */
++	uint64_t total_sectors;
++	uint64_t metadata_sectors;
++	unsigned has_metadata_sectors : 1; /* set when metadata_sectors is present */
++	unsigned invalid : 1;		/* set when snapshot is invalidated */
++	unsigned merge_failed : 1;	/* set when snapshot merge failed */
++	unsigned overflow : 1;		/* set when snapshot overflows */
++};
++
++int dm_get_status_snapshot(struct dm_pool *mem, const char *params,
++			   struct dm_status_snapshot **status);
++
++/* Parse params from STATUS call for thin_pool target */
++typedef enum {
++	DM_THIN_DISCARDS_IGNORE,
++	DM_THIN_DISCARDS_NO_PASSDOWN,
++	DM_THIN_DISCARDS_PASSDOWN
++} dm_thin_discards_t;
++
++struct dm_status_thin_pool {
++	uint64_t transaction_id;
++	uint64_t used_metadata_blocks;
++	uint64_t total_metadata_blocks;
++	uint64_t used_data_blocks;
++	uint64_t total_data_blocks;
++	uint64_t held_metadata_root;
++	uint32_t read_only;		/* metadata may not be changed */
++	dm_thin_discards_t discards;
++	uint32_t fail : 1;		/* all I/O fails */
++	uint32_t error_if_no_space : 1;	/* otherwise queue_if_no_space */
++	uint32_t out_of_data_space : 1;	/* metadata may be changed, but data may not be allocated (no rw) */
++	uint32_t needs_check : 1;	/* metadata needs check */
++	uint32_t error : 1;		/* detected error (switches to fail soon) */
++	uint32_t reserved : 27;
++};
++
++int dm_get_status_thin_pool(struct dm_pool *mem, const char *params,
++			    struct dm_status_thin_pool **status);
++
++/* Parse params from STATUS call for thin target */
++struct dm_status_thin {
++	uint64_t mapped_sectors;
++	uint64_t highest_mapped_sector;
++	uint32_t fail : 1;              /* Thin volume fails I/O */
++	uint32_t reserved : 31;
++};
++
++int dm_get_status_thin(struct dm_pool *mem, const char *params,
++		       struct dm_status_thin **status);
++
++/*
++ * device-mapper statistics support
++ */
++
++/*
++ * Statistics handle.
++ *
++ * Operations on dm_stats objects include managing statistics regions
++ * and obtaining and manipulating current counter values from the
++ * kernel. Methods are provided to return baisc count values and to
++ * derive time-based metrics when a suitable interval estimate is
++ * provided.
++ *
++ * Internally the dm_stats handle contains a pointer to a table of one
++ * or more dm_stats_region objects representing the regions registered
++ * with the dm_stats_create_region() method. These in turn point to a
++ * table of one or more dm_stats_counters objects containing the
++ * counter sets for each defined area within the region:
++ *
++ * dm_stats->dm_stats_region[nr_regions]->dm_stats_counters[nr_areas]
++ *
++ * This structure is private to the library and may change in future
++ * versions: all users should make use of the public interface and treat
++ * the dm_stats type as an opaque handle.
++ *
++ * Regions and counter sets are stored in order of increasing region_id.
++ * Depending on region specifications and the sequence of create and
++ * delete operations this may not correspond to increasing sector
++ * number: users of the library should not assume that this is the case
++ * unless region creation is deliberately managed to ensure this (by
++ * always creating regions in strict order of ascending sector address).
++ *
++ * Regions may also overlap so the same sector range may be included in
++ * more than one region or area: applications should be prepared to deal
++ * with this or manage regions such that it does not occur.
++ */
++struct dm_stats;
++
++/*
++ * Histogram handle.
++ *
++ * A histogram object represents the latency histogram values and bin
++ * boundaries of the histogram associated with a particular area.
++ *
++ * Operations on the handle allow the number of bins, bin boundaries,
++ * counts and relative proportions to be obtained as well as the
++ * conversion of a histogram or its bounds to a compact string
++ * representation.
++ */
++struct dm_histogram;
++
++/*
++ * Allocate a dm_stats handle to use for subsequent device-mapper
++ * statistics operations. A program_id may be specified and will be
++ * used by default for subsequent operations on this handle.
++ *
++ * If program_id is NULL or the empty string a program_id will be
++ * automatically set to the value contained in /proc/self/comm.
++ */
++struct dm_stats *dm_stats_create(const char *program_id);
++
++/*
++ * Bind a dm_stats handle to the specified device major and minor
++ * values. Any previous binding is cleared and any preexisting counter
++ * data contained in the handle is released.
++ */
++int dm_stats_bind_devno(struct dm_stats *dms, int major, int minor);
++
++/*
++ * Bind a dm_stats handle to the specified device name.
++ * Any previous binding is cleared and any preexisting counter
++ * data contained in the handle is released.
++ */
++int dm_stats_bind_name(struct dm_stats *dms, const char *name);
++
++/*
++ * Bind a dm_stats handle to the specified device UUID.
++ * Any previous binding is cleared and any preexisting counter
++ * data contained in the handle is released.
++ */
++int dm_stats_bind_uuid(struct dm_stats *dms, const char *uuid);
++
++/*
++ * Bind a dm_stats handle to the device backing the file referenced
++ * by the specified file descriptor.
++ *
++ * File descriptor fd must reference a regular file, open for reading,
++ * in a local file system, backed by a device-mapper device, that
++ * supports the FIEMAP ioctl, and that returns data describing the
++ * physical location of extents.
++ */
++int dm_stats_bind_from_fd(struct dm_stats *dms, int fd);
++/*
++ * Test whether the running kernel supports the precise_timestamps
++ * feature. Presence of this feature also implies histogram support.
++ * The library will check this call internally and fails any attempt
++ * to use nanosecond counters or histograms on kernels that fail to
++ * meet this check.
++ */
++int dm_message_supports_precise_timestamps(void);
++
++/*
++ * Precise timetamps and histogram support.
++ * 
++ * Test for the presence of precise_timestamps and histogram support.
++ */
++int dm_stats_driver_supports_precise(void);
++int dm_stats_driver_supports_histogram(void);
++
++/*
++ * Returns 1 if the specified region has the precise_timestamps feature
++ * enabled (i.e. produces nanosecond-precision counter values) or 0 for
++ * a region using the default milisecond precision.
++ */
++int dm_stats_get_region_precise_timestamps(const struct dm_stats *dms,
++					   uint64_t region_id);
++
++/*
++ * Returns 1 if the region at the current cursor location has the
++ * precise_timestamps feature enabled (i.e. produces
++ * nanosecond-precision counter values) or 0 for a region using the
++ * default milisecond precision.
++ */
++int dm_stats_get_current_region_precise_timestamps(const struct dm_stats *dms);
++
++#define DM_STATS_ALL_PROGRAMS ""
++/*
++ * Parse the response from a @stats_list message. dm_stats_list will
++ * allocate the necessary dm_stats and dm_stats region structures from
++ * the embedded dm_pool. No counter data will be obtained (the counters
++ * members of dm_stats_region objects are set to NULL).
++ *
++ * A program_id may optionally be supplied; if the argument is non-NULL
++ * only regions with a matching program_id value will be considered. If
++ * the argument is NULL then the default program_id associated with the
++ * dm_stats handle will be used. Passing the special value
++ * DM_STATS_ALL_PROGRAMS will cause all regions to be queried
++ * regardless of region program_id.
++ */
++int dm_stats_list(struct dm_stats *dms, const char *program_id);
++
++#define DM_STATS_REGIONS_ALL UINT64_MAX
++/*
++ * Populate a dm_stats object with statistics for one or more regions of
++ * the specified device.
++ *
++ * A program_id may optionally be supplied; if the argument is non-NULL
++ * only regions with a matching program_id value will be considered. If
++ * the argument is NULL then the default program_id associated with the
++ * dm_stats handle will be used. Passing the special value
++ * DM_STATS_ALL_PROGRAMS will cause all regions to be queried
++ * regardless of region program_id.
++ *
++ * Passing the special value DM_STATS_REGIONS_ALL as the region_id
++ * argument will attempt to retrieve all regions selected by the
++ * program_id argument.
++ *
++ * If region_id is used to request a single region_id to be populated
++ * the program_id is ignored.
++ */
++int dm_stats_populate(struct dm_stats *dms, const char *program_id,
++		      uint64_t region_id);
++
++/*
++ * Create a new statistics region on the device bound to dms.
++ *
++ * start and len specify the region start and length in 512b sectors.
++ * Passing zero for both start and len will create a region spanning
++ * the entire device.
++ *
++ * Step determines how to subdivide the region into discrete counter
++ * sets: a positive value specifies the size of areas into which the
++ * region should be split while a negative value will split the region
++ * into a number of areas equal to the absolute value of step:
++ *
++ * - a region with one area spanning the entire device:
++ *
++ *   dm_stats_create_region(dms, 0, 0, -1, p, a);
++ *
++ * - a region with areas of 1MiB:
++ *
++ *   dm_stats_create_region(dms, 0, 0, 1 << 11, p, a);
++ *
++ * - one 1MiB region starting@1024 sectors with two areas:
++ *
++ *   dm_stats_create_region(dms, 1024, 1 << 11, -2, p, a);
++ *
++ * If precise is non-zero attempt to create a region with nanosecond
++ * precision counters using the kernel precise_timestamps feature.
++ *
++ * precise - A flag to request nanosecond precision counters
++ * to be used for this region.
++ *
++ * histogram_bounds - specify the boundaries of a latency histogram to
++ * be tracked for the region. The values are expressed as an array of
++ * uint64_t terminated with a zero. Values must be in order of ascending
++ * magnitude and specify the upper bounds of successive histogram bins
++ * in nanoseconds (with an implicit lower bound of zero on the first bin
++ * and an implicit upper bound of infinity on the final bin). For
++ * example:
++ *
++ *   uint64_t bounds_ary[] = { 1000, 2000, 3000, 0 };
++ *
++ * Specifies a histogram with four bins: 0-1000ns, 1000-2000ns,
++ * 2000-3000ns and >3000ns.
++ *
++ * The smallest latency value that can be tracked for a region not using
++ * precise_timestamps is 1ms: attempting to create a region with
++ * histogram boundaries < 1ms will cause the precise_timestamps feature
++ * to be enabled for that region automatically if it was not requested
++ * explicitly.
++ *
++ * program_id is an optional string argument that identifies the
++ * program creating the region. If program_id is NULL or the empty
++ * string the default program_id stored in the handle will be used.
++ *
++ * user_data is an optional string argument that is added to the
++ * content of the aux_data field stored with the statistics region by
++ * the kernel.
++ *
++ * The library may also use this space internally, for example, to
++ * store a group descriptor or other metadata: in this case the
++ * library will strip any internal data fields from the value before
++ * it is returned via a call to dm_stats_get_region_aux_data().
++ *
++ * The user data stored is not accessed by the library or kernel and
++ * may be used to store an arbitrary data word (embedded whitespace is
++ * not permitted).
++ *
++ * An application using both the library and direct access to the
++ * @stats_list device-mapper message may see the internal values stored
++ * in this field by the library. In such cases any string up to and
++ * including the first '#' in the field must be treated as an opaque
++ * value and preserved across any external modification of aux_data.
++ *
++ * The region_id of the newly-created region is returned in *region_id
++ * if it is non-NULL.
++ */
++int dm_stats_create_region(struct dm_stats *dms, uint64_t *region_id,
++			   uint64_t start, uint64_t len, int64_t step,
++			   int precise, struct dm_histogram *bounds,
++			   const char *program_id, const char *user_data);
++
++/*
++ * Delete the specified statistics region. This will also mark the
++ * region as not-present and discard any existing statistics data.
++ */
++int dm_stats_delete_region(struct dm_stats *dms, uint64_t region_id);
++
++/*
++ * Clear the specified statistics region. This requests the kernel to
++ * zero all counter values (except in-flight I/O). Note that this
++ * operation is not atomic with respect to reads of the counters; any IO
++ * events occurring between the last print operation and the clear will
++ * be lost. This can be avoided by using the atomic print-and-clear
++ * function of the dm_stats_print_region() call or by using the higher
++ * level dm_stats_populate() interface.
++ */
++int dm_stats_clear_region(struct dm_stats *dms, uint64_t region_id);
++
++/*
++ * Print the current counter values for the specified statistics region
++ * and return them as a string. The memory for the string buffer will
++ * be allocated from the dm_stats handle's private pool and should be
++ * returned by calling dm_stats_buffer_destroy() when no longer
++ * required. The pointer will become invalid following any call that
++ * clears or reinitializes the handle (destroy, list, populate, bind).
++ *
++ * This allows applications that wish to access the raw message response
++ * to obtain it via a dm_stats handle; no parsing of the textual counter
++ * data is carried out by this function.
++ *
++ * Most users are recommended to use the dm_stats_populate() call
++ * instead since this will automatically parse the statistics data into
++ * numeric form accessible via the dm_stats_get_*() counter access
++ * methods.
++ *
++ * A subset of the data lines may be requested by setting the
++ * start_line and num_lines parameters. If both are zero all data
++ * lines are returned.
++ *
++ * If the clear parameter is non-zero the operation will also
++ * atomically reset all counter values to zero (except in-flight IO).
++ */
++char *dm_stats_print_region(struct dm_stats *dms, uint64_t region_id,
++			    unsigned start_line, unsigned num_lines,
++			    unsigned clear);
++
++/*
++ * Destroy a statistics response buffer obtained from a call to
++ * dm_stats_print_region().
++ */
++void dm_stats_buffer_destroy(struct dm_stats *dms, char *buffer);
++
++/*
++ * Determine the number of regions contained in a dm_stats handle
++ * following a dm_stats_list() or dm_stats_populate() call.
++ *
++ * The value returned is the number of registered regions visible with the
++ * progam_id value used for the list or populate operation and may not be
++ * equal to the highest present region_id (either due to program_id
++ * filtering or gaps in the sequence of region_id values).
++ *
++ * Always returns zero on an empty handle.
++ */
++uint64_t dm_stats_get_nr_regions(const struct dm_stats *dms);
++
++/*
++ * Determine the number of groups contained in a dm_stats handle
++ * following a dm_stats_list() or dm_stats_populate() call.
++ *
++ * The value returned is the number of registered groups visible with the
++ * progam_id value used for the list or populate operation and may not be
++ * equal to the highest present group_id (either due to program_id
++ * filtering or gaps in the sequence of group_id values).
++ *
++ * Always returns zero on an empty handle.
++ */
++uint64_t dm_stats_get_nr_groups(const struct dm_stats *dms);
++
++/*
++ * Test whether region_id is present in this dm_stats handle.
++ */
++int dm_stats_region_present(const struct dm_stats *dms, uint64_t region_id);
++
++/*
++ * Returns the number of areas (counter sets) contained in the specified
++ * region_id of the supplied dm_stats handle.
++ */
++uint64_t dm_stats_get_region_nr_areas(const struct dm_stats *dms,
++				      uint64_t region_id);
++
++/*
++ * Returns the total number of areas (counter sets) in all regions of the
++ * given dm_stats object.
++ */
++uint64_t dm_stats_get_nr_areas(const struct dm_stats *dms);
++
++/*
++ * Test whether group_id is present in this dm_stats handle.
++ */
++int dm_stats_group_present(const struct dm_stats *dms, uint64_t group_id);
++
++/*
++ * Return the number of bins in the histogram configuration for the
++ * specified region or zero if no histogram specification is configured.
++ * Valid following a dm_stats_list() or dm_stats_populate() operation.
++ */
++int dm_stats_get_region_nr_histogram_bins(const struct dm_stats *dms,
++					  uint64_t region_id);
++
++/*
++ * Parse a histogram string with optional unit suffixes into a
++ * dm_histogram bounds description.
++ *
++ * A histogram string is a string of numbers "n1,n2,n3,..." that
++ * represent the boundaries of a histogram. The first and final bins
++ * have implicit lower and upper bounds of zero and infinity
++ * respectively and boundary values must occur in order of ascending
++ * magnitude.  Unless a unit suffix is given all values are specified in
++ * nanoseconds.
++ *
++ * For example, if bounds_str="300,600,900", the region will be created
++ * with a histogram containing four bins. Each report will include four
++ * numbers a:b:c:d. a is the number of requests that took between 0 and
++ * 300ns to complete, b is the number of requests that took 300-600ns to
++ * complete, c is the number of requests that took 600-900ns to complete
++ * and d is the number of requests that took more than 900ns to
++ * complete.
++ *
++ * An optional unit suffix of 's', 'ms', 'us', or 'ns' may be used to
++ * specify units of seconds, miliseconds, microseconds, or nanoseconds:
++ *
++ *   bounds_str="1ns,1us,1ms,1s"
++ *   bounds_str="500us,1ms,1500us,2ms"
++ *   bounds_str="200ms,400ms,600ms,800ms,1s"
++ *
++ * The smallest valid unit of time for a histogram specification depends
++ * on whether the region uses precise timestamps: for a region with the
++ * default milisecond precision the smallest possible histogram boundary
++ * magnitude is one milisecond: attempting to use a histogram with a
++ * boundary less than one milisecond when creating a region will cause
++ * the region to be created with the precise_timestamps feature enabled.
++ *
++ * On sucess a pointer to the struct dm_histogram representing the
++ * bounds values is returned, or NULL in the case of error. The returned
++ * pointer should be freed using dm_free() when no longer required.
++ */
++struct dm_histogram *dm_histogram_bounds_from_string(const char *bounds_str);
++
++/*
++ * Parse a zero terminated array of uint64_t into a dm_histogram bounds
++ * description.
++ *
++ * Each value in the array specifies the upper bound of a bin in the
++ * latency histogram in nanoseconds. Values must appear in ascending
++ * order of magnitude.
++ *
++ * The smallest valid unit of time for a histogram specification depends
++ * on whether the region uses precise timestamps: for a region with the
++ * default milisecond precision the smallest possible histogram boundary
++ * magnitude is one milisecond: attempting to use a histogram with a
++ * boundary less than one milisecond when creating a region will cause
++ * the region to be created with the precise_timestamps feature enabled.
++ */
++struct dm_histogram *dm_histogram_bounds_from_uint64(const uint64_t *bounds);
++
++/*
++ * Destroy the histogram bounds array obtained from a call to
++ * dm_histogram_bounds_from_string().
++ */
++void dm_histogram_bounds_destroy(struct dm_histogram *bounds);
++
++/*
++ * Destroy a dm_stats object and all associated regions, counter
++ * sets and histograms.
++ */
++void dm_stats_destroy(struct dm_stats *dms);
++
++/*
++ * Counter sampling interval
++ */
++
++/*
++ * Set the sampling interval for counter data to the specified value in
++ * either nanoseconds or milliseconds.
++ *
++ * The interval is used to calculate time-based metrics from the basic
++ * counter data: an interval must be set before calling any of the
++ * metric methods.
++ *
++ * For best accuracy the duration should be measured and updated at the
++ * end of each interval.
++ *
++ * All values are stored internally with nanosecond precision and are
++ * converted to or from ms when the millisecond interfaces are used.
++ */
++void dm_stats_set_sampling_interval_ns(struct dm_stats *dms,
++				       uint64_t interval_ns);
++
++void dm_stats_set_sampling_interval_ms(struct dm_stats *dms,
++				       uint64_t interval_ms);
++
++/*
++ * Retrieve the configured sampling interval in either nanoseconds or
++ * milliseconds.
++ */
++uint64_t dm_stats_get_sampling_interval_ns(const struct dm_stats *dms);
++uint64_t dm_stats_get_sampling_interval_ms(const struct dm_stats *dms);
++
++/*
++ * Override program_id. This may be used to change the default
++ * program_id value for an existing handle. If the allow_empty argument
++ * is non-zero a NULL or empty program_id is permitted.
++ *
++ * Use with caution! Most users of the library should set a valid,
++ * non-NULL program_id for every statistics region created. Failing to
++ * do so may result in confusing state when multiple programs are
++ * creating and managing statistics regions.
++ *
++ * All users of the library are encouraged to choose an unambiguous,
++ * unique program_id: this could be based on PID (for programs that
++ * create, report, and delete regions in a single process), session id,
++ * executable name, or some other distinguishing string.
++ *
++ * Use of the empty string as a program_id does not simplify use of the
++ * library or the command line tools and use of this value is strongly
++ * discouraged.
++ */
++int dm_stats_set_program_id(struct dm_stats *dms, int allow_empty,
++			    const char *program_id);
++
++/*
++ * Region properties: size, length & area_len.
++ *
++ * Region start and length are returned in units of 512b as specified
++ * at region creation time. The area_len value gives the size of areas
++ * into which the region has been subdivided. For regions with a single
++ * area spanning the range this value is equal to the region length.
++ *
++ * For regions created with a specified number of areas the value
++ * represents the size of the areas into which the kernel divided the
++ * region excluding any rounding of the last area size. The number of
++ * areas may be obtained using the dm_stats_nr_areas_region() call.
++ *
++ * All values are returned in units of 512b sectors.
++ */
++int dm_stats_get_region_start(const struct dm_stats *dms, uint64_t *start,
++			      uint64_t region_id);
++
++int dm_stats_get_region_len(const struct dm_stats *dms, uint64_t *len,
++			    uint64_t region_id);
++
++int dm_stats_get_region_area_len(const struct dm_stats *dms,
++				 uint64_t *len, uint64_t region_id);
++
++/*
++ * Area properties: start, offset and length.
++ *
++ * The area length is always equal to the area length of the region
++ * that contains it and is obtained from dm_stats_get_region_area_len().
++ *
++ * The start of an area is a function of the area_id and the containing
++ * region's start and area length: it gives the absolute offset into the
++ * containing device of the beginning of the area.
++ *
++ * The offset expresses the area's relative offset into the current
++ * region. I.e. the area start minus the start offset of the containing
++ * region.
++ *
++ * All values are returned in units of 512b sectors.
++ */
++int dm_stats_get_area_start(const struct dm_stats *dms, uint64_t *start,
++			    uint64_t region_id, uint64_t area_id);
++
++int dm_stats_get_area_offset(const struct dm_stats *dms, uint64_t *offset,
++			     uint64_t region_id, uint64_t area_id);
++
++/*
++ * Retrieve program_id and user aux_data for a specific region.
++ *
++ * Only valid following a call to dm_stats_list().
++ */
++
++/*
++ * Retrieve program_id for the specified region.
++ *
++ * The returned pointer does not need to be freed separately from the
++ * dm_stats handle but will become invalid after a dm_stats_destroy(),
++ * dm_stats_list(), dm_stats_populate(), or dm_stats_bind*() of the
++ * handle from which it was obtained.
++ */
++const char *dm_stats_get_region_program_id(const struct dm_stats *dms,
++					   uint64_t region_id);
++
++/*
++ * Retrieve user aux_data set for the specified region. This function
++ * will return any stored user aux_data as a string in the memory
++ * pointed to by the aux_data argument.
++ *
++ * Any library internal aux_data fields, such as DMS_GROUP descriptors,
++ * are stripped before the value is returned.
++ *
++ * The returned pointer does not need to be freed separately from the
++ * dm_stats handle but will become invalid after a dm_stats_destroy(),
++ * dm_stats_list(), dm_stats_populate(), or dm_stats_bind*() of the
++ * handle from which it was obtained.
++ */
++const char *dm_stats_get_region_aux_data(const struct dm_stats *dms,
++					 uint64_t region_id);
++
++typedef enum {
++	DM_STATS_OBJECT_TYPE_NONE,
++	DM_STATS_OBJECT_TYPE_AREA,
++	DM_STATS_OBJECT_TYPE_REGION,
++	DM_STATS_OBJECT_TYPE_GROUP
++} dm_stats_obj_type_t;
++
++/*
++ * Statistics cursor
++ *
++ * A dm_stats handle maintains an optional cursor into the statistics
++ * tables that it stores. Iterators are provided to visit each region,
++ * area, or group in a handle and accessor methods are provided to
++ * obtain properties and values for the object at the current cursor
++ * position.
++ *
++ * Using the cursor simplifies walking all regions or groups when
++ * the tables are sparse (i.e. contains some present and some
++ * non-present region_id or group_id values either due to program_id
++ * filtering or the ordering of region and group creation and deletion).
++ *
++ * Simple macros are provided to visit each area, region, or group,
++ * contained in a handle and applications are encouraged to use these
++ * where possible.
++ */
++
++/*
++ * Walk flags are used to initialise a dm_stats handle's cursor control
++ * and to select region or group aggregation when calling a metric or
++ * counter property method with immediate group, region, and area ID
++ * values.
++ *
++ * Walk flags are stored in the uppermost word of a uint64_t so that
++ * a region_id or group_id may be encoded in the lower bits. This
++ * allows an aggregate region_id or group_id to be specified when
++ * retrieving counter or metric values.
++ *
++ * Flags may be ORred together when used to initialise a dm_stats_walk:
++ * the resulting walk will visit instance of each type specified by
++ * the flag combination.
++ */
++#define DM_STATS_WALK_AREA   0x1000000000000ULL
++#define DM_STATS_WALK_REGION 0x2000000000000ULL
++#define DM_STATS_WALK_GROUP  0x4000000000000ULL
++
++#define DM_STATS_WALK_ALL    0x7000000000000ULL
++#define DM_STATS_WALK_DEFAULT (DM_STATS_WALK_AREA | DM_STATS_WALK_REGION)
++
++/*
++ * Skip regions from a DM_STATS_WALK_REGION that contain only a single
++ * area: in this case the region's aggregate values are identical to
++ * the values of the single contained area. Setting this flag will
++ * suppress these duplicate entries during a dm_stats_walk_* with the
++ * DM_STATS_WALK_REGION flag set.
++ */
++#define DM_STATS_WALK_SKIP_SINGLE_AREA   0x8000000000000ULL
++
++/*
++ * Initialise the cursor control of a dm_stats handle for the specified
++ * walk type(s). Including a walk flag in the flags argument will cause
++ * any subsequent walk to visit that type of object (until the next
++ * call to dm_stats_walk_init()).
++ */
++int dm_stats_walk_init(struct dm_stats *dms, uint64_t flags);
++
++/*
++ * Set the cursor of a dm_stats handle to address the first present
++ * group, region, or area of the currently configured walk. It is
++ * valid to attempt to walk a NULL stats handle or a handle containing
++ * no present regions; in this case any call to dm_stats_walk_next()
++ * becomes a no-op and all calls to dm_stats_walk_end() return true.
++ */
++void dm_stats_walk_start(struct dm_stats *dms);
++
++/*
++ * Advance the statistics cursor to the next area, or to the next
++ * present region if at the end of the current region. If the end of
++ * the region, area, or group tables is reached a subsequent call to
++ * dm_stats_walk_end() will return 1 and dm_stats_object_type() called
++ * on the location will return DM_STATS_OBJECT_TYPE_NONE,
++ */
++void dm_stats_walk_next(struct dm_stats *dms);
++
++/*
++ * Force the statistics cursor to advance to the next region. This will
++ * stop any in-progress area walk (by clearing DM_STATS_WALK_AREA) and
++ * advance the cursor to the next present region, the first present
++ * group (if DM_STATS_GROUP_WALK is set), or to the end. In this case a
++ * subsequent call to dm_stats_walk_end() will return 1 and a call to
++ * dm_stats_object_type() for the location will return
++ * DM_STATS_OBJECT_TYPE_NONE.
++ */
++void dm_stats_walk_next_region(struct dm_stats *dms);
++
++/*
++ * Test whether the end of a statistics walk has been reached.
++ */
++int dm_stats_walk_end(struct dm_stats *dms);
++
++/*
++ * Return the type of object at the location specified by region_id
++ * and area_id. If either region_id or area_id uses one of the special
++ * values DM_STATS_REGION_CURRENT or DM_STATS_AREA_CURRENT the
++ * corresponding region or area identifier will be taken from the
++ * current cursor location. If the cursor location or the value encoded
++ * by region_id and area_id indicates an aggregate region or group,
++ * this will be reflected in the value returned.
++ */
++dm_stats_obj_type_t dm_stats_object_type(const struct dm_stats *dms,
++					 uint64_t region_id,
++					 uint64_t area_id);
++
++/*
++ * Return the type of object at the current stats cursor location.
++ */
++dm_stats_obj_type_t dm_stats_current_object_type(const struct dm_stats *dms);
++
++/*
++ * Stats iterators
++ *
++ * C 'for' and 'do'/'while' style iterators for dm_stats data.
++ *
++ * It is not safe to call any function that modifies the region table
++ * within the loop body (i.e. dm_stats_list(), dm_stats_populate(),
++ * dm_stats_init(), or dm_stats_destroy()).
++ *
++ * All counter and property (dm_stats_get_*) access methods, as well as
++ * dm_stats_populate_region() can be safely called from loops.
++ *
++ */
++
++/*
++ * Iterate over the regions table visiting each region.
++ *
++ * If the region table is empty or unpopulated the loop body will not be
++ * executed.
++ */
++#define dm_stats_foreach_region(dms)				\
++for (dm_stats_walk_init((dms), DM_STATS_WALK_REGION),		\
++     dm_stats_walk_start((dms));				\
++     !dm_stats_walk_end((dms)); dm_stats_walk_next_region((dms)))
++
++/*
++ * Iterate over the regions table visiting each area.
++ *
++ * If the region table is empty or unpopulated the loop body will not
++ * be executed.
++ */
++#define dm_stats_foreach_area(dms)				\
++for (dm_stats_walk_init((dms), DM_STATS_WALK_AREA),		\
++     dm_stats_walk_start((dms));				\
++     !dm_stats_walk_end((dms)); dm_stats_walk_next((dms)))
++
++/*
++ * Iterate over the regions table visiting each group. Metric and
++ * counter methods will return values for the group.
++ *
++ * If the group table is empty or unpopulated the loop body will not
++ * be executed.
++ */
++#define dm_stats_foreach_group(dms)				\
++for (dm_stats_walk_init((dms), DM_STATS_WALK_GROUP),		\
++     dm_stats_walk_start(dms);					\
++     !dm_stats_walk_end(dms);					\
++     dm_stats_walk_next(dms))
++
++/*
++ * Start a walk iterating over the regions contained in dm_stats handle
++ * 'dms'.
++ *
++ * The body of the loop should call dm_stats_walk_next() or
++ * dm_stats_walk_next_region() to advance to the next element.
++ *
++ * The loop body is executed at least once even if the stats handle is
++ * empty.
++ */
++#define dm_stats_walk_do(dms)					\
++do {								\
++	dm_stats_walk_start((dms));				\
++	do
++
++/*
++ * Start a 'while' style loop or end a 'do..while' loop iterating over the
++ * regions contained in dm_stats handle 'dms'.
++ */
++#define dm_stats_walk_while(dms)				\
++	while(!dm_stats_walk_end((dms)));			\
++} while (0)
++
++/*
++ * Cursor relative property methods
++ *
++ * Calls with the prefix dm_stats_get_current_* operate relative to the
++ * current cursor location, returning properties for the current region
++ * or area of the supplied dm_stats handle.
++ *
++ */
++
++/*
++ * Returns the number of areas (counter sets) contained in the current
++ * region of the supplied dm_stats handle.
++ */
++uint64_t dm_stats_get_current_nr_areas(const struct dm_stats *dms);
++
++/*
++ * Retrieve the current values of the stats cursor.
++ */
++uint64_t dm_stats_get_current_region(const struct dm_stats *dms);
++uint64_t dm_stats_get_current_area(const struct dm_stats *dms);
++
++/*
++ * Current region properties: size, length & area_len.
++ *
++ * See the comments for the equivalent dm_stats_get_* versions for a
++ * complete description of these methods.
++ *
++ * All values are returned in units of 512b sectors.
++ */
++int dm_stats_get_current_region_start(const struct dm_stats *dms,
++				      uint64_t *start);
++
++int dm_stats_get_current_region_len(const struct dm_stats *dms,
++				    uint64_t *len);
++
++int dm_stats_get_current_region_area_len(const struct dm_stats *dms,
++					 uint64_t *area_len);
++
++/*
++ * Current area properties: start and length.
++ *
++ * See the comments for the equivalent dm_stats_get_* versions for a
++ * complete description of these methods.
++ *
++ * All values are returned in units of 512b sectors.
++ */
++int dm_stats_get_current_area_start(const struct dm_stats *dms,
++				    uint64_t *start);
++
++int dm_stats_get_current_area_offset(const struct dm_stats *dms,
++				     uint64_t *offset);
++
++int dm_stats_get_current_area_len(const struct dm_stats *dms,
++				       uint64_t *start);
++
++/*
++ * Return a pointer to the program_id string for region at the current
++ * cursor location.
++ */
++const char *dm_stats_get_current_region_program_id(const struct dm_stats *dms);
++
++/*
++ * Return a pointer to the user aux_data string for the region at the
++ * current cursor location.
++ */
++const char *dm_stats_get_current_region_aux_data(const struct dm_stats *dms);
++
++/*
++ * Statistics groups and data aggregation.
++ */
++
++/*
++ * Create a new group in stats handle dms from the group descriptor
++ * passed in group. The group descriptor is a string containing a list
++ * of region_id values that will be included in the group. The first
++ * region_id found will be the group leader. Ranges of identifiers may
++ * be expressed as "M-N", where M and N are the start and end region_id
++ * values for the range.
++ */
++int dm_stats_create_group(struct dm_stats *dms, const char *group,
++			  const char *alias, uint64_t *group_id);
++
++/*
++ * Remove the specified group_id. If the remove argument is zero the
++ * group will be removed but the regions that it contained will remain.
++ * If remove is non-zero then all regions that belong to the group will
++ * also be removed.
++ */
++int dm_stats_delete_group(struct dm_stats *dms, uint64_t group_id, int remove);
++
++/*
++ * Set an alias for this group or region. The alias will be returned
++ * instead of the normal dm-stats name for this region or group.
++ */
++int dm_stats_set_alias(struct dm_stats *dms, uint64_t group_id,
++		       const char *alias);
++
++/*
++ * Returns a pointer to the currently configured alias for id, or the
++ * name of the dm device the handle is bound to if no alias has been
++ * set. The pointer will be freed automatically when a new alias is set
++ * or when the stats handle is cleared.
++ */
++const char *dm_stats_get_alias(const struct dm_stats *dms, uint64_t id);
++
++#define DM_STATS_GROUP_NONE UINT64_MAX
++/*
++ * Return the group_id that the specified region_id belongs to, or the
++ * special value DM_STATS_GROUP_NONE if the region does not belong
++ * to any group.
++ */
++uint64_t dm_stats_get_group_id(const struct dm_stats *dms, uint64_t region_id);
++
++/*
++ * Store a pointer to a string describing the regions that are members
++ * of the group specified by group_id in the memory pointed to by buf.
++ * The string is in the same format as the 'group' argument to
++ * dm_stats_create_group().
++ *
++ * The pointer does not need to be freed explicitly by the caller: it
++ * will become invalid following a subsequent dm_stats_list(),
++ * dm_stats_populate() or dm_stats_destroy() of the corresponding
++ * dm_stats handle.
++ */
++int dm_stats_get_group_descriptor(const struct dm_stats *dms,
++				  uint64_t group_id, char **buf);
++
++/*
++ * Create regions that correspond to the extents of a file in the
++ * filesystem and optionally place them into a group.
++ *
++ * File descriptor fd must reference a regular file, open for reading,
++ * in a local file system that supports the FIEMAP ioctl, and that
++ * returns data describing the physical location of extents.
++ *
++ * The file descriptor can be closed by the caller following the call
++ * to dm_stats_create_regions_from_fd().
++ *
++ * Unless nogroup is non-zero the regions will be placed into a group
++ * and the group alias set to the value supplied (if alias is NULL no
++ * group alias will be assigned).
++ *
++ * On success the function returns a pointer to an array of uint64_t
++ * containing the IDs of the newly created regions. The region_id
++ * array is terminated by the value DM_STATS_REGION_NOT_PRESENT and
++ * should be freed using dm_free() when no longer required.
++ *
++ * On error NULL is returned.
++ *
++ * Following a call to dm_stats_create_regions_from_fd() the handle
++ * is guaranteed to be in a listed state, and to contain any region
++ * and group identifiers created by the operation.
++ *
++ * The group_id for the new group is equal to the region_id value in
++ * the first array element.
++ */
++uint64_t *dm_stats_create_regions_from_fd(struct dm_stats *dms, int fd,
++					  int group, int precise,
++					  struct dm_histogram *bounds,
++					  const char *alias);
++/*
++ * Update a group of regions that correspond to the extents of a file
++ * in the filesystem, adding and removing regions to account for
++ * allocation changes in the underlying file.
++ *
++ * File descriptor fd must reference a regular file, open for reading,
++ * in a local file system that supports the FIEMAP ioctl, and that
++ * returns data describing the physical location of extents.
++ *
++ * The file descriptor can be closed by the caller following the call
++ * to dm_stats_update_regions_from_fd().
++ *
++ * On success the function returns a pointer to an array of uint64_t
++ * containing the IDs of the updated regions (including any existing
++ * regions that were not modified by the call).
++ *
++ * The region_id array is terminated by the special value
++ * DM_STATS_REGION_NOT_PRESENT and should be freed using dm_free()
++ * when no longer required.
++ *
++ * On error NULL is returned.
++ *
++ * Following a call to dm_stats_update_regions_from_fd() the handle
++ * is guaranteed to be in a listed state, and to contain any region
++ * and group identifiers created by the operation.
++ *
++ * This function cannot be used with file mapped regions that are
++ * not members of a group: either group the regions, or remove them
++ * and re-map them with dm_stats_create_regions_from_fd().
++ */
++uint64_t *dm_stats_update_regions_from_fd(struct dm_stats *dms, int fd,
++					  uint64_t group_id);
++
++
++/*
++ * The file map monitoring daemon can monitor files in two distinct
++ * ways: the mode affects the behaviour of the daemon when a file
++ * under monitoring is renamed or unlinked, and the conditions which
++ * cause the daemon to terminate.
++ *
++ * In both modes, the daemon will always shut down when the group
++ * being monitored is deleted.
++ *
++ * Follow inode:
++ * The daemon follows the inode of the file, as it was at the time the
++ * daemon started. The file descriptor referencing the file is kept
++ * open at all times, and the daemon will exit when it detects that
++ * the file has been unlinked and it is the last holder of a reference
++ * to the file.
++ *
++ * This mode is useful if the file is expected to be renamed, or moved
++ * within the file system, while it is being monitored.
++ *
++ * Follow path:
++ * The daemon follows the path that was given on the daemon command
++ * line. The file descriptor referencing the file is re-opened on each
++ * iteration of the daemon, and the daemon will exit if no file exists
++ * at this location (a tolerance is allowed so that a brief delay
++ * between unlink() and creat() is permitted).
++ *
++ * This mode is useful if the file is updated by unlinking the original
++ * and placing a new file at the same path.
++ */
++
++typedef enum {
++	DM_FILEMAPD_FOLLOW_INODE,
++	DM_FILEMAPD_FOLLOW_PATH,
++	DM_FILEMAPD_FOLLOW_NONE
++} dm_filemapd_mode_t;
++
++/*
++ * Parse a string representation of a dmfilemapd mode.
++ *
++ * Returns a valid dm_filemapd_mode_t value on success, or
++ * DM_FILEMAPD_FOLLOW_NONE on error.
++ */
++dm_filemapd_mode_t dm_filemapd_mode_from_string(const char *mode_str);
++
++/*
++ * Start the dmfilemapd filemap monitoring daemon for the specified
++ * file descriptor, group, and file system path. The daemon will
++ * monitor the file for allocation changes, and when a change is
++ * detected, call dm_stats_update_regions_from_fd() to update the
++ * mapped regions for the file.
++ *
++ * The path provided to dm_stats_start_filemapd() must be an absolute
++ * path, and should reflect the path of 'fd' at the time that it was
++ * opened.
++ *
++ * The mode parameter controls the behaviour of the daemon when the
++ * file being monitored is unlinked or moved: see the comments for
++ * dm_filemapd_mode_t for a full description and possible values.
++ *
++ * The daemon can be stopped at any time by sending SIGTERM to the
++ * daemon pid.
++ */
++int dm_stats_start_filemapd(int fd, uint64_t group_id, const char *path,
++			    dm_filemapd_mode_t mode, unsigned foreground,
++			    unsigned verbose);
++
++/*
++ * Call this to actually run the ioctl.
++ */
++int dm_task_run(struct dm_task *dmt);
++
++/*
++ * The errno from the last device-mapper ioctl performed by dm_task_run.
++ */
++int dm_task_get_errno(struct dm_task *dmt);
++
++/*
++ * Call this to make or remove the device nodes associated with previously
++ * issued commands.
++ */
++void dm_task_update_nodes(void);
++
++/*
++ * Mangling support
++ *
++ * Character whitelist: 0-9, A-Z, a-z, #+-.:=@_
++ * HEX mangling format: \xNN, NN being the hex value of the character.
++ * (whitelist and format supported by udev)
++*/
++typedef enum {
++	DM_STRING_MANGLING_NONE, /* do not mangle@all */
++	DM_STRING_MANGLING_AUTO, /* mangle only if not already mangled with hex, error when mixed */
++	DM_STRING_MANGLING_HEX	 /* always mangle with hex encoding, no matter what the input is */
++} dm_string_mangling_t;
++
++/*
++ * Set/get mangling mode used for device-mapper names and uuids.
++ */
++int dm_set_name_mangling_mode(dm_string_mangling_t name_mangling);
++dm_string_mangling_t dm_get_name_mangling_mode(void);
++
++/*
++ * Get mangled/unmangled form of the device-mapper name or uuid
++ * irrespective of the global setting (set by dm_set_name_mangling_mode).
++ * The name or uuid returned needs to be freed after use by calling dm_free!
++ */
++char *dm_task_get_name_mangled(const struct dm_task *dmt);
++char *dm_task_get_name_unmangled(const struct dm_task *dmt);
++char *dm_task_get_uuid_mangled(const struct dm_task *dmt);
++char *dm_task_get_uuid_unmangled(const struct dm_task *dmt);
++
++/*
++ * Configure the device-mapper directory
++ */
++int dm_set_dev_dir(const char *dir);
++const char *dm_dir(void);
++
++/*
++ * Configure sysfs directory, /sys by default
++ */
++int dm_set_sysfs_dir(const char *dir);
++const char *dm_sysfs_dir(void);
++
++/*
++ * Configure default UUID prefix string.
++ * Conventionally this is a short capitalised prefix indicating the subsystem
++ * that is managing the devices, e.g. "LVM-" or "MPATH-".
++ * To support stacks of devices from different subsystems, recursive functions
++ * stop recursing if they reach a device with a different prefix.
++ */
++int dm_set_uuid_prefix(const char *uuid_prefix);
++const char *dm_uuid_prefix(void);
++
++/*
++ * Determine whether a major number belongs to device-mapper or not.
++ */
++int dm_is_dm_major(uint32_t major);
++
++/*
++ * Get associated device name for given major and minor number by reading
++ * the sysfs content. If this is a dm device, get associated dm name, the one
++ * that appears in /dev/mapper. DM names could be resolved this way only if
++ * kernel used >= 2.6.29, kernel name is found otherwise (e.g. dm-0).
++ * If prefer_kernel_name is set, the kernel name is always preferred over
++ * device-mapper name for dm devices no matter what the kernel version is.
++ * For non-dm devices, we always get associated kernel name, e.g sda, md0 etc.
++ * Returns 0 on error or if sysfs is not used (or configured incorrectly),
++ * otherwise returns 1 and the supplied buffer holds the device name.
++ */
++int dm_device_get_name(uint32_t major, uint32_t minor,
++		       int prefer_kernel_name,
++		       char *buf, size_t buf_size);
++
++/*
++ * Determine whether a device has any holders (devices
++ * using this device). If sysfs is not used (or configured
++ * incorrectly), returns 0.
++ */
++int dm_device_has_holders(uint32_t major, uint32_t minor);
++
++/*
++ * Determine whether a device contains mounted filesystem.
++ * If sysfs is not used (or configured incorrectly), returns 0.
++ */
++int dm_device_has_mounted_fs(uint32_t major, uint32_t minor);
++
++
++/*
++ * Callback is invoked for individal mountinfo lines,
++ * minor, major and mount target are parsed and unmangled.
++ */
++typedef int (*dm_mountinfo_line_callback_fn) (char *line, unsigned maj, unsigned min,
++					      char *target, void *cb_data);
++
++/*
++ * Read all lines from /proc/self/mountinfo,
++ * for each line calls read_fn callback.
++ */
++int dm_mountinfo_read(dm_mountinfo_line_callback_fn read_fn, void *cb_data);
++
++/*
++ * Initialise library
++ */
++void dm_lib_init(void) __attribute__((constructor));
++
++/*
++ * Release library resources
++ */
++void dm_lib_release(void);
++void dm_lib_exit(void) __attribute__((destructor));
++
++/* An optimisation for clients making repeated calls involving dm ioctls */
++void dm_hold_control_dev(int hold_open);
++
++/*
++ * Use NULL for all devices.
++ */
++int dm_mknodes(const char *name);
++int dm_driver_version(char *version, size_t size);
++
++/******************************************************
++ * Functions to build and manipulate trees of devices *
++ ******************************************************/
++struct dm_tree;
++struct dm_tree_node;
++
++/*
++ * Initialise an empty dependency tree.
++ *
++ * The tree consists of a root node together with one node for each mapped
++ * device which has child nodes for each device referenced in its table.
++ *
++ * Every node in the tree has one or more children and one or more parents.
++ *
++ * The root node is the parent/child of every node that doesn't have other
++ * parents/children.
++ */
++struct dm_tree *dm_tree_create(void);
++void dm_tree_free(struct dm_tree *tree);
++
++/*
++ * List of suffixes to be ignored when matching uuids against existing devices.
++ */
++void dm_tree_set_optional_uuid_suffixes(struct dm_tree *dtree, const char **optional_uuid_suffixes);
++
++/*
++ * Add nodes to the tree for a given device and all the devices it uses.
++ */
++int dm_tree_add_dev(struct dm_tree *tree, uint32_t major, uint32_t minor);
++int dm_tree_add_dev_with_udev_flags(struct dm_tree *tree, uint32_t major,
++				    uint32_t minor, uint16_t udev_flags);
++
++/*
++ * Add a new node to the tree if it doesn't already exist.
++ */
++struct dm_tree_node *dm_tree_add_new_dev(struct dm_tree *tree,
++					 const char *name,
++					 const char *uuid,
++					 uint32_t major, uint32_t minor,
++					 int read_only,
++					 int clear_inactive,
++					 void *context);
++struct dm_tree_node *dm_tree_add_new_dev_with_udev_flags(struct dm_tree *tree,
++							 const char *name,
++							 const char *uuid,
++							 uint32_t major,
++							 uint32_t minor,
++							 int read_only,
++							 int clear_inactive,
++							 void *context,
++							 uint16_t udev_flags);
++
++/*
++ * Search for a node in the tree.
++ * Set major and minor to 0 or uuid to NULL to get the root node.
++ */
++struct dm_tree_node *dm_tree_find_node(struct dm_tree *tree,
++				       uint32_t major,
++				       uint32_t minor);
++struct dm_tree_node *dm_tree_find_node_by_uuid(struct dm_tree *tree,
++					       const char *uuid);
++
++/*
++ * Use this to walk through all children of a given node.
++ * Set handle to NULL in first call.
++ * Returns NULL after the last child.
++ * Set inverted to use inverted tree.
++ */
++struct dm_tree_node *dm_tree_next_child(void **handle,
++					const struct dm_tree_node *parent,
++					uint32_t inverted);
++
++/*
++ * Get properties of a node.
++ */
++const char *dm_tree_node_get_name(const struct dm_tree_node *node);
++const char *dm_tree_node_get_uuid(const struct dm_tree_node *node);
++const struct dm_info *dm_tree_node_get_info(const struct dm_tree_node *node);
++void *dm_tree_node_get_context(const struct dm_tree_node *node);
++/*
++ * Returns  0 when node size and its children is unchanged.
++ * Returns  1 when node or any of its children has increased size.
++ * Rerurns -1 when node or any of its children has reduced size.
++ */
++int dm_tree_node_size_changed(const struct dm_tree_node *dnode);
++
++/*
++ * Returns the number of children of the given node (excluding the root node).
++ * Set inverted for the number of parents.
++ */
++int dm_tree_node_num_children(const struct dm_tree_node *node, uint32_t inverted);
++
++/*
++ * Deactivate a device plus all dependencies.
++ * Ignores devices that don't have a uuid starting with uuid_prefix.
++ */
++int dm_tree_deactivate_children(struct dm_tree_node *dnode,
++				const char *uuid_prefix,
++				size_t uuid_prefix_len);
++/*
++ * Preload/create a device plus all dependencies.
++ * Ignores devices that don't have a uuid starting with uuid_prefix.
++ */
++int dm_tree_preload_children(struct dm_tree_node *dnode,
++			     const char *uuid_prefix,
++			     size_t uuid_prefix_len);
++
++/*
++ * Resume a device plus all dependencies.
++ * Ignores devices that don't have a uuid starting with uuid_prefix.
++ */
++int dm_tree_activate_children(struct dm_tree_node *dnode,
++			      const char *uuid_prefix,
++			      size_t uuid_prefix_len);
++
++/*
++ * Suspend a device plus all dependencies.
++ * Ignores devices that don't have a uuid starting with uuid_prefix.
++ */
++int dm_tree_suspend_children(struct dm_tree_node *dnode,
++			     const char *uuid_prefix,
++			     size_t uuid_prefix_len);
++
++/*
++ * Skip the filesystem sync when suspending.
++ * Does nothing with other functions.
++ * Use this when no snapshots are involved.
++ */
++void dm_tree_skip_lockfs(struct dm_tree_node *dnode);
++
++/*
++ * Set the 'noflush' flag when suspending devices.
++ * If the kernel supports it, instead of erroring outstanding I/O that
++ * cannot be completed, the I/O is queued and resubmitted when the
++ * device is resumed.  This affects multipath devices when all paths
++ * have failed and queue_if_no_path is set, and mirror devices when
++ * block_on_error is set and the mirror log has failed.
++ */
++void dm_tree_use_no_flush_suspend(struct dm_tree_node *dnode);
++
++/*
++ * Retry removal of each device if not successful.
++ */
++void dm_tree_retry_remove(struct dm_tree_node *dnode);
++
++/*
++ * Is the uuid prefix present in the tree?
++ * Only returns 0 if every node was checked successfully.
++ * Returns 1 if the tree walk has to be aborted.
++ */
++int dm_tree_children_use_uuid(struct dm_tree_node *dnode,
++			      const char *uuid_prefix,
++			      size_t uuid_prefix_len);
++
++/*
++ * Construct tables for new nodes before activating them.
++ */
++int dm_tree_node_add_snapshot_origin_target(struct dm_tree_node *dnode,
++					    uint64_t size,
++					    const char *origin_uuid);
++int dm_tree_node_add_snapshot_target(struct dm_tree_node *node,
++				     uint64_t size,
++				     const char *origin_uuid,
++				     const char *cow_uuid,
++				     int persistent,
++				     uint32_t chunk_size);
++int dm_tree_node_add_snapshot_merge_target(struct dm_tree_node *node,
++					   uint64_t size,
++					   const char *origin_uuid,
++					   const char *cow_uuid,
++					   const char *merge_uuid,
++					   uint32_t chunk_size);
++int dm_tree_node_add_error_target(struct dm_tree_node *node,
++				  uint64_t size);
++int dm_tree_node_add_zero_target(struct dm_tree_node *node,
++				 uint64_t size);
++int dm_tree_node_add_linear_target(struct dm_tree_node *node,
++				   uint64_t size);
++int dm_tree_node_add_striped_target(struct dm_tree_node *node,
++				    uint64_t size,
++				    uint32_t stripe_size);
++
++#define DM_CRYPT_IV_DEFAULT	UINT64_C(-1)	/* iv_offset == seg offset */
++/*
++ * Function accepts one string in cipher specification
++ * (chainmode and iv should be NULL because included in cipher string)
++ *   or
++ * separate arguments which will be joined to "cipher-chainmode-iv"
++ */
++int dm_tree_node_add_crypt_target(struct dm_tree_node *node,
++				  uint64_t size,
++				  const char *cipher,
++				  const char *chainmode,
++				  const char *iv,
++				  uint64_t iv_offset,
++				  const char *key);
++int dm_tree_node_add_mirror_target(struct dm_tree_node *node,
++				   uint64_t size);
++
++/* Mirror log flags */
++#define DM_NOSYNC		0x00000001	/* Known already in sync */
++#define DM_FORCESYNC		0x00000002	/* Force resync */
++#define DM_BLOCK_ON_ERROR	0x00000004	/* On error, suspend I/O */
++#define DM_CORELOG		0x00000008	/* In-memory log */
++
++int dm_tree_node_add_mirror_target_log(struct dm_tree_node *node,
++				       uint32_t region_size,
++				       unsigned clustered,
++				       const char *log_uuid,
++				       unsigned area_count,
++				       uint32_t flags);
++
++int dm_tree_node_add_raid_target(struct dm_tree_node *node,
++				 uint64_t size,
++				 const char *raid_type,
++				 uint32_t region_size,
++				 uint32_t stripe_size,
++				 uint64_t rebuilds,
++				 uint64_t flags);
++
++/*
++ * Defines below are based on kernel's dm-cache.c defines
++ * DM_CACHE_MIN_DATA_BLOCK_SIZE (32 * 1024 >> SECTOR_SHIFT)
++ * DM_CACHE_MAX_DATA_BLOCK_SIZE (1024 * 1024 * 1024 >> SECTOR_SHIFT)
++ */
++#define DM_CACHE_MIN_DATA_BLOCK_SIZE (UINT32_C(64))
++#define DM_CACHE_MAX_DATA_BLOCK_SIZE (UINT32_C(2097152))
++/*
++ * Max supported size for cache pool metadata device.
++ * Limitation is hardcoded into the kernel and bigger device sizes
++ * are not accepted.
++ *
++ * Limit defined in drivers/md/dm-cache-metadata.h
++ */
++#define DM_CACHE_METADATA_MAX_SECTORS DM_THIN_METADATA_MAX_SECTORS
++
++/*
++ * Define number of elements in rebuild and writemostly arrays
++ * 'of struct dm_tree_node_raid_params'.
++ */
++
++struct dm_tree_node_raid_params {
++	const char *raid_type;
++
++	uint32_t stripes;
++	uint32_t mirrors;
++	uint32_t region_size;
++	uint32_t stripe_size;
++
++	/*
++	 * 'rebuilds' and 'writemostly' are bitfields that signify
++	 * which devices in the array are to be rebuilt or marked
++	 * writemostly.  The kernel supports up to 253 legs.
++	 * We limit ourselves by choosing a lower value
++	 * for DEFAULT_RAID{1}_MAX_IMAGES in defaults.h.
++	 */
++	uint64_t rebuilds;
++	uint64_t writemostly;
++	uint32_t writebehind;	    /* I/Os (kernel default COUNTER_MAX / 2) */
++	uint32_t sync_daemon_sleep; /* ms (kernel default = 5sec) */
++	uint32_t max_recovery_rate; /* kB/sec/disk */
++	uint32_t min_recovery_rate; /* kB/sec/disk */
++	uint32_t stripe_cache;      /* sectors */
++
++	uint64_t flags;             /* [no]sync */
++	uint32_t reserved2;
++};
++
++/*
++ * Version 2 of above node raid params struct to keeep API compatibility.
++ *
++ * Extended for more than 64 legs (max 253 in the MD kernel runtime!),
++ * delta_disks for disk add/remove reshaping,
++ * data_offset for out-of-place reshaping
++ * and data_copies for odd number of raid10 legs.
++ */
++#define	RAID_BITMAP_SIZE 4 /* 4 * 64 bit elements in rebuilds/writemostly arrays */
++struct dm_tree_node_raid_params_v2 {
++	const char *raid_type;
++
++	uint32_t stripes;
++	uint32_t mirrors;
++	uint32_t region_size;
++	uint32_t stripe_size;
++
++	int delta_disks; /* +/- number of disks to add/remove (reshaping) */
++	int data_offset; /* data offset to set (out-of-place reshaping) */
++
++	/*
++	 * 'rebuilds' and 'writemostly' are bitfields that signify
++	 * which devices in the array are to be rebuilt or marked
++	 * writemostly.  The kernel supports up to 253 legs.
++	 * We limit ourselvs by choosing a lower value
++	 * for DEFAULT_RAID_MAX_IMAGES.
++	 */
++	uint64_t rebuilds[RAID_BITMAP_SIZE];
++	uint64_t writemostly[RAID_BITMAP_SIZE];
++	uint32_t writebehind;	    /* I/Os (kernel default COUNTER_MAX / 2) */
++	uint32_t data_copies;	    /* RAID # of data copies */
++	uint32_t sync_daemon_sleep; /* ms (kernel default = 5sec) */
++	uint32_t max_recovery_rate; /* kB/sec/disk */
++	uint32_t min_recovery_rate; /* kB/sec/disk */
++	uint32_t stripe_cache;      /* sectors */
++
++	uint64_t flags;             /* [no]sync */
++};
++
++int dm_tree_node_add_raid_target_with_params(struct dm_tree_node *node,
++					     uint64_t size,
++					     const struct dm_tree_node_raid_params *p);
++
++/* Version 2 API function taking dm_tree_node_raid_params_v2 for aforementioned extensions. */
++int dm_tree_node_add_raid_target_with_params_v2(struct dm_tree_node *node,
++						uint64_t size,
++						const struct dm_tree_node_raid_params_v2 *p);
++
++/* Cache feature_flags */
++#define DM_CACHE_FEATURE_WRITEBACK    0x00000001
++#define DM_CACHE_FEATURE_WRITETHROUGH 0x00000002
++#define DM_CACHE_FEATURE_PASSTHROUGH  0x00000004
++#define DM_CACHE_FEATURE_METADATA2    0x00000008 /* cache v1.10 */
++
++struct dm_config_node;
++/*
++ * Use for passing cache policy and all its args e.g.:
++ *
++ * policy_settings {
++ *    migration_threshold=2048
++ *    sequention_threashold=100
++ *    ...
++ * }
++ *
++ * For policy without any parameters use NULL.
++ */
++int dm_tree_node_add_cache_target(struct dm_tree_node *node,
++				  uint64_t size,
++				  uint64_t feature_flags, /* DM_CACHE_FEATURE_* */
++				  const char *metadata_uuid,
++				  const char *data_uuid,
++				  const char *origin_uuid,
++				  const char *policy_name,
++				  const struct dm_config_node *policy_settings,
++				  uint32_t data_block_size);
++
++/*
++ * FIXME Add individual cache policy pairs  <key> = value, like:
++ * int dm_tree_node_add_cache_policy_arg(struct dm_tree_node *dnode,
++ *				      const char *key, uint64_t value);
++ */
++
++/*
++ * Replicator operation mode
++ * Note: API for Replicator is not yet stable
++ */
++typedef enum {
++	DM_REPLICATOR_SYNC,			/* Synchronous replication */
++	DM_REPLICATOR_ASYNC_WARN,		/* Warn if async replicator is slow */
++	DM_REPLICATOR_ASYNC_STALL,		/* Stall replicator if not fast enough */
++	DM_REPLICATOR_ASYNC_DROP,		/* Drop sites out of sync */
++	DM_REPLICATOR_ASYNC_FAIL,		/* Fail replicator if slow */
++	NUM_DM_REPLICATOR_MODES
++} dm_replicator_mode_t;
++
++int dm_tree_node_add_replicator_target(struct dm_tree_node *node,
++				       uint64_t size,
++				       const char *rlog_uuid,
++				       const char *rlog_type,
++				       unsigned rsite_index,
++				       dm_replicator_mode_t mode,
++				       uint32_t async_timeout,
++				       uint64_t fall_behind_data,
++				       uint32_t fall_behind_ios);
++
++int dm_tree_node_add_replicator_dev_target(struct dm_tree_node *node,
++					   uint64_t size,
++					   const char *replicator_uuid,	/* Replicator control device */
++					   uint64_t rdevice_index,
++					   const char *rdev_uuid,	/* Rimage device name/uuid */
++					   unsigned rsite_index,
++					   const char *slog_uuid,
++					   uint32_t slog_flags,		/* Mirror log flags */
++					   uint32_t slog_region_size);
++/* End of Replicator API */
++
++/*
++ * FIXME: Defines bellow are based on kernel's dm-thin.c defines
++ * DATA_DEV_BLOCK_SIZE_MIN_SECTORS (64 * 1024 >> SECTOR_SHIFT)
++ * DATA_DEV_BLOCK_SIZE_MAX_SECTORS (1024 * 1024 * 1024 >> SECTOR_SHIFT)
++ */
++#define DM_THIN_MIN_DATA_BLOCK_SIZE (UINT32_C(128))
++#define DM_THIN_MAX_DATA_BLOCK_SIZE (UINT32_C(2097152))
++/*
++ * Max supported size for thin pool  metadata device (17112760320 bytes)
++ * Limitation is hardcoded into the kernel and bigger device size
++ * is not accepted.
++ * drivers/md/dm-thin-metadata.h THIN_METADATA_MAX_SECTORS
++ */
++#define DM_THIN_MAX_METADATA_SIZE   (UINT64_C(255) * (1 << 14) * (4096 / (1 << 9)) - 256 * 1024)
++
++int dm_tree_node_add_thin_pool_target(struct dm_tree_node *node,
++				      uint64_t size,
++				      uint64_t transaction_id,
++				      const char *metadata_uuid,
++				      const char *pool_uuid,
++				      uint32_t data_block_size,
++				      uint64_t low_water_mark,
++				      unsigned skip_block_zeroing);
++
++/* Supported messages for thin provision target */
++typedef enum {
++	DM_THIN_MESSAGE_CREATE_SNAP,		/* device_id, origin_id */
++	DM_THIN_MESSAGE_CREATE_THIN,		/* device_id */
++	DM_THIN_MESSAGE_DELETE,			/* device_id */
++	DM_THIN_MESSAGE_SET_TRANSACTION_ID,	/* current_id, new_id */
++	DM_THIN_MESSAGE_RESERVE_METADATA_SNAP,	/* target version >= 1.1 */
++	DM_THIN_MESSAGE_RELEASE_METADATA_SNAP,	/* target version >= 1.1 */
++} dm_thin_message_t;
++
++int dm_tree_node_add_thin_pool_message(struct dm_tree_node *node,
++				       dm_thin_message_t type,
++				       uint64_t id1, uint64_t id2);
++
++/*
++ * Set thin pool discard features
++ *   ignore      - Disable support for discards
++ *   no_passdown - Don't pass discards down to underlying data device,
++ *                 just remove the mapping
++ * Feature is available since version 1.1 of the thin target.
++ */
++int dm_tree_node_set_thin_pool_discard(struct dm_tree_node *node,
++				       unsigned ignore,
++				       unsigned no_passdown);
++/*
++ * Set error if no space, instead of queueing for thin pool.
++ */
++int dm_tree_node_set_thin_pool_error_if_no_space(struct dm_tree_node *node,
++						 unsigned error_if_no_space);
++/* Start thin pool with metadata in read-only mode */
++int dm_tree_node_set_thin_pool_read_only(struct dm_tree_node *node,
++					 unsigned read_only);
++/*
++ * FIXME: Defines bellow are based on kernel's dm-thin.c defines
++ * MAX_DEV_ID ((1 << 24) - 1)
++ */
++#define DM_THIN_MAX_DEVICE_ID (UINT32_C((1 << 24) - 1))
++int dm_tree_node_add_thin_target(struct dm_tree_node *node,
++				 uint64_t size,
++				 const char *pool_uuid,
++				 uint32_t device_id);
++
++int dm_tree_node_set_thin_external_origin(struct dm_tree_node *node,
++					  const char *external_uuid);
++
++void dm_tree_node_set_udev_flags(struct dm_tree_node *node, uint16_t udev_flags);
++
++void dm_tree_node_set_presuspend_node(struct dm_tree_node *node,
++				      struct dm_tree_node *presuspend_node);
++
++int dm_tree_node_add_target_area(struct dm_tree_node *node,
++				    const char *dev_name,
++				    const char *dlid,
++				    uint64_t offset);
++
++/*
++ * Only for temporarily-missing raid devices where changes are tracked.
++ */
++int dm_tree_node_add_null_area(struct dm_tree_node *node, uint64_t offset);
++
++/*
++ * Set readahead (in sectors) after loading the node.
++ */
++void dm_tree_node_set_read_ahead(struct dm_tree_node *dnode,
++				 uint32_t read_ahead,
++				 uint32_t read_ahead_flags);
++
++/*
++ * Set node callback hook before de/activation.
++ * Callback is called before 'activation' of node for activation tree,
++ * or 'deactivation' of node for deactivation tree.
++ */
++typedef enum {
++	DM_NODE_CALLBACK_PRELOADED,   /* Node has preload deps */
++	DM_NODE_CALLBACK_DEACTIVATED, /* Node is deactivated */
++} dm_node_callback_t;
++typedef int (*dm_node_callback_fn) (struct dm_tree_node *node,
++				    dm_node_callback_t type, void *cb_data);
++void dm_tree_node_set_callback(struct dm_tree_node *node,
++			       dm_node_callback_fn cb, void *cb_data);
++
++void dm_tree_set_cookie(struct dm_tree_node *node, uint32_t cookie);
++uint32_t dm_tree_get_cookie(struct dm_tree_node *node);
++
++/*****************************************************************************
++ * Library functions
++ *****************************************************************************/
++
++/*******************
++ * Memory management
++ *******************/
++
++/*
++ * Never use these functions directly - use the macros following instead.
++ */
++void *dm_malloc_wrapper(size_t s, const char *file, int line)
++	__attribute__((__malloc__)) __attribute__((__warn_unused_result__));
++void *dm_malloc_aligned_wrapper(size_t s, size_t a, const char *file, int line)
++	__attribute__((__malloc__)) __attribute__((__warn_unused_result__));
++void *dm_zalloc_wrapper(size_t s, const char *file, int line)
++	__attribute__((__malloc__)) __attribute__((__warn_unused_result__));
++void *dm_realloc_wrapper(void *p, unsigned int s, const char *file, int line)
++	__attribute__((__warn_unused_result__));
++void dm_free_wrapper(void *ptr);
++char *dm_strdup_wrapper(const char *s, const char *file, int line)
++	__attribute__((__warn_unused_result__));
++int dm_dump_memory_wrapper(void);
++void dm_bounds_check_wrapper(void);
++
++#define dm_malloc(s) dm_malloc_wrapper((s), __FILE__, __LINE__)
++#define dm_malloc_aligned(s, a) dm_malloc_aligned_wrapper((s), @,  __FILE__, __LINE__)
++#define dm_zalloc(s) dm_zalloc_wrapper((s), __FILE__, __LINE__)
++#define dm_strdup(s) dm_strdup_wrapper((s), __FILE__, __LINE__)
++#define dm_free(p) dm_free_wrapper(p)
++#define dm_realloc(p, s) dm_realloc_wrapper((p), (s), __FILE__, __LINE__)
++#define dm_dump_memory() dm_dump_memory_wrapper()
++#define dm_bounds_check() dm_bounds_check_wrapper()
++
++/*
++ * The pool allocator is useful when you are going to allocate
++ * lots of memory, use the memory for a bit, and then free the
++ * memory in one go.  A surprising amount of code has this usage
++ * profile.
++ *
++ * You should think of the pool as an infinite, contiguous chunk
++ * of memory.  The front of this chunk of memory contains
++ * allocated objects, the second half is free.  dm_pool_alloc grabs
++ * the next 'size' bytes from the free half, in effect moving it
++ * into the allocated half.  This operation is very efficient.
++ *
++ * dm_pool_free frees the allocated object *and* all objects
++ * allocated after it.  It is important to note this semantic
++ * difference from malloc/free.  This is also extremely
++ * efficient, since a single dm_pool_free can dispose of a large
++ * complex object.
++ *
++ * dm_pool_destroy frees all allocated memory.
++ *
++ * eg, If you are building a binary tree in your program, and
++ * know that you are only ever going to insert into your tree,
++ * and not delete (eg, maintaining a symbol table for a
++ * compiler).  You can create yourself a pool, allocate the nodes
++ * from it, and when the tree becomes redundant call dm_pool_destroy
++ * (no nasty iterating through the tree to free nodes).
++ *
++ * eg, On the other hand if you wanted to repeatedly insert and
++ * remove objects into the tree, you would be better off
++ * allocating the nodes from a free list; you cannot free a
++ * single arbitrary node with pool.
++ */
++
++struct dm_pool;
++
++/* constructor and destructor */
++struct dm_pool *dm_pool_create(const char *name, size_t chunk_hint)
++	__attribute__((__warn_unused_result__));
++void dm_pool_destroy(struct dm_pool *p);
++
++/* simple allocation/free routines */
++void *dm_pool_alloc(struct dm_pool *p, size_t s)
++	__attribute__((__warn_unused_result__));
++void *dm_pool_alloc_aligned(struct dm_pool *p, size_t s, unsigned alignment)
++	__attribute__((__warn_unused_result__));
++void dm_pool_empty(struct dm_pool *p);
++void dm_pool_free(struct dm_pool *p, void *ptr);
++
++/*
++ * To aid debugging, a pool can be locked. Any modifications made
++ * to the content of the pool while it is locked can be detected.
++ * Default compilation is using a crc checksum to notice modifications.
++ * The pool locking is using the mprotect with the compilation flag
++ * DEBUG_ENFORCE_POOL_LOCKING to enforce the memory protection.
++ */
++/* query pool lock status */
++int dm_pool_locked(struct dm_pool *p);
++/* mark pool as locked */
++int dm_pool_lock(struct dm_pool *p, int crc)
++	__attribute__((__warn_unused_result__));
++/* mark pool as unlocked */
++int dm_pool_unlock(struct dm_pool *p, int crc)
++	__attribute__((__warn_unused_result__));
++
++/*
++ * Object building routines:
++ *
++ * These allow you to 'grow' an object, useful for
++ * building strings, or filling in dynamic
++ * arrays.
++ *
++ * It's probably best explained with an example:
++ *
++ * char *build_string(struct dm_pool *mem)
++ * {
++ *      int i;
++ *      char buffer[16];
++ *
++ *      if (!dm_pool_begin_object(mem, 128))
++ *              return NULL;
++ *
++ *      for (i = 0; i < 50; i++) {
++ *              snprintf(buffer, sizeof(buffer), "%d, ", i);
++ *              if (!dm_pool_grow_object(mem, buffer, 0))
++ *                      goto bad;
++ *      }
++ *
++ *	// add null
++ *      if (!dm_pool_grow_object(mem, "\0", 1))
++ *              goto bad;
++ *
++ *      return dm_pool_end_object(mem);
++ *
++ * bad:
++ *
++ *      dm_pool_abandon_object(mem);
++ *      return NULL;
++ *}
++ *
++ * So start an object by calling dm_pool_begin_object
++ * with a guess@the final object size - if in
++ * doubt make the guess too small.
++ *
++ * Then append chunks of data to your object with
++ * dm_pool_grow_object.  Finally get your object with
++ * a call to dm_pool_end_object.
++ *
++ * Setting delta to 0 means it will use strlen(extra).
++ */
++int dm_pool_begin_object(struct dm_pool *p, size_t hint);
++int dm_pool_grow_object(struct dm_pool *p, const void *extra, size_t delta);
++void *dm_pool_end_object(struct dm_pool *p);
++void dm_pool_abandon_object(struct dm_pool *p);
++
++/* utilities */
++char *dm_pool_strdup(struct dm_pool *p, const char *str)
++	__attribute__((__warn_unused_result__));
++char *dm_pool_strndup(struct dm_pool *p, const char *str, size_t n)
++	__attribute__((__warn_unused_result__));
++void *dm_pool_zalloc(struct dm_pool *p, size_t s)
++	__attribute__((__warn_unused_result__));
++
++/******************
++ * bitset functions
++ ******************/
++
++typedef uint32_t *dm_bitset_t;
++
++dm_bitset_t dm_bitset_create(struct dm_pool *mem, unsigned num_bits);
++void dm_bitset_destroy(dm_bitset_t bs);
++
++int dm_bitset_equal(dm_bitset_t in1, dm_bitset_t in2);
++
++void dm_bit_and(dm_bitset_t out, dm_bitset_t in1, dm_bitset_t in2);
++void dm_bit_union(dm_bitset_t out, dm_bitset_t in1, dm_bitset_t in2);
++int dm_bit_get_first(dm_bitset_t bs);
++int dm_bit_get_next(dm_bitset_t bs, int last_bit);
++int dm_bit_get_last(dm_bitset_t bs);
++int dm_bit_get_prev(dm_bitset_t bs, int last_bit);
++
++#define DM_BITS_PER_INT (sizeof(int) * CHAR_BIT)
++
++#define dm_bit(bs, i) \
++   ((bs)[((i) / DM_BITS_PER_INT) + 1] & (0x1 << ((i) & (DM_BITS_PER_INT - 1))))
++
++#define dm_bit_set(bs, i) \
++   ((bs)[((i) / DM_BITS_PER_INT) + 1] |= (0x1 << ((i) & (DM_BITS_PER_INT - 1))))
++
++#define dm_bit_clear(bs, i) \
++   ((bs)[((i) / DM_BITS_PER_INT) + 1] &= ~(0x1 << ((i) & (DM_BITS_PER_INT - 1))))
++
++#define dm_bit_set_all(bs) \
++   memset((bs) + 1, -1, ((*(bs) / DM_BITS_PER_INT) + 1) * sizeof(int))
++
++#define dm_bit_clear_all(bs) \
++   memset((bs) + 1, 0, ((*(bs) / DM_BITS_PER_INT) + 1) * sizeof(int))
++
++#define dm_bit_copy(bs1, bs2) \
++   memcpy((bs1) + 1, (bs2) + 1, ((*(bs2) / DM_BITS_PER_INT) + 1) * sizeof(int))
++
++/*
++ * Parse a string representation of a bitset into a dm_bitset_t. The
++ * notation used is identical to the kernel bitmap parser (cpuset etc.)
++ * and supports both lists ("1,2,3") and ranges ("1-2,5-8"). If the mem
++ * parameter is NULL memory for the bitset will be allocated using
++ * dm_malloc(). Otherwise the bitset will be allocated using the supplied
++ * dm_pool.
++ */
++dm_bitset_t dm_bitset_parse_list(const char *str, struct dm_pool *mem,
++				 size_t min_num_bits);
++
++/* Returns number of set bits */
++static inline unsigned hweight32(uint32_t i)
++{
++	unsigned r = (i & 0x55555555) + ((i >> 1) & 0x55555555);
++
++	r =    (r & 0x33333333) + ((r >>  2) & 0x33333333);
++	r =    (r & 0x0F0F0F0F) + ((r >>  4) & 0x0F0F0F0F);
++	r =    (r & 0x00FF00FF) + ((r >>  8) & 0x00FF00FF);
++	return (r & 0x0000FFFF) + ((r >> 16) & 0x0000FFFF);
++}
++
++/****************
++ * hash functions
++ ****************/
++
++struct dm_hash_table;
++struct dm_hash_node;
++
++typedef void (*dm_hash_iterate_fn) (void *data);
++
++struct dm_hash_table *dm_hash_create(unsigned size_hint)
++	__attribute__((__warn_unused_result__));
++void dm_hash_destroy(struct dm_hash_table *t);
++void dm_hash_wipe(struct dm_hash_table *t);
++
++void *dm_hash_lookup(struct dm_hash_table *t, const char *key);
++int dm_hash_insert(struct dm_hash_table *t, const char *key, void *data);
++void dm_hash_remove(struct dm_hash_table *t, const char *key);
++
++void *dm_hash_lookup_binary(struct dm_hash_table *t, const void *key, uint32_t len);
++int dm_hash_insert_binary(struct dm_hash_table *t, const void *key, uint32_t len,
++			  void *data);
++void dm_hash_remove_binary(struct dm_hash_table *t, const void *key, uint32_t len);
++
++unsigned dm_hash_get_num_entries(struct dm_hash_table *t);
++void dm_hash_iter(struct dm_hash_table *t, dm_hash_iterate_fn f);
++
++char *dm_hash_get_key(struct dm_hash_table *t, struct dm_hash_node *n);
++void *dm_hash_get_data(struct dm_hash_table *t, struct dm_hash_node *n);
++struct dm_hash_node *dm_hash_get_first(struct dm_hash_table *t);
++struct dm_hash_node *dm_hash_get_next(struct dm_hash_table *t, struct dm_hash_node *n);
++
++/*
++ * dm_hash_insert() replaces the value of an existing
++ * entry with a matching key if one exists.  Otherwise
++ * it adds a new entry.
++ *
++ * dm_hash_insert_with_val() inserts a new entry if
++ * another entry with the same key already exists.
++ * val_len is the size of the data being inserted.
++ *
++ * If two entries with the same key exist,
++ * (added using dm_hash_insert_allow_multiple), then:
++ * . dm_hash_lookup() returns the first one it finds, and
++ *   dm_hash_lookup_with_val() returns the one with a matching
++ *   val_len/val.
++ * . dm_hash_remove() removes the first one it finds, and
++ *   dm_hash_remove_with_val() removes the one with a matching
++ *   val_len/val.
++ *
++ * If a single entry with a given key exists, and it has
++ * zero val_len, then:
++ * . dm_hash_lookup() returns it
++ * . dm_hash_lookup_with_val(val_len=0) returns it
++ * . dm_hash_remove() removes it
++ * . dm_hash_remove_with_val(val_len=0) removes it
++ *
++ * dm_hash_lookup_with_count() is a single call that will
++ * both lookup a key's value and check if there is more
++ * than one entry with the given key.
++ *
++ * (It is not meant to retrieve all the entries with the
++ * given key.  In the common case where a single entry exists
++ * for the key, it is useful to have a single call that will
++ * both look up the value and indicate if multiple values
++ * exist for the key.)
++ *
++ * dm_hash_lookup_with_count:
++ * . If no entries exist, the function returns NULL, and
++ *   the count is set to 0.
++ * . If only one entry exists, the value of that entry is
++ *   returned and count is set to 1.
++ * . If N entries exists, the value of the first entry is
++ *   returned and count is set to N.
++ */
++
++void *dm_hash_lookup_with_val(struct dm_hash_table *t, const char *key,
++                              const void *val, uint32_t val_len);
++void dm_hash_remove_with_val(struct dm_hash_table *t, const char *key,
++                             const void *val, uint32_t val_len);
++int dm_hash_insert_allow_multiple(struct dm_hash_table *t, const char *key,
++                                  const void *val, uint32_t val_len);
++void *dm_hash_lookup_with_count(struct dm_hash_table *t, const char *key, int *count);
++
++
++#define dm_hash_iterate(v, h) \
++	for (v = dm_hash_get_first((h)); v; \
++	     v = dm_hash_get_next((h), v))
++
++/*********
++ * selinux
++ *********/
++
++/*
++ * Obtain SELinux security context assigned for the path and set this
++ * context for creating a new file system object. This security context
++ * is global and it is used until reset to default policy behaviour
++ * by calling 'dm_prepare_selinux_context(NULL, 0)'.
++ */
++int dm_prepare_selinux_context(const char *path, mode_t mode);
++/*
++ * Set SELinux context for existing file system object.
++ */
++int dm_set_selinux_context(const char *path, mode_t mode);
++
++/*********************
++ * string manipulation
++ *********************/
++
++/*
++ * Break up the name of a mapped device into its constituent
++ * Volume Group, Logical Volume and Layer (if present).
++ * If mem is supplied, the result is allocated from the mempool.
++ * Otherwise the strings are changed in situ.
++ */
++int dm_split_lvm_name(struct dm_pool *mem, const char *dmname,
++		      char **vgname, char **lvname, char **layer);
++
++/*
++ * Destructively split buffer into NULL-separated words in argv.
++ * Returns number of words.
++ */
++int dm_split_words(char *buffer, unsigned max,
++		   unsigned ignore_comments, /* Not implemented */
++		   char **argv);
++
++/*
++ * Returns -1 if buffer too small
++ */
++int dm_snprintf(char *buf, size_t bufsize, const char *format, ...)
++    __attribute__ ((format(printf, 3, 4)));
++
++/*
++ * Returns pointer to the last component of the path.
++ */
++const char *dm_basename(const char *path);
++
++/*
++ * Returns number of occurrences of 'c' in 'str' of length 'size'.
++ */
++unsigned dm_count_chars(const char *str, size_t len, const int c);
++
++/*
++ * Length of string after escaping double quotes and backslashes.
++ */
++size_t dm_escaped_len(const char *str);
++
++/*
++ * <vg>-<lv>-<layer> or if !layer just <vg>-<lv>.
++ */
++char *dm_build_dm_name(struct dm_pool *mem, const char *vgname,
++		       const char *lvname, const char *layer);
++char *dm_build_dm_uuid(struct dm_pool *mem, const char *prefix, const char *lvid, const char *layer);
++
++/*
++ * Copies a string, quoting double quotes with backslashes.
++ */
++char *dm_escape_double_quotes(char *out, const char *src);
++
++/*
++ * Undo quoting in situ.
++ */
++void dm_unescape_double_quotes(char *src);
++
++/*
++ * Unescape colons and "at" signs in situ and save the substrings
++ * starting at the position of the first unescaped colon and the
++ * first unescaped "at" sign. This is normally used to unescape
++ * device names used as PVs.
++ */
++void dm_unescape_colons_and_at_signs(char *src,
++				     char **substr_first_unquoted_colon,
++				     char **substr_first_unquoted_at_sign);
++
++/*
++ * Replacement for strncpy() function.
++ *
++ * Copies no more than n bytes from string pointed by src to the buffer
++ * pointed by dest and ensure string is finished with '\0'.
++ * Returns 0 if the whole string does not fit.
++ */
++int dm_strncpy(char *dest, const char *src, size_t n);
++
++/*
++ * Recognize unit specifier in the 'units' arg and return a factor
++ * representing that unit. If the 'units' contains a prefix with digits,
++ * the 'units' is considered to be a custom unit.
++ *
++ * Also, set 'unit_type' output arg to the character that represents
++ * the unit specified. The 'unit_type' character equals to the unit
++ * character itself recognized in the 'units' arg for canonical units.
++ * Otherwise, the 'unit_type' character is set to 'U' for custom unit.
++ *
++ * An example for k/K canonical units and 8k/8K custom units:
++ *
++ *   units  unit_type  return value (factor)
++ *   k      k          1024
++ *   K      K          1000
++ *   8k     U          1024*8
++ *   8K     U          1000*8
++ *   etc...
++ *
++ * Recognized units:
++ *
++ *   h/H - human readable (returns 1 for both)
++ *   b/B - byte (returns 1 for both)
++ *   s/S - sector (returns 512 for both)
++ *   k/K - kilo (returns 1024/1000 respectively)
++ *   m/M - mega (returns 1024^2/1000^2 respectively)
++ *   g/G - giga (returns 1024^3/1000^3 respectively)
++ *   t/T - tera (returns 1024^4/1000^4 respectively)
++ *   p/P - peta (returns 1024^5/1000^5 respectively)
++ *   e/E - exa (returns 1024^6/1000^6 respectively)
++ *
++ * Only one units character is allowed in the 'units' arg
++ * if strict mode is enabled by 'strict' arg.
++ *
++ * The 'endptr' output arg, if not NULL, saves the pointer
++ * in the 'units' string which follows the unit specifier
++ * recognized (IOW the position where the parsing of the
++ * unit specifier stopped).
++ *
++ * Returns the unit factor or 0 if no unit is recognized.
++ */
++uint64_t dm_units_to_factor(const char *units, char *unit_type,
++			    int strict, const char **endptr);
++
++/*
++ * Type of unit specifier used by dm_size_to_string().
++ */
++typedef enum {
++	DM_SIZE_LONG = 0,	/* Megabyte */
++	DM_SIZE_SHORT = 1,	/* MB or MiB */
++	DM_SIZE_UNIT = 2	/* M or m */
++} dm_size_suffix_t;
++
++/*
++ * Convert a size (in 512-byte sectors) into a printable string using units of unit_type.
++ * An upper-case unit_type indicates output units based on powers of 1000 are
++ * required; a lower-case unit_type indicates powers of 1024.
++ * For correct operation, unit_factor must be one of:
++ * 	0 - the correct value will be calculated internally;
++ *   or the output from dm_units_to_factor() corresponding to unit_type;
++ *   or 'u' or 'U', an arbitrary number of bytes to use as the power base.
++ * Set include_suffix to 1 to include a suffix of suffix_type.
++ * Set use_si_units to 0 for suffixes that don't distinguish between 1000 and 1024.
++ * Set use_si_units to 1 for a suffix that does distinguish.
++ */
++const char *dm_size_to_string(struct dm_pool *mem, uint64_t size,
++			      char unit_type, int use_si_units,
++			      uint64_t unit_factor, int include_suffix,
++			      dm_size_suffix_t suffix_type);
++
++/**************************
++ * file/stream manipulation
++ **************************/
++
++/*
++ * Create a directory (with parent directories if necessary).
++ * Returns 1 on success, 0 on failure.
++ */
++int dm_create_dir(const char *dir);
++
++int dm_is_empty_dir(const char *dir);
++
++/*
++ * Close a stream, with nicer error checking than fclose's.
++ * Derived from gnulib's close-stream.c.
++ *
++ * Close "stream".  Return 0 if successful, and EOF (setting errno)
++ * otherwise.  Upon failure, set errno to 0 if the error number
++ * cannot be determined.  Useful mainly for writable streams.
++ */
++int dm_fclose(FILE *stream);
++
++/*
++ * Returns size of a buffer which is allocated with dm_malloc.
++ * Pointer to the buffer is stored in *buf.
++ * Returns -1 on failure leaving buf undefined.
++ */
++int dm_asprintf(char **buf, const char *format, ...)
++    __attribute__ ((format(printf, 2, 3)));
++int dm_vasprintf(char **buf, const char *format, va_list ap)
++    __attribute__ ((format(printf, 2, 0)));
++
++/*
++ * create lockfile (pidfile) - create and lock a lock file
++ * @lockfile: location of lock file
++ *
++ * Returns: 1 on success, 0 otherwise, errno is handled internally
++ */
++int dm_create_lockfile(const char* lockfile);
++
++/*
++ * Query whether a daemon is running based on its lockfile
++ *
++ * Returns: 1 if running, 0 if not
++ */
++int dm_daemon_is_running(const char* lockfile);
++
++/*********************
++ * regular expressions
++ *********************/
++struct dm_regex;
++
++/*
++ * Initialise an array of num patterns for matching.
++ * Uses memory from mem.
++ */
++struct dm_regex *dm_regex_create(struct dm_pool *mem, const char * const *patterns,
++				 unsigned num_patterns);
++
++/*
++ * Match string s against the patterns.
++ * Returns the index of the highest pattern in the array that matches,
++ * or -1 if none match.
++ */
++int dm_regex_match(struct dm_regex *regex, const char *s);
++
++/*
++ * This is useful for regression testing only.  The idea is if two
++ * fingerprints are different, then the two dfas are certainly not
++ * isomorphic.  If two fingerprints _are_ the same then it's very likely
++ * that the dfas are isomorphic.
++ *
++ * This function must be called before any matching is done.
++ */
++uint32_t dm_regex_fingerprint(struct dm_regex *regex);
++
++/******************
++ * percent handling
++ ******************/
++/*
++ * A fixed-point representation of percent values. One percent equals to
++ * DM_PERCENT_1 as defined below. Values that are not multiples of DM_PERCENT_1
++ * represent fractions, with precision of 1/1000000 of a percent. See
++ * dm_percent_to_float for a conversion to a floating-point representation.
++ *
++ * You should always use dm_make_percent when building dm_percent_t values. The
++ * implementation of dm_make_percent is biased towards the middle: it ensures that
++ * the result is DM_PERCENT_0 or DM_PERCENT_100 if and only if this is the actual
++ * value -- it never rounds any intermediate value (> 0 or < 100) to either 0
++ * or 100.
++*/
++#define DM_PERCENT_CHAR '%'
++
++typedef enum {
++	DM_PERCENT_0 = 0,
++	DM_PERCENT_1 = 1000000,
++	DM_PERCENT_100 = 100 * DM_PERCENT_1,
++	DM_PERCENT_INVALID = -1,
++	DM_PERCENT_FAILED = -2
++} dm_percent_range_t;
++
++typedef int32_t dm_percent_t;
++
++float dm_percent_to_float(dm_percent_t percent);
++/*
++ * Return adjusted/rounded float for better percent value printing.
++ * Function ensures for given precision of digits:
++ * 100.0% returns only when the value is DM_PERCENT_100
++ *        for close smaller values rounds to nearest smaller value
++ * 0.0% returns only for value DM_PERCENT_0
++ *        for close bigger values rounds to nearest bigger value
++ * In all other cases returns same value as dm_percent_to_float()
++ */
++float dm_percent_to_round_float(dm_percent_t percent, unsigned digits);
++dm_percent_t dm_make_percent(uint64_t numerator, uint64_t denominator);
++
++/********************
++ * timestamp handling
++ ********************/
++
++/*
++ * Create a dm_timestamp object to use with dm_timestamp_get.
++ */
++struct dm_timestamp *dm_timestamp_alloc(void);
++
++/*
++ * Update dm_timestamp object to represent the current time.
++ */
++int dm_timestamp_get(struct dm_timestamp *ts);
++
++/*
++ * Copy a timestamp from ts_old to ts_new.
++ */
++void dm_timestamp_copy(struct dm_timestamp *ts_new, struct dm_timestamp *ts_old);
++
++/*
++ * Compare two timestamps.
++ *
++ * Return: -1 if ts1 is less than ts2
++ *  	    0 if ts1 is equal to ts2
++ *          1 if ts1 is greater than ts2
++ */
++int dm_timestamp_compare(struct dm_timestamp *ts1, struct dm_timestamp *ts2);
++
++/*
++ * Return the absolute difference in nanoseconds between
++ * the dm_timestamp objects ts1 and ts2.
++ *
++ * Callers that need to know whether ts1 is before, equal to, or after ts2
++ * in addition to the magnitude should use dm_timestamp_compare.
++ */
++uint64_t dm_timestamp_delta(struct dm_timestamp *ts1, struct dm_timestamp *ts2);
++
++/*
++ * Destroy a dm_timestamp object.
++ */
++void dm_timestamp_destroy(struct dm_timestamp *ts);
++
++/*********************
++ * reporting functions
++ *********************/
++
++struct dm_report_object_type {
++	uint32_t id;			/* Powers of 2 */
++	const char *desc;
++	const char *prefix;		/* field id string prefix (optional) */
++	/* FIXME: convert to proper usage of const pointers here */
++	void *(*data_fn)(void *object);	/* callback from report_object() */
++};
++
++struct dm_report_field;
++
++/*
++ * dm_report_field_type flags
++ */
++#define DM_REPORT_FIELD_MASK				0x00000FFF
++#define DM_REPORT_FIELD_ALIGN_MASK			0x0000000F
++#define DM_REPORT_FIELD_ALIGN_LEFT			0x00000001
++#define DM_REPORT_FIELD_ALIGN_RIGHT			0x00000002
++#define DM_REPORT_FIELD_TYPE_MASK			0x00000FF0
++#define DM_REPORT_FIELD_TYPE_NONE			0x00000000
++#define DM_REPORT_FIELD_TYPE_STRING			0x00000010
++#define DM_REPORT_FIELD_TYPE_NUMBER			0x00000020
++#define DM_REPORT_FIELD_TYPE_SIZE			0x00000040
++#define DM_REPORT_FIELD_TYPE_PERCENT			0x00000080
++#define DM_REPORT_FIELD_TYPE_STRING_LIST		0x00000100
++#define DM_REPORT_FIELD_TYPE_TIME			0x00000200
++
++/* For use with reserved values only! */
++#define DM_REPORT_FIELD_RESERVED_VALUE_MASK		0x0000000F
++#define DM_REPORT_FIELD_RESERVED_VALUE_NAMED		0x00000001 /* only named value, less strict form of reservation */
++#define DM_REPORT_FIELD_RESERVED_VALUE_RANGE		0x00000002 /* value is range - low and high value defined */
++#define DM_REPORT_FIELD_RESERVED_VALUE_DYNAMIC_VALUE	0x00000004 /* value is computed in runtime */
++#define DM_REPORT_FIELD_RESERVED_VALUE_FUZZY_NAMES	0x00000008 /* value names are recognized in runtime */
++
++#define DM_REPORT_FIELD_TYPE_ID_LEN 32
++#define DM_REPORT_FIELD_TYPE_HEADING_LEN 32
++
++struct dm_report;
++struct dm_report_field_type {
++	uint32_t type;		/* object type id */
++	uint32_t flags;		/* DM_REPORT_FIELD_* */
++	uint32_t offset;	/* byte offset in the object */
++	int32_t width;		/* default width */
++	/* string used to specify the field */
++	const char id[DM_REPORT_FIELD_TYPE_ID_LEN];
++	/* string printed in header */
++	const char heading[DM_REPORT_FIELD_TYPE_HEADING_LEN];
++	int (*report_fn)(struct dm_report *rh, struct dm_pool *mem,
++			 struct dm_report_field *field, const void *data,
++			 void *private_data);
++	const char *desc;	/* description of the field */
++};
++
++/*
++ * Per-field reserved value.
++ */
++struct dm_report_field_reserved_value {
++	/* field_num is the position of the field in 'fields'
++	   array passed to dm_report_init_with_selection */
++	uint32_t field_num;
++	/* the value is of the same type as the field
++	   identified by field_num */
++	const void *value;
++};
++
++/*
++ * Reserved value is a 'value' that is used directly if any of the 'names' is hit
++ * or in case of fuzzy names, if such fuzzy name matches.
++ *
++ * If type is any of DM_REPORT_FIELD_TYPE_*, the reserved value is recognized
++ * for all fields of that type.
++ *
++ * If type is DM_REPORT_FIELD_TYPE_NONE, the reserved value is recognized
++ * for the exact field specified - hence the type of the value is automatically
++ * the same as the type of the field itself.
++ *
++ * The array of reserved values is used to initialize reporting with
++ * selection enabled (see also dm_report_init_with_selection function).
++ */
++struct dm_report_reserved_value {
++	const uint32_t type;		/* DM_REPORT_FIELD_RESERVED_VALUE_* and DM_REPORT_FIELD_TYPE_*  */
++	const void *value;		/* reserved value:
++						uint64_t for DM_REPORT_FIELD_TYPE_NUMBER
++						uint64_t for DM_REPORT_FIELD_TYPE_SIZE (number of 512-byte sectors)
++						uint64_t for DM_REPORT_FIELD_TYPE_PERCENT
++						const char* for DM_REPORT_FIELD_TYPE_STRING
++						struct dm_report_field_reserved_value for DM_REPORT_FIELD_TYPE_NONE
++						dm_report_reserved_handler* if DM_REPORT_FIELD_RESERVED_VALUE_{DYNAMIC_VALUE,FUZZY_NAMES} is used */
++	const char **names;		/* null-terminated array of static names for this reserved value */
++	const char *description;	/* description of the reserved value */
++};
++
++/*
++ * Available actions for dm_report_reserved_value_handler.
++ */
++typedef enum {
++	DM_REPORT_RESERVED_PARSE_FUZZY_NAME,
++	DM_REPORT_RESERVED_GET_DYNAMIC_VALUE,
++} dm_report_reserved_action_t;
++
++/*
++ * Generic reserved value handler to process reserved value names and/or values.
++ *
++ * Actions and their input/output:
++ *
++ * 	DM_REPORT_RESERVED_PARSE_FUZZY_NAME
++ *		data_in:  const char *fuzzy_name
++ *		data_out: const char *canonical_name, NULL if fuzzy_name not recognized
++ *
++ * 	DM_REPORT_RESERVED_GET_DYNAMIC_VALUE
++ * 		data_in:  const char *canonical_name
++ * 		data_out: void *value, NULL if canonical_name not recognized
++ *
++ * All actions return:
++ *
++ *	-1 if action not implemented
++ * 	0 on error
++ * 	1 on success
++ */
++typedef int (*dm_report_reserved_handler) (struct dm_report *rh,
++					   struct dm_pool *mem,
++					   uint32_t field_num,
++					   dm_report_reserved_action_t action,
++					   const void *data_in,
++					   const void **data_out);
++
++/*
++ * The dm_report_value_cache_{set,get} are helper functions to store and retrieve
++ * various values used during reporting (dm_report_field_type.report_fn) and/or
++ * selection processing (dm_report_reserved_handler instances) to avoid
++ * recalculation of these values or to share values among calls.
++ */
++int dm_report_value_cache_set(struct dm_report *rh, const char *name, const void *data);
++const void *dm_report_value_cache_get(struct dm_report *rh, const char *name);
++/*
++ * dm_report_init output_flags
++ */
++#define DM_REPORT_OUTPUT_MASK			0x000000FF
++#define DM_REPORT_OUTPUT_ALIGNED		0x00000001
++#define DM_REPORT_OUTPUT_BUFFERED		0x00000002
++#define DM_REPORT_OUTPUT_HEADINGS		0x00000004
++#define DM_REPORT_OUTPUT_FIELD_NAME_PREFIX	0x00000008
++#define DM_REPORT_OUTPUT_FIELD_UNQUOTED		0x00000010
++#define DM_REPORT_OUTPUT_COLUMNS_AS_ROWS	0x00000020
++#define DM_REPORT_OUTPUT_MULTIPLE_TIMES		0x00000040
++
++struct dm_report *dm_report_init(uint32_t *report_types,
++				 const struct dm_report_object_type *types,
++				 const struct dm_report_field_type *fields,
++				 const char *output_fields,
++				 const char *output_separator,
++				 uint32_t output_flags,
++				 const char *sort_keys,
++				 void *private_data);
++struct dm_report *dm_report_init_with_selection(uint32_t *report_types,
++						const struct dm_report_object_type *types,
++						const struct dm_report_field_type *fields,
++						const char *output_fields,
++						const char *output_separator,
++						uint32_t output_flags,
++						const char *sort_keys,
++						const char *selection,
++						const struct dm_report_reserved_value reserved_values[],
++						void *private_data);
++/*
++ * Report an object, pass it through the selection criteria if they
++ * are present and display the result on output if it passes the criteria.
++ */
++int dm_report_object(struct dm_report *rh, void *object);
++/*
++ * The same as dm_report_object, but display the result on output only if
++ * 'do_output' arg is set. Also, save the result of selection in 'selected'
++ * arg if it's not NULL (either 1 if the object passes, otherwise 0).
++ */
++int dm_report_object_is_selected(struct dm_report *rh, void *object, int do_output, int *selected);
++
++/*
++ * Compact report output so that if field value is empty for all rows in
++ * the report, drop the field from output completely (including headers).
++ * Compact output is applicable only if report is buffered, otherwise
++ * this function has no effect.
++ */
++int dm_report_compact_fields(struct dm_report *rh);
++
++/*
++ * The same as dm_report_compact_fields, but for selected fields only.
++ * The "fields" arg is comma separated list of field names (the same format
++ * as used for "output_fields" arg in dm_report_init fn).
++ */
++int dm_report_compact_given_fields(struct dm_report *rh, const char *fields);
++
++/*
++ * Returns 1 if there is no data waiting to be output.
++ */
++int dm_report_is_empty(struct dm_report *rh);
++
++/*
++ * Destroy report content without doing output.
++ */
++void dm_report_destroy_rows(struct dm_report *rh);
++
++int dm_report_output(struct dm_report *rh);
++
++/*
++ * Output the report headings for a columns-based report, even if they
++ * have already been shown. Useful for repeating reports that wish to
++ * issue a periodic reminder of the column headings.
++ */
++int dm_report_column_headings(struct dm_report *rh);
++
++void dm_report_free(struct dm_report *rh);
++
++/*
++ * Prefix added to each field name with DM_REPORT_OUTPUT_FIELD_NAME_PREFIX
++ */
++int dm_report_set_output_field_name_prefix(struct dm_report *rh,
++					   const char *report_prefix);
++
++int dm_report_set_selection(struct dm_report *rh, const char *selection);
++
++/*
++ * Report functions are provided for simple data types.
++ * They take care of allocating copies of the data.
++ */
++int dm_report_field_string(struct dm_report *rh, struct dm_report_field *field,
++			   const char *const *data);
++int dm_report_field_string_list(struct dm_report *rh, struct dm_report_field *field,
++				const struct dm_list *data, const char *delimiter);
++int dm_report_field_string_list_unsorted(struct dm_report *rh, struct dm_report_field *field,
++					 const struct dm_list *data, const char *delimiter);
++int dm_report_field_int32(struct dm_report *rh, struct dm_report_field *field,
++			  const int32_t *data);
++int dm_report_field_uint32(struct dm_report *rh, struct dm_report_field *field,
++			   const uint32_t *data);
++int dm_report_field_int(struct dm_report *rh, struct dm_report_field *field,
++			const int *data);
++int dm_report_field_uint64(struct dm_report *rh, struct dm_report_field *field,
++			   const uint64_t *data);
++int dm_report_field_percent(struct dm_report *rh, struct dm_report_field *field,
++			    const dm_percent_t *data);
++
++/*
++ * For custom fields, allocate the data in 'mem' and use
++ * dm_report_field_set_value().
++ * 'sortvalue' may be NULL if it matches 'value'
++ */
++void dm_report_field_set_value(struct dm_report_field *field, const void *value,
++			       const void *sortvalue);
++
++/*
++ * Report group support.
++ */
++struct dm_report_group;
++
++typedef enum {
++	DM_REPORT_GROUP_SINGLE,
++	DM_REPORT_GROUP_BASIC,
++	DM_REPORT_GROUP_JSON
++} dm_report_group_type_t;
++
++struct dm_report_group *dm_report_group_create(dm_report_group_type_t type, void *data);
++int dm_report_group_push(struct dm_report_group *group, struct dm_report *report, void *data);
++int dm_report_group_pop(struct dm_report_group *group);
++int dm_report_group_output_and_pop_all(struct dm_report_group *group);
++int dm_report_group_destroy(struct dm_report_group *group);
++
++/*
++ * Stats counter access methods
++ *
++ * Each method returns the corresponding stats counter value from the
++ * supplied dm_stats handle for the specified region_id and area_id.
++ * If either region_id or area_id uses one of the special values
++ * DM_STATS_REGION_CURRENT or DM_STATS_AREA_CURRENT then the region
++ * or area is selected according to the current state of the dm_stats
++ * handle's embedded cursor.
++ *
++ * Two methods are provided to access counter values: a named function
++ * for each available counter field and a single function that accepts
++ * an enum value specifying the required field. New code is encouraged
++ * to use the enum based interface as calls to the named functions are
++ * implemented using the enum method internally.
++ *
++ * See the kernel documentation for complete descriptions of each
++ * counter field:
++ *
++ * Documentation/device-mapper/statistics.txt
++ * Documentation/iostats.txt
++ *
++ * reads: the number of reads completed
++ * reads_merged: the number of reads merged
++ * read_sectors: the number of sectors read
++ * read_nsecs: the number of nanoseconds spent reading
++ * writes: the number of writes completed
++ * writes_merged: the number of writes merged
++ * write_sectors: the number of sectors written
++ * write_nsecs: the number of nanoseconds spent writing
++ * io_in_progress: the number of I/Os currently in progress
++ * io_nsecs: the number of nanoseconds spent doing I/Os
++ * weighted_io_nsecs: the weighted number of nanoseconds spent doing I/Os
++ * total_read_nsecs: the total time spent reading in nanoseconds
++ * total_write_nsecs: the total time spent writing in nanoseconds
++ */
++
++#define DM_STATS_REGION_CURRENT UINT64_MAX
++#define DM_STATS_AREA_CURRENT UINT64_MAX
++
++typedef enum {
++	DM_STATS_READS_COUNT,
++	DM_STATS_READS_MERGED_COUNT,
++	DM_STATS_READ_SECTORS_COUNT,
++	DM_STATS_READ_NSECS,
++	DM_STATS_WRITES_COUNT,
++	DM_STATS_WRITES_MERGED_COUNT,
++	DM_STATS_WRITE_SECTORS_COUNT,
++	DM_STATS_WRITE_NSECS,
++	DM_STATS_IO_IN_PROGRESS_COUNT,
++	DM_STATS_IO_NSECS,
++	DM_STATS_WEIGHTED_IO_NSECS,
++	DM_STATS_TOTAL_READ_NSECS,
++	DM_STATS_TOTAL_WRITE_NSECS,
++	DM_STATS_NR_COUNTERS
++} dm_stats_counter_t;
++
++uint64_t dm_stats_get_counter(const struct dm_stats *dms,
++			      dm_stats_counter_t counter,
++			      uint64_t region_id, uint64_t area_id);
++
++uint64_t dm_stats_get_reads(const struct dm_stats *dms,
++			    uint64_t region_id, uint64_t area_id);
++
++uint64_t dm_stats_get_reads_merged(const struct dm_stats *dms,
++				   uint64_t region_id, uint64_t area_id);
++
++uint64_t dm_stats_get_read_sectors(const struct dm_stats *dms,
++				   uint64_t region_id, uint64_t area_id);
++
++uint64_t dm_stats_get_read_nsecs(const struct dm_stats *dms,
++				 uint64_t region_id, uint64_t area_id);
++
++uint64_t dm_stats_get_writes(const struct dm_stats *dms,
++			     uint64_t region_id, uint64_t area_id);
++
++uint64_t dm_stats_get_writes_merged(const struct dm_stats *dms,
++				    uint64_t region_id, uint64_t area_id);
++
++uint64_t dm_stats_get_write_sectors(const struct dm_stats *dms,
++				    uint64_t region_id, uint64_t area_id);
++
++uint64_t dm_stats_get_write_nsecs(const struct dm_stats *dms,
++				  uint64_t region_id, uint64_t area_id);
++
++uint64_t dm_stats_get_io_in_progress(const struct dm_stats *dms,
++				     uint64_t region_id, uint64_t area_id);
++
++uint64_t dm_stats_get_io_nsecs(const struct dm_stats *dms,
++			       uint64_t region_id, uint64_t area_id);
++
++uint64_t dm_stats_get_weighted_io_nsecs(const struct dm_stats *dms,
++					uint64_t region_id, uint64_t area_id);
++
++uint64_t dm_stats_get_total_read_nsecs(const struct dm_stats *dms,
++				       uint64_t region_id, uint64_t area_id);
++
++uint64_t dm_stats_get_total_write_nsecs(const struct dm_stats *dms,
++					uint64_t region_id, uint64_t area_id);
++
++/*
++ * Derived statistics access methods
++ *
++ * Each method returns the corresponding value calculated from the
++ * counters stored in the supplied dm_stats handle for the specified
++ * region_id and area_id. If either region_id or area_id uses one of the
++ * special values DM_STATS_REGION_CURRENT or DM_STATS_AREA_CURRENT then
++ * the region or area is selected according to the current state of the
++ * dm_stats handle's embedded cursor.
++ *
++ * The set of metrics is based on the fields provided by the Linux
++ * iostats program.
++ *
++ * rd_merges_per_sec: the number of reads merged per second
++ * wr_merges_per_sec: the number of writes merged per second
++ * reads_per_sec: the number of reads completed per second
++ * writes_per_sec: the number of writes completed per second
++ * read_sectors_per_sec: the number of sectors read per second
++ * write_sectors_per_sec: the number of sectors written per second
++ * average_request_size: the average size of requests submitted
++ * service_time: the average service time (in ns) for requests issued
++ * average_queue_size: the average queue length
++ * average_wait_time: the average time for requests to be served (in ns)
++ * average_rd_wait_time: the average read wait time
++ * average_wr_wait_time: the average write wait time
++ */
++
++typedef enum {
++	DM_STATS_RD_MERGES_PER_SEC,
++	DM_STATS_WR_MERGES_PER_SEC,
++	DM_STATS_READS_PER_SEC,
++	DM_STATS_WRITES_PER_SEC,
++	DM_STATS_READ_SECTORS_PER_SEC,
++	DM_STATS_WRITE_SECTORS_PER_SEC,
++	DM_STATS_AVERAGE_REQUEST_SIZE,
++	DM_STATS_AVERAGE_QUEUE_SIZE,
++	DM_STATS_AVERAGE_WAIT_TIME,
++	DM_STATS_AVERAGE_RD_WAIT_TIME,
++	DM_STATS_AVERAGE_WR_WAIT_TIME,
++	DM_STATS_SERVICE_TIME,
++	DM_STATS_THROUGHPUT,
++	DM_STATS_UTILIZATION,
++	DM_STATS_NR_METRICS
++} dm_stats_metric_t;
++
++int dm_stats_get_metric(const struct dm_stats *dms, int metric,
++			uint64_t region_id, uint64_t area_id, double *value);
++
++int dm_stats_get_rd_merges_per_sec(const struct dm_stats *dms, double *rrqm,
++				   uint64_t region_id, uint64_t area_id);
++
++int dm_stats_get_wr_merges_per_sec(const struct dm_stats *dms, double *rrqm,
++				   uint64_t region_id, uint64_t area_id);
++
++int dm_stats_get_reads_per_sec(const struct dm_stats *dms, double *rd_s,
++			       uint64_t region_id, uint64_t area_id);
++
++int dm_stats_get_writes_per_sec(const struct dm_stats *dms, double *wr_s,
++				uint64_t region_id, uint64_t area_id);
++
++int dm_stats_get_read_sectors_per_sec(const struct dm_stats *dms,
++				      double *rsec_s, uint64_t region_id,
++				      uint64_t area_id);
++
++int dm_stats_get_write_sectors_per_sec(const struct dm_stats *dms,
++				       double *wr_s, uint64_t region_id,
++				       uint64_t area_id);
++
++int dm_stats_get_average_request_size(const struct dm_stats *dms,
++				      double *arqsz, uint64_t region_id,
++				      uint64_t area_id);
++
++int dm_stats_get_service_time(const struct dm_stats *dms, double *svctm,
++			      uint64_t region_id, uint64_t area_id);
++
++int dm_stats_get_average_queue_size(const struct dm_stats *dms, double *qusz,
++				    uint64_t region_id, uint64_t area_id);
++
++int dm_stats_get_average_wait_time(const struct dm_stats *dms, double *await,
++				   uint64_t region_id, uint64_t area_id);
++
++int dm_stats_get_average_rd_wait_time(const struct dm_stats *dms,
++				      double *await, uint64_t region_id,
++				      uint64_t area_id);
++
++int dm_stats_get_average_wr_wait_time(const struct dm_stats *dms,
++				      double *await, uint64_t region_id,
++				      uint64_t area_id);
++
++int dm_stats_get_throughput(const struct dm_stats *dms, double *tput,
++			    uint64_t region_id, uint64_t area_id);
++
++int dm_stats_get_utilization(const struct dm_stats *dms, dm_percent_t *util,
++			     uint64_t region_id, uint64_t area_id);
++
++/*
++ * Statistics histogram access methods.
++ *
++ * Methods to access latency histograms for regions that have them
++ * enabled. Each histogram contains a configurable number of bins
++ * spanning a user defined latency interval.
++ *
++ * The bin count, upper and lower bin bounds, and bin values are
++ * made available via the following area methods.
++ *
++ * Methods to obtain a simple string representation of the histogram
++ * and its bounds are also provided.
++ */
++
++/*
++ * Retrieve a pointer to the histogram associated with the specified
++ * area. If the area does not have a histogram configured this function
++ * returns NULL.
++ *
++ * The pointer does not need to be freed explicitly by the caller: it
++ * will become invalid following a subsequent dm_stats_list(),
++ * dm_stats_populate() or dm_stats_destroy() of the corresponding
++ * dm_stats handle.
++ *
++ * If region_id or area_id is one of the special values
++ * DM_STATS_REGION_CURRENT or DM_STATS_AREA_CURRENT the current cursor
++ * value is used to select the region or area.
++ */
++struct dm_histogram *dm_stats_get_histogram(const struct dm_stats *dms,
++					    uint64_t region_id,
++					    uint64_t area_id);
++
++/*
++ * Return the number of bins in the specified histogram handle.
++ */
++int dm_histogram_get_nr_bins(const struct dm_histogram *dmh);
++
++/*
++ * Get the lower bound of the specified bin of the histogram for the
++ * area specified by region_id and area_id. The value is returned in
++ * nanoseconds.
++ */
++uint64_t dm_histogram_get_bin_lower(const struct dm_histogram *dmh, int bin);
++
++/*
++ * Get the upper bound of the specified bin of the histogram for the
++ * area specified by region_id and area_id. The value is returned in
++ * nanoseconds.
++ */
++uint64_t dm_histogram_get_bin_upper(const struct dm_histogram *dmh, int bin);
++
++/*
++ * Get the width of the specified bin of the histogram for the area
++ * specified by region_id and area_id. The width is equal to the bin
++ * upper bound minus the lower bound and yields the range of latency
++ * values covered by this bin. The value is returned in nanoseconds.
++ */
++uint64_t dm_histogram_get_bin_width(const struct dm_histogram *dmh, int bin);
++
++/*
++ * Get the value of the specified bin of the histogram for the area
++ * specified by region_id and area_id.
++ */
++uint64_t dm_histogram_get_bin_count(const struct dm_histogram *dmh, int bin);
++
++/*
++ * Get the percentage (relative frequency) of the specified bin of the
++ * histogram for the area specified by region_id and area_id.
++ */
++dm_percent_t dm_histogram_get_bin_percent(const struct dm_histogram *dmh,
++					  int bin);
++
++/*
++ * Return the total observations (sum of bin counts) for the histogram
++ * of the area specified by region_id and area_id.
++ */
++uint64_t dm_histogram_get_sum(const struct dm_histogram *dmh);
++
++/*
++ * Histogram formatting flags.
++ */
++#define DM_HISTOGRAM_SUFFIX  0x1
++#define DM_HISTOGRAM_VALUES  0x2
++#define DM_HISTOGRAM_PERCENT 0X4
++#define DM_HISTOGRAM_BOUNDS_LOWER 0x10
++#define DM_HISTOGRAM_BOUNDS_UPPER 0x20
++#define DM_HISTOGRAM_BOUNDS_RANGE 0x30
++
++/*
++ * Return a string representation of the supplied histogram's values and
++ * bin boundaries.
++ *
++ * The bin argument selects the bin to format. If this argument is less
++ * than zero all bins will be included in the resulting string.
++ *
++ * width specifies a minimum width for the field in characters; if it is
++ * zero the width will be determined automatically based on the options
++ * selected for formatting. A value less than zero disables field width
++ * control: bin boundaries and values will be output with a minimum
++ * amount of whitespace.
++ *
++ * flags is a collection of flag arguments that control the string format:
++ *
++ * DM_HISTOGRAM_VALUES  - Include bin values in the string.
++ * DM_HISTOGRAM_SUFFIX  - Include time unit suffixes when printing bounds.
++ * DM_HISTOGRAM_PERCENT - Format bin values as a percentage.
++ *
++ * DM_HISTOGRAM_BOUNDS_LOWER - Include the lower bound of each bin.
++ * DM_HISTOGRAM_BOUNDS_UPPER - Include the upper bound of each bin.
++ * DM_HISTOGRAM_BOUNDS_RANGE - Show the span of each bin as "lo-up".
++ *
++ * The returned pointer does not need to be freed explicitly by the
++ * caller: it will become invalid following a subsequent
++ * dm_stats_list(), dm_stats_populate() or dm_stats_destroy() of the
++ * corresponding dm_stats handle.
++ */
++const char *dm_histogram_to_string(const struct dm_histogram *dmh, int bin,
++				   int width, int flags);
++
++/*************************
++ * config file parse/print
++ *************************/
++typedef enum {
++	DM_CFG_INT,
++	DM_CFG_FLOAT,
++	DM_CFG_STRING,
++	DM_CFG_EMPTY_ARRAY
++} dm_config_value_type_t;
++
++struct dm_config_value {
++	dm_config_value_type_t type;
++
++	union {
++		int64_t i;
++		float f;
++		double d;       	/* Unused. */
++		const char *str;
++	} v;
++
++	struct dm_config_value *next;	/* For arrays */
++	uint32_t format_flags;
++};
++
++struct dm_config_node {
++	const char *key;
++	struct dm_config_node *parent, *sib, *child;
++	struct dm_config_value *v;
++	int id;
++};
++
++struct dm_config_tree {
++	struct dm_config_node *root;
++	struct dm_config_tree *cascade;
++	struct dm_pool *mem;
++	void *custom;
++};
++
++struct dm_config_tree *dm_config_create(void);
++struct dm_config_tree *dm_config_from_string(const char *config_settings);
++int dm_config_parse(struct dm_config_tree *cft, const char *start, const char *end);
++int dm_config_parse_without_dup_node_check(struct dm_config_tree *cft, const char *start, const char *end);
++
++void *dm_config_get_custom(struct dm_config_tree *cft);
++void dm_config_set_custom(struct dm_config_tree *cft, void *custom);
++
++/*
++ * When searching, first_cft is checked before second_cft.
++ */
++struct dm_config_tree *dm_config_insert_cascaded_tree(struct dm_config_tree *first_cft, struct dm_config_tree *second_cft);
++
++/*
++ * If there's a cascaded dm_config_tree, remove the top layer
++ * and return the layer below.  Otherwise return NULL.
++ */
++struct dm_config_tree *dm_config_remove_cascaded_tree(struct dm_config_tree *cft);
++
++/*
++ * Create a new, uncascaded config tree equivalent to the input cascade.
++ */
++struct dm_config_tree *dm_config_flatten(struct dm_config_tree *cft);
++
++void dm_config_destroy(struct dm_config_tree *cft);
++
++/* Simple output line by line. */
++typedef int (*dm_putline_fn)(const char *line, void *baton);
++/* More advaced output with config node reference. */
++typedef int (*dm_config_node_out_fn)(const struct dm_config_node *cn, const char *line, void *baton);
++
++/*
++ * Specification for advanced config node output.
++ */
++struct dm_config_node_out_spec {
++	dm_config_node_out_fn prefix_fn; /* called before processing config node lines */
++	dm_config_node_out_fn line_fn; /* called for each config node line */
++	dm_config_node_out_fn suffix_fn; /* called after processing config node lines */
++};
++
++/* Write the node and any subsequent siblings it has. */
++int dm_config_write_node(const struct dm_config_node *cn, dm_putline_fn putline, void *baton);
++int dm_config_write_node_out(const struct dm_config_node *cn, const struct dm_config_node_out_spec *out_spec, void *baton);
++
++/* Write given node only without subsequent siblings. */
++int dm_config_write_one_node(const struct dm_config_node *cn, dm_putline_fn putline, void *baton);
++int dm_config_write_one_node_out(const struct dm_config_node *cn, const struct dm_config_node_out_spec *out_spec, void *baton);
++
++struct dm_config_node *dm_config_find_node(const struct dm_config_node *cn, const char *path);
++int dm_config_has_node(const struct dm_config_node *cn, const char *path);
++int dm_config_remove_node(struct dm_config_node *parent, struct dm_config_node *remove);
++const char *dm_config_find_str(const struct dm_config_node *cn, const char *path, const char *fail);
++const char *dm_config_find_str_allow_empty(const struct dm_config_node *cn, const char *path, const char *fail);
++int dm_config_find_int(const struct dm_config_node *cn, const char *path, int fail);
++int64_t dm_config_find_int64(const struct dm_config_node *cn, const char *path, int64_t fail);
++float dm_config_find_float(const struct dm_config_node *cn, const char *path, float fail);
++
++const struct dm_config_node *dm_config_tree_find_node(const struct dm_config_tree *cft, const char *path);
++const char *dm_config_tree_find_str(const struct dm_config_tree *cft, const char *path, const char *fail);
++const char *dm_config_tree_find_str_allow_empty(const struct dm_config_tree *cft, const char *path, const char *fail);
++int dm_config_tree_find_int(const struct dm_config_tree *cft, const char *path, int fail);
++int64_t dm_config_tree_find_int64(const struct dm_config_tree *cft, const char *path, int64_t fail);
++float dm_config_tree_find_float(const struct dm_config_tree *cft, const char *path, float fail);
++int dm_config_tree_find_bool(const struct dm_config_tree *cft, const char *path, int fail);
++
++/*
++ * Understands (0, ~0), (y, n), (yes, no), (on,
++ * off), (true, false).
++ */
++int dm_config_find_bool(const struct dm_config_node *cn, const char *path, int fail);
++int dm_config_value_is_bool(const struct dm_config_value *v);
++
++int dm_config_get_uint32(const struct dm_config_node *cn, const char *path, uint32_t *result);
++int dm_config_get_uint64(const struct dm_config_node *cn, const char *path, uint64_t *result);
++int dm_config_get_str(const struct dm_config_node *cn, const char *path, const char **result);
++int dm_config_get_list(const struct dm_config_node *cn, const char *path, const struct dm_config_value **result);
++int dm_config_get_section(const struct dm_config_node *cn, const char *path, const struct dm_config_node **result);
++
++unsigned dm_config_maybe_section(const char *str, unsigned len);
++
++const char *dm_config_parent_name(const struct dm_config_node *n);
++
++struct dm_config_node *dm_config_clone_node_with_mem(struct dm_pool *mem, const struct dm_config_node *node, int siblings);
++struct dm_config_node *dm_config_create_node(struct dm_config_tree *cft, const char *key);
++struct dm_config_value *dm_config_create_value(struct dm_config_tree *cft);
++struct dm_config_node *dm_config_clone_node(struct dm_config_tree *cft, const struct dm_config_node *cn, int siblings);
++
++/*
++ * Common formatting flags applicable to all config node types (lower 16 bits).
++ */
++#define DM_CONFIG_VALUE_FMT_COMMON_ARRAY             0x00000001 /* value is array */
++#define DM_CONFIG_VALUE_FMT_COMMON_EXTRA_SPACES      0x00000002 /* add spaces in "key = value" pairs in constrast to "key=value" for better readability */
++
++/*
++ * Type-related config node formatting flags (higher 16 bits).
++ */
++/* int-related formatting flags */
++#define DM_CONFIG_VALUE_FMT_INT_OCTAL                0x00010000 /* print number in octal form */
++
++/* string-related formatting flags */
++#define DM_CONFIG_VALUE_FMT_STRING_NO_QUOTES         0x00010000 /* do not print quotes around string value */
++
++void dm_config_value_set_format_flags(struct dm_config_value *cv, uint32_t format_flags);
++uint32_t dm_config_value_get_format_flags(struct dm_config_value *cv);
++
++struct dm_pool *dm_config_memory(struct dm_config_tree *cft);
++
++/* Udev device directory. */
++#define DM_UDEV_DEV_DIR "/dev/"
++
++/* Cookie prefixes.
++ *
++ * The cookie value consists of a prefix (16 bits) and a base (16 bits).
++ * We can use the prefix to store the flags. These flags are sent to
++ * kernel within given dm task. When returned back to userspace in
++ * DM_COOKIE udev environment variable, we can control several aspects
++ * of udev rules we use by decoding the cookie prefix. When doing the
++ * notification, we replace the cookie prefix with DM_COOKIE_MAGIC,
++ * so we notify the right semaphore.
++ *
++ * It is still possible to use cookies for passing the flags to udev
++ * rules even when udev_sync is disabled. The base part of the cookie
++ * will be zero (there's no notification semaphore) and prefix will be
++ * set then. However, having udev_sync enabled is highly recommended.
++ */
++#define DM_COOKIE_MAGIC 0x0D4D
++#define DM_UDEV_FLAGS_MASK 0xFFFF0000
++#define DM_UDEV_FLAGS_SHIFT 16
++
++/*
++ * DM_UDEV_DISABLE_DM_RULES_FLAG is set in case we need to disable
++ * basic device-mapper udev rules that create symlinks in /dev/<DM_DIR>
++ * directory. However, we can't reliably prevent creating default
++ * nodes by udev (commonly /dev/dm-X, where X is a number).
++ */
++#define DM_UDEV_DISABLE_DM_RULES_FLAG 0x0001
++/*
++ * DM_UDEV_DISABLE_SUBSYTEM_RULES_FLAG is set in case we need to disable
++ * subsystem udev rules, but still we need the general DM udev rules to
++ * be applied (to create the nodes and symlinks under /dev and /dev/disk).
++ */
++#define DM_UDEV_DISABLE_SUBSYSTEM_RULES_FLAG 0x0002
++/*
++ * DM_UDEV_DISABLE_DISK_RULES_FLAG is set in case we need to disable
++ * general DM rules that set symlinks in /dev/disk directory.
++ */
++#define DM_UDEV_DISABLE_DISK_RULES_FLAG 0x0004
++/*
++ * DM_UDEV_DISABLE_OTHER_RULES_FLAG is set in case we need to disable
++ * all the other rules that are not general device-mapper nor subsystem
++ * related (the rules belong to other software or packages). All foreign
++ * rules should check this flag directly and they should ignore further
++ * rule processing for such event.
++ */
++#define DM_UDEV_DISABLE_OTHER_RULES_FLAG 0x0008
++/*
++ * DM_UDEV_LOW_PRIORITY_FLAG is set in case we need to instruct the
++ * udev rules to give low priority to the device that is currently
++ * processed. For example, this provides a way to select which symlinks
++ * could be overwritten by high priority ones if their names are equal.
++ * Common situation is a name based on FS UUID while using origin and
++ * snapshot devices.
++ */
++#define DM_UDEV_LOW_PRIORITY_FLAG 0x0010
++/*
++ * DM_UDEV_DISABLE_LIBRARY_FALLBACK is set in case we need to disable
++ * libdevmapper's node management. We will rely on udev completely
++ * and there will be no fallback action provided by libdevmapper if
++ * udev does something improperly. Using the library fallback code has
++ * a consequence that you need to take into account: any device node
++ * or symlink created without udev is not recorded in udev database
++ * which other applications may read to get complete list of devices.
++ * For this reason, use of DM_UDEV_DISABLE_LIBRARY_FALLBACK is
++ * recommended on systems where udev is used. Keep library fallback
++ * enabled just for exceptional cases where you need to debug udev-related
++ * problems. If you hit such problems, please contact us through upstream
++ * LVM2 development mailing list (see also README file). This flag is
++ * currently not set by default in libdevmapper so you need to set it
++ * explicitly if you're sure that udev is behaving correctly on your
++ * setups.
++ */
++#define DM_UDEV_DISABLE_LIBRARY_FALLBACK 0x0020
++/*
++ * DM_UDEV_PRIMARY_SOURCE_FLAG is automatically appended by
++ * libdevmapper for all ioctls generating udev uevents. Once used in
++ * udev rules, we know if this is a real "primary sourced" event or not.
++ * We need to distinguish real events originated in libdevmapper from
++ * any spurious events to gather all missing information (e.g. events
++ * generated as a result of "udevadm trigger" command or as a result
++ * of the "watch" udev rule).
++ */
++#define DM_UDEV_PRIMARY_SOURCE_FLAG 0x0040
++
++/*
++ * Udev flags reserved for use by any device-mapper subsystem.
++ */
++#define DM_SUBSYSTEM_UDEV_FLAG0 0x0100
++#define DM_SUBSYSTEM_UDEV_FLAG1 0x0200
++#define DM_SUBSYSTEM_UDEV_FLAG2 0x0400
++#define DM_SUBSYSTEM_UDEV_FLAG3 0x0800
++#define DM_SUBSYSTEM_UDEV_FLAG4 0x1000
++#define DM_SUBSYSTEM_UDEV_FLAG5 0x2000
++#define DM_SUBSYSTEM_UDEV_FLAG6 0x4000
++#define DM_SUBSYSTEM_UDEV_FLAG7 0x8000
++
++int dm_cookie_supported(void);
++
++/*
++ * Udev synchronisation functions.
++ */
++void dm_udev_set_sync_support(int sync_with_udev);
++int dm_udev_get_sync_support(void);
++void dm_udev_set_checking(int checking);
++int dm_udev_get_checking(void);
++
++/*
++ * Default value to get new auto generated cookie created
++ */
++#define DM_COOKIE_AUTO_CREATE 0
++int dm_udev_create_cookie(uint32_t *cookie);
++int dm_udev_complete(uint32_t cookie);
++int dm_udev_wait(uint32_t cookie);
++
++/*
++ * dm_dev_wait_immediate 
++ * If *ready is 1 on return, the wait is complete.
++ * If *ready is 0 on return, the wait is incomplete and either
++ * this function or dm_udev_wait() must be called again.
++ * Returns 0 on error, when neither function should be called again.
++ */
++int dm_udev_wait_immediate(uint32_t cookie, int *ready);
++
++#define DM_DEV_DIR_UMASK 0022
++#define DM_CONTROL_NODE_UMASK 0177
++
++#ifdef __cplusplus
++}
++#endif
++#endif				/* LIB_DEVICE_MAPPER_H */
+diff --git a/device_mapper/libdevmapper.h b/device_mapper/libdevmapper.h
 deleted file mode 100644
-index e69de29..0000000
-diff --git a/liblvm/Doxyfile b/liblvm/Doxyfile
-deleted file mode 100644
-index 3d2e8e4..0000000
---- a/liblvm/Doxyfile
+index f7ff4ce..0000000
+--- a/device_mapper/libdevmapper.h
 +++ /dev/null
-@@ -1,254 +0,0 @@
--# Doxyfile 1.5.7.1
--
--#---------------------------------------------------------------------------
--# Project related configuration options
--#---------------------------------------------------------------------------
--DOXYFILE_ENCODING      = UTF-8
--PROJECT_NAME           =
--PROJECT_NUMBER         =
--OUTPUT_DIRECTORY       = doxygen-output
--CREATE_SUBDIRS         = NO
--OUTPUT_LANGUAGE        = English
--BRIEF_MEMBER_DESC      = YES
--REPEAT_BRIEF           = YES
--ABBREVIATE_BRIEF       =
--ALWAYS_DETAILED_SEC    = NO
--INLINE_INHERITED_MEMB  = NO
--FULL_PATH_NAMES        = YES
--STRIP_FROM_PATH        =
--STRIP_FROM_INC_PATH    =
--SHORT_NAMES            = NO
--JAVADOC_AUTOBRIEF      = NO
--QT_AUTOBRIEF           = NO
--MULTILINE_CPP_IS_BRIEF = NO
--INHERIT_DOCS           = YES
--SEPARATE_MEMBER_PAGES  = NO
--TAB_SIZE               = 8
--ALIASES                =
--OPTIMIZE_OUTPUT_FOR_C  = NO
--OPTIMIZE_OUTPUT_JAVA   = NO
--OPTIMIZE_FOR_FORTRAN   = NO
--OPTIMIZE_OUTPUT_VHDL   = NO
--BUILTIN_STL_SUPPORT    = NO
--CPP_CLI_SUPPORT        = NO
--SIP_SUPPORT            = NO
--IDL_PROPERTY_SUPPORT   = YES
--DISTRIBUTE_GROUP_DOC   = NO
--SUBGROUPING            = YES
--TYPEDEF_HIDES_STRUCT   = NO
--SYMBOL_CACHE_SIZE      = 0
--#---------------------------------------------------------------------------
--# Build related configuration options
--#---------------------------------------------------------------------------
--EXTRACT_ALL            = YES
--EXTRACT_PRIVATE        = YES
--EXTRACT_STATIC         = NO
--EXTRACT_LOCAL_CLASSES  = YES
--EXTRACT_LOCAL_METHODS  = NO
--EXTRACT_ANON_NSPACES   = NO
--HIDE_UNDOC_MEMBERS     = NO
--HIDE_UNDOC_CLASSES     = NO
--HIDE_FRIEND_COMPOUNDS  = NO
--HIDE_IN_BODY_DOCS      = NO
--INTERNAL_DOCS          = NO
--CASE_SENSE_NAMES       = YES
--HIDE_SCOPE_NAMES       = NO
--SHOW_INCLUDE_FILES     = YES
--INLINE_INFO            = YES
--SORT_MEMBER_DOCS       = YES
--SORT_BRIEF_DOCS        = NO
--SORT_GROUP_NAMES       = NO
--SORT_BY_SCOPE_NAME     = NO
--GENERATE_TODOLIST      = YES
--GENERATE_TESTLIST      = YES
--GENERATE_BUGLIST       = YES
--GENERATE_DEPRECATEDLIST= YES
--ENABLED_SECTIONS       =
--MAX_INITIALIZER_LINES  = 30
--SHOW_USED_FILES        = YES
--SHOW_DIRECTORIES       = NO
--SHOW_FILES             = YES
--SHOW_NAMESPACES        = YES
--FILE_VERSION_FILTER    =
--LAYOUT_FILE            =
--#---------------------------------------------------------------------------
--# configuration options related to warning and progress messages
--#---------------------------------------------------------------------------
--QUIET                  = NO
--WARNINGS               = YES
--WARN_IF_UNDOCUMENTED   = YES
--WARN_IF_DOC_ERROR      = YES
--WARN_NO_PARAMDOC       = NO
--WARN_FORMAT            = "$file:$line: $text"
--WARN_LOGFILE           =
--#---------------------------------------------------------------------------
--# configuration options related to the input files
--#---------------------------------------------------------------------------
--INPUT                  = ./
--INPUT_ENCODING         = UTF-8
--FILE_PATTERNS          = *.c \
--                         *.h
--RECURSIVE              = NO
--EXCLUDE                =
--EXCLUDE_SYMLINKS       = NO
--EXCLUDE_PATTERNS       =
--EXCLUDE_SYMBOLS        =
--EXAMPLE_PATH           = ../test/api
--EXAMPLE_PATTERNS       =
--EXAMPLE_RECURSIVE      = NO
--IMAGE_PATH             =
--INPUT_FILTER           =
--FILTER_PATTERNS        =
--FILTER_SOURCE_FILES    = NO
--#---------------------------------------------------------------------------
--# configuration options related to source browsing
--#---------------------------------------------------------------------------
--SOURCE_BROWSER         = NO
--INLINE_SOURCES         = NO
--STRIP_CODE_COMMENTS    = YES
--REFERENCED_BY_RELATION = NO
--REFERENCES_RELATION    = NO
--REFERENCES_LINK_SOURCE = YES
--USE_HTAGS              = NO
--VERBATIM_HEADERS       = YES
--#---------------------------------------------------------------------------
--# configuration options related to the alphabetical class index
--#---------------------------------------------------------------------------
--ALPHABETICAL_INDEX     = NO
--COLS_IN_ALPHA_INDEX    = 5
--IGNORE_PREFIX          =
--#---------------------------------------------------------------------------
--# configuration options related to the HTML output
--#---------------------------------------------------------------------------
--GENERATE_HTML          = YES
--HTML_OUTPUT            = html
--HTML_FILE_EXTENSION    = .html
--HTML_HEADER            =
--HTML_FOOTER            =
--HTML_STYLESHEET        =
--HTML_ALIGN_MEMBERS     = YES
--HTML_DYNAMIC_SECTIONS  = NO
--GENERATE_DOCSET        = NO
--DOCSET_FEEDNAME        = "Doxygen generated docs"
--DOCSET_BUNDLE_ID       = org.doxygen.Project
--GENERATE_HTMLHELP      = NO
--CHM_FILE               =
--HHC_LOCATION           =
--GENERATE_CHI           = NO
--CHM_INDEX_ENCODING     =
--BINARY_TOC             = NO
--TOC_EXPAND             = NO
--GENERATE_QHP           = NO
--QCH_FILE               =
--QHP_NAMESPACE          = org.doxygen.Project
--QHP_VIRTUAL_FOLDER     = doc
--QHG_LOCATION           =
--DISABLE_INDEX          = NO
--ENUM_VALUES_PER_LINE   = 4
--GENERATE_TREEVIEW      = NONE
--TREEVIEW_WIDTH         = 250
--FORMULA_FONTSIZE       = 10
--#---------------------------------------------------------------------------
--# configuration options related to the LaTeX output
--#---------------------------------------------------------------------------
--GENERATE_LATEX         = YES
--LATEX_OUTPUT           = latex
--LATEX_CMD_NAME         = latex
--MAKEINDEX_CMD_NAME     = makeindex
--COMPACT_LATEX          = NO
--PAPER_TYPE             = a4wide
--EXTRA_PACKAGES         =
--LATEX_HEADER           =
--PDF_HYPERLINKS         = YES
--USE_PDFLATEX           = YES
--LATEX_BATCHMODE        = NO
--LATEX_HIDE_INDICES     = NO
--#---------------------------------------------------------------------------
--# configuration options related to the RTF output
--#---------------------------------------------------------------------------
--GENERATE_RTF           = NO
--RTF_OUTPUT             = rtf
--COMPACT_RTF            = NO
--RTF_HYPERLINKS         = NO
--RTF_STYLESHEET_FILE    =
--RTF_EXTENSIONS_FILE    =
--#---------------------------------------------------------------------------
--# configuration options related to the man page output
--#---------------------------------------------------------------------------
--GENERATE_MAN           = YES
--MAN_OUTPUT             = man
--MAN_EXTENSION          = .3
--MAN_LINKS              = NO
--#---------------------------------------------------------------------------
--# configuration options related to the XML output
--#---------------------------------------------------------------------------
--GENERATE_XML           = NO
--XML_OUTPUT             = xml
--XML_SCHEMA             =
--XML_DTD                =
--XML_PROGRAMLISTING     = YES
--#---------------------------------------------------------------------------
--# configuration options for the AutoGen Definitions output
--#---------------------------------------------------------------------------
--GENERATE_AUTOGEN_DEF   = NO
--#---------------------------------------------------------------------------
--# configuration options related to the Perl module output
--#---------------------------------------------------------------------------
--GENERATE_PERLMOD       = NO
--PERLMOD_LATEX          = NO
--PERLMOD_PRETTY         = YES
--PERLMOD_MAKEVAR_PREFIX =
--#---------------------------------------------------------------------------
--# Configuration options related to the preprocessor
--#---------------------------------------------------------------------------
--ENABLE_PREPROCESSING   = YES
--MACRO_EXPANSION        = NO
--EXPAND_ONLY_PREDEF     = NO
--SEARCH_INCLUDES        = YES
--INCLUDE_PATH           = ../libdm
--INCLUDE_FILE_PATTERNS  =
--PREDEFINED             =
--EXPAND_AS_DEFINED      =
--SKIP_FUNCTION_MACROS   = YES
--#---------------------------------------------------------------------------
--# Configuration::additions related to external references
--#---------------------------------------------------------------------------
--TAGFILES               =
--GENERATE_TAGFILE       =
--ALLEXTERNALS           = NO
--EXTERNAL_GROUPS        = YES
--PERL_PATH              = /usr/bin/perl
--#---------------------------------------------------------------------------
--# Configuration options related to the dot tool
--#---------------------------------------------------------------------------
--CLASS_DIAGRAMS         = YES
--MSCGEN_PATH            =
--HIDE_UNDOC_RELATIONS   = YES
--HAVE_DOT               = NO
--DOT_FONTNAME           = FreeSans
--DOT_FONTSIZE           = 10
--DOT_FONTPATH           =
--CLASS_GRAPH            = YES
--COLLABORATION_GRAPH    = YES
--GROUP_GRAPHS           = YES
--UML_LOOK               = NO
--TEMPLATE_RELATIONS     = NO
--INCLUDE_GRAPH          = YES
--INCLUDED_BY_GRAPH      = YES
--CALL_GRAPH             = YES
--CALLER_GRAPH           = NO
--GRAPHICAL_HIERARCHY    = YES
--DIRECTORY_GRAPH        = YES
--DOT_IMAGE_FORMAT       = png
--DOT_PATH               =
--DOTFILE_DIRS           =
--DOT_GRAPH_MAX_NODES    = 50
--MAX_DOT_GRAPH_DEPTH    = 0
--DOT_TRANSPARENT        = NO
--DOT_MULTI_TARGETS      = NO
--GENERATE_LEGEND        = YES
--DOT_CLEANUP            = YES
--#---------------------------------------------------------------------------
--# Configuration::additions related to the search engine
--#---------------------------------------------------------------------------
--SEARCHENGINE           = NO
-diff --git a/liblvm/Makefile.in b/liblvm/Makefile.in
-deleted file mode 100644
-index 210ee37..0000000
---- a/liblvm/Makefile.in
-+++ /dev/null
-@@ -1,81 +0,0 @@
--#
--# Copyright (C) 2001-2004 Sistina Software, Inc. All rights reserved.
--# Copyright (C) 2004-2013 Red Hat, Inc. All rights reserved.
--#
--# This file is part of LVM2.
--#
--# This copyrighted material is made available to anyone wishing to use,
--# modify, copy, or redistribute it subject to the terms and conditions
--# of the GNU General Public License v.2.
--#
--# You should have received a copy of the GNU General Public License
--# along with this program; if not, write to the Free Software Foundation,
--# Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
--
--srcdir = @srcdir@
--top_srcdir = @top_srcdir@
--top_builddir = @top_builddir@
--
--SOURCES =\
--	lvm_misc.c \
--	lvm_prop.c \
--	lvm_base.c \
--	lvm_lv.c \
--	lvm_pv.c \
--	lvm_vg.c
--
--LIB_NAME = liblvm2app
--LIB_VERSION = $(LIB_VERSION_APP)
--
--ifeq ("@STATIC_LINK@", "yes")
--  LIB_STATIC = $(LIB_NAME).a
--endif
--
--LIB_SHARED = $(LIB_NAME).$(LIB_SUFFIX)
--
--CLEAN_TARGETS += liblvm.cflow $(LIB_NAME).a
--
--EXPORTED_HEADER = $(srcdir)/lvm2app.h
--EXPORTED_FN_PREFIX = lvm
--
--LDDEPS += $(top_builddir)/lib/liblvm-internal.a
--
--include $(top_builddir)/make.tmpl
--
--LDFLAGS += -L$(top_builddir)/lib -L$(top_builddir)/daemons/dmeventd
--LIBS += $(LVMINTERNAL_LIBS) -laio
--
--.PHONY: install_dynamic install_static install_include install_pkgconfig
--
--INSTALL_TYPE = install_dynamic
--
--ifeq ("@STATIC_LINK@", "yes")
--  INSTALL_TYPE += install_static
--endif
--
--ifeq ("@PKGCONFIG@", "yes")
--  INSTALL_TYPE += install_pkgconfig
--endif
--
--install: $(INSTALL_TYPE) install_include
--
--install_include: $(srcdir)/lvm2app.h
--	$(INSTALL_DATA) -D $< $(includedir)/$(<F)
--
--install_dynamic: install_lib_shared
--
--install_static: $(LIB_STATIC)
--	$(INSTALL_DATA) -D $< $(usrlibdir)/$(<F)
--
--install_pkgconfig: $(LIB_NAME).pc
--	$(INSTALL_DATA) -D $< $(pkgconfigdir)/lvm2app.pc
--
--liblvm.cflow: $(SOURCES)
--	set -e; (echo -n "SOURCES += "; \
--		 echo $(SOURCES) | \
--		 sed "s/^/ /;s/ / $(top_srcdir)\/liblvm\//g;s/$$//"; \
--		 ) > $@
--
--cflow: liblvm.cflow
--
--DISTCLEAN_TARGETS += $(LIB_NAME).pc
-diff --git a/liblvm/liblvm2app.pc.in b/liblvm/liblvm2app.pc.in
-deleted file mode 100644
-index 7d7fd3d..0000000
---- a/liblvm/liblvm2app.pc.in
-+++ /dev/null
-@@ -1,11 +0,0 @@
--prefix=@prefix@
--exec_prefix=@exec_prefix@
--libdir=@libdir@
--includedir=@includedir@
--
--Name: lvm2app
--Description: lvm2 application library
--Version: @LVM_MAJOR at .@LVM_LIBAPI@
--Cflags: -I${includedir} 
--Libs: -L${libdir} -llvm2app
--Requires.private: devmapper @BLKID_PC@
-diff --git a/liblvm/lvm2app.h b/liblvm/lvm2app.h
-deleted file mode 100644
-index 10ecd2e..0000000
---- a/liblvm/lvm2app.h
-+++ /dev/null
-@@ -1,1983 +0,0 @@
+@@ -1,3554 +0,0 @@
 -/*
-- * Copyright (C) 2008-2013 Red Hat, Inc. All rights reserved.
+- * Copyright (C) 2001-2004 Sistina Software, Inc. All rights reserved.
+- * Copyright (C) 2004-2017 Red Hat, Inc. All rights reserved.
+- * Copyright (C) 2006 Rackable Systems All rights reserved.
 - *
-- * This file is part of LVM2.
+- * This file is part of the device-mapper userspace tools.
 - *
 - * This copyrighted material is made available to anyone wishing to use,
 - * modify, copy, or redistribute it subject to the terms and conditions
@@ -3253,6354 +3639,3819 @@ index 10ecd2e..0000000
 - *
 - * You should have received a copy of the GNU Lesser General Public License
 - * along with this program; if not, write to the Free Software Foundation,
-- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
+- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 - */
--#ifndef _LIB_LVM2APP_H
--#define _LIB_LVM2APP_H
 -
--#include <libdevmapper.h>
+-#ifndef LIB_DEVICE_MAPPER_H
+-#define LIB_DEVICE_MAPPER_H
 -
--#include <stdint.h>
+-#include <inttypes.h>
+-#include <stdarg.h>
+-#include <sys/types.h>
+-#include <sys/stat.h>
 -
--#ifndef _BUILDING_LVM
--#warning "liblvm2app is deprecated, use D-Bus API instead."
+-#ifdef __linux__
+-#  include <linux/types.h>
 -#endif
+-
+-#include <limits.h>
+-#include <string.h>
+-#include <stdlib.h>
+-#include <stdio.h>
+-
+-#include "base/data-struct/list.h"
+-
+-#include "base/data-struct/list.h"
+-
+-#ifndef __GNUC__
+-# define __typeof__ typeof
+-#endif
+-
+-/* Macros to make string defines */
+-#define DM_TO_STRING_EXP(A) #A
+-#define DM_TO_STRING(A) DM_TO_STRING_EXP(A)
+-
+-#define DM_ARRAY_SIZE(a) (sizeof(a) / sizeof((a)[0]))
 -
 -#ifdef __cplusplus
 -extern "C" {
 -#endif
 -
--/******************************** WARNING ***********************************
-- *
-- * NOTE: This API is under development and subject to change at any time.
-- *
-- * Please send feedback to lvm-devel at redhat.com
-- *
-- *********************************** WARNING ********************************/
--
--/*************************** Design Overview ********************************/
--
--/**
-- * \mainpage LVM library API
-- *
-- * The API is designed around the following basic LVM objects:
-- * 1) Physical Volume (pv_t) 2) Volume Group (vg_t) 3) Logical Volume (lv_t).
-- *
-- * The library provides functions to list the objects in a system,
-- * get and set object properties (such as names, UUIDs, and sizes), as well
-- * as create/remove objects and perform more complex operations and
-- * transformations. Each object instance is represented by a handle, and
-- * handles are passed to and from the functions to perform the operations.
-- *
-- * A central object in the library is the Volume Group, represented by the
-- * VG handle, vg_t. Performing an operation on a PV or LV object first
-- * requires obtaining a VG handle. Once the vg_t has been obtained, it can
-- * be used to enumerate the pv_t and lv_t objects within that vg_t. Attributes
-- * of these objects can then be queried or changed.
-- *
-- * A volume group handle may be obtained with read or write permission.
-- * Any attempt to change a property of a pv_t, vg_t, or lv_t without
-- * obtaining write permission on the vg_t will fail with EPERM.
-- *
-- * An application first opening a VG read-only, then later wanting to change
-- * a property of an object must first close the VG and re-open with write
-- * permission. Currently liblvm provides no mechanism to determine whether
-- * the VG has changed on-disk in between these operations - this is the
-- * application's responsiblity. One way the application can ensure the VG
-- * has not changed is to save the "vg_seqno" field after opening the VG with
-- * READ permission. If the application later needs to modify the VG, it can
-- * close the VG and re-open with WRITE permission. It should then check
-- * whether the original "vg_seqno" obtained with READ permission matches
-- * the new one obtained with WRITE permission.
-- */
--
--/**
-- * Retrieve the library version.
-- *
-- * The library version is the same format as the full LVM version.
-- * The format is as follows:
-- *    LVM_MAJOR.LVM_MINOR.LVM_PATCHLEVEL(LVM_LIBAPI)[-LVM_RELEASE]
-- * An application wishing to determine compatibility with a particular version
-- * of the library should check at least the LVM_MAJOR, LVM_MINOR, and
-- * LVM_LIBAPI numbers.  For example, assume the full LVM version is
-- * 2.02.50(1)-1.  The application should verify the "2.02" and the "(1)".
-- *
-- * \return  A string describing the library version.
-- */
--const char *lvm_library_get_version(void);
--
--/******************************** structures ********************************/
--
--/**
-- * Opaque C pointers - Internal structures may change without notice between
-- * releases, whereas this API will be changed much less frequently.  Backwards
-- * compatibility will normally be preserved in future releases.  On any occasion
-- * when the developers do decide to break backwards compatibility in any
-- * significant way, the LVM_LIBAPI number (included in the library's soname)
-- * will be incremented.
-- */
--
--/**
-- * \class lvm_t
-- *
-- * This is the base handle that is needed to open and create objects such as
-- * volume groups and logical volumes.  In addition, this handle provides a
-- * context for error handling information, saving any error number (see
-- * lvm_errno()) and error message (see lvm_errmsg()) that any function may
-- * generate.
-- */
--typedef struct lvm *lvm_t;
--
--/**
-- * \class vg_t
-- *
-- * The volume group object is a central object in the library, and can be
-- * either a read-only object or a read-write object depending on the function
-- * used to obtain the object handle. For example, lvm_vg_create() always
-- * returns a read/write handle, while lvm_vg_open() has a "mode" argument
-- * to define the read/write mode of the handle.
-- */
--typedef struct volume_group *vg_t;
--
--/**
-- * \class lv_t
-- *
-- * This logical volume object is bound to a vg_t and has the same
-- * read/write mode as the vg_t.  Changes will be written to disk
-- * when the vg_t gets committed to disk by calling lvm_vg_write().
-- */
--typedef struct logical_volume *lv_t;
--
--/**
-- * \class pv_t
-- *
-- * This physical volume object is bound to a vg_t and has the same
-- * read/write mode as the vg_t.  Changes will be written to disk
-- * when the vg_t gets committed to disk by calling lvm_vg_write().
-- */
--typedef struct physical_volume *pv_t;
+-/*****************************************************************
+- * The first section of this file provides direct access to the
+- * individual device-mapper ioctls.  Since it is quite laborious to
+- * build the ioctl arguments for the device-mapper, people are
+- * encouraged to use this library.
+- ****************************************************************/
 -
--/**
-- * \class lvseg_t
-- *
-- * This lv segment object is bound to a lv_t.
-- */
--typedef struct lv_segment *lvseg_t;
--
--/**
-- * \class pvseg_t
-- *
-- * This pv segment object is bound to a pv_t.
-- */
--typedef struct pv_segment *pvseg_t;
--
--/**
-- * \class lv_create_params
-- *
-- * This lv_create_params represents the plethora of available options when
-- * creating a logical volume
+-/*
+- * The library user may wish to register their own
+- * logging function.  By default errors go to stderr.
+- * Use dm_log_with_errno_init(NULL) to restore the default log fn.
+- * Error messages may have a non-zero errno.
+- * Debug messages may have a non-zero class.
+- * Aborts on internal error when env DM_ABORT_ON_INTERNAL_ERRORS is 1
 - */
--typedef struct lvm_lv_create_params *lv_create_params_t;
 -
--/**
-- * \class pv_create_params
-- *
-- * This pv_create_params represents the plethora of available options when
-- * creating a physical volume
-- */
--typedef struct lvm_pv_create_params *pv_create_params_t;
+-typedef void (*dm_log_with_errno_fn) (int level, const char *file, int line,
+-				      int dm_errno_or_class, const char *f, ...)
+-    __attribute__ ((format(printf, 5, 6)));
 -
--/**
-- * Logical Volume object list.
-- *
-- * Lists of these structures are returned by lvm_vg_list_lvs().
-- */
--typedef struct lvm_lv_list {
--	struct dm_list list;
--	lv_t lv;
--} lv_list_t;
+-void dm_log_with_errno_init(dm_log_with_errno_fn fn);
+-void dm_log_init_verbose(int level);
 -
--/**
-- * Logical Volume Segment object list.
+-/*
+- * Original version of this function.
+- * dm_errno is set to 0.
 - *
-- * Lists of these structures are returned by lvm_lv_list_lvsegs().
+- * Deprecated: Use the _with_errno_ versions above instead.
 - */
--typedef struct lvm_lvseg_list {
--	struct dm_list list;
--	lvseg_t lvseg;
--} lvseg_list_t;
+-typedef void (*dm_log_fn) (int level, const char *file, int line,
+-			   const char *f, ...)
+-    __attribute__ ((format(printf, 4, 5)));
 -
--/**
-- * Physical volume object list.
-- *
-- * Lists of these structures are returned by lvm_vg_list_pvs().
+-void dm_log_init(dm_log_fn fn);
+-/*
+- * For backward-compatibility, indicate that dm_log_init() was used
+- * to set a non-default value of dm_log().
 - */
--typedef struct lvm_pv_list {
--	struct dm_list list;
--	pv_t pv;
--} pv_list_t;
+-int dm_log_is_non_default(void);
 -
--/**
-- * Physical Volume Segment object list.
-- *
-- * Lists of these structures are returned by lvm_pv_list_pvsegs().
+-/*
+- * Number of devices currently in suspended state (via the library).
 - */
--typedef struct lvm_pvseg_list {
--	struct dm_list list;
--	pvseg_t pvseg;
--} pvseg_list_t;
+-int dm_get_suspended_counter(void);
 -
--/**
-- * String list.
-- *
-- * This string list contains read-only strings.
-- * Lists of these structures are returned by functions such as
-- * lvm_list_vg_names() and lvm_list_vg_uuids().
-- */
--typedef struct lvm_str_list {
--	struct dm_list list;
--	const char *str;
--} lvm_str_list_t;
+-enum {
+-	DM_DEVICE_CREATE,
+-	DM_DEVICE_RELOAD,
+-	DM_DEVICE_REMOVE,
+-	DM_DEVICE_REMOVE_ALL,
 -
--/**
-- * Property Value
-- *
-- * This structure defines a single LVM property value for an LVM object.
-- * The structures are returned by functions such as
-- * lvm_vg_get_property().
-- *
-- * is_settable: indicates whether a 'set' function exists for this property
-- * is_string: indicates whether this property is a string (1) or not (0)
-- * is_integer: indicates whether this property is an integer (1) or not (0)
-- * is_valid: indicates whether 'value' is valid (1) or not (0)
-- */
--typedef struct lvm_property_value {
--	uint32_t is_settable:1;
--	uint32_t is_string:1;
--	uint32_t is_integer:1;
--	uint32_t is_valid:1;
--	uint32_t is_signed:1;
--	uint32_t padding:27;
--	union {
--		const char *string;
--		uint64_t integer;
--		int64_t signed_integer;
--	} value;
--} lvm_property_value_t;
+-	DM_DEVICE_SUSPEND,
+-	DM_DEVICE_RESUME,
 -
--/*************************** generic lvm handling ***************************/
--/**
-- * Create a LVM handle.
-- *
-- * \memberof lvm_t
-- *
-- * Once all LVM operations have been completed, use lvm_quit() to release
-- * the handle and any associated resources.
-- *
-- * \param system_dir
-- * Set an alternative LVM system directory. Use NULL to use the
-- * default value. If the environment variable LVM_SYSTEM_DIR is set,
-- * it will override any system_dir setting.
-- *
-- * \return
-- * A valid LVM handle is returned or NULL if there has been a
-- * memory allocation problem. You have to check if an error occured
-- * with the lvm_error() function.
-- */
--lvm_t lvm_init(const char *system_dir);
+-	DM_DEVICE_INFO,
+-	DM_DEVICE_DEPS,
+-	DM_DEVICE_RENAME,
 -
--/**
-- * Destroy a LVM handle allocated with lvm_init().
-- *
-- * \memberof lvm_t
-- *
-- * This function should be used after all LVM operations are complete or after
-- * an unrecoverable error.  Destroying the LVM handle frees the memory and
-- * other resources associated with the handle.  Once destroyed, the handle
-- * cannot be used subsequently.
-- *
-- * \param   libh
-- * Handle obtained from lvm_init().
-- */
--void lvm_quit(lvm_t libh);
+-	DM_DEVICE_VERSION,
 -
--/**
-- * Reload the original configuration from the system directory.
-- *
-- * \memberof lvm_t
-- *
-- * This function should be used when any LVM configuration changes in the LVM
-- * system_dir or by another lvm_config* function, and the change is needed by
-- * the application.
-- *
-- * \param   libh
-- * Handle obtained from lvm_init().
-- *
-- * \return
-- * 0 (success) or -1 (failure).
-- */
--int lvm_config_reload(lvm_t libh);
+-	DM_DEVICE_STATUS,
+-	DM_DEVICE_TABLE,
+-	DM_DEVICE_WAITEVENT,
 -
--/**
-- * Override the LVM configuration with a configuration string.
-- *
-- * \memberof lvm_t
-- *
-- * This function is equivalent to the --config option on lvm commands.
-- * Once this API has been used to over-ride the configuration,
-- * use lvm_config_reload() to apply the new settings.
-- *
-- * \param   libh
-- * Handle obtained from lvm_init().
-- *
-- * \param   config_string
-- * LVM configuration string to apply.  See the lvm.conf file man page
-- * for the format of the config string.
-- *
-- * \return
-- * 0 (success) or -1 (failure).
-- */
--int lvm_config_override(lvm_t libh, const char *config_string);
+-	DM_DEVICE_LIST,
 -
--/**
-- * Find a boolean value in the LVM configuration.
-- *
-- * \memberof lvm_t
-- *
-- * This function finds a boolean value associated with a path
-- * in current LVM configuration.
-- *
-- * \param   libh
-- * Handle obtained from lvm_init().
-- *
-- * \param   config_path
-- * A path in LVM configuration
-- *
-- * \param   fail
-- * Value to return if the path is not found.
-- *
-- * \return
-- * boolean value for 'config_path' (success) or the value of 'fail' (error)
-- */
--int lvm_config_find_bool(lvm_t libh, const char *config_path, int fail);
+-	DM_DEVICE_CLEAR,
 -
--/**
-- * Return stored error no describing last LVM API error.
-- *
-- * \memberof lvm_t
-- *
-- * Users of liblvm should use lvm_errno to determine the details of a any
-- * failure of the last call.  A basic success or fail is always returned by
-- * every function, either by returning a 0 or -1, or a non-NULL / NULL.
-- * If a function has failed, lvm_errno may be used to get a more specific
-- * error code describing the failure.  In this way, lvm_errno may be used
-- * after every function call, even after a 'get' function call that simply
-- * returns a value.
-- *
-- * \param   libh
-- * Handle obtained from lvm_init().
-- *
-- * \return
-- * An errno value describing the last LVM error.
-- */
--int lvm_errno(lvm_t libh);
+-	DM_DEVICE_MKNODES,
 -
--/**
-- * Return stored error message describing last LVM error.
-- *
-- * \memberof lvm_t
-- *
-- * This function may be used in conjunction with lvm_errno() to obtain more
-- * specific error information for a function that is known to have failed.
-- *
-- * \param   libh
-- * Handle obtained from lvm_init().
+-	DM_DEVICE_LIST_VERSIONS,
+-	
+-	DM_DEVICE_TARGET_MSG,
+-
+-	DM_DEVICE_SET_GEOMETRY
+-};
+-
+-/*
+- * You will need to build a struct dm_task for
+- * each ioctl command you want to execute.
+- */
+-
+-struct dm_pool;
+-struct dm_task;
+-struct dm_timestamp;
+-
+-struct dm_task *dm_task_create(int type);
+-void dm_task_destroy(struct dm_task *dmt);
+-
+-int dm_task_set_name(struct dm_task *dmt, const char *name);
+-int dm_task_set_uuid(struct dm_task *dmt, const char *uuid);
+-
+-/*
+- * Retrieve attributes after an info.
+- */
+-struct dm_info {
+-	int exists;
+-	int suspended;
+-	int live_table;
+-	int inactive_table;
+-	int32_t open_count;
+-	uint32_t event_nr;
+-	uint32_t major;
+-	uint32_t minor;		/* minor device number */
+-	int read_only;		/* 0:read-write; 1:read-only */
+-
+-	int32_t target_count;
+-
+-	int deferred_remove;
+-	int internal_suspend;
+-};
+-
+-struct dm_deps {
+-	uint32_t count;
+-	uint32_t filler;
+-	uint64_t device[0];
+-};
+-
+-struct dm_names {
+-	uint64_t dev;
+-	uint32_t next;		/* Offset to next struct from start of this struct */
+-	char name[0];
+-};
+-
+-struct dm_versions {
+-	uint32_t next;		/* Offset to next struct from start of this struct */
+-	uint32_t version[3];
+-
+-	char name[0];
+-};
+-
+-int dm_get_library_version(char *version, size_t size);
+-int dm_task_get_driver_version(struct dm_task *dmt, char *version, size_t size);
+-int dm_task_get_info(struct dm_task *dmt, struct dm_info *dmi);
+-
+-/*
+- * This function returns dm device's UUID based on the value
+- * of the mangling mode set during preceding dm_task_run call:
+- *   - unmangled UUID for DM_STRING_MANGLING_{AUTO, HEX},
+- *   - UUID without any changes for DM_STRING_MANGLING_NONE.
+- *
+- * To get mangled or unmangled form of the UUID directly, use
+- * dm_task_get_uuid_mangled or dm_task_get_uuid_unmangled function.
+- */
+-const char *dm_task_get_uuid(const struct dm_task *dmt);
+-
+-struct dm_deps *dm_task_get_deps(struct dm_task *dmt);
+-struct dm_versions *dm_task_get_versions(struct dm_task *dmt);
+-const char *dm_task_get_message_response(struct dm_task *dmt);
+-
+-/*
+- * These functions return device-mapper names based on the value
+- * of the mangling mode set during preceding dm_task_run call:
+- *   - unmangled name for DM_STRING_MANGLING_{AUTO, HEX},
+- *   - name without any changes for DM_STRING_MANGLING_NONE.
+- *
+- * To get mangled or unmangled form of the name directly, use
+- * dm_task_get_name_mangled or dm_task_get_name_unmangled function.
+- */
+-const char *dm_task_get_name(const struct dm_task *dmt);
+-struct dm_names *dm_task_get_names(struct dm_task *dmt);
+-
+-int dm_task_set_ro(struct dm_task *dmt);
+-int dm_task_set_newname(struct dm_task *dmt, const char *newname);
+-int dm_task_set_newuuid(struct dm_task *dmt, const char *newuuid);
+-int dm_task_set_minor(struct dm_task *dmt, int minor);
+-int dm_task_set_major(struct dm_task *dmt, int major);
+-int dm_task_set_major_minor(struct dm_task *dmt, int major, int minor, int allow_default_major_fallback);
+-int dm_task_set_uid(struct dm_task *dmt, uid_t uid);
+-int dm_task_set_gid(struct dm_task *dmt, gid_t gid);
+-int dm_task_set_mode(struct dm_task *dmt, mode_t mode);
+-/* See also description for DM_UDEV_DISABLE_LIBRARY_FALLBACK flag! */
+-int dm_task_set_cookie(struct dm_task *dmt, uint32_t *cookie, uint16_t flags);
+-int dm_task_set_event_nr(struct dm_task *dmt, uint32_t event_nr);
+-int dm_task_set_geometry(struct dm_task *dmt, const char *cylinders, const char *heads, const char *sectors, const char *start);
+-int dm_task_set_message(struct dm_task *dmt, const char *message);
+-int dm_task_set_sector(struct dm_task *dmt, uint64_t sector);
+-int dm_task_no_flush(struct dm_task *dmt);
+-int dm_task_no_open_count(struct dm_task *dmt);
+-int dm_task_skip_lockfs(struct dm_task *dmt);
+-int dm_task_query_inactive_table(struct dm_task *dmt);
+-int dm_task_suppress_identical_reload(struct dm_task *dmt);
+-int dm_task_secure_data(struct dm_task *dmt);
+-int dm_task_retry_remove(struct dm_task *dmt);
+-int dm_task_deferred_remove(struct dm_task *dmt);
+-
+-/*
+- * Record timestamp immediately after the ioctl returns.
+- */
+-int dm_task_set_record_timestamp(struct dm_task *dmt);
+-struct dm_timestamp *dm_task_get_ioctl_timestamp(struct dm_task *dmt);
+-
+-/*
+- * Enable checks for common mistakes such as issuing ioctls in an unsafe order.
+- */
+-int dm_task_enable_checks(struct dm_task *dmt);
+-
+-typedef enum {
+-	DM_ADD_NODE_ON_RESUME, /* add /dev/mapper node with dmsetup resume */
+-	DM_ADD_NODE_ON_CREATE  /* add /dev/mapper node with dmsetup create */
+-} dm_add_node_t;
+-int dm_task_set_add_node(struct dm_task *dmt, dm_add_node_t add_node);
+-
+-/*
+- * Control read_ahead.
+- */
+-#define DM_READ_AHEAD_AUTO UINT32_MAX	/* Use kernel default readahead */
+-#define DM_READ_AHEAD_NONE 0		/* Disable readahead */
+-
+-#define DM_READ_AHEAD_MINIMUM_FLAG	0x1	/* Value supplied is minimum */
+-
+-/*
+- * Read ahead is set with DM_DEVICE_CREATE with a table or DM_DEVICE_RESUME.
+- */
+-int dm_task_set_read_ahead(struct dm_task *dmt, uint32_t read_ahead,
+-			   uint32_t read_ahead_flags);
+-uint32_t dm_task_get_read_ahead(const struct dm_task *dmt,
+-				uint32_t *read_ahead);
+-
+-/*
+- * Use these to prepare for a create or reload.
+- */
+-int dm_task_add_target(struct dm_task *dmt,
+-		       uint64_t start,
+-		       uint64_t size, const char *ttype, const char *params);
+-
+-/*
+- * Format major/minor numbers correctly for input to driver.
+- */
+-#define DM_FORMAT_DEV_BUFSIZE	13	/* Minimum bufsize to handle worst case. */
+-int dm_format_dev(char *buf, int bufsize, uint32_t dev_major, uint32_t dev_minor);
+-
+-/* Use this to retrive target information returned from a STATUS call */
+-void *dm_get_next_target(struct dm_task *dmt,
+-			 void *next, uint64_t *start, uint64_t *length,
+-			 char **target_type, char **params);
+-
+-/*
+- * Following dm_get_status_* functions will allocate approriate status structure
+- * from passed mempool together with the necessary character arrays.
+- * Destroying the mempool will release all asociated allocation.
+- */
+-
+-/* Parse params from STATUS call for mirror target */
+-typedef enum {
+-	DM_STATUS_MIRROR_ALIVE	      = 'A',/* No failures */
+-	DM_STATUS_MIRROR_FLUSH_FAILED = 'F',/* Mirror out-of-sync */
+-	DM_STATUS_MIRROR_WRITE_FAILED = 'D',/* Mirror out-of-sync */
+-	DM_STATUS_MIRROR_SYNC_FAILED  = 'S',/* Mirror out-of-sync */
+-	DM_STATUS_MIRROR_READ_FAILED  = 'R',/* Mirror data unaffected */
+-	DM_STATUS_MIRROR_UNCLASSIFIED = 'U' /* Bug */
+-} dm_status_mirror_health_t;
+-
+-struct dm_status_mirror {
+-	uint64_t total_regions;
+-	uint64_t insync_regions;
+-	uint32_t dev_count;             /* # of devs[] elements (<= 8) */
+-	struct {
+-		dm_status_mirror_health_t health;
+-		uint32_t major;
+-		uint32_t minor;
+-	} *devs;                        /* array with individual legs */
+-	const char *log_type;           /* core, disk,.... */
+-	uint32_t log_count;		/* # of logs[] elements */
+-	struct {
+-		dm_status_mirror_health_t health;
+-		uint32_t major;
+-		uint32_t minor;
+-	} *logs;			/* array with individual logs */
+-};
+-
+-int dm_get_status_mirror(struct dm_pool *mem, const char *params,
+-			 struct dm_status_mirror **status);
+-
+-/* Parse params from STATUS call for raid target */
+-struct dm_status_raid {
+-	uint64_t reserved;
+-	uint64_t total_regions;		/* sectors */
+-	uint64_t insync_regions;	/* sectors */
+-	uint64_t mismatch_count;
+-	uint32_t dev_count;
+-	char *raid_type;
+-	/* A - alive,  a - alive not in-sync,  D - dead/failed */
+-	char *dev_health;
+-	/* idle, frozen, resync, recover, check, repair */
+-	char *sync_action;
+-	uint64_t data_offset; /* RAID out-of-place reshaping */
+-};
+-
+-int dm_get_status_raid(struct dm_pool *mem, const char *params,
+-		       struct dm_status_raid **status);
+-
+-/* Parse params from STATUS call for cache target */
+-struct dm_status_cache {
+-	uint64_t version;  /* zero for now */
+-
+-	uint32_t metadata_block_size;   /* in 512B sectors */
+-	uint32_t block_size;            /* AKA 'chunk_size' */
+-
+-	uint64_t metadata_used_blocks;
+-	uint64_t metadata_total_blocks;
+-
+-	uint64_t used_blocks;
+-	uint64_t dirty_blocks;
+-	uint64_t total_blocks;
+-
+-	uint64_t read_hits;
+-	uint64_t read_misses;
+-	uint64_t write_hits;
+-	uint64_t write_misses;
+-
+-	uint64_t demotions;
+-	uint64_t promotions;
+-
+-	uint64_t feature_flags;		/* DM_CACHE_FEATURE_? */
+-
+-	int core_argc;
+-	char **core_argv;
+-
+-	char *policy_name;
+-	int policy_argc;
+-	char **policy_argv;
+-
+-	unsigned error : 1;		/* detected error (switches to fail soon) */
+-	unsigned fail : 1;		/* all I/O fails */
+-	unsigned needs_check : 1;	/* metadata needs check */
+-	unsigned read_only : 1;		/* metadata may not be changed */
+-	uint32_t reserved : 28;
+-};
+-
+-int dm_get_status_cache(struct dm_pool *mem, const char *params,
+-			struct dm_status_cache **status);
+-
+-/*
+- * Parse params from STATUS call for snapshot target
+- *
+- * Snapshot target's format:
+- * <= 1.7.0: <used_sectors>/<total_sectors>
+- * >= 1.8.0: <used_sectors>/<total_sectors> <metadata_sectors>
+- */
+-struct dm_status_snapshot {
+-	uint64_t used_sectors;          /* in 512b units */
+-	uint64_t total_sectors;
+-	uint64_t metadata_sectors;
+-	unsigned has_metadata_sectors : 1; /* set when metadata_sectors is present */
+-	unsigned invalid : 1;		/* set when snapshot is invalidated */
+-	unsigned merge_failed : 1;	/* set when snapshot merge failed */
+-	unsigned overflow : 1;		/* set when snapshot overflows */
+-};
+-
+-int dm_get_status_snapshot(struct dm_pool *mem, const char *params,
+-			   struct dm_status_snapshot **status);
+-
+-/* Parse params from STATUS call for thin_pool target */
+-typedef enum {
+-	DM_THIN_DISCARDS_IGNORE,
+-	DM_THIN_DISCARDS_NO_PASSDOWN,
+-	DM_THIN_DISCARDS_PASSDOWN
+-} dm_thin_discards_t;
+-
+-struct dm_status_thin_pool {
+-	uint64_t transaction_id;
+-	uint64_t used_metadata_blocks;
+-	uint64_t total_metadata_blocks;
+-	uint64_t used_data_blocks;
+-	uint64_t total_data_blocks;
+-	uint64_t held_metadata_root;
+-	uint32_t read_only;		/* metadata may not be changed */
+-	dm_thin_discards_t discards;
+-	uint32_t fail : 1;		/* all I/O fails */
+-	uint32_t error_if_no_space : 1;	/* otherwise queue_if_no_space */
+-	uint32_t out_of_data_space : 1;	/* metadata may be changed, but data may not be allocated (no rw) */
+-	uint32_t needs_check : 1;	/* metadata needs check */
+-	uint32_t error : 1;		/* detected error (switches to fail soon) */
+-	uint32_t reserved : 27;
+-};
+-
+-int dm_get_status_thin_pool(struct dm_pool *mem, const char *params,
+-			    struct dm_status_thin_pool **status);
+-
+-/* Parse params from STATUS call for thin target */
+-struct dm_status_thin {
+-	uint64_t mapped_sectors;
+-	uint64_t highest_mapped_sector;
+-	uint32_t fail : 1;              /* Thin volume fails I/O */
+-	uint32_t reserved : 31;
+-};
+-
+-int dm_get_status_thin(struct dm_pool *mem, const char *params,
+-		       struct dm_status_thin **status);
+-
+-/*
+- * device-mapper statistics support
+- */
+-
+-/*
+- * Statistics handle.
+- *
+- * Operations on dm_stats objects include managing statistics regions
+- * and obtaining and manipulating current counter values from the
+- * kernel. Methods are provided to return baisc count values and to
+- * derive time-based metrics when a suitable interval estimate is
+- * provided.
+- *
+- * Internally the dm_stats handle contains a pointer to a table of one
+- * or more dm_stats_region objects representing the regions registered
+- * with the dm_stats_create_region() method. These in turn point to a
+- * table of one or more dm_stats_counters objects containing the
+- * counter sets for each defined area within the region:
+- *
+- * dm_stats->dm_stats_region[nr_regions]->dm_stats_counters[nr_areas]
+- *
+- * This structure is private to the library and may change in future
+- * versions: all users should make use of the public interface and treat
+- * the dm_stats type as an opaque handle.
+- *
+- * Regions and counter sets are stored in order of increasing region_id.
+- * Depending on region specifications and the sequence of create and
+- * delete operations this may not correspond to increasing sector
+- * number: users of the library should not assume that this is the case
+- * unless region creation is deliberately managed to ensure this (by
+- * always creating regions in strict order of ascending sector address).
+- *
+- * Regions may also overlap so the same sector range may be included in
+- * more than one region or area: applications should be prepared to deal
+- * with this or manage regions such that it does not occur.
+- */
+-struct dm_stats;
+-
+-/*
+- * Histogram handle.
+- *
+- * A histogram object represents the latency histogram values and bin
+- * boundaries of the histogram associated with a particular area.
+- *
+- * Operations on the handle allow the number of bins, bin boundaries,
+- * counts and relative proportions to be obtained as well as the
+- * conversion of a histogram or its bounds to a compact string
+- * representation.
+- */
+-struct dm_histogram;
+-
+-/*
+- * Allocate a dm_stats handle to use for subsequent device-mapper
+- * statistics operations. A program_id may be specified and will be
+- * used by default for subsequent operations on this handle.
+- *
+- * If program_id is NULL or the empty string a program_id will be
+- * automatically set to the value contained in /proc/self/comm.
+- */
+-struct dm_stats *dm_stats_create(const char *program_id);
+-
+-/*
+- * Bind a dm_stats handle to the specified device major and minor
+- * values. Any previous binding is cleared and any preexisting counter
+- * data contained in the handle is released.
+- */
+-int dm_stats_bind_devno(struct dm_stats *dms, int major, int minor);
+-
+-/*
+- * Bind a dm_stats handle to the specified device name.
+- * Any previous binding is cleared and any preexisting counter
+- * data contained in the handle is released.
+- */
+-int dm_stats_bind_name(struct dm_stats *dms, const char *name);
+-
+-/*
+- * Bind a dm_stats handle to the specified device UUID.
+- * Any previous binding is cleared and any preexisting counter
+- * data contained in the handle is released.
+- */
+-int dm_stats_bind_uuid(struct dm_stats *dms, const char *uuid);
+-
+-/*
+- * Bind a dm_stats handle to the device backing the file referenced
+- * by the specified file descriptor.
+- *
+- * File descriptor fd must reference a regular file, open for reading,
+- * in a local file system, backed by a device-mapper device, that
+- * supports the FIEMAP ioctl, and that returns data describing the
+- * physical location of extents.
+- */
+-int dm_stats_bind_from_fd(struct dm_stats *dms, int fd);
+-/*
+- * Test whether the running kernel supports the precise_timestamps
+- * feature. Presence of this feature also implies histogram support.
+- * The library will check this call internally and fails any attempt
+- * to use nanosecond counters or histograms on kernels that fail to
+- * meet this check.
+- */
+-int dm_message_supports_precise_timestamps(void);
+-
+-/*
+- * Precise timetamps and histogram support.
+- * 
+- * Test for the presence of precise_timestamps and histogram support.
+- */
+-int dm_stats_driver_supports_precise(void);
+-int dm_stats_driver_supports_histogram(void);
+-
+-/*
+- * Returns 1 if the specified region has the precise_timestamps feature
+- * enabled (i.e. produces nanosecond-precision counter values) or 0 for
+- * a region using the default milisecond precision.
+- */
+-int dm_stats_get_region_precise_timestamps(const struct dm_stats *dms,
+-					   uint64_t region_id);
+-
+-/*
+- * Returns 1 if the region at the current cursor location has the
+- * precise_timestamps feature enabled (i.e. produces
+- * nanosecond-precision counter values) or 0 for a region using the
+- * default milisecond precision.
+- */
+-int dm_stats_get_current_region_precise_timestamps(const struct dm_stats *dms);
+-
+-#define DM_STATS_ALL_PROGRAMS ""
+-/*
+- * Parse the response from a @stats_list message. dm_stats_list will
+- * allocate the necessary dm_stats and dm_stats region structures from
+- * the embedded dm_pool. No counter data will be obtained (the counters
+- * members of dm_stats_region objects are set to NULL).
+- *
+- * A program_id may optionally be supplied; if the argument is non-NULL
+- * only regions with a matching program_id value will be considered. If
+- * the argument is NULL then the default program_id associated with the
+- * dm_stats handle will be used. Passing the special value
+- * DM_STATS_ALL_PROGRAMS will cause all regions to be queried
+- * regardless of region program_id.
+- */
+-int dm_stats_list(struct dm_stats *dms, const char *program_id);
+-
+-#define DM_STATS_REGIONS_ALL UINT64_MAX
+-/*
+- * Populate a dm_stats object with statistics for one or more regions of
+- * the specified device.
+- *
+- * A program_id may optionally be supplied; if the argument is non-NULL
+- * only regions with a matching program_id value will be considered. If
+- * the argument is NULL then the default program_id associated with the
+- * dm_stats handle will be used. Passing the special value
+- * DM_STATS_ALL_PROGRAMS will cause all regions to be queried
+- * regardless of region program_id.
+- *
+- * Passing the special value DM_STATS_REGIONS_ALL as the region_id
+- * argument will attempt to retrieve all regions selected by the
+- * program_id argument.
+- *
+- * If region_id is used to request a single region_id to be populated
+- * the program_id is ignored.
+- */
+-int dm_stats_populate(struct dm_stats *dms, const char *program_id,
+-		      uint64_t region_id);
+-
+-/*
+- * Create a new statistics region on the device bound to dms.
+- *
+- * start and len specify the region start and length in 512b sectors.
+- * Passing zero for both start and len will create a region spanning
+- * the entire device.
+- *
+- * Step determines how to subdivide the region into discrete counter
+- * sets: a positive value specifies the size of areas into which the
+- * region should be split while a negative value will split the region
+- * into a number of areas equal to the absolute value of step:
+- *
+- * - a region with one area spanning the entire device:
+- *
+- *   dm_stats_create_region(dms, 0, 0, -1, p, a);
+- *
+- * - a region with areas of 1MiB:
+- *
+- *   dm_stats_create_region(dms, 0, 0, 1 << 11, p, a);
+- *
+- * - one 1MiB region starting@1024 sectors with two areas:
+- *
+- *   dm_stats_create_region(dms, 1024, 1 << 11, -2, p, a);
+- *
+- * If precise is non-zero attempt to create a region with nanosecond
+- * precision counters using the kernel precise_timestamps feature.
+- *
+- * precise - A flag to request nanosecond precision counters
+- * to be used for this region.
+- *
+- * histogram_bounds - specify the boundaries of a latency histogram to
+- * be tracked for the region. The values are expressed as an array of
+- * uint64_t terminated with a zero. Values must be in order of ascending
+- * magnitude and specify the upper bounds of successive histogram bins
+- * in nanoseconds (with an implicit lower bound of zero on the first bin
+- * and an implicit upper bound of infinity on the final bin). For
+- * example:
+- *
+- *   uint64_t bounds_ary[] = { 1000, 2000, 3000, 0 };
+- *
+- * Specifies a histogram with four bins: 0-1000ns, 1000-2000ns,
+- * 2000-3000ns and >3000ns.
+- *
+- * The smallest latency value that can be tracked for a region not using
+- * precise_timestamps is 1ms: attempting to create a region with
+- * histogram boundaries < 1ms will cause the precise_timestamps feature
+- * to be enabled for that region automatically if it was not requested
+- * explicitly.
+- *
+- * program_id is an optional string argument that identifies the
+- * program creating the region. If program_id is NULL or the empty
+- * string the default program_id stored in the handle will be used.
+- *
+- * user_data is an optional string argument that is added to the
+- * content of the aux_data field stored with the statistics region by
+- * the kernel.
+- *
+- * The library may also use this space internally, for example, to
+- * store a group descriptor or other metadata: in this case the
+- * library will strip any internal data fields from the value before
+- * it is returned via a call to dm_stats_get_region_aux_data().
+- *
+- * The user data stored is not accessed by the library or kernel and
+- * may be used to store an arbitrary data word (embedded whitespace is
+- * not permitted).
+- *
+- * An application using both the library and direct access to the
+- * @stats_list device-mapper message may see the internal values stored
+- * in this field by the library. In such cases any string up to and
+- * including the first '#' in the field must be treated as an opaque
+- * value and preserved across any external modification of aux_data.
+- *
+- * The region_id of the newly-created region is returned in *region_id
+- * if it is non-NULL.
+- */
+-int dm_stats_create_region(struct dm_stats *dms, uint64_t *region_id,
+-			   uint64_t start, uint64_t len, int64_t step,
+-			   int precise, struct dm_histogram *bounds,
+-			   const char *program_id, const char *user_data);
+-
+-/*
+- * Delete the specified statistics region. This will also mark the
+- * region as not-present and discard any existing statistics data.
+- */
+-int dm_stats_delete_region(struct dm_stats *dms, uint64_t region_id);
+-
+-/*
+- * Clear the specified statistics region. This requests the kernel to
+- * zero all counter values (except in-flight I/O). Note that this
+- * operation is not atomic with respect to reads of the counters; any IO
+- * events occurring between the last print operation and the clear will
+- * be lost. This can be avoided by using the atomic print-and-clear
+- * function of the dm_stats_print_region() call or by using the higher
+- * level dm_stats_populate() interface.
+- */
+-int dm_stats_clear_region(struct dm_stats *dms, uint64_t region_id);
+-
+-/*
+- * Print the current counter values for the specified statistics region
+- * and return them as a string. The memory for the string buffer will
+- * be allocated from the dm_stats handle's private pool and should be
+- * returned by calling dm_stats_buffer_destroy() when no longer
+- * required. The pointer will become invalid following any call that
+- * clears or reinitializes the handle (destroy, list, populate, bind).
+- *
+- * This allows applications that wish to access the raw message response
+- * to obtain it via a dm_stats handle; no parsing of the textual counter
+- * data is carried out by this function.
+- *
+- * Most users are recommended to use the dm_stats_populate() call
+- * instead since this will automatically parse the statistics data into
+- * numeric form accessible via the dm_stats_get_*() counter access
+- * methods.
+- *
+- * A subset of the data lines may be requested by setting the
+- * start_line and num_lines parameters. If both are zero all data
+- * lines are returned.
+- *
+- * If the clear parameter is non-zero the operation will also
+- * atomically reset all counter values to zero (except in-flight IO).
+- */
+-char *dm_stats_print_region(struct dm_stats *dms, uint64_t region_id,
+-			    unsigned start_line, unsigned num_lines,
+-			    unsigned clear);
+-
+-/*
+- * Destroy a statistics response buffer obtained from a call to
+- * dm_stats_print_region().
+- */
+-void dm_stats_buffer_destroy(struct dm_stats *dms, char *buffer);
+-
+-/*
+- * Determine the number of regions contained in a dm_stats handle
+- * following a dm_stats_list() or dm_stats_populate() call.
+- *
+- * The value returned is the number of registered regions visible with the
+- * progam_id value used for the list or populate operation and may not be
+- * equal to the highest present region_id (either due to program_id
+- * filtering or gaps in the sequence of region_id values).
+- *
+- * Always returns zero on an empty handle.
+- */
+-uint64_t dm_stats_get_nr_regions(const struct dm_stats *dms);
+-
+-/*
+- * Determine the number of groups contained in a dm_stats handle
+- * following a dm_stats_list() or dm_stats_populate() call.
+- *
+- * The value returned is the number of registered groups visible with the
+- * progam_id value used for the list or populate operation and may not be
+- * equal to the highest present group_id (either due to program_id
+- * filtering or gaps in the sequence of group_id values).
+- *
+- * Always returns zero on an empty handle.
+- */
+-uint64_t dm_stats_get_nr_groups(const struct dm_stats *dms);
+-
+-/*
+- * Test whether region_id is present in this dm_stats handle.
+- */
+-int dm_stats_region_present(const struct dm_stats *dms, uint64_t region_id);
+-
+-/*
+- * Returns the number of areas (counter sets) contained in the specified
+- * region_id of the supplied dm_stats handle.
+- */
+-uint64_t dm_stats_get_region_nr_areas(const struct dm_stats *dms,
+-				      uint64_t region_id);
+-
+-/*
+- * Returns the total number of areas (counter sets) in all regions of the
+- * given dm_stats object.
+- */
+-uint64_t dm_stats_get_nr_areas(const struct dm_stats *dms);
+-
+-/*
+- * Test whether group_id is present in this dm_stats handle.
+- */
+-int dm_stats_group_present(const struct dm_stats *dms, uint64_t group_id);
+-
+-/*
+- * Return the number of bins in the histogram configuration for the
+- * specified region or zero if no histogram specification is configured.
+- * Valid following a dm_stats_list() or dm_stats_populate() operation.
+- */
+-int dm_stats_get_region_nr_histogram_bins(const struct dm_stats *dms,
+-					  uint64_t region_id);
+-
+-/*
+- * Parse a histogram string with optional unit suffixes into a
+- * dm_histogram bounds description.
+- *
+- * A histogram string is a string of numbers "n1,n2,n3,..." that
+- * represent the boundaries of a histogram. The first and final bins
+- * have implicit lower and upper bounds of zero and infinity
+- * respectively and boundary values must occur in order of ascending
+- * magnitude.  Unless a unit suffix is given all values are specified in
+- * nanoseconds.
+- *
+- * For example, if bounds_str="300,600,900", the region will be created
+- * with a histogram containing four bins. Each report will include four
+- * numbers a:b:c:d. a is the number of requests that took between 0 and
+- * 300ns to complete, b is the number of requests that took 300-600ns to
+- * complete, c is the number of requests that took 600-900ns to complete
+- * and d is the number of requests that took more than 900ns to
+- * complete.
+- *
+- * An optional unit suffix of 's', 'ms', 'us', or 'ns' may be used to
+- * specify units of seconds, miliseconds, microseconds, or nanoseconds:
+- *
+- *   bounds_str="1ns,1us,1ms,1s"
+- *   bounds_str="500us,1ms,1500us,2ms"
+- *   bounds_str="200ms,400ms,600ms,800ms,1s"
+- *
+- * The smallest valid unit of time for a histogram specification depends
+- * on whether the region uses precise timestamps: for a region with the
+- * default milisecond precision the smallest possible histogram boundary
+- * magnitude is one milisecond: attempting to use a histogram with a
+- * boundary less than one milisecond when creating a region will cause
+- * the region to be created with the precise_timestamps feature enabled.
+- *
+- * On sucess a pointer to the struct dm_histogram representing the
+- * bounds values is returned, or NULL in the case of error. The returned
+- * pointer should be freed using dm_free() when no longer required.
+- */
+-struct dm_histogram *dm_histogram_bounds_from_string(const char *bounds_str);
+-
+-/*
+- * Parse a zero terminated array of uint64_t into a dm_histogram bounds
+- * description.
+- *
+- * Each value in the array specifies the upper bound of a bin in the
+- * latency histogram in nanoseconds. Values must appear in ascending
+- * order of magnitude.
+- *
+- * The smallest valid unit of time for a histogram specification depends
+- * on whether the region uses precise timestamps: for a region with the
+- * default milisecond precision the smallest possible histogram boundary
+- * magnitude is one milisecond: attempting to use a histogram with a
+- * boundary less than one milisecond when creating a region will cause
+- * the region to be created with the precise_timestamps feature enabled.
+- */
+-struct dm_histogram *dm_histogram_bounds_from_uint64(const uint64_t *bounds);
+-
+-/*
+- * Destroy the histogram bounds array obtained from a call to
+- * dm_histogram_bounds_from_string().
+- */
+-void dm_histogram_bounds_destroy(struct dm_histogram *bounds);
+-
+-/*
+- * Destroy a dm_stats object and all associated regions, counter
+- * sets and histograms.
+- */
+-void dm_stats_destroy(struct dm_stats *dms);
+-
+-/*
+- * Counter sampling interval
+- */
+-
+-/*
+- * Set the sampling interval for counter data to the specified value in
+- * either nanoseconds or milliseconds.
+- *
+- * The interval is used to calculate time-based metrics from the basic
+- * counter data: an interval must be set before calling any of the
+- * metric methods.
+- *
+- * For best accuracy the duration should be measured and updated at the
+- * end of each interval.
+- *
+- * All values are stored internally with nanosecond precision and are
+- * converted to or from ms when the millisecond interfaces are used.
+- */
+-void dm_stats_set_sampling_interval_ns(struct dm_stats *dms,
+-				       uint64_t interval_ns);
+-
+-void dm_stats_set_sampling_interval_ms(struct dm_stats *dms,
+-				       uint64_t interval_ms);
+-
+-/*
+- * Retrieve the configured sampling interval in either nanoseconds or
+- * milliseconds.
+- */
+-uint64_t dm_stats_get_sampling_interval_ns(const struct dm_stats *dms);
+-uint64_t dm_stats_get_sampling_interval_ms(const struct dm_stats *dms);
+-
+-/*
+- * Override program_id. This may be used to change the default
+- * program_id value for an existing handle. If the allow_empty argument
+- * is non-zero a NULL or empty program_id is permitted.
+- *
+- * Use with caution! Most users of the library should set a valid,
+- * non-NULL program_id for every statistics region created. Failing to
+- * do so may result in confusing state when multiple programs are
+- * creating and managing statistics regions.
+- *
+- * All users of the library are encouraged to choose an unambiguous,
+- * unique program_id: this could be based on PID (for programs that
+- * create, report, and delete regions in a single process), session id,
+- * executable name, or some other distinguishing string.
+- *
+- * Use of the empty string as a program_id does not simplify use of the
+- * library or the command line tools and use of this value is strongly
+- * discouraged.
+- */
+-int dm_stats_set_program_id(struct dm_stats *dms, int allow_empty,
+-			    const char *program_id);
+-
+-/*
+- * Region properties: size, length & area_len.
+- *
+- * Region start and length are returned in units of 512b as specified
+- * at region creation time. The area_len value gives the size of areas
+- * into which the region has been subdivided. For regions with a single
+- * area spanning the range this value is equal to the region length.
+- *
+- * For regions created with a specified number of areas the value
+- * represents the size of the areas into which the kernel divided the
+- * region excluding any rounding of the last area size. The number of
+- * areas may be obtained using the dm_stats_nr_areas_region() call.
+- *
+- * All values are returned in units of 512b sectors.
+- */
+-int dm_stats_get_region_start(const struct dm_stats *dms, uint64_t *start,
+-			      uint64_t region_id);
+-
+-int dm_stats_get_region_len(const struct dm_stats *dms, uint64_t *len,
+-			    uint64_t region_id);
+-
+-int dm_stats_get_region_area_len(const struct dm_stats *dms,
+-				 uint64_t *len, uint64_t region_id);
+-
+-/*
+- * Area properties: start, offset and length.
+- *
+- * The area length is always equal to the area length of the region
+- * that contains it and is obtained from dm_stats_get_region_area_len().
+- *
+- * The start of an area is a function of the area_id and the containing
+- * region's start and area length: it gives the absolute offset into the
+- * containing device of the beginning of the area.
+- *
+- * The offset expresses the area's relative offset into the current
+- * region. I.e. the area start minus the start offset of the containing
+- * region.
+- *
+- * All values are returned in units of 512b sectors.
+- */
+-int dm_stats_get_area_start(const struct dm_stats *dms, uint64_t *start,
+-			    uint64_t region_id, uint64_t area_id);
+-
+-int dm_stats_get_area_offset(const struct dm_stats *dms, uint64_t *offset,
+-			     uint64_t region_id, uint64_t area_id);
+-
+-/*
+- * Retrieve program_id and user aux_data for a specific region.
+- *
+- * Only valid following a call to dm_stats_list().
+- */
+-
+-/*
+- * Retrieve program_id for the specified region.
+- *
+- * The returned pointer does not need to be freed separately from the
+- * dm_stats handle but will become invalid after a dm_stats_destroy(),
+- * dm_stats_list(), dm_stats_populate(), or dm_stats_bind*() of the
+- * handle from which it was obtained.
+- */
+-const char *dm_stats_get_region_program_id(const struct dm_stats *dms,
+-					   uint64_t region_id);
+-
+-/*
+- * Retrieve user aux_data set for the specified region. This function
+- * will return any stored user aux_data as a string in the memory
+- * pointed to by the aux_data argument.
+- *
+- * Any library internal aux_data fields, such as DMS_GROUP descriptors,
+- * are stripped before the value is returned.
+- *
+- * The returned pointer does not need to be freed separately from the
+- * dm_stats handle but will become invalid after a dm_stats_destroy(),
+- * dm_stats_list(), dm_stats_populate(), or dm_stats_bind*() of the
+- * handle from which it was obtained.
+- */
+-const char *dm_stats_get_region_aux_data(const struct dm_stats *dms,
+-					 uint64_t region_id);
+-
+-typedef enum {
+-	DM_STATS_OBJECT_TYPE_NONE,
+-	DM_STATS_OBJECT_TYPE_AREA,
+-	DM_STATS_OBJECT_TYPE_REGION,
+-	DM_STATS_OBJECT_TYPE_GROUP
+-} dm_stats_obj_type_t;
+-
+-/*
+- * Statistics cursor
+- *
+- * A dm_stats handle maintains an optional cursor into the statistics
+- * tables that it stores. Iterators are provided to visit each region,
+- * area, or group in a handle and accessor methods are provided to
+- * obtain properties and values for the object at the current cursor
+- * position.
+- *
+- * Using the cursor simplifies walking all regions or groups when
+- * the tables are sparse (i.e. contains some present and some
+- * non-present region_id or group_id values either due to program_id
+- * filtering or the ordering of region and group creation and deletion).
+- *
+- * Simple macros are provided to visit each area, region, or group,
+- * contained in a handle and applications are encouraged to use these
+- * where possible.
+- */
+-
+-/*
+- * Walk flags are used to initialise a dm_stats handle's cursor control
+- * and to select region or group aggregation when calling a metric or
+- * counter property method with immediate group, region, and area ID
+- * values.
+- *
+- * Walk flags are stored in the uppermost word of a uint64_t so that
+- * a region_id or group_id may be encoded in the lower bits. This
+- * allows an aggregate region_id or group_id to be specified when
+- * retrieving counter or metric values.
+- *
+- * Flags may be ORred together when used to initialise a dm_stats_walk:
+- * the resulting walk will visit instance of each type specified by
+- * the flag combination.
+- */
+-#define DM_STATS_WALK_AREA   0x1000000000000ULL
+-#define DM_STATS_WALK_REGION 0x2000000000000ULL
+-#define DM_STATS_WALK_GROUP  0x4000000000000ULL
+-
+-#define DM_STATS_WALK_ALL    0x7000000000000ULL
+-#define DM_STATS_WALK_DEFAULT (DM_STATS_WALK_AREA | DM_STATS_WALK_REGION)
+-
+-/*
+- * Skip regions from a DM_STATS_WALK_REGION that contain only a single
+- * area: in this case the region's aggregate values are identical to
+- * the values of the single contained area. Setting this flag will
+- * suppress these duplicate entries during a dm_stats_walk_* with the
+- * DM_STATS_WALK_REGION flag set.
+- */
+-#define DM_STATS_WALK_SKIP_SINGLE_AREA   0x8000000000000ULL
+-
+-/*
+- * Initialise the cursor control of a dm_stats handle for the specified
+- * walk type(s). Including a walk flag in the flags argument will cause
+- * any subsequent walk to visit that type of object (until the next
+- * call to dm_stats_walk_init()).
+- */
+-int dm_stats_walk_init(struct dm_stats *dms, uint64_t flags);
+-
+-/*
+- * Set the cursor of a dm_stats handle to address the first present
+- * group, region, or area of the currently configured walk. It is
+- * valid to attempt to walk a NULL stats handle or a handle containing
+- * no present regions; in this case any call to dm_stats_walk_next()
+- * becomes a no-op and all calls to dm_stats_walk_end() return true.
+- */
+-void dm_stats_walk_start(struct dm_stats *dms);
+-
+-/*
+- * Advance the statistics cursor to the next area, or to the next
+- * present region if at the end of the current region. If the end of
+- * the region, area, or group tables is reached a subsequent call to
+- * dm_stats_walk_end() will return 1 and dm_stats_object_type() called
+- * on the location will return DM_STATS_OBJECT_TYPE_NONE,
+- */
+-void dm_stats_walk_next(struct dm_stats *dms);
+-
+-/*
+- * Force the statistics cursor to advance to the next region. This will
+- * stop any in-progress area walk (by clearing DM_STATS_WALK_AREA) and
+- * advance the cursor to the next present region, the first present
+- * group (if DM_STATS_GROUP_WALK is set), or to the end. In this case a
+- * subsequent call to dm_stats_walk_end() will return 1 and a call to
+- * dm_stats_object_type() for the location will return
+- * DM_STATS_OBJECT_TYPE_NONE.
+- */
+-void dm_stats_walk_next_region(struct dm_stats *dms);
+-
+-/*
+- * Test whether the end of a statistics walk has been reached.
+- */
+-int dm_stats_walk_end(struct dm_stats *dms);
+-
+-/*
+- * Return the type of object at the location specified by region_id
+- * and area_id. If either region_id or area_id uses one of the special
+- * values DM_STATS_REGION_CURRENT or DM_STATS_AREA_CURRENT the
+- * corresponding region or area identifier will be taken from the
+- * current cursor location. If the cursor location or the value encoded
+- * by region_id and area_id indicates an aggregate region or group,
+- * this will be reflected in the value returned.
+- */
+-dm_stats_obj_type_t dm_stats_object_type(const struct dm_stats *dms,
+-					 uint64_t region_id,
+-					 uint64_t area_id);
+-
+-/*
+- * Return the type of object at the current stats cursor location.
+- */
+-dm_stats_obj_type_t dm_stats_current_object_type(const struct dm_stats *dms);
+-
+-/*
+- * Stats iterators
+- *
+- * C 'for' and 'do'/'while' style iterators for dm_stats data.
 - *
-- * \return
-- * An error string describing the last LVM error.
-- */
--const char *lvm_errmsg(lvm_t libh);
--
--/**
-- * Scan all devices on the system for VGs and LVM metadata.
+- * It is not safe to call any function that modifies the region table
+- * within the loop body (i.e. dm_stats_list(), dm_stats_populate(),
+- * dm_stats_init(), or dm_stats_destroy()).
 - *
-- * \memberof lvm_t
+- * All counter and property (dm_stats_get_*) access methods, as well as
+- * dm_stats_populate_region() can be safely called from loops.
 - *
-- * \return
-- * 0 (success) or -1 (failure).
 - */
--int lvm_scan(lvm_t libh);
 -
--/**
-- * Return the list of volume group names.
-- *
-- * \memberof lvm_t
-- *
-- * The memory allocated for the list is tied to the lvm_t handle and will be
-- * released when lvm_quit() is called.
-- *
-- * NOTE: This function normally does not scan devices in the system for LVM
-- * metadata.  To scan the system, use lvm_scan().
+-/*
+- * Iterate over the regions table visiting each region.
 - *
-- * To process the list, use the dm_list iterator functions.  For example:
-- *      vg_t vg;
-- *      struct dm_list *vgnames;
-- *      struct lvm_str_list *strl;
-- *
-- *      vgnames = lvm_list_vg_names(libh);
-- *	dm_list_iterate_items(strl, vgnames) {
-- *		vgname = strl->str;
-- *              vg = lvm_vg_open(libh, vgname, "r");
-- *              // do something with vg
-- *              lvm_vg_close(vg);
-- *      }
-- *
-- *
-- * \return
-- * A list with entries of type struct lvm_str_list, containing the
-- * VG name strings of the Volume Groups known to the system.
-- * NULL is returned if unable to allocate memory.
-- * An empty list (verify with dm_list_empty) is returned if no VGs
-- * exist on the system.
+- * If the region table is empty or unpopulated the loop body will not be
+- * executed.
 - */
--struct dm_list *lvm_list_vg_names(lvm_t libh);
+-#define dm_stats_foreach_region(dms)				\
+-for (dm_stats_walk_init((dms), DM_STATS_WALK_REGION),		\
+-     dm_stats_walk_start((dms));				\
+-     !dm_stats_walk_end((dms)); dm_stats_walk_next_region((dms)))
 -
--/**
-- * Return the list of volume group uuids.
-- *
-- * \memberof lvm_t
-- *
-- * The memory allocated for the list is tied to the lvm_t handle and will be
-- * released when lvm_quit() is called.
+-/*
+- * Iterate over the regions table visiting each area.
 - *
-- * NOTE: This function normally does not scan devices in the system for LVM
-- * metadata.  To scan the system, use lvm_scan().
-- *
-- * \param   libh
-- * Handle obtained from lvm_init().
-- *
-- * \return
-- * A list with entries of type struct lvm_str_list, containing the
-- * VG UUID strings of the Volume Groups known to the system.
-- * NULL is returned if unable to allocate memory.
-- * An empty list (verify with dm_list_empty) is returned if no VGs
-- * exist on the system.
+- * If the region table is empty or unpopulated the loop body will not
+- * be executed.
 - */
--struct dm_list *lvm_list_vg_uuids(lvm_t libh);
+-#define dm_stats_foreach_area(dms)				\
+-for (dm_stats_walk_init((dms), DM_STATS_WALK_AREA),		\
+-     dm_stats_walk_start((dms));				\
+-     !dm_stats_walk_end((dms)); dm_stats_walk_next((dms)))
 -
--/**
-- * Return the volume group name given a PV UUID
-- *
-- * \memberof lvm_t
-- *
-- * The memory allocated for the name is tied to the lvm_t handle and will be
-- * released when lvm_quit() is called.
-- *
-- * NOTE: This function may scan devices in the system for LVM metadata.
+-/*
+- * Iterate over the regions table visiting each group. Metric and
+- * counter methods will return values for the group.
 - *
-- * \param   libh
-- * Handle obtained from lvm_init().
-- *
-- * \return
-- * The volume group name for the given PV UUID.
-- * NULL is returned if the PV UUID is not associated with a volume group.
+- * If the group table is empty or unpopulated the loop body will not
+- * be executed.
 - */
--const char *lvm_vgname_from_pvid(lvm_t libh, const char *pvid);
+-#define dm_stats_foreach_group(dms)				\
+-for (dm_stats_walk_init((dms), DM_STATS_WALK_GROUP),		\
+-     dm_stats_walk_start(dms);					\
+-     !dm_stats_walk_end(dms);					\
+-     dm_stats_walk_next(dms))
 -
--/**
-- * Return the volume group name given a device name
-- *
-- * \memberof lvm_t
-- *
-- * The memory allocated for the name is tied to the lvm_t handle and will be
-- * released when lvm_quit() is called.
-- *
-- * NOTE: This function may scan devices in the system for LVM metadata.
-- *
-- * \param   libh
-- * Handle obtained from lvm_init().
+-/*
+- * Start a walk iterating over the regions contained in dm_stats handle
+- * 'dms'.
 - *
-- * \return
-- * The volume group name for the given device name.
-- * NULL is returned if the device is not an LVM device.
+- * The body of the loop should call dm_stats_walk_next() or
+- * dm_stats_walk_next_region() to advance to the next element.
 - *
+- * The loop body is executed at least once even if the stats handle is
+- * empty.
 - */
--const char *lvm_vgname_from_device(lvm_t libh, const char *device);
+-#define dm_stats_walk_do(dms)					\
+-do {								\
+-	dm_stats_walk_start((dms));				\
+-	do
 -
--/**
-- * Open an existing VG.
-- *
-- * Open a VG for reading or writing.
-- *
-- * \memberof lvm_t
-- *
-- * \param   libh
-- * Handle obtained from lvm_init().
-- *
-- * \param   vgname
-- * Name of the VG to open.
-- *
-- * \param   mode
-- * Open mode - either "r" (read) or "w" (read/write).
-- * Any other character results in an error with EINVAL set.
-- *
-- * \param   flags
-- * Open flags - currently ignored.
-- *
-- * \return  non-NULL VG handle (success) or NULL (failure).
+-/*
+- * Start a 'while' style loop or end a 'do..while' loop iterating over the
+- * regions contained in dm_stats handle 'dms'.
 - */
--vg_t lvm_vg_open(lvm_t libh, const char *vgname, const char *mode,
--		  uint32_t flags);
+-#define dm_stats_walk_while(dms)				\
+-	while(!dm_stats_walk_end((dms)));			\
+-} while (0)
 -
--/**
-- * Validate a name to be used for new VG construction.
+-/*
+- * Cursor relative property methods
 - *
-- * This function checks that the name has no invalid characters,
-- * the length doesn't exceed maximum and that the VG name isn't already in use
-- * and that the name adheres to any other limitations.
+- * Calls with the prefix dm_stats_get_current_* operate relative to the
+- * current cursor location, returning properties for the current region
+- * or area of the supplied dm_stats handle.
 - *
-- * \param libh
-- * Valid library handle
-- *
-- * \param name
-- * Name to validate for new VG create.
 - */
--int lvm_vg_name_validate(lvm_t libh, const char *vg_name);
 -
--/**
-- * Create a VG with default parameters.
-- *
-- * \memberof lvm_t
-- *
-- * This function creates a Volume Group object in memory.
-- * Upon success, other APIs may be used to set non-default parameters.
-- * For example, to set a non-default extent size, use lvm_vg_set_extent_size().
-- * Next, to add physical storage devices to the volume group, use
-- * lvm_vg_extend() for each device.
-- * Once all parameters are set appropriately and all devices are added to the
-- * VG, use lvm_vg_write() to commit the new VG to disk, and lvm_vg_close() to
-- * release the VG handle.
-- *
-- * \param   libh
-- * Handle obtained from lvm_init().
-- *
-- * \param   vg_name
-- * Name of the VG to open.
-- *
-- * \return
-- * non-NULL vg handle (success) or NULL (failure)
+-/*
+- * Returns the number of areas (counter sets) contained in the current
+- * region of the supplied dm_stats handle.
 - */
--vg_t lvm_vg_create(lvm_t libh, const char *vg_name);
+-uint64_t dm_stats_get_current_nr_areas(const struct dm_stats *dms);
 -
--/*************************** volume group handling **************************/
--
--/**
-- * Return a list of LV handles for a given VG handle.
-- *
-- * \memberof vg_t
-- *
-- * \param   vg
-- * VG handle obtained from lvm_vg_create() or lvm_vg_open().
-- *
-- * \return
-- * A list of lvm_lv_list structures containing lv handles for this vg.
-- * If no LVs exist on the given VG, NULL is returned.
+-/*
+- * Retrieve the current values of the stats cursor.
 - */
--struct dm_list *lvm_vg_list_lvs(vg_t vg);
+-uint64_t dm_stats_get_current_region(const struct dm_stats *dms);
+-uint64_t dm_stats_get_current_area(const struct dm_stats *dms);
 -
--/**
-- * Return a list of PV handles for all.
-- *
-- * \memberof lvm_t
+-/*
+- * Current region properties: size, length & area_len.
 - *
-- * \param   libh
-- * Library handle retrieved from lvm_init
+- * See the comments for the equivalent dm_stats_get_* versions for a
+- * complete description of these methods.
 - *
-- * \return
-- * A list of lvm_pv_list structures containing pv handles for all physical
-- * volumes. If no PVs exist or a global lock was unable to be obtained a
-- * NULL is returned.  Do not attempt to remove one of the PVs until after the
-- * call to lvm_list_pvs_free has been made.
+- * All values are returned in units of 512b sectors.
 - */
--struct dm_list *lvm_list_pvs(lvm_t libh);
+-int dm_stats_get_current_region_start(const struct dm_stats *dms,
+-				      uint64_t *start);
 -
--/**
-- * Free the resources used by acquiring the pvlist.  This should be called as
-- * soon as possible after processing the needed information from the pv list as
-- * a global lock is held.
-- *
-- * \param	pvlist
-- * PV list to be freed
-- *
-- * \return
-- * 0 on success, else -1 with library errno and text set.
-- */
--int lvm_list_pvs_free(struct dm_list *pvlist);
+-int dm_stats_get_current_region_len(const struct dm_stats *dms,
+-				    uint64_t *len);
 -
--/**
-- *  Create a physical volume.
-- *  \param	libh	Library handle
-- *  \param	pv_name	The physical volume name
-- *  \param	size	Size of physical volume, 0 = use all available.
-- *  \return
-- *  0 on success, else -1 with library errno and text set.
-- */
--int lvm_pv_create(lvm_t libh, const char *pv_name, uint64_t size);
+-int dm_stats_get_current_region_area_len(const struct dm_stats *dms,
+-					 uint64_t *area_len);
 -
--/**
-- * Create a physical volume parameter object for PV creation.
+-/*
+- * Current area properties: start and length.
 - *
-- * \param	libh	Library handle
-- * \param	pv_name	Device name
+- * See the comments for the equivalent dm_stats_get_* versions for a
+- * complete description of these methods.
 - *
-- * \return
-- * NULL on error, else valid parameter object to use.
+- * All values are returned in units of 512b sectors.
 - */
--pv_create_params_t lvm_pv_params_create(lvm_t libh, const char *pv_name);
+-int dm_stats_get_current_area_start(const struct dm_stats *dms,
+-				    uint64_t *start);
 -
--/**
-- * Create a parameter object to use in function lvm_pv_create_adv
-- *
-- * 	\param 	params	The params object to get property value from
-- * 	\param	name	The name of the property to retrieve
-- *
-- * 	Available properties:
-- *
-- * 	size					zero indicates use detected size of device
-- * 							(recommended and default)
-- *	pvmetadatacopies		Number of metadata copies (0,1,2)
-- *	pvmetadatasize			The approx. size to be to be set aside for metadata
-- *	data_alignment			Align the start of the data to a multiple of
-- *							this number
-- *	data_alignment_offset	Shift the start of the data area by this addl.
-- *							offset
-- *	zero					Set to 1 to zero out first 2048 bytes of
-- *							device, 0 to not (default is 1)
-- *
-- * 	\return
-- * 	lvm_property_value
-- */
--struct lvm_property_value lvm_pv_params_get_property(
--						const pv_create_params_t params,
--						const char *name);
+-int dm_stats_get_current_area_offset(const struct dm_stats *dms,
+-				     uint64_t *offset);
 -
--/**
-- * Sets a property of a PV parameter create object.
-- *
-- * \param	params		The parameter object
-- * \param	name		The name of the property to set (see get prop list)
-- * \param	prop		The property to set the value on.
-- */
--int lvm_pv_params_set_property(pv_create_params_t params, const char *name,
--								struct lvm_property_value *prop);
--/**
-- * Creates a physical volume using the supplied params object.
-- *
-- * \param	params		The parameters to use for physical volume creation
-- *
-- * \return
-- * -1 on error, 0 on success.
-- */
--int lvm_pv_create_adv(pv_create_params_t params);
+-int dm_stats_get_current_area_len(const struct dm_stats *dms,
+-				       uint64_t *start);
 -
--/**
-- *  Remove a physical volume.
-- *  Note: You cannot remove a PV while iterating through the list of PVs as
-- *  locks are held for the PV list.
-- *  \param	libh	Library handle
-- *  \param	pv_name	The physical volume name
-- *  \return
-- *  0 on success, else -1 with library errno and text set.
+-/*
+- * Return a pointer to the program_id string for region at the current
+- * cursor location.
 - */
--int lvm_pv_remove(lvm_t libh, const char *pv_name);
+-const char *dm_stats_get_current_region_program_id(const struct dm_stats *dms);
 -
--/**
-- * Return a list of PV handles for a given VG handle.
-- *
-- * \memberof vg_t
-- *
-- * \param   vg
-- * VG handle obtained from lvm_vg_create() or lvm_vg_open().
-- *
-- * \return
-- * A list of lvm_pv_list structures containing pv handles for this vg.
-- * If no PVs exist on the given VG, NULL is returned.
+-/*
+- * Return a pointer to the user aux_data string for the region at the
+- * current cursor location.
 - */
--struct dm_list *lvm_vg_list_pvs(vg_t vg);
+-const char *dm_stats_get_current_region_aux_data(const struct dm_stats *dms);
 -
--/**
-- * Write a VG to disk.
-- *
-- * \memberof vg_t
-- *
-- * This function commits the Volume Group object referenced by the VG handle
-- * to disk. Upon failure, retry the operation and/or release the VG handle
-- * with lvm_vg_close().
-- *
-- * \param   vg
-- * VG handle obtained from lvm_vg_create() or lvm_vg_open().
-- *
-- * \return
-- * 0 (success) or -1 (failure).
+-/*
+- * Statistics groups and data aggregation.
 - */
--int lvm_vg_write(vg_t vg);
 -
--/**
-- * Remove a VG from the system.
-- *
-- * \memberof vg_t
-- *
-- * This function removes a Volume Group object in memory, and requires
-- * calling lvm_vg_write() to commit the removal to disk.
-- *
-- * \param   vg
-- * VG handle obtained from lvm_vg_create() or lvm_vg_open().
-- *
-- * \return
-- * 0 (success) or -1 (failure).
+-/*
+- * Create a new group in stats handle dms from the group descriptor
+- * passed in group. The group descriptor is a string containing a list
+- * of region_id values that will be included in the group. The first
+- * region_id found will be the group leader. Ranges of identifiers may
+- * be expressed as "M-N", where M and N are the start and end region_id
+- * values for the range.
 - */
--int lvm_vg_remove(vg_t vg);
+-int dm_stats_create_group(struct dm_stats *dms, const char *group,
+-			  const char *alias, uint64_t *group_id);
 -
--/**
-- * Close a VG opened with lvm_vg_create or lvm_vg_open().
-- *
-- * \memberof vg_t
-- *
-- * This function releases a VG handle and any resources associated with the
-- * handle.
-- *
-- * \param   vg
-- * VG handle obtained from lvm_vg_create() or lvm_vg_open().
-- *
-- * \return
-- * 0 (success) or -1 (failure).
+-/*
+- * Remove the specified group_id. If the remove argument is zero the
+- * group will be removed but the regions that it contained will remain.
+- * If remove is non-zero then all regions that belong to the group will
+- * also be removed.
 - */
--int lvm_vg_close(vg_t vg);
+-int dm_stats_delete_group(struct dm_stats *dms, uint64_t group_id, int remove);
 -
--/**
-- * Extend a VG by adding a device.
-- *
-- * \memberof vg_t
-- *
-- * This function requires calling lvm_vg_write() to commit the change to disk.
-- * After successfully adding a device, use lvm_vg_write() to commit the new VG
-- * to disk.  Upon failure, retry the operation or release the VG handle with
-- * lvm_vg_close().
-- * If the device is not initialized for LVM use, it will be initialized
-- * before adding to the VG.  Although some internal checks are done,
-- * the caller should be sure the device is not in use by other subsystems
-- * before calling lvm_vg_extend().
-- *
-- * \param   vg
-- * VG handle obtained from lvm_vg_create() or lvm_vg_open().
-- *
-- * \param   device
-- * Absolute pathname of device to add to VG.
-- *
-- * \return
-- * 0 (success) or -1 (failure).
+-/*
+- * Set an alias for this group or region. The alias will be returned
+- * instead of the normal dm-stats name for this region or group.
 - */
--int lvm_vg_extend(vg_t vg, const char *device);
+-int dm_stats_set_alias(struct dm_stats *dms, uint64_t group_id,
+-		       const char *alias);
 -
--/**
-- * Reduce a VG by removing an unused device.
-- *
-- * \memberof vg_t
-- *
-- * This function requires calling lvm_vg_write() to commit the change to disk.
-- * After successfully removing a device, use lvm_vg_write() to commit the new VG
-- * to disk.  Upon failure, retry the operation or release the VG handle with
-- * lvm_vg_close().
-- *
-- * \param   vg
-- * VG handle obtained from lvm_vg_create() or lvm_vg_open().
-- *
-- * \param   device
-- * Name of device to remove from VG.
-- *
-- * \return
-- * 0 (success) or -1 (failure).
+-/*
+- * Returns a pointer to the currently configured alias for id, or the
+- * name of the dm device the handle is bound to if no alias has been
+- * set. The pointer will be freed automatically when a new alias is set
+- * or when the stats handle is cleared.
 - */
--int lvm_vg_reduce(vg_t vg, const char *device);
+-const char *dm_stats_get_alias(const struct dm_stats *dms, uint64_t id);
 -
--/**
-- * Add a tag to a VG.
-- *
-- * \memberof vg_t
-- *
-- * This function requires calling lvm_vg_write() to commit the change to disk.
-- * After successfully adding a tag, use lvm_vg_write() to commit the
-- * new VG to disk.  Upon failure, retry the operation or release the VG handle
-- * with lvm_vg_close().
-- *
-- * \param   vg
-- * VG handle obtained from lvm_vg_create() or lvm_vg_open().
-- *
-- * \param   tag
-- * Tag to add to the VG.
-- *
-- * \return
-- * 0 (success) or -1 (failure).
+-#define DM_STATS_GROUP_NONE UINT64_MAX
+-/*
+- * Return the group_id that the specified region_id belongs to, or the
+- * special value DM_STATS_GROUP_NONE if the region does not belong
+- * to any group.
 - */
--int lvm_vg_add_tag(vg_t vg, const char *tag);
+-uint64_t dm_stats_get_group_id(const struct dm_stats *dms, uint64_t region_id);
 -
--/**
-- * Remove a tag from a VG.
-- *
-- * \memberof vg_t
+-/*
+- * Store a pointer to a string describing the regions that are members
+- * of the group specified by group_id in the memory pointed to by buf.
+- * The string is in the same format as the 'group' argument to
+- * dm_stats_create_group().
 - *
-- * This function requires calling lvm_vg_write() to commit the change to disk.
-- * After successfully removing a tag, use lvm_vg_write() to commit the
-- * new VG to disk.  Upon failure, retry the operation or release the VG handle
-- * with lvm_vg_close().
-- *
-- * \param   vg
-- * VG handle obtained from lvm_vg_create() or lvm_vg_open().
-- *
-- * \param   tag
-- * Tag to remove from VG.
-- *
-- * \return
-- * 0 (success) or -1 (failure).
+- * The pointer does not need to be freed explicitly by the caller: it
+- * will become invalid following a subsequent dm_stats_list(),
+- * dm_stats_populate() or dm_stats_destroy() of the corresponding
+- * dm_stats handle.
 - */
--int lvm_vg_remove_tag(vg_t vg, const char *tag);
+-int dm_stats_get_group_descriptor(const struct dm_stats *dms,
+-				  uint64_t group_id, char **buf);
 -
--/**
-- * Set the extent size of a VG.
-- *
-- * \memberof vg_t
-- *
-- * This function requires calling lvm_vg_write() to commit the change to disk.
-- * After successfully setting a new extent size, use lvm_vg_write() to commit
-- * the new VG to disk.  Upon failure, retry the operation or release the VG
-- * handle with lvm_vg_close().
+-/*
+- * Create regions that correspond to the extents of a file in the
+- * filesystem and optionally place them into a group.
 - *
-- * \param   vg
-- * VG handle obtained from lvm_vg_create() or lvm_vg_open().
+- * File descriptor fd must reference a regular file, open for reading,
+- * in a local file system that supports the FIEMAP ioctl, and that
+- * returns data describing the physical location of extents.
 - *
-- * \param   new_size
-- * New extent size in bytes.
+- * The file descriptor can be closed by the caller following the call
+- * to dm_stats_create_regions_from_fd().
 - *
-- * \return
-- * 0 (success) or -1 (failure).
-- */
--int lvm_vg_set_extent_size(vg_t vg, uint32_t new_size);
--
--/**
-- * Get whether or not a volume group is clustered.
+- * Unless nogroup is non-zero the regions will be placed into a group
+- * and the group alias set to the value supplied (if alias is NULL no
+- * group alias will be assigned).
 - *
-- * \memberof vg_t
-- *
-- * \param   vg
-- * VG handle obtained from lvm_vg_create() or lvm_vg_open().
-- *
-- * \return
-- * 1 if the VG is clustered, 0 if not
-- */
--uint64_t lvm_vg_is_clustered(vg_t vg);
--
--/**
-- * Get whether or not a volume group is exported.
+- * On success the function returns a pointer to an array of uint64_t
+- * containing the IDs of the newly created regions. The region_id
+- * array is terminated by the value DM_STATS_REGION_NOT_PRESENT and
+- * should be freed using dm_free() when no longer required.
 - *
-- * \memberof vg_t
+- * On error NULL is returned.
 - *
-- * \param   vg
-- * VG handle obtained from lvm_vg_create() or lvm_vg_open().
+- * Following a call to dm_stats_create_regions_from_fd() the handle
+- * is guaranteed to be in a listed state, and to contain any region
+- * and group identifiers created by the operation.
 - *
-- * \return
-- * 1 if the VG is exported, 0 if not
+- * The group_id for the new group is equal to the region_id value in
+- * the first array element.
 - */
--uint64_t lvm_vg_is_exported(vg_t vg);
--
--/**
-- * Get whether or not a volume group is a partial volume group.
+-uint64_t *dm_stats_create_regions_from_fd(struct dm_stats *dms, int fd,
+-					  int group, int precise,
+-					  struct dm_histogram *bounds,
+-					  const char *alias);
+-/*
+- * Update a group of regions that correspond to the extents of a file
+- * in the filesystem, adding and removing regions to account for
+- * allocation changes in the underlying file.
 - *
-- * \memberof vg_t
+- * File descriptor fd must reference a regular file, open for reading,
+- * in a local file system that supports the FIEMAP ioctl, and that
+- * returns data describing the physical location of extents.
 - *
-- * When one or more physical volumes belonging to the volume group
-- * are missing from the system the volume group is a partial volume
-- * group.
+- * The file descriptor can be closed by the caller following the call
+- * to dm_stats_update_regions_from_fd().
 - *
-- * \param   vg
-- * VG handle obtained from lvm_vg_create() or lvm_vg_open().
-- *
-- * \return
-- * 1 if the VG is PVs, 0 if not
-- */
--uint64_t lvm_vg_is_partial(vg_t vg);
--
--/**
-- * Get the current metadata sequence number of a volume group.
+- * On success the function returns a pointer to an array of uint64_t
+- * containing the IDs of the updated regions (including any existing
+- * regions that were not modified by the call).
 - *
-- * \memberof vg_t
+- * The region_id array is terminated by the special value
+- * DM_STATS_REGION_NOT_PRESENT and should be freed using dm_free()
+- * when no longer required.
 - *
-- * The metadata sequence number is incrented for each metadata change.
-- * Applications may use the sequence number to determine if any LVM objects
-- * have changed from a prior query.
+- * On error NULL is returned.
 - *
-- * \param   vg
-- * VG handle obtained from lvm_vg_create() or lvm_vg_open().
+- * Following a call to dm_stats_update_regions_from_fd() the handle
+- * is guaranteed to be in a listed state, and to contain any region
+- * and group identifiers created by the operation.
 - *
-- * \return
-- * Metadata sequence number.
+- * This function cannot be used with file mapped regions that are
+- * not members of a group: either group the regions, or remove them
+- * and re-map them with dm_stats_create_regions_from_fd().
 - */
--uint64_t lvm_vg_get_seqno(const vg_t vg);
+-uint64_t *dm_stats_update_regions_from_fd(struct dm_stats *dms, int fd,
+-					  uint64_t group_id);
 -
--/**
-- * Get the current uuid of a volume group.
-- *
-- * \memberof vg_t
-- *
-- * The memory allocated for the uuid is tied to the vg_t handle and will be
-- * released when lvm_vg_close() is called.
-- *
-- * \param   vg
-- * VG handle obtained from lvm_vg_create() or lvm_vg_open().
-- *
-- * \return
-- * Copy of the uuid string.
-- */
--const char *lvm_vg_get_uuid(const vg_t vg);
 -
--/**
-- * Get the current name of a volume group.
+-/*
+- * The file map monitoring daemon can monitor files in two distinct
+- * ways: the mode affects the behaviour of the daemon when a file
+- * under monitoring is renamed or unlinked, and the conditions which
+- * cause the daemon to terminate.
 - *
-- * \memberof vg_t
+- * In both modes, the daemon will always shut down when the group
+- * being monitored is deleted.
 - *
-- * The memory allocated for the name is tied to the vg_t handle and will be
-- * released when lvm_vg_close() is called.
+- * Follow inode:
+- * The daemon follows the inode of the file, as it was at the time the
+- * daemon started. The file descriptor referencing the file is kept
+- * open at all times, and the daemon will exit when it detects that
+- * the file has been unlinked and it is the last holder of a reference
+- * to the file.
 - *
-- * \param   vg
-- * VG handle obtained from lvm_vg_create() or lvm_vg_open().
+- * This mode is useful if the file is expected to be renamed, or moved
+- * within the file system, while it is being monitored.
 - *
-- * \return
-- * Copy of the name.
-- */
--const char *lvm_vg_get_name(const vg_t vg);
--
--/**
-- * Get the current size in bytes of a volume group.
+- * Follow path:
+- * The daemon follows the path that was given on the daemon command
+- * line. The file descriptor referencing the file is re-opened on each
+- * iteration of the daemon, and the daemon will exit if no file exists
+- * at this location (a tolerance is allowed so that a brief delay
+- * between unlink() and creat() is permitted).
 - *
-- * \memberof vg_t
-- *
-- * \param   vg
-- * VG handle obtained from lvm_vg_create() or lvm_vg_open().
-- *
-- * \return
-- * Size in bytes.
+- * This mode is useful if the file is updated by unlinking the original
+- * and placing a new file at the same path.
 - */
--uint64_t lvm_vg_get_size(const vg_t vg);
 -
--/**
-- * Get the current unallocated space in bytes of a volume group.
-- *
-- * \memberof vg_t
-- *
-- * \param   vg
-- * VG handle obtained from lvm_vg_create() or lvm_vg_open().
-- *
-- * \return
-- * Free size in bytes.
-- */
--uint64_t lvm_vg_get_free_size(const vg_t vg);
+-typedef enum {
+-	DM_FILEMAPD_FOLLOW_INODE,
+-	DM_FILEMAPD_FOLLOW_PATH,
+-	DM_FILEMAPD_FOLLOW_NONE
+-} dm_filemapd_mode_t;
 -
--/**
-- * Get the current extent size in bytes of a volume group.
-- *
-- * \memberof vg_t
-- *
-- * \param   vg
-- * VG handle obtained from lvm_vg_create() or lvm_vg_open().
+-/*
+- * Parse a string representation of a dmfilemapd mode.
 - *
-- * \return
-- * Extent size in bytes.
+- * Returns a valid dm_filemapd_mode_t value on success, or
+- * DM_FILEMAPD_FOLLOW_NONE on error.
 - */
--uint64_t lvm_vg_get_extent_size(const vg_t vg);
+-dm_filemapd_mode_t dm_filemapd_mode_from_string(const char *mode_str);
 -
--/**
-- * Get the current number of total extents of a volume group.
+-/*
+- * Start the dmfilemapd filemap monitoring daemon for the specified
+- * file descriptor, group, and file system path. The daemon will
+- * monitor the file for allocation changes, and when a change is
+- * detected, call dm_stats_update_regions_from_fd() to update the
+- * mapped regions for the file.
 - *
-- * \memberof vg_t
+- * The path provided to dm_stats_start_filemapd() must be an absolute
+- * path, and should reflect the path of 'fd' at the time that it was
+- * opened.
 - *
-- * \param   vg
-- * VG handle obtained from lvm_vg_create() or lvm_vg_open().
+- * The mode parameter controls the behaviour of the daemon when the
+- * file being monitored is unlinked or moved: see the comments for
+- * dm_filemapd_mode_t for a full description and possible values.
 - *
-- * \return
-- * Extent count.
+- * The daemon can be stopped at any time by sending SIGTERM to the
+- * daemon pid.
 - */
--uint64_t lvm_vg_get_extent_count(const vg_t vg);
+-int dm_stats_start_filemapd(int fd, uint64_t group_id, const char *path,
+-			    dm_filemapd_mode_t mode, unsigned foreground,
+-			    unsigned verbose);
 -
--/**
-- * Get the current number of free extents of a volume group.
-- *
-- * \memberof vg_t
-- *
-- * \param   vg
-- * VG handle obtained from lvm_vg_create() or lvm_vg_open().
-- *
-- * \return
-- * Free extent count.
+-/*
+- * Call this to actually run the ioctl.
 - */
--uint64_t lvm_vg_get_free_extent_count(const vg_t vg);
+-int dm_task_run(struct dm_task *dmt);
 -
--/**
-- * Get the current number of physical volumes of a volume group.
-- *
-- * \memberof vg_t
-- *
-- * \param   vg
-- * VG handle obtained from lvm_vg_create() or lvm_vg_open().
-- *
-- * \return
-- * Physical volume count.
+-/*
+- * The errno from the last device-mapper ioctl performed by dm_task_run.
 - */
--uint64_t lvm_vg_get_pv_count(const vg_t vg);
+-int dm_task_get_errno(struct dm_task *dmt);
 -
--/**
-- * Get the maximum number of physical volumes allowed in a volume group.
-- *
-- * \memberof vg_t
-- *
-- * \param   vg
-- * VG handle obtained from lvm_vg_create() or lvm_vg_open().
-- *
-- * \return
-- * Maximum number of physical volumes allowed in a volume group.
+-/*
+- * Call this to make or remove the device nodes associated with previously
+- * issued commands.
 - */
--uint64_t lvm_vg_get_max_pv(const vg_t vg);
+-void dm_task_update_nodes(void);
 -
--/**
-- * Get the maximum number of logical volumes allowed in a volume group.
-- *
-- * \memberof vg_t
-- *
-- * \param   vg
-- * VG handle obtained from lvm_vg_create() or lvm_vg_open().
+-/*
+- * Mangling support
 - *
-- * \return
-- * Maximum number of logical volumes allowed in a volume group.
-- */
--uint64_t lvm_vg_get_max_lv(const vg_t vg);
+- * Character whitelist: 0-9, A-Z, a-z, #+-.:=@_
+- * HEX mangling format: \xNN, NN being the hex value of the character.
+- * (whitelist and format supported by udev)
+-*/
+-typedef enum {
+-	DM_STRING_MANGLING_NONE, /* do not mangle@all */
+-	DM_STRING_MANGLING_AUTO, /* mangle only if not already mangled with hex, error when mixed */
+-	DM_STRING_MANGLING_HEX	 /* always mangle with hex encoding, no matter what the input is */
+-} dm_string_mangling_t;
 -
--/**
-- * Return the list of volume group tags.
-- *
-- * \memberof vg_t
-- *
-- * The memory allocated for the list is tied to the vg_t handle and will be
-- * released when lvm_vg_close() is called.
-- *
-- * To process the list, use the dm_list iterator functions.  For example:
-- *      vg_t vg;
-- *      struct dm_list *tags;
-- *      struct lvm_str_list *strl;
-- *
-- *      tags = lvm_vg_get_tags(vg);
-- *	dm_list_iterate_items(strl, tags) {
-- *		tag = strl->str;
-- *              // do something with tag
-- *      }
-- *
-- *
-- * \return
-- * A list with entries of type struct lvm_str_list, containing the
-- * tag strings attached to volume group.
-- * If no tags are attached to the given VG, an empty list is returned
-- * (check with dm_list_empty()).
-- * If there is a problem obtaining the list of tags, NULL is returned.
+-/*
+- * Set/get mangling mode used for device-mapper names and uuids.
 - */
--struct dm_list *lvm_vg_get_tags(const vg_t vg);
+-int dm_set_name_mangling_mode(dm_string_mangling_t name_mangling);
+-dm_string_mangling_t dm_get_name_mangling_mode(void);
 -
--/**
-- * Get the value of a VG property
-- *
-- * \memberof vg_t
-- *
-- * \param   vg
-- * VG handle obtained from lvm_vg_create() or lvm_vg_open().
-- *
-- * \param   name
-- * Name of property to query.  See vgs man page for full list of properties
-- * that may be queried.
-- *
-- * The memory allocated for a string property value is tied to the vg_t
-- * handle and will be released when lvm_vg_close() is called.
-- *
-- * Example:
-- *      lvm_property_value v;
-- *      char *prop_name = "vg_mda_count";
-- *
-- *      v = lvm_vg_get_property(vg, prop_name);
-- *      if (!v.is_valid) {
-- *           printf("Invalid property name or unable to query"
-- *                  "'%s', errno = %d.\n", prop_name, lvm_errno(libh));
-- *           return;
-- *      }
-- *      if (v.is_string)
-- *           printf(", value = %s\n", v.value.string);
-- *	if (v.is_integer)
-- *           printf(", value = %"PRIu64"\n", v.value.integer);
-- *
-- *
-- * \return
-- * lvm_property_value structure that will contain the current
-- * value of the property.  Caller should check 'is_valid' flag before using
-- * the value.  If 'is_valid' is not set, caller should check lvm_errno()
-- * for specific error.
+-/*
+- * Get mangled/unmangled form of the device-mapper name or uuid
+- * irrespective of the global setting (set by dm_set_name_mangling_mode).
+- * The name or uuid returned needs to be freed after use by calling dm_free!
 - */
--struct lvm_property_value lvm_vg_get_property(const vg_t vg, const char *name);
+-char *dm_task_get_name_mangled(const struct dm_task *dmt);
+-char *dm_task_get_name_unmangled(const struct dm_task *dmt);
+-char *dm_task_get_uuid_mangled(const struct dm_task *dmt);
+-char *dm_task_get_uuid_unmangled(const struct dm_task *dmt);
 -
--/**
-- * Set the value of a VG property.  Note that the property must be
-- * a 'settable' property, as evidenced by the 'is_settable' flag
-- * when querying the property.
-- *
-- * \memberof vg_t
-- *
-- * The memory allocated for a string property value is tied to the vg_t
-- * handle and will be released when lvm_vg_close() is called.
-- *
-- * Example (integer):
-- *      lvm_property_value copies;
-- *
-- *      if (lvm_vg_get_property(vg, "vg_mda_copies", &copies) < 0) {
-- *              // Error - unable to query property
-- *      }
-- *      if (!copies.is_settable) {
-- *              // Error - property not settable
-- *      }
-- *      copies.value.integer = 2;
-- *      if (lvm_vg_set_property(vg, "vg_mda_copies", &copies) < 0) {
-- *              // handle error
-- *      }
-- *
-- * \return
-- * 0 (success) or -1 (failure).
+-/*
+- * Configure the device-mapper directory
 - */
--int lvm_vg_set_property(const vg_t vg, const char *name,
--			struct lvm_property_value *value);
--
--/************************** logical volume handling *************************/
+-int dm_set_dev_dir(const char *dir);
+-const char *dm_dir(void);
 -
--/**
-- * Create a linear logical volume.
-- * This function commits the change to disk and does _not_ require calling
-- * lvm_vg_write().
-- * NOTE: The commit behavior of this function is subject to change
-- * as the API is developed.
-- *
-- * \param   vg
-- * VG handle obtained from lvm_vg_create() or lvm_vg_open().
-- *
-- * \param   name
-- * Name of logical volume to create.
-- *
-- * \param   size
-- * Size of logical volume in extents.
-- *
-- * \return
-- * non-NULL handle to an LV object created, or NULL if creation fails.
-- *
+-/*
+- * Configure sysfs directory, /sys by default
 - */
--lv_t lvm_vg_create_lv_linear(vg_t vg, const char *name, uint64_t size);
+-int dm_set_sysfs_dir(const char *dir);
+-const char *dm_sysfs_dir(void);
 -
--/**
-- * Return a list of lvseg handles for a given LV handle.
-- *
-- * \memberof lv_t
-- *
-- * \param   lv
-- * Logical volume handle.
-- *
-- * \return
-- * A list of lvm_lvseg_list structures containing lvseg handles for this lv.
+-/*
+- * Configure default UUID prefix string.
+- * Conventionally this is a short capitalised prefix indicating the subsystem
+- * that is managing the devices, e.g. "LVM-" or "MPATH-".
+- * To support stacks of devices from different subsystems, recursive functions
+- * stop recursing if they reach a device with a different prefix.
 - */
--struct dm_list *lvm_lv_list_lvsegs(lv_t lv);
+-int dm_set_uuid_prefix(const char *uuid_prefix);
+-const char *dm_uuid_prefix(void);
 -
--/**
-- * Lookup an LV handle in a VG by the LV name.
-- *
-- * \memberof lv_t
-- *
-- * \param   vg
-- * VG handle obtained from lvm_vg_create() or lvm_vg_open().
-- *
-- * \param   name
-- * Name of LV to lookup.
-- *
-- * \return
-- * non-NULL handle to the LV 'name' attached to the VG.
-- * NULL is returned if the LV name is not associated with the VG handle.
+-/*
+- * Determine whether a major number belongs to device-mapper or not.
 - */
--lv_t lvm_lv_from_name(vg_t vg, const char *name);
+-int dm_is_dm_major(uint32_t major);
 -
--/**
-- * Lookup an LV handle in a VG by the LV uuid.
-- * The form of the uuid may be either the formatted, human-readable form,
-- * or the non-formatted form.
-- *
-- * \memberof lv_t
-- *
-- * \param   vg
-- * VG handle obtained from lvm_vg_create() or lvm_vg_open().
-- *
-- * \param   uuid
-- * UUID of LV to lookup.
-- *
-- * \return
-- * non-NULL handle to the LV with 'uuid' attached to the VG.
-- * NULL is returned if the LV uuid is not associated with the VG handle.
+-/*
+- * Get associated device name for given major and minor number by reading
+- * the sysfs content. If this is a dm device, get associated dm name, the one
+- * that appears in /dev/mapper. DM names could be resolved this way only if
+- * kernel used >= 2.6.29, kernel name is found otherwise (e.g. dm-0).
+- * If prefer_kernel_name is set, the kernel name is always preferred over
+- * device-mapper name for dm devices no matter what the kernel version is.
+- * For non-dm devices, we always get associated kernel name, e.g sda, md0 etc.
+- * Returns 0 on error or if sysfs is not used (or configured incorrectly),
+- * otherwise returns 1 and the supplied buffer holds the device name.
 - */
--lv_t lvm_lv_from_uuid(vg_t vg, const char *uuid);
+-int dm_device_get_name(uint32_t major, uint32_t minor,
+-		       int prefer_kernel_name,
+-		       char *buf, size_t buf_size);
 -
--/**
-- * Activate a logical volume.
-- *
-- * \memberof lv_t
-- *
-- * This function is the equivalent of the lvm command "lvchange -ay".
-- *
-- * NOTE: This function cannot currently handle LVs with an in-progress pvmove or
-- * lvconvert.
-- *
-- * \param   lv
-- * Logical volume handle.
-- *
-- * \return
-- * 0 (success) or -1 (failure).
+-/*
+- * Determine whether a device has any holders (devices
+- * using this device). If sysfs is not used (or configured
+- * incorrectly), returns 0.
 - */
--int lvm_lv_activate(lv_t lv);
+-int dm_device_has_holders(uint32_t major, uint32_t minor);
 -
--/**
-- * Deactivate a logical volume.
-- *
-- * \memberof lv_t
-- *
-- * This function is the equivalent of the lvm command "lvchange -an".
-- *
-- * \param   lv
-- * Logical volume handle.
-- *
-- * \return
-- * 0 (success) or -1 (failure).
+-/*
+- * Determine whether a device contains mounted filesystem.
+- * If sysfs is not used (or configured incorrectly), returns 0.
 - */
--int lvm_lv_deactivate(lv_t lv);
+-int dm_device_has_mounted_fs(uint32_t major, uint32_t minor);
 -
--/**
-- * Remove a logical volume from a volume group.
-- *
-- * \memberof lv_t
-- *
-- * This function commits the change to disk and does _not_ require calling
-- * lvm_vg_write().
-- * NOTE: The commit behavior of this function is subject to change
-- * as the API is developed.
-- * Currently only removing linear LVs are possible.
-- *
-- * \param   lv
-- * Logical volume handle.
-- *
-- * \return
-- * 0 (success) or -1 (failure).
-- */
--int lvm_vg_remove_lv(lv_t lv);
 -
--/**
-- * Get the current name of a logical volume.
-- *
-- * \memberof lv_t
-- *
-- * The memory allocated for the uuid is tied to the vg_t handle and will be
-- * released when lvm_vg_close() is called.
-- *
-- * \param   lv
-- * Logical volume handle.
-- *
-- * \return
-- * Copy of the uuid string.
+-/*
+- * Callback is invoked for individal mountinfo lines,
+- * minor, major and mount target are parsed and unmangled.
 - */
--const char *lvm_lv_get_uuid(const lv_t lv);
+-typedef int (*dm_mountinfo_line_callback_fn) (char *line, unsigned maj, unsigned min,
+-					      char *target, void *cb_data);
 -
--/**
-- * Get the current uuid of a logical volume.
-- *
-- * \memberof lv_t
-- *
-- * The memory allocated for the name is tied to the vg_t handle and will be
-- * released when lvm_vg_close() is called.
-- *
-- * \param   lv
-- * Logical volume handle.
-- *
-- * \return
-- * Copy of the name.
+-/*
+- * Read all lines from /proc/self/mountinfo,
+- * for each line calls read_fn callback.
 - */
--const char *lvm_lv_get_name(const lv_t lv);
+-int dm_mountinfo_read(dm_mountinfo_line_callback_fn read_fn, void *cb_data);
 -
--/**
-- * Get the attributes of a logical volume.
-- *
-- * \memberof lv_t
-- *
-- * The memory allocated for the name is tied to the vg_t handle and will be
-- * released when lvm_vg_close() is called.
-- *
-- * \param   lv
-- * Logical volume handle.
-- *
-- * \return
-- * Copy of the attributes for the logical volume
+-/*
+- * Initialise library
 - */
--const char *lvm_lv_get_attr(const lv_t lv);
+-void dm_lib_init(void) __attribute__((constructor));
 -
--/**
-- * Get the origin of a snapshot.
-- *
-- * \memberof lv_t
-- *
-- * The memory allocated for the name is tied to the vg_t handle and will be
-- * released when lvm_vg_close() is called.
-- *
-- * \param   lv
-- * Logical volume handle.
-- *
-- * \return
-- * Null if the logical volume is not a snapshot, else origin name.
+-/*
+- * Release library resources
 - */
--const char *lvm_lv_get_origin(const lv_t lv);
+-void dm_lib_release(void);
+-void dm_lib_exit(void) __attribute__((destructor));
 -
--/**
-- * Get the current size in bytes of a logical volume.
-- *
-- * \memberof lv_t
-- *
-- * \param   lv
-- * Logical volume handle.
-- *
-- * \return
-- * Size in bytes.
-- */
--uint64_t lvm_lv_get_size(const lv_t lv);
+-/* An optimisation for clients making repeated calls involving dm ioctls */
+-void dm_hold_control_dev(int hold_open);
 -
--/**
-- * Get the value of a LV property
-- *
-- * \memberof lv_t
-- *
-- * \param   lv
-- * Logical volume handle.
-- *
-- * \param   name
-- * Name of property to query.  See lvs man page for full list of properties
-- * that may be queried.
-- *
-- * The memory allocated for a string property value is tied to the vg_t
-- * handle and will be released when lvm_vg_close() is called.
-- *
-- * Example:
-- *      lvm_property_value v;
-- *      char *prop_name = "seg_count";
-- *
-- *      v = lvm_lv_get_property(lv, prop_name);
-- *      if (!v.is_valid) {
-- *           printf("Invalid property name or unable to query"
-- *                  "'%s', errno = %d.\n", prop_name, lvm_errno(libh));
-- *           return;
-- *      }
-- *      if (v.is_string)
-- *           printf(", value = %s\n", v.value.string);
-- *	if (v.is_integer)
-- *           printf(", value = %"PRIu64"\n", v.value.integer);
-- *
-- * \return
-- * lvm_property_value structure that will contain the current
-- * value of the property.  Caller should check 'is_valid' flag before using
-- * the value.  If 'is_valid' is not set, caller should check lvm_errno()
-- * for specific error.
+-/*
+- * Use NULL for all devices.
 - */
--struct lvm_property_value lvm_lv_get_property(const lv_t lv, const char *name);
+-int dm_mknodes(const char *name);
+-int dm_driver_version(char *version, size_t size);
 -
--/**
-- * Get the value of a LV segment property
-- *
-- * \memberof lv_t
-- *
-- * \param   lvseg
-- * Logical volume segment handle.
-- *
-- * \param   name
-- * Name of property to query.  See lvs man page for full list of properties
-- * that may be queried.
-- *
-- * The memory allocated for a string property value is tied to the vg_t
-- * handle and will be released when lvm_vg_close() is called.
-- *
-- * Example:
-- *      lvm_property_value v;
-- *      char *prop_name = "seg_start_pe";
-- *
-- *      v = lvm_lvseg_get_property(lvseg, prop_name);
-- *      if (lvm_errno(libh) || !v.is_valid) {
-- *           // handle error
-- *           printf("Invalid property name or unable to query"
-- *                  "'%s'.\n", prop_name);
-- *           return;
-- *      }
-- *      if (v.is_string)
-- *           printf(", value = %s\n", v.value.string);
-- *	else
-- *           printf(", value = %"PRIu64"\n", v.value.integer);
-- *
-- * \return
-- * lvm_property_value structure that will contain the current
-- * value of the property.  Caller should check lvm_errno() as well
-- * as 'is_valid' flag before using the value.
-- */
--struct lvm_property_value lvm_lvseg_get_property(const lvseg_t lvseg,
--						 const char *name);
+-/******************************************************
+- * Functions to build and manipulate trees of devices *
+- ******************************************************/
+-struct dm_tree;
+-struct dm_tree_node;
 -
--/**
-- * Get the current activation state of a logical volume.
+-/*
+- * Initialise an empty dependency tree.
 - *
-- * \memberof lv_t
+- * The tree consists of a root node together with one node for each mapped
+- * device which has child nodes for each device referenced in its table.
 - *
-- * \param   lv
-- * Logical volume handle.
+- * Every node in the tree has one or more children and one or more parents.
 - *
-- * \return
-- * 1 if the LV is active in the kernel, 0 if not
+- * The root node is the parent/child of every node that doesn't have other
+- * parents/children.
 - */
--uint64_t lvm_lv_is_active(const lv_t lv);
+-struct dm_tree *dm_tree_create(void);
+-void dm_tree_free(struct dm_tree *tree);
 -
--/**
-- * Get the current suspended state of a logical volume.
-- *
-- * \memberof lv_t
-- *
-- * \param   lv
-- * Logical volume handle.
-- *
-- * \return
-- * 1 if the LV is suspended in the kernel, 0 if not
+-/*
+- * List of suffixes to be ignored when matching uuids against existing devices.
 - */
--uint64_t lvm_lv_is_suspended(const lv_t lv);
+-void dm_tree_set_optional_uuid_suffixes(struct dm_tree *dtree, const char **optional_uuid_suffixes);
 -
--/**
-- * Add a tag to an LV.
-- *
-- * \memberof lv_t
-- *
-- * This function requires calling lvm_vg_write() to commit the change to disk.
-- * After successfully adding a tag, use lvm_vg_write() to commit the
-- * new VG to disk.  Upon failure, retry the operation or release the VG handle
-- * with lvm_vg_close().
-- *
-- * \param   lv
-- * Logical volume handle.
-- *
-- * \param   tag
-- * Tag to add to an LV.
-- *
-- * \return
-- * 0 (success) or -1 (failure).
+-/*
+- * Add nodes to the tree for a given device and all the devices it uses.
 - */
--int lvm_lv_add_tag(lv_t lv, const char *tag);
+-int dm_tree_add_dev(struct dm_tree *tree, uint32_t major, uint32_t minor);
+-int dm_tree_add_dev_with_udev_flags(struct dm_tree *tree, uint32_t major,
+-				    uint32_t minor, uint16_t udev_flags);
 -
--/**
-- * Remove a tag from an LV.
-- *
-- * \memberof lv_t
-- *
-- * This function requires calling lvm_vg_write() to commit the change to disk.
-- * After successfully removing a tag, use lvm_vg_write() to commit the
-- * new VG to disk.  Upon failure, retry the operation or release the VG handle
-- * with lvm_vg_close().
-- *
-- * \param   lv
-- * Logical volume handle.
-- *
-- * \param   tag
-- * Tag to remove from LV.
-- *
-- * \return
-- * 0 (success) or -1 (failure).
+-/*
+- * Add a new node to the tree if it doesn't already exist.
 - */
--int lvm_lv_remove_tag(lv_t lv, const char *tag);
+-struct dm_tree_node *dm_tree_add_new_dev(struct dm_tree *tree,
+-					 const char *name,
+-					 const char *uuid,
+-					 uint32_t major, uint32_t minor,
+-					 int read_only,
+-					 int clear_inactive,
+-					 void *context);
+-struct dm_tree_node *dm_tree_add_new_dev_with_udev_flags(struct dm_tree *tree,
+-							 const char *name,
+-							 const char *uuid,
+-							 uint32_t major,
+-							 uint32_t minor,
+-							 int read_only,
+-							 int clear_inactive,
+-							 void *context,
+-							 uint16_t udev_flags);
 -
--/**
-- * Return the list of logical volume tags.
-- *
-- * \memberof lv_t
-- *
-- * The memory allocated for the list is tied to the vg_t handle and will be
-- * released when lvm_vg_close() is called.
-- *
-- * To process the list, use the dm_list iterator functions.  For example:
-- *      lv_t lv;
-- *      struct dm_list *tags;
-- *      struct lvm_str_list *strl;
-- *
-- *      tags = lvm_lv_get_tags(lv);
-- *	dm_list_iterate_items(strl, tags) {
-- *		tag = strl->str;
-- *              // do something with tag
-- *      }
-- *
-- *
-- * \return
-- * A list with entries of type struct lvm_str_list, containing the
-- * tag strings attached to volume group.
-- * If no tags are attached to the LV, an empty list is returned
-- * (check with dm_list_empty()).
-- * If there is a problem obtaining the list of tags, NULL is returned.
+-/*
+- * Search for a node in the tree.
+- * Set major and minor to 0 or uuid to NULL to get the root node.
 - */
--struct dm_list *lvm_lv_get_tags(const lv_t lv);
+-struct dm_tree_node *dm_tree_find_node(struct dm_tree *tree,
+-				       uint32_t major,
+-				       uint32_t minor);
+-struct dm_tree_node *dm_tree_find_node_by_uuid(struct dm_tree *tree,
+-					       const char *uuid);
 -
--/**
-- * Rename logical volume to new_name.
-- *
-- * \memberof lv_t
-- *
-- * \param   lv
-- * Logical volume handle.
-- *
-- * \param   new_name
-- * New name of logical volume.
-- *
-- * \return
-- * 0 (success) or -1 (failure).
-- *
+-/*
+- * Use this to walk through all children of a given node.
+- * Set handle to NULL in first call.
+- * Returns NULL after the last child.
+- * Set inverted to use inverted tree.
 - */
--int lvm_lv_rename(lv_t lv, const char *new_name);
+-struct dm_tree_node *dm_tree_next_child(void **handle,
+-					const struct dm_tree_node *parent,
+-					uint32_t inverted);
 -
--/**
-- * Resize logical volume to new_size bytes.
-- *
-- * \memberof lv_t
-- *
-- * \param   lv
-- * Logical volume handle.
-- *
-- * \param   new_size
-- * New size in bytes.
-- *
-- * \return
-- * 0 (success) or -1 (failure).
-- *
+-/*
+- * Get properties of a node.
 - */
--int lvm_lv_resize(const lv_t lv, uint64_t new_size);
--
--/**
-- * Create a snapshot of a logical volume
-- *
-- * \memberof lv_t
-- *
-- * \param   lv
-- * Logical volume handle.
-- *
-- * \param   snap_name
-- * Name of the snapshot.
-- *
-- * \param   max_snap_size
-- * Max snapshot space to use. If you pass zero the same amount of space as
-- * the origin will be used.
-- *
-- * \return
-- * Valid lv pointer on success, else NULL on error.
-- *
+-const char *dm_tree_node_get_name(const struct dm_tree_node *node);
+-const char *dm_tree_node_get_uuid(const struct dm_tree_node *node);
+-const struct dm_info *dm_tree_node_get_info(const struct dm_tree_node *node);
+-void *dm_tree_node_get_context(const struct dm_tree_node *node);
+-/*
+- * Returns  0 when node size and its children is unchanged.
+- * Returns  1 when node or any of its children has increased size.
+- * Rerurns -1 when node or any of its children has reduced size.
 - */
--lv_t lvm_lv_snapshot(const lv_t lv, const char *snap_name, uint64_t max_snap_size);
+-int dm_tree_node_size_changed(const struct dm_tree_node *dnode);
 -
--/**
-- * Validate a name to be used for LV creation.
-- *
-- * Validates that the name does not contain any invalid characters, max length
-- * and that the LV name doesn't already exist for this VG.
-- *
-- * Note: You can have the same LV name in different VGs, thus the reason this
-- * function requires that you specify a VG to check against.
-- *
-- * \param lv
-- * Volume group handle.
-- *
-- * \param name
-- * Name to validate
+-/*
+- * Returns the number of children of the given node (excluding the root node).
+- * Set inverted for the number of parents.
 - */
--int lvm_lv_name_validate(const vg_t vg, const char *lv_name);
+-int dm_tree_node_num_children(const struct dm_tree_node *node, uint32_t inverted);
 -
--/**
-- * Thin provisioning discard policies
+-/*
+- * Deactivate a device plus all dependencies.
+- * Ignores devices that don't have a uuid starting with uuid_prefix.
+- */
+-int dm_tree_deactivate_children(struct dm_tree_node *dnode,
+-				const char *uuid_prefix,
+-				size_t uuid_prefix_len);
+-/*
+- * Preload/create a device plus all dependencies.
+- * Ignores devices that don't have a uuid starting with uuid_prefix.
+- */
+-int dm_tree_preload_children(struct dm_tree_node *dnode,
+-			     const char *uuid_prefix,
+-			     size_t uuid_prefix_len);
+-
+-/*
+- * Resume a device plus all dependencies.
+- * Ignores devices that don't have a uuid starting with uuid_prefix.
+- */
+-int dm_tree_activate_children(struct dm_tree_node *dnode,
+-			      const char *uuid_prefix,
+-			      size_t uuid_prefix_len);
+-
+-/*
+- * Suspend a device plus all dependencies.
+- * Ignores devices that don't have a uuid starting with uuid_prefix.
+- */
+-int dm_tree_suspend_children(struct dm_tree_node *dnode,
+-			     const char *uuid_prefix,
+-			     size_t uuid_prefix_len);
+-
+-/*
+- * Skip the filesystem sync when suspending.
+- * Does nothing with other functions.
+- * Use this when no snapshots are involved.
+- */
+-void dm_tree_skip_lockfs(struct dm_tree_node *dnode);
+-
+-/*
+- * Set the 'noflush' flag when suspending devices.
+- * If the kernel supports it, instead of erroring outstanding I/O that
+- * cannot be completed, the I/O is queued and resubmitted when the
+- * device is resumed.  This affects multipath devices when all paths
+- * have failed and queue_if_no_path is set, and mirror devices when
+- * block_on_error is set and the mirror log has failed.
+- */
+-void dm_tree_use_no_flush_suspend(struct dm_tree_node *dnode);
+-
+-/*
+- * Retry removal of each device if not successful.
+- */
+-void dm_tree_retry_remove(struct dm_tree_node *dnode);
+-
+-/*
+- * Is the uuid prefix present in the tree?
+- * Only returns 0 if every node was checked successfully.
+- * Returns 1 if the tree walk has to be aborted.
+- */
+-int dm_tree_children_use_uuid(struct dm_tree_node *dnode,
+-			      const char *uuid_prefix,
+-			      size_t uuid_prefix_len);
+-
+-/*
+- * Construct tables for new nodes before activating them.
+- */
+-int dm_tree_node_add_snapshot_origin_target(struct dm_tree_node *dnode,
+-					    uint64_t size,
+-					    const char *origin_uuid);
+-int dm_tree_node_add_snapshot_target(struct dm_tree_node *node,
+-				     uint64_t size,
+-				     const char *origin_uuid,
+-				     const char *cow_uuid,
+-				     int persistent,
+-				     uint32_t chunk_size);
+-int dm_tree_node_add_snapshot_merge_target(struct dm_tree_node *node,
+-					   uint64_t size,
+-					   const char *origin_uuid,
+-					   const char *cow_uuid,
+-					   const char *merge_uuid,
+-					   uint32_t chunk_size);
+-int dm_tree_node_add_error_target(struct dm_tree_node *node,
+-				  uint64_t size);
+-int dm_tree_node_add_zero_target(struct dm_tree_node *node,
+-				 uint64_t size);
+-int dm_tree_node_add_linear_target(struct dm_tree_node *node,
+-				   uint64_t size);
+-int dm_tree_node_add_striped_target(struct dm_tree_node *node,
+-				    uint64_t size,
+-				    uint32_t stripe_size);
+-
+-#define DM_CRYPT_IV_DEFAULT	UINT64_C(-1)	/* iv_offset == seg offset */
+-/*
+- * Function accepts one string in cipher specification
+- * (chainmode and iv should be NULL because included in cipher string)
+- *   or
+- * separate arguments which will be joined to "cipher-chainmode-iv"
+- */
+-int dm_tree_node_add_crypt_target(struct dm_tree_node *node,
+-				  uint64_t size,
+-				  const char *cipher,
+-				  const char *chainmode,
+-				  const char *iv,
+-				  uint64_t iv_offset,
+-				  const char *key);
+-int dm_tree_node_add_mirror_target(struct dm_tree_node *node,
+-				   uint64_t size);
+-
+-/* Mirror log flags */
+-#define DM_NOSYNC		0x00000001	/* Known already in sync */
+-#define DM_FORCESYNC		0x00000002	/* Force resync */
+-#define DM_BLOCK_ON_ERROR	0x00000004	/* On error, suspend I/O */
+-#define DM_CORELOG		0x00000008	/* In-memory log */
+-
+-int dm_tree_node_add_mirror_target_log(struct dm_tree_node *node,
+-				       uint32_t region_size,
+-				       unsigned clustered,
+-				       const char *log_uuid,
+-				       unsigned area_count,
+-				       uint32_t flags);
+-
+-int dm_tree_node_add_raid_target(struct dm_tree_node *node,
+-				 uint64_t size,
+-				 const char *raid_type,
+-				 uint32_t region_size,
+-				 uint32_t stripe_size,
+-				 uint64_t rebuilds,
+-				 uint64_t flags);
+-
+-/*
+- * Defines below are based on kernel's dm-cache.c defines
+- * DM_CACHE_MIN_DATA_BLOCK_SIZE (32 * 1024 >> SECTOR_SHIFT)
+- * DM_CACHE_MAX_DATA_BLOCK_SIZE (1024 * 1024 * 1024 >> SECTOR_SHIFT)
+- */
+-#define DM_CACHE_MIN_DATA_BLOCK_SIZE (UINT32_C(64))
+-#define DM_CACHE_MAX_DATA_BLOCK_SIZE (UINT32_C(2097152))
+-/*
+- * Max supported size for cache pool metadata device.
+- * Limitation is hardcoded into the kernel and bigger device sizes
+- * are not accepted.
+- *
+- * Limit defined in drivers/md/dm-cache-metadata.h
+- */
+-#define DM_CACHE_METADATA_MAX_SECTORS DM_THIN_METADATA_MAX_SECTORS
+-
+-/*
+- * Define number of elements in rebuild and writemostly arrays
+- * 'of struct dm_tree_node_raid_params'.
+- */
+-
+-struct dm_tree_node_raid_params {
+-	const char *raid_type;
+-
+-	uint32_t stripes;
+-	uint32_t mirrors;
+-	uint32_t region_size;
+-	uint32_t stripe_size;
+-
+-	/*
+-	 * 'rebuilds' and 'writemostly' are bitfields that signify
+-	 * which devices in the array are to be rebuilt or marked
+-	 * writemostly.  The kernel supports up to 253 legs.
+-	 * We limit ourselves by choosing a lower value
+-	 * for DEFAULT_RAID{1}_MAX_IMAGES in defaults.h.
+-	 */
+-	uint64_t rebuilds;
+-	uint64_t writemostly;
+-	uint32_t writebehind;	    /* I/Os (kernel default COUNTER_MAX / 2) */
+-	uint32_t sync_daemon_sleep; /* ms (kernel default = 5sec) */
+-	uint32_t max_recovery_rate; /* kB/sec/disk */
+-	uint32_t min_recovery_rate; /* kB/sec/disk */
+-	uint32_t stripe_cache;      /* sectors */
+-
+-	uint64_t flags;             /* [no]sync */
+-	uint32_t reserved2;
+-};
+-
+-/*
+- * Version 2 of above node raid params struct to keeep API compatibility.
+- *
+- * Extended for more than 64 legs (max 253 in the MD kernel runtime!),
+- * delta_disks for disk add/remove reshaping,
+- * data_offset for out-of-place reshaping
+- * and data_copies for odd number of raid10 legs.
+- */
+-#define	RAID_BITMAP_SIZE 4 /* 4 * 64 bit elements in rebuilds/writemostly arrays */
+-struct dm_tree_node_raid_params_v2 {
+-	const char *raid_type;
+-
+-	uint32_t stripes;
+-	uint32_t mirrors;
+-	uint32_t region_size;
+-	uint32_t stripe_size;
+-
+-	int delta_disks; /* +/- number of disks to add/remove (reshaping) */
+-	int data_offset; /* data offset to set (out-of-place reshaping) */
+-
+-	/*
+-	 * 'rebuilds' and 'writemostly' are bitfields that signify
+-	 * which devices in the array are to be rebuilt or marked
+-	 * writemostly.  The kernel supports up to 253 legs.
+-	 * We limit ourselvs by choosing a lower value
+-	 * for DEFAULT_RAID_MAX_IMAGES.
+-	 */
+-	uint64_t rebuilds[RAID_BITMAP_SIZE];
+-	uint64_t writemostly[RAID_BITMAP_SIZE];
+-	uint32_t writebehind;	    /* I/Os (kernel default COUNTER_MAX / 2) */
+-	uint32_t data_copies;	    /* RAID # of data copies */
+-	uint32_t sync_daemon_sleep; /* ms (kernel default = 5sec) */
+-	uint32_t max_recovery_rate; /* kB/sec/disk */
+-	uint32_t min_recovery_rate; /* kB/sec/disk */
+-	uint32_t stripe_cache;      /* sectors */
+-
+-	uint64_t flags;             /* [no]sync */
+-};
+-
+-int dm_tree_node_add_raid_target_with_params(struct dm_tree_node *node,
+-					     uint64_t size,
+-					     const struct dm_tree_node_raid_params *p);
+-
+-/* Version 2 API function taking dm_tree_node_raid_params_v2 for aforementioned extensions. */
+-int dm_tree_node_add_raid_target_with_params_v2(struct dm_tree_node *node,
+-						uint64_t size,
+-						const struct dm_tree_node_raid_params_v2 *p);
+-
+-/* Cache feature_flags */
+-#define DM_CACHE_FEATURE_WRITEBACK    0x00000001
+-#define DM_CACHE_FEATURE_WRITETHROUGH 0x00000002
+-#define DM_CACHE_FEATURE_PASSTHROUGH  0x00000004
+-#define DM_CACHE_FEATURE_METADATA2    0x00000008 /* cache v1.10 */
+-
+-struct dm_config_node;
+-/*
+- * Use for passing cache policy and all its args e.g.:
+- *
+- * policy_settings {
+- *    migration_threshold=2048
+- *    sequention_threashold=100
+- *    ...
+- * }
+- *
+- * For policy without any parameters use NULL.
+- */
+-int dm_tree_node_add_cache_target(struct dm_tree_node *node,
+-				  uint64_t size,
+-				  uint64_t feature_flags, /* DM_CACHE_FEATURE_* */
+-				  const char *metadata_uuid,
+-				  const char *data_uuid,
+-				  const char *origin_uuid,
+-				  const char *policy_name,
+-				  const struct dm_config_node *policy_settings,
+-				  uint32_t data_block_size);
+-
+-/*
+- * FIXME Add individual cache policy pairs  <key> = value, like:
+- * int dm_tree_node_add_cache_policy_arg(struct dm_tree_node *dnode,
+- *				      const char *key, uint64_t value);
+- */
+-
+-/*
+- * Replicator operation mode
+- * Note: API for Replicator is not yet stable
 - */
 -typedef enum {
--	LVM_THIN_DISCARDS_IGNORE,
--	LVM_THIN_DISCARDS_NO_PASSDOWN,
--	LVM_THIN_DISCARDS_PASSDOWN,
--} lvm_thin_discards_t;
+-	DM_REPLICATOR_SYNC,			/* Synchronous replication */
+-	DM_REPLICATOR_ASYNC_WARN,		/* Warn if async replicator is slow */
+-	DM_REPLICATOR_ASYNC_STALL,		/* Stall replicator if not fast enough */
+-	DM_REPLICATOR_ASYNC_DROP,		/* Drop sites out of sync */
+-	DM_REPLICATOR_ASYNC_FAIL,		/* Fail replicator if slow */
+-	NUM_DM_REPLICATOR_MODES
+-} dm_replicator_mode_t;
 -
--/**
-- * Create a thinpool parameter passing object for the specified VG
-- *
-- * \param   vg
-- * Volume Group handle.
-- *
-- * \param   pool_name
-- * Name of the pool.
-- *
-- * \param   size
-- * size of the pool
-- *
-- * \param   chunk_size
-- * data block size of the pool
-- * Default value is DEFAULT_THIN_POOL_CHUNK_SIZE * 2 when 0 passed as chunk_size
-- * DM_THIN_MIN_DATA_BLOCK_SIZE < chunk_size < DM_THIN_MAX_DATA_BLOCK_SIZE
-- *
-- * \param meta_size
-- * Size of thin pool's metadata logical volume. Allowed range is 2MB-16GB.
-- * Default value (ie if 0) pool size / pool chunk size * 64
-- *
-- * \param discard
-- * Thin discard policy
-- * Note: THIN_DISCARDS_PASSDOWN is the default.
-- *
-- * \return
-- * Valid lv_create_params pointer on success, else NULL on error.
-- * Note: Memory is associated with the vg, it will get reclaimed when vg is
-- * closed.
-- *
+-int dm_tree_node_add_replicator_target(struct dm_tree_node *node,
+-				       uint64_t size,
+-				       const char *rlog_uuid,
+-				       const char *rlog_type,
+-				       unsigned rsite_index,
+-				       dm_replicator_mode_t mode,
+-				       uint32_t async_timeout,
+-				       uint64_t fall_behind_data,
+-				       uint32_t fall_behind_ios);
+-
+-int dm_tree_node_add_replicator_dev_target(struct dm_tree_node *node,
+-					   uint64_t size,
+-					   const char *replicator_uuid,	/* Replicator control device */
+-					   uint64_t rdevice_index,
+-					   const char *rdev_uuid,	/* Rimage device name/uuid */
+-					   unsigned rsite_index,
+-					   const char *slog_uuid,
+-					   uint32_t slog_flags,		/* Mirror log flags */
+-					   uint32_t slog_region_size);
+-/* End of Replicator API */
+-
+-/*
+- * FIXME: Defines bellow are based on kernel's dm-thin.c defines
+- * DATA_DEV_BLOCK_SIZE_MIN_SECTORS (64 * 1024 >> SECTOR_SHIFT)
+- * DATA_DEV_BLOCK_SIZE_MAX_SECTORS (1024 * 1024 * 1024 >> SECTOR_SHIFT)
 - */
--lv_create_params_t lvm_lv_params_create_thin_pool(vg_t vg,
--		const char *pool_name, uint64_t size, uint32_t chunk_size,
--		uint64_t meta_size, lvm_thin_discards_t discard);
--
--#define lvm_lv_params_create_thin_pool_default(vg, pool_name, size) \
--			lvm_lv_params_create_thin_pool((vg), (pool_name), (size), 0, 0, \
--			LVM_THIN_DISCARDS_PASSDOWN)
--
--/**
-- * Creates the snapshot parameter passing object for the specified lv.
-- *
-- * \param	lv
-- * The logical volume to snapshot
-- *
-- * \param	snap_name
-- * Name of snapshot
-- *
-- * \param	max_snap_size
-- * Used for old snap shots max size, set to zero for thinp
-- *
-- * \return
-- * Valid lv_create_params pointer on success, else NULL on error.
-- * Note: Memory is associated with the vg, it will get reclaimed when vg is
-- * closed.
+-#define DM_THIN_MIN_DATA_BLOCK_SIZE (UINT32_C(128))
+-#define DM_THIN_MAX_DATA_BLOCK_SIZE (UINT32_C(2097152))
+-/*
+- * Max supported size for thin pool  metadata device (17112760320 bytes)
+- * Limitation is hardcoded into the kernel and bigger device size
+- * is not accepted.
+- * drivers/md/dm-thin-metadata.h THIN_METADATA_MAX_SECTORS
 - */
--lv_create_params_t lvm_lv_params_create_snapshot(const lv_t lv,
--													const char *snap_name,
--													uint64_t max_snap_size);
--/**
-- * Get the specific value of a lv create parameter by name
-- *
-- * \param	params		lv create parameters
-- *
-- * \param	name		name of parameter
-- *
-- * \return
-- * lvm_property_value structure that will contain the current
-- * value of the property.  Caller should check 'is_valid' flag before using
-- * the value.  If 'is_valid' is not set, caller should check lvm_errno()
-- * for specific error.
+-#define DM_THIN_MAX_METADATA_SIZE   (UINT64_C(255) * (1 << 14) * (4096 / (1 << 9)) - 256 * 1024)
+-
+-int dm_tree_node_add_thin_pool_target(struct dm_tree_node *node,
+-				      uint64_t size,
+-				      uint64_t transaction_id,
+-				      const char *metadata_uuid,
+-				      const char *pool_uuid,
+-				      uint32_t data_block_size,
+-				      uint64_t low_water_mark,
+-				      unsigned skip_block_zeroing);
+-
+-/* Supported messages for thin provision target */
+-typedef enum {
+-	DM_THIN_MESSAGE_CREATE_SNAP,		/* device_id, origin_id */
+-	DM_THIN_MESSAGE_CREATE_THIN,		/* device_id */
+-	DM_THIN_MESSAGE_DELETE,			/* device_id */
+-	DM_THIN_MESSAGE_SET_TRANSACTION_ID,	/* current_id, new_id */
+-	DM_THIN_MESSAGE_RESERVE_METADATA_SNAP,	/* target version >= 1.1 */
+-	DM_THIN_MESSAGE_RELEASE_METADATA_SNAP,	/* target version >= 1.1 */
+-} dm_thin_message_t;
+-
+-int dm_tree_node_add_thin_pool_message(struct dm_tree_node *node,
+-				       dm_thin_message_t type,
+-				       uint64_t id1, uint64_t id2);
+-
+-/*
+- * Set thin pool discard features
+- *   ignore      - Disable support for discards
+- *   no_passdown - Don't pass discards down to underlying data device,
+- *                 just remove the mapping
+- * Feature is available since version 1.1 of the thin target.
 - */
--struct lvm_property_value lvm_lv_params_get_property(
--											const lv_create_params_t params,
--											const char *name);
--
--
--/**
-- * Set the specific value of a lv create parameter by name
-- *
-- * Note that the property must be a 'settable' property, as evidenced '
-- * by the 'is_settable' flag when querying the property.
-- *
-- * The memory allocated for a string property value is tied to the vg_t
-- * handle associated with the lv_create_params_t and will be released when
-- * lvm_vg_close() is called.
-- *
-- * \param	params		lv create parameters
-- *
-- * \param	name		name of parameter
-- *
-- * \param	prop		Property value to use for setting
-- *
-- * \return
-- * 0 on success, -1 on error.
+-int dm_tree_node_set_thin_pool_discard(struct dm_tree_node *node,
+-				       unsigned ignore,
+-				       unsigned no_passdown);
+-/*
+- * Set error if no space, instead of queueing for thin pool.
 - */
--int lvm_lv_params_set_property(lv_create_params_t params,
--								const char *name,
--								struct lvm_property_value *prop);
--
--/**
-- * Create a thin LV creation parameters in a given VG & thin pool
-- *
-- * \param   vg
-- * Volume Group handle.
-- *
-- * \param   pool_name
-- * Name of the pool.
-- *
-- * \param lvname
-- * Name of the LV to create
-- *
-- * \param   size
-- * Size of logical volume
-- *
-- * \return
-- * Valid lv_create_params pointer on success, else NULL on error.
-- * Note: Memory is associated with the vg, it will get reclaimed when vg is
-- * closed.
-- *
+-int dm_tree_node_set_thin_pool_error_if_no_space(struct dm_tree_node *node,
+-						 unsigned error_if_no_space);
+-/* Start thin pool with metadata in read-only mode */
+-int dm_tree_node_set_thin_pool_read_only(struct dm_tree_node *node,
+-					 unsigned read_only);
+-/*
+- * FIXME: Defines bellow are based on kernel's dm-thin.c defines
+- * MAX_DEV_ID ((1 << 24) - 1)
 - */
--lv_create_params_t lvm_lv_params_create_thin(const vg_t vg, const char *pool_name,
--									const char *lvname, uint64_t size);
--/**
-- * Create the actual logical volume.
-- *
-- * \param	params		The parameters object for lv creation
-- *
-- * \return
-- * Valid lv pointer on success, else NULL on error.
+-#define DM_THIN_MAX_DEVICE_ID (UINT32_C((1 << 24) - 1))
+-int dm_tree_node_add_thin_target(struct dm_tree_node *node,
+-				 uint64_t size,
+-				 const char *pool_uuid,
+-				 uint32_t device_id);
+-
+-int dm_tree_node_set_thin_external_origin(struct dm_tree_node *node,
+-					  const char *external_uuid);
+-
+-void dm_tree_node_set_udev_flags(struct dm_tree_node *node, uint16_t udev_flags);
+-
+-void dm_tree_node_set_presuspend_node(struct dm_tree_node *node,
+-				      struct dm_tree_node *presuspend_node);
+-
+-int dm_tree_node_add_target_area(struct dm_tree_node *node,
+-				    const char *dev_name,
+-				    const char *dlid,
+-				    uint64_t offset);
+-
+-/*
+- * Only for temporarily-missing raid devices where changes are tracked.
 - */
--lv_t lvm_lv_create(lv_create_params_t params);
+-int dm_tree_node_add_null_area(struct dm_tree_node *node, uint64_t offset);
 -
--/************************** physical volume handling ************************/
+-/*
+- * Set readahead (in sectors) after loading the node.
+- */
+-void dm_tree_node_set_read_ahead(struct dm_tree_node *dnode,
+-				 uint32_t read_ahead,
+-				 uint32_t read_ahead_flags);
 -
--/**
-- * Physical volume handling should not be needed anymore. Only physical volumes
-- * bound to a vg contain useful information. Therefore the creation,
-- * modification and the removal of orphan physical volumes is not suported.
+-/*
+- * Set node callback hook before de/activation.
+- * Callback is called before 'activation' of node for activation tree,
+- * or 'deactivation' of node for deactivation tree.
+- */
+-typedef enum {
+-	DM_NODE_CALLBACK_PRELOADED,   /* Node has preload deps */
+-	DM_NODE_CALLBACK_DEACTIVATED, /* Node is deactivated */
+-} dm_node_callback_t;
+-typedef int (*dm_node_callback_fn) (struct dm_tree_node *node,
+-				    dm_node_callback_t type, void *cb_data);
+-void dm_tree_node_set_callback(struct dm_tree_node *node,
+-			       dm_node_callback_fn cb, void *cb_data);
+-
+-void dm_tree_set_cookie(struct dm_tree_node *node, uint32_t cookie);
+-uint32_t dm_tree_get_cookie(struct dm_tree_node *node);
+-
+-/*****************************************************************************
+- * Library functions
+- *****************************************************************************/
+-
+-/*******************
+- * Memory management
+- *******************/
+-
+-/*
+- * Never use these functions directly - use the macros following instead.
+- */
+-void *dm_malloc_wrapper(size_t s, const char *file, int line)
+-	__attribute__((__malloc__)) __attribute__((__warn_unused_result__));
+-void *dm_malloc_aligned_wrapper(size_t s, size_t a, const char *file, int line)
+-	__attribute__((__malloc__)) __attribute__((__warn_unused_result__));
+-void *dm_zalloc_wrapper(size_t s, const char *file, int line)
+-	__attribute__((__malloc__)) __attribute__((__warn_unused_result__));
+-void *dm_realloc_wrapper(void *p, unsigned int s, const char *file, int line)
+-	__attribute__((__warn_unused_result__));
+-void dm_free_wrapper(void *ptr);
+-char *dm_strdup_wrapper(const char *s, const char *file, int line)
+-	__attribute__((__warn_unused_result__));
+-int dm_dump_memory_wrapper(void);
+-void dm_bounds_check_wrapper(void);
+-
+-#define dm_malloc(s) dm_malloc_wrapper((s), __FILE__, __LINE__)
+-#define dm_malloc_aligned(s, a) dm_malloc_aligned_wrapper((s), @,  __FILE__, __LINE__)
+-#define dm_zalloc(s) dm_zalloc_wrapper((s), __FILE__, __LINE__)
+-#define dm_strdup(s) dm_strdup_wrapper((s), __FILE__, __LINE__)
+-#define dm_free(p) dm_free_wrapper(p)
+-#define dm_realloc(p, s) dm_realloc_wrapper((p), (s), __FILE__, __LINE__)
+-#define dm_dump_memory() dm_dump_memory_wrapper()
+-#define dm_bounds_check() dm_bounds_check_wrapper()
+-
+-/*
+- * The pool allocator is useful when you are going to allocate
+- * lots of memory, use the memory for a bit, and then free the
+- * memory in one go.  A surprising amount of code has this usage
+- * profile.
+- *
+- * You should think of the pool as an infinite, contiguous chunk
+- * of memory.  The front of this chunk of memory contains
+- * allocated objects, the second half is free.  dm_pool_alloc grabs
+- * the next 'size' bytes from the free half, in effect moving it
+- * into the allocated half.  This operation is very efficient.
+- *
+- * dm_pool_free frees the allocated object *and* all objects
+- * allocated after it.  It is important to note this semantic
+- * difference from malloc/free.  This is also extremely
+- * efficient, since a single dm_pool_free can dispose of a large
+- * complex object.
+- *
+- * dm_pool_destroy frees all allocated memory.
+- *
+- * eg, If you are building a binary tree in your program, and
+- * know that you are only ever going to insert into your tree,
+- * and not delete (eg, maintaining a symbol table for a
+- * compiler).  You can create yourself a pool, allocate the nodes
+- * from it, and when the tree becomes redundant call dm_pool_destroy
+- * (no nasty iterating through the tree to free nodes).
+- *
+- * eg, On the other hand if you wanted to repeatedly insert and
+- * remove objects into the tree, you would be better off
+- * allocating the nodes from a free list; you cannot free a
+- * single arbitrary node with pool.
 - */
 -
--/**
-- * Get the current uuid of a physical volume.
-- *
-- * \memberof pv_t
-- *
-- * The memory allocated for the uuid is tied to the vg_t handle and will be
-- * released when lvm_vg_close() is called.
-- *
-- * \param   pv
-- * Physical volume handle.
-- *
-- * \return
-- * Copy of the uuid string.
-- */
--const char *lvm_pv_get_uuid(const pv_t pv);
+-struct dm_pool;
 -
--/**
-- * Get the current name of a physical volume.
-- *
-- * \memberof pv_t
-- *
-- * The memory allocated for the name is tied to the vg_t handle and will be
-- * released when lvm_vg_close() is called.
-- *
-- * \param   pv
-- * Physical volume handle.
-- *
-- * \return
-- * Copy of the name.
-- */
--const char *lvm_pv_get_name(const pv_t pv);
+-/* constructor and destructor */
+-struct dm_pool *dm_pool_create(const char *name, size_t chunk_hint)
+-	__attribute__((__warn_unused_result__));
+-void dm_pool_destroy(struct dm_pool *p);
 -
--/**
-- * Get the current number of metadata areas in the physical volume.
-- *
-- * \memberof pv_t
-- *
-- * \param   pv
-- * Physical volume handle.
-- *
-- * \return
-- * Number of metadata areas in the PV.
-- */
--uint64_t lvm_pv_get_mda_count(const pv_t pv);
+-/* simple allocation/free routines */
+-void *dm_pool_alloc(struct dm_pool *p, size_t s)
+-	__attribute__((__warn_unused_result__));
+-void *dm_pool_alloc_aligned(struct dm_pool *p, size_t s, unsigned alignment)
+-	__attribute__((__warn_unused_result__));
+-void dm_pool_empty(struct dm_pool *p);
+-void dm_pool_free(struct dm_pool *p, void *ptr);
 -
--/**
-- * Get the current size in bytes of a device underlying a
-- * physical volume.
-- *
-- * \memberof pv_t
-- *
-- * \param   pv
-- * Physical volume handle.
-- *
-- * \return
-- * Size in bytes.
+-/*
+- * To aid debugging, a pool can be locked. Any modifications made
+- * to the content of the pool while it is locked can be detected.
+- * Default compilation is using a crc checksum to notice modifications.
+- * The pool locking is using the mprotect with the compilation flag
+- * DEBUG_ENFORCE_POOL_LOCKING to enforce the memory protection.
 - */
--uint64_t lvm_pv_get_dev_size(const pv_t pv);
+-/* query pool lock status */
+-int dm_pool_locked(struct dm_pool *p);
+-/* mark pool as locked */
+-int dm_pool_lock(struct dm_pool *p, int crc)
+-	__attribute__((__warn_unused_result__));
+-/* mark pool as unlocked */
+-int dm_pool_unlock(struct dm_pool *p, int crc)
+-	__attribute__((__warn_unused_result__));
 -
--/**
-- * Get the current size in bytes of a physical volume.
+-/*
+- * Object building routines:
 - *
-- * \memberof pv_t
+- * These allow you to 'grow' an object, useful for
+- * building strings, or filling in dynamic
+- * arrays.
 - *
-- * \param   pv
-- * Physical volume handle.
+- * It's probably best explained with an example:
 - *
-- * \return
-- * Size in bytes.
-- */
--uint64_t lvm_pv_get_size(const pv_t pv);
--
--/**
-- * Get the current unallocated space in bytes of a physical volume.
+- * char *build_string(struct dm_pool *mem)
+- * {
+- *      int i;
+- *      char buffer[16];
 - *
-- * \memberof pv_t
+- *      if (!dm_pool_begin_object(mem, 128))
+- *              return NULL;
 - *
-- * \param   pv
-- * Physical volume handle.
-- *
-- * \return
-- * Free size in bytes.
-- */
--uint64_t lvm_pv_get_free(const pv_t pv);
--
--/**
-- * Get the value of a PV property
-- *
-- * \memberof pv_t
-- *
-- * \param   pv
-- * Physical volume handle.
-- *
-- * \param   name
-- * Name of property to query.  See pvs man page for full list of properties
-- * that may be queried.
-- *
-- * The memory allocated for a string property value is tied to the vg_t handle
-- * and will be released when lvm_vg_close() is called. For "percent" values
-- * (those obtained for copy_percent and snap_percent properties), please see
-- * dm_percent_range_t and lvm_percent_to_float().
-- *
-- * Example:
-- *      lvm_property_value value;
-- *      char *prop_name = "pv_mda_count";
-- *
-- *      v = lvm_pv_get_property(pv, prop_name);
-- *      if (!v.is_valid) {
-- *           printf("Invalid property name or unable to query"
-- *                  "'%s', errno = %d.\n", prop_name, lvm_errno(libh));
-- *           return;
+- *      for (i = 0; i < 50; i++) {
+- *              snprintf(buffer, sizeof(buffer), "%d, ", i);
+- *              if (!dm_pool_grow_object(mem, buffer, 0))
+- *                      goto bad;
 - *      }
-- *      if (v.is_string)
-- *           printf(", value = %s\n", v.value.string);
-- *	if (v.is_integer)
-- *           printf(", value = %"PRIu64"\n", v.value.integer);
 - *
-- * \return
-- * lvm_property_value structure that will contain the current
-- * value of the property.  Caller should check 'is_valid' flag before using
-- * the value.  If 'is_valid' is not set, caller should check lvm_errno()
-- * for specific error.
+- *	// add null
+- *      if (!dm_pool_grow_object(mem, "\0", 1))
+- *              goto bad;
+- *
+- *      return dm_pool_end_object(mem);
+- *
+- * bad:
+- *
+- *      dm_pool_abandon_object(mem);
+- *      return NULL;
+- *}
+- *
+- * So start an object by calling dm_pool_begin_object
+- * with a guess@the final object size - if in
+- * doubt make the guess too small.
+- *
+- * Then append chunks of data to your object with
+- * dm_pool_grow_object.  Finally get your object with
+- * a call to dm_pool_end_object.
+- *
+- * Setting delta to 0 means it will use strlen(extra).
 - */
--struct lvm_property_value lvm_pv_get_property(const pv_t pv, const char *name);
+-int dm_pool_begin_object(struct dm_pool *p, size_t hint);
+-int dm_pool_grow_object(struct dm_pool *p, const void *extra, size_t delta);
+-void *dm_pool_end_object(struct dm_pool *p);
+-void dm_pool_abandon_object(struct dm_pool *p);
 -
--/**
-- * Get the value of a PV segment property
-- *
-- * \memberof pv_t
-- *
-- * \param   pvseg
-- * Physical volume segment handle.
-- *
-- * \param   name
-- * Name of property to query.  See pvs man page for full list of properties
-- * that may be queried.
-- *
-- * The memory allocated for a string property value is tied to the vg_t
-- * handle and will be released when lvm_vg_close() is called.
-- *
-- * Example:
-- *      lvm_property_value v;
-- *      char *prop_name = "pvseg_start";
-- *
-- *      v = lvm_pvseg_get_property(pvseg, prop_name);
-- *      if (lvm_errno(libh) || !v.is_valid) {
-- *           // handle error
-- *           printf("Invalid property name or unable to query"
-- *                  "'%s'.\n", prop_name);
-- *           return;
-- *      }
-- *      if (v.is_string)
-- *           printf(", value = %s\n", v.value.string);
-- *	else
-- *           printf(", value = %"PRIu64"\n", v.value.integer);
-- *
-- * \return
-- * lvm_property_value structure that will contain the current
-- * value of the property.  Caller should check lvm_errno() as well
-- * as 'is_valid' flag before using the value.
+-/* utilities */
+-char *dm_pool_strdup(struct dm_pool *p, const char *str)
+-	__attribute__((__warn_unused_result__));
+-char *dm_pool_strndup(struct dm_pool *p, const char *str, size_t n)
+-	__attribute__((__warn_unused_result__));
+-void *dm_pool_zalloc(struct dm_pool *p, size_t s)
+-	__attribute__((__warn_unused_result__));
+-
+-/******************
+- * bitset functions
+- ******************/
+-
+-typedef uint32_t *dm_bitset_t;
+-
+-dm_bitset_t dm_bitset_create(struct dm_pool *mem, unsigned num_bits);
+-void dm_bitset_destroy(dm_bitset_t bs);
+-
+-int dm_bitset_equal(dm_bitset_t in1, dm_bitset_t in2);
+-
+-void dm_bit_and(dm_bitset_t out, dm_bitset_t in1, dm_bitset_t in2);
+-void dm_bit_union(dm_bitset_t out, dm_bitset_t in1, dm_bitset_t in2);
+-int dm_bit_get_first(dm_bitset_t bs);
+-int dm_bit_get_next(dm_bitset_t bs, int last_bit);
+-int dm_bit_get_last(dm_bitset_t bs);
+-int dm_bit_get_prev(dm_bitset_t bs, int last_bit);
+-
+-#define DM_BITS_PER_INT (sizeof(int) * CHAR_BIT)
+-
+-#define dm_bit(bs, i) \
+-   ((bs)[((i) / DM_BITS_PER_INT) + 1] & (0x1 << ((i) & (DM_BITS_PER_INT - 1))))
+-
+-#define dm_bit_set(bs, i) \
+-   ((bs)[((i) / DM_BITS_PER_INT) + 1] |= (0x1 << ((i) & (DM_BITS_PER_INT - 1))))
+-
+-#define dm_bit_clear(bs, i) \
+-   ((bs)[((i) / DM_BITS_PER_INT) + 1] &= ~(0x1 << ((i) & (DM_BITS_PER_INT - 1))))
+-
+-#define dm_bit_set_all(bs) \
+-   memset((bs) + 1, -1, ((*(bs) / DM_BITS_PER_INT) + 1) * sizeof(int))
+-
+-#define dm_bit_clear_all(bs) \
+-   memset((bs) + 1, 0, ((*(bs) / DM_BITS_PER_INT) + 1) * sizeof(int))
+-
+-#define dm_bit_copy(bs1, bs2) \
+-   memcpy((bs1) + 1, (bs2) + 1, ((*(bs2) / DM_BITS_PER_INT) + 1) * sizeof(int))
+-
+-/*
+- * Parse a string representation of a bitset into a dm_bitset_t. The
+- * notation used is identical to the kernel bitmap parser (cpuset etc.)
+- * and supports both lists ("1,2,3") and ranges ("1-2,5-8"). If the mem
+- * parameter is NULL memory for the bitset will be allocated using
+- * dm_malloc(). Otherwise the bitset will be allocated using the supplied
+- * dm_pool.
 - */
--struct lvm_property_value lvm_pvseg_get_property(const pvseg_t pvseg,
--						 const char *name);
+-dm_bitset_t dm_bitset_parse_list(const char *str, struct dm_pool *mem,
+-				 size_t min_num_bits);
 -
--/**
-- * Return a list of pvseg handles for a given PV handle.
+-/* Returns number of set bits */
+-static inline unsigned hweight32(uint32_t i)
+-{
+-	unsigned r = (i & 0x55555555) + ((i >> 1) & 0x55555555);
+-
+-	r =    (r & 0x33333333) + ((r >>  2) & 0x33333333);
+-	r =    (r & 0x0F0F0F0F) + ((r >>  4) & 0x0F0F0F0F);
+-	r =    (r & 0x00FF00FF) + ((r >>  8) & 0x00FF00FF);
+-	return (r & 0x0000FFFF) + ((r >> 16) & 0x0000FFFF);
+-}
+-
+-/****************
+- * hash functions
+- ****************/
+-
+-struct dm_hash_table;
+-struct dm_hash_node;
+-
+-typedef void (*dm_hash_iterate_fn) (void *data);
+-
+-struct dm_hash_table *dm_hash_create(unsigned size_hint)
+-	__attribute__((__warn_unused_result__));
+-void dm_hash_destroy(struct dm_hash_table *t);
+-void dm_hash_wipe(struct dm_hash_table *t);
+-
+-void *dm_hash_lookup(struct dm_hash_table *t, const char *key);
+-int dm_hash_insert(struct dm_hash_table *t, const char *key, void *data);
+-void dm_hash_remove(struct dm_hash_table *t, const char *key);
+-
+-void *dm_hash_lookup_binary(struct dm_hash_table *t, const void *key, uint32_t len);
+-int dm_hash_insert_binary(struct dm_hash_table *t, const void *key, uint32_t len,
+-			  void *data);
+-void dm_hash_remove_binary(struct dm_hash_table *t, const void *key, uint32_t len);
+-
+-unsigned dm_hash_get_num_entries(struct dm_hash_table *t);
+-void dm_hash_iter(struct dm_hash_table *t, dm_hash_iterate_fn f);
+-
+-char *dm_hash_get_key(struct dm_hash_table *t, struct dm_hash_node *n);
+-void *dm_hash_get_data(struct dm_hash_table *t, struct dm_hash_node *n);
+-struct dm_hash_node *dm_hash_get_first(struct dm_hash_table *t);
+-struct dm_hash_node *dm_hash_get_next(struct dm_hash_table *t, struct dm_hash_node *n);
+-
+-/*
+- * dm_hash_insert() replaces the value of an existing
+- * entry with a matching key if one exists.  Otherwise
+- * it adds a new entry.
 - *
-- * \memberof pv_t
+- * dm_hash_insert_with_val() inserts a new entry if
+- * another entry with the same key already exists.
+- * val_len is the size of the data being inserted.
 - *
-- * \param   pv
-- * Physical volume handle.
+- * If two entries with the same key exist,
+- * (added using dm_hash_insert_allow_multiple), then:
+- * . dm_hash_lookup() returns the first one it finds, and
+- *   dm_hash_lookup_with_val() returns the one with a matching
+- *   val_len/val.
+- * . dm_hash_remove() removes the first one it finds, and
+- *   dm_hash_remove_with_val() removes the one with a matching
+- *   val_len/val.
 - *
-- * \return
-- * A list of lvm_pvseg_list structures containing pvseg handles for this pv.
+- * If a single entry with a given key exists, and it has
+- * zero val_len, then:
+- * . dm_hash_lookup() returns it
+- * . dm_hash_lookup_with_val(val_len=0) returns it
+- * . dm_hash_remove() removes it
+- * . dm_hash_remove_with_val(val_len=0) removes it
+- *
+- * dm_hash_lookup_with_count() is a single call that will
+- * both lookup a key's value and check if there is more
+- * than one entry with the given key.
+- *
+- * (It is not meant to retrieve all the entries with the
+- * given key.  In the common case where a single entry exists
+- * for the key, it is useful to have a single call that will
+- * both look up the value and indicate if multiple values
+- * exist for the key.)
+- *
+- * dm_hash_lookup_with_count:
+- * . If no entries exist, the function returns NULL, and
+- *   the count is set to 0.
+- * . If only one entry exists, the value of that entry is
+- *   returned and count is set to 1.
+- * . If N entries exists, the value of the first entry is
+- *   returned and count is set to N.
 - */
--struct dm_list *lvm_pv_list_pvsegs(pv_t pv);
 -
--/**
-- * Lookup an PV handle in a VG by the PV name.
-- *
-- * \memberof pv_t
-- *
-- * \param   vg
-- * VG handle obtained from lvm_vg_create() or lvm_vg_open().
-- *
-- * \param   name
-- * Name of PV to lookup.
-- *
-- * \return
-- * non-NULL handle to the PV 'name' attached to the VG.
-- * NULL is returned if the PV name is not associated with the VG handle.
+-void *dm_hash_lookup_with_val(struct dm_hash_table *t, const char *key,
+-                              const void *val, uint32_t val_len);
+-void dm_hash_remove_with_val(struct dm_hash_table *t, const char *key,
+-                             const void *val, uint32_t val_len);
+-int dm_hash_insert_allow_multiple(struct dm_hash_table *t, const char *key,
+-                                  const void *val, uint32_t val_len);
+-void *dm_hash_lookup_with_count(struct dm_hash_table *t, const char *key, int *count);
+-
+-
+-#define dm_hash_iterate(v, h) \
+-	for (v = dm_hash_get_first((h)); v; \
+-	     v = dm_hash_get_next((h), v))
+-
+-/*********
+- * selinux
+- *********/
+-
+-/*
+- * Obtain SELinux security context assigned for the path and set this
+- * context for creating a new file system object. This security context
+- * is global and it is used until reset to default policy behaviour
+- * by calling 'dm_prepare_selinux_context(NULL, 0)'.
 - */
--pv_t lvm_pv_from_name(vg_t vg, const char *name);
--
--/**
-- * Lookup an PV handle in a VG by the PV uuid.
-- * The form of the uuid may be either the formatted, human-readable form,
-- * or the non-formatted form.
-- *
-- * \memberof pv_t
-- *
-- * \param   vg
-- * VG handle obtained from lvm_vg_create() or lvm_vg_open().
-- *
-- * \param   uuid
-- * UUID of PV to lookup.
-- *
-- * \return
-- * non-NULL handle to the PV with 'uuid' attached to the VG.
-- * NULL is returned if the PV uuid is not associated with the VG handle.
+-int dm_prepare_selinux_context(const char *path, mode_t mode);
+-/*
+- * Set SELinux context for existing file system object.
 - */
--pv_t lvm_pv_from_uuid(vg_t vg, const char *uuid);
+-int dm_set_selinux_context(const char *path, mode_t mode);
 -
--/**
-- * Resize physical volume to new_size bytes.
-- *
-- * \memberof pv_t
-- *
-- * \param   pv
-- * Physical volume handle.
-- *
-- * \param   new_size
-- * New size in bytes.
-- *
-- * \return
-- * 0 (success) or -1 (failure).
+-/*********************
+- * string manipulation
+- *********************/
+-
+-/*
+- * Break up the name of a mapped device into its constituent
+- * Volume Group, Logical Volume and Layer (if present).
+- * If mem is supplied, the result is allocated from the mempool.
+- * Otherwise the strings are changed in situ.
 - */
--int lvm_pv_resize(const pv_t pv, uint64_t new_size);
+-int dm_split_lvm_name(struct dm_pool *mem, const char *dmname,
+-		      char **vgname, char **lvname, char **layer);
 -
--#define PERCENT_0 DM_PERCENT_0
--#define PERCENT_1 DM_PERCENT_1
--#define PERCENT_100 DM_PERCENT_100
--#define PERCENT_INVALID DM_PERCENT_INVALID
--#define PERCENT_MERGE_FAILED DM_PERCENT_FAILED
--
--typedef dm_percent_t percent_t;
--
--/**
-- * Convert a (fixed-point) value obtained from the percent-denominated
-- * *_get_property functions into a floating-point value.
+-/*
+- * Destructively split buffer into NULL-separated words in argv.
+- * Returns number of words.
 - */
--float lvm_percent_to_float(percent_t v);
+-int dm_split_words(char *buffer, unsigned max,
+-		   unsigned ignore_comments, /* Not implemented */
+-		   char **argv);
+-
+-/*
+- * Returns -1 if buffer too small
+- */
+-int dm_snprintf(char *buf, size_t bufsize, const char *format, ...)
+-    __attribute__ ((format(printf, 3, 4)));
+-
+-/*
+- * Returns pointer to the last component of the path.
+- */
+-const char *dm_basename(const char *path);
+-
+-/*
+- * Returns number of occurrences of 'c' in 'str' of length 'size'.
+- */
+-unsigned dm_count_chars(const char *str, size_t len, const int c);
+-
+-/*
+- * Length of string after escaping double quotes and backslashes.
+- */
+-size_t dm_escaped_len(const char *str);
+-
+-/*
+- * <vg>-<lv>-<layer> or if !layer just <vg>-<lv>.
+- */
+-char *dm_build_dm_name(struct dm_pool *mem, const char *vgname,
+-		       const char *lvname, const char *layer);
+-char *dm_build_dm_uuid(struct dm_pool *mem, const char *prefix, const char *lvid, const char *layer);
+-
+-/*
+- * Copies a string, quoting double quotes with backslashes.
+- */
+-char *dm_escape_double_quotes(char *out, const char *src);
+-
+-/*
+- * Undo quoting in situ.
+- */
+-void dm_unescape_double_quotes(char *src);
+-
+-/*
+- * Unescape colons and "at" signs in situ and save the substrings
+- * starting at the position of the first unescaped colon and the
+- * first unescaped "at" sign. This is normally used to unescape
+- * device names used as PVs.
+- */
+-void dm_unescape_colons_and_at_signs(char *src,
+-				     char **substr_first_unquoted_colon,
+-				     char **substr_first_unquoted_at_sign);
+-
+-/*
+- * Replacement for strncpy() function.
+- *
+- * Copies no more than n bytes from string pointed by src to the buffer
+- * pointed by dest and ensure string is finished with '\0'.
+- * Returns 0 if the whole string does not fit.
+- */
+-int dm_strncpy(char *dest, const char *src, size_t n);
+-
+-/*
+- * Recognize unit specifier in the 'units' arg and return a factor
+- * representing that unit. If the 'units' contains a prefix with digits,
+- * the 'units' is considered to be a custom unit.
+- *
+- * Also, set 'unit_type' output arg to the character that represents
+- * the unit specified. The 'unit_type' character equals to the unit
+- * character itself recognized in the 'units' arg for canonical units.
+- * Otherwise, the 'unit_type' character is set to 'U' for custom unit.
+- *
+- * An example for k/K canonical units and 8k/8K custom units:
+- *
+- *   units  unit_type  return value (factor)
+- *   k      k          1024
+- *   K      K          1000
+- *   8k     U          1024*8
+- *   8K     U          1000*8
+- *   etc...
+- *
+- * Recognized units:
+- *
+- *   h/H - human readable (returns 1 for both)
+- *   b/B - byte (returns 1 for both)
+- *   s/S - sector (returns 512 for both)
+- *   k/K - kilo (returns 1024/1000 respectively)
+- *   m/M - mega (returns 1024^2/1000^2 respectively)
+- *   g/G - giga (returns 1024^3/1000^3 respectively)
+- *   t/T - tera (returns 1024^4/1000^4 respectively)
+- *   p/P - peta (returns 1024^5/1000^5 respectively)
+- *   e/E - exa (returns 1024^6/1000^6 respectively)
+- *
+- * Only one units character is allowed in the 'units' arg
+- * if strict mode is enabled by 'strict' arg.
+- *
+- * The 'endptr' output arg, if not NULL, saves the pointer
+- * in the 'units' string which follows the unit specifier
+- * recognized (IOW the position where the parsing of the
+- * unit specifier stopped).
+- *
+- * Returns the unit factor or 0 if no unit is recognized.
+- */
+-uint64_t dm_units_to_factor(const char *units, char *unit_type,
+-			    int strict, const char **endptr);
+-
+-/*
+- * Type of unit specifier used by dm_size_to_string().
+- */
+-typedef enum {
+-	DM_SIZE_LONG = 0,	/* Megabyte */
+-	DM_SIZE_SHORT = 1,	/* MB or MiB */
+-	DM_SIZE_UNIT = 2	/* M or m */
+-} dm_size_suffix_t;
+-
+-/*
+- * Convert a size (in 512-byte sectors) into a printable string using units of unit_type.
+- * An upper-case unit_type indicates output units based on powers of 1000 are
+- * required; a lower-case unit_type indicates powers of 1024.
+- * For correct operation, unit_factor must be one of:
+- * 	0 - the correct value will be calculated internally;
+- *   or the output from dm_units_to_factor() corresponding to unit_type;
+- *   or 'u' or 'U', an arbitrary number of bytes to use as the power base.
+- * Set include_suffix to 1 to include a suffix of suffix_type.
+- * Set use_si_units to 0 for suffixes that don't distinguish between 1000 and 1024.
+- * Set use_si_units to 1 for a suffix that does distinguish.
+- */
+-const char *dm_size_to_string(struct dm_pool *mem, uint64_t size,
+-			      char unit_type, int use_si_units,
+-			      uint64_t unit_factor, int include_suffix,
+-			      dm_size_suffix_t suffix_type);
+-
+-/**************************
+- * file/stream manipulation
+- **************************/
+-
+-/*
+- * Create a directory (with parent directories if necessary).
+- * Returns 1 on success, 0 on failure.
+- */
+-int dm_create_dir(const char *dir);
+-
+-int dm_is_empty_dir(const char *dir);
+-
+-/*
+- * Close a stream, with nicer error checking than fclose's.
+- * Derived from gnulib's close-stream.c.
+- *
+- * Close "stream".  Return 0 if successful, and EOF (setting errno)
+- * otherwise.  Upon failure, set errno to 0 if the error number
+- * cannot be determined.  Useful mainly for writable streams.
+- */
+-int dm_fclose(FILE *stream);
+-
+-/*
+- * Returns size of a buffer which is allocated with dm_malloc.
+- * Pointer to the buffer is stored in *buf.
+- * Returns -1 on failure leaving buf undefined.
+- */
+-int dm_asprintf(char **buf, const char *format, ...)
+-    __attribute__ ((format(printf, 2, 3)));
+-int dm_vasprintf(char **buf, const char *format, va_list ap)
+-    __attribute__ ((format(printf, 2, 0)));
+-
+-/*
+- * create lockfile (pidfile) - create and lock a lock file
+- * @lockfile: location of lock file
+- *
+- * Returns: 1 on success, 0 otherwise, errno is handled internally
+- */
+-int dm_create_lockfile(const char* lockfile);
+-
+-/*
+- * Query whether a daemon is running based on its lockfile
+- *
+- * Returns: 1 if running, 0 if not
+- */
+-int dm_daemon_is_running(const char* lockfile);
+-
+-/*********************
+- * regular expressions
+- *********************/
+-struct dm_regex;
+-
+-/*
+- * Initialise an array of num patterns for matching.
+- * Uses memory from mem.
+- */
+-struct dm_regex *dm_regex_create(struct dm_pool *mem, const char * const *patterns,
+-				 unsigned num_patterns);
+-
+-/*
+- * Match string s against the patterns.
+- * Returns the index of the highest pattern in the array that matches,
+- * or -1 if none match.
+- */
+-int dm_regex_match(struct dm_regex *regex, const char *s);
+-
+-/*
+- * This is useful for regression testing only.  The idea is if two
+- * fingerprints are different, then the two dfas are certainly not
+- * isomorphic.  If two fingerprints _are_ the same then it's very likely
+- * that the dfas are isomorphic.
+- *
+- * This function must be called before any matching is done.
+- */
+-uint32_t dm_regex_fingerprint(struct dm_regex *regex);
+-
+-/******************
+- * percent handling
+- ******************/
+-/*
+- * A fixed-point representation of percent values. One percent equals to
+- * DM_PERCENT_1 as defined below. Values that are not multiples of DM_PERCENT_1
+- * represent fractions, with precision of 1/1000000 of a percent. See
+- * dm_percent_to_float for a conversion to a floating-point representation.
+- *
+- * You should always use dm_make_percent when building dm_percent_t values. The
+- * implementation of dm_make_percent is biased towards the middle: it ensures that
+- * the result is DM_PERCENT_0 or DM_PERCENT_100 if and only if this is the actual
+- * value -- it never rounds any intermediate value (> 0 or < 100) to either 0
+- * or 100.
+-*/
+-#define DM_PERCENT_CHAR '%'
+-
+-typedef enum {
+-	DM_PERCENT_0 = 0,
+-	DM_PERCENT_1 = 1000000,
+-	DM_PERCENT_100 = 100 * DM_PERCENT_1,
+-	DM_PERCENT_INVALID = -1,
+-	DM_PERCENT_FAILED = -2
+-} dm_percent_range_t;
+-
+-typedef int32_t dm_percent_t;
+-
+-float dm_percent_to_float(dm_percent_t percent);
+-/*
+- * Return adjusted/rounded float for better percent value printing.
+- * Function ensures for given precision of digits:
+- * 100.0% returns only when the value is DM_PERCENT_100
+- *        for close smaller values rounds to nearest smaller value
+- * 0.0% returns only for value DM_PERCENT_0
+- *        for close bigger values rounds to nearest bigger value
+- * In all other cases returns same value as dm_percent_to_float()
+- */
+-float dm_percent_to_round_float(dm_percent_t percent, unsigned digits);
+-dm_percent_t dm_make_percent(uint64_t numerator, uint64_t denominator);
+-
+-/********************
+- * timestamp handling
+- ********************/
+-
+-/*
+- * Create a dm_timestamp object to use with dm_timestamp_get.
+- */
+-struct dm_timestamp *dm_timestamp_alloc(void);
+-
+-/*
+- * Update dm_timestamp object to represent the current time.
+- */
+-int dm_timestamp_get(struct dm_timestamp *ts);
+-
+-/*
+- * Copy a timestamp from ts_old to ts_new.
+- */
+-void dm_timestamp_copy(struct dm_timestamp *ts_new, struct dm_timestamp *ts_old);
+-
+-/*
+- * Compare two timestamps.
+- *
+- * Return: -1 if ts1 is less than ts2
+- *  	    0 if ts1 is equal to ts2
+- *          1 if ts1 is greater than ts2
+- */
+-int dm_timestamp_compare(struct dm_timestamp *ts1, struct dm_timestamp *ts2);
+-
+-/*
+- * Return the absolute difference in nanoseconds between
+- * the dm_timestamp objects ts1 and ts2.
+- *
+- * Callers that need to know whether ts1 is before, equal to, or after ts2
+- * in addition to the magnitude should use dm_timestamp_compare.
+- */
+-uint64_t dm_timestamp_delta(struct dm_timestamp *ts1, struct dm_timestamp *ts2);
+-
+-/*
+- * Destroy a dm_timestamp object.
+- */
+-void dm_timestamp_destroy(struct dm_timestamp *ts);
+-
+-/*********************
+- * reporting functions
+- *********************/
+-
+-struct dm_report_object_type {
+-	uint32_t id;			/* Powers of 2 */
+-	const char *desc;
+-	const char *prefix;		/* field id string prefix (optional) */
+-	/* FIXME: convert to proper usage of const pointers here */
+-	void *(*data_fn)(void *object);	/* callback from report_object() */
+-};
+-
+-struct dm_report_field;
+-
+-/*
+- * dm_report_field_type flags
+- */
+-#define DM_REPORT_FIELD_MASK				0x00000FFF
+-#define DM_REPORT_FIELD_ALIGN_MASK			0x0000000F
+-#define DM_REPORT_FIELD_ALIGN_LEFT			0x00000001
+-#define DM_REPORT_FIELD_ALIGN_RIGHT			0x00000002
+-#define DM_REPORT_FIELD_TYPE_MASK			0x00000FF0
+-#define DM_REPORT_FIELD_TYPE_NONE			0x00000000
+-#define DM_REPORT_FIELD_TYPE_STRING			0x00000010
+-#define DM_REPORT_FIELD_TYPE_NUMBER			0x00000020
+-#define DM_REPORT_FIELD_TYPE_SIZE			0x00000040
+-#define DM_REPORT_FIELD_TYPE_PERCENT			0x00000080
+-#define DM_REPORT_FIELD_TYPE_STRING_LIST		0x00000100
+-#define DM_REPORT_FIELD_TYPE_TIME			0x00000200
+-
+-/* For use with reserved values only! */
+-#define DM_REPORT_FIELD_RESERVED_VALUE_MASK		0x0000000F
+-#define DM_REPORT_FIELD_RESERVED_VALUE_NAMED		0x00000001 /* only named value, less strict form of reservation */
+-#define DM_REPORT_FIELD_RESERVED_VALUE_RANGE		0x00000002 /* value is range - low and high value defined */
+-#define DM_REPORT_FIELD_RESERVED_VALUE_DYNAMIC_VALUE	0x00000004 /* value is computed in runtime */
+-#define DM_REPORT_FIELD_RESERVED_VALUE_FUZZY_NAMES	0x00000008 /* value names are recognized in runtime */
+-
+-#define DM_REPORT_FIELD_TYPE_ID_LEN 32
+-#define DM_REPORT_FIELD_TYPE_HEADING_LEN 32
+-
+-struct dm_report;
+-struct dm_report_field_type {
+-	uint32_t type;		/* object type id */
+-	uint32_t flags;		/* DM_REPORT_FIELD_* */
+-	uint32_t offset;	/* byte offset in the object */
+-	int32_t width;		/* default width */
+-	/* string used to specify the field */
+-	const char id[DM_REPORT_FIELD_TYPE_ID_LEN];
+-	/* string printed in header */
+-	const char heading[DM_REPORT_FIELD_TYPE_HEADING_LEN];
+-	int (*report_fn)(struct dm_report *rh, struct dm_pool *mem,
+-			 struct dm_report_field *field, const void *data,
+-			 void *private_data);
+-	const char *desc;	/* description of the field */
+-};
+-
+-/*
+- * Per-field reserved value.
+- */
+-struct dm_report_field_reserved_value {
+-	/* field_num is the position of the field in 'fields'
+-	   array passed to dm_report_init_with_selection */
+-	uint32_t field_num;
+-	/* the value is of the same type as the field
+-	   identified by field_num */
+-	const void *value;
+-};
+-
+-/*
+- * Reserved value is a 'value' that is used directly if any of the 'names' is hit
+- * or in case of fuzzy names, if such fuzzy name matches.
+- *
+- * If type is any of DM_REPORT_FIELD_TYPE_*, the reserved value is recognized
+- * for all fields of that type.
+- *
+- * If type is DM_REPORT_FIELD_TYPE_NONE, the reserved value is recognized
+- * for the exact field specified - hence the type of the value is automatically
+- * the same as the type of the field itself.
+- *
+- * The array of reserved values is used to initialize reporting with
+- * selection enabled (see also dm_report_init_with_selection function).
+- */
+-struct dm_report_reserved_value {
+-	const uint32_t type;		/* DM_REPORT_FIELD_RESERVED_VALUE_* and DM_REPORT_FIELD_TYPE_*  */
+-	const void *value;		/* reserved value:
+-						uint64_t for DM_REPORT_FIELD_TYPE_NUMBER
+-						uint64_t for DM_REPORT_FIELD_TYPE_SIZE (number of 512-byte sectors)
+-						uint64_t for DM_REPORT_FIELD_TYPE_PERCENT
+-						const char* for DM_REPORT_FIELD_TYPE_STRING
+-						struct dm_report_field_reserved_value for DM_REPORT_FIELD_TYPE_NONE
+-						dm_report_reserved_handler* if DM_REPORT_FIELD_RESERVED_VALUE_{DYNAMIC_VALUE,FUZZY_NAMES} is used */
+-	const char **names;		/* null-terminated array of static names for this reserved value */
+-	const char *description;	/* description of the reserved value */
+-};
+-
+-/*
+- * Available actions for dm_report_reserved_value_handler.
+- */
+-typedef enum {
+-	DM_REPORT_RESERVED_PARSE_FUZZY_NAME,
+-	DM_REPORT_RESERVED_GET_DYNAMIC_VALUE,
+-} dm_report_reserved_action_t;
+-
+-/*
+- * Generic reserved value handler to process reserved value names and/or values.
+- *
+- * Actions and their input/output:
+- *
+- * 	DM_REPORT_RESERVED_PARSE_FUZZY_NAME
+- *		data_in:  const char *fuzzy_name
+- *		data_out: const char *canonical_name, NULL if fuzzy_name not recognized
+- *
+- * 	DM_REPORT_RESERVED_GET_DYNAMIC_VALUE
+- * 		data_in:  const char *canonical_name
+- * 		data_out: void *value, NULL if canonical_name not recognized
+- *
+- * All actions return:
+- *
+- *	-1 if action not implemented
+- * 	0 on error
+- * 	1 on success
+- */
+-typedef int (*dm_report_reserved_handler) (struct dm_report *rh,
+-					   struct dm_pool *mem,
+-					   uint32_t field_num,
+-					   dm_report_reserved_action_t action,
+-					   const void *data_in,
+-					   const void **data_out);
+-
+-/*
+- * The dm_report_value_cache_{set,get} are helper functions to store and retrieve
+- * various values used during reporting (dm_report_field_type.report_fn) and/or
+- * selection processing (dm_report_reserved_handler instances) to avoid
+- * recalculation of these values or to share values among calls.
+- */
+-int dm_report_value_cache_set(struct dm_report *rh, const char *name, const void *data);
+-const void *dm_report_value_cache_get(struct dm_report *rh, const char *name);
+-/*
+- * dm_report_init output_flags
+- */
+-#define DM_REPORT_OUTPUT_MASK			0x000000FF
+-#define DM_REPORT_OUTPUT_ALIGNED		0x00000001
+-#define DM_REPORT_OUTPUT_BUFFERED		0x00000002
+-#define DM_REPORT_OUTPUT_HEADINGS		0x00000004
+-#define DM_REPORT_OUTPUT_FIELD_NAME_PREFIX	0x00000008
+-#define DM_REPORT_OUTPUT_FIELD_UNQUOTED		0x00000010
+-#define DM_REPORT_OUTPUT_COLUMNS_AS_ROWS	0x00000020
+-#define DM_REPORT_OUTPUT_MULTIPLE_TIMES		0x00000040
+-
+-struct dm_report *dm_report_init(uint32_t *report_types,
+-				 const struct dm_report_object_type *types,
+-				 const struct dm_report_field_type *fields,
+-				 const char *output_fields,
+-				 const char *output_separator,
+-				 uint32_t output_flags,
+-				 const char *sort_keys,
+-				 void *private_data);
+-struct dm_report *dm_report_init_with_selection(uint32_t *report_types,
+-						const struct dm_report_object_type *types,
+-						const struct dm_report_field_type *fields,
+-						const char *output_fields,
+-						const char *output_separator,
+-						uint32_t output_flags,
+-						const char *sort_keys,
+-						const char *selection,
+-						const struct dm_report_reserved_value reserved_values[],
+-						void *private_data);
+-/*
+- * Report an object, pass it through the selection criteria if they
+- * are present and display the result on output if it passes the criteria.
+- */
+-int dm_report_object(struct dm_report *rh, void *object);
+-/*
+- * The same as dm_report_object, but display the result on output only if
+- * 'do_output' arg is set. Also, save the result of selection in 'selected'
+- * arg if it's not NULL (either 1 if the object passes, otherwise 0).
+- */
+-int dm_report_object_is_selected(struct dm_report *rh, void *object, int do_output, int *selected);
+-
+-/*
+- * Compact report output so that if field value is empty for all rows in
+- * the report, drop the field from output completely (including headers).
+- * Compact output is applicable only if report is buffered, otherwise
+- * this function has no effect.
+- */
+-int dm_report_compact_fields(struct dm_report *rh);
+-
+-/*
+- * The same as dm_report_compact_fields, but for selected fields only.
+- * The "fields" arg is comma separated list of field names (the same format
+- * as used for "output_fields" arg in dm_report_init fn).
+- */
+-int dm_report_compact_given_fields(struct dm_report *rh, const char *fields);
+-
+-/*
+- * Returns 1 if there is no data waiting to be output.
+- */
+-int dm_report_is_empty(struct dm_report *rh);
+-
+-/*
+- * Destroy report content without doing output.
+- */
+-void dm_report_destroy_rows(struct dm_report *rh);
+-
+-int dm_report_output(struct dm_report *rh);
+-
+-/*
+- * Output the report headings for a columns-based report, even if they
+- * have already been shown. Useful for repeating reports that wish to
+- * issue a periodic reminder of the column headings.
+- */
+-int dm_report_column_headings(struct dm_report *rh);
+-
+-void dm_report_free(struct dm_report *rh);
+-
+-/*
+- * Prefix added to each field name with DM_REPORT_OUTPUT_FIELD_NAME_PREFIX
+- */
+-int dm_report_set_output_field_name_prefix(struct dm_report *rh,
+-					   const char *report_prefix);
+-
+-int dm_report_set_selection(struct dm_report *rh, const char *selection);
+-
+-/*
+- * Report functions are provided for simple data types.
+- * They take care of allocating copies of the data.
+- */
+-int dm_report_field_string(struct dm_report *rh, struct dm_report_field *field,
+-			   const char *const *data);
+-int dm_report_field_string_list(struct dm_report *rh, struct dm_report_field *field,
+-				const struct dm_list *data, const char *delimiter);
+-int dm_report_field_string_list_unsorted(struct dm_report *rh, struct dm_report_field *field,
+-					 const struct dm_list *data, const char *delimiter);
+-int dm_report_field_int32(struct dm_report *rh, struct dm_report_field *field,
+-			  const int32_t *data);
+-int dm_report_field_uint32(struct dm_report *rh, struct dm_report_field *field,
+-			   const uint32_t *data);
+-int dm_report_field_int(struct dm_report *rh, struct dm_report_field *field,
+-			const int *data);
+-int dm_report_field_uint64(struct dm_report *rh, struct dm_report_field *field,
+-			   const uint64_t *data);
+-int dm_report_field_percent(struct dm_report *rh, struct dm_report_field *field,
+-			    const dm_percent_t *data);
+-
+-/*
+- * For custom fields, allocate the data in 'mem' and use
+- * dm_report_field_set_value().
+- * 'sortvalue' may be NULL if it matches 'value'
+- */
+-void dm_report_field_set_value(struct dm_report_field *field, const void *value,
+-			       const void *sortvalue);
+-
+-/*
+- * Report group support.
+- */
+-struct dm_report_group;
+-
+-typedef enum {
+-	DM_REPORT_GROUP_SINGLE,
+-	DM_REPORT_GROUP_BASIC,
+-	DM_REPORT_GROUP_JSON
+-} dm_report_group_type_t;
+-
+-struct dm_report_group *dm_report_group_create(dm_report_group_type_t type, void *data);
+-int dm_report_group_push(struct dm_report_group *group, struct dm_report *report, void *data);
+-int dm_report_group_pop(struct dm_report_group *group);
+-int dm_report_group_output_and_pop_all(struct dm_report_group *group);
+-int dm_report_group_destroy(struct dm_report_group *group);
+-
+-/*
+- * Stats counter access methods
+- *
+- * Each method returns the corresponding stats counter value from the
+- * supplied dm_stats handle for the specified region_id and area_id.
+- * If either region_id or area_id uses one of the special values
+- * DM_STATS_REGION_CURRENT or DM_STATS_AREA_CURRENT then the region
+- * or area is selected according to the current state of the dm_stats
+- * handle's embedded cursor.
+- *
+- * Two methods are provided to access counter values: a named function
+- * for each available counter field and a single function that accepts
+- * an enum value specifying the required field. New code is encouraged
+- * to use the enum based interface as calls to the named functions are
+- * implemented using the enum method internally.
+- *
+- * See the kernel documentation for complete descriptions of each
+- * counter field:
+- *
+- * Documentation/device-mapper/statistics.txt
+- * Documentation/iostats.txt
+- *
+- * reads: the number of reads completed
+- * reads_merged: the number of reads merged
+- * read_sectors: the number of sectors read
+- * read_nsecs: the number of nanoseconds spent reading
+- * writes: the number of writes completed
+- * writes_merged: the number of writes merged
+- * write_sectors: the number of sectors written
+- * write_nsecs: the number of nanoseconds spent writing
+- * io_in_progress: the number of I/Os currently in progress
+- * io_nsecs: the number of nanoseconds spent doing I/Os
+- * weighted_io_nsecs: the weighted number of nanoseconds spent doing I/Os
+- * total_read_nsecs: the total time spent reading in nanoseconds
+- * total_write_nsecs: the total time spent writing in nanoseconds
+- */
+-
+-#define DM_STATS_REGION_CURRENT UINT64_MAX
+-#define DM_STATS_AREA_CURRENT UINT64_MAX
+-
+-typedef enum {
+-	DM_STATS_READS_COUNT,
+-	DM_STATS_READS_MERGED_COUNT,
+-	DM_STATS_READ_SECTORS_COUNT,
+-	DM_STATS_READ_NSECS,
+-	DM_STATS_WRITES_COUNT,
+-	DM_STATS_WRITES_MERGED_COUNT,
+-	DM_STATS_WRITE_SECTORS_COUNT,
+-	DM_STATS_WRITE_NSECS,
+-	DM_STATS_IO_IN_PROGRESS_COUNT,
+-	DM_STATS_IO_NSECS,
+-	DM_STATS_WEIGHTED_IO_NSECS,
+-	DM_STATS_TOTAL_READ_NSECS,
+-	DM_STATS_TOTAL_WRITE_NSECS,
+-	DM_STATS_NR_COUNTERS
+-} dm_stats_counter_t;
+-
+-uint64_t dm_stats_get_counter(const struct dm_stats *dms,
+-			      dm_stats_counter_t counter,
+-			      uint64_t region_id, uint64_t area_id);
+-
+-uint64_t dm_stats_get_reads(const struct dm_stats *dms,
+-			    uint64_t region_id, uint64_t area_id);
+-
+-uint64_t dm_stats_get_reads_merged(const struct dm_stats *dms,
+-				   uint64_t region_id, uint64_t area_id);
+-
+-uint64_t dm_stats_get_read_sectors(const struct dm_stats *dms,
+-				   uint64_t region_id, uint64_t area_id);
+-
+-uint64_t dm_stats_get_read_nsecs(const struct dm_stats *dms,
+-				 uint64_t region_id, uint64_t area_id);
+-
+-uint64_t dm_stats_get_writes(const struct dm_stats *dms,
+-			     uint64_t region_id, uint64_t area_id);
+-
+-uint64_t dm_stats_get_writes_merged(const struct dm_stats *dms,
+-				    uint64_t region_id, uint64_t area_id);
+-
+-uint64_t dm_stats_get_write_sectors(const struct dm_stats *dms,
+-				    uint64_t region_id, uint64_t area_id);
+-
+-uint64_t dm_stats_get_write_nsecs(const struct dm_stats *dms,
+-				  uint64_t region_id, uint64_t area_id);
+-
+-uint64_t dm_stats_get_io_in_progress(const struct dm_stats *dms,
+-				     uint64_t region_id, uint64_t area_id);
+-
+-uint64_t dm_stats_get_io_nsecs(const struct dm_stats *dms,
+-			       uint64_t region_id, uint64_t area_id);
+-
+-uint64_t dm_stats_get_weighted_io_nsecs(const struct dm_stats *dms,
+-					uint64_t region_id, uint64_t area_id);
+-
+-uint64_t dm_stats_get_total_read_nsecs(const struct dm_stats *dms,
+-				       uint64_t region_id, uint64_t area_id);
+-
+-uint64_t dm_stats_get_total_write_nsecs(const struct dm_stats *dms,
+-					uint64_t region_id, uint64_t area_id);
+-
+-/*
+- * Derived statistics access methods
+- *
+- * Each method returns the corresponding value calculated from the
+- * counters stored in the supplied dm_stats handle for the specified
+- * region_id and area_id. If either region_id or area_id uses one of the
+- * special values DM_STATS_REGION_CURRENT or DM_STATS_AREA_CURRENT then
+- * the region or area is selected according to the current state of the
+- * dm_stats handle's embedded cursor.
+- *
+- * The set of metrics is based on the fields provided by the Linux
+- * iostats program.
+- *
+- * rd_merges_per_sec: the number of reads merged per second
+- * wr_merges_per_sec: the number of writes merged per second
+- * reads_per_sec: the number of reads completed per second
+- * writes_per_sec: the number of writes completed per second
+- * read_sectors_per_sec: the number of sectors read per second
+- * write_sectors_per_sec: the number of sectors written per second
+- * average_request_size: the average size of requests submitted
+- * service_time: the average service time (in ns) for requests issued
+- * average_queue_size: the average queue length
+- * average_wait_time: the average time for requests to be served (in ns)
+- * average_rd_wait_time: the average read wait time
+- * average_wr_wait_time: the average write wait time
+- */
+-
+-typedef enum {
+-	DM_STATS_RD_MERGES_PER_SEC,
+-	DM_STATS_WR_MERGES_PER_SEC,
+-	DM_STATS_READS_PER_SEC,
+-	DM_STATS_WRITES_PER_SEC,
+-	DM_STATS_READ_SECTORS_PER_SEC,
+-	DM_STATS_WRITE_SECTORS_PER_SEC,
+-	DM_STATS_AVERAGE_REQUEST_SIZE,
+-	DM_STATS_AVERAGE_QUEUE_SIZE,
+-	DM_STATS_AVERAGE_WAIT_TIME,
+-	DM_STATS_AVERAGE_RD_WAIT_TIME,
+-	DM_STATS_AVERAGE_WR_WAIT_TIME,
+-	DM_STATS_SERVICE_TIME,
+-	DM_STATS_THROUGHPUT,
+-	DM_STATS_UTILIZATION,
+-	DM_STATS_NR_METRICS
+-} dm_stats_metric_t;
+-
+-int dm_stats_get_metric(const struct dm_stats *dms, int metric,
+-			uint64_t region_id, uint64_t area_id, double *value);
+-
+-int dm_stats_get_rd_merges_per_sec(const struct dm_stats *dms, double *rrqm,
+-				   uint64_t region_id, uint64_t area_id);
+-
+-int dm_stats_get_wr_merges_per_sec(const struct dm_stats *dms, double *rrqm,
+-				   uint64_t region_id, uint64_t area_id);
+-
+-int dm_stats_get_reads_per_sec(const struct dm_stats *dms, double *rd_s,
+-			       uint64_t region_id, uint64_t area_id);
+-
+-int dm_stats_get_writes_per_sec(const struct dm_stats *dms, double *wr_s,
+-				uint64_t region_id, uint64_t area_id);
+-
+-int dm_stats_get_read_sectors_per_sec(const struct dm_stats *dms,
+-				      double *rsec_s, uint64_t region_id,
+-				      uint64_t area_id);
+-
+-int dm_stats_get_write_sectors_per_sec(const struct dm_stats *dms,
+-				       double *wr_s, uint64_t region_id,
+-				       uint64_t area_id);
+-
+-int dm_stats_get_average_request_size(const struct dm_stats *dms,
+-				      double *arqsz, uint64_t region_id,
+-				      uint64_t area_id);
+-
+-int dm_stats_get_service_time(const struct dm_stats *dms, double *svctm,
+-			      uint64_t region_id, uint64_t area_id);
+-
+-int dm_stats_get_average_queue_size(const struct dm_stats *dms, double *qusz,
+-				    uint64_t region_id, uint64_t area_id);
+-
+-int dm_stats_get_average_wait_time(const struct dm_stats *dms, double *await,
+-				   uint64_t region_id, uint64_t area_id);
+-
+-int dm_stats_get_average_rd_wait_time(const struct dm_stats *dms,
+-				      double *await, uint64_t region_id,
+-				      uint64_t area_id);
+-
+-int dm_stats_get_average_wr_wait_time(const struct dm_stats *dms,
+-				      double *await, uint64_t region_id,
+-				      uint64_t area_id);
+-
+-int dm_stats_get_throughput(const struct dm_stats *dms, double *tput,
+-			    uint64_t region_id, uint64_t area_id);
+-
+-int dm_stats_get_utilization(const struct dm_stats *dms, dm_percent_t *util,
+-			     uint64_t region_id, uint64_t area_id);
+-
+-/*
+- * Statistics histogram access methods.
+- *
+- * Methods to access latency histograms for regions that have them
+- * enabled. Each histogram contains a configurable number of bins
+- * spanning a user defined latency interval.
+- *
+- * The bin count, upper and lower bin bounds, and bin values are
+- * made available via the following area methods.
+- *
+- * Methods to obtain a simple string representation of the histogram
+- * and its bounds are also provided.
+- */
+-
+-/*
+- * Retrieve a pointer to the histogram associated with the specified
+- * area. If the area does not have a histogram configured this function
+- * returns NULL.
+- *
+- * The pointer does not need to be freed explicitly by the caller: it
+- * will become invalid following a subsequent dm_stats_list(),
+- * dm_stats_populate() or dm_stats_destroy() of the corresponding
+- * dm_stats handle.
+- *
+- * If region_id or area_id is one of the special values
+- * DM_STATS_REGION_CURRENT or DM_STATS_AREA_CURRENT the current cursor
+- * value is used to select the region or area.
+- */
+-struct dm_histogram *dm_stats_get_histogram(const struct dm_stats *dms,
+-					    uint64_t region_id,
+-					    uint64_t area_id);
+-
+-/*
+- * Return the number of bins in the specified histogram handle.
+- */
+-int dm_histogram_get_nr_bins(const struct dm_histogram *dmh);
+-
+-/*
+- * Get the lower bound of the specified bin of the histogram for the
+- * area specified by region_id and area_id. The value is returned in
+- * nanoseconds.
+- */
+-uint64_t dm_histogram_get_bin_lower(const struct dm_histogram *dmh, int bin);
+-
+-/*
+- * Get the upper bound of the specified bin of the histogram for the
+- * area specified by region_id and area_id. The value is returned in
+- * nanoseconds.
+- */
+-uint64_t dm_histogram_get_bin_upper(const struct dm_histogram *dmh, int bin);
+-
+-/*
+- * Get the width of the specified bin of the histogram for the area
+- * specified by region_id and area_id. The width is equal to the bin
+- * upper bound minus the lower bound and yields the range of latency
+- * values covered by this bin. The value is returned in nanoseconds.
+- */
+-uint64_t dm_histogram_get_bin_width(const struct dm_histogram *dmh, int bin);
+-
+-/*
+- * Get the value of the specified bin of the histogram for the area
+- * specified by region_id and area_id.
+- */
+-uint64_t dm_histogram_get_bin_count(const struct dm_histogram *dmh, int bin);
+-
+-/*
+- * Get the percentage (relative frequency) of the specified bin of the
+- * histogram for the area specified by region_id and area_id.
+- */
+-dm_percent_t dm_histogram_get_bin_percent(const struct dm_histogram *dmh,
+-					  int bin);
+-
+-/*
+- * Return the total observations (sum of bin counts) for the histogram
+- * of the area specified by region_id and area_id.
+- */
+-uint64_t dm_histogram_get_sum(const struct dm_histogram *dmh);
+-
+-/*
+- * Histogram formatting flags.
+- */
+-#define DM_HISTOGRAM_SUFFIX  0x1
+-#define DM_HISTOGRAM_VALUES  0x2
+-#define DM_HISTOGRAM_PERCENT 0X4
+-#define DM_HISTOGRAM_BOUNDS_LOWER 0x10
+-#define DM_HISTOGRAM_BOUNDS_UPPER 0x20
+-#define DM_HISTOGRAM_BOUNDS_RANGE 0x30
+-
+-/*
+- * Return a string representation of the supplied histogram's values and
+- * bin boundaries.
+- *
+- * The bin argument selects the bin to format. If this argument is less
+- * than zero all bins will be included in the resulting string.
+- *
+- * width specifies a minimum width for the field in characters; if it is
+- * zero the width will be determined automatically based on the options
+- * selected for formatting. A value less than zero disables field width
+- * control: bin boundaries and values will be output with a minimum
+- * amount of whitespace.
+- *
+- * flags is a collection of flag arguments that control the string format:
+- *
+- * DM_HISTOGRAM_VALUES  - Include bin values in the string.
+- * DM_HISTOGRAM_SUFFIX  - Include time unit suffixes when printing bounds.
+- * DM_HISTOGRAM_PERCENT - Format bin values as a percentage.
+- *
+- * DM_HISTOGRAM_BOUNDS_LOWER - Include the lower bound of each bin.
+- * DM_HISTOGRAM_BOUNDS_UPPER - Include the upper bound of each bin.
+- * DM_HISTOGRAM_BOUNDS_RANGE - Show the span of each bin as "lo-up".
+- *
+- * The returned pointer does not need to be freed explicitly by the
+- * caller: it will become invalid following a subsequent
+- * dm_stats_list(), dm_stats_populate() or dm_stats_destroy() of the
+- * corresponding dm_stats handle.
+- */
+-const char *dm_histogram_to_string(const struct dm_histogram *dmh, int bin,
+-				   int width, int flags);
+-
+-/*************************
+- * config file parse/print
+- *************************/
+-typedef enum {
+-	DM_CFG_INT,
+-	DM_CFG_FLOAT,
+-	DM_CFG_STRING,
+-	DM_CFG_EMPTY_ARRAY
+-} dm_config_value_type_t;
+-
+-struct dm_config_value {
+-	dm_config_value_type_t type;
+-
+-	union {
+-		int64_t i;
+-		float f;
+-		double d;       	/* Unused. */
+-		const char *str;
+-	} v;
+-
+-	struct dm_config_value *next;	/* For arrays */
+-	uint32_t format_flags;
+-};
+-
+-struct dm_config_node {
+-	const char *key;
+-	struct dm_config_node *parent, *sib, *child;
+-	struct dm_config_value *v;
+-	int id;
+-};
+-
+-struct dm_config_tree {
+-	struct dm_config_node *root;
+-	struct dm_config_tree *cascade;
+-	struct dm_pool *mem;
+-	void *custom;
+-};
+-
+-struct dm_config_tree *dm_config_create(void);
+-struct dm_config_tree *dm_config_from_string(const char *config_settings);
+-int dm_config_parse(struct dm_config_tree *cft, const char *start, const char *end);
+-int dm_config_parse_without_dup_node_check(struct dm_config_tree *cft, const char *start, const char *end);
+-
+-void *dm_config_get_custom(struct dm_config_tree *cft);
+-void dm_config_set_custom(struct dm_config_tree *cft, void *custom);
+-
+-/*
+- * When searching, first_cft is checked before second_cft.
+- */
+-struct dm_config_tree *dm_config_insert_cascaded_tree(struct dm_config_tree *first_cft, struct dm_config_tree *second_cft);
+-
+-/*
+- * If there's a cascaded dm_config_tree, remove the top layer
+- * and return the layer below.  Otherwise return NULL.
+- */
+-struct dm_config_tree *dm_config_remove_cascaded_tree(struct dm_config_tree *cft);
+-
+-/*
+- * Create a new, uncascaded config tree equivalent to the input cascade.
+- */
+-struct dm_config_tree *dm_config_flatten(struct dm_config_tree *cft);
+-
+-void dm_config_destroy(struct dm_config_tree *cft);
+-
+-/* Simple output line by line. */
+-typedef int (*dm_putline_fn)(const char *line, void *baton);
+-/* More advaced output with config node reference. */
+-typedef int (*dm_config_node_out_fn)(const struct dm_config_node *cn, const char *line, void *baton);
+-
+-/*
+- * Specification for advanced config node output.
+- */
+-struct dm_config_node_out_spec {
+-	dm_config_node_out_fn prefix_fn; /* called before processing config node lines */
+-	dm_config_node_out_fn line_fn; /* called for each config node line */
+-	dm_config_node_out_fn suffix_fn; /* called after processing config node lines */
+-};
+-
+-/* Write the node and any subsequent siblings it has. */
+-int dm_config_write_node(const struct dm_config_node *cn, dm_putline_fn putline, void *baton);
+-int dm_config_write_node_out(const struct dm_config_node *cn, const struct dm_config_node_out_spec *out_spec, void *baton);
+-
+-/* Write given node only without subsequent siblings. */
+-int dm_config_write_one_node(const struct dm_config_node *cn, dm_putline_fn putline, void *baton);
+-int dm_config_write_one_node_out(const struct dm_config_node *cn, const struct dm_config_node_out_spec *out_spec, void *baton);
+-
+-struct dm_config_node *dm_config_find_node(const struct dm_config_node *cn, const char *path);
+-int dm_config_has_node(const struct dm_config_node *cn, const char *path);
+-int dm_config_remove_node(struct dm_config_node *parent, struct dm_config_node *remove);
+-const char *dm_config_find_str(const struct dm_config_node *cn, const char *path, const char *fail);
+-const char *dm_config_find_str_allow_empty(const struct dm_config_node *cn, const char *path, const char *fail);
+-int dm_config_find_int(const struct dm_config_node *cn, const char *path, int fail);
+-int64_t dm_config_find_int64(const struct dm_config_node *cn, const char *path, int64_t fail);
+-float dm_config_find_float(const struct dm_config_node *cn, const char *path, float fail);
+-
+-const struct dm_config_node *dm_config_tree_find_node(const struct dm_config_tree *cft, const char *path);
+-const char *dm_config_tree_find_str(const struct dm_config_tree *cft, const char *path, const char *fail);
+-const char *dm_config_tree_find_str_allow_empty(const struct dm_config_tree *cft, const char *path, const char *fail);
+-int dm_config_tree_find_int(const struct dm_config_tree *cft, const char *path, int fail);
+-int64_t dm_config_tree_find_int64(const struct dm_config_tree *cft, const char *path, int64_t fail);
+-float dm_config_tree_find_float(const struct dm_config_tree *cft, const char *path, float fail);
+-int dm_config_tree_find_bool(const struct dm_config_tree *cft, const char *path, int fail);
+-
+-/*
+- * Understands (0, ~0), (y, n), (yes, no), (on,
+- * off), (true, false).
+- */
+-int dm_config_find_bool(const struct dm_config_node *cn, const char *path, int fail);
+-int dm_config_value_is_bool(const struct dm_config_value *v);
+-
+-int dm_config_get_uint32(const struct dm_config_node *cn, const char *path, uint32_t *result);
+-int dm_config_get_uint64(const struct dm_config_node *cn, const char *path, uint64_t *result);
+-int dm_config_get_str(const struct dm_config_node *cn, const char *path, const char **result);
+-int dm_config_get_list(const struct dm_config_node *cn, const char *path, const struct dm_config_value **result);
+-int dm_config_get_section(const struct dm_config_node *cn, const char *path, const struct dm_config_node **result);
+-
+-unsigned dm_config_maybe_section(const char *str, unsigned len);
+-
+-const char *dm_config_parent_name(const struct dm_config_node *n);
+-
+-struct dm_config_node *dm_config_clone_node_with_mem(struct dm_pool *mem, const struct dm_config_node *node, int siblings);
+-struct dm_config_node *dm_config_create_node(struct dm_config_tree *cft, const char *key);
+-struct dm_config_value *dm_config_create_value(struct dm_config_tree *cft);
+-struct dm_config_node *dm_config_clone_node(struct dm_config_tree *cft, const struct dm_config_node *cn, int siblings);
+-
+-/*
+- * Common formatting flags applicable to all config node types (lower 16 bits).
+- */
+-#define DM_CONFIG_VALUE_FMT_COMMON_ARRAY             0x00000001 /* value is array */
+-#define DM_CONFIG_VALUE_FMT_COMMON_EXTRA_SPACES      0x00000002 /* add spaces in "key = value" pairs in constrast to "key=value" for better readability */
+-
+-/*
+- * Type-related config node formatting flags (higher 16 bits).
+- */
+-/* int-related formatting flags */
+-#define DM_CONFIG_VALUE_FMT_INT_OCTAL                0x00010000 /* print number in octal form */
+-
+-/* string-related formatting flags */
+-#define DM_CONFIG_VALUE_FMT_STRING_NO_QUOTES         0x00010000 /* do not print quotes around string value */
+-
+-void dm_config_value_set_format_flags(struct dm_config_value *cv, uint32_t format_flags);
+-uint32_t dm_config_value_get_format_flags(struct dm_config_value *cv);
+-
+-struct dm_pool *dm_config_memory(struct dm_config_tree *cft);
+-
+-/* Udev device directory. */
+-#define DM_UDEV_DEV_DIR "/dev/"
+-
+-/* Cookie prefixes.
+- *
+- * The cookie value consists of a prefix (16 bits) and a base (16 bits).
+- * We can use the prefix to store the flags. These flags are sent to
+- * kernel within given dm task. When returned back to userspace in
+- * DM_COOKIE udev environment variable, we can control several aspects
+- * of udev rules we use by decoding the cookie prefix. When doing the
+- * notification, we replace the cookie prefix with DM_COOKIE_MAGIC,
+- * so we notify the right semaphore.
+- *
+- * It is still possible to use cookies for passing the flags to udev
+- * rules even when udev_sync is disabled. The base part of the cookie
+- * will be zero (there's no notification semaphore) and prefix will be
+- * set then. However, having udev_sync enabled is highly recommended.
+- */
+-#define DM_COOKIE_MAGIC 0x0D4D
+-#define DM_UDEV_FLAGS_MASK 0xFFFF0000
+-#define DM_UDEV_FLAGS_SHIFT 16
+-
+-/*
+- * DM_UDEV_DISABLE_DM_RULES_FLAG is set in case we need to disable
+- * basic device-mapper udev rules that create symlinks in /dev/<DM_DIR>
+- * directory. However, we can't reliably prevent creating default
+- * nodes by udev (commonly /dev/dm-X, where X is a number).
+- */
+-#define DM_UDEV_DISABLE_DM_RULES_FLAG 0x0001
+-/*
+- * DM_UDEV_DISABLE_SUBSYTEM_RULES_FLAG is set in case we need to disable
+- * subsystem udev rules, but still we need the general DM udev rules to
+- * be applied (to create the nodes and symlinks under /dev and /dev/disk).
+- */
+-#define DM_UDEV_DISABLE_SUBSYSTEM_RULES_FLAG 0x0002
+-/*
+- * DM_UDEV_DISABLE_DISK_RULES_FLAG is set in case we need to disable
+- * general DM rules that set symlinks in /dev/disk directory.
+- */
+-#define DM_UDEV_DISABLE_DISK_RULES_FLAG 0x0004
+-/*
+- * DM_UDEV_DISABLE_OTHER_RULES_FLAG is set in case we need to disable
+- * all the other rules that are not general device-mapper nor subsystem
+- * related (the rules belong to other software or packages). All foreign
+- * rules should check this flag directly and they should ignore further
+- * rule processing for such event.
+- */
+-#define DM_UDEV_DISABLE_OTHER_RULES_FLAG 0x0008
+-/*
+- * DM_UDEV_LOW_PRIORITY_FLAG is set in case we need to instruct the
+- * udev rules to give low priority to the device that is currently
+- * processed. For example, this provides a way to select which symlinks
+- * could be overwritten by high priority ones if their names are equal.
+- * Common situation is a name based on FS UUID while using origin and
+- * snapshot devices.
+- */
+-#define DM_UDEV_LOW_PRIORITY_FLAG 0x0010
+-/*
+- * DM_UDEV_DISABLE_LIBRARY_FALLBACK is set in case we need to disable
+- * libdevmapper's node management. We will rely on udev completely
+- * and there will be no fallback action provided by libdevmapper if
+- * udev does something improperly. Using the library fallback code has
+- * a consequence that you need to take into account: any device node
+- * or symlink created without udev is not recorded in udev database
+- * which other applications may read to get complete list of devices.
+- * For this reason, use of DM_UDEV_DISABLE_LIBRARY_FALLBACK is
+- * recommended on systems where udev is used. Keep library fallback
+- * enabled just for exceptional cases where you need to debug udev-related
+- * problems. If you hit such problems, please contact us through upstream
+- * LVM2 development mailing list (see also README file). This flag is
+- * currently not set by default in libdevmapper so you need to set it
+- * explicitly if you're sure that udev is behaving correctly on your
+- * setups.
+- */
+-#define DM_UDEV_DISABLE_LIBRARY_FALLBACK 0x0020
+-/*
+- * DM_UDEV_PRIMARY_SOURCE_FLAG is automatically appended by
+- * libdevmapper for all ioctls generating udev uevents. Once used in
+- * udev rules, we know if this is a real "primary sourced" event or not.
+- * We need to distinguish real events originated in libdevmapper from
+- * any spurious events to gather all missing information (e.g. events
+- * generated as a result of "udevadm trigger" command or as a result
+- * of the "watch" udev rule).
+- */
+-#define DM_UDEV_PRIMARY_SOURCE_FLAG 0x0040
+-
+-/*
+- * Udev flags reserved for use by any device-mapper subsystem.
+- */
+-#define DM_SUBSYSTEM_UDEV_FLAG0 0x0100
+-#define DM_SUBSYSTEM_UDEV_FLAG1 0x0200
+-#define DM_SUBSYSTEM_UDEV_FLAG2 0x0400
+-#define DM_SUBSYSTEM_UDEV_FLAG3 0x0800
+-#define DM_SUBSYSTEM_UDEV_FLAG4 0x1000
+-#define DM_SUBSYSTEM_UDEV_FLAG5 0x2000
+-#define DM_SUBSYSTEM_UDEV_FLAG6 0x4000
+-#define DM_SUBSYSTEM_UDEV_FLAG7 0x8000
+-
+-int dm_cookie_supported(void);
+-
+-/*
+- * Udev synchronisation functions.
+- */
+-void dm_udev_set_sync_support(int sync_with_udev);
+-int dm_udev_get_sync_support(void);
+-void dm_udev_set_checking(int checking);
+-int dm_udev_get_checking(void);
+-
+-/*
+- * Default value to get new auto generated cookie created
+- */
+-#define DM_COOKIE_AUTO_CREATE 0
+-int dm_udev_create_cookie(uint32_t *cookie);
+-int dm_udev_complete(uint32_t cookie);
+-int dm_udev_wait(uint32_t cookie);
+-
+-/*
+- * dm_dev_wait_immediate 
+- * If *ready is 1 on return, the wait is complete.
+- * If *ready is 0 on return, the wait is incomplete and either
+- * this function or dm_udev_wait() must be called again.
+- * Returns 0 on error, when neither function should be called again.
+- */
+-int dm_udev_wait_immediate(uint32_t cookie, int *ready);
+-
+-#define DM_DEV_DIR_UMASK 0022
+-#define DM_CONTROL_NODE_UMASK 0177
 -
 -#ifdef __cplusplus
 -}
 -#endif
--#endif /* _LIB_LVM2APP_H */
-diff --git a/liblvm/lvm_base.c b/liblvm/lvm_base.c
-deleted file mode 100644
-index 791c629..0000000
---- a/liblvm/lvm_base.c
-+++ /dev/null
-@@ -1,216 +0,0 @@
--/*
-- * Copyright (C) 2008,2009 Red Hat, Inc. All rights reserved.
-- *
-- * This file is part of LVM2.
-- *
-- * This copyrighted material is made available to anyone wishing to use,
-- * modify, copy, or redistribute it subject to the terms and conditions
-- * of the GNU Lesser General Public License v.2.1.
-- *
-- * You should have received a copy of the GNU Lesser General Public License
-- * along with this program; if not, write to the Free Software Foundation,
-- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
-- */
--
--#include "lib/misc/lib.h"
--#include "lib/commands/toolcontext.h"
--#include "lib/locking/locking.h"
--#include "lvm-version.h"
--#include "lib/metadata/metadata-exported.h"
--#include "liblvm/lvm2app.h"
--#include "lvm_misc.h"
--
--const char *lvm_library_get_version(void)
--{
--	return LVM_VERSION;
--}
--
--static lvm_t _lvm_init(const char *system_dir)
--{
--	struct cmd_context *cmd;
--
--	/* FIXME: logging bound to handle
--	 */
--
--	if (!udev_init_library_context())
--		stack;
--
--	/*
--	 * It's not necessary to use name mangling for LVM:
--	 *   - the character set used for VG-LV names is subset of udev character set
--	 *   - when we check other devices (e.g. device_is_usable fn), we use major:minor, not dm names
--	 */
--	dm_set_name_mangling_mode(DM_STRING_MANGLING_NONE);
--
--	/* create context */
--	/* FIXME: split create_toolcontext */
--	/* FIXME: make all globals configurable */
--	cmd = create_toolcontext(0, system_dir, 0, 0, 1, 1);
--	if (!cmd)
--		return NULL;
--
--	/*
--	 * FIXME: if an non memory error occured, return the cmd (maybe some
--	 * cleanup needed).
--	 */
--
--	/* initialization from lvm_run_command */
--	init_error_message_produced(0);
--
--	/* FIXME: locking_type config option needed? */
--	/* initialize locking */
--	if (!init_locking(-1, cmd, 0)) {
--		/* FIXME: use EAGAIN as error code here */
--		lvm_quit((lvm_t) cmd);
--		return NULL;
--	}
--	/*
--	 * FIXME: Use cmd->cmd_line as audit trail for liblvm calls.  Used in
--	 * archive() call.  Possible example:
--	 * cmd_line = "lvm_vg_create: vg1\nlvm_vg_extend vg1 /dev/sda1\n"
--	 */
--	cmd->cmd_line = "liblvm";
--
--	/*
--	 * Turn off writing to stdout/stderr.
--	 * FIXME Fix lib/ to support a non-interactive mode instead.
--	 */
--	log_suppress(1);
--
--	return (lvm_t) cmd;
--}
--
--
--lvm_t lvm_init(const char *system_dir)
--{
--	lvm_t h = NULL;
--	struct saved_env e = store_user_env(NULL);
--	h = _lvm_init(system_dir);
--	restore_user_env(&e);
--	return h;
--}
--
--void lvm_quit(lvm_t libh)
--{
--	struct saved_env e = store_user_env((struct cmd_context *)libh);
--	fin_locking();
--	destroy_toolcontext((struct cmd_context *)libh);
--	udev_fin_library_context();
--	restore_user_env(&e);
--}
--
--int lvm_config_reload(lvm_t libh)
--{
--	int rc = 0;
--
--	/* FIXME: re-init locking needed here? */
--	struct saved_env e = store_user_env((struct cmd_context *)libh);
--	if (!refresh_toolcontext((struct cmd_context *)libh))
--		rc = -1;
--	restore_user_env(&e);
--	return rc;
--}
--
--/*
-- * FIXME: submit a patch to document the --config option
-- */
--int lvm_config_override(lvm_t libh, const char *config_settings)
--{
--	int rc = 0;
--	struct cmd_context *cmd = (struct cmd_context *)libh;
--	struct saved_env e = store_user_env((struct cmd_context *)libh);
--
--	if (!override_config_tree_from_string(cmd, config_settings))
--		rc = -1;
--	restore_user_env(&e);
--	return rc;
--}
--
--/*
-- * When full lvm connection is not being used, libh can be NULL
-- * and this command will internally create a single-use, light-weight
-- * cmd struct that only has cmd->cft populated from lvm.conf.
-- */
--int lvm_config_find_bool(lvm_t libh, const char *config_path, int fail)
--{
--	int rc = 0;
--	struct cmd_context *cmd;
--	struct saved_env e;
--
--	if (libh) {
--		cmd = (struct cmd_context *)libh;
--		e = store_user_env((struct cmd_context *)libh);
--	} else {
--		if (!(cmd = create_config_context()))
--			return 0;
--	}
--
--	rc = dm_config_tree_find_bool(cmd->cft, config_path, fail);
--
--	if (libh)
--		restore_user_env(&e);
--	else
--		destroy_config_context(cmd);
--	return rc;
--}
--
--int lvm_errno(lvm_t libh)
--{
--	int rc;
--	struct saved_env e = store_user_env((struct cmd_context *)libh);
--	rc = stored_errno();
--	restore_user_env(&e);
--	return rc;
--}
--
--const char *lvm_errmsg(lvm_t libh)
--{
--	const char *rc = NULL;
--	struct cmd_context *cmd = (struct cmd_context *)libh;
--	struct saved_env e = store_user_env((struct cmd_context *)libh);
--
--	const char *msg = stored_errmsg_with_clear();
--	if (msg) {
--		rc = dm_pool_strdup(cmd->mem, msg);
--		free((void *)msg);
--	}
--
--	restore_user_env(&e);
--	return rc;
--}
--
--const char *lvm_vgname_from_pvid(lvm_t libh, const char *pvid)
--{
--	const char *rc = NULL;
--	struct cmd_context *cmd = (struct cmd_context *)libh;
--	struct id id;
--	struct saved_env e = store_user_env((struct cmd_context *)libh);
--
--	if (id_read_format(&id, pvid)) {
--		rc = find_vgname_from_pvid(cmd, (char *)id.uuid);
--	} else {
--		log_error(INTERNAL_ERROR "Unable to convert uuid");
--	}
--
--	restore_user_env(&e);
--	return rc;
--}
--
--const char *lvm_vgname_from_device(lvm_t libh, const char *device)
--{
--	const char *rc = NULL;
--	struct cmd_context *cmd = (struct cmd_context *)libh;
--	struct saved_env e = store_user_env(cmd);
--	rc = find_vgname_from_pvname(cmd, device);
--	restore_user_env(&e);
--	return rc;
--}
--
--/*
-- * No context to work with, so no ability to save off and restore env is not
-- * available and is not needed.
-- */
--float lvm_percent_to_float(percent_t v)
--{
--	return dm_percent_to_float(v);
--}
-diff --git a/liblvm/lvm_lv.c b/liblvm/lvm_lv.c
-deleted file mode 100644
-index 48774df..0000000
---- a/liblvm/lvm_lv.c
-+++ /dev/null
-@@ -1,820 +0,0 @@
--/*
-- * Copyright (C) 2008-2013 Red Hat, Inc. All rights reserved.
-- *
-- * This file is part of LVM2.
-- *
-- * This copyrighted material is made available to anyone wishing to use,
-- * modify, copy, or redistribute it subject to the terms and conditions
-- * of the GNU Lesser General Public License v.2.1.
-- *
-- * You should have received a copy of the GNU Lesser General Public License
-- * along with this program; if not, write to the Free Software Foundation,
-- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
-- */
--
--#include "lib/misc/lib.h"
--#include "lib/metadata/metadata-exported.h"
--#include "lib/misc/lvm-string.h"
--#include "lib/config/defaults.h"
--#include "lib/metadata/segtype.h"
--#include "lib/locking/locking.h"
--#include "lib/activate/activate.h"
--#include "lvm_misc.h"
--#include "liblvm/lvm2app.h"
--
--/* FIXME Improve all the log messages to include context. Which VG/LV as a minimum? */
--
--struct lvm_lv_create_params
--{
--	uint32_t magic;
--	vg_t vg;
--	struct lvcreate_params lvp;
--};
--
--#define LV_CREATE_PARAMS_MAGIC 0xFEED0001
--
--static int _lv_check_handle(const lv_t lv, const int vg_writeable)
--{
--	if (!lv || !lv->vg || vg_read_error(lv->vg))
--		return -1;
--	if (vg_writeable && !vg_check_write_mode(lv->vg))
--		return -1;
--	return 0;
--}
--
--/* FIXME: have lib/report/report.c _disp function call lv_size()? */
--uint64_t lvm_lv_get_size(const lv_t lv)
--{
--	uint64_t rc;
--	struct saved_env e = store_user_env(lv->vg->cmd);
--	rc = SECTOR_SIZE * lv_size(lv);
--	restore_user_env(&e);
--	return rc;
--}
--
--const char *lvm_lv_get_uuid(const lv_t lv)
--{
--	const char *rc;
--	struct saved_env e = store_user_env(lv->vg->cmd);
--	rc = lv_uuid_dup(lv->vg->vgmem, lv);
--	restore_user_env(&e);
--	return rc;
--}
--
--const char *lvm_lv_get_name(const lv_t lv)
--{
--	const char *rc;
--	struct saved_env e = store_user_env(lv->vg->cmd);
--	rc = dm_pool_strndup(lv->vg->vgmem, lv->name, NAME_LEN+1);
--	restore_user_env(&e);
--	return rc;
--}
--
--const char *lvm_lv_get_attr(const lv_t lv)
--{
--	const char *rc;
--	struct saved_env e = store_user_env(lv->vg->cmd);
--	rc = lv_attr_dup(lv->vg->vgmem, lv);
--	restore_user_env(&e);
--	return rc;
--}
--
--const char *lvm_lv_get_origin(const lv_t lv)
--{
--	const char *rc;
--	struct saved_env e = store_user_env(lv->vg->cmd);
--	rc = lv_origin_dup(lv->vg->vgmem, lv);
--	restore_user_env(&e);
--	return rc;
--}
--
--struct lvm_property_value lvm_lv_get_property(const lv_t lv, const char *name)
--{
--	struct lvm_property_value rc;
--	struct saved_env e = store_user_env(lv->vg->cmd);
--	rc = get_property(NULL, NULL, lv, NULL, NULL, NULL, NULL, name);
--	restore_user_env(&e);
--	return rc;
--}
--
--struct lvm_property_value lvm_lvseg_get_property(const lvseg_t lvseg,
--						 const char *name)
--{
--	struct lvm_property_value rc;
--	struct saved_env e = store_user_env(lvseg->lv->vg->cmd);
--	rc = get_property(NULL, NULL, NULL, lvseg, NULL, NULL, NULL, name);
--	restore_user_env(&e);
--	return rc;
--}
--
--uint64_t lvm_lv_is_active(const lv_t lv)
--{
--	uint64_t rc = 0;
--	struct lvinfo info;
--
--	struct saved_env e = store_user_env(lv->vg->cmd);
--
--	if (lv_info(lv->vg->cmd, lv, 0, &info, 0, 0) &&
--	    info.exists && info.live_table)
--		rc = 1;
--
--	restore_user_env(&e);
--	return rc;
--}
--
--uint64_t lvm_lv_is_suspended(const lv_t lv)
--{
--	uint64_t rc = 0;
--	struct lvinfo info;
--	struct saved_env e = store_user_env(lv->vg->cmd);
--
--	if (lv_info(lv->vg->cmd, lv, 0, &info, 0, 0) &&
--	    info.exists && info.suspended)
--		rc = 1;
--
--	restore_user_env(&e);
--	return rc;
--}
--
--static int _lvm_lv_add_tag(lv_t lv, const char *tag)
--{
--	if (_lv_check_handle(lv, 1))
--		return -1;
--	if (!lv_change_tag(lv, tag, 1))
--		return -1;
--	return 0;
--}
--
--int lvm_lv_add_tag(lv_t lv, const char *tag)
--{
--	int rc;
--	struct saved_env e = store_user_env(lv->vg->cmd);
--	rc = _lvm_lv_add_tag(lv, tag);
--	restore_user_env(&e);
--	return rc;
--}
--
--
--static int _lvm_lv_remove_tag(lv_t lv, const char *tag)
--{
--	if (_lv_check_handle(lv, 1))
--		return -1;
--	if (!lv_change_tag(lv, tag, 0))
--		return -1;
--	return 0;
--}
--
--int lvm_lv_remove_tag(lv_t lv, const char *tag)
--{
--	int rc;
--	struct saved_env e = store_user_env(lv->vg->cmd);
--	rc = _lvm_lv_remove_tag(lv, tag);
--	restore_user_env(&e);
--	return rc;
--}
--
--
--struct dm_list *lvm_lv_get_tags(const lv_t lv)
--{
--	struct dm_list *rc;
--	struct saved_env e = store_user_env(lv->vg->cmd);
--	rc = tag_list_copy(lv->vg->vgmem, &lv->tags);
--	restore_user_env(&e);
--	return rc;
--}
--
--/* Set defaults for non-segment specific LV parameters */
--static void _lv_set_default_params(struct lvcreate_params *lp,
--				   vg_t vg, const char *lvname,
--				   uint64_t extents)
--{
--	lp->zero = 1;
--	lp->wipe_signatures = 0;
--	lp->major = -1;
--	lp->minor = -1;
--	lp->activate = CHANGE_AY;
--	lp->lv_name = lvname; /* FIXME: check this for safety */
--	lp->pvh = &vg->pvs;
--
--	lp->extents = extents;
--	lp->permission = LVM_READ | LVM_WRITE;
--	lp->read_ahead = DM_READ_AHEAD_NONE;
--	lp->alloc = ALLOC_INHERIT;
--	dm_list_init(&lp->tags);
--}
--
--static struct segment_type * _get_segtype(struct cmd_context *cmd) {
--	struct segment_type *rc = get_segtype_from_string(cmd, SEG_TYPE_NAME_STRIPED);
--	if (!rc) {
--		log_error(INTERNAL_ERROR "Segtype striped not found.");
--	}
--	return rc;
--}
--
--/* Set default for linear segment specific LV parameters */
--static int _lv_set_default_linear_params(struct cmd_context *cmd,
--					  struct lvcreate_params *lp)
--{
--	if (!(lp->segtype = _get_segtype(cmd))) {
--		return 0;
--	}
--
--	lp->stripes = 1;
--
--	return 1;
--}
--
--/*
-- * FIXME: This function should probably not commit to disk but require calling
-- * lvm_vg_write.  However, this appears to be non-trivial change until
-- * lv_create_single is refactored by segtype.
-- */
--static lv_t _lvm_vg_create_lv_linear(vg_t vg, const char *name, uint64_t size)
--{
--	struct lvcreate_params lp = { 0 };
--	uint64_t extents;
--	struct logical_volume *lv;
--
--	if (vg_read_error(vg))
--		return NULL;
--	if (!vg_check_write_mode(vg))
--		return NULL;
--
--	if (!(extents = extents_from_size(vg->cmd, size / SECTOR_SIZE,
--					  vg->extent_size))) {
--		log_error("Unable to create LV without size.");
--		return NULL;
--	}
--
--	_lv_set_default_params(&lp, vg, name, extents);
--	if (!_lv_set_default_linear_params(vg->cmd, &lp))
--		return_NULL;
--	if (!(lv = lv_create_single(vg, &lp)))
--		return_NULL;
--	return (lv_t) lv;
--}
--
--lv_t lvm_vg_create_lv_linear(vg_t vg, const char *name, uint64_t size)
--{
--	lv_t rc;
--	struct saved_env e = store_user_env(vg->cmd);
--	rc = _lvm_vg_create_lv_linear(vg, name, size);
--	restore_user_env(&e);
--	return rc;
--}
--
--/*
-- * FIXME: This function should probably not commit to disk but require calling
-- * lvm_vg_write.
-- */
--static int _lvm_vg_remove_lv(lv_t lv)
--{
--	if (!lv || !lv->vg || vg_read_error(lv->vg))
--		return -1;
--	if (!vg_check_write_mode(lv->vg))
--		return -1;
--	if (!lv_remove_single(lv->vg->cmd, lv, DONT_PROMPT, 0))
--		return -1;
--	return 0;
--}
--
--int lvm_vg_remove_lv(lv_t lv)
--{
--	int rc;
--	struct saved_env e = store_user_env(lv->vg->cmd);
--	rc = _lvm_vg_remove_lv(lv);
--	restore_user_env(&e);
--	return rc;
--}
--
--static int _lvm_lv_activate(lv_t lv)
--{
--	if (!lv || !lv->vg || vg_read_error(lv->vg) || !lv->vg->cmd)
--		return -1;
--
--	/* FIXME: handle pvmove stuff later */
--	if (lv_is_locked(lv)) {
--		log_error("Unable to activate locked LV");
--		return -1;
--	}
--
--	/* FIXME: handle lvconvert stuff later */
--	if (lv_is_converting(lv)) {
--		log_error("Unable to activate LV with in-progress lvconvert");
--		return -1;
--	}
--
--	if (lv_is_origin(lv) ||
--	    lv_is_pvmove(lv) ||
--	    seg_only_exclusive(first_seg(lv))) {
--		log_verbose("Activating logical volume \"%s\" "
--			    "exclusively", lv->name);
--		if (!activate_lv_excl(lv->vg->cmd, lv)) {
--			/* FIXME Improve msg */
--			log_error("Activate exclusive failed.");
--			return -1;
--		}
--	} else {
--		log_verbose("Activating logical volume \"%s\"",
--			    lv->name);
--		if (!activate_lv(lv->vg->cmd, lv)) {
--			/* FIXME Improve msg */
--			log_error("Activate failed.");
--			return -1;
--		}
--	}
--	return 0;
--}
--
--int lvm_lv_activate(lv_t lv)
--{
--	int rc;
--	struct saved_env e = store_user_env(lv->vg->cmd);
--	rc = _lvm_lv_activate(lv);
--	restore_user_env(&e);
--	return rc;
--}
--
--static int _lvm_lv_deactivate(lv_t lv)
--{
--	if (!lv || !lv->vg || vg_read_error(lv->vg) || !lv->vg->cmd)
--		return -1;
--
--	log_verbose("Deactivating logical volume \"%s\"", lv->name);
--	if (!deactivate_lv(lv->vg->cmd, lv)) {
--		log_error("Deactivate failed.");
--		return -1;
--	}
--	return 0;
--}
--
--int lvm_lv_deactivate(lv_t lv)
--{
--	int rc;
--	struct saved_env e = store_user_env(lv->vg->cmd);
--	rc = _lvm_lv_deactivate(lv);
--	restore_user_env(&e);
--	return rc;
--}
--
--static struct dm_list *_lvm_lv_list_lvsegs(lv_t lv)
--{
--	struct dm_list *list;
--	lvseg_list_t *lvseg;
--	struct lv_segment *lvl;
--
--	if (dm_list_empty(&lv->segments))
--		return NULL;
--
--	if (!(list = dm_pool_zalloc(lv->vg->vgmem, sizeof(*list)))) {
--		log_errno(ENOMEM, "Memory allocation fail for dm_list.");
--		return NULL;
--	}
--	dm_list_init(list);
--
--	dm_list_iterate_items(lvl, &lv->segments) {
--		if (!(lvseg = dm_pool_zalloc(lv->vg->vgmem, sizeof(*lvseg)))) {
--			log_errno(ENOMEM,
--				"Memory allocation fail for lvm_lvseg_list.");
--			return NULL;
--		}
--		lvseg->lvseg = lvl;
--		dm_list_add(list, &lvseg->list);
--	}
--	return list;
--}
--
--struct dm_list *lvm_lv_list_lvsegs(lv_t lv)
--{
--	struct dm_list *rc;
--	struct saved_env e = store_user_env(lv->vg->cmd);
--	rc = _lvm_lv_list_lvsegs(lv);
--	restore_user_env(&e);
--	return rc;
--}
--
--lv_t lvm_lv_from_name(vg_t vg, const char *name)
--{
--	lv_t rc = NULL;
--	struct lv_list *lvl;
--
--	struct saved_env e = store_user_env(vg->cmd);
--	dm_list_iterate_items(lvl, &vg->lvs) {
--		if (!strcmp(name, lvl->lv->name)) {
--			rc = lvl->lv;
--			break;
--		}
--	}
--	restore_user_env(&e);
--	return rc;
--}
--
--static lv_t _lvm_lv_from_uuid(vg_t vg, const char *uuid)
--{
--	struct lv_list *lvl;
--	struct id id;
--
--	if (strlen(uuid) < ID_LEN) {
--		log_errno (EINVAL, "Invalid UUID string length");
--		return NULL;
--	}
--
--	if (!id_read_format(&id, uuid)) {
--		log_errno(EINVAL, "Invalid UUID format.");
--		return NULL;
--	}
--
--	dm_list_iterate_items(lvl, &vg->lvs) {
--		if (id_equal(&vg->id, &lvl->lv->lvid.id[0]) &&
--		    id_equal(&id, &lvl->lv->lvid.id[1]))
--			return lvl->lv;
--	}
--	return NULL;
--}
--
--lv_t lvm_lv_from_uuid(vg_t vg, const char *uuid)
--{
--	lv_t rc;
--	struct saved_env e = store_user_env(vg->cmd);
--	rc = _lvm_lv_from_uuid(vg, uuid);
--	restore_user_env(&e);
--	return rc;
--}
--
--int lvm_lv_rename(lv_t lv, const char *new_name)
--{
--	int rc = 0;
--	struct saved_env e = store_user_env(lv->vg->cmd);
--	if (!lv_rename(lv->vg->cmd, lv, new_name)) {
--		/* FIXME Improve msg */
--		log_error("LV rename failed.");
--		rc = -1;
--	}
--	restore_user_env(&e);
--	return rc;
--}
--
--int lvm_lv_resize(const lv_t lv, uint64_t new_size)
--{
--	int rc = 0;
--	struct lvresize_params lp = {
--		.sign = SIGN_NONE,
--		.percent = PERCENT_NONE,
--		.resize = LV_ANY,
--		.size = new_size >> SECTOR_SHIFT,
--		.force = 1,	/* Assume the user has a good backup? */
--	};
--	struct saved_env e = store_user_env(lv->vg->cmd);
--
--	if (!lv_resize(lv, &lp, &lv->vg->pvs)) {
--		/* FIXME Improve msg */
--		log_error("LV resize failed.");
--		/* FIXME Define consistent symbolic return codes */
--		rc = -1;
--	}
--	restore_user_env(&e);
--	return rc;
--}
--
--lv_t lvm_lv_snapshot(const lv_t lv, const char *snap_name,
--						uint64_t max_snap_size)
--{
--	lv_t rc = NULL;
--	struct lvm_lv_create_params *lvcp = NULL;
--	struct saved_env e = store_user_env(lv->vg->cmd);
--
--	lvcp = lvm_lv_params_create_snapshot(lv, snap_name, max_snap_size);
--	if (lvcp) {
--		rc = lvm_lv_create(lvcp);
--	}
--	restore_user_env(&e);
--	return rc;
--}
--
--/* Set defaults for thin pool specific LV parameters */
--static int _lv_set_pool_params(struct lvcreate_params *lp,
--				vg_t vg, const char *pool_name,
--				uint64_t extents, uint64_t meta_size)
--{
--	uint64_t pool_metadata_size;
--
--	_lv_set_default_params(lp, vg, pool_name, extents);
--
--	lp->create_pool = 1;
--	lp->segtype = get_segtype_from_string(vg->cmd, SEG_TYPE_NAME_THIN_POOL);
--	lp->stripes = 1;
--
--	if (!meta_size) {
--		pool_metadata_size = extents * vg->extent_size /
--			(lp->chunk_size * (SECTOR_SIZE / 64));
--		while ((pool_metadata_size >
--			(DEFAULT_THIN_POOL_OPTIMAL_METADATA_SIZE * 2)) &&
--		       lp->chunk_size < DM_THIN_MAX_DATA_BLOCK_SIZE) {
--			lp->chunk_size <<= 1;
--			pool_metadata_size >>= 1;
--	         }
--	} else
--		pool_metadata_size = meta_size;
--
--	if (pool_metadata_size % vg->extent_size)
--		pool_metadata_size +=
--			vg->extent_size - pool_metadata_size % vg->extent_size;
--
--	if (!(lp->pool_metadata_extents =
--	      extents_from_size(vg->cmd, pool_metadata_size / SECTOR_SIZE,
--				vg->extent_size)))
--		return_0;
--
--	return 1;
--}
--
--static lv_create_params_t _lvm_lv_params_create_thin_pool(vg_t vg,
--		const char *pool_name, uint64_t size, uint32_t chunk_size,
--		uint64_t meta_size, lvm_thin_discards_t discard)
--{
--	uint64_t extents = 0;
--	struct lvm_lv_create_params *lvcp = NULL;
--
--	if (meta_size > (2 * DEFAULT_THIN_POOL_MAX_METADATA_SIZE)) {
--		log_error("Invalid metadata size");
--		return NULL;
--	}
--
--	if (meta_size &&
--		meta_size < (2 * DEFAULT_THIN_POOL_MIN_METADATA_SIZE)) {
--		log_error("Invalid metadata size");
--		return NULL;
--	}
--
--	if (vg_read_error(vg))
--		return NULL;
--
--	if (!vg_check_write_mode(vg))
--		return NULL;
--
--	if (pool_name == NULL || !strlen(pool_name)) {
--		log_error("pool_name invalid");
--		return NULL;
--	}
--
--	if (!(extents = extents_from_size(vg->cmd, size / SECTOR_SIZE,
--					  vg->extent_size))) {
--		log_error("Unable to create LV thin pool without size.");
--		return NULL;
--	}
--
--	lvcp = dm_pool_zalloc(vg->vgmem, sizeof (struct lvm_lv_create_params));
--
--	if (lvcp) {
--		lvcp->vg = vg;
--		switch (discard) {
--		case LVM_THIN_DISCARDS_IGNORE:
--			lvcp->lvp.discards = THIN_DISCARDS_IGNORE;
--			break;
--		case LVM_THIN_DISCARDS_NO_PASSDOWN:
--			lvcp->lvp.discards = THIN_DISCARDS_NO_PASSDOWN;
--			break;
--		case LVM_THIN_DISCARDS_PASSDOWN:
--			lvcp->lvp.discards = THIN_DISCARDS_PASSDOWN;
--			break;
--		default:
--			log_error("Invalid discard argument %d for thin pool creation.", discard);
--			return NULL;
--		}
--		lvcp->lvp.zero_new_blocks = THIN_ZERO_YES;
--
--		if (chunk_size)
--			lvcp->lvp.chunk_size = chunk_size;
--		else
--			lvcp->lvp.chunk_size = DEFAULT_THIN_POOL_CHUNK_SIZE * 2;
--
--		if (lvcp->lvp.chunk_size < DM_THIN_MIN_DATA_BLOCK_SIZE ||
--				lvcp->lvp.chunk_size > DM_THIN_MAX_DATA_BLOCK_SIZE) {
--			log_error("Invalid chunk_size");
--			return NULL;
--		}
--
--		if (!_lv_set_pool_params(&lvcp->lvp, vg, pool_name, extents, meta_size))
--			return_NULL;
--
--		lvcp->magic = LV_CREATE_PARAMS_MAGIC;
--	}
--	return lvcp;
--}
--
--lv_create_params_t lvm_lv_params_create_thin_pool(vg_t vg,
--		const char *pool_name, uint64_t size, uint32_t chunk_size,
--		uint64_t meta_size, lvm_thin_discards_t discard)
--{
--	lv_create_params_t rc;
--	struct saved_env e = store_user_env(vg->cmd);
--	rc = _lvm_lv_params_create_thin_pool(vg, pool_name, size, chunk_size,
--										meta_size, discard);
--	restore_user_env(&e);
--	return rc;
--}
--
--/* Set defaults for thin LV specific parameters */
--static int _lv_set_thin_params(struct lvcreate_params *lp,
--			       vg_t vg, const char *pool_name,
--			       const char *lvname,
--			       uint32_t extents)
--{
--	_lv_set_default_params(lp, vg, lvname, 0);
--
--	lp->pool_name = pool_name;
--	lp->segtype = get_segtype_from_string(vg->cmd, SEG_TYPE_NAME_THIN);
--	lp->virtual_extents = extents;
--	lp->stripes = 1;
--
--	return 1;
--}
--
--static lv_create_params_t _lvm_lv_params_create_snapshot(const lv_t lv,
--							 const char *snap_name,
--							 uint64_t max_snap_size)
--{
--	uint64_t size = 0;
--	uint64_t extents = 0;
--	struct lvm_lv_create_params *lvcp = NULL;
--
--	if (vg_read_error(lv->vg)) {
--		return NULL;
--	}
--
--	if (!vg_check_write_mode(lv->vg))
--			return NULL;
--
--	if (snap_name == NULL || !strlen(snap_name)) {
--		log_error("snap_name invalid");
--		return NULL;
--	}
--
--	if (max_snap_size) {
--		size = max_snap_size >> SECTOR_SHIFT;
--		if (!(extents = extents_from_size(lv->vg->cmd, size, lv->vg->extent_size)))
--			return_NULL;
--	}
--
--	if (!size && !lv_is_thin_volume(lv) ) {
--		log_error("Origin is not thin, specify size of snapshot");
--		return NULL;
--	}
--
--	lvcp = dm_pool_zalloc(lv->vg->vgmem, sizeof (struct lvm_lv_create_params));
--	if (lvcp) {
--		lvcp->vg = lv->vg;
--		_lv_set_default_params(&lvcp->lvp, lv->vg, snap_name, extents);
--
--		if (size) {
--			if (!(lvcp->lvp.segtype = get_segtype_from_string(lv->vg->cmd, SEG_TYPE_NAME_SNAPSHOT))) {
--				log_error("Segtype snapshot not found.");
--				return NULL;
--			}
--			lvcp->lvp.chunk_size = 8;
--			lvcp->lvp.snapshot = 1;
--		} else {
--			if (!(lvcp->lvp.segtype = get_segtype_from_string(lv->vg->cmd, SEG_TYPE_NAME_THIN))) {
--				log_error("Segtype thin not found.");
--				return NULL;
--			}
--
--			lvcp->lvp.pool_name = first_seg(lv)->pool_lv->name;
--		}
--
--		lvcp->lvp.stripes = 1;
--		lvcp->lvp.origin_name = lv->name;
--
--		lvcp->magic = LV_CREATE_PARAMS_MAGIC;
--	}
--
--	return lvcp;
--}
--
--lv_create_params_t lvm_lv_params_create_snapshot(const lv_t lv,
--						 const char *snap_name,
--						 uint64_t max_snap_size)
--{
--	lv_create_params_t rc;
--	struct saved_env e = store_user_env(lv->vg->cmd);
--	rc = _lvm_lv_params_create_snapshot(lv, snap_name, max_snap_size);
--	restore_user_env(&e);
--	return rc;
--}
--
--static lv_create_params_t _lvm_lv_params_create_thin(const vg_t vg,
--									const char *pool_name,
--									const char *lvname, uint64_t size)
--{
--	struct lvm_lv_create_params *lvcp = NULL;
--	uint32_t extents = 0;
--
--	/* precondition checks */
--	if (vg_read_error(vg))
--		return NULL;
--
--	if (!vg_check_write_mode(vg))
--		return NULL;
--
--	if (pool_name == NULL || !strlen(pool_name)) {
--		log_error("pool_name invalid");
--		return NULL;
--	}
--
--	if (lvname == NULL || !strlen(lvname)) {
--		log_error("lvname invalid");
--		return NULL;
--	}
--
--	if (!(extents = extents_from_size(vg->cmd, size / SECTOR_SIZE,
--			vg->extent_size))) {
--		log_error("Unable to create thin LV without size.");
--		return NULL;
--	}
--
--	lvcp = dm_pool_zalloc(vg->vgmem, sizeof (struct lvm_lv_create_params));
--	if (lvcp) {
--		lvcp->vg = vg;
--		if (!_lv_set_thin_params(&lvcp->lvp, vg, pool_name, lvname, extents))
--			return_NULL;
--
--		lvcp->magic = LV_CREATE_PARAMS_MAGIC;
--	}
--
--	return lvcp;
--}
--
--lv_create_params_t lvm_lv_params_create_thin(const vg_t vg, const char *pool_name,
--									const char *lvname, uint64_t size)
--{
--	lv_create_params_t rc;
--	struct saved_env e = store_user_env(vg->cmd);
--	rc = _lvm_lv_params_create_thin(vg, pool_name, lvname, size);
--	restore_user_env(&e);
--	return rc;
--}
--
--struct lvm_property_value lvm_lv_params_get_property(
--						const lv_create_params_t params,
--						const char *name)
--{
--	struct lvm_property_value rc = { .is_valid = 0 };
--
--	if (params && params->magic == LV_CREATE_PARAMS_MAGIC) {
--		struct saved_env e = store_user_env(params->vg->cmd);
--		rc = get_property(NULL, NULL, NULL, NULL, NULL, &params->lvp, NULL, name);
--		restore_user_env(&e);
--	} else
--		log_error("Invalid lv_create_params parameter");
--
--	return rc;
--}
--
--int lvm_lv_params_set_property(lv_create_params_t params, const char *name,
--								struct lvm_property_value *prop)
--{
--	int rc = -1;
--
--	if (params && params->magic == LV_CREATE_PARAMS_MAGIC) {
--		struct saved_env e = store_user_env(params->vg->cmd);
--		rc = set_property(NULL, NULL, NULL, &params->lvp, NULL, name, prop);
--		restore_user_env(&e);
--	} else
--		log_error("Invalid lv_create_params parameter");
--
--	return rc;
--}
--
--static lv_t _lvm_lv_create(lv_create_params_t params)
--{
--	struct lv_list *lvl = NULL;
--
--	if (params && params->magic == LV_CREATE_PARAMS_MAGIC) {
--		if (!params->lvp.segtype) {
--			log_error("segtype parameter is NULL");
--			return_NULL;
--		}
--		if (!lv_create_single(params->vg, &params->lvp))
--				return_NULL;
--
--		/*
--		 * In some case we are making a thin pool so lv_name is not valid, but
--		 * pool is.
--		 */
--		if (!(lvl = find_lv_in_vg(params->vg,
--				(params->lvp.lv_name) ? params->lvp.lv_name : params->lvp.pool_name)))
--			return_NULL;
--		return (lv_t) lvl->lv;
--	}
--	log_error("Invalid lv_create_params parameter");
--	return NULL;
--}
--
--lv_t lvm_lv_create(lv_create_params_t params)
--{
--	lv_t rc;
--	struct saved_env e = store_user_env(params->vg->cmd);
--	rc = _lvm_lv_create(params);
--	restore_user_env(&e);
--	return rc;
--}
-diff --git a/liblvm/lvm_misc.c b/liblvm/lvm_misc.c
-deleted file mode 100644
-index 2b24de2..0000000
---- a/liblvm/lvm_misc.c
-+++ /dev/null
-@@ -1,168 +0,0 @@
--/*
-- * Copyright (C) 2008-2013 Red Hat, Inc. All rights reserved.
-- *
-- * This file is part of LVM2.
-- *
-- * This copyrighted material is made available to anyone wishing to use,
-- * modify, copy, or redistribute it subject to the terms and conditions
-- * of the GNU Lesser General Public License v.2.1.
-- *
-- * You should have received a copy of the GNU Lesser General Public License
-- * along with this program; if not, write to the Free Software Foundation,
-- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
-- */
--
--#include "lib/misc/lib.h"
--#include "lib/report/properties.h"
--#include "lvm_misc.h"
--#include "liblvm/lvm2app.h"
--#include "lvm_prop.h"
--
--struct dm_list *tag_list_copy(struct dm_pool *p, struct dm_list *tag_list)
--{
--	struct dm_list *list;
--	lvm_str_list_t *lsl;
--	struct dm_str_list *sl;
--
--	if (!(list = dm_pool_zalloc(p, sizeof(*list)))) {
--		log_errno(ENOMEM, "Memory allocation fail for dm_list.");
--		return NULL;
--	}
--	dm_list_init(list);
--
--	dm_list_iterate_items(sl, tag_list) {
--		if (!(lsl = dm_pool_zalloc(p, sizeof(*lsl)))) {
--			log_errno(ENOMEM,
--				"Memory allocation fail for lvm_lv_list.");
--			return NULL;
--		}
--		if (!(lsl->str = dm_pool_strdup(p, sl->str))) {
--			log_errno(ENOMEM,
--				"Memory allocation fail for lvm_lv_list->str.");
--			return NULL;
--		}
--		dm_list_add(list, &lsl->list);
--	}
--	return list;
--}
--
--struct lvm_property_value get_property(const pv_t pv, const vg_t vg,
--				       const lv_t lv,
--				       const lvseg_t lvseg,
--				       const pvseg_t pvseg,
--				       const struct lvcreate_params *lvcp,
--				       const struct pvcreate_params *pvcp,
--				       const char *name)
--{
--	struct lvm_property_type prop;
--	struct lvm_property_value v = { 0 };
--
--	prop.id = name;
--
--	if (pv) {
--		if (!pv_get_property(pv, &prop))
--			return v;
--	} else if (vg) {
--		if (!vg_get_property(vg, &prop))
--			return v;
--	} else if (lv) {
--		if (!lv_get_property(lv, &prop))
--			return v;
--	} else if (lvseg) {
--		if (!lvseg_get_property(lvseg, &prop))
--			return v;
--	} else if (pvseg) {
--		if (!pvseg_get_property(pvseg, &prop))
--			return v;
--	} else if (lvcp) {
--		if (!lv_create_param_get_property(lvcp, &prop))
--			return v;
--	} else if (pvcp) {
--		if (!pv_create_param_get_property(pvcp, &prop))
--			return v;
--	} else {
--		log_errno(EINVAL, "Invalid NULL handle passed to library function.");
--		return v;
--	}
--
--	v.is_settable = prop.is_settable;
--	v.is_string = prop.is_string;
--	v.is_integer = prop.is_integer;
--	v.is_signed = prop.is_signed;
--	if (v.is_string)
--		v.value.string = prop.value.string;
--	if (v.is_integer)
--		v.value.integer = prop.value.integer;
--	v.is_valid = 1;
--	return v;
--}
--
--
--int set_property(const pv_t pv, const vg_t vg, const lv_t lv,
--		struct lvcreate_params *lvcp,
--		struct pvcreate_params *pvcp,
--		const char *name,
--		struct lvm_property_value *v)
--{
--	struct lvm_property_type prop;
--
--	prop.id = name;
--	if (v->is_string)
--		prop.value.string = v->value.string;
--	else
--		prop.value.integer = v->value.integer;
--	if (pv) {
--		if (!pv_set_property(pv, &prop)) {
--			v->is_valid = 0;
--			return -1;
--		}
--	} else if (vg) {
--		if (!vg_set_property(vg, &prop)) {
--			v->is_valid = 0;
--			return -1;
--		}
--	} else if (lv) {
--		if (!lv_set_property(lv, &prop)) {
--			v->is_valid = 0;
--			return -1;
--		}
--	} else if (lvcp) {
--		if (!lv_create_param_set_property(lvcp, &prop)) {
--			v->is_valid = 0;
--			return -1;
--		}
--	} else if (pvcp) {
--		if (!pv_create_param_set_property(pvcp, &prop)) {
--			v->is_valid = 0;
--			return -1;
--		}
--	} else {
--		return -1;
--	}
--	return 0;
--}
--
--/*
-- * Store anything that may need to be restored back to the user on library
-- * call exit.  Currently the only thing we are preserving is the users umask.
-- */
--struct saved_env store_user_env(struct cmd_context *cmd)
--{
--	struct saved_env env = {0};
--
--	if (cmd) {
--		env.user_umask = umask(cmd->default_settings.umask);
--	} else {
--		env.user_umask = umask(0);
--		umask(env.user_umask);
--	}
--
--	return env;
--}
--
--void restore_user_env(const struct saved_env *env)
--{
--	if (env) {
--		umask(env->user_umask);
--	}
--}
-diff --git a/liblvm/lvm_misc.h b/liblvm/lvm_misc.h
-deleted file mode 100644
-index b83a443..0000000
---- a/liblvm/lvm_misc.h
-+++ /dev/null
-@@ -1,46 +0,0 @@
--/*
-- * Copyright (C) 2008-2013 Red Hat, Inc. All rights reserved.
-- *
-- * This file is part of LVM2.
-- *
-- * This copyrighted material is made available to anyone wishing to use,
-- * modify, copy, or redistribute it subject to the terms and conditions
-- * of the GNU Lesser General Public License v.2.1.
-- *
-- * You should have received a copy of the GNU Lesser General Public License
-- * along with this program; if not, write to the Free Software Foundation,
-- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
-- */
--#ifndef _LVM2APP_MISC_H
--#define _LVM2APP_MISC_H
--
+-#endif				/* LIB_DEVICE_MAPPER_H */
+diff --git a/device_mapper/libdm-common.h b/device_mapper/libdm-common.h
+index 010d876..cf99265 100644
+--- a/device_mapper/libdm-common.h
++++ b/device_mapper/libdm-common.h
+@@ -16,7 +16,7 @@
+ #ifndef LIB_DMCOMMON_H
+ #define LIB_DMCOMMON_H
+ 
+-#include "libdevmapper.h"
++#include "device_mapper/all.h"
+ 
+ #define DM_DEFAULT_NAME_MANGLING_MODE_ENV_VAR_NAME "DM_DEFAULT_NAME_MANGLING_MODE"
+ 
+diff --git a/device_mapper/misc/dm-logging.h b/device_mapper/misc/dm-logging.h
+index e355bc5..4db38bd 100644
+--- a/device_mapper/misc/dm-logging.h
++++ b/device_mapper/misc/dm-logging.h
+@@ -16,7 +16,7 @@
+ #ifndef _DM_LOGGING_H
+ #define _DM_LOGGING_H
+ 
 -#include "device_mapper/libdevmapper.h"
--#include "liblvm/lvm2app.h"
--#include "lib/metadata/metadata-exported.h"
--#include "lib/commands/toolcontext.h"
--
--#include <sys/types.h>
--#include <sys/stat.h>
--
--struct saved_env
--{
--	mode_t user_umask;
--};
--
--struct saved_env store_user_env(struct cmd_context *cmd);
--void restore_user_env(const struct saved_env *env);
--
--struct dm_list *tag_list_copy(struct dm_pool *p, struct dm_list *tag_list);
--struct lvm_property_value get_property(const pv_t pv, const vg_t vg,
--				       const lv_t lv, const lvseg_t lvseg,
--				       const pvseg_t pvseg,
--				       const struct lvcreate_params *lvcp,
--				       const struct pvcreate_params *pvcp,
--				       const char *name);
--int set_property(const pv_t pv, const vg_t vg, const lv_t lv,
--			struct lvcreate_params *lvcp,
--			struct pvcreate_params *pvcp,
--			const char *name,
--			struct lvm_property_value *value);
--
--#endif
-diff --git a/liblvm/lvm_prop.c b/liblvm/lvm_prop.c
-deleted file mode 100644
-index 5d274a6..0000000
---- a/liblvm/lvm_prop.c
-+++ /dev/null
-@@ -1,74 +0,0 @@
--/*
-- * Copyright (C) 2013 Red Hat, Inc. All rights reserved.
-- *
-- * This file is part of LVM2.
-- *
-- * This copyrighted material is made available to anyone wishing to use,
-- * modify, copy, or redistribute it subject to the terms and conditions
-- * of the GNU Lesser General Public License v.2.1.
-- *
-- * You should have received a copy of the GNU Lesser General Public License
-- * along with this program; if not, write to the Free Software Foundation,
-- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
-- */
--
--#include "lvm_prop.h"
++#include "device_mapper/all.h"
+ 
+ extern dm_log_with_errno_fn dm_log_with_errno;
+ 
+diff --git a/device_mapper/misc/dmlib.h b/device_mapper/misc/dmlib.h
+index 88b6ac3..fe64bd7 100644
+--- a/device_mapper/misc/dmlib.h
++++ b/device_mapper/misc/dmlib.h
+@@ -26,7 +26,7 @@
+ #define _REENTRANT
+ #define _GNU_SOURCE
+ 
 -#include "device_mapper/libdevmapper.h"
--#include "lib/metadata/metadata.h"
--
--/* lv create parameters */
--GET_LVCREATEPARAMS_NUM_PROPERTY_FN(skip_zero, lvcp->zero)
--SET_LVCREATEPARAMS_NUM_PROPERTY_FN(skip_zero, lvcp->zero)
--
--/* PV create parameters */
--GET_PVCREATEPARAMS_NUM_PROPERTY_FN(size, pvcp->pva.size)
--SET_PVCREATEPARAMS_NUM_PROPERTY_FN(size, pvcp->pva.size)
--
--GET_PVCREATEPARAMS_NUM_PROPERTY_FN(pvmetadatacopies, pvcp->pva.pvmetadatacopies)
--SET_PVCREATEPARAMS_NUM_PROPERTY_FN(pvmetadatacopies, pvcp->pva.pvmetadatacopies)
--
--GET_PVCREATEPARAMS_NUM_PROPERTY_FN(pvmetadatasize, pvcp->pva.pvmetadatasize)
--SET_PVCREATEPARAMS_NUM_PROPERTY_FN(pvmetadatasize, pvcp->pva.pvmetadatasize)
--
--GET_PVCREATEPARAMS_NUM_PROPERTY_FN(data_alignment, pvcp->pva.data_alignment)
--SET_PVCREATEPARAMS_NUM_PROPERTY_FN(data_alignment, pvcp->pva.data_alignment)
--
--GET_PVCREATEPARAMS_NUM_PROPERTY_FN(data_alignment_offset, pvcp->pva.data_alignment_offset)
--SET_PVCREATEPARAMS_NUM_PROPERTY_FN(data_alignment_offset, pvcp->pva.data_alignment_offset)
--
--GET_PVCREATEPARAMS_NUM_PROPERTY_FN(zero, pvcp->zero)
--SET_PVCREATEPARAMS_NUM_PROPERTY_FN(zero, pvcp->zero)
--
--struct lvm_property_type _lib_properties[] = {
--#include "lvm_prop_fields.h"
--	{ 0, "", 0, 0, 0, 0, { .integer = 0 }, prop_not_implemented_get,
--			prop_not_implemented_set },
--};
--
--#undef STR
--#undef NUM
--#undef FIELD
--
--int lv_create_param_get_property(const struct lvcreate_params *lvcp,
--		struct lvm_property_type *prop)
--{
--	return prop_get_property(_lib_properties, lvcp, prop, LV_CREATE_PARAMS);
--}
--
--int lv_create_param_set_property(struct lvcreate_params *lvcp,
--		    struct lvm_property_type *prop)
--{
--	return prop_set_property(_lib_properties, lvcp, prop, LV_CREATE_PARAMS);
--}
--
--int pv_create_param_get_property(const struct pvcreate_params *pvcp,
--		struct lvm_property_type *prop)
--{
--	return prop_get_property(_lib_properties, pvcp, prop, PV_CREATE_PARAMS);
--}
--
--int pv_create_param_set_property(struct pvcreate_params *pvcp,
--		    struct lvm_property_type *prop)
--{
--	return prop_set_property(_lib_properties, pvcp, prop, PV_CREATE_PARAMS);
--}
-diff --git a/liblvm/lvm_prop.h b/liblvm/lvm_prop.h
-deleted file mode 100644
-index 5a30a76..0000000
---- a/liblvm/lvm_prop.h
-+++ /dev/null
-@@ -1,49 +0,0 @@
--/*
-- * Copyright (C) 2013 Red Hat, Inc. All rights reserved.
-- *
-- * This file is part of LVM2.
-- *
-- * This copyrighted material is made available to anyone wishing to use,
-- * modify, copy, or redistribute it subject to the terms and conditions
-- * of the GNU Lesser General Public License v.2.1.
-- *
-- * You should have received a copy of the GNU Lesser General Public License
-- * along with this program; if not, write to the Free Software Foundation,
-- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
-- */
--#include "lib/properties/prop_common.h"
--
--#ifndef _LIB_LVM_PROP_H
--#define _LIB_LVM_PROP_H
--
--typedef struct lvcreate_params type_lvcreate_params;
--typedef struct pvcreate_params type_pvcreate_params;
--
--#define LV_CREATE_PARAMS 1
--#define PV_CREATE_PARAMS 2
--
--#define GET_LVCREATEPARAMS_NUM_PROPERTY_FN(NAME, VALUE)\
--	GET_NUM_PROPERTY_FN(NAME, VALUE, lvcreate_params, lvcp)
--
--#define SET_LVCREATEPARAMS_NUM_PROPERTY_FN(NAME, VALUE) \
--	SET_NUM_PROPERTY(NAME, VALUE, lvcreate_params, lvcp)
--
--#define GET_PVCREATEPARAMS_NUM_PROPERTY_FN(NAME, VALUE)\
--	GET_NUM_PROPERTY_FN(NAME, VALUE, pvcreate_params, pvcp)
--
--#define SET_PVCREATEPARAMS_NUM_PROPERTY_FN(NAME, VALUE) \
--	SET_NUM_PROPERTY(NAME, VALUE, pvcreate_params, pvcp)
--
--int lv_create_param_get_property(const struct lvcreate_params *lvcp,
--		struct lvm_property_type *prop);
--
--int lv_create_param_set_property(struct lvcreate_params *lvcp,
--		    struct lvm_property_type *prop);
--
--int pv_create_param_get_property(const struct pvcreate_params *pvcp,
--		struct lvm_property_type *prop);
--
--int pv_create_param_set_property(struct pvcreate_params *pvcp,
--		    struct lvm_property_type *prop);
--
--#endif
-diff --git a/liblvm/lvm_prop_fields.h b/liblvm/lvm_prop_fields.h
-deleted file mode 100644
-index 10f1290..0000000
---- a/liblvm/lvm_prop_fields.h
-+++ /dev/null
-@@ -1,22 +0,0 @@
--/*
-- * Copyright (C) 2013 Red Hat, Inc. All rights reserved.
-- *
-- * This file is part of LVM2.
-- *
-- * This copyrighted material is made available to anyone wishing to use,
-- * modify, copy, or redistribute it subject to the terms and conditions
-- * of the GNU Lesser General Public License v.2.1.
-- *
-- * You should have received a copy of the GNU Lesser General Public License
-- * along with this program; if not, write to the Free Software Foundation,
-- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
-- */
--
--FIELD(LV_CREATE_PARAMS, lvcreate_params, NUM, "skip_zero", zero, 2, uint32, skip_zero, "Skip zeroing on lv creation", 1)
--
--FIELD(PV_CREATE_PARAMS, pvcreate_params, NUM, "size",      size, 2, uint64_t, size, "PV size", 1)
--FIELD(PV_CREATE_PARAMS, pvcreate_params, NUM, "pvmetadatacopies", pvmetadatacopies, 2, uint64_t, pvmetadatacopies, "PV Metadata copies", 1)
--FIELD(PV_CREATE_PARAMS, pvcreate_params, NUM, "pvmetadatasize", pvmetadatasize, 2, uint64_t, pvmetadatasize, "PV Metadata size", 1)
--FIELD(PV_CREATE_PARAMS, pvcreate_params, NUM, "data_alignment", data_alignment, 2, uint64_t, data_alignment, "Start data to a multiple of value", 1)
--FIELD(PV_CREATE_PARAMS, pvcreate_params, NUM, "data_alignment_offset", data_alignment_offset, 2, uint64_t, data_alignment_offset, "Shift the start of the data area", 1)
--FIELD(PV_CREATE_PARAMS, pvcreate_params, NUM, "zero", zero, 2, uint64_t, zero, "Zero first 2048 bytes of device", 1)
-diff --git a/liblvm/lvm_pv.c b/liblvm/lvm_pv.c
-deleted file mode 100644
-index bd6ee4f..0000000
---- a/liblvm/lvm_pv.c
-+++ /dev/null
-@@ -1,474 +0,0 @@
--/*
-- * Copyright (C) 2008-2013 Red Hat, Inc. All rights reserved.
-- *
-- * This file is part of LVM2.
-- *
-- * This copyrighted material is made available to anyone wishing to use,
-- * modify, copy, or redistribute it subject to the terms and conditions
-- * of the GNU Lesser General Public License v.2.1.
-- *
-- * You should have received a copy of the GNU Lesser General Public License
-- * along with this program; if not, write to the Free Software Foundation,
-- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
-- */
--
--#include <stddef.h>
--#include "lib/misc/lib.h"
--#include "lib/metadata/metadata-exported.h"
--#include "lib/misc/lvm-string.h"
--#include "lib/datastruct/str_list.h"
--#include "lvm_misc.h"
--#include "liblvm/lvm2app.h"
--#include "lib/locking/locking.h"
--#include "lib/commands/toolcontext.h"
--#include "lvm_misc.h"
--#include "lib/cache/lvmetad.h"
--
--struct lvm_pv_create_params
--{
--	uint32_t magic;
--	lvm_t libh;
--	const char *pv_name;
--	struct pvcreate_params pv_p;
--};
--
--#define PV_CREATE_PARAMS_MAGIC 0xFEED0002
--
--const char *lvm_pv_get_uuid(const pv_t pv)
--{
--	const char *rc;
--	struct saved_env e = store_user_env(pv->vg->cmd);
--	rc = pv_uuid_dup(pv->vg->vgmem, pv);
--	restore_user_env(&e);
--	return rc;
--}
--
--const char *lvm_pv_get_name(const pv_t pv)
--{
--	const char *rc;
--	struct saved_env e = store_user_env(pv->vg->cmd);
--	rc = dm_pool_strndup(pv->vg->vgmem, pv_dev_name(pv), NAME_LEN);
--	restore_user_env(&e);
--	return rc;
--}
--
--uint64_t lvm_pv_get_mda_count(const pv_t pv)
--{
--	uint64_t rc;
--	struct saved_env e = store_user_env(pv->vg->cmd);
--	rc = (uint64_t) pv_mda_count(pv);
--	restore_user_env(&e);
--	return rc;
--}
--
--uint64_t lvm_pv_get_dev_size(const pv_t pv)
--{
--	uint64_t rc;
--	struct saved_env e = store_user_env(pv->vg->cmd);
--	rc = SECTOR_SIZE * pv_dev_size(pv);
--	restore_user_env(&e);
--	return rc;
--}
--
--uint64_t lvm_pv_get_size(const pv_t pv)
--{
--	uint64_t rc;
--	struct saved_env e = store_user_env(pv->vg->cmd);
--	rc = SECTOR_SIZE * pv_size_field(pv);
--	restore_user_env(&e);
--	return rc;
--}
--
--uint64_t lvm_pv_get_free(const pv_t pv)
--{
--	uint64_t rc;
--	struct saved_env e = store_user_env(pv->vg->cmd);
--	rc = SECTOR_SIZE * pv_free(pv);
--	restore_user_env(&e);
--	return rc;
--}
--
--struct lvm_property_value lvm_pv_get_property(const pv_t pv, const char *name)
--{
--	struct lvm_property_value rc;
--	struct saved_env e = store_user_env(pv->vg->cmd);
--	rc = get_property(pv, NULL, NULL, NULL, NULL, NULL, NULL, name);
--	restore_user_env(&e);
--	return rc;
--}
--
--struct lvm_property_value lvm_pvseg_get_property(const pvseg_t pvseg,
--						 const char *name)
--{
--	struct lvm_property_value rc;
--	struct saved_env e = store_user_env(pvseg->pv->vg->cmd);
--	rc = get_property(NULL, NULL, NULL, NULL, pvseg, NULL, NULL, name);
--	restore_user_env(&e);
--	return rc;
--}
--
--struct lvm_list_wrapper
--{
--	unsigned long magic;
--	struct cmd_context *cmd;
--	struct dm_list pvslist;
--	struct dm_list vgslist;
--};
--
--int lvm_pv_remove(lvm_t libh, const char *pv_name)
--{
--	int rc = 0;
--	struct cmd_context *cmd = (struct cmd_context *)libh;
--	struct saved_env e = store_user_env(cmd);
--	struct dm_list pv_names;
--
--	dm_list_init(&pv_names);
--
--	if (!str_list_add(cmd->mem, &pv_names, pv_name))
--		rc = -1;
--
--	if (rc >= 0 && !pvremove_many(cmd, &pv_names, 0, 0))
--		rc = -1;
--
--	restore_user_env(&e);
--	return rc;
--}
--
--#define PV_LIST_MAGIC 4026907153U
--
--static struct dm_list *_lvm_list_pvs(lvm_t libh)
--{
--	struct lvm_list_wrapper *rc = NULL;
--	struct cmd_context *cmd = (struct cmd_context *)libh;
--
--	/*
--	 * This memory will get cleared when the library handle
--	 * gets closed, don't try to free is as it doesn't work
--	 * like malloc/free do.
--	 */
--	if (!(rc = dm_pool_zalloc(cmd->mem, sizeof(*rc)))) {
--		log_errno(ENOMEM, "Memory allocation fail for pv list.");
--		return NULL;
--	}
--
--	if (!lock_vol(cmd, VG_GLOBAL, LCK_VG_WRITE, NULL)) {
--		log_errno(ENOLCK, "Unable to obtain global lock.");
--	} else {
--		dm_list_init(&rc->pvslist);
--		dm_list_init(&rc->vgslist);
--		if (!get_pvs_perserve_vg(cmd, &rc->pvslist, &rc->vgslist))
--			return_NULL;
--
--		/*
--		 * If we have no PVs we still need to have access to cmd
--		 * pointer in the free call.
--		 */
--		rc->cmd = cmd;
--		rc->magic = PV_LIST_MAGIC;
--	}
--
--	return &rc->pvslist;
--}
--
--struct dm_list *lvm_list_pvs(lvm_t libh)
--{
--	struct dm_list *rc;
--	struct saved_env e = store_user_env((struct cmd_context *)libh);
--	rc = _lvm_list_pvs(libh);
--	restore_user_env(&e);
--	return rc;
--}
--
--int lvm_list_pvs_free(struct dm_list *pvlist)
--{
--	struct lvm_list_wrapper *to_delete;
--	struct vg_list *vgl;
--	struct pv_list *pvl;
--	struct saved_env e;
--
--	if (pvlist) {
--		to_delete = dm_list_struct_base(pvlist, struct lvm_list_wrapper, pvslist);
--		if (to_delete->magic != PV_LIST_MAGIC) {
--			log_errno(EINVAL, "Not a correct pvlist structure");
--			return -1;
--		}
--
--		/*
--		 * Need to ensure that pointer is valid before we can use reference to
--		 * cmd.
--		 */
--		e = store_user_env(to_delete->cmd);
--
--		dm_list_iterate_items(vgl, &to_delete->vgslist) {
--			release_vg(vgl->vg);
--		}
--
--		dm_list_iterate_items(pvl, &to_delete->pvslist)
--			free_pv_fid(pvl->pv);
--
--		unlock_vg(to_delete->cmd, NULL, VG_GLOBAL);
--		to_delete->magic = 0xA5A5A5A5;
--
--		restore_user_env(&e);
--	}
--
--	return 0;
--}
--
--static struct dm_list *_lvm_pv_list_pvsegs(pv_t pv)
--{
--	struct dm_list *list;
--	pvseg_list_t *pvseg;
--	struct pv_segment *pvl;
--
--	if (dm_list_empty(&pv->segments))
--		return NULL;
--
--	if (!(list = dm_pool_zalloc(pv->vg->vgmem, sizeof(*list)))) {
--		log_errno(ENOMEM, "Memory allocation fail for dm_list.");
--		return NULL;
--	}
--
--	dm_list_init(list);
--
--	dm_list_iterate_items(pvl, &pv->segments) {
--		if (!(pvseg = dm_pool_zalloc(pv->vg->vgmem, sizeof(*pvseg)))) {
--			log_errno(ENOMEM,
--				"Memory allocation fail for lvm_pvseg_list.");
--			return NULL;
--		}
--		pvseg->pvseg = pvl;
--		dm_list_add(list, &pvseg->list);
--	}
--
--	return list;
--}
--
--struct dm_list *lvm_pv_list_pvsegs(pv_t pv)
--{
--	struct dm_list *rc;
--	struct saved_env e = store_user_env(pv->vg->cmd);
--	rc = _lvm_pv_list_pvsegs(pv);
--	restore_user_env(&e);
--	return rc;
--}
--
--pv_t lvm_pv_from_name(vg_t vg, const char *name)
--{
--	pv_t rc = NULL;
--	struct pv_list *pvl;
--	struct saved_env e = store_user_env(vg->cmd);
--
--	dm_list_iterate_items(pvl, &vg->pvs)
--		if (!strcmp(name, pv_dev_name(pvl->pv))) {
--			rc = pvl->pv;
--			break;
--		}
--
--	restore_user_env(&e);
--	return rc;
--}
--
--static pv_t _lvm_pv_from_uuid(vg_t vg, const char *uuid)
--{
--	struct pv_list *pvl;
--	struct id id;
--
--	if (strlen(uuid) < ID_LEN) {
--		log_errno (EINVAL, "Invalid UUID string length");
--		return NULL;
--	}
--
--	if (!id_read_format(&id, uuid)) {
--		log_errno(EINVAL, "Invalid UUID format.");
--		return NULL;
--	}
--
--	dm_list_iterate_items(pvl, &vg->pvs)
--		if (id_equal(&id, &pvl->pv->id))
--			return pvl->pv;
--
--	return NULL;
--}
--
--pv_t lvm_pv_from_uuid(vg_t vg, const char *uuid)
--{
--	pv_t rc;
--	struct saved_env e = store_user_env(vg->cmd);
--	rc = _lvm_pv_from_uuid(vg, uuid);
--	restore_user_env(&e);
--	return rc;
--}
--
--static int _lvm_pv_resize(const pv_t pv, uint64_t new_size)
--{
--	uint64_t size = new_size >> SECTOR_SHIFT;
--
--	if (new_size % SECTOR_SIZE) {
--		log_errno(EINVAL, "Size not a multiple of 512");
--		return -1;
--	}
--
--	if (!vg_check_write_mode(pv->vg))
--		return -1;
--
--	if (!pv_resize_single(pv->vg->cmd, pv->vg, pv, size, 1)) {
--		log_error("PV re-size failed!");
--		return -1;
--	}
--
--	return 0;
--}
--
--int lvm_pv_resize(const pv_t pv, uint64_t new_size)
--{
--	int rc;
--	struct saved_env e = store_user_env(pv->vg->cmd);
--	rc = _lvm_pv_resize(pv, new_size);
--	restore_user_env(&e);
--	return rc;
--}
--
--/*
-- * Common internal code to create a parameter passing object
-- */
--static struct lvm_pv_create_params *_lvm_pv_params_create(
--		lvm_t libh,
--		const char *pv_name,
--		struct lvm_pv_create_params *pvcp_in)
--{
--	struct lvm_pv_create_params *pvcp = NULL;
--	const char *dev = NULL;
--	struct cmd_context *cmd = (struct cmd_context *)libh;
--
--	if (!pv_name || strlen(pv_name) == 0) {
--		log_error("Invalid pv_name");
--		return NULL;
--	}
--
--	if (!pvcp_in) {
--		pvcp = dm_pool_zalloc(cmd->libmem, sizeof(struct lvm_pv_create_params));
--	} else {
--		pvcp = pvcp_in;
--	}
--
--	if (!pvcp) {
--		return NULL;
--	}
--
--	dev = dm_pool_strdup(cmd->libmem, pv_name);
--	if (!dev) {
--		return NULL;
--	}
--
--	pvcreate_params_set_defaults(&pvcp->pv_p);
--	pvcp->pv_p.yes = 1;
--	pvcp->pv_p.force = DONT_PROMPT;
--	pvcp->pv_name = dev;
--	pvcp->libh = libh;
--	pvcp->magic = PV_CREATE_PARAMS_MAGIC;
--
--	return pvcp;
--}
--
--pv_create_params_t lvm_pv_params_create(lvm_t libh, const char *pv_name)
--{
--	pv_create_params_t rc;
--	struct saved_env e = store_user_env((struct cmd_context *)libh);
--	rc = _lvm_pv_params_create(libh, pv_name, NULL);
--	restore_user_env(&e);
--	return rc;
--}
--
--struct lvm_property_value lvm_pv_params_get_property(
--						const pv_create_params_t params,
--						const char *name)
--{
--	struct lvm_property_value rc = {
--		.is_valid = 0
--	};
--	struct saved_env e;
--
--	if (params && params->magic == PV_CREATE_PARAMS_MAGIC) {
--		e = store_user_env((struct cmd_context *)(params->libh));
--		rc = get_property(NULL, NULL, NULL, NULL, NULL, NULL, &params->pv_p,
--							name);
--		restore_user_env(&e);
--	} else {
--		log_error("Invalid pv_create_params parameter");
--	}
--
--	return rc;
--}
--
--int lvm_pv_params_set_property(pv_create_params_t params, const char *name,
--								struct lvm_property_value *prop)
--{
--	int rc = -1;
--	struct saved_env e;
--
--	if (params && params->magic == PV_CREATE_PARAMS_MAGIC) {
--		e = store_user_env((struct cmd_context *)(params->libh));
--		rc = set_property(NULL, NULL, NULL, NULL, &params->pv_p, name, prop);
--		restore_user_env(&e);
--	} else {
--		log_error("Invalid pv_create_params parameter");
--	}
--	return rc;
--}
--
--static int _pv_create(pv_create_params_t params)
--{
--	struct cmd_context *cmd = (struct cmd_context *)params->libh;
--	int rc = 0;
--
--	if (params->pv_p.pva.size) {
--		if (params->pv_p.pva.size % SECTOR_SIZE) {
--			log_errno(EINVAL, "Size not a multiple of 512");
--			return -1;
--		}
--		params->pv_p.pva.size = params->pv_p.pva.size >> SECTOR_SHIFT;
--	}
--
--	if (!lock_vol(cmd, VG_ORPHANS, LCK_VG_WRITE, NULL)) {
--		log_errno(EINVAL, "Can't get lock for orphan PVs");
--		return -1;
--	}
--
--	if (!(pvcreate_vol(cmd, params->pv_name, &params->pv_p, 1)))
--		rc = -1;
--
--	unlock_vg(cmd, NULL, VG_ORPHANS);
--	return rc;
--}
--
--int lvm_pv_create(lvm_t libh, const char *pv_name, uint64_t size)
--{
--	struct lvm_pv_create_params pp;
--	int rc = -1;
--	struct saved_env e = store_user_env((struct cmd_context *)libh);
--
--	if (_lvm_pv_params_create(libh, pv_name, &pp)) {
--		pp.pv_p.pva.size = size;
--		rc = _pv_create(&pp);
--	}
--
--	restore_user_env(&e);
--	return rc;
--}
--
--int lvm_pv_create_adv(pv_create_params_t params)
--{
--	int rc = -1;
--	struct saved_env e;
--
--	if (params && params->magic == PV_CREATE_PARAMS_MAGIC) {
--		e = store_user_env((struct cmd_context *)(params->libh));
--		rc = _pv_create(params);
--		restore_user_env(&e);
--	} else {
--		log_error("Invalid pv_create_params parameter");
--	}
--
--	return rc;
--}
-diff --git a/liblvm/lvm_vg.c b/liblvm/lvm_vg.c
-deleted file mode 100644
-index b55d195..0000000
---- a/liblvm/lvm_vg.c
-+++ /dev/null
-@@ -1,564 +0,0 @@
--/*
-- * Copyright (C) 2008-2013 Red Hat, Inc. All rights reserved.
-- *
-- * This file is part of LVM2.
-- *
-- * This copyrighted material is made available to anyone wishing to use,
-- * modify, copy, or redistribute it subject to the terms and conditions
-- * of the GNU Lesser General Public License v.2.1.
-- *
-- * You should have received a copy of the GNU Lesser General Public License
-- * along with this program; if not, write to the Free Software Foundation,
-- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
-- */
--
--#include "lib/misc/lib.h"
--#include "lib/commands/toolcontext.h"
--#include "lib/metadata/metadata.h"
--#include "lib/format_text/archiver.h"
--#include "lib/locking/locking.h"
--#include "lib/cache/lvmcache.h"
--#include "lib/cache/lvmetad.h"
--#include "lvm_misc.h"
--#include "liblvm/lvm2app.h"
--#include "lib/display/display.h"
--#include "lib/cache/lvmetad.h"
--
--int lvm_vg_add_tag(vg_t vg, const char *tag)
--{
--	int rc = -1;
--	struct saved_env e = store_user_env(vg->cmd);
--
--	if (!vg_read_error(vg) && vg_check_write_mode(vg) &&
--		vg_change_tag(vg, tag, 1))
--		rc = 0;
--	restore_user_env(&e);
--	return rc;
--}
--
--
--int lvm_vg_remove_tag(vg_t vg, const char *tag)
--{
--	int rc = -1;
--	struct saved_env e = store_user_env(vg->cmd);
--
--	if (!vg_read_error(vg) && vg_check_write_mode(vg) &&
--		vg_change_tag(vg, tag, 0))
--		rc = 0;
--	restore_user_env(&e);
--	return rc;
--}
--
--
--vg_t lvm_vg_create(lvm_t libh, const char *vg_name)
--{
--	struct volume_group *vg = NULL;
--	struct saved_env e = store_user_env((struct cmd_context *)libh);
--
--	vg = vg_lock_and_create((struct cmd_context *)libh, vg_name);
--	/* FIXME: error handling is still TBD */
--	if (vg_read_error(vg)) {
--		release_vg(vg);
--		vg = NULL;
--	} else {
--		vg->open_mode = 'w';
--	}
--
--	restore_user_env(&e);
--	return (vg_t) vg;
--}
--
--static int _lvm_vg_extend(vg_t vg, const char *device)
--{
--	struct pvcreate_params pp;
--
--	if (vg_read_error(vg))
--		return -1;
--
--	if (!vg_check_write_mode(vg))
--		return -1;
--
--	if (!lock_vol(vg->cmd, VG_ORPHANS, LCK_VG_WRITE, NULL)) {
--		log_error("Can't get lock for orphan PVs");
--		return -1;
--	}
--
--	pvcreate_params_set_defaults(&pp);
--	if (!vg_extend(vg, 1, &device, &pp)) {
--		unlock_vg(vg->cmd, NULL, VG_ORPHANS);
--		return -1;
--	}
--	/*
--	 * FIXME: Either commit to disk, or keep holding VG_ORPHANS and
--	 * release in lvm_vg_close().
--	 */
--	unlock_vg(vg->cmd, NULL, VG_ORPHANS);
--	return 0;
--}
--
--int lvm_vg_extend(vg_t vg, const char *device)
--{
--	int rc = 0;
--	struct saved_env e = store_user_env(vg->cmd);
--	rc = _lvm_vg_extend(vg, device);
--	restore_user_env(&e);
--	return rc;
--}
--
--int lvm_vg_reduce(vg_t vg, const char *device)
--{
--	int rc = -1;
--	struct saved_env e = store_user_env(vg->cmd);
--
--	if (!vg_read_error(vg) && vg_check_write_mode(vg) && vg_reduce(vg, device))
--		rc = 0;
--
--	restore_user_env(&e);
--	return rc;
--}
--
--int lvm_vg_set_extent_size(vg_t vg, uint32_t new_size)
--{
--	int rc = -1;
--	struct saved_env e = store_user_env(vg->cmd);
--
--	if (!vg_read_error(vg) && vg_check_write_mode(vg) &&
--		vg_set_extent_size(vg, new_size / SECTOR_SIZE))
--		rc = 0;
--
--	restore_user_env(&e);
--	return rc;
--}
--
--static int _lvm_vg_write(vg_t vg)
--{
--	struct pv_list *pvl;
--
--	if (vg_read_error(vg))
--		return -1;
--	if (!vg_check_write_mode(vg))
--		return -1;
--
--	if (dm_list_empty(&vg->pvs)) {
--		if (!vg_remove(vg))
--			return -1;
--		return 0;
--	}
--
--	if (! dm_list_empty(&vg->removed_pvs)) {
--		if (!lock_vol(vg->cmd, VG_ORPHANS, LCK_VG_WRITE, NULL)) {
--			log_error("Can't get lock for orphan PVs");
--			return 0;
--		}
--	}
--
--	if (!archive(vg))
--		return -1;
--
--	/* Store VG on disk(s) */
--	if (!vg_write(vg) || !vg_commit(vg))
--		return -1;
--
--	if (! dm_list_empty(&vg->removed_pvs)) {
--		dm_list_iterate_items(pvl, &vg->removed_pvs) {
--			pv_write_orphan(vg->cmd, pvl->pv);
--			pv_set_fid(pvl->pv, NULL);
--			/* FIXME: do pvremove / label_remove()? */
--		}
--		dm_list_init(&vg->removed_pvs);
--		unlock_vg(vg->cmd, NULL, VG_ORPHANS);
--	}
--
--	return 0;
--}
--
--int lvm_vg_write(vg_t vg)
--{
--	int rc;
--	struct saved_env e = store_user_env(vg->cmd);
--	rc = _lvm_vg_write(vg);
--	restore_user_env(&e);
--	return rc;
--}
--
--int lvm_vg_close(vg_t vg)
--{
--	struct saved_env e = store_user_env(vg->cmd);
--	if (vg_read_error(vg) == FAILED_LOCKING)
--		release_vg(vg);
--	else if (!lvmcache_vgname_is_locked(vg->name))
--		release_vg(vg);
--	else
--		unlock_and_release_vg(vg->cmd, vg, vg->name);
--	restore_user_env(&e);
--	return 0;
--}
--
--int lvm_vg_remove(vg_t vg)
--{
--	int rc = -1;
--	struct saved_env e = store_user_env(vg->cmd);
--
--	if (!vg_read_error(vg) && vg_check_write_mode(vg) && vg_remove_check(vg)) {
--		vg_remove_pvs(vg);
--		rc = 0;
--	}
--
--	restore_user_env(&e);
--	return rc;
--}
--
--static vg_t _lvm_vg_open(lvm_t libh, const char *vgname, const char *mode,
--		  uint32_t flags)
--{
--	uint32_t internal_flags = 0;
--	struct volume_group *vg;
--
--	if (!strncmp(mode, "w", 1))
--		internal_flags |= READ_FOR_UPDATE;
--	else if (strncmp(mode, "r", 1)) {
--		log_errno(EINVAL, "Invalid VG open mode");
--		return NULL;
--	}
--
--	lvmcache_label_scan((struct cmd_context *)libh);
--
--	vg = vg_read((struct cmd_context *)libh, vgname, NULL, internal_flags, 0);
--	if (vg_read_error(vg)) {
--		/* FIXME: use log_errno either here in inside vg_read */
--		release_vg(vg);
--		return NULL;
--	}
--	/* FIXME: combine this with locking ? */
--	vg->open_mode = mode[0];
--
--	return (vg_t) vg;
--}
--
--vg_t lvm_vg_open(lvm_t libh, const char *vgname, const char *mode,
--		  uint32_t flags)
--{
--	vg_t rc;
--	struct saved_env e = store_user_env((struct cmd_context*)libh);
--	rc = _lvm_vg_open(libh, vgname, mode, flags);
--	restore_user_env(&e);
--	return rc;
--}
--
--static struct dm_list *_lvm_vg_list_pvs(vg_t vg)
--{
--	struct dm_list *list;
--	pv_list_t *pvs;
--	struct pv_list *pvl;
--
--	if (dm_list_empty(&vg->pvs))
--		return NULL;
--
--	if (!(list = dm_pool_zalloc(vg->vgmem, sizeof(*list)))) {
--		log_errno(ENOMEM, "Memory allocation fail for dm_list.");
--		return NULL;
--	}
--	dm_list_init(list);
--
--	dm_list_iterate_items(pvl, &vg->pvs) {
--		if (!(pvs = dm_pool_zalloc(vg->vgmem, sizeof(*pvs)))) {
--			log_errno(ENOMEM,
--				"Memory allocation fail for lvm_pv_list.");
--			return NULL;
--		}
--		pvs->pv = pvl->pv;
--		dm_list_add(list, &pvs->list);
--	}
--	return list;
--}
--
--struct dm_list *lvm_vg_list_pvs(vg_t vg)
--{
--	struct dm_list *rc;
--	struct saved_env e = store_user_env(vg->cmd);
--	rc = _lvm_vg_list_pvs(vg);
--	restore_user_env(&e);
--	return rc;
--}
--
--static struct dm_list *_lvm_vg_list_lvs(vg_t vg)
--{
--	struct dm_list *list;
--	lv_list_t *lvs;
--	struct lv_list *lvl;
--
--	if (dm_list_empty(&vg->lvs))
--		return NULL;
--
--	if (!(list = dm_pool_zalloc(vg->vgmem, sizeof(*list)))) {
--		log_errno(ENOMEM, "Memory allocation fail for dm_list.");
--		return NULL;
--	}
--	dm_list_init(list);
--
--	dm_list_iterate_items(lvl, &vg->lvs) {
--		if (!(lvs = dm_pool_zalloc(vg->vgmem, sizeof(*lvs)))) {
--			log_errno(ENOMEM,
--				"Memory allocation fail for lvm_lv_list.");
--			return NULL;
--		}
--		lvs->lv = lvl->lv;
--		dm_list_add(list, &lvs->list);
--	}
--	return list;
--}
--
--struct dm_list *lvm_vg_list_lvs(vg_t vg)
--{
--	struct dm_list *rc;
--	struct saved_env e = store_user_env(vg->cmd);
--	rc = _lvm_vg_list_lvs(vg);
--	restore_user_env(&e);
--	return rc;
--}
--
--struct dm_list *lvm_vg_get_tags(const vg_t vg)
--{
--	struct dm_list *rc;
--	struct saved_env e = store_user_env(vg->cmd);
--	rc = tag_list_copy(vg->vgmem, &vg->tags);
--	restore_user_env(&e);
--	return rc;
--}
--
--uint64_t lvm_vg_get_seqno(const vg_t vg)
--{
--	uint64_t rc;
--	struct saved_env e = store_user_env(vg->cmd);
--	rc = vg_seqno(vg);
--	restore_user_env(&e);
--	return rc;
--}
--
--uint64_t lvm_vg_is_clustered(const vg_t vg)
--{
--	uint64_t rc;
--	struct saved_env e = store_user_env(vg->cmd);
--	rc = vg_is_clustered(vg);
--	restore_user_env(&e);
--	return rc;
--}
--
--uint64_t lvm_vg_is_exported(const vg_t vg)
--{
--	uint64_t rc;
--	struct saved_env e = store_user_env(vg->cmd);
--	rc = vg_is_exported(vg);
--	restore_user_env(&e);
--	return rc;
--}
--
--uint64_t lvm_vg_is_partial(const vg_t vg)
--{
--	uint64_t rc;
--	struct saved_env e = store_user_env(vg->cmd);
--	rc = (vg_missing_pv_count(vg) != 0);
--	restore_user_env(&e);
--	return rc;
--}
--
--/* FIXME: invalid handle? return INTMAX? */
--uint64_t lvm_vg_get_size(const vg_t vg)
--{
--	uint64_t rc;
--	struct saved_env e = store_user_env(vg->cmd);
--	rc = SECTOR_SIZE * vg_size(vg);
--	restore_user_env(&e);
--	return rc;
--}
--
--uint64_t lvm_vg_get_free_size(const vg_t vg)
--{
--	uint64_t rc;
--	struct saved_env e = store_user_env(vg->cmd);
--	rc = SECTOR_SIZE * vg_free(vg);
--	restore_user_env(&e);
--	return rc;
--}
--
--uint64_t lvm_vg_get_extent_size(const vg_t vg)
--{
--	uint64_t rc;
--	struct saved_env e = store_user_env(vg->cmd);
--	rc = SECTOR_SIZE * vg_extent_size(vg);
--	restore_user_env(&e);
--	return rc;
--}
--
--uint64_t lvm_vg_get_extent_count(const vg_t vg)
--{
--	uint64_t rc;
--	struct saved_env e = store_user_env(vg->cmd);
--	rc = vg_extent_count(vg);
--	restore_user_env(&e);
--	return rc;
--}
--
--uint64_t lvm_vg_get_free_extent_count(const vg_t vg)
--{
--	uint64_t rc;
--	struct saved_env e = store_user_env(vg->cmd);
--	rc = vg_free_count(vg);
--	restore_user_env(&e);
--	return rc;
--}
--
--uint64_t lvm_vg_get_pv_count(const vg_t vg)
--{
--	uint64_t rc;
--	struct saved_env e = store_user_env(vg->cmd);
--	rc = vg_pv_count(vg);
--	restore_user_env(&e);
--	return rc;
--}
--
--uint64_t lvm_vg_get_max_pv(const vg_t vg)
--{
--	uint64_t rc;
--	struct saved_env e = store_user_env(vg->cmd);
--	rc = vg_max_pv(vg);
--	restore_user_env(&e);
--	return rc;
--}
--
--uint64_t lvm_vg_get_max_lv(const vg_t vg)
--{
--	uint64_t rc;
--	struct saved_env e = store_user_env(vg->cmd);
--	rc = vg_max_lv(vg);
--	restore_user_env(&e);
--	return rc;
--}
--
--const char *lvm_vg_get_uuid(const vg_t vg)
--{
--	const char *rc;
--	struct saved_env e = store_user_env(vg->cmd);
--	rc = vg_uuid_dup(vg);
--	restore_user_env(&e);
--	return rc;
--}
--
--const char *lvm_vg_get_name(const vg_t vg)
--{
--	const char *rc;
--	struct saved_env e = store_user_env(vg->cmd);
--	rc = dm_pool_strndup(vg->vgmem, vg->name, NAME_LEN+1);
--	restore_user_env(&e);
--	return rc;
--}
--
--
--struct lvm_property_value lvm_vg_get_property(const vg_t vg, const char *name)
--{
--	struct lvm_property_value rc;
--	struct saved_env e = store_user_env(vg->cmd);
--	rc = get_property(NULL, vg, NULL, NULL, NULL, NULL, NULL, name);
--	restore_user_env(&e);
--	return rc;
--}
--
--int lvm_vg_set_property(const vg_t vg, const char *name,
--			struct lvm_property_value *value)
--{
--	/* At this point it is unknown if all property set paths make the
--	 * appropriate copy of the string.  We will allocate a copy on the vg so
--	 * that worst case we have two copies which will get freed when the vg gets
--	 * released.
--	 */
--	int rc;
--	struct saved_env e = store_user_env(vg->cmd);
--
--	if (value->is_valid && value->is_string && value->value.string) {
--		value->value.string = dm_pool_strndup(vg->vgmem, value->value.string,
--				strlen(value->value.string) + 1);
--	}
--
--	rc = set_property(NULL, vg, NULL, NULL, NULL, name, value);
--	restore_user_env(&e);
--	return rc;
--}
--
--struct dm_list *lvm_list_vg_names(lvm_t libh)
--{
--	struct dm_list *rc = NULL;
--	struct saved_env e = store_user_env((struct cmd_context *)libh);
--
--	if (lvmetad_vg_list_to_lvmcache((struct cmd_context *)libh)) {
--		rc = get_vgnames((struct cmd_context *)libh, 0);
--	}
--	restore_user_env(&e);
--	return rc;
--}
--
--struct dm_list *lvm_list_vg_uuids(lvm_t libh)
--{
--	struct dm_list *rc = NULL;
--	struct saved_env e = store_user_env((struct cmd_context *)libh);
--
--	if (lvmetad_vg_list_to_lvmcache((struct cmd_context *)libh)) {
--		rc = get_vgids((struct cmd_context *)libh, 0);
--	}
--	restore_user_env(&e);
--	return rc;
--}
--
--/*
-- * FIXME: Elaborate on when to use, side-effects, .cache file, etc
-- */
--int lvm_scan(lvm_t libh)
--{
--	int rc = 0;
--	struct saved_env e = store_user_env((struct cmd_context *)libh);
--
--	if (!lvmcache_label_scan((struct cmd_context *)libh))
--		rc = -1;
--
--	restore_user_env(&e);
--	return rc;
--}
--
--int lvm_lv_name_validate(const vg_t vg, const char *name)
--{
--	int rc = -1;
--	name_error_t name_error;
--	int historical;
--
--	struct saved_env e = store_user_env(vg->cmd);
--
--	name_error = validate_name_detailed(name);
--
--	if (NAME_VALID == name_error) {
--		if (apply_lvname_restrictions(name)) {
--			if (!lv_name_is_used_in_vg(vg, name, &historical)) {
--				rc = 0;
--			} else {
--				log_errno(EINVAL, "%sLV name exists in VG",
--					  historical ? "historical " : "");
--			}
--		}
--	} else {
--		display_name_error(name_error);
--	}
--
--	restore_user_env(&e);
--	return rc;
--}
--
--int lvm_vg_name_validate(lvm_t libh, const char *name)
--{
--	int rc = -1;
--	struct cmd_context *cmd = (struct cmd_context *)libh;
--	struct saved_env e = store_user_env(cmd);
--
--	if (validate_new_vg_name(cmd, name))
--		rc = 0;
--
--	restore_user_env(&e);
--	return rc;
--}
-diff --git a/liblvm/test/vgadd.c b/liblvm/test/vgadd.c
-deleted file mode 100644
-index c96baa7..0000000
---- a/liblvm/test/vgadd.c
-+++ /dev/null
-@@ -1,90 +0,0 @@
--/*
-- * Copyright (C) 2009 Red Hat, Inc. All rights reserved.
-- *
-- * This file is part of LVM2.
-- *
-- * This copyrighted material is made available to anyone wishing to use,
-- * modify, copy, or redistribute it subject to the terms and conditions
-- * of the GNU Lesser General Public License v.2.1.
-- *
-- * You should have received a copy of the GNU Lesser General Public License
-- * along with this program; if not, write to the Free Software Foundation,
-- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
-- */
--
--#include <stdio.h>
--#include <unistd.h>
--#include <inttypes.h>
--#include <assert.h>
--
--#include "lvm2app.h"
--
--int main(int argc, char *argv[])
--{
--	char *vgname = NULL;
--	lvm_t handle;
--	vg_t vg;
--	lv_t lv;
--	lvm_str_list_t *sl;
--	pv_list_t *pvl;
--	lv_list_t *lvl;
--	struct dm_list *vgnames;
--	struct dm_list *vgids;
--	struct dm_list *pvlist;
--	struct dm_list *lvlist;
--	int added = 0;
--	int ret;
--	int i;
--
--	vgname = argv[1];
--
--	handle = lvm_init(NULL);
--	if (!handle) {
--		printf("lvm_init failed\n");
--		return -1;
--	}
--
--	vg = lvm_vg_create(handle, vgname);
--
--	for (i = 2; i < argc; i++) {
--		printf("adding %s to vg\n", argv[i]);
--		ret = lvm_vg_extend(vg, argv[i]);
--
--		if (ret) {
--			printf("Failed to add %s to vg\n", argv[i]);
--			goto out;
--		}
--
--		added++;
--	}
--
--	if (!added) {
--		printf("No PVs added, not writing VG.\n");
--		goto out;
--	}
--
--	printf("writing vg\n");
--	ret = lvm_vg_write(vg);
--
--	lvm_vg_close(vg);
--
--	sleep(1);
--
--	vg = lvm_vg_open(handle, vgname, "w", 0);
--	if (!vg) {
--		printf("vg open %s failed\n", vgname);
--		goto out;
--	}
--
--	lv = lvm_vg_create_lv_linear(vg, "lv0", 1024*1024);
--	if (!lv) {
--		printf("lv create failed\n");
--		goto out;
--	}
--
--	lvm_vg_close(vg);
--out:
--	lvm_quit(handle);
--
--	return 0;
--}
-diff --git a/liblvm/test/vgshow.c b/liblvm/test/vgshow.c
-deleted file mode 100644
-index 519f3dd..0000000
---- a/liblvm/test/vgshow.c
-+++ /dev/null
-@@ -1,95 +0,0 @@
--/*
-- * Copyright (C) 2009 Red Hat, Inc. All rights reserved.
-- *
-- * This file is part of LVM2.
-- *
-- * This copyrighted material is made available to anyone wishing to use,
-- * modify, copy, or redistribute it subject to the terms and conditions
-- * of the GNU Lesser General Public License v.2.1.
-- *
-- * You should have received a copy of the GNU Lesser General Public License
-- * along with this program; if not, write to the Free Software Foundation,
-- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
-- */
--
--#include <stdio.h>
--#include <unistd.h>
--#include <inttypes.h>
--#include <assert.h>
--
--#include "lvm2app.h"
--
--int main(int argc, char *argv[])
--{
--	char *vgname = NULL;
--	lvm_t handle;
--	vg_t vg;
--	lvm_str_list_t *sl;
--	pv_list_t *pvl;
--	lv_list_t *lvl;
--	struct dm_list *vgnames;
--	struct dm_list *vgids;
--	struct dm_list *pvlist;
--	struct dm_list *lvlist;
--	uint64_t val;
--
--	vgname = argv[1];
--
--	handle = lvm_init(NULL);
--	if (!handle) {
--		printf("lvm_init failed\n");
--		return -1;
--	}
--
--	vgnames = lvm_list_vg_names(handle);
--
--	dm_list_iterate_items(sl, vgnames)
--		printf("vg name %s\n", sl->str);
--
--	vgids = lvm_list_vg_uuids(handle);
--
--	dm_list_iterate_items(sl, vgids)
--		printf("vg uuid %s\n", sl->str);
--
--	if (!vgname) {
--		printf("No vg name arg\n");
--		goto out;
--	}
--
--	vg = lvm_vg_open(handle, vgname, "r", 0);
--
--	if (!vg) {
--		printf("vg open %s failed\n", vgname);
--		goto out;
--	}
--
--	val = lvm_vg_get_seqno(vg);
--
--	printf("vg seqno %llu\n", (unsigned long long)val);
--
--	pvlist = lvm_vg_list_pvs(vg);
--	
--	dm_list_iterate_items(pvl, pvlist) {
--		printf("vg pv name %s\n", lvm_pv_get_name(pvl->pv));
--
--		val = lvm_pv_get_dev_size(pvl->pv);
--
--		printf("vg pv size %llu\n", (unsigned long long)val);
--	}
--
--	lvlist = lvm_vg_list_lvs(vg);
--	
--	dm_list_iterate_items(lvl, lvlist) {
--		printf("vg lv name %s\n", lvm_lv_get_name(lvl->lv));
--
--		val = lvm_lv_get_size(lvl->lv);
--
--		printf("vg lv size %llu\n", (unsigned long long)val);
--	}
--
--	lvm_vg_close(vg);
--out:
--	lvm_quit(handle);
--
--	return 0;
--}
-diff --git a/test/api/Makefile.in b/test/api/Makefile.in
-index 6872095..c8d9fc0 100644
---- a/test/api/Makefile.in
-+++ b/test/api/Makefile.in
-@@ -16,47 +16,14 @@ top_srcdir = @top_srcdir@
- top_builddir = @top_builddir@
++#include "device_mapper/all.h"
+ #include "lib/misc/util.h"
+ #include "dm-logging.h"
  
- TARGETS =
--ifeq ("@APPLIB@", "yes")
--TARGETS += test
--SOURCES = test.c
--
--TARGETS += \
--	lvtest.t \
--	vglist.t \
--	percent.t \
--	pe_start.t \
--	thin_percent.t \
--	vgtest.t
--
--SOURCES2 = \
--	lvtest.c \
--	vglist.c \
--	percent.c \
--	pe_start.c \
--	thin_percent.c \
--	vgtest.c
--
--endif
--
- PYTEST = python_lvm_unit.py
+diff --git a/device_mapper/vdo/status.c b/device_mapper/vdo/status.c
+index 4bd15e4..7a26e1a 100644
+--- a/device_mapper/vdo/status.c
++++ b/device_mapper/vdo/status.c
+@@ -1,7 +1,7 @@
+ #include "target.h"
  
- include $(top_builddir)/make.tmpl
+ // For DM_ARRAY_SIZE!
+-#include "device_mapper/libdevmapper.h"
++#include "device_mapper/all.h"
  
- DEFS += -D_REENTRANT
--DEPLIBS += $(top_builddir)/liblvm/liblvm2app.so
--LDFLAGS+=\
--	-L$(top_builddir)/liblvm \
--	-L$(top_builddir)/daemons/dmeventd
--LIBS += @LVM2APP_LIB@ $(DMEVENT_LIBS)
--
--%.t: %.o $(DEPLIBS)
--	$(CC) -o $@ $(<) $(CFLAGS) $(LDFLAGS) $(ELDFLAGS) $(LIBS)
+ #include <ctype.h>
+ #include <stdlib.h>
+diff --git a/lib/config/config.h b/lib/config/config.h
+index 146aae1..4c8ddac 100644
+--- a/lib/config/config.h
++++ b/lib/config/config.h
+@@ -16,7 +16,7 @@
+ #ifndef _LVM_CONFIG_H
+ #define _LVM_CONFIG_H
  
- all:
- 	test -x $(PYTEST) || chmod 755 $(PYTEST)
+-#include "device_mapper/libdevmapper.h"
++#include "device_mapper/all.h"
+ #include "lib/device/device.h"
  
--test: $(OBJECTS) $(DEPLIBS)
--	$(CC) -o $@ $(OBJECTS) $(CFLAGS) $(LDFLAGS) $(ELDFLAGS) $(LIBS) $(READLINE_LIBS)
--
- Makefile: $(srcdir)/Makefile.in $(top_builddir)/config.status
- 	cd $(top_builddir) && $(SHELL) ./config.status test/api/Makefile
-diff --git a/test/api/lvtest.c b/test/api/lvtest.c
-deleted file mode 100644
-index 9a5fc22..0000000
---- a/test/api/lvtest.c
-+++ /dev/null
-@@ -1,64 +0,0 @@
--/*
-- * Copyright (C) 2010 Red Hat, Inc. All rights reserved.
-- *
-- * This file is part of LVM2.
-- *
-- * This copyrighted material is made available to anyone wishing to use,
-- * modify, copy, or redistribute it subject to the terms and conditions
-- * of the GNU Lesser General Public License v.2.1.
-- *
-- * You should have received a copy of the GNU Lesser General Public License
-- * along with this program; if not, write to the Free Software Foundation,
-- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
-- */
--
--#undef NDEBUG
--
--#include "liblvm/lvm2app.h"
--#include "assert.h"
--
--#define err(args...) \
--	do { fprintf(stderr, args); goto bad; } while (0)
--
--int main(int argc, char *argv[])
--{
--	lvm_t handle;
--	vg_t vg;
--	lv_t lv;
--	int r = -1;
--
--	if (!(handle = lvm_init(NULL)))
--                return -1;
--
--	if (!(vg = lvm_vg_open(handle, argv[1], "w", 0)))
--		err("VG open %s failed.\n", argv[1]);
--
--	if (!(lv = lvm_lv_from_name(vg, "test")))
--                err("LV test not found.\n");
--
--	if (lvm_lv_deactivate(lv))
--                err("LV test deactivation failed.\n");
--
--	if (lvm_lv_activate(lv))
--                err("LV test activation failed.\n");
--
--	if (lvm_lv_activate(lv))
--                err("LV test repeated activation failed.\n");
--
--	if (lvm_lv_rename(lv, "test1"))
--		err("LV test rename to test1 failed.\n");
--
--	if (lvm_lv_rename(lv, "test2"))
--		err("LV test1 rename to test2 failed.\n");
--
--	if (lvm_lv_rename(lv, "test"))
--		err("LV test2 rename to test failed.\n");
--
--	if (lvm_vg_close(vg))
--		err("VG close failed.\n");
--
--        r = 0;
--bad:
--	lvm_quit(handle);
--	return r;
--}
-diff --git a/test/api/pe_start.c b/test/api/pe_start.c
-deleted file mode 100644
-index 16b4c0d..0000000
---- a/test/api/pe_start.c
-+++ /dev/null
-@@ -1,47 +0,0 @@
--/*
-- * Copyright (C) 2011 Red Hat, Inc. All rights reserved.
-- *
-- * This file is part of LVM2.
-- *
-- * This copyrighted material is made available to anyone wishing to use,
-- * modify, copy, or redistribute it subject to the terms and conditions
-- * of the GNU Lesser General Public License v.2.1.
-- *
-- * You should have received a copy of the GNU Lesser General Public License
-- * along with this program; if not, write to the Free Software Foundation,
-- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
-- */
--
--#undef NDEBUG
--
--#include "liblvm/lvm2app.h"
--#include "assert.h"
--
--int main(int argc, char *argv[])
--{
--	lvm_t handle;
--	vg_t vg = NULL;
--	pv_t pv;
--	struct lvm_property_value v;
--
--	handle = lvm_init(NULL);
--        assert(handle);
--
--	vg = lvm_vg_create(handle, argv[1]);
--        assert(vg);
--
--	if (lvm_vg_extend(vg, argv[2]))
--		abort();
--
--	pv = lvm_pv_from_name(vg, argv[2]);
--	assert(pv);
--
--        v = lvm_pv_get_property(pv, "pe_start");
--        assert(v.is_valid);
--	fprintf(stderr, "pe_start = %d\n", (int)v.value.integer);
--        assert(v.value.integer == 2048 * 512);
--
--        lvm_vg_close(vg);
--	lvm_quit(handle);
--        return 0;
--}
-diff --git a/test/api/percent.c b/test/api/percent.c
-deleted file mode 100644
-index afc361c..0000000
---- a/test/api/percent.c
-+++ /dev/null
-@@ -1,63 +0,0 @@
--/*
-- * Copyright (C) 2010 Red Hat, Inc. All rights reserved.
-- *
-- * This file is part of LVM2.
-- *
-- * This copyrighted material is made available to anyone wishing to use,
-- * modify, copy, or redistribute it subject to the terms and conditions
-- * of the GNU Lesser General Public License v.2.1.
-- *
-- * You should have received a copy of the GNU Lesser General Public License
-- * along with this program; if not, write to the Free Software Foundation,
-- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
-- */
--
--#undef NDEBUG
--
--#include "liblvm/lvm2app.h"
--#include "assert.h"
--
--int main(int argc, char *argv[])
--{
--	lvm_t handle;
--	vg_t vg = NULL;
--	lv_t lv;
--	struct lvm_property_value v;
--	struct lvm_property_value d;
--
--	handle = lvm_init(NULL);
--        assert(handle);
--
--	vg = lvm_vg_open(handle, argv[1], "r", 0);
--        assert(vg);
--
--	lv = lvm_lv_from_name(vg, "snap");
--        assert(lv);
--
--        v = lvm_lv_get_property(lv, "snap_percent");
--        assert(v.is_valid);
--        assert(v.value.integer == PERCENT_0);
--
--	lv = lvm_lv_from_name(vg, "mirr");
--        assert(lv);
--
--        v = lvm_lv_get_property(lv, "copy_percent");
--        assert(v.is_valid);
--        assert(v.value.integer == PERCENT_100);
--
--        lv = lvm_lv_from_name(vg, "snap2");
--        assert(lv);
--
--        v = lvm_lv_get_property(lv, "snap_percent");
--        assert(v.is_valid);
--        assert(v.value.integer == 50 * PERCENT_1);
--
--	d = lvm_lv_get_property(lv, "data_percent");
--	assert(d.is_valid);
--	assert(d.value.integer == v.value.integer);
--
--        lvm_vg_close(vg);
--
--	lvm_quit(handle);
--        return 0;
--}
-diff --git a/test/api/test.c b/test/api/test.c
-deleted file mode 100644
-index a4d200b..0000000
---- a/test/api/test.c
-+++ /dev/null
-@@ -1,1110 +0,0 @@
--/*
-- * Copyright (C) 2001-2004 Sistina Software, Inc. All rights reserved.
-- * Copyright (C) 2004-2011 Red Hat, Inc. All rights reserved.
-- *
-- * This file is part of LVM2.
-- *
-- * This copyrighted material is made available to anyone wishing to use,
-- * modify, copy, or redistribute it subject to the terms and conditions
-- * of the GNU Lesser General Public License v.2.1.
-- *
-- * You should have received a copy of the GNU Lesser General Public License
-- * along with this program; if not, write to the Free Software Foundation,
-- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
-- */
--
--#include <stdio.h>
--#include <string.h>
--#include <stdlib.h>
--#include <ctype.h>
--
--#include "configure.h"
--#include "liblvm/lvm2app.h"
--
--#ifdef READLINE_SUPPORT
--#include <readline/readline.h>
--
--#define MAX_ARGS 64
--
--static int lvm_split(char *str, int *argc, char **argv, int max)
--{
--	char *b = str, *e;
--	*argc = 0;
--
--	while (*b) {
--		while (*b && isspace(*b))
--			b++;
--
--		if ((!*b) || ((*argc == 0)&&(*b == '#')))
--			break;
--
--		e = b;
--		while (*e && !isspace(*e))
--			e++;
--
--		argv[(*argc)++] = b;
--		if (!*e)
--			break;
--		*e++ = '\0';
--		b = e;
--		if (*argc == max)
--			break;
--	}
--
--	if (*argc < max)
--		argv[*argc] = NULL;
--
--	return *argc;
--}
--
--static void _show_help(void)
--{
--	printf("'lv_activate vgname lvname: "
--	       "Activate an LV\n");
--	printf("'lv_deactivate vgname lvname: "
--	       "Deactivate an LV\n");
--	printf("'vg_remove_lv vgname lvname': "
--	       "Remove a LV\n");
--	printf("'vg_create_lv_linear vgname lvname size_in_bytes': "
--	       "Create a linear LV\n");
--	printf("'scan_vgs': "
--	       "Scan the system for LVM metadata\n");
--	printf("'list_vg_names': "
--	       "List the names of the VGs that exist in the system\n");
--	printf("'list_vg_ids': "
--	       "List the uuids of the VGs that exist in the system\n");
--	printf("'vg_list_pvs vgname': "
--	       "List the PVs that exist in VG vgname\n");
--	printf("'pv_list_pvsegs pvname': "
--	       "List the PV segments that exist in PV pvname\n");
--	printf("'vg_list_lvs vgname': "
--	       "List the LVs that exist in VG vgname\n");
--	printf("'lv_list_lvsegs vgname lvname': "
--	       "List the LV segments that exist in LV vgname/lvname\n");
--	printf("'vgs_open': "
--	       "List the VGs that are currently open\n");
--	printf("'vgs': "
--	       "List all VGs known to the system\n");
--	printf("'vg_extend vgname device: "
--	       "Issue a lvm_vg_extend() API call on VG 'vgname'\n");
--	printf("'vg_reduce vgname device: "
--	       "Issue a lvm_vg_reduce() API call on VG 'vgname'\n");
--	printf("'vg_open vgname ['r' | 'w']': "
--	       "Issue a lvm_vg_open() API call on VG 'vgname'\n");
--	printf("'vg_close vgname': "
--	       "Issue a lvm_vg_close() API call on VG 'vgname'\n");
--	printf("'vg_create vgname: "
--	       "Issue a lvm_vg_create() to create VG 'vgname'\n");
--	printf("'vg_remove vgname: "
--	       "Issue a lvm_vg_remove() to remove VG 'vgname'\n");
--	printf("'config_reload': "
--	       "Issue a lvm_config_reload() API to reload LVM config\n");
--	printf("'config_override' device: "
--	       "Issue a lvm_config_override() with accept device filter\n");
--	printf("'vg_get_tags vgname': "
--	       "List the tags of a VG\n");
--	printf("'lv_get_property vgname lvname property_name': "
--	       "Display the value of LV property\n");
--	printf("'vg_get_property vgname property_name': "
--	       "Display the value of VG property\n");
--	printf("'pv_get_property pvname property_name': "
--	       "Display the value of PV property\n");
--	printf("'vg_set_property vgname property_name': "
--	       "Set the value of VG property\n");
--	printf("'lv_get_tags vgname lvname': "
--	       "List the tags of a LV\n");
--	printf("'vg_{add|remove}_tag vgname tag': "
--	       "Add/remove a tag from a VG\n");
--	printf("'lv_{add|remove}_tag vgname lvname tag': "
--	       "Add/remove a tag from a LV\n");
--	printf("'vgname_from_devname device': "
--	       "Lookup a vgname from a device name\n");
--	printf("'vgname_from_pvid pvid': "
--	       "Lookup a vgname from a pvid\n");
--	printf("'lv_from_uuid vgname lvuuid': "
--	       "Lookup an LV from an LV uuid\n");
--	printf("'lv_from_name vgname lvname': "
--	       "Lookup an LV from an LV name\n");
--	printf("'pv_from_uuid vgname pvuuid': "
--	       "Lookup an LV from an LV uuid\n");
--	printf("'pv_from_name vgname pvname': "
--	       "Lookup an LV from an LV name\n");
--	printf("'quit': exit the program\n");
--}
--
--static struct dm_hash_table *_vgid_hash = NULL;
--static struct dm_hash_table *_vgname_hash = NULL;
--static struct dm_hash_table *_pvname_hash = NULL;
--static struct dm_hash_table *_lvname_hash = NULL;
--
--static void _hash_destroy_single(struct dm_hash_table **htable)
--{
--	if (htable && *htable) {
--		dm_hash_destroy(*htable);
--		*htable = NULL;
--	}
--}
--
--static void _hash_destroy(void)
--{
--	_hash_destroy_single(&_vgname_hash);
--	_hash_destroy_single(&_vgid_hash);
--	_hash_destroy_single(&_pvname_hash);
--	_hash_destroy_single(&_lvname_hash);
--}
--
--static int _hash_create(void)
--{
--	if (!(_vgname_hash = dm_hash_create(128)))
--		return 0;
--	if (!(_pvname_hash = dm_hash_create(128))) {
--		_hash_destroy_single(&_vgname_hash);
--		return 0;
--	}
--	if (!(_lvname_hash = dm_hash_create(128))) {
--		_hash_destroy_single(&_vgname_hash);
--		_hash_destroy_single(&_pvname_hash);
--		return 0;
--	}
--	if (!(_vgid_hash = dm_hash_create(128))) {
--		_hash_destroy_single(&_vgname_hash);
--		_hash_destroy_single(&_pvname_hash);
--		_hash_destroy_single(&_lvname_hash);
--		return 0;
--	}
--	return 1;
--}
--
--/* FIXME: this should be per vg */
--static lv_t _lookup_lv_by_name(const char *name)
--{
--	lv_t lv;
--
--	if (!name) {
--		printf ("Invalid LV name\n");
--		return NULL;
--	}
--	if (!(lv = dm_hash_lookup(_lvname_hash, name))) {
--		printf ("Can't find %s in LVs - run vg_create_lv first\n",
--			name);
--		return NULL;
--	}
--	return lv;
--}
--
--static vg_t _lookup_vg_by_name(char **argv, int argc)
--{
--	vg_t vg;
--
--	if (argc < 2) {
--		printf ("Please enter vg_name\n");
--		return NULL;
--	}
--	if (!(vg = dm_hash_lookup(_vgid_hash, argv[1])) &&
--	    !(vg = dm_hash_lookup(_vgname_hash, argv[1]))) {
--		printf ("Can't find %s in open VGs - run vg_open first\n",
--			argv[1]);
--		return NULL;
--	}
--	return vg;
--}
--
--static pv_t _lookup_pv_by_name(const char *name)
--{
--	pv_t pv;
--
--	if (!(pv = dm_hash_lookup(_pvname_hash, name))) {
--		printf ("Can't find %s in open PVs - run vg_open first\n",
--			name);
--		return NULL;
--	}
--	return pv;
--}
--
--static void _add_lvs_to_lvname_hash(struct dm_list *lvs)
--{
--	struct lvm_lv_list *lvl;
--	dm_list_iterate_items(lvl, lvs) {
--		/* Concatenate VG name with LV name */
--		dm_hash_insert(_lvname_hash, lvm_lv_get_name(lvl->lv), lvl->lv);
--	}
--}
--
--static void _add_pvs_to_pvname_hash(struct dm_list *pvs)
--{
--	struct lvm_pv_list *pvl;
--	dm_list_iterate_items(pvl, pvs) {
--		dm_hash_insert(_pvname_hash, lvm_pv_get_name(pvl->pv), pvl->pv);
--	}
--}
--
--static void _remove_device_from_pvname_hash(struct dm_list *pvs, const char *name)
--{
--	struct lvm_pv_list *pvl;
--	dm_list_iterate_items(pvl, pvs) {
--		if (!strncmp(lvm_pv_get_name(pvl->pv), name, strlen(name)))
--			dm_hash_remove(_pvname_hash, name);
--	}
--}
--static void _add_device_to_pvname_hash(struct dm_list *pvs, const char *name)
--{
--	struct lvm_pv_list *pvl;
--	dm_list_iterate_items(pvl, pvs) {
--		if (!strncmp(lvm_pv_get_name(pvl->pv), name, strlen(name)))
--			dm_hash_insert(_pvname_hash, name, pvl->pv);
--	}
--}
--
--static void _vg_reduce(char **argv, int argc, lvm_t libh)
--{
--	vg_t vg;
--	struct dm_list *pvs;
--
--	if (argc < 2) {
--		printf ("Please enter vg_name\n");
--		return;
--	}
--	if (!(vg = dm_hash_lookup(_vgid_hash, argv[1])) &&
--	    !(vg = dm_hash_lookup(_vgname_hash, argv[1]))) {
--		printf ("VG not open\n");
--		return;
--	}
--	if (lvm_vg_reduce(vg, argv[2])) {
--		printf("Error reducing %s by %s\n", argv[1], argv[2]);
--		return;
--	}
--
--	printf("Success reducing vg %s by %s\n", argv[1], argv[2]);
--
--	/*
--	 * Add the device into the hashes for lookups
--	 */
--	pvs = lvm_vg_list_pvs(vg);
--	if (pvs && !dm_list_empty(pvs))
--		_remove_device_from_pvname_hash(pvs, argv[2]);
--}
--
--/* Print "Error" or "Success" depending on lvm status */
--static int _lvm_status_to_pass_fail(int rc)
--{
--	if (rc)
--		printf("Error ");
--	else
--		printf("Success ");
--	return rc;
--}
--static void _config_override(char **argv, int argc, lvm_t libh)
--{
--	int rc;
--	char tmp[64];
--
--	if (argc < 2) {
--		printf ("Please enter device\n");
--		return;
--	}
--	snprintf(tmp, 63, "devices{filter=[\"a|%s|\", \"r|.*|\"]}", argv[1]);
--	rc = lvm_config_override(libh, tmp);
--	_lvm_status_to_pass_fail(rc);
--	printf("overriding LVM configuration\n");
--}
--
--static void _config_reload(char **argv, int argc, lvm_t libh)
--{
--	int rc;
--	rc = lvm_config_reload(libh);
--	_lvm_status_to_pass_fail(rc);
--	printf("reloading LVM configuration\n");
--}
--
--static void _vg_extend(char **argv, int argc, lvm_t libh)
--{
--	vg_t vg;
--	struct dm_list *pvs;
--
--	if (argc < 2) {
--		printf ("Please enter vg_name\n");
--		return;
--	}
--	if (!(vg = dm_hash_lookup(_vgid_hash, argv[1])) &&
--	    !(vg = dm_hash_lookup(_vgname_hash, argv[1]))) {
--		printf ("VG not open\n");
--		return;
--	}
--	if (lvm_vg_extend(vg, argv[2])) {
--		printf("Error extending %s with %s\n", argv[1], argv[2]);
--		return;
--	}
--
--	printf("Success extending vg %s with %s\n", argv[1], argv[2]);
--
--	/*
--	 * Add the device into the hashes for lookups
--	 */
--	pvs = lvm_vg_list_pvs(vg);
--	if (pvs && !dm_list_empty(pvs))
--		_add_device_to_pvname_hash(pvs, argv[2]);
--}
--
--static void _vg_open(char **argv, int argc, lvm_t libh)
--{
--	vg_t vg;
--	struct dm_list *lvs;
--	struct dm_list *pvs;
--
--	if (argc < 2) {
--		printf ("Please enter vg_name\n");
--		return;
--	}
--	if ((vg = dm_hash_lookup(_vgid_hash, argv[1])) ||
--	    (vg = dm_hash_lookup(_vgname_hash, argv[1]))) {
--		printf ("VG already open\n");
--		return;
--	}
--	if (argc < 3)
--		vg = lvm_vg_open(libh, argv[1], "r", 0);
--	else
--		vg = lvm_vg_open(libh, argv[1], argv[2], 0);
--	if (!vg || !lvm_vg_get_name(vg)) {
--		printf("Error opening %s\n", argv[1]);
--		return;
--	}
--
--	printf("Success opening vg %s\n", argv[1]);
--	dm_hash_insert(_vgname_hash, lvm_vg_get_name(vg), vg);
--	dm_hash_insert(_vgid_hash, lvm_vg_get_uuid(vg), vg);
--
--	/*
--	 * Add the LVs and PVs into the hashes for lookups
--	 */
--	lvs = lvm_vg_list_lvs(vg);
--	if (lvs && !dm_list_empty(lvs))
--		_add_lvs_to_lvname_hash(lvs);
--	pvs = lvm_vg_list_pvs(vg);
--	if (pvs && !dm_list_empty(pvs))
--		_add_pvs_to_pvname_hash(pvs);
--}
--/* Lookup the vg and remove it from the vgname and vgid hashes */
--static vg_t _lookup_and_remove_vg(const char *vgname)
--{
--	vg_t vg=NULL;
--
--	if ((vg = dm_hash_lookup(_vgname_hash, vgname))) {
--		dm_hash_remove(_vgid_hash, lvm_vg_get_uuid(vg));
--		dm_hash_remove(_vgname_hash, lvm_vg_get_name(vg));
--	}
--	if (!vg && (vg = dm_hash_lookup(_vgid_hash, vgname))) {
--		dm_hash_remove(_vgid_hash, lvm_vg_get_uuid(vg));
--		dm_hash_remove(_vgname_hash, lvm_vg_get_name(vg));
--	}
--	return vg;
--}
--
--static void _vg_write(char **argv, int argc)
--{
--	vg_t vg;
--	int rc = 0;
--
--	if (argc < 2) {
--		printf ("Please enter vg_name\n");
--		return;
--	}
--	vg = _lookup_vg_by_name(argv, argc);
--	if (!vg) {
--		printf("Can't find vg_name %s\n", argv[1]);
--		return;
--	}
--	rc = lvm_vg_write(vg);
--	_lvm_status_to_pass_fail(rc);
--	printf("writing VG %s\n", lvm_vg_get_name(vg));
--}
--
--static void _vg_create(char **argv, int argc, lvm_t libh)
--{
--	vg_t vg;
--
--	if (argc < 2) {
--		printf ("Please enter vg_name\n");
--		return;
--	}
--	vg = lvm_vg_create(libh, argv[1]);
--	if (!vg || !lvm_vg_get_name(vg)) {
--		printf("Error creating %s\n", argv[1]);
--		return;
--	}
--
--	printf("Success creating vg %s\n", argv[1]);
--	dm_hash_insert(_vgname_hash, lvm_vg_get_name(vg), vg);
--	dm_hash_insert(_vgid_hash, lvm_vg_get_uuid(vg), vg);
--}
--
--static void _vg_remove(char **argv, int argc)
--{
--	vg_t vg;
--	int rc = 0;
--
--	if (argc < 2) {
--		printf ("Please enter vg_name\n");
--		return;
--	}
--	vg = _lookup_vg_by_name(argv, argc);
--	if (!vg) {
--		printf("Can't find vg_name %s\n", argv[1]);
--		return;
--	}
--	rc = lvm_vg_remove(vg);
--	_lvm_status_to_pass_fail(rc);
--	printf("removing VG\n");
--}
--
--static void _vg_close(char **argv, int argc)
--{
--	vg_t vg;
--	int rc = 0;
--
--	if (argc < 2) {
--		printf ("Please enter vg_name\n");
--		return;
--	}
--	vg = _lookup_and_remove_vg(argv[1]);
--	if (!vg) {
--		printf("Can't find vg_name %s\n", argv[1]);
--		return;
--	}
--	rc = lvm_vg_close(vg);
--	_lvm_status_to_pass_fail(rc);
--	printf("closing VG\n");
--}
--
--static void _show_one_vg(vg_t vg)
--{
--	printf("%s (%s): sz=%"PRIu64", free=%"PRIu64", #pv=%"PRIu64
--		", seq#=%"PRIu64"\n",
--		lvm_vg_get_name(vg), lvm_vg_get_uuid(vg),
--		lvm_vg_get_size(vg), lvm_vg_get_free_size(vg),
--		lvm_vg_get_pv_count(vg), lvm_vg_get_seqno(vg));
--}
--
--static void _print_pv(pv_t pv)
--{
--	if (!pv)
--		return;
--	printf("%s (%s): size=%"PRIu64", free=%"PRIu64
--	       ", dev_size=%"PRIu64", mda_count=%"PRIu64"\n",
--	       lvm_pv_get_name(pv), lvm_pv_get_uuid(pv),
--	       lvm_pv_get_size(pv), lvm_pv_get_free(pv),
--	       lvm_pv_get_dev_size(pv),
--	       lvm_pv_get_mda_count(pv));
--}
--
--static void _print_lv(vg_t vg, lv_t lv)
--{
--	if (!lv)
--		return;
--	printf("%s/%s (%s): size=%"PRIu64", %sACTIVE / %sSUSPENDED\n",
--	       lvm_vg_get_name(vg),
--	       lvm_lv_get_name(lv), lvm_lv_get_uuid(lv),
--	       lvm_lv_get_size(lv),
--	       lvm_lv_is_active(lv) ? "" : "IN",
--	       lvm_lv_is_suspended(lv) ? "" : "NOT ");
--}
--
--static void _list_open_vgs(void)
--{
--	dm_hash_iter(_vgid_hash, (dm_hash_iterate_fn) _show_one_vg);
--}
--
--static void _pvs_in_vg(char **argv, int argc)
--{
--	struct dm_list *pvs;
--	struct lvm_pv_list *pvl;
--	vg_t vg;
--
--	if (!(vg = _lookup_vg_by_name(argv, argc)))
--		return;
--	pvs = lvm_vg_list_pvs(vg);
--	if (!pvs || dm_list_empty(pvs)) {
--		printf("No PVs in VG %s\n", lvm_vg_get_name(vg));
--		return;
--	}
--	printf("PVs in VG %s:\n", lvm_vg_get_name(vg));
--	dm_list_iterate_items(pvl, pvs) {
--		_print_pv(pvl->pv);
--	}
--}
--
--static void _print_property_value(const char *name,
--				  struct lvm_property_value v)
--{
--	if (!v.is_valid)
--		printf("%s = INVALID\n", name);
--	else if (v.is_string)
--		printf("%s = %s\n", name, v.value.string);
--	else
--		printf("%s = %"PRIu64"\n", name, v.value.integer);
--}
--
--static void _pvsegs_in_pv(char **argv, int argc)
--{
--	struct dm_list *pvsegs;
--	struct lvm_pvseg_list *pvl;
--	pv_t pv;
--
--	if (!(pv = _lookup_pv_by_name(argv[1])))
--		return;
--	pvsegs = lvm_pv_list_pvsegs(pv);
--	if (!pvsegs || dm_list_empty(pvsegs)) {
--		printf("No PV segments in pv %s\n", argv[1]);
--		return;
--	}
--	printf("PV segments in pv %s:\n", argv[1]);
--	dm_list_iterate_items(pvl, pvsegs) {
--		struct lvm_property_value v;
--		v = lvm_pvseg_get_property(pvl->pvseg, "pvseg_start");
--		_print_property_value("pvseg_start", v);
--		v = lvm_pvseg_get_property(pvl->pvseg, "pvseg_size");
--		_print_property_value("pvseg_size", v);
--	}
--}
--
--static void _scan_vgs(lvm_t libh)
--{
--	lvm_scan(libh);
--}
--
--static void _list_vg_names(lvm_t libh)
--{
--	struct dm_list *list;
--	struct lvm_str_list *strl;
--
--	list = lvm_list_vg_names(libh);
--	printf("VG names:\n");
--	dm_list_iterate_items(strl, list) {
--		printf("%s\n", strl->str);
--	}
--}
--
--static void _list_vg_ids(lvm_t libh)
--{
--	struct dm_list *list;
--	struct lvm_str_list *strl;
--
--	list = lvm_list_vg_uuids(libh);
--	printf("VG uuids:\n");
--	dm_list_iterate_items(strl, list) {
--		printf("%s\n", strl->str);
--	}
--}
--
--static void _display_tags(struct dm_list *list)
--{
--	struct lvm_str_list *strl;
--	if (dm_list_empty(list)) {
--		printf("No tags exist\n");
--		return;
--	} else if (!list) {
--		printf("Error obtaining tags\n");
--		return;
--	}
--	dm_list_iterate_items(strl, list) {
--		printf("%s\n", strl->str);
--	}
--}
--
--static void _vg_get_tags(char **argv, int argc)
--{
--	vg_t vg;
--
--	if (!(vg = _lookup_vg_by_name(argv, argc)))
--		return;
--	printf("VG tags:\n");
--	_display_tags(lvm_vg_get_tags(vg));
--}
--
--static void _vg_tag(char **argv, int argc, int add)
--{
--	vg_t vg;
--
--	if (argc < 3) {
--		printf("Please enter vgname, tag\n");
--		return;
--	}
--	if (!(vg = _lookup_vg_by_name(argv, argc)))
--		return;
--	if (add && lvm_vg_add_tag(vg, argv[2]))
--		printf("Error ");
--	else if (!add && lvm_vg_remove_tag(vg, argv[2])){
--		printf("Error ");
--	} else {
--		printf("Success ");
--	}
--	printf("%s tag %s to VG %s\n",
--	       add ? "adding":"removing", argv[2], argv[1]);
--}
--
--static void _pv_get_property(char **argv, int argc)
--{
--	pv_t pv;
--	struct lvm_property_value v;
--
--	if (argc < 3) {
--		printf("Please enter pvname, field_id\n");
--		return;
--	}
--	if (!(pv = _lookup_pv_by_name(argv[1])))
--		return;
--	v = lvm_pv_get_property(pv, argv[2]);
--	_print_property_value(argv[2], v);
--}
--
--static void _vg_get_property(char **argv, int argc)
--{
--	vg_t vg;
--	struct lvm_property_value v;
--
--	if (argc < 3) {
--		printf("Please enter vgname, field_id\n");
--		return;
--	}
--	if (!(vg = _lookup_vg_by_name(argv, argc)))
--		return;
--	v =  lvm_vg_get_property(vg, argv[2]);
--	_print_property_value(argv[2], v);
--}
--
--static void _lv_get_property(char **argv, int argc)
--{
--	lv_t lv;
--	struct lvm_property_value v;
--
--	if (argc < 4) {
--		printf("Please enter vgname, lvname, field_id\n");
--		return;
--	}
--	if (!(lv = _lookup_lv_by_name(argv[2])))
--		return;
--	v = lvm_lv_get_property(lv, argv[3]);
--	_print_property_value(argv[3], v);
--}
--
--static void _vg_set_property(char **argv, int argc)
--{
--	vg_t vg;
--	struct lvm_property_value value;
--	int rc;
--
--	if (argc < 4) {
--		printf("Please enter vgname, field_id, value\n");
--		return;
--	}
--	if (!(vg = _lookup_vg_by_name(argv, argc)))
--		return;
--	value = lvm_vg_get_property(vg, argv[2]);
--	if (!value.is_valid) {
--		printf("Error obtaining property value\n");
--		return;
--	}
--	if (value.is_string)
--		value.value.string = argv[3];
--	else
--		value.value.integer = atoi(argv[3]);
--	rc = lvm_vg_set_property(vg, argv[2], &value);
--	if (rc)
--		printf("Error ");
--	else
--		printf("Success ");
--	printf("setting value of property %s in VG %s\n",
--	       argv[2], argv[1]);
--}
--
--static void _lv_get_tags(char **argv, int argc)
--{
--	lv_t lv;
--
--	if (argc < 3) {
--		printf("Please enter vgname, lvname\n");
--		return;
--	}
--	if (!(lv = _lookup_lv_by_name(argv[2])))
--		return;
--	printf("LV tags:\n");
--	_display_tags(lvm_lv_get_tags(lv));
--}
--
--static void _lv_tag(char **argv, int argc, int add)
--{
--	lv_t lv;
--
--	if (argc < 3) {
--		printf("Please enter vgname, lvname\n");
--		return;
--	}
--	if (!(lv = _lookup_lv_by_name(argv[2])))
--		return;
--	if (add && lvm_lv_add_tag(lv, argv[3]))
--		printf("Error ");
--	else if (!add && lvm_lv_remove_tag(lv, argv[3])){
--		printf("Error ");
--	} else {
--		printf("Success ");
--	}
--	printf("%s tag %s to LV %s\n",
--	       add ? "adding":"removing", argv[3], argv[2]);
--}
--
--static void _lv_from_uuid(char **argv, int argc)
--{
--	vg_t vg;
--
--	if (argc < 3) {
--		printf("Please enter vgname, lv_uuid\n");
--		return;
--	}
--	if (!(vg = _lookup_vg_by_name(argv, argc)))
--		return;
--	_print_lv(vg, lvm_lv_from_uuid(vg, argv[2]));
--}
--
--static void _lv_from_name(char **argv, int argc)
--{
--	vg_t vg;
--
--	if (argc < 3) {
--		printf("Please enter vgname, lv_uuid\n");
--		return;
--	}
--	if (!(vg = _lookup_vg_by_name(argv, argc)))
--		return;
--	_print_lv(vg, lvm_lv_from_name(vg, argv[2]));
--}
--
--static void _pv_from_uuid(char **argv, int argc)
--{
--	vg_t vg;
--
--	if (argc < 3) {
--		printf("Please enter vgname, pv_uuid\n");
--		return;
--	}
--	if (!(vg = _lookup_vg_by_name(argv, argc)))
--		return;
--	_print_pv(lvm_pv_from_uuid(vg, argv[2]));
--}
--
--static void _pv_from_name(char **argv, int argc)
--{
--	vg_t vg;
--
--	if (argc < 3) {
--		printf("Please enter vgname, pv_uuid\n");
--		return;
--	}
--	if (!(vg = _lookup_vg_by_name(argv, argc)))
--		return;
--	_print_pv(lvm_pv_from_name(vg, argv[2]));
--}
--
--static void _vgname_from_pvid(char **argv, int argc, lvm_t libh)
--{
--	const char *vgname;
--
--	if (argc < 1) {
--		printf("Please enter pvid\n");
--		return;
--	}
--	if (!(vgname = lvm_vgname_from_pvid(libh, argv[1]))) {
--		printf("Error ");
--	} else {
--		printf("Success ");
--	}
--	printf("looking up vgname=%s from PVID=%s\n",
--	       vgname, argv[1]);
--}
--static void _vgname_from_devname(char **argv, int argc, lvm_t libh)
--{
--	const char *vgname;
--
--	if (argc < 1) {
--		printf("Please enter device\n");
--		return;
--	}
--	if (!(vgname = lvm_vgname_from_device(libh, argv[1]))) {
--		printf("Error ");
--	} else {
--		printf("Success ");
--	}
--	printf("looking up vgname=%s from device name=%s\n",
--	       vgname, argv[1]);
--}
--static void _lvs_in_vg(char **argv, int argc)
--{
--	struct dm_list *lvs;
--	struct lvm_lv_list *lvl;
--	vg_t vg;
--
--	if (!(vg = _lookup_vg_by_name(argv, argc)))
--		return;
--	lvs = lvm_vg_list_lvs(vg);
--	if (!lvs || dm_list_empty(lvs)) {
--		printf("No LVs in VG %s\n", lvm_vg_get_name(vg));
--		return;
--	}
--	printf("LVs in VG %s:\n", lvm_vg_get_name(vg));
--	dm_list_iterate_items(lvl, lvs) {
--		_print_lv(vg, lvl->lv);
--	}
--}
--
--static void _lvsegs_in_lv(char **argv, int argc)
--{
--	struct dm_list *lvsegs;
--	struct lvm_lvseg_list *lvl;
--	lv_t lv;
--
--	if (!(lv = _lookup_lv_by_name(argv[2])))
--		return;
--	lvsegs = lvm_lv_list_lvsegs(lv);
--	if (!lvsegs || dm_list_empty(lvsegs)) {
--		printf("No LV segments in lv %s\n", lvm_lv_get_name(lv));
--		return;
--	}
--	printf("LV segments in lv %s:\n", lvm_lv_get_name(lv));
--	dm_list_iterate_items(lvl, lvsegs) {
--		struct lvm_property_value v;
--		v = lvm_lvseg_get_property(lvl->lvseg, "segtype");
--		_print_property_value("segtype", v);
--		v = lvm_lvseg_get_property(lvl->lvseg, "seg_start_pe");
--		_print_property_value("seg_start_pe", v);
--		v = lvm_lvseg_get_property(lvl->lvseg, "seg_size");
--		_print_property_value("seg_size", v);
--		v = lvm_lvseg_get_property(lvl->lvseg, "devices");
--		_print_property_value("devices", v);
--		v = lvm_lvseg_get_property(lvl->lvseg, "seg_pe_ranges");
--		_print_property_value("seg_pe_ranges", v);
--	}
--}
--
--static void _lv_deactivate(char **argv, int argc)
--{
--	lv_t lv;
--	int rc=0;
--
--	if (argc < 3) {
--		printf("Please enter vgname, lvname\n");
--		return;
--	}
--	if (!(lv = _lookup_lv_by_name(argv[2])))
--		return;
--	rc = lvm_lv_deactivate(lv);
--	_lvm_status_to_pass_fail(rc);
--	printf("De-activating LV %s in VG %s\n",
--		argv[2], argv[1]);
--}
--static void _lv_activate(char **argv, int argc)
--{
--	lv_t lv;
--	int rc=0;
--
--	if (argc < 3) {
--		printf("Please enter vgname, lvname\n");
--		return;
--	}
--	if (!(lv = _lookup_lv_by_name(argv[2])))
--		return;
--	rc = lvm_lv_activate(lv);
--	_lvm_status_to_pass_fail(rc);
--	printf("activating LV %s in VG %s\n",
--		argv[2], argv[1]);
--}
--
--static void _vg_remove_lv(char **argv, int argc)
--{
--	lv_t lv;
--
--	if (argc < 3) {
--		printf("Please enter vgname, lvname\n");
--		return;
--	}
--	if (!(lv = _lookup_lv_by_name(argv[2])))
--		return;
--	if (lvm_vg_remove_lv(lv))
--		printf("Error ");
--	else {
--		printf("Success ");
--		dm_hash_remove(_lvname_hash, argv[2]);
--	}
--	printf("removing LV %s in VG %s\n",
--		argv[2], argv[1]);
--}
--
--static void _vg_create_lv_linear(char **argv, int argc)
--{
--	vg_t vg;
--	lv_t lv;
--
--	if (argc < 4) {
--		printf("Please enter vgname, lvname, and size\n");
--		return;
--	}
--	if (!(vg = _lookup_vg_by_name(argv, argc)))
--		return;
--	lv = lvm_vg_create_lv_linear(vg, argv[2], atol(argv[3]));
--	if (!lv)
--		printf("Error ");
--	else {
--		printf("Success ");
--		dm_hash_insert(_lvname_hash, argv[2], lv);
--	}
--	printf("creating LV %s in VG %s\n",
--		argv[2], argv[1]);
--}
--
--static int lvmapi_test_shell(lvm_t libh)
--{
--	int argc;
--	char *input = NULL, *args[MAX_ARGS], **argv;
--
--	_hash_create();
--	argc=0;
--	while (1) {
--		free(input);
--		input = readline("liblvm> ");
--
--		/* EOF */
--		if (!input) {
--			printf("\n");
--			break;
--		}
--
--		/* empty line */
--		if (!*input)
--			continue;
--
--		argv = args;
--
--		if (lvm_split(input, &argc, argv, MAX_ARGS) == MAX_ARGS) {
--			printf("Too many arguments, sorry.");
--			continue;
--		}
--
--		if (!strcmp(argv[0], "lvm")) {
--			argv++;
--			argc--;
--		}
--
--		if (!argc)
--			continue;
--
--		if (!strcmp(argv[0], "quit") || !strcmp(argv[0], "exit")) {
--			printf("Exiting.\n");
--			break;
--		} else if (!strcmp(argv[0], "?") || !strcmp(argv[0], "help")) {
--			_show_help();
--		} else if (!strcmp(argv[0], "config_reload")) {
--			_config_reload(argv, argc, libh);
--		} else if (!strcmp(argv[0], "config_override")) {
--			_config_override(argv, argc, libh);
--		} else if (!strcmp(argv[0], "vg_extend")) {
--			_vg_extend(argv, argc, libh);
--		} else if (!strcmp(argv[0], "vg_reduce")) {
--			_vg_reduce(argv, argc, libh);
--		} else if (!strcmp(argv[0], "vg_write")) {
--			_vg_write(argv, argc);
--		} else if (!strcmp(argv[0], "vg_open")) {
--			_vg_open(argv, argc, libh);
--		} else if (!strcmp(argv[0], "vg_close")) {
--			_vg_close(argv, argc);
--		} else if (!strcmp(argv[0], "vg_create")) {
--			_vg_create(argv, argc, libh);
--		} else if (!strcmp(argv[0], "vg_remove")) {
--			_vg_remove(argv, argc);
--		} else if (!strcmp(argv[0], "lv_activate")) {
--			_lv_activate(argv, argc);
--		} else if (!strcmp(argv[0], "lv_deactivate")) {
--			_lv_deactivate(argv, argc);
--		} else if (!strcmp(argv[0], "vg_remove_lv")) {
--			_vg_remove_lv(argv, argc);
--		} else if (!strcmp(argv[0], "vgs_open")) {
--			_list_open_vgs();
--		} else if (!strcmp(argv[0], "vg_list_pvs")) {
--			_pvs_in_vg(argv, argc);
--		} else if (!strcmp(argv[0], "pv_list_pvsegs")) {
--			_pvsegs_in_pv(argv, argc);
--		} else if (!strcmp(argv[0], "vg_list_lvs")) {
--			_lvs_in_vg(argv, argc);
--		} else if (!strcmp(argv[0], "lv_list_lvsegs")) {
--			_lvsegs_in_lv(argv, argc);
--		} else if (!strcmp(argv[0], "list_vg_names")) {
--			_list_vg_names(libh);
--		} else if (!strcmp(argv[0], "list_vg_ids")) {
--			_list_vg_ids(libh);
--		} else if (!strcmp(argv[0], "scan_vgs")) {
--			_scan_vgs(libh);
--		} else if (!strcmp(argv[0], "vg_create_lv_linear")) {
--			_vg_create_lv_linear(argv, argc);
--		} else if (!strcmp(argv[0], "vg_add_tag")) {
--			_vg_tag(argv, argc, 1);
--		} else if (!strcmp(argv[0], "vg_remove_tag")) {
--			_vg_tag(argv, argc, 0);
--		} else if (!strcmp(argv[0], "vg_get_tags")) {
--			_vg_get_tags(argv, argc);
--		} else if (!strcmp(argv[0], "lv_get_property")) {
--			_lv_get_property(argv, argc);
--		} else if (!strcmp(argv[0], "vg_get_property")) {
--			_vg_get_property(argv, argc);
--		} else if (!strcmp(argv[0], "pv_get_property")) {
--			_pv_get_property(argv, argc);
--		} else if (!strcmp(argv[0], "vg_set_property")) {
--			_vg_set_property(argv, argc);
--		} else if (!strcmp(argv[0], "lv_add_tag")) {
--			_lv_tag(argv, argc, 1);
--		} else if (!strcmp(argv[0], "lv_remove_tag")) {
--			_lv_tag(argv, argc, 0);
--		} else if (!strcmp(argv[0], "lv_get_tags")) {
--			_lv_get_tags(argv, argc);
--		} else if (!strcmp(argv[0], "vgname_from_devname")) {
--			_vgname_from_devname(argv, argc, libh);
--		} else if (!strcmp(argv[0], "vgname_from_pvid")) {
--			_vgname_from_pvid(argv, argc, libh);
--		} else if (!strcmp(argv[0], "lv_from_uuid")) {
--			_lv_from_uuid(argv, argc);
--		} else if (!strcmp(argv[0], "lv_from_name")) {
--			_lv_from_name(argv, argc);
--		} else if (!strcmp(argv[0], "pv_from_uuid")) {
--			_pv_from_uuid(argv, argc);
--		} else if (!strcmp(argv[0], "pv_from_name")) {
--			_pv_from_name(argv, argc);
--		} else {
--			printf ("Unrecognized command %s\n", argv[0]);
--		}
--	}
--
--	dm_hash_iter(_vgname_hash, (dm_hash_iterate_fn) lvm_vg_close);
--	_hash_destroy();
--	free(input);
--	return 0;
--}
--#else /* !READLINE_SUPPORT */
--static int lvmapi_test_shell(lvm_t libh)
--{
--	printf("Build without readline library, no interactive testing.\n");
--	return 1;
--}
--#endif
--
--int main (int argc, char *argv[])
--{
--	lvm_t libh;
--
--	libh = lvm_init(NULL);
--	if (!libh) {
--		printf("Unable to open lvm library instance\n");
--		return 1;
--	}
--
--	printf("Library version: %s\n", lvm_library_get_version());
--	lvmapi_test_shell(libh);
--
--	lvm_quit(libh);
--	return 0;
--}
--
-diff --git a/test/api/thin_percent.c b/test/api/thin_percent.c
-deleted file mode 100644
-index 7f99abf..0000000
---- a/test/api/thin_percent.c
-+++ /dev/null
-@@ -1,78 +0,0 @@
--/*
-- * Copyright (C) 2012 Red Hat, Inc. All rights reserved.
-- *
-- * This file is part of LVM2.
-- *
-- * This copyrighted material is made available to anyone wishing to use,
-- * modify, copy, or redistribute it subject to the terms and conditions
-- * of the GNU Lesser General Public License v.2.1.
-- *
-- * You should have received a copy of the GNU Lesser General Public License
-- * along with this program; if not, write to the Free Software Foundation,
-- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
-- */
--
--#undef NDEBUG
--
--#include "liblvm/lvm2app.h"
--#include "assert.h"
--
--int main(int argc, char *argv[])
--{
--	lvm_t handle;
--	vg_t vg;
--	lv_t lv;
--	struct lvm_property_value v;
--	struct dm_list *lvsegs;
--	struct lvm_lvseg_list *lvl;
--
--	handle = lvm_init(NULL);
--	assert(handle);
--
--	vg = lvm_vg_open(handle, argv[1], "r", 0);
--	assert(vg);
--
--	lv = lvm_lv_from_name(vg, "pool");
--	assert(lv);
--
--	lvsegs = lvm_lv_list_lvsegs(lv);
--	assert(lvsegs && (dm_list_size(lvsegs) == 1));
--	dm_list_iterate_items(lvl, lvsegs) {
--		v = lvm_lvseg_get_property(lvl->lvseg, "discards");
--		assert(v.is_valid && v.is_string);
--		assert(strcmp(v.value.string, "passdown") == 0);
--	}
--
--	v = lvm_lv_get_property(lv, "data_percent");
--	assert(v.is_valid);
--	assert(v.value.integer == 25 * PERCENT_1);
--
--
--	lv = lvm_lv_from_name(vg, "thin");
--	assert(lv);
--
--	v = lvm_lv_get_property(lv, "data_percent");
--	assert(v.is_valid);
--	assert(v.value.integer == 50 * PERCENT_1);
--
--
--	lv = lvm_lv_from_name(vg, "snap");
--	assert(lv);
--
--	v = lvm_lv_get_property(lv, "data_percent");
--	assert(v.is_valid);
--	assert(v.value.integer == 75 * PERCENT_1);
--
--	v = lvm_lv_get_property(lv, "snap_percent");
--	assert(v.is_valid);
--	assert(v.value.integer == (uint64_t) DM_PERCENT_INVALID);
--
--	v = lvm_lv_get_property(lv, "origin");
--	assert(v.is_valid);
--	assert(strcmp(v.value.string, "thin") == 0);
--
--	lvm_vg_close(vg);
--	lvm_quit(handle);
--
--	return 0;
--}
-diff --git a/test/api/vglist.c b/test/api/vglist.c
-deleted file mode 100644
-index daa21c2..0000000
---- a/test/api/vglist.c
-+++ /dev/null
-@@ -1,73 +0,0 @@
--/*
-- * Copyright (C) 2009 Red Hat, Inc. All rights reserved.
-- *
-- * This file is part of LVM2.
-- *
-- * This copyrighted material is made available to anyone wishing to use,
-- * modify, copy, or redistribute it subject to the terms and conditions
-- * of the GNU Lesser General Public License v.2.1.
-- *
-- * You should have received a copy of the GNU Lesser General Public License
-- * along with this program; if not, write to the Free Software Foundation,
-- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
-- */
--
--#include <stdio.h>
--#include <unistd.h>
--#include <inttypes.h>
--#include <assert.h>
--
--#include "liblvm/lvm2app.h"
--
--lvm_t handle;
--vg_t vg;
--
--static void start(void) {
--	handle = lvm_init(NULL);
--	if (!handle) {
--		fprintf(stderr, "Unable to lvm_init\n");
--		abort();
--	}
--}
--
--static void done(int ok) {
--	if (handle && lvm_errno(handle)) {
--		fprintf(stderr, "LVM Error: %s\n", lvm_errmsg(handle));
--		ok = 0;
--	}
--	if (handle)
--		lvm_quit(handle);
--	if (!ok)
--		abort();
--}
--
--int main(int argc, char *argv[])
--{
--	lvm_str_list_t *str;
--	int i = 0;
--	struct dm_list *vgnames;
--	struct dm_list *vgids;
--
--	if (argc != 3)
--		abort();
--
--	start();
--	vgnames = lvm_list_vg_names(handle);
--	dm_list_iterate_items(str, vgnames) {
--		assert(++i <= 1);
--		assert(!strcmp(str->str, argv[1]));
--	}
--	assert(i == 1);
--	done(1);
--
--	i = 0;
--	start();
--	vgids = lvm_list_vg_uuids(handle);
--	dm_list_iterate_items(str, vgids) {
--		assert(++i <= 1);
--		assert(!strcmp(str->str, argv[2]));
--	}
--	assert(i == 1);
--	done(1);
--	return 0;
--}
-diff --git a/test/api/vgtest.c b/test/api/vgtest.c
-deleted file mode 100644
-index 6a438d1..0000000
---- a/test/api/vgtest.c
-+++ /dev/null
-@@ -1,164 +0,0 @@
--/*
-- * Copyright (C) 2009 Red Hat, Inc. All rights reserved.
-- *
-- * This file is part of LVM2.
-- *
-- * This copyrighted material is made available to anyone wishing to use,
-- * modify, copy, or redistribute it subject to the terms and conditions
-- * of the GNU Lesser General Public License v.2.1.
-- *
-- * You should have received a copy of the GNU Lesser General Public License
-- * along with this program; if not, write to the Free Software Foundation,
-- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
-- */
--/*
-- * Unit test case for vgcreate and related APIs.
-- * # gcc -g vgcreate.c -I../../liblvm -I../../include -L../../liblvm \
-- *   -L../../libdm -ldevmapper -llvm2app
-- * # export LD_LIBRARY_PATH=`pwd`/../../libdm:`pwd`/../../liblvm
-- */
--#include <stdio.h>
--#include <unistd.h>
--#include <inttypes.h>
--
--#include "liblvm/lvm2app.h"
--
--lvm_t handle;
--vg_t vg;
--const char *vg_name;
--#define MAX_DEVICES 16
--const char *device[MAX_DEVICES];
--uint64_t size = 4096;
--
--#define vg_create(vg_name) \
--	printf("Creating VG %s\n", vg_name); \
--	vg = lvm_vg_create(handle, vg_name); \
--	if (!vg) { \
--		fprintf(stderr, "Error creating volume group %s\n", vg_name); \
--		goto bad; \
--	}
--#define vg_extend(vg, dev) \
--	printf("Extending VG %s by %s\n", vg_name, dev); \
--	status = lvm_vg_extend(vg, dev); \
--	if (status) { \
--		fprintf(stderr, "Error extending volume group %s " \
--			"with device %s\n", vg_name, dev); \
--		goto bad; \
--	}
--#define vg_commit(vg) \
--	printf("Committing VG %s to disk\n", vg_name); \
--	status = lvm_vg_write(vg); \
--	if (status) { \
--		fprintf(stderr, "Commit of volume group '%s' failed\n", \
--			lvm_vg_get_name(vg)); \
--		goto bad; \
--	}
--#define vg_open(vg_name, mode) \
--	printf("Opening VG %s %s\n", vg_name, mode); \
--	vg = lvm_vg_open(handle, vg_name, mode, 0); \
--	if (!vg) { \
--		fprintf(stderr, "Error opening volume group %s\n", vg_name); \
--		goto bad; \
--	}
--#define vg_close(vg) \
--	printf("Closing VG %s\n", vg_name); \
--	if (lvm_vg_close(vg)) { \
--		fprintf(stderr, "Error closing volume group %s\n", vg_name); \
--		goto bad; \
--	}
--#define vg_reduce(vg, dev) \
--	printf("Reducing VG %s by %s\n", vg_name, dev); \
--	status = lvm_vg_reduce(vg, dev); \
--	if (status) { \
--		fprintf(stderr, "Error reducing volume group %s " \
--			"by device %s\n", vg_name, dev); \
--		goto bad; \
--	}
--#define vg_remove(vg) \
--	printf("Removing VG %s from system\n", vg_name); \
--	status = lvm_vg_remove(vg); \
--	if (status) { \
--		fprintf(stderr, "Revmoval of volume group '%s' failed\n", \
--			vg_name); \
--		goto bad; \
--	}
--
--static int init_vgtest(int argc, char *argv[])
--{
--	int i;
--
--	if (argc < 4) {
--		fprintf(stderr, "Usage: %s <vgname> <pv1> <pv2> [... <pvN> ]",
--			argv[0]);
--		return -1;
--	}
--	vg_name = argv[1];
--	for(i=2; i<MAX_DEVICES && i < argc; i++) {
--		device[i-2] = argv[i];
--	}
--	return 0;
--}
--
--int main(int argc, char *argv[])
--{
--	int status;
--
--	if (init_vgtest(argc, argv) < 0)
--		goto bad;
--
--	/* FIXME: make the below messages verbose-only and print PASS/FAIL*/
--	printf("Opening LVM\n");
--	handle = lvm_init(NULL);
--	if (!handle) {
--		fprintf(stderr, "Unable to lvm_init\n");
--		goto bad;
--	}
--
--	printf("Library version: %s\n", lvm_library_get_version());
--	vg_create(vg_name);
--	vg_extend(vg, device[0]);
--
--	printf("Setting VG %s extent_size to %"PRIu64"\n", vg_name, size);
--	status = lvm_vg_set_extent_size(vg, size);
--	if (status) {
--		fprintf(stderr, "Can not set physical extent "
--			"size '%"PRIu64"' for '%s'\n",
--			size, vg_name);
--		goto bad;
--	}
--
--	vg_commit(vg);
--	vg_close(vg);
--
--	vg_open(vg_name, "r");
--	vg_close(vg);
--
--	vg_open(vg_name, "w");
--	vg_extend(vg, device[1]);
--	vg_reduce(vg, device[0]);
--	vg_commit(vg);
--	vg_close(vg);
--
--	vg_open(vg_name, "w");
--	vg_extend(vg, device[0]);
--	vg_commit(vg);
--	vg_close(vg);
--
--	vg_open(vg_name, "w");
--	vg_remove(vg);
--	vg_commit(vg);
--	vg_close(vg);
--
--	lvm_quit(handle);
--	printf("liblvm vgcreate unit test PASS\n");
--	_exit(0);
--bad:
--	printf("liblvm vgcreate unit test FAIL\n");
--	if (handle && lvm_errno(handle))
--		fprintf(stderr, "LVM Error: %s\n", lvm_errmsg(handle));
--	if (vg)
--		lvm_vg_close(vg);
--	if (handle)
--		lvm_quit(handle);
--	_exit(-1);
--}
+ /* 16 bits: 3 bits for major, 4 bits for minor, 9 bits for patchlevel */
+diff --git a/lib/device/bcache.h b/lib/device/bcache.h
+index 8f328c7..cb36c30 100644
+--- a/lib/device/bcache.h
++++ b/lib/device/bcache.h
+@@ -15,7 +15,7 @@
+ #ifndef BCACHE_H
+ #define BCACHE_H
+ 
+-#include "device_mapper/libdevmapper.h"
++#include "device_mapper/all.h"
+ 
+ #include <linux/fs.h>
+ #include <stdint.h>
+diff --git a/lib/metadata/pv.h b/lib/metadata/pv.h
+index d5d91ce..61aa54e 100644
+--- a/lib/metadata/pv.h
++++ b/lib/metadata/pv.h
+@@ -16,7 +16,7 @@
+ #define _LVM_PV_H
+ 
+ #include "lib/uuid/uuid.h"
+-#include "device_mapper/libdevmapper.h"
++#include "device_mapper/all.h"
+ 
+ struct device;
+ struct format_type;
+diff --git a/lib/metadata/vg.h b/lib/metadata/vg.h
+index 6208159..9921b91 100644
+--- a/lib/metadata/vg.h
++++ b/lib/metadata/vg.h
+@@ -16,7 +16,7 @@
+ #define _LVM_VG_H
+ 
+ #include "lib/uuid/uuid.h"
+-#include "device_mapper/libdevmapper.h"
++#include "device_mapper/all.h"
+ 
+ struct cmd_context;
+ struct format_instance;
+diff --git a/lib/misc/lib.h b/lib/misc/lib.h
+index 3ae3aac..0d61f34 100644
+--- a/lib/misc/lib.h
++++ b/lib/misc/lib.h
+@@ -79,7 +79,7 @@
+ 
+ 
+ #include "lib/misc/intl.h"
+-#include "device_mapper/libdevmapper.h"
++#include "device_mapper/all.h"
+ #include "lib/misc/util.h"
+ 
+ #ifdef DM
+diff --git a/lib/report/properties.h b/lib/report/properties.h
+index 38b6111..3d93b08 100644
+--- a/lib/report/properties.h
++++ b/lib/report/properties.h
+@@ -14,7 +14,7 @@
+ #ifndef _LVM_PROPERTIES_H
+ #define _LVM_PROPERTIES_H
+ 
+-#include "device_mapper/libdevmapper.h"
++#include "device_mapper/all.h"
+ #include "lib/metadata/metadata.h"
+ #include "lib/report/report.h"
+ #include "lib/properties/prop_common.h"
+diff --git a/scripts/lvm2_activation_generator_systemd_red_hat.c b/scripts/lvm2_activation_generator_systemd_red_hat.c
+index 9ba1996..7791e64 100644
+--- a/scripts/lvm2_activation_generator_systemd_red_hat.c
++++ b/scripts/lvm2_activation_generator_systemd_red_hat.c
+@@ -27,7 +27,7 @@
+ #include <unistd.h>
+ 
+ #include "configure.h"
+-#include "device_mapper/libdevmapper.h"
++#include "device_mapper/all.h"
+ 
+ //----------------------------------------------------------------
+ 
+diff --git a/test/unit/activation-generator_t.c b/test/unit/activation-generator_t.c
+index 56871a7..9f6b661 100644
+--- a/test/unit/activation-generator_t.c
++++ b/test/unit/activation-generator_t.c
+@@ -16,7 +16,7 @@
+ #include "framework.h"
+ #include "units.h"
+ 
+-#include "device_mapper/libdevmapper.h"
++#include "device_mapper/all.h"
+ 
+ //----------------------------------------------------------------
+ 
+diff --git a/test/unit/bitset_t.c b/test/unit/bitset_t.c
+index 9b18fcb..12b2a20 100644
+--- a/test/unit/bitset_t.c
++++ b/test/unit/bitset_t.c
+@@ -13,7 +13,7 @@
+  */
+ 
+ #include "units.h"
+-#include "device_mapper/libdevmapper.h"
++#include "device_mapper/all.h"
+ 
+ enum {
+         NR_BITS = 137
+diff --git a/test/unit/config_t.c b/test/unit/config_t.c
+index 21af551..50d388f 100644
+--- a/test/unit/config_t.c
++++ b/test/unit/config_t.c
+@@ -13,7 +13,7 @@
+  */
+ 
+ #include "units.h"
+-#include "device_mapper/libdevmapper.h"
++#include "device_mapper/all.h"
+ 
+ static void *_mem_init(void)
+ {
+diff --git a/test/unit/dmlist_t.c b/test/unit/dmlist_t.c
+index 8a9948f..0e33385 100644
+--- a/test/unit/dmlist_t.c
++++ b/test/unit/dmlist_t.c
+@@ -13,7 +13,7 @@
+  */
+ 
+ #include "units.h"
+-#include "device_mapper/libdevmapper.h"
++#include "device_mapper/all.h"
+ 
+ static void test_dmlist_splice(void *fixture)
+ {
+diff --git a/test/unit/dmstatus_t.c b/test/unit/dmstatus_t.c
+index f50dd75..ac2015e 100644
+--- a/test/unit/dmstatus_t.c
++++ b/test/unit/dmstatus_t.c
+@@ -13,7 +13,7 @@
+  */
+ 
+ #include "units.h"
+-#include "device_mapper/libdevmapper.h"
++#include "device_mapper/all.h"
+ 
+ static void *_mem_init(void)
+ {
+diff --git a/test/unit/framework.h b/test/unit/framework.h
+index 0a8a5f2..0c45596 100644
+--- a/test/unit/framework.h
++++ b/test/unit/framework.h
+@@ -1,7 +1,7 @@
+ #ifndef TEST_UNIT_FRAMEWORK_H
+ #define TEST_UNIT_FRAMEWORK_H
+ 
+-#include "device_mapper/libdevmapper.h"
++#include "device_mapper/all.h"
+ 
+ #include <stdbool.h>
+ #include <stdint.h>
+diff --git a/test/unit/matcher_t.c b/test/unit/matcher_t.c
+index 296c78a..89b2988 100644
+--- a/test/unit/matcher_t.c
++++ b/test/unit/matcher_t.c
+@@ -14,7 +14,7 @@
+  */
+ 
+ #include "units.h"
+-#include "device_mapper/libdevmapper.h"
++#include "device_mapper/all.h"
+ 
+ #include "matcher_data.h"
+ 
+diff --git a/test/unit/percent_t.c b/test/unit/percent_t.c
+index 4341480..9b349a9 100644
+--- a/test/unit/percent_t.c
++++ b/test/unit/percent_t.c
+@@ -13,7 +13,7 @@
+  */
+ 
+ #include "units.h"
+-#include "device_mapper/libdevmapper.h"
++#include "device_mapper/all.h"
+ 
+ #include <stdio.h>
+ #include <string.h>
+diff --git a/test/unit/string_t.c b/test/unit/string_t.c
+index 3557247..82c6448 100644
+--- a/test/unit/string_t.c
++++ b/test/unit/string_t.c
+@@ -13,7 +13,7 @@
+  */
+ 
+ #include "units.h"
+-#include "device_mapper/libdevmapper.h"
++#include "device_mapper/all.h"
+ 
+ #include <stdio.h>
+ #include <string.h>
+diff --git a/tools/tool.h b/tools/tool.h
+index 51d530c..a4cef3d 100644
+--- a/tools/tool.h
++++ b/tools/tool.h
+@@ -24,7 +24,7 @@
+ 
+ #include <unistd.h>
+ 
+-#include "device_mapper/libdevmapper.h"
++#include "device_mapper/all.h"
+ #include "lib/misc/util.h"
+ 
+ #endif	/* _LVM_TOOL_H */
 
 
