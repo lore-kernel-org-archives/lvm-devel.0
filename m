@@ -1,81 +1,59 @@
 From: David Teigland <teigland@sourceware.org>
-Date: Wed, 13 Jun 2018 15:33:31 -0400
-Subject: master - tests: remove metadata-dirs
-Message-ID: <201806131933.w5DJXVMc017199@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Wed, 13 Jun 2018 15:37:48 -0400
+Subject: master - Remove systemd script for starting shared VG
+Message-ID: <201806131937.w5DJbmAQ017689@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=d067263f51f782661d6faa00b106b872b3e1dc6f
-Commit:        d067263f51f782661d6faa00b106b872b3e1dc6f
-Parent:        5fca75877d8af5fe6f277159490eda4817740060
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=fa00fce97c1eabef9f1ec88dd420660cd4d6f004
+Commit:        fa00fce97c1eabef9f1ec88dd420660cd4d6f004
+Parent:        a163d5341a90c1c2f656b0d15c055bbd90333a60
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Wed Jun 13 14:14:23 2018 -0500
+AuthorDate:    Tue Jun 12 14:35:27 2018 -0500
 Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Wed Jun 13 14:14:23 2018 -0500
+CommitterDate: Wed Jun 13 14:37:16 2018 -0500
 
-tests: remove metadata-dirs
+Remove systemd script for starting shared VG
 
-metadata dirs are removed
+Shared VGs will generally be started and activated by
+the resource agent.  Without the agent, this script doesn't
+have a good way to know which LVs to activate.
 ---
- test/shell/metadata-dirs.sh |   48 -------------------------------------------
- 1 files changed, 0 insertions(+), 48 deletions(-)
+ scripts/lvm2_lvmlocking_systemd_red_hat.service.in |   24 --------------------
+ 1 files changed, 0 insertions(+), 24 deletions(-)
 
-diff --git a/test/shell/metadata-dirs.sh b/test/shell/metadata-dirs.sh
+diff --git a/scripts/lvm2_lvmlocking_systemd_red_hat.service.in b/scripts/lvm2_lvmlocking_systemd_red_hat.service.in
 deleted file mode 100644
-index 2a43340..0000000
---- a/test/shell/metadata-dirs.sh
+index 62d8177..0000000
+--- a/scripts/lvm2_lvmlocking_systemd_red_hat.service.in
 +++ /dev/null
-@@ -1,48 +0,0 @@
--#!/usr/bin/env bash
+@@ -1,24 +0,0 @@
+-[Unit]
+-Description=Availability of lockspaces in lvmlockd
+-Documentation=man:lvmlockd(8)
+-After=lvm2-lvmlockd.service sanlock.service dlm.service
 -
--# Copyright (C) 2011 Red Hat, Inc. All rights reserved.
--#
--# This copyrighted material is made available to anyone wishing to use,
--# modify, copy, or redistribute it subject to the terms and conditions
--# of the GNU General Public License v.2.
--#
--# You should have received a copy of the GNU General Public License
--# along with this program; if not, write to the Free Software Foundation,
--# Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
+-[Service]
+-Type=oneshot
+-RemainAfterExit=yes
 -
+-# start lockspaces and wait for them to finish starting
+-ExecStart=@SBINDIR@/lvm vgchange --lock-start --lock-opt autowait
 -
--SKIP_WITH_LVMPOLLD=1
+-# auto activate LVs in the newly started lockd VGs
+-ExecStart=@SBINDIR@/lvm vgchange -aay -S 'locktype=sanlock || locktype=dlm'
 -
--. lib/inittest
+-# deactivate LVs in lockd VGs
+-ExecStop=@SBINDIR@/lvm vgchange -an -S 'locktype=sanlock || locktype=dlm'
 -
--aux prepare_devs 3
--get_devs
+-# stop lockspaces and wait for them to finish stopping
+-ExecStop=@SBINDIR@/lvmlockctl --stop-lockspaces --wait 1
 -
--pvcreate --metadatacopies 0 "${DEVICES[@]}"
--not vgcreate $SHARED "$vg" "${DEVICES[@]}"
+-[Install]
+-WantedBy=multi-user.target
 -
--aux lvmconf "metadata/dirs = [ \"$TESTDIR/mda\" ]"
--
--vgcreate $SHARED $vg "$dev1"
--check vg_field $vg vg_mda_count 1
--vgremove -ff $vg
--
--vgcreate $SHARED "$vg" "${DEVICES[@]}"
--check vg_field $vg vg_mda_count 1
--vgremove -ff $vg
--
--pvcreate --metadatacopies 1 --metadataignore y "$dev1"
--vgcreate $SHARED "$vg" "${DEVICES[@]}"
--check vg_field $vg vg_mda_count 2
--vgremove -ff $vg
--
--pvcreate --metadatacopies 1 --metadataignore n "$dev1"
--vgcreate $SHARED "$vg" "${DEVICES[@]}"
--check vg_field $vg vg_mda_count 2
--vgremove -ff $vg
--
--pvcreate --metadatacopies 0 "$dev1"
--aux lvmconf "metadata/dirs = [ \"$TESTDIR/mda\", \"$TESTDIR/mda2\" ]"
--vgcreate $SHARED "$vg" "${DEVICES[@]}"
--check vg_field $vg vg_mda_count 2
--vgremove -ff $vg
 
 
