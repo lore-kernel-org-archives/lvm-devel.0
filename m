@@ -1,258 +1,103 @@
 From: David Teigland <teigland@sourceware.org>
-Date: Wed, 13 Jun 2018 15:33:25 -0400
-Subject: master - Remove vgconvert
-Message-ID: <201806131933.w5DJXPNO016948@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Wed, 13 Jun 2018 15:33:30 -0400
+Subject: master - tests: remove vgconvert usage
+Message-ID: <201806131933.w5DJXUxS017080@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=5fca75877d8af5fe6f277159490eda4817740060
-Commit:        5fca75877d8af5fe6f277159490eda4817740060
-Parent:        22c5467add88268554a7d163a26892166dbc3104
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=a163d5341a90c1c2f656b0d15c055bbd90333a60
+Commit:        a163d5341a90c1c2f656b0d15c055bbd90333a60
+Parent:        d067263f51f782661d6faa00b106b872b3e1dc6f
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Wed Jun 13 14:12:46 2018 -0500
+AuthorDate:    Wed Jun 13 14:16:28 2018 -0500
 Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Wed Jun 13 14:14:03 2018 -0500
+CommitterDate: Wed Jun 13 14:16:28 2018 -0500
 
-Remove vgconvert
+tests: remove vgconvert usage
 
-it has no use without lvm1
 ---
- man/vgconvert.8_des    |    6 +-
- tools/Makefile.in      |    1 -
- tools/command-lines.in |   15 ++---
- tools/stub.h           |    9 +++
- tools/vgconvert.c      |  151 ------------------------------------------------
- 5 files changed, 19 insertions(+), 163 deletions(-)
+ test/shell/metadata.sh       |   38 --------------------------------------
+ test/shell/pvcreate-usage.sh |   19 -------------------
+ 2 files changed, 0 insertions(+), 57 deletions(-)
 
-diff --git a/man/vgconvert.8_des b/man/vgconvert.8_des
-index 8519063..eb5a006 100644
---- a/man/vgconvert.8_des
-+++ b/man/vgconvert.8_des
-@@ -1,3 +1,3 @@
--vgconvert converts VG metadata from one format to another.  This command
--is no longer used because this version of lvm no longer supports the LVM1
--format.
-+vgconvert is no longer a part of LVM.  It was removed along with
-+support for the LVM1 format.  Use an older version of LVM to
-+convert VGs from the LVM1 format to LVM2.
-diff --git a/tools/Makefile.in b/tools/Makefile.in
-index 9742842..3785b50 100644
---- a/tools/Makefile.in
-+++ b/tools/Makefile.in
-@@ -52,7 +52,6 @@ SOURCES =\
- 	vgchange.c \
- 	vgck.c \
- 	vgcreate.c \
--	vgconvert.c \
- 	vgdisplay.c \
- 	vgexport.c \
- 	vgextend.c \
-diff --git a/tools/command-lines.in b/tools/command-lines.in
-index ad710a4..0f9ed47 100644
---- a/tools/command-lines.in
-+++ b/tools/command-lines.in
-@@ -1548,14 +1548,6 @@ ID: vgck_general
+diff --git a/test/shell/metadata.sh b/test/shell/metadata.sh
+index aae749a..a86bc0b 100644
+--- a/test/shell/metadata.sh
++++ b/test/shell/metadata.sh
+@@ -46,41 +46,3 @@ for mdacp in 1 0; do
+ 	vgremove -f $vg
+ done
+ not grep "Cached VG .* incorrect PV list" out0
+-
+-# begin M1 metadata tests
+-if test -n "$LVM_TEST_LVM1" ; then
+-
+-pvcreate -M1 "$dev1" "$dev2" "$dev3"
+-pv3_uuid=$(get pv_field "$dev3" pv_uuid)
+-vgcreate $SHARED -M1 $vg "$dev1" "$dev2" "$dev3"
+-pvchange --uuid "$dev1"
+-
+-# verify pe_start of all M1 PVs
+-pv_align="128.00k"
+-check pv_field "$dev1" pe_start $pv_align
+-check pv_field "$dev2" pe_start $pv_align
+-check pv_field "$dev3" pe_start $pv_align
+-
+-pvs --units k -o name,pe_start,vg_mda_size,vg_name "${DEVICES[@]}"
+-
+-# upgrade from v1 to v2 metadata
+-vgconvert -M2 $vg
+-
+-# verify pe_start of all M2 PVs
+-check pv_field "$dev1" pe_start $pv_align
+-check pv_field "$dev2" pe_start $pv_align
+-check pv_field "$dev3" pe_start $pv_align
+-
+-pvs --units k -o name,pe_start,vg_mda_size,vg_name "${DEVICES[@]}"
+-
+-# create backup and then restore $dev3
+-vgcfgbackup -f "$TESTDIR/bak-%s" "$vg"
+-pvcreate -ff -y --restorefile "$TESTDIR/bak-$vg" --uuid "$pv3_uuid" "$dev3"
+-vgcfgrestore -f "$TESTDIR/bak-$vg" "$vg"
+-
+-# verify pe_start of $dev3
+-check pv_field "$dev3" pe_start $pv_align
+-
+-fi
+-# end M1 metadata tests
+-
+diff --git a/test/shell/pvcreate-usage.sh b/test/shell/pvcreate-usage.sh
+index 4ece05f..0a6f1ea 100644
+--- a/test/shell/pvcreate-usage.sh
++++ b/test/shell/pvcreate-usage.sh
+@@ -143,25 +143,6 @@ pvcreate --metadatasize 128k --metadatacopies 2 --dataalignmentoffset 7s "$dev1"
+ check pv_field "$dev1" pv_mda_count 2
+ # FIXME: compare start of 2nd mda with and without --dataalignmentoffset
  
- ---
- 
--vgconvert VG ...
--OO: --force, --labelsector Number, --bootloaderareasize SizeMB,
----metadatatype MetadataType, --pvmetadatacopies MetadataCopiesPV,
----metadatasize SizeMB, --reportformat ReportFmt
--ID: vgconvert_general
+-#COMM 'pv with LVM1 compatible data alignment can be convereted'
+-#compatible == LVM1_PE_ALIGN == 64k
+-if test -n "$LVM_TEST_LVM1" ; then
+-pvcreate --dataalignment 256k "$dev1"
+-vgcreate $SHARED -s 1m $vg "$dev1"
+-vgconvert -M1 $vg
+-vgconvert -M2 $vg
+-check pv_field "$dev1" pe_start 256.00k
+-vgremove $vg
+-fi
 -
-----
+-#COMM 'pv with LVM1 incompatible data alignment cannot be convereted'
+-if test -n "$LVM_TEST_LVM1" ; then
+-pvcreate --dataalignment 10k "$dev1"
+-vgcreate $SHARED -s 1m $vg "$dev1"
+-not vgconvert -M1 $vg
+-vgremove $vg
+-fi
 -
- vgcreate VG_new PV ...
- OO: --addtag Tag, --alloc Alloc, --autobackup Bool, --clustered Bool, --maxlogicalvolumes Uint32,
- --maxphysicalvolumes Uint32, --metadataprofile String, --metadatatype MetadataType,
-@@ -1783,3 +1775,10 @@ lvmsar
- OO: --full, --stdin
- ID: lvmsar_general
- 
-+# deprecated
-+vgconvert VG ...
-+OO: --force, --labelsector Number, --bootloaderareasize SizeMB,
-+--metadatatype MetadataType, --pvmetadatacopies MetadataCopiesPV,
-+--metadatasize SizeMB, --reportformat ReportFmt
-+ID: vgconvert_general
-+
-diff --git a/tools/stub.h b/tools/stub.h
-index 1d58387..fcfc189 100644
---- a/tools/stub.h
-+++ b/tools/stub.h
-@@ -48,3 +48,12 @@ int lvmchange(struct cmd_context *cmd __attribute__((unused)),
- 	log_error("Use 'dmsetup' commands to reset the kernel device-mapper driver.");
- 	return ECMD_FAILED;
- }
-+
-+int vgconvert(struct cmd_context *cmd __attribute__((unused)),
-+	      int argc __attribute__((unused)),
-+	      char **argv __attribute__((unused)))
-+{
-+	log_error("The vgconvert command has been removed along with the lvm1 format.");
-+	log_error("Use a previous version of lvm to convert the lvm1 format to lvm2.");
-+	return ECMD_FAILED;
-+}
-diff --git a/tools/vgconvert.c b/tools/vgconvert.c
-deleted file mode 100644
-index ca9615c..0000000
---- a/tools/vgconvert.c
-+++ /dev/null
-@@ -1,151 +0,0 @@
--/*
-- * Copyright (C) 2001-2004 Sistina Software, Inc. All rights reserved.
-- * Copyright (C) 2004-2007 Red Hat, Inc. All rights reserved.
-- *
-- * This file is part of LVM2.
-- *
-- * This copyrighted material is made available to anyone wishing to use,
-- * modify, copy, or redistribute it subject to the terms and conditions
-- * of the GNU Lesser General Public License v.2.1.
-- *
-- * You should have received a copy of the GNU Lesser General Public License
-- * along with this program; if not, write to the Free Software Foundation,
-- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
-- */
--
--#include "tools.h"
--
--static int _vgconvert_single(struct cmd_context *cmd, const char *vg_name,
--			     struct volume_group *vg,
--			     struct processing_handle *handle __attribute__((unused)))
--{
--	struct pv_create_args pva = { 0 };
--	struct logical_volume *lv;
--	struct lv_list *lvl;
--	struct lvinfo info;
--	int active = 0;
--
--	if (!vg_check_status(vg, LVM_WRITE | EXPORTED_VG))
--		return_ECMD_FAILED;
--
--	if (vg->fid->fmt == cmd->fmt) {
--		log_error("Volume group \"%s\" already uses format %s",
--			  vg_name, cmd->fmt->name);
--		return ECMD_FAILED;
--	}
--
--	if (arg_sign_value(cmd, metadatasize_ARG, SIGN_NONE) == SIGN_MINUS) {
--		log_error("Metadata size may not be negative");
--		return EINVALID_CMD_LINE;
--	}
--
--	pva.pvmetadatasize = arg_uint64_value(cmd, metadatasize_ARG, UINT64_C(0));
--	if (!pva.pvmetadatasize)
--		pva.pvmetadatasize = find_config_tree_int(cmd, metadata_pvmetadatasize_CFG, NULL);
--
--	pva.pvmetadatacopies = arg_int_value(cmd, pvmetadatacopies_ARG, -1);
--	if (pva.pvmetadatacopies < 0)
--		pva.pvmetadatacopies = find_config_tree_int(cmd, metadata_pvmetadatacopies_CFG, NULL);
--
--	if (arg_sign_value(cmd, bootloaderareasize_ARG, SIGN_NONE) == SIGN_MINUS) {
--		log_error("Bootloader area size may not be negative");
--		return EINVALID_CMD_LINE;
--	}
--
--	pva.ba_size = arg_uint64_value(cmd, bootloaderareasize_ARG, UINT64_C(0));
--
--	if (!vg_check_new_extent_size(cmd->fmt, vg->extent_size))
--		return_ECMD_FAILED;
--
--	if (!archive(vg)) {
--		log_error("Archive of \"%s\" metadata failed.", vg_name);
--		return ECMD_FAILED;
--	}
--
--	/* Set PV/LV limit if converting from unlimited metadata format */
--	if (vg->fid->fmt->features & FMT_UNLIMITED_VOLS &&
--	    !(cmd->fmt->features & FMT_UNLIMITED_VOLS)) {
--		if (!vg->max_lv)
--			vg->max_lv = 255;
--		if (!vg->max_pv)
--			vg->max_pv = 255;
--	}
--
--	/* If converting to restricted lvid, check if lvid is compatible */
--	if (!(vg->fid->fmt->features & FMT_RESTRICTED_LVIDS) &&
--	    cmd->fmt->features & FMT_RESTRICTED_LVIDS)
--		dm_list_iterate_items(lvl, &vg->lvs)
--			if (!lvid_in_restricted_range(&lvl->lv->lvid)) {
--				log_error("Logical volume %s lvid format is"
--					  " incompatible with requested"
--					  " metadata format.", lvl->lv->name);
--				return ECMD_FAILED;
--			}
--
--	/* Attempt to change any LVIDs that are too big */
--	if (cmd->fmt->features & FMT_RESTRICTED_LVIDS) {
--		dm_list_iterate_items(lvl, &vg->lvs) {
--			lv = lvl->lv;
--			if (lv_is_snapshot(lv))
--				continue;
--			if (lvnum_from_lvid(&lv->lvid) < MAX_RESTRICTED_LVS)
--				continue;
--			if (lv_info(cmd, lv, 0, &info, 0, 0) && info.exists) {
--				log_error("Logical volume %s must be "
--					  "deactivated before conversion.",
--					   lv->name);
--				active++;
--				continue;
--			}
--			lvid_from_lvnum(&lv->lvid, &lv->vg->id, find_free_lvnum(lv));
--
--		}
--	}
--
--	if (active)
--		return_ECMD_FAILED;
--
--	/* FIXME Cache the label format change so we don't have to skip this */
--	if (test_mode()) {
--		log_verbose("Test mode: Skipping metadata writing for VG %s in"
--			    " format %s", vg_name, cmd->fmt->name);
--		return ECMD_PROCESSED;
--	}
--
--	log_verbose("Writing metadata for VG %s using format %s", vg_name,
--		    cmd->fmt->name);
--
--	if (!backup_restore_vg(cmd, vg, 1, &pva)) {
--		log_error("Conversion failed for volume group %s.", vg_name);
--		log_error("Use pvcreate and vgcfgrestore to repair from "
--			  "archived metadata.");
--		return ECMD_FAILED;
--	}
--	log_print_unless_silent("Volume group %s successfully converted", vg_name);
--
--	backup(vg);
--
--	return ECMD_PROCESSED;
--}
--
--int vgconvert(struct cmd_context *cmd, int argc, char **argv)
--{
--	if (!argc) {
--		log_error("Please enter volume group(s)");
--		return EINVALID_CMD_LINE;
--	}
--
--	if (arg_is_set(cmd, metadatatype_ARG) && lvmetad_used()) {
--		log_error("lvmetad must be disabled to change metadata types.");
--		return EINVALID_CMD_LINE;
--	}
--
--	if (arg_int_value(cmd, labelsector_ARG, 0) >= LABEL_SCAN_SECTORS) {
--		log_error("labelsector must be less than %lu",
--			  LABEL_SCAN_SECTORS);
--		return EINVALID_CMD_LINE;
--	}
--
--	return process_each_vg(cmd, argc, argv, NULL, NULL, READ_FOR_UPDATE, 0, NULL,
--			       &_vgconvert_single);
--}
+ #COMM 'vgcfgrestore allows pe_start=0'
+ #basically it produces nonsense, but it tests vgcfgrestore,
+ #not that final cfg is usable...
 
 
