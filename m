@@ -1,52 +1,40 @@
 From: David Teigland <teigland@sourceware.org>
-Date: Wed, 13 Jun 2018 16:59:17 -0400
-Subject: 2018-06-01-stable - lvmlockd: update method for changing clustered VG
-Message-ID: <201806132059.w5DKxHs0026692@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Wed, 13 Jun 2018 16:59:37 -0400
+Subject: master - lvmlockd: update method for changing clustered VG
+Message-ID: <201806132059.w5DKxbaV026713@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=214de62b5dd68dbab50f1c87d285814aa7454663
-Commit:        214de62b5dd68dbab50f1c87d285814aa7454663
-Parent:        e9c0a64fb5ab384d5e0b599a8654fd11bcaed17c
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=e53cfc6a88d7acafde6ba3fa293bcf15b9a033bc
+Commit:        e53cfc6a88d7acafde6ba3fa293bcf15b9a033bc
+Parent:        9b79f0244a17c91d790e2114e1c912e5efe00a2f
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Wed Jun 13 15:54:39 2018 -0500
+AuthorDate:    Wed Jun 13 15:30:28 2018 -0500
 Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Wed Jun 13 15:58:57 2018 -0500
+CommitterDate: Wed Jun 13 15:30:28 2018 -0500
 
 lvmlockd: update method for changing clustered VG
 
-The previous method for forcibly changing a clustered VG to
-a local VG involved using -cn and --config locking_type=0.
-Add an alternative that is consistent with other forced
-lock type changes:
+The previous method for forcibly changing a clustered VG
+to a local VG involved using -cn and locking_type 0.
+Since those options are deprecated, replace it with
+the same command used for other forced lock type changes:
 vgchange --locktype none --lockopt force.
 ---
- WHATS_NEW                  |    1 +
  lib/commands/toolcontext.h |    1 +
  lib/metadata/metadata.c    |    9 +++++++++
  man/lvmlockd.8_main        |    9 +++------
  tools/vgchange.c           |    1 +
- 5 files changed, 15 insertions(+), 6 deletions(-)
+ 4 files changed, 14 insertions(+), 6 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index ce03fdd..f89fd1a 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.02.179 -
- ====================================
-+  Allow forced vgchange to lock type none on clustered VG.
-   Add the report field "shared".
-   Enable automatic metadata consistency repair on a shared VG.
-   Fix pvremove force on a PV with a shared VG.
 diff --git a/lib/commands/toolcontext.h b/lib/commands/toolcontext.h
-index 83c8e82..bc05736 100644
+index baecfbd..9849e5f 100644
 --- a/lib/commands/toolcontext.h
 +++ b/lib/commands/toolcontext.h
-@@ -154,6 +154,7 @@ struct cmd_context {
+@@ -153,6 +153,7 @@ struct cmd_context {
  	unsigned include_shared_vgs:1;		/* report/display cmds can reveal lockd VGs */
  	unsigned include_active_foreign_vgs:1;	/* cmd should process foreign VGs with active LVs */
  	unsigned vg_read_print_access_error:1;	/* print access errors from vg_read */
@@ -55,13 +43,13 @@ index 83c8e82..bc05736 100644
  	unsigned lockd_vg_disable:1;
  	unsigned lockd_lv_disable:1;
 diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
-index 67cf374..7da6718 100644
+index 40854de..113c87c 100644
 --- a/lib/metadata/metadata.c
 +++ b/lib/metadata/metadata.c
-@@ -5126,6 +5126,15 @@ int vg_flag_write_locked(struct volume_group *vg)
+@@ -4689,6 +4689,15 @@ int vg_flag_write_locked(struct volume_group *vg)
  static int _access_vg_clustered(struct cmd_context *cmd, const struct volume_group *vg)
  {
- 	if (vg_is_clustered(vg) && !locking_is_clustered()) {
+ 	if (vg_is_clustered(vg)) {
 +		/*
 +		 * force_access_clustered is only set when forcibly
 +		 * converting a clustered vg to lock type none.
@@ -102,10 +90,10 @@ index cf4c52e..6411c01 100644
  After the VG is local, follow the steps described in "changing a local VG
  to a lockd VG".
 diff --git a/tools/vgchange.c b/tools/vgchange.c
-index e231c86..531bedc 100644
+index b427a81..891f22a 100644
 --- a/tools/vgchange.c
 +++ b/tools/vgchange.c
-@@ -1189,6 +1189,7 @@ int vgchange_locktype_cmd(struct cmd_context *cmd, int argc, char **argv)
+@@ -1039,6 +1039,7 @@ int vgchange_locktype_cmd(struct cmd_context *cmd, int argc, char **argv)
  		cmd->lockd_vg_disable = 1;
  		cmd->lockd_lv_disable = 1;
  		cmd->handles_missing_pvs = 1;
