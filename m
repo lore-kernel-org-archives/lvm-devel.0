@@ -1,54 +1,43 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Thu, 14 Jun 2018 16:03:20 -0400
-Subject: master - systemd: add conficting sockets
-Message-ID: <201806142003.w5EK3KYT004079@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Thu, 14 Jun 2018 16:03:24 -0400
+Subject: master - tests: bigger lv
+Message-ID: <201806142003.w5EK3ONp004089@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=b58160a1913fdd61c378479f6362bd904e7de942
-Commit:        b58160a1913fdd61c378479f6362bd904e7de942
-Parent:        a35098b1102eb7f387e90bd16da4cf3ed833ca57
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=b1729dbcddb7243f556b286f958cd4a97f821d65
+Commit:        b1729dbcddb7243f556b286f958cd4a97f821d65
+Parent:        f4abbafde7ac1918ecb54c23ec90d2d9dcdc9c02
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Jun 12 16:27:42 2018 +0200
+AuthorDate:    Thu Jun 14 21:52:22 2018 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Thu Jun 14 22:02:01 2018 +0200
 
-systemd: add conficting sockets
+tests: bigger lv
 
-Since we are using "DefaultDependencies=no" we do not get automatic STOP
-job on socket connection - so automatically refuse connection on
-shutdown by adding this Conflict definition to socket Unit.
+Although throttling slows down things considerable, it still could
+reach the end before next test so use bigger LV.
 ---
- scripts/lvm2_lvmetad_systemd_red_hat.socket.in  |    1 +
- scripts/lvm2_lvmpolld_systemd_red_hat.socket.in |    1 +
- 2 files changed, 2 insertions(+), 0 deletions(-)
+ test/shell/pvmove-abort.sh |    4 ++--
+ 1 files changed, 2 insertions(+), 2 deletions(-)
 
-diff --git a/scripts/lvm2_lvmetad_systemd_red_hat.socket.in b/scripts/lvm2_lvmetad_systemd_red_hat.socket.in
-index 9575f98..2663c72 100644
---- a/scripts/lvm2_lvmetad_systemd_red_hat.socket.in
-+++ b/scripts/lvm2_lvmetad_systemd_red_hat.socket.in
-@@ -2,6 +2,7 @@
- Description=LVM2 metadata daemon socket
- Documentation=man:lvmetad(8)
- DefaultDependencies=no
-+Conflicts=shutdown.target
+diff --git a/test/shell/pvmove-abort.sh b/test/shell/pvmove-abort.sh
+index 49847c0..1445799 100644
+--- a/test/shell/pvmove-abort.sh
++++ b/test/shell/pvmove-abort.sh
+@@ -34,8 +34,8 @@ for backgroundarg in "-b" "" ;
+ do
  
- [Socket]
- ListenStream=@DEFAULT_RUN_DIR@/lvmetad.socket
-diff --git a/scripts/lvm2_lvmpolld_systemd_red_hat.socket.in b/scripts/lvm2_lvmpolld_systemd_red_hat.socket.in
-index ca9f123..0537d7f 100644
---- a/scripts/lvm2_lvmpolld_systemd_red_hat.socket.in
-+++ b/scripts/lvm2_lvmpolld_systemd_red_hat.socket.in
-@@ -2,6 +2,7 @@
- Description=LVM2 poll daemon socket
- Documentation=man:lvmpolld(8)
- DefaultDependencies=no
-+Conflicts=shutdown.target
+ # Create multisegment LV
+-lvcreate -an -Zn -l30 -n $lv1 $vg "$dev1"
+-lvcreate -an -Zn -l40 -n $lv2 $vg "$dev2"
++lvcreate -an -Zn -l40 -n $lv1 $vg "$dev1"
++lvcreate -an -Zn -l50 -n $lv2 $vg "$dev2"
  
- [Socket]
- ListenStream=@DEFAULT_RUN_DIR@/lvmpolld.socket
+ cmd1=(pvmove -i1 $backgroundarg $mode "$dev1" "$dev3")
+ cmd2=(pvmove -i1 $backgroundarg $mode "$dev2" "$dev3")
 
 
