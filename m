@@ -1,52 +1,57 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
 Date: Thu, 14 Jun 2018 16:02:52 -0400
-Subject: master - device_mapper: drop unneeded function
-Message-ID: <201806142002.w5EK2qQl003547@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Subject: master - build: better srcdir builddir support
+Message-ID: <201806142002.w5EK2qtw003552@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=3eff3aa4f8faa5a84de2ba696b15a976fad31852
-Commit:        3eff3aa4f8faa5a84de2ba696b15a976fad31852
-Parent:        5b515db71ba13d2a4f328be6a97bb309401c5c69
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=5b515db71ba13d2a4f328be6a97bb309401c5c69
+Commit:        5b515db71ba13d2a4f328be6a97bb309401c5c69
+Parent:        52ab3c1584cd40572e82d6add7a7c71204fa9721
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu Jun 14 20:47:23 2018 +0200
+AuthorDate:    Thu Jun 14 20:57:02 2018 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Thu Jun 14 22:02:01 2018 +0200
 
-device_mapper: drop unneeded function
+build: better srcdir builddir support
 
-Subdir without stats.
+With the move to top-level makefile - there are some issues
+with subdir recursive makefile.
+Make the building more tolerant for now until fully resolved.
 ---
- device_mapper/ioctl/libdm-iface.c |   14 --------------
- 1 files changed, 0 insertions(+), 14 deletions(-)
+ Makefile.in      |    3 ++-
+ test/Makefile.in |    2 +-
+ 2 files changed, 3 insertions(+), 2 deletions(-)
 
-diff --git a/device_mapper/ioctl/libdm-iface.c b/device_mapper/ioctl/libdm-iface.c
-index bec7f0f..733eece 100644
---- a/device_mapper/ioctl/libdm-iface.c
-+++ b/device_mapper/ioctl/libdm-iface.c
-@@ -624,20 +624,6 @@ static int _dm_inactive_supported(void)
- 	return inactive_supported;
- }
+diff --git a/Makefile.in b/Makefile.in
+index ae05aea..d076088 100644
+--- a/Makefile.in
++++ b/Makefile.in
+@@ -193,7 +193,8 @@ endif
  
--int dm_message_supports_precise_timestamps(void)
--{
--	/*
--	 * 4.32.0 supports "precise_timestamps" and "histogram:" options
--	 * to @stats_create messages but lacks the ability to report
--	 * these properties via a subsequent @stats_list: require at
--	 * least 4.33.0 in order to use these features.
--	 */
--	if (dm_check_version() && _dm_version >= 4)
--		if (_dm_version_minor >= 33)
--			return 1;
--	return 0;
--}
--
- void *dm_get_next_target(struct dm_task *dmt, void *next,
- 			 uint64_t *start, uint64_t *length,
- 			 char **target_type, char **params)
+ endif
+ 
+-include test/unit/Makefile
++# FIXME: Drop once top-level make is resolved
++-include test/unit/Makefile
+ include $(top_srcdir)/device_mapper/Makefile
+ include $(top_srcdir)/base/Makefile
+ 
+diff --git a/test/Makefile.in b/test/Makefile.in
+index 4c3c715..ca2e2e1 100644
+--- a/test/Makefile.in
++++ b/test/Makefile.in
+@@ -357,7 +357,7 @@ LIB = $(addprefix lib/, $(LIB_SHARED) $(LIB_LOCAL) $(LIB_NOT) $(LIB_LINK_NOT) $(
+ 	touch $@
+ 
+ .lib-dir-stamp:
+-	$(MKDIR_P) lib
++	$(MKDIR_P) lib unit
+ 	for i in $(CMDS); do $(LN_S) -f lvm-wrapper lib/$$i; done
+ 	for i in daemons/clvmd/clvmd daemons/dmeventd/dmeventd \
+ 		tools/dmsetup daemons/lvmetad/lvmetad \
 
 
