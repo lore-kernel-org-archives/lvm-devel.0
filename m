@@ -1,52 +1,74 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Thu, 14 Jun 2018 17:23:26 -0400
-Subject: master - build: cmirrord with internal dm lib
-Message-ID: <201806142123.w5ELNQQL014823@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Thu, 14 Jun 2018 17:23:29 -0400
+Subject: master - tests: drop some clvmd refs
+Message-ID: <201806142123.w5ELNTC8014833@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=b2cb8f846ac8061bb3e71d5805edd72e67d277db
-Commit:        b2cb8f846ac8061bb3e71d5805edd72e67d277db
-Parent:        b1729dbcddb7243f556b286f958cd4a97f821d65
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=faf3cc8f71a6e727e2124199eef25ff00e954c0f
+Commit:        faf3cc8f71a6e727e2124199eef25ff00e954c0f
+Parent:        b2cb8f846ac8061bb3e71d5805edd72e67d277db
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu Jun 14 23:14:04 2018 +0200
+AuthorDate:    Thu Jun 14 23:14:32 2018 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Thu Jun 14 23:14:04 2018 +0200
+CommitterDate: Thu Jun 14 23:22:42 2018 +0200
 
-build: cmirrord with internal dm lib
+tests: drop some clvmd refs
 
+Do not try to link clvmd binary.
+Ensure lib is created new and does not refer old binaries.
 ---
- daemons/cmirrord/Makefile.in |    2 +-
- daemons/cmirrord/functions.c |    1 +
- 2 files changed, 2 insertions(+), 1 deletions(-)
+ test/Makefile.in |   11 +++++------
+ 1 files changed, 5 insertions(+), 6 deletions(-)
 
-diff --git a/daemons/cmirrord/Makefile.in b/daemons/cmirrord/Makefile.in
-index b6bab2d..a78dafe 100644
---- a/daemons/cmirrord/Makefile.in
-+++ b/daemons/cmirrord/Makefile.in
-@@ -30,7 +30,7 @@ LDFLAGS += $(EXTRA_EXEC_LDFLAGS) $(ELDFLAGS)
+diff --git a/test/Makefile.in b/test/Makefile.in
+index ca2e2e1..48ecdd7 100644
+--- a/test/Makefile.in
++++ b/test/Makefile.in
+@@ -123,7 +123,6 @@ help:
+ 	@echo "  LVM_TEST_CACHE_RESTORE_CMD Command for cache_restore [$(LVM_TEST_CACHE_RESTORE_CMD)]."
+ 	@echo "  LVM_TEST_UNLIMITED	Set to get unlimited test log (>32MB)"
+ 	@echo "  LVM_VALGRIND		Enable valgrind testing, execs $$"VALGRIND.
+-	@echo "  LVM_VALGRIND_CLVMD	Enable valgrind testing of clvmd (1)."
+ 	@echo "  LVM_VALGRIND_DMEVENTD	Enable valgrind testing of dmeventd (1)."
+ 	@echo "  LVM_VALGRIND_LVMETAD	Enable valgrind testing of lvmetad (1)."
+ 	@echo "  LVM_STRACE		Enable strace logging."
+@@ -304,7 +303,6 @@ lib/paths-common: $(srcdir)/Makefile.in .lib-dir-stamp Makefile
+ 	echo 'LVMETAD_PIDFILE="@LVMETAD_PIDFILE@"' >> $@-t
+ 	echo 'LVMPOLLD_PIDFILE="@LVMPOLLD_PIDFILE@"' >> $@-t
+ 	echo 'DMEVENTD_PIDFILE="@DMEVENTD_PIDFILE@"' >> $@-t
+-	echo 'CLVMD_PIDFILE="@CLVMD_PIDFILE@"' >> $@-t
+ 	echo 'LVM_TEST_THIN_CHECK_CMD=$${LVM_TEST_THIN_CHECK_CMD- at THIN_CHECK_CMD@}' >> $@-t
+ 	echo 'LVM_TEST_THIN_DUMP_CMD=$${LVM_TEST_THIN_DUMP_CMD- at THIN_DUMP_CMD@}' >> $@-t
+ 	echo 'LVM_TEST_THIN_REPAIR_CMD=$${LVM_TEST_THIN_REPAIR_CMD- at THIN_REPAIR_CMD@}' >> $@-t
+@@ -314,7 +312,7 @@ lib/paths-common: $(srcdir)/Makefile.in .lib-dir-stamp Makefile
+ 	echo 'LVM_TEST_CACHE_REPAIR_CMD=$${LVM_TEST_CACHE_REPAIR_CMD- at CACHE_REPAIR_CMD@}' >> $@-t
+ 	echo 'LVM_TEST_CACHE_RESTORE_CMD=$${LVM_TEST_CACHE_RESTORE_CMD- at CACHE_RESTORE_CMD@}' >> $@-t
+ 	echo 'export DM_UDEV_SYNCHRONISATION THIN RAID CACHE\' >> $@-t
+-	echo ' LVMETAD_PIDFILE LVMPOLLD_PIDFILE DMEVENTD_PIDFILE CLVMD_PIDFILE\' >> $@-t
++	echo ' LVMETAD_PIDFILE LVMPOLLD_PIDFILE DMEVENTD_PIDFILE \' >> $@-t
+ 	echo ' LVM_TEST_THIN_CHECK_CMD LVM_TEST_THIN_DUMP_CMD LVM_TEST_THIN_REPAIR_CMD LVM_TEST_THIN_RESTORE_CMD\' >> $@-t
+ 	echo ' LVM_TEST_CACHE_CHECK_CMD LVM_TEST_CACHE_DUMP_CMD LVM_TEST_CACHE_REPAIR_CMD LVM_TEST_CACHE_RESTORE_CMD' >> $@-t
+ 	mv $@-t $@
+@@ -358,12 +356,13 @@ LIB = $(addprefix lib/, $(LIB_SHARED) $(LIB_LOCAL) $(LIB_NOT) $(LIB_LINK_NOT) $(
  
- cmirrord: $(OBJECTS) $(top_builddir)/lib/liblvm-internal.a
- 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(OBJECTS) \
--		$(LVMLIBS) $(LMLIBS) $(LIBS)
-+		$(LVMLIBS) $(LMLIBS) $(INTERNAL_LIBS) $(LIBS)
- 
- install: $(TARGETS)
- 	$(INSTALL_PROGRAM) -D cmirrord $(usrsbindir)/cmirrord
-diff --git a/daemons/cmirrord/functions.c b/daemons/cmirrord/functions.c
-index 61bcf16..f10a8d5 100644
---- a/daemons/cmirrord/functions.c
-+++ b/daemons/cmirrord/functions.c
-@@ -11,6 +11,7 @@
-  */
- #include "logging.h"
- #include "functions.h"
-+#include "base/memory/zalloc.h"
- 
- #include <sys/sysmacros.h>
- #include <dirent.h>
+ .lib-dir-stamp:
+ 	$(MKDIR_P) lib unit
++	$(RM) lib/clvmd
+ 	for i in $(CMDS); do $(LN_S) -f lvm-wrapper lib/$$i; done
+-	for i in daemons/clvmd/clvmd daemons/dmeventd/dmeventd \
+-		tools/dmsetup daemons/lvmetad/lvmetad \
++	for i in daemons/dmeventd/dmeventd \
++		libdm/dm-tools/dmsetup daemons/lvmetad/lvmetad \
+ 		daemons/lvmpolld/lvmpolld ; do \
+ 		$(LN_S) -f $(abs_top_builddir)/$$i lib/; done
+-	$(LN_S) -f $(abs_top_builddir)/tools/dmsetup lib/dmstats
++	$(LN_S) -f $(abs_top_builddir)/libdm/dm-tools/dmsetup lib/dmstats
+ 	$(LN_S) -f $(abs_top_srcdir)/conf/lvmdbusd.profile lib/
+ 	$(LN_S) -f $(abs_top_srcdir)/conf/thin-performance.profile lib/
+ 	$(LN_S) -f $(abs_top_srcdir)/scripts/fsadm.sh lib/fsadm
 
 
