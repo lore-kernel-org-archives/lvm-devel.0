@@ -1,38 +1,52 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Thu, 14 Jun 2018 16:03:25 -0400
-Subject: master - debug: missing trace
-Message-ID: <201806142003.w5EK3POS004094@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Thu, 14 Jun 2018 17:23:26 -0400
+Subject: master - build: cmirrord with internal dm lib
+Message-ID: <201806142123.w5ELNQQL014823@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=f4abbafde7ac1918ecb54c23ec90d2d9dcdc9c02
-Commit:        f4abbafde7ac1918ecb54c23ec90d2d9dcdc9c02
-Parent:        b58160a1913fdd61c378479f6362bd904e7de942
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=b2cb8f846ac8061bb3e71d5805edd72e67d277db
+Commit:        b2cb8f846ac8061bb3e71d5805edd72e67d277db
+Parent:        b1729dbcddb7243f556b286f958cd4a97f821d65
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed Jun 13 15:56:58 2018 +0200
+AuthorDate:    Thu Jun 14 23:14:04 2018 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Thu Jun 14 22:02:01 2018 +0200
+CommitterDate: Thu Jun 14 23:14:04 2018 +0200
 
-debug: missing trace
+build: cmirrord with internal dm lib
 
 ---
- tools/toollib.c |    1 +
- 1 files changed, 1 insertions(+), 0 deletions(-)
+ daemons/cmirrord/Makefile.in |    2 +-
+ daemons/cmirrord/functions.c |    1 +
+ 2 files changed, 2 insertions(+), 1 deletions(-)
 
-diff --git a/tools/toollib.c b/tools/toollib.c
-index 7caab45..f64bd58 100644
---- a/tools/toollib.c
-+++ b/tools/toollib.c
-@@ -1963,6 +1963,7 @@ static int _process_vgnameid_list(struct cmd_context *cmd, uint32_t read_flags,
- 		log_very_verbose("Processing VG %s %s", vg_name, uuid);
+diff --git a/daemons/cmirrord/Makefile.in b/daemons/cmirrord/Makefile.in
+index b6bab2d..a78dafe 100644
+--- a/daemons/cmirrord/Makefile.in
++++ b/daemons/cmirrord/Makefile.in
+@@ -30,7 +30,7 @@ LDFLAGS += $(EXTRA_EXEC_LDFLAGS) $(ELDFLAGS)
  
- 		if (!lockd_vg(cmd, vg_name, NULL, 0, &lockd_state)) {
-+			stack;
- 			ret_max = ECMD_FAILED;
- 			report_log_ret_code(ret_max);
- 			continue;
+ cmirrord: $(OBJECTS) $(top_builddir)/lib/liblvm-internal.a
+ 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(OBJECTS) \
+-		$(LVMLIBS) $(LMLIBS) $(LIBS)
++		$(LVMLIBS) $(LMLIBS) $(INTERNAL_LIBS) $(LIBS)
+ 
+ install: $(TARGETS)
+ 	$(INSTALL_PROGRAM) -D cmirrord $(usrsbindir)/cmirrord
+diff --git a/daemons/cmirrord/functions.c b/daemons/cmirrord/functions.c
+index 61bcf16..f10a8d5 100644
+--- a/daemons/cmirrord/functions.c
++++ b/daemons/cmirrord/functions.c
+@@ -11,6 +11,7 @@
+  */
+ #include "logging.h"
+ #include "functions.h"
++#include "base/memory/zalloc.h"
+ 
+ #include <sys/sysmacros.h>
+ #include <dirent.h>
 
 
