@@ -1,1920 +1,6475 @@
 From: Joe Thornber <thornber@sourceware.org>
-Date: Thu, 14 Jun 2018 09:33:49 -0400
-Subject: master - dmfilemapd: Move to libdm/dm-tools
-Message-ID: <201806141333.w5EDXnmu017687@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Thu, 14 Jun 2018 09:34:09 -0400
+Subject: master - device_mapper: remove libdm-stats.c
+Message-ID: <201806141334.w5EDY9EV017735@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=fededfbbbc5ed79c509a34a0f8a681fa27e49533
-Commit:        fededfbbbc5ed79c509a34a0f8a681fa27e49533
-Parent:        0524829af69935070b7b15c1bede8f7f4afc9a13
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=e84e9cd115c37a64de6c0b67972a01044dffe843
+Commit:        e84e9cd115c37a64de6c0b67972a01044dffe843
+Parent:        fededfbbbc5ed79c509a34a0f8a681fa27e49533
 Author:        Joe Thornber <ejt@redhat.com>
-AuthorDate:    Thu Jun 14 14:27:19 2018 +0100
+AuthorDate:    Thu Jun 14 14:32:17 2018 +0100
 Committer:     Joe Thornber <ejt@redhat.com>
-CommitterDate: Thu Jun 14 14:27:19 2018 +0100
+CommitterDate: Thu Jun 14 14:32:17 2018 +0100
 
-dmfilemapd: Move to libdm/dm-tools
+device_mapper: remove libdm-stats.c
 
-No longer uses any lvm code.
+We don't use it in lvm.
 ---
- configure                       |    3 +-
- configure.ac                    |    1 -
- daemons/Makefile.in             |    6 +-
- daemons/dmfilemapd/.gitignore   |    1 -
- daemons/dmfilemapd/Makefile.in  |   65 ---
- daemons/dmfilemapd/dmfilemapd.c |  836 ---------------------------------------
- libdm/dm-tools/.gitignore       |    1 +
- libdm/dm-tools/Makefile.in      |   42 ++-
- libdm/dm-tools/dmfilemapd.c     |  835 ++++++++++++++++++++++++++++++++++++++
- 9 files changed, 876 insertions(+), 914 deletions(-)
+ device_mapper/Makefile      |    1 -
+ device_mapper/all.h         | 1314 -----------
+ device_mapper/libdm-stats.c | 5096 -------------------------------------------
+ 3 files changed, 0 insertions(+), 6411 deletions(-)
 
-diff --git a/configure b/configure
-index ed3a315..4536b03 100755
---- a/configure
-+++ b/configure
-@@ -13611,7 +13611,7 @@ _ACEOF
+diff --git a/device_mapper/Makefile b/device_mapper/Makefile
+index 3a1e415..931431c 100644
+--- a/device_mapper/Makefile
++++ b/device_mapper/Makefile
+@@ -17,7 +17,6 @@ DEVICE_MAPPER_SOURCE=\
+ 	device_mapper/libdm-deptree.c \
+ 	device_mapper/libdm-file.c \
+ 	device_mapper/libdm-report.c \
+-	device_mapper/libdm-stats.c \
+ 	device_mapper/libdm-string.c \
+ 	device_mapper/libdm-targets.c \
+ 	device_mapper/libdm-timestamp.c \
+diff --git a/device_mapper/all.h b/device_mapper/all.h
+index c834f32..8dcb38c 100644
+--- a/device_mapper/all.h
++++ b/device_mapper/all.h
+@@ -436,1006 +436,6 @@ int dm_get_status_thin(struct dm_pool *mem, const char *params,
+ 		       struct dm_status_thin **status);
  
- 
- ################################################################################
--ac_config_files="$ac_config_files Makefile make.tmpl libdm/make.tmpl daemons/Makefile daemons/cmirrord/Makefile daemons/dmeventd/Makefile daemons/dmeventd/libdevmapper-event.pc daemons/dmeventd/plugins/Makefile daemons/dmeventd/plugins/lvm2/Makefile daemons/dmeventd/plugins/raid/Makefile daemons/dmeventd/plugins/mirror/Makefile daemons/dmeventd/plugins/snapshot/Makefile daemons/dmeventd/plugins/thin/Makefile daemons/dmfilemapd/Makefile daemons/lvmdbusd/Makefile daemons/lvmdbusd/lvmdbusd daemons/lvmdbusd/lvmdb.py daemons/lvmdbusd/lvm_shell_proxy.py daemons/lvmdbusd/path.py daemons/lvmetad/Makefile daemons/lvmpolld/Makefile daemons/lvmlockd/Makefile conf/Makefile conf/example.conf conf/lvmlocal.conf conf/command_profile_template.profile conf/metadata_profile_template.profile include/Makefile lib/Makefile include/lvm-version.h libdaemon/Makefile libdaemon/client/Makefile libdaemon/server/Makefile libdm/Makefile libdm/dm-tools/Makefile libdm/libdevmapper.pc man/Makefile po/Makefile scri
- pts/blkdeactivate.sh scripts/blk_availability_init_red_hat scripts/blk_availability_systemd_red_hat.service scripts/cmirrord_init_red_hat scripts/com.redhat.lvmdbus1.service scripts/dm_event_systemd_red_hat.service scripts/dm_event_systemd_red_hat.socket scripts/lvm2_cmirrord_systemd_red_hat.service scripts/lvm2_lvmdbusd_systemd_red_hat.service scripts/lvm2_lvmetad_init_red_hat scripts/lvm2_lvmetad_systemd_red_hat.service scripts/lvm2_lvmetad_systemd_red_hat.socket scripts/lvm2_lvmpolld_init_red_hat scripts/lvm2_lvmpolld_systemd_red_hat.service scripts/lvm2_lvmpolld_systemd_red_hat.socket scripts/lvm2_lvmlockd_systemd_red_hat.service scripts/lvm2_monitoring_init_red_hat scripts/lvm2_monitoring_systemd_red_hat.service scripts/lvm2_pvscan_systemd_red_hat at .service scripts/lvm2_tmpfiles_red_hat.conf scripts/lvmdump.sh scripts/Makefile test/Makefile tools/Makefile udev/Makefile"
-+ac_config_files="$ac_config_files Makefile make.tmpl libdm/make.tmpl daemons/Makefile daemons/cmirrord/Makefile daemons/dmeventd/Makefile daemons/dmeventd/libdevmapper-event.pc daemons/dmeventd/plugins/Makefile daemons/dmeventd/plugins/lvm2/Makefile daemons/dmeventd/plugins/raid/Makefile daemons/dmeventd/plugins/mirror/Makefile daemons/dmeventd/plugins/snapshot/Makefile daemons/dmeventd/plugins/thin/Makefile daemons/lvmdbusd/Makefile daemons/lvmdbusd/lvmdbusd daemons/lvmdbusd/lvmdb.py daemons/lvmdbusd/lvm_shell_proxy.py daemons/lvmdbusd/path.py daemons/lvmetad/Makefile daemons/lvmpolld/Makefile daemons/lvmlockd/Makefile conf/Makefile conf/example.conf conf/lvmlocal.conf conf/command_profile_template.profile conf/metadata_profile_template.profile include/Makefile lib/Makefile include/lvm-version.h libdaemon/Makefile libdaemon/client/Makefile libdaemon/server/Makefile libdm/Makefile libdm/dm-tools/Makefile libdm/libdevmapper.pc man/Makefile po/Makefile scripts/blkdeactivate.sh scripts
- /blk_availability_init_red_hat scripts/blk_availability_systemd_red_hat.service scripts/cmirrord_init_red_hat scripts/com.redhat.lvmdbus1.service scripts/dm_event_systemd_red_hat.service scripts/dm_event_systemd_red_hat.socket scripts/lvm2_cmirrord_systemd_red_hat.service scripts/lvm2_lvmdbusd_systemd_red_hat.service scripts/lvm2_lvmetad_init_red_hat scripts/lvm2_lvmetad_systemd_red_hat.service scripts/lvm2_lvmetad_systemd_red_hat.socket scripts/lvm2_lvmpolld_init_red_hat scripts/lvm2_lvmpolld_systemd_red_hat.service scripts/lvm2_lvmpolld_systemd_red_hat.socket scripts/lvm2_lvmlockd_systemd_red_hat.service scripts/lvm2_monitoring_init_red_hat scripts/lvm2_monitoring_systemd_red_hat.service scripts/lvm2_pvscan_systemd_red_hat at .service scripts/lvm2_tmpfiles_red_hat.conf scripts/lvmdump.sh scripts/Makefile test/Makefile tools/Makefile udev/Makefile"
- 
- cat >confcache <<\_ACEOF
- # This file is a shell script that caches the results of configure
-@@ -14319,7 +14319,6 @@ do
-     "daemons/dmeventd/plugins/mirror/Makefile") CONFIG_FILES="$CONFIG_FILES daemons/dmeventd/plugins/mirror/Makefile" ;;
-     "daemons/dmeventd/plugins/snapshot/Makefile") CONFIG_FILES="$CONFIG_FILES daemons/dmeventd/plugins/snapshot/Makefile" ;;
-     "daemons/dmeventd/plugins/thin/Makefile") CONFIG_FILES="$CONFIG_FILES daemons/dmeventd/plugins/thin/Makefile" ;;
--    "daemons/dmfilemapd/Makefile") CONFIG_FILES="$CONFIG_FILES daemons/dmfilemapd/Makefile" ;;
-     "daemons/lvmdbusd/Makefile") CONFIG_FILES="$CONFIG_FILES daemons/lvmdbusd/Makefile" ;;
-     "daemons/lvmdbusd/lvmdbusd") CONFIG_FILES="$CONFIG_FILES daemons/lvmdbusd/lvmdbusd" ;;
-     "daemons/lvmdbusd/lvmdb.py") CONFIG_FILES="$CONFIG_FILES daemons/lvmdbusd/lvmdb.py" ;;
-diff --git a/configure.ac b/configure.ac
-index 42f19fd..05b13e0 100644
---- a/configure.ac
-+++ b/configure.ac
-@@ -1764,7 +1764,6 @@ daemons/dmeventd/plugins/raid/Makefile
- daemons/dmeventd/plugins/mirror/Makefile
- daemons/dmeventd/plugins/snapshot/Makefile
- daemons/dmeventd/plugins/thin/Makefile
--daemons/dmfilemapd/Makefile
- daemons/lvmdbusd/Makefile
- daemons/lvmdbusd/lvmdbusd
- daemons/lvmdbusd/lvmdb.py
-diff --git a/daemons/Makefile.in b/daemons/Makefile.in
-index 8edaefa..5226a5e 100644
---- a/daemons/Makefile.in
-+++ b/daemons/Makefile.in
-@@ -44,12 +44,8 @@ ifeq ("@BUILD_LVMDBUSD@", "yes")
-   SUBDIRS += lvmdbusd
- endif
- 
--ifeq ("@BUILD_DMFILEMAPD@", "yes")
--  SUBDIRS += dmfilemapd
--endif
+ /*
+- * device-mapper statistics support
+- */
 -
- ifeq ($(MAKECMDGOALS),distclean)
--  SUBDIRS = cmirrord dmeventd lvmetad lvmpolld lvmlockd lvmdbusd dmfilemapd
-+  SUBDIRS = cmirrord dmeventd lvmetad lvmpolld lvmlockd lvmdbusd
- endif
+-/*
+- * Statistics handle.
+- *
+- * Operations on dm_stats objects include managing statistics regions
+- * and obtaining and manipulating current counter values from the
+- * kernel. Methods are provided to return baisc count values and to
+- * derive time-based metrics when a suitable interval estimate is
+- * provided.
+- *
+- * Internally the dm_stats handle contains a pointer to a table of one
+- * or more dm_stats_region objects representing the regions registered
+- * with the dm_stats_create_region() method. These in turn point to a
+- * table of one or more dm_stats_counters objects containing the
+- * counter sets for each defined area within the region:
+- *
+- * dm_stats->dm_stats_region[nr_regions]->dm_stats_counters[nr_areas]
+- *
+- * This structure is private to the library and may change in future
+- * versions: all users should make use of the public interface and treat
+- * the dm_stats type as an opaque handle.
+- *
+- * Regions and counter sets are stored in order of increasing region_id.
+- * Depending on region specifications and the sequence of create and
+- * delete operations this may not correspond to increasing sector
+- * number: users of the library should not assume that this is the case
+- * unless region creation is deliberately managed to ensure this (by
+- * always creating regions in strict order of ascending sector address).
+- *
+- * Regions may also overlap so the same sector range may be included in
+- * more than one region or area: applications should be prepared to deal
+- * with this or manage regions such that it does not occur.
+- */
+-struct dm_stats;
+-
+-/*
+- * Histogram handle.
+- *
+- * A histogram object represents the latency histogram values and bin
+- * boundaries of the histogram associated with a particular area.
+- *
+- * Operations on the handle allow the number of bins, bin boundaries,
+- * counts and relative proportions to be obtained as well as the
+- * conversion of a histogram or its bounds to a compact string
+- * representation.
+- */
+-struct dm_histogram;
+-
+-/*
+- * Allocate a dm_stats handle to use for subsequent device-mapper
+- * statistics operations. A program_id may be specified and will be
+- * used by default for subsequent operations on this handle.
+- *
+- * If program_id is NULL or the empty string a program_id will be
+- * automatically set to the value contained in /proc/self/comm.
+- */
+-struct dm_stats *dm_stats_create(const char *program_id);
+-
+-/*
+- * Bind a dm_stats handle to the specified device major and minor
+- * values. Any previous binding is cleared and any preexisting counter
+- * data contained in the handle is released.
+- */
+-int dm_stats_bind_devno(struct dm_stats *dms, int major, int minor);
+-
+-/*
+- * Bind a dm_stats handle to the specified device name.
+- * Any previous binding is cleared and any preexisting counter
+- * data contained in the handle is released.
+- */
+-int dm_stats_bind_name(struct dm_stats *dms, const char *name);
+-
+-/*
+- * Bind a dm_stats handle to the specified device UUID.
+- * Any previous binding is cleared and any preexisting counter
+- * data contained in the handle is released.
+- */
+-int dm_stats_bind_uuid(struct dm_stats *dms, const char *uuid);
+-
+-/*
+- * Bind a dm_stats handle to the device backing the file referenced
+- * by the specified file descriptor.
+- *
+- * File descriptor fd must reference a regular file, open for reading,
+- * in a local file system, backed by a device-mapper device, that
+- * supports the FIEMAP ioctl, and that returns data describing the
+- * physical location of extents.
+- */
+-int dm_stats_bind_from_fd(struct dm_stats *dms, int fd);
+-/*
+- * Test whether the running kernel supports the precise_timestamps
+- * feature. Presence of this feature also implies histogram support.
+- * The library will check this call internally and fails any attempt
+- * to use nanosecond counters or histograms on kernels that fail to
+- * meet this check.
+- */
+-int dm_message_supports_precise_timestamps(void);
+-
+-/*
+- * Precise timetamps and histogram support.
+- * 
+- * Test for the presence of precise_timestamps and histogram support.
+- */
+-int dm_stats_driver_supports_precise(void);
+-int dm_stats_driver_supports_histogram(void);
+-
+-/*
+- * Returns 1 if the specified region has the precise_timestamps feature
+- * enabled (i.e. produces nanosecond-precision counter values) or 0 for
+- * a region using the default milisecond precision.
+- */
+-int dm_stats_get_region_precise_timestamps(const struct dm_stats *dms,
+-					   uint64_t region_id);
+-
+-/*
+- * Returns 1 if the region at the current cursor location has the
+- * precise_timestamps feature enabled (i.e. produces
+- * nanosecond-precision counter values) or 0 for a region using the
+- * default milisecond precision.
+- */
+-int dm_stats_get_current_region_precise_timestamps(const struct dm_stats *dms);
+-
+-#define DM_STATS_ALL_PROGRAMS ""
+-/*
+- * Parse the response from a @stats_list message. dm_stats_list will
+- * allocate the necessary dm_stats and dm_stats region structures from
+- * the embedded dm_pool. No counter data will be obtained (the counters
+- * members of dm_stats_region objects are set to NULL).
+- *
+- * A program_id may optionally be supplied; if the argument is non-NULL
+- * only regions with a matching program_id value will be considered. If
+- * the argument is NULL then the default program_id associated with the
+- * dm_stats handle will be used. Passing the special value
+- * DM_STATS_ALL_PROGRAMS will cause all regions to be queried
+- * regardless of region program_id.
+- */
+-int dm_stats_list(struct dm_stats *dms, const char *program_id);
+-
+-#define DM_STATS_REGIONS_ALL UINT64_MAX
+-/*
+- * Populate a dm_stats object with statistics for one or more regions of
+- * the specified device.
+- *
+- * A program_id may optionally be supplied; if the argument is non-NULL
+- * only regions with a matching program_id value will be considered. If
+- * the argument is NULL then the default program_id associated with the
+- * dm_stats handle will be used. Passing the special value
+- * DM_STATS_ALL_PROGRAMS will cause all regions to be queried
+- * regardless of region program_id.
+- *
+- * Passing the special value DM_STATS_REGIONS_ALL as the region_id
+- * argument will attempt to retrieve all regions selected by the
+- * program_id argument.
+- *
+- * If region_id is used to request a single region_id to be populated
+- * the program_id is ignored.
+- */
+-int dm_stats_populate(struct dm_stats *dms, const char *program_id,
+-		      uint64_t region_id);
+-
+-/*
+- * Create a new statistics region on the device bound to dms.
+- *
+- * start and len specify the region start and length in 512b sectors.
+- * Passing zero for both start and len will create a region spanning
+- * the entire device.
+- *
+- * Step determines how to subdivide the region into discrete counter
+- * sets: a positive value specifies the size of areas into which the
+- * region should be split while a negative value will split the region
+- * into a number of areas equal to the absolute value of step:
+- *
+- * - a region with one area spanning the entire device:
+- *
+- *   dm_stats_create_region(dms, 0, 0, -1, p, a);
+- *
+- * - a region with areas of 1MiB:
+- *
+- *   dm_stats_create_region(dms, 0, 0, 1 << 11, p, a);
+- *
+- * - one 1MiB region starting@1024 sectors with two areas:
+- *
+- *   dm_stats_create_region(dms, 1024, 1 << 11, -2, p, a);
+- *
+- * If precise is non-zero attempt to create a region with nanosecond
+- * precision counters using the kernel precise_timestamps feature.
+- *
+- * precise - A flag to request nanosecond precision counters
+- * to be used for this region.
+- *
+- * histogram_bounds - specify the boundaries of a latency histogram to
+- * be tracked for the region. The values are expressed as an array of
+- * uint64_t terminated with a zero. Values must be in order of ascending
+- * magnitude and specify the upper bounds of successive histogram bins
+- * in nanoseconds (with an implicit lower bound of zero on the first bin
+- * and an implicit upper bound of infinity on the final bin). For
+- * example:
+- *
+- *   uint64_t bounds_ary[] = { 1000, 2000, 3000, 0 };
+- *
+- * Specifies a histogram with four bins: 0-1000ns, 1000-2000ns,
+- * 2000-3000ns and >3000ns.
+- *
+- * The smallest latency value that can be tracked for a region not using
+- * precise_timestamps is 1ms: attempting to create a region with
+- * histogram boundaries < 1ms will cause the precise_timestamps feature
+- * to be enabled for that region automatically if it was not requested
+- * explicitly.
+- *
+- * program_id is an optional string argument that identifies the
+- * program creating the region. If program_id is NULL or the empty
+- * string the default program_id stored in the handle will be used.
+- *
+- * user_data is an optional string argument that is added to the
+- * content of the aux_data field stored with the statistics region by
+- * the kernel.
+- *
+- * The library may also use this space internally, for example, to
+- * store a group descriptor or other metadata: in this case the
+- * library will strip any internal data fields from the value before
+- * it is returned via a call to dm_stats_get_region_aux_data().
+- *
+- * The user data stored is not accessed by the library or kernel and
+- * may be used to store an arbitrary data word (embedded whitespace is
+- * not permitted).
+- *
+- * An application using both the library and direct access to the
+- * @stats_list device-mapper message may see the internal values stored
+- * in this field by the library. In such cases any string up to and
+- * including the first '#' in the field must be treated as an opaque
+- * value and preserved across any external modification of aux_data.
+- *
+- * The region_id of the newly-created region is returned in *region_id
+- * if it is non-NULL.
+- */
+-int dm_stats_create_region(struct dm_stats *dms, uint64_t *region_id,
+-			   uint64_t start, uint64_t len, int64_t step,
+-			   int precise, struct dm_histogram *bounds,
+-			   const char *program_id, const char *user_data);
+-
+-/*
+- * Delete the specified statistics region. This will also mark the
+- * region as not-present and discard any existing statistics data.
+- */
+-int dm_stats_delete_region(struct dm_stats *dms, uint64_t region_id);
+-
+-/*
+- * Clear the specified statistics region. This requests the kernel to
+- * zero all counter values (except in-flight I/O). Note that this
+- * operation is not atomic with respect to reads of the counters; any IO
+- * events occurring between the last print operation and the clear will
+- * be lost. This can be avoided by using the atomic print-and-clear
+- * function of the dm_stats_print_region() call or by using the higher
+- * level dm_stats_populate() interface.
+- */
+-int dm_stats_clear_region(struct dm_stats *dms, uint64_t region_id);
+-
+-/*
+- * Print the current counter values for the specified statistics region
+- * and return them as a string. The memory for the string buffer will
+- * be allocated from the dm_stats handle's private pool and should be
+- * returned by calling dm_stats_buffer_destroy() when no longer
+- * required. The pointer will become invalid following any call that
+- * clears or reinitializes the handle (destroy, list, populate, bind).
+- *
+- * This allows applications that wish to access the raw message response
+- * to obtain it via a dm_stats handle; no parsing of the textual counter
+- * data is carried out by this function.
+- *
+- * Most users are recommended to use the dm_stats_populate() call
+- * instead since this will automatically parse the statistics data into
+- * numeric form accessible via the dm_stats_get_*() counter access
+- * methods.
+- *
+- * A subset of the data lines may be requested by setting the
+- * start_line and num_lines parameters. If both are zero all data
+- * lines are returned.
+- *
+- * If the clear parameter is non-zero the operation will also
+- * atomically reset all counter values to zero (except in-flight IO).
+- */
+-char *dm_stats_print_region(struct dm_stats *dms, uint64_t region_id,
+-			    unsigned start_line, unsigned num_lines,
+-			    unsigned clear);
+-
+-/*
+- * Destroy a statistics response buffer obtained from a call to
+- * dm_stats_print_region().
+- */
+-void dm_stats_buffer_destroy(struct dm_stats *dms, char *buffer);
+-
+-/*
+- * Determine the number of regions contained in a dm_stats handle
+- * following a dm_stats_list() or dm_stats_populate() call.
+- *
+- * The value returned is the number of registered regions visible with the
+- * progam_id value used for the list or populate operation and may not be
+- * equal to the highest present region_id (either due to program_id
+- * filtering or gaps in the sequence of region_id values).
+- *
+- * Always returns zero on an empty handle.
+- */
+-uint64_t dm_stats_get_nr_regions(const struct dm_stats *dms);
+-
+-/*
+- * Determine the number of groups contained in a dm_stats handle
+- * following a dm_stats_list() or dm_stats_populate() call.
+- *
+- * The value returned is the number of registered groups visible with the
+- * progam_id value used for the list or populate operation and may not be
+- * equal to the highest present group_id (either due to program_id
+- * filtering or gaps in the sequence of group_id values).
+- *
+- * Always returns zero on an empty handle.
+- */
+-uint64_t dm_stats_get_nr_groups(const struct dm_stats *dms);
+-
+-/*
+- * Test whether region_id is present in this dm_stats handle.
+- */
+-int dm_stats_region_present(const struct dm_stats *dms, uint64_t region_id);
+-
+-/*
+- * Returns the number of areas (counter sets) contained in the specified
+- * region_id of the supplied dm_stats handle.
+- */
+-uint64_t dm_stats_get_region_nr_areas(const struct dm_stats *dms,
+-				      uint64_t region_id);
+-
+-/*
+- * Returns the total number of areas (counter sets) in all regions of the
+- * given dm_stats object.
+- */
+-uint64_t dm_stats_get_nr_areas(const struct dm_stats *dms);
+-
+-/*
+- * Test whether group_id is present in this dm_stats handle.
+- */
+-int dm_stats_group_present(const struct dm_stats *dms, uint64_t group_id);
+-
+-/*
+- * Return the number of bins in the histogram configuration for the
+- * specified region or zero if no histogram specification is configured.
+- * Valid following a dm_stats_list() or dm_stats_populate() operation.
+- */
+-int dm_stats_get_region_nr_histogram_bins(const struct dm_stats *dms,
+-					  uint64_t region_id);
+-
+-/*
+- * Parse a histogram string with optional unit suffixes into a
+- * dm_histogram bounds description.
+- *
+- * A histogram string is a string of numbers "n1,n2,n3,..." that
+- * represent the boundaries of a histogram. The first and final bins
+- * have implicit lower and upper bounds of zero and infinity
+- * respectively and boundary values must occur in order of ascending
+- * magnitude.  Unless a unit suffix is given all values are specified in
+- * nanoseconds.
+- *
+- * For example, if bounds_str="300,600,900", the region will be created
+- * with a histogram containing four bins. Each report will include four
+- * numbers a:b:c:d. a is the number of requests that took between 0 and
+- * 300ns to complete, b is the number of requests that took 300-600ns to
+- * complete, c is the number of requests that took 600-900ns to complete
+- * and d is the number of requests that took more than 900ns to
+- * complete.
+- *
+- * An optional unit suffix of 's', 'ms', 'us', or 'ns' may be used to
+- * specify units of seconds, miliseconds, microseconds, or nanoseconds:
+- *
+- *   bounds_str="1ns,1us,1ms,1s"
+- *   bounds_str="500us,1ms,1500us,2ms"
+- *   bounds_str="200ms,400ms,600ms,800ms,1s"
+- *
+- * The smallest valid unit of time for a histogram specification depends
+- * on whether the region uses precise timestamps: for a region with the
+- * default milisecond precision the smallest possible histogram boundary
+- * magnitude is one milisecond: attempting to use a histogram with a
+- * boundary less than one milisecond when creating a region will cause
+- * the region to be created with the precise_timestamps feature enabled.
+- *
+- * On sucess a pointer to the struct dm_histogram representing the
+- * bounds values is returned, or NULL in the case of error. The returned
+- * pointer should be freed using free() when no longer required.
+- */
+-struct dm_histogram *dm_histogram_bounds_from_string(const char *bounds_str);
+-
+-/*
+- * Parse a zero terminated array of uint64_t into a dm_histogram bounds
+- * description.
+- *
+- * Each value in the array specifies the upper bound of a bin in the
+- * latency histogram in nanoseconds. Values must appear in ascending
+- * order of magnitude.
+- *
+- * The smallest valid unit of time for a histogram specification depends
+- * on whether the region uses precise timestamps: for a region with the
+- * default milisecond precision the smallest possible histogram boundary
+- * magnitude is one milisecond: attempting to use a histogram with a
+- * boundary less than one milisecond when creating a region will cause
+- * the region to be created with the precise_timestamps feature enabled.
+- */
+-struct dm_histogram *dm_histogram_bounds_from_uint64(const uint64_t *bounds);
+-
+-/*
+- * Destroy the histogram bounds array obtained from a call to
+- * dm_histogram_bounds_from_string().
+- */
+-void dm_histogram_bounds_destroy(struct dm_histogram *bounds);
+-
+-/*
+- * Destroy a dm_stats object and all associated regions, counter
+- * sets and histograms.
+- */
+-void dm_stats_destroy(struct dm_stats *dms);
+-
+-/*
+- * Counter sampling interval
+- */
+-
+-/*
+- * Set the sampling interval for counter data to the specified value in
+- * either nanoseconds or milliseconds.
+- *
+- * The interval is used to calculate time-based metrics from the basic
+- * counter data: an interval must be set before calling any of the
+- * metric methods.
+- *
+- * For best accuracy the duration should be measured and updated at the
+- * end of each interval.
+- *
+- * All values are stored internally with nanosecond precision and are
+- * converted to or from ms when the millisecond interfaces are used.
+- */
+-void dm_stats_set_sampling_interval_ns(struct dm_stats *dms,
+-				       uint64_t interval_ns);
+-
+-void dm_stats_set_sampling_interval_ms(struct dm_stats *dms,
+-				       uint64_t interval_ms);
+-
+-/*
+- * Retrieve the configured sampling interval in either nanoseconds or
+- * milliseconds.
+- */
+-uint64_t dm_stats_get_sampling_interval_ns(const struct dm_stats *dms);
+-uint64_t dm_stats_get_sampling_interval_ms(const struct dm_stats *dms);
+-
+-/*
+- * Override program_id. This may be used to change the default
+- * program_id value for an existing handle. If the allow_empty argument
+- * is non-zero a NULL or empty program_id is permitted.
+- *
+- * Use with caution! Most users of the library should set a valid,
+- * non-NULL program_id for every statistics region created. Failing to
+- * do so may result in confusing state when multiple programs are
+- * creating and managing statistics regions.
+- *
+- * All users of the library are encouraged to choose an unambiguous,
+- * unique program_id: this could be based on PID (for programs that
+- * create, report, and delete regions in a single process), session id,
+- * executable name, or some other distinguishing string.
+- *
+- * Use of the empty string as a program_id does not simplify use of the
+- * library or the command line tools and use of this value is strongly
+- * discouraged.
+- */
+-int dm_stats_set_program_id(struct dm_stats *dms, int allow_empty,
+-			    const char *program_id);
+-
+-/*
+- * Region properties: size, length & area_len.
+- *
+- * Region start and length are returned in units of 512b as specified
+- * at region creation time. The area_len value gives the size of areas
+- * into which the region has been subdivided. For regions with a single
+- * area spanning the range this value is equal to the region length.
+- *
+- * For regions created with a specified number of areas the value
+- * represents the size of the areas into which the kernel divided the
+- * region excluding any rounding of the last area size. The number of
+- * areas may be obtained using the dm_stats_nr_areas_region() call.
+- *
+- * All values are returned in units of 512b sectors.
+- */
+-int dm_stats_get_region_start(const struct dm_stats *dms, uint64_t *start,
+-			      uint64_t region_id);
+-
+-int dm_stats_get_region_len(const struct dm_stats *dms, uint64_t *len,
+-			    uint64_t region_id);
+-
+-int dm_stats_get_region_area_len(const struct dm_stats *dms,
+-				 uint64_t *len, uint64_t region_id);
+-
+-/*
+- * Area properties: start, offset and length.
+- *
+- * The area length is always equal to the area length of the region
+- * that contains it and is obtained from dm_stats_get_region_area_len().
+- *
+- * The start of an area is a function of the area_id and the containing
+- * region's start and area length: it gives the absolute offset into the
+- * containing device of the beginning of the area.
+- *
+- * The offset expresses the area's relative offset into the current
+- * region. I.e. the area start minus the start offset of the containing
+- * region.
+- *
+- * All values are returned in units of 512b sectors.
+- */
+-int dm_stats_get_area_start(const struct dm_stats *dms, uint64_t *start,
+-			    uint64_t region_id, uint64_t area_id);
+-
+-int dm_stats_get_area_offset(const struct dm_stats *dms, uint64_t *offset,
+-			     uint64_t region_id, uint64_t area_id);
+-
+-/*
+- * Retrieve program_id and user aux_data for a specific region.
+- *
+- * Only valid following a call to dm_stats_list().
+- */
+-
+-/*
+- * Retrieve program_id for the specified region.
+- *
+- * The returned pointer does not need to be freed separately from the
+- * dm_stats handle but will become invalid after a dm_stats_destroy(),
+- * dm_stats_list(), dm_stats_populate(), or dm_stats_bind*() of the
+- * handle from which it was obtained.
+- */
+-const char *dm_stats_get_region_program_id(const struct dm_stats *dms,
+-					   uint64_t region_id);
+-
+-/*
+- * Retrieve user aux_data set for the specified region. This function
+- * will return any stored user aux_data as a string in the memory
+- * pointed to by the aux_data argument.
+- *
+- * Any library internal aux_data fields, such as DMS_GROUP descriptors,
+- * are stripped before the value is returned.
+- *
+- * The returned pointer does not need to be freed separately from the
+- * dm_stats handle but will become invalid after a dm_stats_destroy(),
+- * dm_stats_list(), dm_stats_populate(), or dm_stats_bind*() of the
+- * handle from which it was obtained.
+- */
+-const char *dm_stats_get_region_aux_data(const struct dm_stats *dms,
+-					 uint64_t region_id);
+-
+-typedef enum {
+-	DM_STATS_OBJECT_TYPE_NONE,
+-	DM_STATS_OBJECT_TYPE_AREA,
+-	DM_STATS_OBJECT_TYPE_REGION,
+-	DM_STATS_OBJECT_TYPE_GROUP
+-} dm_stats_obj_type_t;
+-
+-/*
+- * Statistics cursor
+- *
+- * A dm_stats handle maintains an optional cursor into the statistics
+- * tables that it stores. Iterators are provided to visit each region,
+- * area, or group in a handle and accessor methods are provided to
+- * obtain properties and values for the object at the current cursor
+- * position.
+- *
+- * Using the cursor simplifies walking all regions or groups when
+- * the tables are sparse (i.e. contains some present and some
+- * non-present region_id or group_id values either due to program_id
+- * filtering or the ordering of region and group creation and deletion).
+- *
+- * Simple macros are provided to visit each area, region, or group,
+- * contained in a handle and applications are encouraged to use these
+- * where possible.
+- */
+-
+-/*
+- * Walk flags are used to initialise a dm_stats handle's cursor control
+- * and to select region or group aggregation when calling a metric or
+- * counter property method with immediate group, region, and area ID
+- * values.
+- *
+- * Walk flags are stored in the uppermost word of a uint64_t so that
+- * a region_id or group_id may be encoded in the lower bits. This
+- * allows an aggregate region_id or group_id to be specified when
+- * retrieving counter or metric values.
+- *
+- * Flags may be ORred together when used to initialise a dm_stats_walk:
+- * the resulting walk will visit instance of each type specified by
+- * the flag combination.
+- */
+-#define DM_STATS_WALK_AREA   0x1000000000000ULL
+-#define DM_STATS_WALK_REGION 0x2000000000000ULL
+-#define DM_STATS_WALK_GROUP  0x4000000000000ULL
+-
+-#define DM_STATS_WALK_ALL    0x7000000000000ULL
+-#define DM_STATS_WALK_DEFAULT (DM_STATS_WALK_AREA | DM_STATS_WALK_REGION)
+-
+-/*
+- * Skip regions from a DM_STATS_WALK_REGION that contain only a single
+- * area: in this case the region's aggregate values are identical to
+- * the values of the single contained area. Setting this flag will
+- * suppress these duplicate entries during a dm_stats_walk_* with the
+- * DM_STATS_WALK_REGION flag set.
+- */
+-#define DM_STATS_WALK_SKIP_SINGLE_AREA   0x8000000000000ULL
+-
+-/*
+- * Initialise the cursor control of a dm_stats handle for the specified
+- * walk type(s). Including a walk flag in the flags argument will cause
+- * any subsequent walk to visit that type of object (until the next
+- * call to dm_stats_walk_init()).
+- */
+-int dm_stats_walk_init(struct dm_stats *dms, uint64_t flags);
+-
+-/*
+- * Set the cursor of a dm_stats handle to address the first present
+- * group, region, or area of the currently configured walk. It is
+- * valid to attempt to walk a NULL stats handle or a handle containing
+- * no present regions; in this case any call to dm_stats_walk_next()
+- * becomes a no-op and all calls to dm_stats_walk_end() return true.
+- */
+-void dm_stats_walk_start(struct dm_stats *dms);
+-
+-/*
+- * Advance the statistics cursor to the next area, or to the next
+- * present region if at the end of the current region. If the end of
+- * the region, area, or group tables is reached a subsequent call to
+- * dm_stats_walk_end() will return 1 and dm_stats_object_type() called
+- * on the location will return DM_STATS_OBJECT_TYPE_NONE,
+- */
+-void dm_stats_walk_next(struct dm_stats *dms);
+-
+-/*
+- * Force the statistics cursor to advance to the next region. This will
+- * stop any in-progress area walk (by clearing DM_STATS_WALK_AREA) and
+- * advance the cursor to the next present region, the first present
+- * group (if DM_STATS_GROUP_WALK is set), or to the end. In this case a
+- * subsequent call to dm_stats_walk_end() will return 1 and a call to
+- * dm_stats_object_type() for the location will return
+- * DM_STATS_OBJECT_TYPE_NONE.
+- */
+-void dm_stats_walk_next_region(struct dm_stats *dms);
+-
+-/*
+- * Test whether the end of a statistics walk has been reached.
+- */
+-int dm_stats_walk_end(struct dm_stats *dms);
+-
+-/*
+- * Return the type of object at the location specified by region_id
+- * and area_id. If either region_id or area_id uses one of the special
+- * values DM_STATS_REGION_CURRENT or DM_STATS_AREA_CURRENT the
+- * corresponding region or area identifier will be taken from the
+- * current cursor location. If the cursor location or the value encoded
+- * by region_id and area_id indicates an aggregate region or group,
+- * this will be reflected in the value returned.
+- */
+-dm_stats_obj_type_t dm_stats_object_type(const struct dm_stats *dms,
+-					 uint64_t region_id,
+-					 uint64_t area_id);
+-
+-/*
+- * Return the type of object at the current stats cursor location.
+- */
+-dm_stats_obj_type_t dm_stats_current_object_type(const struct dm_stats *dms);
+-
+-/*
+- * Stats iterators
+- *
+- * C 'for' and 'do'/'while' style iterators for dm_stats data.
+- *
+- * It is not safe to call any function that modifies the region table
+- * within the loop body (i.e. dm_stats_list(), dm_stats_populate(),
+- * dm_stats_init(), or dm_stats_destroy()).
+- *
+- * All counter and property (dm_stats_get_*) access methods, as well as
+- * dm_stats_populate_region() can be safely called from loops.
+- *
+- */
+-
+-/*
+- * Iterate over the regions table visiting each region.
+- *
+- * If the region table is empty or unpopulated the loop body will not be
+- * executed.
+- */
+-#define dm_stats_foreach_region(dms)				\
+-for (dm_stats_walk_init((dms), DM_STATS_WALK_REGION),		\
+-     dm_stats_walk_start((dms));				\
+-     !dm_stats_walk_end((dms)); dm_stats_walk_next_region((dms)))
+-
+-/*
+- * Iterate over the regions table visiting each area.
+- *
+- * If the region table is empty or unpopulated the loop body will not
+- * be executed.
+- */
+-#define dm_stats_foreach_area(dms)				\
+-for (dm_stats_walk_init((dms), DM_STATS_WALK_AREA),		\
+-     dm_stats_walk_start((dms));				\
+-     !dm_stats_walk_end((dms)); dm_stats_walk_next((dms)))
+-
+-/*
+- * Iterate over the regions table visiting each group. Metric and
+- * counter methods will return values for the group.
+- *
+- * If the group table is empty or unpopulated the loop body will not
+- * be executed.
+- */
+-#define dm_stats_foreach_group(dms)				\
+-for (dm_stats_walk_init((dms), DM_STATS_WALK_GROUP),		\
+-     dm_stats_walk_start(dms);					\
+-     !dm_stats_walk_end(dms);					\
+-     dm_stats_walk_next(dms))
+-
+-/*
+- * Start a walk iterating over the regions contained in dm_stats handle
+- * 'dms'.
+- *
+- * The body of the loop should call dm_stats_walk_next() or
+- * dm_stats_walk_next_region() to advance to the next element.
+- *
+- * The loop body is executed at least once even if the stats handle is
+- * empty.
+- */
+-#define dm_stats_walk_do(dms)					\
+-do {								\
+-	dm_stats_walk_start((dms));				\
+-	do
+-
+-/*
+- * Start a 'while' style loop or end a 'do..while' loop iterating over the
+- * regions contained in dm_stats handle 'dms'.
+- */
+-#define dm_stats_walk_while(dms)				\
+-	while(!dm_stats_walk_end((dms)));			\
+-} while (0)
+-
+-/*
+- * Cursor relative property methods
+- *
+- * Calls with the prefix dm_stats_get_current_* operate relative to the
+- * current cursor location, returning properties for the current region
+- * or area of the supplied dm_stats handle.
+- *
+- */
+-
+-/*
+- * Returns the number of areas (counter sets) contained in the current
+- * region of the supplied dm_stats handle.
+- */
+-uint64_t dm_stats_get_current_nr_areas(const struct dm_stats *dms);
+-
+-/*
+- * Retrieve the current values of the stats cursor.
+- */
+-uint64_t dm_stats_get_current_region(const struct dm_stats *dms);
+-uint64_t dm_stats_get_current_area(const struct dm_stats *dms);
+-
+-/*
+- * Current region properties: size, length & area_len.
+- *
+- * See the comments for the equivalent dm_stats_get_* versions for a
+- * complete description of these methods.
+- *
+- * All values are returned in units of 512b sectors.
+- */
+-int dm_stats_get_current_region_start(const struct dm_stats *dms,
+-				      uint64_t *start);
+-
+-int dm_stats_get_current_region_len(const struct dm_stats *dms,
+-				    uint64_t *len);
+-
+-int dm_stats_get_current_region_area_len(const struct dm_stats *dms,
+-					 uint64_t *area_len);
+-
+-/*
+- * Current area properties: start and length.
+- *
+- * See the comments for the equivalent dm_stats_get_* versions for a
+- * complete description of these methods.
+- *
+- * All values are returned in units of 512b sectors.
+- */
+-int dm_stats_get_current_area_start(const struct dm_stats *dms,
+-				    uint64_t *start);
+-
+-int dm_stats_get_current_area_offset(const struct dm_stats *dms,
+-				     uint64_t *offset);
+-
+-int dm_stats_get_current_area_len(const struct dm_stats *dms,
+-				       uint64_t *start);
+-
+-/*
+- * Return a pointer to the program_id string for region at the current
+- * cursor location.
+- */
+-const char *dm_stats_get_current_region_program_id(const struct dm_stats *dms);
+-
+-/*
+- * Return a pointer to the user aux_data string for the region at the
+- * current cursor location.
+- */
+-const char *dm_stats_get_current_region_aux_data(const struct dm_stats *dms);
+-
+-/*
+- * Statistics groups and data aggregation.
+- */
+-
+-/*
+- * Create a new group in stats handle dms from the group descriptor
+- * passed in group. The group descriptor is a string containing a list
+- * of region_id values that will be included in the group. The first
+- * region_id found will be the group leader. Ranges of identifiers may
+- * be expressed as "M-N", where M and N are the start and end region_id
+- * values for the range.
+- */
+-int dm_stats_create_group(struct dm_stats *dms, const char *group,
+-			  const char *alias, uint64_t *group_id);
+-
+-/*
+- * Remove the specified group_id. If the remove argument is zero the
+- * group will be removed but the regions that it contained will remain.
+- * If remove is non-zero then all regions that belong to the group will
+- * also be removed.
+- */
+-int dm_stats_delete_group(struct dm_stats *dms, uint64_t group_id, int remove);
+-
+-/*
+- * Set an alias for this group or region. The alias will be returned
+- * instead of the normal dm-stats name for this region or group.
+- */
+-int dm_stats_set_alias(struct dm_stats *dms, uint64_t group_id,
+-		       const char *alias);
+-
+-/*
+- * Returns a pointer to the currently configured alias for id, or the
+- * name of the dm device the handle is bound to if no alias has been
+- * set. The pointer will be freed automatically when a new alias is set
+- * or when the stats handle is cleared.
+- */
+-const char *dm_stats_get_alias(const struct dm_stats *dms, uint64_t id);
+-
+-#define DM_STATS_GROUP_NONE UINT64_MAX
+-/*
+- * Return the group_id that the specified region_id belongs to, or the
+- * special value DM_STATS_GROUP_NONE if the region does not belong
+- * to any group.
+- */
+-uint64_t dm_stats_get_group_id(const struct dm_stats *dms, uint64_t region_id);
+-
+-/*
+- * Store a pointer to a string describing the regions that are members
+- * of the group specified by group_id in the memory pointed to by buf.
+- * The string is in the same format as the 'group' argument to
+- * dm_stats_create_group().
+- *
+- * The pointer does not need to be freed explicitly by the caller: it
+- * will become invalid following a subsequent dm_stats_list(),
+- * dm_stats_populate() or dm_stats_destroy() of the corresponding
+- * dm_stats handle.
+- */
+-int dm_stats_get_group_descriptor(const struct dm_stats *dms,
+-				  uint64_t group_id, char **buf);
+-
+-/*
+- * Create regions that correspond to the extents of a file in the
+- * filesystem and optionally place them into a group.
+- *
+- * File descriptor fd must reference a regular file, open for reading,
+- * in a local file system that supports the FIEMAP ioctl, and that
+- * returns data describing the physical location of extents.
+- *
+- * The file descriptor can be closed by the caller following the call
+- * to dm_stats_create_regions_from_fd().
+- *
+- * Unless nogroup is non-zero the regions will be placed into a group
+- * and the group alias set to the value supplied (if alias is NULL no
+- * group alias will be assigned).
+- *
+- * On success the function returns a pointer to an array of uint64_t
+- * containing the IDs of the newly created regions. The region_id
+- * array is terminated by the value DM_STATS_REGION_NOT_PRESENT and
+- * should be freed using free() when no longer required.
+- *
+- * On error NULL is returned.
+- *
+- * Following a call to dm_stats_create_regions_from_fd() the handle
+- * is guaranteed to be in a listed state, and to contain any region
+- * and group identifiers created by the operation.
+- *
+- * The group_id for the new group is equal to the region_id value in
+- * the first array element.
+- */
+-uint64_t *dm_stats_create_regions_from_fd(struct dm_stats *dms, int fd,
+-					  int group, int precise,
+-					  struct dm_histogram *bounds,
+-					  const char *alias);
+-/*
+- * Update a group of regions that correspond to the extents of a file
+- * in the filesystem, adding and removing regions to account for
+- * allocation changes in the underlying file.
+- *
+- * File descriptor fd must reference a regular file, open for reading,
+- * in a local file system that supports the FIEMAP ioctl, and that
+- * returns data describing the physical location of extents.
+- *
+- * The file descriptor can be closed by the caller following the call
+- * to dm_stats_update_regions_from_fd().
+- *
+- * On success the function returns a pointer to an array of uint64_t
+- * containing the IDs of the updated regions (including any existing
+- * regions that were not modified by the call).
+- *
+- * The region_id array is terminated by the special value
+- * DM_STATS_REGION_NOT_PRESENT and should be freed using free()
+- * when no longer required.
+- *
+- * On error NULL is returned.
+- *
+- * Following a call to dm_stats_update_regions_from_fd() the handle
+- * is guaranteed to be in a listed state, and to contain any region
+- * and group identifiers created by the operation.
+- *
+- * This function cannot be used with file mapped regions that are
+- * not members of a group: either group the regions, or remove them
+- * and re-map them with dm_stats_create_regions_from_fd().
+- */
+-uint64_t *dm_stats_update_regions_from_fd(struct dm_stats *dms, int fd,
+-					  uint64_t group_id);
+-
+-
+-/*
+- * The file map monitoring daemon can monitor files in two distinct
+- * ways: the mode affects the behaviour of the daemon when a file
+- * under monitoring is renamed or unlinked, and the conditions which
+- * cause the daemon to terminate.
+- *
+- * In both modes, the daemon will always shut down when the group
+- * being monitored is deleted.
+- *
+- * Follow inode:
+- * The daemon follows the inode of the file, as it was at the time the
+- * daemon started. The file descriptor referencing the file is kept
+- * open at all times, and the daemon will exit when it detects that
+- * the file has been unlinked and it is the last holder of a reference
+- * to the file.
+- *
+- * This mode is useful if the file is expected to be renamed, or moved
+- * within the file system, while it is being monitored.
+- *
+- * Follow path:
+- * The daemon follows the path that was given on the daemon command
+- * line. The file descriptor referencing the file is re-opened on each
+- * iteration of the daemon, and the daemon will exit if no file exists
+- * at this location (a tolerance is allowed so that a brief delay
+- * between unlink() and creat() is permitted).
+- *
+- * This mode is useful if the file is updated by unlinking the original
+- * and placing a new file at the same path.
+- */
+-
+-typedef enum {
+-	DM_FILEMAPD_FOLLOW_INODE,
+-	DM_FILEMAPD_FOLLOW_PATH,
+-	DM_FILEMAPD_FOLLOW_NONE
+-} dm_filemapd_mode_t;
+-
+-/*
+- * Parse a string representation of a dmfilemapd mode.
+- *
+- * Returns a valid dm_filemapd_mode_t value on success, or
+- * DM_FILEMAPD_FOLLOW_NONE on error.
+- */
+-dm_filemapd_mode_t dm_filemapd_mode_from_string(const char *mode_str);
+-
+-/*
+- * Start the dmfilemapd filemap monitoring daemon for the specified
+- * file descriptor, group, and file system path. The daemon will
+- * monitor the file for allocation changes, and when a change is
+- * detected, call dm_stats_update_regions_from_fd() to update the
+- * mapped regions for the file.
+- *
+- * The path provided to dm_stats_start_filemapd() must be an absolute
+- * path, and should reflect the path of 'fd' at the time that it was
+- * opened.
+- *
+- * The mode parameter controls the behaviour of the daemon when the
+- * file being monitored is unlinked or moved: see the comments for
+- * dm_filemapd_mode_t for a full description and possible values.
+- *
+- * The daemon can be stopped@any time by sending SIGTERM to the
+- * daemon pid.
+- */
+-int dm_stats_start_filemapd(int fd, uint64_t group_id, const char *path,
+-			    dm_filemapd_mode_t mode, unsigned foreground,
+-			    unsigned verbose);
+-
+-/*
+  * Call this to actually run the ioctl.
+  */
+ int dm_task_run(struct dm_task *dmt);
+@@ -2840,320 +1840,6 @@ int dm_report_group_pop(struct dm_report_group *group);
+ int dm_report_group_output_and_pop_all(struct dm_report_group *group);
+ int dm_report_group_destroy(struct dm_report_group *group);
  
- include $(top_builddir)/make.tmpl
-diff --git a/daemons/dmfilemapd/.gitignore b/daemons/dmfilemapd/.gitignore
+-/*
+- * Stats counter access methods
+- *
+- * Each method returns the corresponding stats counter value from the
+- * supplied dm_stats handle for the specified region_id and area_id.
+- * If either region_id or area_id uses one of the special values
+- * DM_STATS_REGION_CURRENT or DM_STATS_AREA_CURRENT then the region
+- * or area is selected according to the current state of the dm_stats
+- * handle's embedded cursor.
+- *
+- * Two methods are provided to access counter values: a named function
+- * for each available counter field and a single function that accepts
+- * an enum value specifying the required field. New code is encouraged
+- * to use the enum based interface as calls to the named functions are
+- * implemented using the enum method internally.
+- *
+- * See the kernel documentation for complete descriptions of each
+- * counter field:
+- *
+- * Documentation/device-mapper/statistics.txt
+- * Documentation/iostats.txt
+- *
+- * reads: the number of reads completed
+- * reads_merged: the number of reads merged
+- * read_sectors: the number of sectors read
+- * read_nsecs: the number of nanoseconds spent reading
+- * writes: the number of writes completed
+- * writes_merged: the number of writes merged
+- * write_sectors: the number of sectors written
+- * write_nsecs: the number of nanoseconds spent writing
+- * io_in_progress: the number of I/Os currently in progress
+- * io_nsecs: the number of nanoseconds spent doing I/Os
+- * weighted_io_nsecs: the weighted number of nanoseconds spent doing I/Os
+- * total_read_nsecs: the total time spent reading in nanoseconds
+- * total_write_nsecs: the total time spent writing in nanoseconds
+- */
+-
+-#define DM_STATS_REGION_CURRENT UINT64_MAX
+-#define DM_STATS_AREA_CURRENT UINT64_MAX
+-
+-typedef enum {
+-	DM_STATS_READS_COUNT,
+-	DM_STATS_READS_MERGED_COUNT,
+-	DM_STATS_READ_SECTORS_COUNT,
+-	DM_STATS_READ_NSECS,
+-	DM_STATS_WRITES_COUNT,
+-	DM_STATS_WRITES_MERGED_COUNT,
+-	DM_STATS_WRITE_SECTORS_COUNT,
+-	DM_STATS_WRITE_NSECS,
+-	DM_STATS_IO_IN_PROGRESS_COUNT,
+-	DM_STATS_IO_NSECS,
+-	DM_STATS_WEIGHTED_IO_NSECS,
+-	DM_STATS_TOTAL_READ_NSECS,
+-	DM_STATS_TOTAL_WRITE_NSECS,
+-	DM_STATS_NR_COUNTERS
+-} dm_stats_counter_t;
+-
+-uint64_t dm_stats_get_counter(const struct dm_stats *dms,
+-			      dm_stats_counter_t counter,
+-			      uint64_t region_id, uint64_t area_id);
+-
+-uint64_t dm_stats_get_reads(const struct dm_stats *dms,
+-			    uint64_t region_id, uint64_t area_id);
+-
+-uint64_t dm_stats_get_reads_merged(const struct dm_stats *dms,
+-				   uint64_t region_id, uint64_t area_id);
+-
+-uint64_t dm_stats_get_read_sectors(const struct dm_stats *dms,
+-				   uint64_t region_id, uint64_t area_id);
+-
+-uint64_t dm_stats_get_read_nsecs(const struct dm_stats *dms,
+-				 uint64_t region_id, uint64_t area_id);
+-
+-uint64_t dm_stats_get_writes(const struct dm_stats *dms,
+-			     uint64_t region_id, uint64_t area_id);
+-
+-uint64_t dm_stats_get_writes_merged(const struct dm_stats *dms,
+-				    uint64_t region_id, uint64_t area_id);
+-
+-uint64_t dm_stats_get_write_sectors(const struct dm_stats *dms,
+-				    uint64_t region_id, uint64_t area_id);
+-
+-uint64_t dm_stats_get_write_nsecs(const struct dm_stats *dms,
+-				  uint64_t region_id, uint64_t area_id);
+-
+-uint64_t dm_stats_get_io_in_progress(const struct dm_stats *dms,
+-				     uint64_t region_id, uint64_t area_id);
+-
+-uint64_t dm_stats_get_io_nsecs(const struct dm_stats *dms,
+-			       uint64_t region_id, uint64_t area_id);
+-
+-uint64_t dm_stats_get_weighted_io_nsecs(const struct dm_stats *dms,
+-					uint64_t region_id, uint64_t area_id);
+-
+-uint64_t dm_stats_get_total_read_nsecs(const struct dm_stats *dms,
+-				       uint64_t region_id, uint64_t area_id);
+-
+-uint64_t dm_stats_get_total_write_nsecs(const struct dm_stats *dms,
+-					uint64_t region_id, uint64_t area_id);
+-
+-/*
+- * Derived statistics access methods
+- *
+- * Each method returns the corresponding value calculated from the
+- * counters stored in the supplied dm_stats handle for the specified
+- * region_id and area_id. If either region_id or area_id uses one of the
+- * special values DM_STATS_REGION_CURRENT or DM_STATS_AREA_CURRENT then
+- * the region or area is selected according to the current state of the
+- * dm_stats handle's embedded cursor.
+- *
+- * The set of metrics is based on the fields provided by the Linux
+- * iostats program.
+- *
+- * rd_merges_per_sec: the number of reads merged per second
+- * wr_merges_per_sec: the number of writes merged per second
+- * reads_per_sec: the number of reads completed per second
+- * writes_per_sec: the number of writes completed per second
+- * read_sectors_per_sec: the number of sectors read per second
+- * write_sectors_per_sec: the number of sectors written per second
+- * average_request_size: the average size of requests submitted
+- * service_time: the average service time (in ns) for requests issued
+- * average_queue_size: the average queue length
+- * average_wait_time: the average time for requests to be served (in ns)
+- * average_rd_wait_time: the average read wait time
+- * average_wr_wait_time: the average write wait time
+- */
+-
+-typedef enum {
+-	DM_STATS_RD_MERGES_PER_SEC,
+-	DM_STATS_WR_MERGES_PER_SEC,
+-	DM_STATS_READS_PER_SEC,
+-	DM_STATS_WRITES_PER_SEC,
+-	DM_STATS_READ_SECTORS_PER_SEC,
+-	DM_STATS_WRITE_SECTORS_PER_SEC,
+-	DM_STATS_AVERAGE_REQUEST_SIZE,
+-	DM_STATS_AVERAGE_QUEUE_SIZE,
+-	DM_STATS_AVERAGE_WAIT_TIME,
+-	DM_STATS_AVERAGE_RD_WAIT_TIME,
+-	DM_STATS_AVERAGE_WR_WAIT_TIME,
+-	DM_STATS_SERVICE_TIME,
+-	DM_STATS_THROUGHPUT,
+-	DM_STATS_UTILIZATION,
+-	DM_STATS_NR_METRICS
+-} dm_stats_metric_t;
+-
+-int dm_stats_get_metric(const struct dm_stats *dms, int metric,
+-			uint64_t region_id, uint64_t area_id, double *value);
+-
+-int dm_stats_get_rd_merges_per_sec(const struct dm_stats *dms, double *rrqm,
+-				   uint64_t region_id, uint64_t area_id);
+-
+-int dm_stats_get_wr_merges_per_sec(const struct dm_stats *dms, double *rrqm,
+-				   uint64_t region_id, uint64_t area_id);
+-
+-int dm_stats_get_reads_per_sec(const struct dm_stats *dms, double *rd_s,
+-			       uint64_t region_id, uint64_t area_id);
+-
+-int dm_stats_get_writes_per_sec(const struct dm_stats *dms, double *wr_s,
+-				uint64_t region_id, uint64_t area_id);
+-
+-int dm_stats_get_read_sectors_per_sec(const struct dm_stats *dms,
+-				      double *rsec_s, uint64_t region_id,
+-				      uint64_t area_id);
+-
+-int dm_stats_get_write_sectors_per_sec(const struct dm_stats *dms,
+-				       double *wr_s, uint64_t region_id,
+-				       uint64_t area_id);
+-
+-int dm_stats_get_average_request_size(const struct dm_stats *dms,
+-				      double *arqsz, uint64_t region_id,
+-				      uint64_t area_id);
+-
+-int dm_stats_get_service_time(const struct dm_stats *dms, double *svctm,
+-			      uint64_t region_id, uint64_t area_id);
+-
+-int dm_stats_get_average_queue_size(const struct dm_stats *dms, double *qusz,
+-				    uint64_t region_id, uint64_t area_id);
+-
+-int dm_stats_get_average_wait_time(const struct dm_stats *dms, double *await,
+-				   uint64_t region_id, uint64_t area_id);
+-
+-int dm_stats_get_average_rd_wait_time(const struct dm_stats *dms,
+-				      double *await, uint64_t region_id,
+-				      uint64_t area_id);
+-
+-int dm_stats_get_average_wr_wait_time(const struct dm_stats *dms,
+-				      double *await, uint64_t region_id,
+-				      uint64_t area_id);
+-
+-int dm_stats_get_throughput(const struct dm_stats *dms, double *tput,
+-			    uint64_t region_id, uint64_t area_id);
+-
+-int dm_stats_get_utilization(const struct dm_stats *dms, dm_percent_t *util,
+-			     uint64_t region_id, uint64_t area_id);
+-
+-/*
+- * Statistics histogram access methods.
+- *
+- * Methods to access latency histograms for regions that have them
+- * enabled. Each histogram contains a configurable number of bins
+- * spanning a user defined latency interval.
+- *
+- * The bin count, upper and lower bin bounds, and bin values are
+- * made available via the following area methods.
+- *
+- * Methods to obtain a simple string representation of the histogram
+- * and its bounds are also provided.
+- */
+-
+-/*
+- * Retrieve a pointer to the histogram associated with the specified
+- * area. If the area does not have a histogram configured this function
+- * returns NULL.
+- *
+- * The pointer does not need to be freed explicitly by the caller: it
+- * will become invalid following a subsequent dm_stats_list(),
+- * dm_stats_populate() or dm_stats_destroy() of the corresponding
+- * dm_stats handle.
+- *
+- * If region_id or area_id is one of the special values
+- * DM_STATS_REGION_CURRENT or DM_STATS_AREA_CURRENT the current cursor
+- * value is used to select the region or area.
+- */
+-struct dm_histogram *dm_stats_get_histogram(const struct dm_stats *dms,
+-					    uint64_t region_id,
+-					    uint64_t area_id);
+-
+-/*
+- * Return the number of bins in the specified histogram handle.
+- */
+-int dm_histogram_get_nr_bins(const struct dm_histogram *dmh);
+-
+-/*
+- * Get the lower bound of the specified bin of the histogram for the
+- * area specified by region_id and area_id. The value is returned in
+- * nanoseconds.
+- */
+-uint64_t dm_histogram_get_bin_lower(const struct dm_histogram *dmh, int bin);
+-
+-/*
+- * Get the upper bound of the specified bin of the histogram for the
+- * area specified by region_id and area_id. The value is returned in
+- * nanoseconds.
+- */
+-uint64_t dm_histogram_get_bin_upper(const struct dm_histogram *dmh, int bin);
+-
+-/*
+- * Get the width of the specified bin of the histogram for the area
+- * specified by region_id and area_id. The width is equal to the bin
+- * upper bound minus the lower bound and yields the range of latency
+- * values covered by this bin. The value is returned in nanoseconds.
+- */
+-uint64_t dm_histogram_get_bin_width(const struct dm_histogram *dmh, int bin);
+-
+-/*
+- * Get the value of the specified bin of the histogram for the area
+- * specified by region_id and area_id.
+- */
+-uint64_t dm_histogram_get_bin_count(const struct dm_histogram *dmh, int bin);
+-
+-/*
+- * Get the percentage (relative frequency) of the specified bin of the
+- * histogram for the area specified by region_id and area_id.
+- */
+-dm_percent_t dm_histogram_get_bin_percent(const struct dm_histogram *dmh,
+-					  int bin);
+-
+-/*
+- * Return the total observations (sum of bin counts) for the histogram
+- * of the area specified by region_id and area_id.
+- */
+-uint64_t dm_histogram_get_sum(const struct dm_histogram *dmh);
+-
+-/*
+- * Histogram formatting flags.
+- */
+-#define DM_HISTOGRAM_SUFFIX  0x1
+-#define DM_HISTOGRAM_VALUES  0x2
+-#define DM_HISTOGRAM_PERCENT 0X4
+-#define DM_HISTOGRAM_BOUNDS_LOWER 0x10
+-#define DM_HISTOGRAM_BOUNDS_UPPER 0x20
+-#define DM_HISTOGRAM_BOUNDS_RANGE 0x30
+-
+-/*
+- * Return a string representation of the supplied histogram's values and
+- * bin boundaries.
+- *
+- * The bin argument selects the bin to format. If this argument is less
+- * than zero all bins will be included in the resulting string.
+- *
+- * width specifies a minimum width for the field in characters; if it is
+- * zero the width will be determined automatically based on the options
+- * selected for formatting. A value less than zero disables field width
+- * control: bin boundaries and values will be output with a minimum
+- * amount of whitespace.
+- *
+- * flags is a collection of flag arguments that control the string format:
+- *
+- * DM_HISTOGRAM_VALUES  - Include bin values in the string.
+- * DM_HISTOGRAM_SUFFIX  - Include time unit suffixes when printing bounds.
+- * DM_HISTOGRAM_PERCENT - Format bin values as a percentage.
+- *
+- * DM_HISTOGRAM_BOUNDS_LOWER - Include the lower bound of each bin.
+- * DM_HISTOGRAM_BOUNDS_UPPER - Include the upper bound of each bin.
+- * DM_HISTOGRAM_BOUNDS_RANGE - Show the span of each bin as "lo-up".
+- *
+- * The returned pointer does not need to be freed explicitly by the
+- * caller: it will become invalid following a subsequent
+- * dm_stats_list(), dm_stats_populate() or dm_stats_destroy() of the
+- * corresponding dm_stats handle.
+- */
+-const char *dm_histogram_to_string(const struct dm_histogram *dmh, int bin,
+-				   int width, int flags);
+-
+ /*************************
+  * config file parse/print
+  *************************/
+diff --git a/device_mapper/libdm-stats.c b/device_mapper/libdm-stats.c
 deleted file mode 100644
-index 6dcde30..0000000
---- a/daemons/dmfilemapd/.gitignore
+index 219d393..0000000
+--- a/device_mapper/libdm-stats.c
 +++ /dev/null
-@@ -1 +0,0 @@
--dmfilemapd
-diff --git a/daemons/dmfilemapd/Makefile.in b/daemons/dmfilemapd/Makefile.in
-deleted file mode 100644
-index 1afd6b8..0000000
---- a/daemons/dmfilemapd/Makefile.in
-+++ /dev/null
-@@ -1,65 +0,0 @@
--#
--# Copyright (C) 2016 Red Hat, Inc. All rights reserved.
--#
--# This file is part of the device-mapper userspace tools.
--#
--# This copyrighted material is made available to anyone wishing to use,
--# modify, copy, or redistribute it subject to the terms and conditions
--# of the GNU Lesser General Public License v.2.1.
--#
--# You should have received a copy of the GNU Lesser General Public License
--# along with this program; if not, write to the Free Software Foundation,
--# Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
--
--srcdir = @srcdir@
--top_srcdir = @top_srcdir@
--top_builddir = @top_builddir@
--
--SOURCES = dmfilemapd.c
--
--TARGETS = dmfilemapd
--
--.PHONY: install_dmfilemapd install_dmfilemapd_static
--
--INSTALL_DMFILEMAPD_TARGETS = install_dmfilemapd_dynamic
--
--CLEAN_TARGETS = dmfilemapd.static
--
--CFLOW_LIST = $(SOURCES)
--CFLOW_LIST_TARGET = $(LIB_NAME).cflow
--CFLOW_TARGET = dmfilemapd
--
--include $(top_builddir)/make.tmpl
--
--all: device-mapper
--device-mapper: $(TARGETS)
--
--CFLAGS_dmfilemapd.o += $(EXTRA_EXEC_CFLAGS)
--
--dmfilemapd: $(LIB_SHARED) dmfilemapd.o
--	$(CC) $(CFLAGS) $(LDFLAGS) $(EXTRA_EXEC_LDFLAGS) $(ELDFLAGS) \
--		-o $@ dmfilemapd.o $(DL_LIBS) $(LIBS)
--
--dmfilemapd.static: $(LIB_STATIC) dmfilemapd.o
--	$(CC) $(CFLAGS) $(LDFLAGS) $(ELDFLAGS) -static -L$(interfacebuilddir) \
--		-o $@ dmfilemapd.o $(DL_LIBS) $(LIBS) $(STATIC_LIBS)
--
--ifneq ("$(CFLOW_CMD)", "")
--CFLOW_SOURCES = $(addprefix $(srcdir)/, $(SOURCES))
---include $(top_builddir)/libdm/libdevmapper.cflow
---include $(top_builddir)/lib/liblvm-internal.cflow
---include $(top_builddir)/lib/liblvm2cmd.cflow
---include $(top_builddir)/daemons/dmfilemapd/$(LIB_NAME).cflow
--endif
--
--install_dmfilemapd_dynamic: dmfilemapd
--	$(INSTALL_PROGRAM) -D $< $(sbindir)/$(<F)
--
--install_dmfilemapd_static: dmfilemapd.static
--	$(INSTALL_PROGRAM) -D $< $(staticdir)/$(<F)
--
--install_dmfilemapd: $(INSTALL_DMFILEMAPD_TARGETS)
--
--install: install_dmfilemapd
--
--install_device-mapper: install_dmfilemapd
-diff --git a/daemons/dmfilemapd/dmfilemapd.c b/daemons/dmfilemapd/dmfilemapd.c
-deleted file mode 100644
-index 726ad6e..0000000
---- a/daemons/dmfilemapd/dmfilemapd.c
-+++ /dev/null
-@@ -1,836 +0,0 @@
+@@ -1,5096 +0,0 @@
 -/*
 - * Copyright (C) 2016 Red Hat, Inc. All rights reserved.
 - *
-- * This file is part of the device-mapper userspace tools.
+- * _stats_get_extents_for_file() based in part on filefrag_fiemap() from
+- * e2fsprogs/misc/filefrag.c. Copyright 2003 by Theodore Ts'o.
 - *
-- * It includes tree drawing code based on pstree: http://psmisc.sourceforge.net/
+- * This file is part of the device-mapper userspace tools.
 - *
 - * This copyrighted material is made available to anyone wishing to use,
 - * modify, copy, or redistribute it subject to the terms and conditions
-- * of the GNU General Public License v.2.
+- * of the GNU Lesser General Public License v.2.1.
 - *
-- * You should have received a copy of the GNU General Public License
+- * You should have received a copy of the GNU Lesser General Public License
 - * along with this program; if not, write to the Free Software Foundation,
 - * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 - */
 -
--#include "tools/tool.h"
+-#include "base/memory/zalloc.h"
+-#include "misc/dmlib.h"
+-#include "misc/kdev_t.h"
 -
--#include "device_mapper/misc/dm-logging.h"
+-#include "math.h" /* log10() */
 -
--#include "lib/config/defaults.h"
--
--#include <sys/types.h>
--#include <sys/stat.h>
+-#include <sys/sysmacros.h>
+-#include <sys/ioctl.h>
+-#include <sys/vfs.h> /* fstatfs */
 -#include <unistd.h>
--#include <fcntl.h>
--#include <sys/inotify.h>
--#include <dirent.h>
--#include <ctype.h>
 -
 -#ifdef __linux__
--#  include "kdev_t.h"
--#else
--#  define MAJOR(x) major((x))
--#  define MINOR(x) minor((x))
--#  define MKDEV(x,y) makedev((x),(y))
+-  #include <linux/fs.h> /* FS_IOC_FIEMAP */
 -#endif
 -
--/* limit to two updates/sec */
--#define FILEMAPD_WAIT_USECS 500000
+-#ifdef HAVE_LINUX_FIEMAP_H
+-  #include <linux/fiemap.h> /* fiemap */
+-#endif
 -
--/* how long to wait for unlinked files */
--#define FILEMAPD_NOFILE_WAIT_USECS 100000
--#define FILEMAPD_NOFILE_WAIT_TRIES 10
+-#ifdef HAVE_LINUX_MAGIC_H
+-  #include <linux/magic.h> /* BTRFS_SUPER_MAGIC */
+-#endif
 -
--struct filemap_monitor {
--	dm_filemapd_mode_t mode;
--	const char *program_id;
--	uint64_t group_id;
--	char *path;
--	int fd;
+-#define DM_STATS_REGION_NOT_PRESENT UINT64_MAX
+-#define DM_STATS_GROUP_NOT_PRESENT DM_STATS_GROUP_NONE
 -
--	int inotify_fd;
--	int inotify_watch_fd;
+-#define NSEC_PER_USEC   1000L
+-#define NSEC_PER_MSEC   1000000L
+-#define NSEC_PER_SEC    1000000000L
 -
--	/* monitoring heuristics */
--	int64_t blocks; /* allocated blocks, from stat.st_blocks */
--	uint64_t nr_regions;
--	int deleted;
+-#define PRECISE_ARG "precise_timestamps"
+-#define HISTOGRAM_ARG "histogram:"
+-
+-#define STATS_ROW_BUF_LEN 4096
+-#define STATS_MSG_BUF_LEN 1024
+-#define STATS_FIE_BUF_LEN 2048
+-
+-#define SECTOR_SHIFT 9L
+-
+-/* Histogram bin */
+-struct dm_histogram_bin {
+-	uint64_t upper; /* Upper bound on this bin. */
+-	uint64_t count; /* Count value for this bin. */
 -};
 -
--static int _foreground;
--static int _verbose;
--
--const char *const _usage = "dmfilemapd <fd> <group_id> <abs_path> <mode> "
--			   "[<foreground>[<log_level>]]";
+-struct dm_histogram {
+-	/* The stats handle this histogram belongs to. */
+-	const struct dm_stats *dms;
+-	/* The region this histogram belongs to. */
+-	const struct dm_stats_region *region;
+-	uint64_t sum; /* Sum of histogram bin counts. */
+-	int nr_bins; /* Number of histogram bins assigned. */
+-	struct dm_histogram_bin bins[0];
+-};
 -
 -/*
-- * Daemon logging. By default, all messages are thrown away: messages
-- * are only written to the terminal if the daemon is run in the foreground.
+- * See Documentation/device-mapper/statistics.txt for full descriptions
+- * of the device-mapper statistics counter fields.
 - */
--__attribute__((format(printf, 5, 0)))
--static void _dmfilemapd_log_line(int level,
--				 const char *file __attribute__((unused)),
--				 int line __attribute__((unused)),
--				 int dm_errno_or_class,
--				 const char *f, va_list ap)
+-struct dm_stats_counters {
+-	uint64_t reads;		    /* Num reads completed */
+-	uint64_t reads_merged;	    /* Num reads merged */
+-	uint64_t read_sectors;	    /* Num sectors read */
+-	uint64_t read_nsecs;	    /* Num milliseconds spent reading */
+-	uint64_t writes;	    /* Num writes completed */
+-	uint64_t writes_merged;	    /* Num writes merged */
+-	uint64_t write_sectors;	    /* Num sectors written */
+-	uint64_t write_nsecs;	    /* Num milliseconds spent writing */
+-	uint64_t io_in_progress;    /* Num I/Os currently in progress */
+-	uint64_t io_nsecs;	    /* Num milliseconds spent doing I/Os */
+-	uint64_t weighted_io_nsecs; /* Weighted num milliseconds doing I/Os */
+-	uint64_t total_read_nsecs;  /* Total time spent reading in milliseconds */
+-	uint64_t total_write_nsecs; /* Total time spent writing in milliseconds */
+-	struct dm_histogram *histogram; /* Histogram. */
+-};
+-
+-struct dm_stats_region {
+-	uint64_t region_id; /* as returned by @stats_list */
+-	uint64_t group_id;
+-	uint64_t start;
+-	uint64_t len;
+-	uint64_t step;
+-	char *program_id;
+-	char *aux_data;
+-	uint64_t timescale; /* precise_timestamps is per-region */
+-	struct dm_histogram *bounds; /* histogram configuration */
+-	struct dm_histogram *histogram; /* aggregate cache */
+-	struct dm_stats_counters *counters;
+-};
+-
+-struct dm_stats_group {
+-	uint64_t group_id;
+-	const char *alias;
+-	dm_bitset_t regions;
+-	struct dm_histogram *histogram;
+-};
+-
+-struct dm_stats {
+-	/* device binding */
+-	int bind_major;  /* device major that this dm_stats object is bound to */
+-	int bind_minor;  /* device minor that this dm_stats object is bound to */
+-	char *bind_name; /* device-mapper device name */
+-	char *bind_uuid; /* device-mapper UUID */
+-	char *program_id; /* default program_id for this handle */
+-	const char *name; /* cached device_name used for reporting */
+-	struct dm_pool *mem; /* memory pool for region and counter tables */
+-	struct dm_pool *hist_mem; /* separate pool for histogram tables */
+-	struct dm_pool *group_mem; /* separate pool for group tables */
+-	uint64_t nr_regions; /* total number of present regions */
+-	uint64_t max_region; /* size of the regions table */
+-	uint64_t interval_ns;  /* sampling interval in nanoseconds */
+-	uint64_t timescale; /* default sample value multiplier */
+-	int precise; /* use precise_timestamps when creating regions */
+-	struct dm_stats_region *regions;
+-	struct dm_stats_group *groups;
+-	/* statistics cursor */
+-	uint64_t walk_flags; /* walk control flags */
+-	uint64_t cur_flags;
+-	uint64_t cur_group;
+-	uint64_t cur_region;
+-	uint64_t cur_area;
+-};
+-
+-#define PROC_SELF_COMM "/proc/self/comm"
+-static char *_program_id_from_proc(void)
 -{
--	static int _abort_on_internal_errors = -1;
--	FILE *out = log_stderr(level) ? stderr : stdout;
+-	FILE *comm = NULL;
+-	char buf[STATS_ROW_BUF_LEN];
 -
--	level = log_level(level);
+-	if (!(comm = fopen(PROC_SELF_COMM, "r")))
+-		return_NULL;
 -
--	if (level <= _LOG_WARN || _verbose) {
--		if (level < _LOG_WARN)
--			out = stderr;
--		vfprintf(out, f, ap);
--		fputc('\n', out);
+-	if (!fgets(buf, sizeof(buf), comm)) {
+-		log_error("Could not read from %s", PROC_SELF_COMM);
+-		if (fclose(comm))
+-			stack;
+-		return NULL;
 -	}
 -
--	if (_abort_on_internal_errors < 0)
--		/* Set when env DM_ABORT_ON_INTERNAL_ERRORS is not "0" */
--		_abort_on_internal_errors =
--			strcmp(getenv("DM_ABORT_ON_INTERNAL_ERRORS") ? : "0", "0");
+-	if (fclose(comm))
+-		stack;
 -
--	if (_abort_on_internal_errors &&
--	    !strncmp(f, INTERNAL_ERROR, sizeof(INTERNAL_ERROR) - 1))
--		abort();
+-	return strdup(buf);
 -}
 -
--__attribute__((format(printf, 5, 6)))
--static void _dmfilemapd_log_with_errno(int level,
--				       const char *file, int line,
--				       int dm_errno_or_class,
--				       const char *f, ...)
+-static uint64_t _nr_areas(uint64_t len, uint64_t step)
 -{
--	va_list ap;
--
--	va_start(ap, f);
--	_dmfilemapd_log_line(level, file, line, dm_errno_or_class, f, ap);
--	va_end(ap);
--}
--
--/*
-- * Only used for reporting errors before daemonise().
-- */
--__attribute__((format(printf, 1, 2)))
--static void _early_log(const char *fmt, ...)
--{
--	va_list ap;
--
--	va_start(ap, fmt);
--	vfprintf(stderr, fmt, ap);
--	fputc('\n', stderr);
--	va_end(ap);
--}
--
--static void _setup_logging(void)
--{
--	dm_log_init_verbose(_verbose - 1);
--	dm_log_with_errno_init(_dmfilemapd_log_with_errno);
--}
--
--#define PROC_FD_DELETED_STR "(deleted)"
--/*
-- * Scan the /proc/<pid>/fd directory for pid and check for an fd
-- * symlink whose contents match path.
-- */
--static int _is_open_in_pid(pid_t pid, const char *path)
--{
--	char deleted_path[PATH_MAX + sizeof(PROC_FD_DELETED_STR)];
--	struct dirent *pid_dp = NULL;
--	char path_buf[PATH_MAX];
--	char link_buf[PATH_MAX];
--	DIR *pid_d = NULL;
--	ssize_t len;
--
--	if (pid == getpid())
--		return 0;
--
--	if (dm_snprintf(path_buf, sizeof(path_buf),
--			DEFAULT_PROC_DIR "%d/fd", pid) < 0) {
--		log_error("Could not format pid path.");
--		return 0;
--	}
--
+-	/* Default is one area. */
+-	if (!len || !step)
+-		return 1;
 -	/*
--	 * Test for the kernel 'file (deleted)' form when scanning.
+-	 * drivers/md/dm-stats.c::message_stats_create()
+-	 * A region may be sub-divided into areas with their own counters.
+-	 * Any partial area at the end of the region is treated as an
+-	 * additional complete area.
 -	 */
--	if (dm_snprintf(deleted_path, sizeof(deleted_path), "%s %s",
--			path, PROC_FD_DELETED_STR) < 0) {
--		log_error("Could not format check path.");
--		return 0;
+-	return (len + step - 1) / step;
+-}
+-
+-static uint64_t _nr_areas_region(struct dm_stats_region *region)
+-{
+-	return _nr_areas(region->len, region->step);
+-}
+-
+-struct dm_stats *dm_stats_create(const char *program_id)
+-{
+-	size_t hist_hint = sizeof(struct dm_histogram_bin);
+-	size_t group_hint = sizeof(struct dm_stats_group);
+-	struct dm_stats *dms = NULL;
+-
+-	if (!(dms = zalloc(sizeof(*dms))))
+-		return_NULL;
+-
+-	/* FIXME: better hint. */
+-	if (!(dms->mem = dm_pool_create("stats_pool", 4096))) {
+-		free(dms);
+-		return_NULL;
 -	}
 -
--	pid_d = opendir(path_buf);
--	if (!pid_d) {
--		log_error("Could not open proc path: %s.", path_buf);
--		return 0;
+-	if (!(dms->hist_mem = dm_pool_create("histogram_pool", hist_hint)))
+-		goto_bad;
+-
+-	if (!(dms->group_mem = dm_pool_create("group_pool", group_hint)))
+-		goto_bad;
+-
+-	if (!program_id || !strlen(program_id))
+-		dms->program_id = _program_id_from_proc();
+-	else
+-		dms->program_id = strdup(program_id);
+-
+-	if (!dms->program_id) {
+-		log_error("Could not allocate memory for program_id");
+-		goto bad;
 -	}
 -
--	while ((pid_dp = readdir(pid_d)) != NULL) {
--		if (pid_dp->d_name[0] == '.')
--			continue;
--		if ((len = readlinkat(dirfd(pid_d), pid_dp->d_name, link_buf,
--				      sizeof(link_buf))) < 0) {
--			log_error("readlink failed for " DEFAULT_PROC_DIR
--				  "/%d/fd/.", pid);
--			goto bad;
--		}
--		link_buf[len] = '\0';
--		if (!strcmp(deleted_path, link_buf)) {
--			if (closedir(pid_d))
--				log_sys_error("closedir", path_buf);
--			return 1;
--		}
--	}
+-	dms->bind_major = -1;
+-	dms->bind_minor = -1;
+-	dms->bind_name = NULL;
+-	dms->bind_uuid = NULL;
+-
+-	dms->name = NULL;
+-
+-	/* by default all regions use msec precision */
+-	dms->timescale = NSEC_PER_MSEC;
+-	dms->precise = 0;
+-
+-	dms->nr_regions = DM_STATS_REGION_NOT_PRESENT;
+-	dms->max_region = DM_STATS_REGION_NOT_PRESENT;
+-	dms->regions = NULL;
+-
+-	/* maintain compatibility with earlier walk version */
+-	dms->walk_flags = dms->cur_flags = DM_STATS_WALK_DEFAULT;
+-
+-	return dms;
 -
 -bad:
--	if (closedir(pid_d))
--		log_sys_error("closedir", path_buf);
+-	dm_pool_destroy(dms->mem);
+-	if (dms->hist_mem)
+-		dm_pool_destroy(dms->hist_mem);
+-	if (dms->group_mem)
+-		dm_pool_destroy(dms->group_mem);
+-	free(dms);
+-	return NULL;
+-}
 -
+-/*
+- * Test whether the stats region pointed to by region is present.
+- */
+-static int _stats_region_present(const struct dm_stats_region *region)
+-{
+-	return !(region->region_id == DM_STATS_REGION_NOT_PRESENT);
+-}
+-
+-/*
+- * Test whether the stats group pointed to by group is present.
+- */
+-static int _stats_group_present(const struct dm_stats_group *group)
+-{
+-	return !(group->group_id == DM_STATS_GROUP_NOT_PRESENT);
+-}
+-
+-/*
+- * Test whether a stats group id is present.
+- */
+-static int _stats_group_id_present(const struct dm_stats *dms, uint64_t id)
+-{
+-	struct dm_stats_group *group = NULL;
+-
+-	if (id == DM_STATS_GROUP_NOT_PRESENT)
+-		return 0;
+-
+-	if (!dms)
+-		return_0;
+-
+-	if (!dms->regions)
+-		return 0;
+-
+-	if (id > dms->max_region)
+-		return 0;
+-
+-	group = &dms->groups[id];
+-
+-	return _stats_group_present(group);
+-}
+-
+-/*
+- * Test whether the given region_id is a member of any group.
+- */
+-static uint64_t _stats_region_is_grouped(const struct dm_stats* dms,
+-					 uint64_t region_id)
+-{
+-	uint64_t group_id;
+-
+-	if (region_id == DM_STATS_GROUP_NOT_PRESENT)
+-		return 0;
+-
+-	if (!_stats_region_present(&dms->regions[region_id]))
+-		return 0;
+-
+-	group_id = dms->regions[region_id].group_id;
+-
+-	return group_id != DM_STATS_GROUP_NOT_PRESENT;
+-}
+-
+-static void _stats_histograms_destroy(struct dm_pool *mem,
+-				      struct dm_stats_region *region)
+-{
+-	/* Unpopulated handle. */
+-	if (!region->counters)
+-		return;
+-
+-	/*
+-	 * Free everything in the pool back to the first histogram.
+-	 */
+-	if (region->counters[0].histogram)
+-		dm_pool_free(mem, region->counters[0].histogram);
+-}
+-
+-static void _stats_region_destroy(struct dm_stats_region *region)
+-{
+-	if (!_stats_region_present(region))
+-		return;
+-
+-	region->start = region->len = region->step = 0;
+-	region->timescale = 0;
+-
+-	/*
+-	 * Don't free counters and histogram bounds here: they are
+-	 * dropped from the pool along with the corresponding
+-	 * regions table.
+-	 *
+-	 * The following objects are all allocated with malloc.
+-	 */
+-
+-	region->counters = NULL;
+-	region->bounds = NULL;
+-
+-	free(region->program_id);
+-	region->program_id = NULL;
+-	free(region->aux_data);
+-	region->aux_data = NULL;
+-	region->region_id = DM_STATS_REGION_NOT_PRESENT;
+-}
+-
+-static void _stats_regions_destroy(struct dm_stats *dms)
+-{
+-	struct dm_pool *mem = dms->mem;
+-	uint64_t i;
+-
+-	if (!dms->regions)
+-		return;
+-
+-	/* walk backwards to obey pool order */
+-	for (i = dms->max_region; (i != DM_STATS_REGION_NOT_PRESENT); i--) {
+-		_stats_histograms_destroy(dms->hist_mem, &dms->regions[i]);
+-		_stats_region_destroy(&dms->regions[i]);
+-	}
+-
+-	dm_pool_free(mem, dms->regions);
+-	dms->regions = NULL;
+-}
+-
+-static void _stats_group_destroy(struct dm_stats_group *group)
+-{
+-	if (!_stats_group_present(group))
+-		return;
+-
+-	group->histogram = NULL;
+-
+-	if (group->alias) {
+-		free((char *) group->alias);
+-		group->alias = NULL;
+-	}
+-	if (group->regions) {
+-		dm_bitset_destroy(group->regions);
+-		group->regions = NULL;
+-	}
+-	group->group_id = DM_STATS_GROUP_NOT_PRESENT;
+-}
+-
+-static void _stats_groups_destroy(struct dm_stats *dms)
+-{
+-	uint64_t i;
+-
+-	if (!dms->groups)
+-		return;
+-
+-	for (i = dms->max_region; (i != DM_STATS_REGION_NOT_PRESENT); i--)
+-		_stats_group_destroy(&dms->groups[i]);
+-	dm_pool_free(dms->group_mem, dms->groups);
+-	dms->groups = NULL;
+-}
+-
+-static int _set_stats_device(struct dm_stats *dms, struct dm_task *dmt)
+-{
+-	if (dms->bind_name)
+-		return dm_task_set_name(dmt, dms->bind_name);
+-	if (dms->bind_uuid)
+-		return dm_task_set_uuid(dmt, dms->bind_uuid);
+-	if (dms->bind_major > 0)
+-		return dm_task_set_major(dmt, dms->bind_major)
+-			&& dm_task_set_minor(dmt, dms->bind_minor);
+-	return_0;
+-}
+-
+-static int _stats_bound(const struct dm_stats *dms)
+-{
+-	if (dms->bind_major > 0 || dms->bind_name || dms->bind_uuid)
+-		return 1;
+-	/* %p format specifier expects a void pointer. */
+-	log_error("Stats handle at %p is not bound.", dms);
+-	return 0;
+-}
+-
+-static void _stats_clear_binding(struct dm_stats *dms)
+-{
+-	if (dms->bind_name)
+-		dm_pool_free(dms->mem, dms->bind_name);
+-	if (dms->bind_uuid)
+-		dm_pool_free(dms->mem, dms->bind_uuid);
+-	free((char *) dms->name);
+-
+-	dms->bind_name = dms->bind_uuid = NULL;
+-	dms->bind_major = dms->bind_minor = -1;
+-	dms->name = NULL;
+-}
+-
+-int dm_stats_bind_devno(struct dm_stats *dms, int major, int minor)
+-{
+-	_stats_clear_binding(dms);
+-	_stats_regions_destroy(dms);
+-	_stats_groups_destroy(dms);
+-
+-	dms->bind_major = major;
+-	dms->bind_minor = minor;
+-
+-	return 1;
+-}
+-
+-int dm_stats_bind_name(struct dm_stats *dms, const char *name)
+-{
+-	_stats_clear_binding(dms);
+-	_stats_regions_destroy(dms);
+-	_stats_groups_destroy(dms);
+-
+-	if (!(dms->bind_name = dm_pool_strdup(dms->mem, name)))
+-		return_0;
+-
+-	return 1;
+-}
+-
+-int dm_stats_bind_uuid(struct dm_stats *dms, const char *uuid)
+-{
+-	_stats_clear_binding(dms);
+-	_stats_regions_destroy(dms);
+-	_stats_groups_destroy(dms);
+-
+-	if (!(dms->bind_uuid = dm_pool_strdup(dms->mem, uuid)))
+-		return_0;
+-
+-	return 1;
+-}
+-
+-int dm_stats_bind_from_fd(struct dm_stats *dms, int fd)
+-{
+-        int major, minor;
+-        struct stat buf;
+-
+-        if (fstat(fd, &buf)) {
+-                log_error("fstat failed for fd %d.", fd);
+-                return 0;
+-        }
+-
+-        major = (int) MAJOR(buf.st_dev);
+-        minor = (int) MINOR(buf.st_dev);
+-
+-        if (!dm_stats_bind_devno(dms, major, minor))
+-                return_0;
+-        return 1;
+-}
+-
+-static int _stats_check_precise_timestamps(const struct dm_stats *dms)
+-{
+-	/* Already checked? */
+-	if (dms && dms->precise)
+-		return 1;
+-
+-	return dm_message_supports_precise_timestamps();
+-}
+-
+-int dm_stats_driver_supports_precise(void)
+-{
+-	return _stats_check_precise_timestamps(NULL);
+-}
+-
+-int dm_stats_driver_supports_histogram(void)
+-{
+-	return _stats_check_precise_timestamps(NULL);
+-}
+-
+-static int _fill_hist_arg(char *hist_arg, size_t hist_len, uint64_t scale,
+-			  struct dm_histogram *bounds)
+-{
+-	int i, l, len = 0, nr_bins;
+-	char *arg = hist_arg;
+-	uint64_t value;
+-
+-	nr_bins = bounds->nr_bins;
+-
+-	for (i = 0; i < nr_bins; i++) {
+-		value = bounds->bins[i].upper / scale;
+-		if ((l = dm_snprintf(arg, hist_len - len, FMTu64"%s", value,
+-				     (i == (nr_bins - 1)) ? "" : ",")) < 0)
+-			return_0;
+-		len += l;
+-		arg += l;
+-	}
+-	return 1;
+-}
+-
+-static void *_get_hist_arg(struct dm_histogram *bounds, uint64_t scale,
+-			   size_t *len)
+-{
+-	struct dm_histogram_bin *entry, *bins;
+-	size_t hist_len = 1; /* terminating '\0' */
+-	double value;
+-
+-	entry = bins = bounds->bins;
+-
+-	entry += bounds->nr_bins - 1;
+-	while(entry >= bins) {
+-		value = (double) (entry--)->upper;
+-		/* Use lround to avoid size_t -> double cast warning. */
+-		hist_len += 1 + (size_t) lround(log10(value / scale));
+-		if (entry != bins)
+-			hist_len++; /* ',' */
+-	}
+-
+-	*len = hist_len;
+-
+-	return zalloc(hist_len);
+-}
+-
+-static char *_build_histogram_arg(struct dm_histogram *bounds, int *precise)
+-{
+-	struct dm_histogram_bin *entry, *bins;
+-	size_t hist_len;
+-	char *hist_arg;
+-	uint64_t scale;
+-
+-	entry = bins = bounds->bins;
+-
+-	/* Empty histogram is invalid. */
+-	if (!bounds->nr_bins) {
+-		log_error("Cannot format empty histogram description.");
+-		return NULL;
+-	}
+-
+-	/* Validate entries and set *precise if precision < 1ms. */
+-	entry += bounds->nr_bins - 1;
+-	while (entry >= bins) {
+-		if (entry != bins) {
+-			if (entry->upper < (entry - 1)->upper) {
+-				log_error("Histogram boundaries must be in "
+-					  "order of increasing magnitude.");
+-				return 0;
+-			}
+-		}
+-
+-		/*
+-		 * Only enable precise_timestamps automatically if any
+-		 * value in the histogram bounds uses precision < 1ms.
+-		 */
+-		if (((entry--)->upper % NSEC_PER_MSEC) && !*precise)
+-			*precise = 1;
+-	}
+-
+-	scale = (*precise) ? 1 : NSEC_PER_MSEC;
+-
+-	/* Calculate hist_len and allocate a character buffer. */
+-	if (!(hist_arg = _get_hist_arg(bounds, scale, &hist_len))) {
+-		log_error("Could not allocate memory for histogram argument.");
+-		return 0;
+-	}
+-
+-	/* Fill hist_arg with boundary strings. */
+-	if (!_fill_hist_arg(hist_arg, hist_len, scale, bounds))
+-		goto_bad;
+-
+-	return hist_arg;
+-
+-bad:
+-	log_error("Could not build histogram arguments.");
+-	free(hist_arg);
+-
+-	return NULL;
+-}
+-
+-static struct dm_task *_stats_send_message(struct dm_stats *dms, char *msg)
+-{
+-	struct dm_task *dmt;
+-
+-	if (!(dmt = dm_task_create(DM_DEVICE_TARGET_MSG)))
+-		return_0;
+-
+-	if (!_set_stats_device(dms, dmt))
+-		goto_bad;
+-
+-	if (!dm_task_set_message(dmt, msg))
+-		goto_bad;
+-
+-	if (!dm_task_run(dmt))
+-		goto_bad;
+-
+-	return dmt;
+-
+-bad:
+-	dm_task_destroy(dmt);
+-	return NULL;
+-}
+-
+-/*
+- * Cache the dm device_name for the device bound to dms.
+- */
+-static int _stats_set_name_cache(struct dm_stats *dms)
+-{
+-	struct dm_task *dmt;
+-
+-	if (dms->name)
+-		return 1;
+-
+-	if (!(dmt = dm_task_create(DM_DEVICE_INFO)))
+-		return_0;
+-
+-	if (!_set_stats_device(dms, dmt))
+-		goto_bad;
+-
+-	if (!dm_task_run(dmt))
+-		goto_bad;
+-
+-	if (!(dms->name = strdup(dm_task_get_name(dmt))))
+-		goto_bad;
+-
+-	dm_task_destroy(dmt);
+-
+-	return 1;
+-
+-bad:
+-	log_error("Could not retrieve device-mapper name for device.");
+-	dm_task_destroy(dmt);
 -	return 0;
 -}
 -
 -/*
-- * Attempt to determine whether a file is open by any process by
-- * scanning symbolic links in /proc/<pid>/fd.
-- *
-- * This is a heuristic since it cannot guarantee to detect brief
-- * access in all cases: a process that opens and then closes the
-- * file rapidly may never be seen by the scan.
-- *
-- * The method will also give false-positives if a process exists
-- * that has a deleted file open that had the same path, but a
-- * different inode number, to the file being monitored.
-- *
-- * For this reason the daemon only uses _is_open() for unlinked
-- * files when the mode is DM_FILEMAPD_FOLLOW_INODE, since these
-- * files can no longer be newly opened by processes.
-- *
-- * In this situation !is_open(path) provides an indication that
-- * the daemon should shut down: the file has been unlinked from
-- * the file system and we appear to hold the final reference.
+- * update region group_id values
 - */
--static int _is_open(const char *path)
+-static void _stats_update_groups(struct dm_stats *dms)
 -{
--	struct dirent *proc_dp = NULL;
--	DIR *proc_d = NULL;
--	pid_t pid;
+-	struct dm_stats_group *group;
+-	uint64_t group_id, i;
 -
--	proc_d = opendir(DEFAULT_PROC_DIR);
--	if (!proc_d)
+-	for (group_id = 0; group_id < dms->max_region + 1; group_id++) {
+-		if (!_stats_group_id_present(dms, group_id))
+-			continue;
+-
+-		group = &dms->groups[group_id];
+-
+-		for (i = dm_bit_get_first(group->regions);
+-		     i != DM_STATS_GROUP_NOT_PRESENT;
+-		     i = dm_bit_get_next(group->regions, i))
+-			dms->regions[i].group_id = group_id;
+-	}
+-}
+-
+-static void _check_group_regions_present(struct dm_stats *dms,
+-					 struct dm_stats_group *group)
+-{
+-	dm_bitset_t regions = group->regions;
+-	int64_t i, group_id;
+-
+-	group_id = i = dm_bit_get_first(regions);
+-
+-	for (; i > 0; i = dm_bit_get_next(regions, i))
+-		if (!_stats_region_present(&dms->regions[i])) {
+-			log_warn("Group descriptor " FMTd64 " contains "
+-				 "non-existent region_id " FMTd64 ".",
+-				 group_id, i);
+-			dm_bit_clear(regions, i);
+-		}
+-}
+-
+-/*
+- * Parse a DMS_GROUP group descriptor embedded in a region's aux_data.
+- *
+- * DMS_GROUP="ALIAS:MEMBERS"
+- *
+- * ALIAS: group alias
+- * MEMBERS: list of group member region ids.
+- *
+- */
+-#define DMS_GROUP_TAG "DMS_GROUP="
+-#define DMS_GROUP_TAG_LEN (sizeof(DMS_GROUP_TAG) - 1)
+-#define DMS_GROUP_SEP ':'
+-#define DMS_AUX_SEP "#"
+-
+-static int _parse_aux_data_group(struct dm_stats *dms,
+-				 struct dm_stats_region *region,
+-				 struct dm_stats_group *group)
+-{
+-	char *alias, *c, *end;
+-	dm_bitset_t regions;
+-
+-	memset(group, 0, sizeof(*group));
+-	group->group_id = DM_STATS_GROUP_NOT_PRESENT;
+-
+-	/* find start of group tag */
+-	c = strstr(region->aux_data, DMS_GROUP_TAG);
+-	if (!c)
+-		return 1; /* no group is not an error */
+-
+-	alias = c + strlen(DMS_GROUP_TAG);
+-
+-	c = strchr(c, DMS_GROUP_SEP);
+-
+-	if (!c) {
+-		log_error("Found malformed group tag while reading aux_data");
 -		return 0;
--	while ((proc_dp = readdir(proc_d)) != NULL) {
--		if (!isdigit(proc_dp->d_name[0]))
--			continue;
--		errno = 0;
--		pid = (pid_t) strtol(proc_dp->d_name, NULL, 10);
--		if (errno || !pid)
--			continue;
--		if (_is_open_in_pid(pid, path)) {
--			if (closedir(proc_d))
--				log_sys_error("closedir", DEFAULT_PROC_DIR);
--			return 1;
+-	}
+-
+-	/* terminate alias and advance to members */
+-	*(c++) = '\0';
+-
+-	log_debug("Read alias '%s' from aux_data", alias);
+-
+-	if (!c) {
+-		log_error("Found malformed group descriptor while "
+-			  "reading aux_data, expected '%c'", DMS_GROUP_SEP);
+-		return 0;
+-	}
+-
+-	/* if user aux_data follows make sure we have a terminated
+-	 * string to pass to dm_bitset_parse_list().
+-	 */
+-	end = strstr(c, DMS_AUX_SEP);
+-	if (!end)
+-		end = c + strlen(c);
+-	*(end++) = '\0';
+-
+-	if (!(regions = dm_bitset_parse_list(c, NULL, 0))) {
+-		log_error("Could not parse member list while "
+-			  "reading group aux_data");
+-		return 0;
+-	}
+-
+-	group->group_id = dm_bit_get_first(regions);
+-	if (group->group_id != region->region_id) {
+-		log_error("Found invalid group descriptor in region " FMTu64
+-			  " aux_data.", region->region_id);
+-		group->group_id = DM_STATS_GROUP_NOT_PRESENT;
+-		goto bad;
+-	}
+-
+-	group->regions = regions;
+-	group->alias = NULL;
+-	if (strlen(alias)) {
+-		group->alias = strdup(alias);
+-		if (!group->alias) {
+-			log_error("Could not allocate memory for group alias");
+-			goto bad;
 -		}
 -	}
 -
--	if (closedir(proc_d))
--		log_sys_error("closedir", DEFAULT_PROC_DIR);
+-	/* separate group tag from user aux_data */
+-	if ((strlen(end) > 1) || strncmp(end, "-", 1))
+-		c = strdup(end);
+-	else
+-		c = strdup("");
+-
+-	if (!c) {
+-		log_error("Could not allocate memory for user aux_data");
+-		goto bad_alias;
+-	}
+-
+-	free(region->aux_data);
+-	region->aux_data = c;
+-
+-	log_debug("Found group_id " FMTu64 ": alias=\"%s\"", group->group_id,
+-		  (group->alias) ? group->alias : "");
+-
+-	return 1;
+-
+-bad_alias:
+-	free((char *) group->alias);
+-bad:
+-	dm_bitset_destroy(regions);
+-	return 0;
+-}
+-
+-/*
+- * Parse a histogram specification returned by the kernel in a
+- * @stats_list response.
+- */
+-static int _stats_parse_histogram_spec(struct dm_stats *dms,
+-				       struct dm_stats_region *region,
+-				       const char *histogram)
+-{
+-	static const char _valid_chars[] = "0123456789,";
+-	uint64_t scale = region->timescale, this_val = 0;
+-	struct dm_pool *mem = dms->hist_mem;
+-	struct dm_histogram_bin cur;
+-	struct dm_histogram hist;
+-	int nr_bins = 1;
+-	const char *c, *v, *val_start;
+-	char *p, *endptr = NULL;
+-
+-	/* Advance past "histogram:". */
+-	histogram = strchr(histogram, ':');
+-	if (!histogram) {
+-		log_error("Could not parse histogram description.");
+-		return 0;
+-	}
+-	histogram++;
+-
+-	/* @stats_list rows are newline terminated. */
+-	if ((p = strchr(histogram, '\n')))
+-		*p = '\0';
+-
+-	if (!dm_pool_begin_object(mem, sizeof(cur)))
+-		return_0;
+-
+-	memset(&hist, 0, sizeof(hist));
+-
+-	hist.nr_bins = 0; /* fix later */
+-	hist.region = region;
+-	hist.dms = dms;
+-
+-	if (!dm_pool_grow_object(mem, &hist, sizeof(hist)))
+-		goto_bad;
+-
+-	c = histogram;
+-	do {
+-		for (v = _valid_chars; *v; v++)
+-			if (*c == *v)
+-				break;
+-		if (!*v) {
+-			stack;
+-			goto badchar;
+-		}
+-
+-		if (*c == ',') {
+-			log_error("Invalid histogram description: %s",
+-				  histogram);
+-			goto bad;
+-		} else {
+-			val_start = c;
+-			endptr = NULL;
+-
+-			errno = 0;
+-			this_val = strtoull(val_start, &endptr, 10);
+-			if (errno || !endptr) {
+-				log_error("Could not parse histogram boundary.");
+-				goto bad;
+-			}
+-
+-			c = endptr; /* Advance to units, comma, or end. */
+-
+-			if (*c == ',')
+-				c++;
+-			else if (*c || (*c == ' ')) { /* Expected ',' or NULL. */
+-				stack;
+-				goto badchar;
+-			}
+-
+-			if (*c == ',')
+-				c++;
+-
+-			cur.upper = scale * this_val;
+-			cur.count = 0;
+-
+-			if (!dm_pool_grow_object(mem, &cur, sizeof(cur)))
+-				goto_bad;
+-
+-			nr_bins++;
+-		}
+-	} while (*c && (*c != ' '));
+-
+-	/* final upper bound. */
+-	cur.upper = UINT64_MAX;
+-	if (!dm_pool_grow_object(mem, &cur, sizeof(cur)))
+-		goto_bad;
+-
+-	region->bounds = dm_pool_end_object(mem);
+-
+-	if (!region->bounds)
+-		return_0;
+-
+-	region->bounds->nr_bins = nr_bins;
+-
+-	log_debug("Added region histogram spec with %d entries.", nr_bins);
+-	return 1;
+-
+-badchar:
+-	log_error("Invalid character in histogram: '%c' (0x%x)", *c, *c);
+-bad:
+-	dm_pool_abandon_object(mem);
+-	return 0;
+-}
+-
+-static int _stats_parse_list_region(struct dm_stats *dms,
+-				    struct dm_stats_region *region, char *line)
+-{
+-	char *p = NULL, string_data[STATS_ROW_BUF_LEN];
+-	char *program_id, *aux_data, *stats_args;
+-	char *empty_string = (char *) "";
+-	int r;
+-
+-	memset(string_data, 0, sizeof(string_data));
+-
+-	/*
+-	 * Parse fixed fields, line format:
+-	 *
+-	 * <region_id>: <start_sector>+<length> <step> <string data>
+-	 *
+-	 * Maximum string data size is 4096 - 1 bytes.
+-	 */
+-	r = sscanf(line, FMTu64 ": " FMTu64 "+" FMTu64 " " FMTu64 " %4095c",
+-		   &region->region_id, &region->start, &region->len,
+-		   &region->step, string_data);
+-
+-	if (r != 5)
+-		return_0;
+-
+-	/* program_id is guaranteed to be first. */
+-	program_id = string_data;
+-
+-	/*
+-	 * FIXME: support embedded '\ ' in string data:
+-	 *   s/strchr/_find_unescaped_space()/
+-	 */
+-	if ((p = strchr(string_data, ' '))) {
+-		/* terminate program_id string. */
+-		*p = '\0';
+-		if (!strncmp(program_id, "-", 1))
+-			program_id = empty_string;
+-		aux_data = p + 1;
+-		if ((p = strchr(aux_data, ' '))) {
+-			/* terminate aux_data string. */
+-			*p = '\0';
+-			stats_args = p + 1;
+-		} else
+-			stats_args = empty_string;
+-
+-		/* no aux_data? */
+-		if (!strncmp(aux_data, "-", 1))
+-			aux_data = empty_string;
+-		else
+-			/* remove trailing newline */
+-			aux_data[strlen(aux_data) - 1] = '\0';
+-	} else
+-		aux_data = stats_args = empty_string;
+-
+-	if (strstr(stats_args, PRECISE_ARG))
+-		region->timescale = 1;
+-	else
+-		region->timescale = NSEC_PER_MSEC;
+-
+-	if ((p = strstr(stats_args, HISTOGRAM_ARG))) {
+-		if (!_stats_parse_histogram_spec(dms, region, p))
+-			return_0;
+-	} else
+-		region->bounds = NULL;
+-
+-	/* clear aggregate cache */
+-	region->histogram = NULL;
+-
+-	region->group_id = DM_STATS_GROUP_NOT_PRESENT;
+-
+-	if (!(region->program_id = strdup(program_id)))
+-		return_0;
+-	if (!(region->aux_data = strdup(aux_data))) {
+-		free(region->program_id);
+-		return_0;
+-	}
+-
+-	region->counters = NULL;
+-	return 1;
+-}
+-
+-static int _stats_parse_list(struct dm_stats *dms, const char *resp)
+-{
+-	uint64_t max_region = 0, nr_regions = 0;
+-	struct dm_stats_region cur, fill;
+-	struct dm_stats_group cur_group;
+-	struct dm_pool *mem = dms->mem, *group_mem = dms->group_mem;
+-	char line[STATS_ROW_BUF_LEN];
+-	FILE *list_rows;
+-
+-	if (!resp) {
+-		log_error("Could not parse NULL @stats_list response.");
+-		return 0;
+-	}
+-
+-	_stats_regions_destroy(dms);
+-	_stats_groups_destroy(dms);
+-
+-	/* no regions */
+-	if (!strlen(resp)) {
+-		dms->nr_regions = dms->max_region = 0;
+-		dms->regions = NULL;
+-		return 1;
+-	}
+-
+-	/*
+-	 * dm_task_get_message_response() returns a 'const char *' but
+-	 * since fmemopen also permits "w" it expects a 'char *'.
+-	 */
+-	if (!(list_rows = fmemopen((char *)resp, strlen(resp), "r")))
+-		return_0;
+-
+-	/* begin region table */
+-	if (!dm_pool_begin_object(mem, 1024))
+-		goto_bad;
+-
+-	/* begin group table */
+-	if (!dm_pool_begin_object(group_mem, 32))
+-		goto_bad;
+-
+-	while(fgets(line, sizeof(line), list_rows)) {
+-
+-		cur_group.group_id = DM_STATS_GROUP_NOT_PRESENT;
+-		cur_group.regions = NULL;
+-		cur_group.alias = NULL;
+-
+-		if (!_stats_parse_list_region(dms, &cur, line))
+-			goto_bad;
+-
+-		/* handle holes in the list of region_ids */
+-		if (cur.region_id > max_region) {
+-			memset(&fill, 0, sizeof(fill));
+-			memset(&cur_group, 0, sizeof(cur_group));
+-			fill.region_id = DM_STATS_REGION_NOT_PRESENT;
+-			cur_group.group_id = DM_STATS_GROUP_NOT_PRESENT;
+-			do {
+-				if (!dm_pool_grow_object(mem, &fill, sizeof(fill)))
+-					goto_bad;
+-				if (!dm_pool_grow_object(group_mem, &cur_group,
+-							 sizeof(cur_group)))
+-					goto_bad;
+-			} while (max_region++ < (cur.region_id - 1));
+-		}
+-
+-		if (cur.aux_data)
+-			if (!_parse_aux_data_group(dms, &cur, &cur_group))
+-				log_error("Failed to parse group descriptor "
+-					  "from region_id " FMTu64 " aux_data:"
+-					  "'%s'", cur.region_id, cur.aux_data);
+-				/* continue */
+-
+-		if (!dm_pool_grow_object(mem, &cur, sizeof(cur)))
+-			goto_bad;
+-
+-		if (!dm_pool_grow_object(group_mem, &cur_group,
+-					 sizeof(cur_group)))
+-			goto_bad;
+-
+-		max_region++;
+-		nr_regions++;
+-	}
+-
+-	if (!nr_regions)
+-		/* no region data read from @stats_list */
+-		goto bad;
+-
+-	dms->nr_regions = nr_regions;
+-	dms->max_region = max_region - 1;
+-	dms->regions = dm_pool_end_object(mem);
+-	dms->groups = dm_pool_end_object(group_mem);
+-
+-	dm_stats_foreach_group(dms)
+-		_check_group_regions_present(dms, &dms->groups[dms->cur_group]);
+-
+-	_stats_update_groups(dms);
+-
+-	if (fclose(list_rows))
+-		stack;
+-
+-	return 1;
+-
+-bad:
+-	if (fclose(list_rows))
+-		stack;
+-	dm_pool_abandon_object(mem);
+-	dm_pool_abandon_object(group_mem);
 -
 -	return 0;
 -}
 -
--static void _filemap_monitor_wait(uint64_t usecs)
+-int dm_stats_list(struct dm_stats *dms, const char *program_id)
 -{
--	if (_verbose) {
--		if (usecs == FILEMAPD_WAIT_USECS)
--			log_very_verbose("Waiting for check interval");
--		if (usecs == FILEMAPD_NOFILE_WAIT_USECS)
--			log_very_verbose("Waiting for unlinked path");
+-	char msg[STATS_MSG_BUF_LEN];
+-	struct dm_task *dmt;
+-	int r;
+-
+-	if (!_stats_bound(dms))
+-		return_0;
+-
+-	/* allow zero-length program_id for list */
+-	if (!program_id)
+-		program_id = dms->program_id;
+-
+-	if (!_stats_set_name_cache(dms))
+-		return_0;
+-
+-	if (dms->regions)
+-		_stats_regions_destroy(dms);
+-
+-	r = dm_snprintf(msg, sizeof(msg), "@stats_list %s", program_id);
+-
+-	if (r < 0) {
+-		log_error("Failed to prepare stats message.");
+-		return 0;
 -	}
--	usleep((useconds_t) usecs);
+-
+-	if (!(dmt = _stats_send_message(dms, msg)))
+-		return_0;
+-
+-	if (!_stats_parse_list(dms, dm_task_get_message_response(dmt))) {
+-		log_error("Could not parse @stats_list response.");
+-		goto bad;
+-	}
+-
+-	dm_task_destroy(dmt);
+-	return 1;
+-
+-bad:
+-	dm_task_destroy(dmt);
+-	return 0;
 -}
 -
--static int _parse_args(int argc, char **argv, struct filemap_monitor *fm)
+-/*
+- * Parse histogram data returned from a @stats_print operation.
+- */
+-static int _stats_parse_histogram(struct dm_pool *mem, char *hist_str,
+-				  struct dm_histogram **histogram,
+-				  struct dm_stats_region *region)
 -{
--	char *endptr;
+-	static const char _valid_chars[] = "0123456789:";
+-	struct dm_histogram *bounds = region->bounds;
+-	struct dm_histogram hist = {
+-		.nr_bins = region->bounds->nr_bins
+-	};
+-	const char *c, *v, *val_start;
+-	struct dm_histogram_bin cur;
+-	uint64_t sum = 0, this_val;
+-	char *endptr = NULL;
+-	int bin = 0;
 -
--	/* we don't care what is in argv[0]. */
--	argc--;
--	argv++;
+-	c = hist_str;
 -
--	if (argc < 5) {
--		_early_log("Wrong number of arguments.");
--		_early_log("usage: %s", _usage);
--		return 0;
--	}
+-	if (!dm_pool_begin_object(mem, sizeof(cur)))
+-		return_0;
 -
--	/*
--	 * We don't know the true nr_regions at daemon start time,
--	 * and it is not worth a dm_stats_list()/group walk to count:
--	 * we can assume that there is@least one region or the
--	 * daemon would not have been started.
--	 *
--	 * A correct value will be obtained following the first update
--	 * of the group's regions.
--	 */
--	fm->nr_regions = 1;
+-	if (!dm_pool_grow_object(mem, &hist, sizeof(hist)))
+-		goto_bad;
 -
--	/* parse <fd> */
--	errno = 0;
--	fm->fd = (int) strtol(argv[0], &endptr, 10);
--	if (errno || *endptr) {
--		_early_log("Could not parse file descriptor: %s", argv[0]);
--		return 0;
--	}
+-	do {
+-		memset(&cur, 0, sizeof(cur));
+-		for (v = _valid_chars; *v; v++)
+-			if (*c == *v)
+-				break;
+-		if (!*v)
+-			goto badchar;
 -
--	argc--;
--	argv++;
+-		if (*c == ',')
+-			goto badchar;
+-		else {
+-			val_start = c;
+-			endptr = NULL;
 -
--	/* parse <group_id> */
--	errno = 0;
--	fm->group_id = strtoull(argv[0], &endptr, 10);
--	if (*endptr || errno) {
--		_early_log("Could not parse group identifier: %s", argv[0]);
--		return 0;
--	}
--
--	argc--;
--	argv++;
--
--	/* parse <path> */
--	if (!argv[0] || !strlen(argv[0])) {
--		_early_log("Path argument is required.");
--		return 0;
--	}
--
--	if (*argv[0] != '/') {
--		_early_log("Path argument must specify an absolute path.");
--		return 0;
--	}
--
--	fm->path = strdup(argv[0]);
--	if (!fm->path) {
--		_early_log("Could not allocate memory for path argument.");
--		return 0;
--	}
--
--	argc--;
--	argv++;
--
--	/* parse <mode> */
--	if (!argv[0] || !strlen(argv[0])) {
--		_early_log("Mode argument is required.");
--		return 0;
--	}
--
--	fm->mode = dm_filemapd_mode_from_string(argv[0]);
--	if (fm->mode == DM_FILEMAPD_FOLLOW_NONE)
--		return 0;
--
--	argc--;
--	argv++;
--
--	/* parse [<foreground>[<verbose>]] */
--	if (argc) {
--		errno = 0;
--		_foreground = (int) strtol(argv[0], &endptr, 10);
--		if (errno || *endptr) {
--			_early_log("Could not parse debug argument: %s.",
--				   argv[0]);
--			return 0;
--		}
--		argc--;
--		argv++;
--		if (argc) {
 -			errno = 0;
--			_verbose = (int) strtol(argv[0], &endptr, 10);
--			if (errno || *endptr) {
--				_early_log("Could not parse verbose "
--					   "argument: %s", argv[0]);
--				return 0;
+-			this_val = strtoull(val_start, &endptr, 10);
+-			if (errno || !endptr) {
+-				log_error("Could not parse histogram value.");
+-				goto bad;
 -			}
--			if (_verbose < 0 || _verbose > 3) {
--				_early_log("Verbose argument out of range: %d.",
--					   _verbose);
--				return 0;
+-			c = endptr; /* Advance to colon, or end. */
+-
+-			if (*c == ':')
+-				c++;
+-			else if (*c & (*c != '\n'))
+-				/* Expected ':', '\n', or NULL. */
+-				goto badchar;
+-
+-			if (*c == ':')
+-				c++;
+-
+-			cur.upper = bounds->bins[bin].upper;
+-			cur.count = this_val;
+-			sum += this_val;
+-
+-			if (!dm_pool_grow_object(mem, &cur, sizeof(cur)))
+-				goto_bad;
+-
+-			bin++;
+-		}
+-	} while (*c && (*c != '\n'));
+-
+-	log_debug("Added region histogram data with %d entries.", hist.nr_bins);
+-
+-	*histogram = dm_pool_end_object(mem);
+-	(*histogram)->sum = sum;
+-
+-	return 1;
+-
+-badchar:
+-	log_error("Invalid character in histogram data: '%c' (0x%x)", *c, *c);
+-bad:
+-	dm_pool_abandon_object(mem);
+-	return 0;
+-}
+-
+-static int _stats_parse_region(struct dm_stats *dms, const char *resp,
+-			       struct dm_stats_region *region,
+-			       uint64_t timescale)
+-{
+-	struct dm_histogram *hist = NULL;
+-	struct dm_pool *mem = dms->mem;
+-	struct dm_stats_counters cur;
+-	FILE *stats_rows = NULL;
+-	uint64_t start = 0, len = 0;
+-	char row[STATS_ROW_BUF_LEN];
+-	int r;
+-
+-	if (!resp) {
+-		log_error("Could not parse empty @stats_print response.");
+-		return 0;
+-	}
+-
+-	region->start = UINT64_MAX;
+-
+-	if (!dm_pool_begin_object(mem, 512))
+-		goto_bad;
+-
+-	/*
+-	 * dm_task_get_message_response() returns a 'const char *' but
+-	 * since fmemopen also permits "w" it expects a 'char *'.
+-	 */
+-	stats_rows = fmemopen((char *)resp, strlen(resp), "r");
+-	if (!stats_rows)
+-		goto_bad;
+-
+-	/*
+-	 * Output format for each step-sized area of a region:
+-	 *
+-	 * <start_sector>+<length> counters
+-	 *
+-	 * The first 11 counters have the same meaning as
+-	 * /sys/block/ * /stat or /proc/diskstats.
+-	 *
+-	 * Please refer to Documentation/iostats.txt for details.
+-	 *
+-	 * 1. the number of reads completed
+-	 * 2. the number of reads merged
+-	 * 3. the number of sectors read
+-	 * 4. the number of milliseconds spent reading
+-	 * 5. the number of writes completed
+-	 * 6. the number of writes merged
+-	 * 7. the number of sectors written
+-	 * 8. the number of milliseconds spent writing
+-	 * 9. the number of I/Os currently in progress
+-	 * 10. the number of milliseconds spent doing I/Os
+-	 * 11. the weighted number of milliseconds spent doing I/Os
+-	 *
+-	 * Additional counters:
+-	 * 12. the total time spent reading in milliseconds
+-	 * 13. the total time spent writing in milliseconds
+-	 *
+-	*/
+-	while (fgets(row, sizeof(row), stats_rows)) {
+-		r = sscanf(row, FMTu64 "+" FMTu64 /* start+len */
+-			   /* reads */
+-			   FMTu64 " " FMTu64 " " FMTu64 " " FMTu64 " "
+-			   /* writes */
+-			   FMTu64 " " FMTu64 " " FMTu64 " " FMTu64 " "
+-			   /* in flight & io nsecs */
+-			   FMTu64 " " FMTu64 " " FMTu64 " "
+-			   /* tot read/write nsecs */
+-			   FMTu64 " " FMTu64, &start, &len,
+-			   &cur.reads, &cur.reads_merged, &cur.read_sectors,
+-			   &cur.read_nsecs,
+-			   &cur.writes, &cur.writes_merged, &cur.write_sectors,
+-			   &cur.write_nsecs,
+-			   &cur.io_in_progress,
+-			   &cur.io_nsecs, &cur.weighted_io_nsecs,
+-			   &cur.total_read_nsecs, &cur.total_write_nsecs);
+-		if (r != 15) {
+-			log_error("Could not parse @stats_print row.");
+-			goto bad;
+-		}
+-
+-		/* scale time values up if needed */
+-		if (timescale != 1) {
+-			cur.read_nsecs *= timescale;
+-			cur.write_nsecs *= timescale;
+-			cur.io_nsecs *= timescale;
+-			cur.weighted_io_nsecs *= timescale;
+-			cur.total_read_nsecs *= timescale;
+-			cur.total_write_nsecs *= timescale;
+-		}
+-
+-		if (region->bounds) {
+-			/* Find first histogram separator. */
+-			char *hist_str = strchr(row, ':');
+-			if (!hist_str) {
+-				log_error("Could not parse histogram value.");
+-				goto bad;
 -			}
+-			/* Find space preceding histogram. */
+-			while (hist_str && *(hist_str - 1) != ' ')
+-				hist_str--;
+-
+-			/* Use a separate pool for histogram objects since we
+-			 * are growing the area table and each area's histogram
+-			 * table simultaneously.
+-			 */
+-			if (!_stats_parse_histogram(dms->hist_mem, hist_str,
+-						    &hist, region))
+-				goto_bad;
+-			hist->dms = dms;
+-			hist->region = region;
+-		}
+-
+-		cur.histogram = hist;
+-
+-		if (!dm_pool_grow_object(mem, &cur, sizeof(cur)))
+-			goto_bad;
+-
+-		if (region->start == UINT64_MAX) {
+-			region->start = start;
+-			region->step = len; /* area size is always uniform. */
 -		}
 -	}
+-
+-	if (region->start == UINT64_MAX)
+-		/* no area data read from @stats_print */
+-		goto bad;
+-
+-	region->len = (start + len) - region->start;
+-	region->timescale = timescale;
+-	region->counters = dm_pool_end_object(mem);
+-
+-	if (fclose(stats_rows))
+-		stack;
+-
+-	return 1;
+-
+-bad:
+-	if (stats_rows)
+-		if (fclose(stats_rows))
+-			stack;
+-	dm_pool_abandon_object(mem);
+-
+-	return 0;
+-}
+-
+-static void _stats_walk_next_present(const struct dm_stats *dms,
+-				     uint64_t *flags,
+-				     uint64_t *cur_r, uint64_t *cur_a,
+-				     uint64_t *cur_g)
+-{
+-	struct dm_stats_region *cur = NULL;
+-
+-	/* start of walk: region loop advances *cur_r to 0. */
+-	if (*cur_r != DM_STATS_REGION_NOT_PRESENT)
+-		cur = &dms->regions[*cur_r];
+-
+-	/* within current region? */
+-	if (cur && (*flags & DM_STATS_WALK_AREA)) {
+-		if (++(*cur_a) < _nr_areas_region(cur))
+-			return;
+-		else
+-			*cur_a = 0;
+-	}
+-
+-	/* advance to next present, non-skipped region or end */
+-	while (++(*cur_r) <= dms->max_region) {
+-		cur = &dms->regions[*cur_r];
+-		if (!_stats_region_present(cur))
+-			continue;
+-		if ((*flags & DM_STATS_WALK_SKIP_SINGLE_AREA))
+-			if (!(*flags & DM_STATS_WALK_AREA))
+-				if (_nr_areas_region(cur) < 2)
+-					continue;
+-		/* matching region found */
+-		break;
+-	}
+-	return;
+-}
+-
+-static void _stats_walk_next(const struct dm_stats *dms, uint64_t *flags,
+-			     uint64_t *cur_r, uint64_t *cur_a, uint64_t *cur_g)
+-{
+-	if (!dms || !dms->regions)
+-		return;
+-
+-	if (*flags & DM_STATS_WALK_AREA) {
+-		/* advance to next area, region, or end */
+-		_stats_walk_next_present(dms, flags, cur_r, cur_a, cur_g);
+-		return;
+-	}
+-
+-	if (*flags & DM_STATS_WALK_REGION) {
+-		/* enable region aggregation */
+-		*cur_a = DM_STATS_WALK_REGION;
+-		_stats_walk_next_present(dms, flags, cur_r, cur_a, cur_g);
+-		return;
+-	}
+-
+-	if (*flags & DM_STATS_WALK_GROUP) {
+-		/* enable group aggregation */
+-		*cur_r = *cur_a = DM_STATS_WALK_GROUP;
+-		while (!_stats_group_id_present(dms, ++(*cur_g))
+-		       && (*cur_g) < dms->max_region + 1)
+-			; /* advance to next present group or end */
+-		return;
+-	}
+-
+-	log_error("stats_walk_next called with empty walk flags");
+-}
+-
+-static void _group_walk_start(const struct dm_stats *dms, uint64_t *flags,
+-			      uint64_t *cur_r, uint64_t *cur_a, uint64_t *cur_g)
+-{
+-	if (!(*flags & DM_STATS_WALK_GROUP))
+-		return;
+-
+-	*cur_a = *cur_r = DM_STATS_WALK_GROUP;
+-	*cur_g = 0;
+-
+-	/* advance to next present group or end */
+-	while ((*cur_g) <= dms->max_region) {
+-	        if (_stats_region_is_grouped(dms, *cur_g))
+-			break;
+-		(*cur_g)++;
+-	}
+-
+-	if (*cur_g > dms->max_region)
+-		/* no groups to walk */
+-		*flags &= ~DM_STATS_WALK_GROUP;
+-}
+-
+-static void _stats_walk_start(const struct dm_stats *dms, uint64_t *flags,
+-			      uint64_t *cur_r, uint64_t *cur_a,
+-			      uint64_t *cur_g)
+-{
+-	log_debug("starting stats walk with %s %s %s %s",
+-		  (*flags & DM_STATS_WALK_AREA) ? "AREA" : "",
+-		  (*flags & DM_STATS_WALK_REGION) ? "REGION" : "",
+-		  (*flags & DM_STATS_WALK_GROUP) ? "GROUP" : "",
+-		  (*flags & DM_STATS_WALK_SKIP_SINGLE_AREA) ? "SKIP" : "");
+-
+-	if (!dms->regions)
+-		return;
+-
+-	if (!(*flags & (DM_STATS_WALK_AREA | DM_STATS_WALK_REGION)))
+-		return _group_walk_start(dms, flags, cur_r, cur_a, cur_g);
+-
+-	/* initialise cursor state */
+-	*cur_a = 0;
+-	*cur_r = DM_STATS_REGION_NOT_PRESENT;
+-	*cur_g = DM_STATS_GROUP_NOT_PRESENT;
+-
+-	if (!(*flags & DM_STATS_WALK_AREA))
+-		*cur_a = DM_STATS_WALK_REGION;
+-
+-	/* advance to first present, non-skipped region */
+-	_stats_walk_next_present(dms, flags, cur_r, cur_a, cur_g);
+-}
+-
+-#define DM_STATS_WALK_MASK (DM_STATS_WALK_AREA			\
+-			    | DM_STATS_WALK_REGION		\
+-			    | DM_STATS_WALK_GROUP		\
+-			    | DM_STATS_WALK_SKIP_SINGLE_AREA)
+-
+-int dm_stats_walk_init(struct dm_stats *dms, uint64_t flags)
+-{
+-	if (!dms)
+-		return_0;
+-
+-	if (flags & ~DM_STATS_WALK_MASK) {
+-		log_error("Unknown value in walk flags: 0x" FMTx64,
+-			  (uint64_t) (flags & ~DM_STATS_WALK_MASK));
+-		return 0;
+-	}
+-	dms->walk_flags = flags;
+-	log_debug("dm_stats_walk_init: initialised flags to " FMTx64, flags);
 -	return 1;
 -}
 -
--static int _filemap_fd_update_blocks(struct filemap_monitor *fm)
+-void dm_stats_walk_start(struct dm_stats *dms)
 -{
--	struct stat buf;
+-	if (!dms || !dms->regions)
+-		return;
 -
--	if (fm->fd < 0) {
--		log_error("Filemap fd is not open.");
+-	dms->cur_flags = dms->walk_flags;
+-
+-	_stats_walk_start(dms, &dms->cur_flags,
+-			  &dms->cur_region, &dms->cur_area,
+-			  &dms->cur_group);
+-}
+-
+-void dm_stats_walk_next(struct dm_stats *dms)
+-{
+-	_stats_walk_next(dms, &dms->cur_flags,
+-			 &dms->cur_region, &dms->cur_area,
+-			 &dms->cur_group);
+-}
+-
+-void dm_stats_walk_next_region(struct dm_stats *dms)
+-{
+-	dms->cur_flags &= ~DM_STATS_WALK_AREA;
+-	_stats_walk_next(dms, &dms->cur_flags,
+-			 &dms->cur_region, &dms->cur_area,
+-			 &dms->cur_group);
+-}
+-
+-/*
+- * Return 1 if any regions remain that are present and not skipped
+- * by the current walk flags or 0 otherwise.
+- */
+-static uint64_t _stats_walk_any_unskipped(const struct dm_stats *dms,
+-					  uint64_t *flags,
+-					  uint64_t *cur_r, uint64_t *cur_a)
+-{
+-	struct dm_stats_region *region;
+-	uint64_t i;
+-
+-	if (*cur_r > dms->max_region)
 -		return 0;
+-
+-	for (i = *cur_r; i <= dms->max_region; i++) {
+-		region = &dms->regions[i];
+-		if (!_stats_region_present(region))
+-			continue;
+-		if ((*flags & DM_STATS_WALK_SKIP_SINGLE_AREA)
+-		    && !(*flags & DM_STATS_WALK_AREA))
+-			if (_nr_areas_region(region) < 2)
+-				continue;
+-		return 1;
 -	}
--
--	if (fstat(fm->fd, &buf)) {
--		log_error("Failed to fstat filemap file descriptor.");
--		return 0;
--	}
--
--	fm->blocks = buf.st_blocks;
--
--	return 1;
+-	return 0;
 -}
 -
--static int _filemap_fd_check_changed(struct filemap_monitor *fm)
+-static void _stats_walk_end_areas(const struct dm_stats *dms, uint64_t *flags,
+-				  uint64_t *cur_r, uint64_t *cur_a,
+-				  uint64_t *cur_g)
 -{
--	int64_t old_blocks;
+-	int end = !_stats_walk_any_unskipped(dms, flags, cur_r, cur_a);
 -
--	old_blocks = fm->blocks;
+-	if (!(*flags & DM_STATS_WALK_AREA))
+-		return;
 -
--	if (!_filemap_fd_update_blocks(fm))
--		return -1;
+-	if (!end)
+-		return;
 -
--	return (fm->blocks != old_blocks);
--}
--
--static void _filemap_monitor_close_fd(struct filemap_monitor *fm)
--{
--	if (close(fm->fd))
--		log_error("Error closing file descriptor.");
--	fm->fd = -1;
--}
--
--static void _filemap_monitor_end_notify(struct filemap_monitor *fm)
--{
--	inotify_rm_watch(fm->inotify_fd, fm->inotify_watch_fd);
--}
--
--static int _filemap_monitor_set_notify(struct filemap_monitor *fm)
--{
--	int inotify_fd, watch_fd;
--
--	/*
--	 * Set IN_NONBLOCK since we do not want to block in event read()
--	 * calls. Do not set IN_CLOEXEC as dmfilemapd is single-threaded
--	 * and does not fork or exec.
--	 */
--	if ((inotify_fd = inotify_init1(IN_NONBLOCK)) < 0) {
--		log_sys_error("inotify_init1", "IN_NONBLOCK");
--		return 0;
+-	*flags &= ~DM_STATS_WALK_AREA;
+-	if (*flags & DM_STATS_WALK_REGION) {
+-		/* start region walk */
+-		*cur_a = DM_STATS_WALK_REGION;
+-		*cur_r = DM_STATS_REGION_NOT_PRESENT;
+-		_stats_walk_next_present(dms, flags, cur_r, cur_a, cur_g);
+-		if (!_stats_walk_any_unskipped(dms, flags, cur_r, cur_a)) {
+-			/* no more regions */
+-			*flags &= ~DM_STATS_WALK_REGION;
+-			if (!(*flags & DM_STATS_WALK_GROUP))
+-				*cur_r = dms->max_region;
+-		}
 -	}
 -
--	if ((watch_fd = inotify_add_watch(inotify_fd, fm->path,
--					  IN_MODIFY | IN_DELETE_SELF)) < 0) {
--		log_sys_error("inotify_add_watch", fm->path);
--		return 0;
--	}
--	fm->inotify_fd = inotify_fd;
--	fm->inotify_watch_fd = watch_fd;
--	return 1;
+-	if (*flags & DM_STATS_WALK_REGION)
+-		return;
+-
+-	if (*flags & DM_STATS_WALK_GROUP)
+-		_group_walk_start(dms, flags, cur_r, cur_a, cur_g);
 -}
 -
--static int _filemap_monitor_reopen_fd(struct filemap_monitor *fm)
+-static int _stats_walk_end(const struct dm_stats *dms, uint64_t *flags,
+-			   uint64_t *cur_r, uint64_t *cur_a, uint64_t *cur_g)
 -{
--	int tries = FILEMAPD_NOFILE_WAIT_TRIES;
--
--	/*
--	 * In DM_FILEMAPD_FOLLOW_PATH mode, inotify watches must be
--	 * re-established whenever the file at the watched path is
--	 * changed.
--	 *
--	 * FIXME: stat file and skip if inode is unchanged.
--	 */
--	if (fm->fd > 0)
--		log_error("Filemap file descriptor already open.");
--
--	while ((fm->fd < 0) && --tries)
--		if (((fm->fd = open(fm->path, O_RDONLY)) < 0) && tries)
--			_filemap_monitor_wait(FILEMAPD_NOFILE_WAIT_USECS);
--
--	if (!tries && (fm->fd < 0)) {
--		log_error("Could not re-open file descriptor.");
--		return 0;
--	}
--
--	return _filemap_monitor_set_notify(fm);
--}
--
--static int _filemap_monitor_get_events(struct filemap_monitor *fm)
--{
--	/* alignment as per man(7) inotify */
--	char buf[sizeof(struct inotify_event) + NAME_MAX + 1]
--		__attribute__ ((aligned(__alignof__(struct inotify_event))));
--
--	struct inotify_event *event;
--	int check = 0;
--	ssize_t len;
--	char *ptr;
--
--	/*
--	 * Close the file descriptor for the file being monitored here
--	 * when mode=path: this will allow the inode to be de-allocated,
--	 * and an IN_DELETE_SELF event generated in the case that the
--	 * daemon is holding the last open reference to the file.
--	 */
--	if (fm->mode == DM_FILEMAPD_FOLLOW_PATH) {
--		_filemap_monitor_end_notify(fm);
--		_filemap_monitor_close_fd(fm);
--	}
--
--	len = read(fm->inotify_fd, (void *) &buf, sizeof(buf));
--
--	/* no events to read? */
--	if (len < 0 && (errno == EAGAIN))
+-	if (*flags & DM_STATS_WALK_AREA) {
+-		_stats_walk_end_areas(dms, flags, cur_r, cur_a, cur_g);
 -		goto out;
--
--	/* interrupted by signal? */
--	if (len < 0 && (errno == EINTR))
--		goto out;
--
--	if (len < 0)
--		return -1;
--
--	if (!len)
--		goto out;
--
--	for (ptr = buf; ptr < buf + len; ptr += sizeof(*event) + event->len) {
--		event = (struct inotify_event *) ptr;
--		if (event->mask & IN_DELETE_SELF)
--			fm->deleted = 1;
--		if (event->mask & IN_MODIFY)
--			check = 1;
--		/*
--		 * Event IN_IGNORED is generated when a file has been deleted
--		 * and IN_DELETE_SELF generated, and indicates that the file
--		 * watch has been automatically removed.
--		 *
--		 * This can only happen for the DM_FILEMAPD_FOLLOW_PATH mode,
--		 * since inotify IN_DELETE events are generated at the time
--		 * the inode is destroyed: DM_FILEMAPD_FOLLOW_INODE will hold
--		 * the file descriptor open, meaning that the event will not
--		 * be generated until after the daemon closes the file.
--		 *
--		 * The event is ignored here since inotify monitoring will
--		 * be reestablished (or the daemon will terminate) following
--		 * deletion of a DM_FILEMAPD_FOLLOW_PATH monitored file.
--		 */
--		if (event->mask & IN_IGNORED)
--			log_very_verbose("Inotify watch removed: IN_IGNORED "
--					 "in event->mask");
 -	}
 -
+-	if (*flags & DM_STATS_WALK_REGION) {
+-		if (!_stats_walk_any_unskipped(dms, flags, cur_r, cur_a)) {
+-			*flags &= ~DM_STATS_WALK_REGION;
+-			_group_walk_start(dms, flags, cur_r, cur_a, cur_g);
+-		}
+-		goto out;
+-	}
+-
+-	if (*flags & DM_STATS_WALK_GROUP) {
+-		if (*cur_g <= dms->max_region)
+-			goto out;
+-		*flags &= ~DM_STATS_WALK_GROUP;
+-	}
 -out:
--	/*
--	 * Re-open file descriptor if required and log disposition.
--	 */
--	if (fm->mode == DM_FILEMAPD_FOLLOW_PATH)
--		if (!_filemap_monitor_reopen_fd(fm))
--			return -1;
--
--	log_very_verbose("exiting _filemap_monitor_get_events() with "
--			 "deleted=%d, check=%d", fm->deleted, check);
--	return check;
+-	return !(*flags & ~DM_STATS_WALK_SKIP_SINGLE_AREA);
 -}
 -
--static void _filemap_monitor_destroy(struct filemap_monitor *fm)
+-int dm_stats_walk_end(struct dm_stats *dms)
 -{
--	if (fm->fd > 0) {
--		_filemap_monitor_end_notify(fm);
--		_filemap_monitor_close_fd(fm);
--	}
--	free((void *) fm->program_id);
--	free(fm->path);
--}
--
--static int _filemap_monitor_check_same_file(int fd1, int fd2)
--{
--	struct stat buf1, buf2;
--
--	if ((fd1 < 0) || (fd2 < 0))
--		return 0;
--
--	if (fstat(fd1, &buf1)) {
--		log_error("Failed to fstat file descriptor %d", fd1);
--		return -1;
--	}
--
--	if (fstat(fd2, &buf2)) {
--		log_error("Failed to fstat file descriptor %d", fd2);
--		return -1;
--	}
--
--	return ((buf1.st_dev == buf2.st_dev) && (buf1.st_ino == buf2.st_ino));
--}
--
--static int _filemap_monitor_check_file_unlinked(struct filemap_monitor *fm)
--{
--	char path_buf[PATH_MAX];
--	char link_buf[PATH_MAX];
--	int same, fd;
--	ssize_t len;
--
--	fm->deleted = 0;
--	same = 0;
--
--	if ((fd = open(fm->path, O_RDONLY)) < 0)
--		goto check_unlinked;
--
--	same = _filemap_monitor_check_same_file(fm->fd, fd);
--
--	if (close(fd))
--		log_error("Error closing fd %d", fd);
--
--	if (same < 0)
--		return 0;
--
--	if (same)
+-	if (!dms)
 -		return 1;
 -
--check_unlinked:
--	/*
--	 * The file has been unlinked from its original location: test
--	 * whether it is still reachable in the filesystem, or if it is
--	 * unlinked and anonymous.
--	 */
--	if (dm_snprintf(path_buf, sizeof(path_buf), DEFAULT_PROC_DIR
--			"/%d/fd/%d", getpid(), fm->fd) < 0) {
--		log_error("Could not format pid path.");
--		return 0;
+-	if (_stats_walk_end(dms, &dms->cur_flags,
+-			    &dms->cur_region, &dms->cur_area,
+-			    &dms->cur_group)) {
+-		dms->cur_flags = dms->walk_flags;
+-		return 1;
 -	}
--	if ((len = readlink(path_buf, link_buf, sizeof(link_buf) - 1)) < 0) {
--		log_error("readlink failed for " DEFAULT_PROC_DIR "/%d/fd/%d.",
--			  getpid(), fm->fd);
--		return 0;
--	}
--	link_buf[len] = '\0';
+-	return 0;
+-}
 -
--	/*
--	 * Try to re-open the file, from the path now reported in /proc/pid/fd.
--	 */
--	if ((fd = open(link_buf, O_RDONLY)) < 0)
--		fm->deleted = 1;
+-dm_stats_obj_type_t dm_stats_object_type(const struct dm_stats *dms,
+-					 uint64_t region_id,
+-					 uint64_t area_id)
+-{
+-	uint64_t group_id;
+-
+-	region_id = (region_id == DM_STATS_REGION_CURRENT)
+-		     ? dms->cur_region : region_id ;
+-	area_id = (area_id == DM_STATS_AREA_CURRENT)
+-		   ? dms->cur_area : area_id ;
+-
+-	if (region_id == DM_STATS_REGION_NOT_PRESENT)
+-		/* no region */
+-		return DM_STATS_OBJECT_TYPE_NONE;
+-
+-	if (region_id & DM_STATS_WALK_GROUP) {
+-		if (region_id == DM_STATS_WALK_GROUP)
+-			/* indirect group_id from cursor */
+-			group_id = dms->cur_group;
+-		else
+-			/* immediate group_id encoded in region_id */
+-			group_id = region_id & ~DM_STATS_WALK_GROUP;
+-		if (!_stats_group_id_present(dms, group_id))
+-			return DM_STATS_OBJECT_TYPE_NONE;
+-		return DM_STATS_OBJECT_TYPE_GROUP;
+-	}
+-
+-	if (region_id > dms->max_region)
+-		/* end of table */
+-		return DM_STATS_OBJECT_TYPE_NONE;
+-
+-	if (area_id & DM_STATS_WALK_REGION)
+-		/* aggregate region */
+-		return DM_STATS_OBJECT_TYPE_REGION;
+-
+-	/* plain region_id and area_id */
+-	return DM_STATS_OBJECT_TYPE_AREA;
+-}
+-
+-dm_stats_obj_type_t dm_stats_current_object_type(const struct dm_stats *dms)
+-{
+-	/* dm_stats_object_type will decode region/area */
+-	return dm_stats_object_type(dms,
+-				    DM_STATS_REGION_CURRENT,
+-				    DM_STATS_AREA_CURRENT);
+-}
+-
+-uint64_t dm_stats_get_region_nr_areas(const struct dm_stats *dms,
+-				      uint64_t region_id)
+-{
+-	struct dm_stats_region *region = NULL;
+-
+-	/* groups or aggregate regions cannot be subdivided */
+-	if (region_id & DM_STATS_WALK_GROUP)
+-		return 1;
+-
+-	region = &dms->regions[region_id];
+-	return _nr_areas_region(region);
+-}
+-
+-uint64_t dm_stats_get_current_nr_areas(const struct dm_stats *dms)
+-{
+-	/* groups or aggregate regions cannot be subdivided */
+-	if (dms->cur_region & DM_STATS_WALK_GROUP)
+-		return 1;
+-
+-	return dm_stats_get_region_nr_areas(dms, dms->cur_region);
+-}
+-
+-uint64_t dm_stats_get_nr_areas(const struct dm_stats *dms)
+-{
+-	uint64_t nr_areas = 0, flags = DM_STATS_WALK_AREA;
+-	/* use a separate cursor */
+-	uint64_t cur_region = 0, cur_area = 0, cur_group = 0;
+-
+-	/* no regions to visit? */
+-	if (!dms->regions)
+-		return 0;
+-
+-	flags = DM_STATS_WALK_AREA;
+-	_stats_walk_start(dms, &flags, &cur_region, &cur_area, &cur_group);
+-	do {
+-		nr_areas += dm_stats_get_current_nr_areas(dms);
+-		_stats_walk_next(dms, &flags,
+-				 &cur_region, &cur_area,
+-				 &cur_group);
+-	} while (!_stats_walk_end(dms, &flags,
+-				  &cur_region, &cur_area,
+-				  &cur_group));
+-	return nr_areas;
+-}
+-
+-int dm_stats_group_present(const struct dm_stats *dms, uint64_t group_id)
+-{
+-	return _stats_group_id_present(dms, group_id);
+-}
+-
+-int dm_stats_get_region_nr_histogram_bins(const struct dm_stats *dms,
+-					  uint64_t region_id)
+-{
+-	region_id = (region_id == DM_STATS_REGION_CURRENT)
+-		     ? dms->cur_region : region_id ;
+-
+-	/* FIXME: support group histograms if all region bounds match */
+-	if (region_id & DM_STATS_WALK_GROUP)
+-		return 0;
+-
+-	if (!dms->regions[region_id].bounds)
+-		return 0;
+-
+-	return dms->regions[region_id].bounds->nr_bins;
+-}
+-
+-/*
+- * Fill buf with a list of set regions in the regions bitmap. Consecutive
+- * ranges of set region IDs are output using "M-N" range notation.
+- *
+- * The number of bytes consumed is returned or zero on error.
+- */
+-static size_t _stats_group_tag_fill(const struct dm_stats *dms,
+-				    dm_bitset_t regions,
+-				    char *buf, size_t buflen)
+-{
+-	int i, j, r, next, last = 0;
+-	size_t used = 0;
+-
+-	last = dm_bit_get_last(regions);
+-
+-	i = dm_bit_get_first(regions);
+-	for(; i >= 0; i = dm_bit_get_next(regions, i)) {
+-		/* find range end */
+-		j = i;
+-		do
+-			next = j + 1;
+-		while ((j = dm_bit_get_next(regions, j)) == next);
+-
+-		/* set to last set bit */
+-		j = next - 1;
+-
+-		/* handle range vs. single region */
+-		if (i != j)
+-			r = dm_snprintf(buf, buflen, FMTu64 "-" FMTu64 "%s",
+-					(uint64_t) i, (uint64_t) j,
+-					(j == last) ? "" : ",");
+-		else
+-			r = dm_snprintf(buf, buflen, FMTu64 "%s", (uint64_t) i,
+-					(i == last) ? "" : ",");
+-		if (r < 0)
+-			goto_bad;
+-
+-		i = next; /* skip handled bits if in range */
+-
+-		buf += r;
+-		used += r;
+-	}
+-
+-	return used;
+-bad:
+-	log_error("Could not format group list.");
+-	return 0;
+-}
+-
+-/*
+- * Calculate the space required to hold a string description of the group
+- * described by the regions bitset using comma separated list in range
+- * notation ("A,B,C,M-N").
+- */
+-static size_t _stats_group_tag_len(const struct dm_stats *dms,
+-				   dm_bitset_t regions)
+-{
+-	int64_t i, j, next, nr_regions = 0;
+-	size_t buflen = 0, id_len = 0;
+-
+-	/* check region ids and find last set bit */
+-	i = dm_bit_get_first(regions);
+-	for (; i >= 0; i = dm_bit_get_next(regions, i)) {
+-		/* length of region_id or range start in characters */
+-		id_len = (i) ? 1 + (size_t) log10(i) : 1;
+-		buflen += id_len;
+-		j = i;
+-		do
+-			next = j + 1;
+-		while ((j = dm_bit_get_next(regions, j)) == next);
+-
+-		/* set to last set bit */
+-		j = next - 1;
+-
+-		nr_regions += j - i + 1;
+-
+-		/* handle range */
+-		if (i != j) {
+-			/* j is always > i, which is always >= 0 */
+-			id_len = 1 + (size_t) log10(j);
+-			buflen += id_len + 1; /* range end plus "-" */
+-		}
+-		buflen++;
+-		i = next; /* skip bits if handling range */
+-	}
+-	return buflen;
+-}
+-
+-/*
+- * Build a DMS_GROUP="..." tag for the group specified by group_id,
+- * to be stored in the corresponding region's aux_data field.
+- */
+-static char *_build_group_tag(struct dm_stats *dms, uint64_t group_id)
+-{
+-	char *aux_string, *buf;
+-	dm_bitset_t regions;
+-	const char *alias;
+-	size_t buflen = 0;
+-	int r;
+-
+-	regions = dms->groups[group_id].regions;
+-	alias = dms->groups[group_id].alias;
+-
+-	buflen = _stats_group_tag_len(dms, regions);
+-
+-	if (!buflen)
+-		return_0;
+-
+-	buflen += DMS_GROUP_TAG_LEN;
+-	buflen += 1 + (alias ? strlen(alias) : 0); /* 'alias:' */
+-
+-	buf = aux_string = malloc(buflen);
+-	if (!buf) {
+-		log_error("Could not allocate memory for aux_data string.");
+-		return NULL;
+-	}
+-
+-	if (!dm_strncpy(buf, DMS_GROUP_TAG, DMS_GROUP_TAG_LEN + 1))
+-		goto_bad;
+-
+-	buf += DMS_GROUP_TAG_LEN;
+-	buflen -= DMS_GROUP_TAG_LEN;
+-
+-	r = dm_snprintf(buf, buflen, "%s%c", alias ? alias : "", DMS_GROUP_SEP);
+-	if (r < 0)
+-		goto_bad;
+-
+-	buf += r;
+-	buflen -= r;
+-
+-	r = _stats_group_tag_fill(dms, regions, buf, buflen);
+-	if (!r)
+-		goto_bad;
+-
+-	return aux_string;
+-bad:
+-	log_error("Could not format group aux_data.");
+-	free(aux_string);
+-	return NULL;
+-}
+-
+-/*
+- * Store updated aux_data for a region. The aux_data is passed to the
+- * kernel using the @stats_set_aux message. Any required group tag is
+- * generated from the current group table and included in the message.
+- */
+-static int _stats_set_aux(struct dm_stats *dms,
+-			  uint64_t region_id, const char *aux_data)
+-{
+-	const char *group_tag = NULL;
+-	struct dm_task *dmt = NULL;
+-	char msg[STATS_MSG_BUF_LEN];
+-
+-	/* group data required? */
+-	if (_stats_group_id_present(dms, region_id)) {
+-		group_tag = _build_group_tag(dms, region_id);
+-		if (!group_tag) {
+-			log_error("Could not build group descriptor for "
+-				  "region ID " FMTu64, region_id);
+-			goto bad;
+-		}
+-	}
+-
+-	if (dm_snprintf(msg, sizeof(msg), "@stats_set_aux " FMTu64 " %s%s%s ",
+-			region_id, (group_tag) ? group_tag : "",
+-			(group_tag) ? DMS_AUX_SEP : "",
+-			(strlen(aux_data)) ? aux_data : "-") < 0) {
+-		log_error("Could not prepare @stats_set_aux message");
+-		goto bad;
+-	}
+-
+-	if (!(dmt = _stats_send_message(dms, msg)))
+-		goto_bad;
+-
+-	free((char *) group_tag);
+-
+-	/* no response to a @stats_set_aux message */
+-	dm_task_destroy(dmt);
+-
+-	return 1;
+-bad:
+-	free((char *) group_tag);
+-	return 0;
+-}
+-
+-/*
+- * Maximum length of a "start+end" range string:
+- * Two 20 digit uint64_t, '+', and NULL.
+- */
+-#define RANGE_LEN 42
+-static int _stats_create_region(struct dm_stats *dms, uint64_t *region_id,
+-				uint64_t start, uint64_t len, int64_t step,
+-				int precise, const char *hist_arg,
+-				const char *program_id,	const char *aux_data)
+-{
+-	char msg[STATS_MSG_BUF_LEN], range[RANGE_LEN], *endptr = NULL;
+-	const char *err_fmt = "Could not prepare @stats_create %s.";
+-	const char *precise_str = PRECISE_ARG;
+-	const char *resp, *opt_args = NULL;
+-	struct dm_task *dmt = NULL;
+-	int r = 0, nr_opt = 0;
+-
+-	if (!_stats_bound(dms))
+-		return_0;
+-
+-	if (!program_id || !strlen(program_id))
+-		program_id = dms->program_id;
+-
+-	if (start || len) {
+-		if (dm_snprintf(range, sizeof(range), FMTu64 "+" FMTu64,
+-				start, len) < 0) {
+-			log_error(err_fmt, "range");
+-			return 0;
+-		}
+-	}
+-
+-	if (precise < 0)
+-		precise = dms->precise;
+-
+-	if (precise)
+-		nr_opt++;
 -	else
--		same = _filemap_monitor_check_same_file(fm->fd, fd);
+-		precise_str = "";
 -
--	if ((fd >= 0) && close(fd))
--		log_error("Error closing fd %d", fd);
+-	if (hist_arg)
+-		nr_opt++;
+-	else
+-		hist_arg = "";
 -
--	if (same < 0)
+-	if (nr_opt) {
+-		if ((dm_asprintf((char **)&opt_args, "%d %s %s%s", nr_opt,
+-				 precise_str,
+-				 (strlen(hist_arg)) ? HISTOGRAM_ARG : "",
+-				 hist_arg)) < 0) {
+-			log_error(err_fmt, PRECISE_ARG " option.");
+-			return 0;
+-		}
+-	} else
+-		opt_args = strdup("");
+-
+-	if (dm_snprintf(msg, sizeof(msg), "@stats_create %s %s" FMTu64
+-			" %s %s %s", (start || len) ? range : "-",
+-			(step < 0) ? "/" : "",
+-			(uint64_t)llabs(step),
+-			opt_args, program_id, aux_data) < 0) {
+-		log_error(err_fmt, "message");
+-		free((void *) opt_args);
+-		return 0;
+-	}
+-
+-	if (!(dmt = _stats_send_message(dms, msg)))
+-		goto_out;
+-
+-	resp = dm_task_get_message_response(dmt);
+-	if (!resp) {
+-		log_error("Could not parse empty @stats_create response.");
+-		goto out;
+-	}
+-
+-	if (region_id) {
+-		errno = 0;
+-		*region_id = strtoull(resp, &endptr, 10);
+-		if (errno || resp == endptr)
+-			goto_out;
+-	}
+-
+-	r = 1;
+-
+-out:
+-	if (dmt)
+-		dm_task_destroy(dmt);
+-	free((void *) opt_args);
+-
+-	return r;
+-}
+-
+-int dm_stats_create_region(struct dm_stats *dms, uint64_t *region_id,
+-			   uint64_t start, uint64_t len, int64_t step,
+-			   int precise, struct dm_histogram *bounds,
+-			   const char *program_id, const char *user_data)
+-{
+-	char *hist_arg = NULL;
+-	int r = 0;
+-
+-	/* Nanosecond counters and histograms both need precise_timestamps. */
+-	if ((precise || bounds) && !_stats_check_precise_timestamps(dms))
+-		return_0;
+-
+-	if (bounds) {
+-		/* _build_histogram_arg enables precise if vals < 1ms. */
+-		if (!(hist_arg = _build_histogram_arg(bounds, &precise)))
+-			goto_out;
+-	}
+-
+-	r = _stats_create_region(dms, region_id, start, len, step,
+-				 precise, hist_arg, program_id, user_data);
+-	free(hist_arg);
+-
+-out:
+-	return r;
+-}
+-
+-static void _stats_clear_group_regions(struct dm_stats *dms, uint64_t group_id)
+-{
+-	struct dm_stats_group *group;
+-	uint64_t i;
+-
+-	group = &dms->groups[group_id];
+-	for (i = dm_bit_get_first(group->regions);
+-	     i != DM_STATS_GROUP_NOT_PRESENT;
+-	     i = dm_bit_get_next(group->regions, i))
+-		dms->regions[i].group_id = DM_STATS_GROUP_NOT_PRESENT;
+-}
+-
+-static int _stats_remove_region_id_from_group(struct dm_stats *dms,
+-					      uint64_t region_id)
+-{
+-	struct dm_stats_region *region = &dms->regions[region_id];
+-	uint64_t group_id = region->group_id;
+-	dm_bitset_t regions = dms->groups[group_id].regions;
+-
+-	if (!_stats_region_is_grouped(dms, region_id))
+-		return_0;
+-
+-	dm_bit_clear(regions, region_id);
+-
+-	/* removing group leader? */
+-	if (region_id == group_id) {
+-		_stats_clear_group_regions(dms, group_id);
+-		_stats_group_destroy(&dms->groups[group_id]);
+-	}
+-
+-	return _stats_set_aux(dms, group_id, dms->regions[group_id].aux_data);
+-}
+-
+-static int _stats_delete_region(struct dm_stats *dms, uint64_t region_id)
+-{
+-	char msg[STATS_MSG_BUF_LEN];
+-	struct dm_task *dmt;
+-
+-	if (_stats_region_is_grouped(dms, region_id))
+-		if (!_stats_remove_region_id_from_group(dms, region_id)) {
+-			log_error("Could not remove region ID " FMTu64 " from "
+-				  "group ID " FMTu64,
+-				  region_id, dms->regions[region_id].group_id);
+-			return 0;
+-		}
+-
+-	if (dm_snprintf(msg, sizeof(msg), "@stats_delete " FMTu64, region_id) < 0) {
+-		log_error("Could not prepare @stats_delete message.");
+-		return 0;
+-	}
+-
+-	dmt = _stats_send_message(dms, msg);
+-	if (!dmt)
+-		return_0;
+-	dm_task_destroy(dmt);
+-
+-	return 1;
+-}
+-
+-int dm_stats_delete_region(struct dm_stats *dms, uint64_t region_id)
+-{
+-	int listed = 0;
+-
+-	if (!_stats_bound(dms))
+-		return_0;
+-
+-	/*
+-	 * To correctly delete a region, that may be part of a group, a
+-	 * listed handle is required, since the region may need to be
+-	 * removed from another region's group descriptor; earlier
+-	 * versions of the region deletion interface do not have this
+-	 * requirement since there are no dependencies between regions.
+-	 *
+-	 * Listing a previously unlisted handle has numerous
+-	 * side-effects on other calls and operations (e.g. stats
+-	 * walks), especially when returning to a function that depends
+-	 * on the state of the region table, or statistics cursor.
+-	 *
+-	 * To avoid changing the semantics of the API, and the need for
+-	 * a versioned symbol, maintain a flag indicating when a listing
+-	 * has been carried out, and drop the region table before
+-	 * returning.
+-	 *
+-	 * This ensures compatibility with programs compiled against
+-	 * earlier versions of libdm.
+-	 */
+-	if (!dms->regions && !(listed = dm_stats_list(dms, dms->program_id))) {
+-		log_error("Could not obtain region list while deleting "
+-			  "region ID " FMTu64, region_id);
+-		goto bad;
+-	}
+-
+-	if (!dm_stats_get_nr_regions(dms)) {
+-		log_error("Could not delete region ID " FMTu64 ": "
+-			  "no regions found", region_id);
+-		goto bad;
+-	}
+-
+-	/* includes invalid and special region_id values */
+-	if (!dm_stats_region_present(dms, region_id)) {
+-		log_error("Region ID " FMTu64 " does not exist", region_id);
+-		goto bad;
+-	}
+-
+-	if (!_stats_delete_region(dms, region_id))
+-		goto bad;
+-
+-	if (!listed)
+-		/* wipe region and mark as not present */
+-		_stats_region_destroy(&dms->regions[region_id]);
+-	else
+-		/* return handle to prior state */
+-		_stats_regions_destroy(dms);
+-
+-	return 1;
+-bad:
+-	if (listed)
+-		_stats_regions_destroy(dms);
+-
+-	return 0;
+-}
+-
+-int dm_stats_clear_region(struct dm_stats *dms, uint64_t region_id)
+-{
+-	char msg[STATS_MSG_BUF_LEN];
+-	struct dm_task *dmt;
+-
+-	if (!_stats_bound(dms))
+-		return_0;
+-
+-	if (dm_snprintf(msg, sizeof(msg), "@stats_clear " FMTu64, region_id) < 0) {
+-		log_error("Could not prepare @stats_clear message.");
+-		return 0;
+-	}
+-
+-	dmt = _stats_send_message(dms, msg);
+-
+-	if (!dmt)
+-		return_0;
+-
+-	dm_task_destroy(dmt);
+-
+-	return 1;
+-}
+-
+-static struct dm_task *_stats_print_region(struct dm_stats *dms,
+-				    uint64_t region_id, unsigned start_line,
+-				    unsigned num_lines, unsigned clear)
+-{
+-	/* @stats_print[_clear] <region_id> [<start_line> <num_lines>] */
+-	const char *err_fmt = "Could not prepare @stats_print %s.";
+-	char msg[STATS_MSG_BUF_LEN], lines[RANGE_LEN];
+-	struct dm_task *dmt = NULL;
+-
+-	if (start_line || num_lines)
+-		if (dm_snprintf(lines, sizeof(lines),
+-				"%u %u", start_line, num_lines) < 0) {
+-			log_error(err_fmt, "row specification");
+-			return NULL;
+-		}
+-
+-	if (dm_snprintf(msg, sizeof(msg), "@stats_print%s " FMTu64 " %s",
+-			(clear) ? "_clear" : "",
+-			region_id, (start_line || num_lines) ? lines : "") < 0) {
+-		log_error(err_fmt, "message");
+-		return NULL;
+-	}
+-
+-	if (!(dmt = _stats_send_message(dms, msg)))
+-		return_NULL;
+-
+-	return dmt;
+-}
+-
+-char *dm_stats_print_region(struct dm_stats *dms, uint64_t region_id,
+-			    unsigned start_line, unsigned num_lines,
+-			    unsigned clear)
+-{
+-	char *resp = NULL;
+-	struct dm_task *dmt = NULL;
+-	const char *response;
+-
+-	if (!_stats_bound(dms))
+-		return_0;
+-
+-	/*
+-	 * FIXME: 'print' can be emulated for groups or aggregate regions
+-	 * by populating the handle and emitting aggregate counter data
+-	 * in the kernel print format.
+-	 */
+-	if (region_id == DM_STATS_WALK_GROUP)
+-		return_0;
+-
+-	dmt = _stats_print_region(dms, region_id,
+-				  start_line, num_lines, clear);
+-
+-	if (!dmt)
+-		return_0;
+-
+-	if (!(response = dm_task_get_message_response(dmt)))
+-		goto_out;
+-
+-	if (!(resp = dm_pool_strdup(dms->mem, response)))
+-		log_error("Could not allocate memory for response buffer.");
+-out:
+-	dm_task_destroy(dmt);
+-
+-	return resp;
+-}
+-
+-void dm_stats_buffer_destroy(struct dm_stats *dms, char *buffer)
+-{
+-	dm_pool_free(dms->mem, buffer);
+-}
+-
+-uint64_t dm_stats_get_nr_regions(const struct dm_stats *dms)
+-{
+-	if (!dms)
+-		return_0;
+-
+-	if (!dms->regions)
 -		return 0;
 -
--	/* Should not happen with normal /proc. */
--	if ((fd > 0) && !same) {
--		log_error("File descriptor mismatch: %d and %s (read from %s) "
--			  "are not the same file!", fm->fd, link_buf, path_buf);
+-	return dms->nr_regions;
+-}
+-
+-uint64_t dm_stats_get_nr_groups(const struct dm_stats *dms)
+-{
+-	uint64_t group_id, nr_groups = 0;
+-
+-	if (!dms)
+-		return_0;
+-
+-	/* no regions or groups? */
+-	if (!dms->regions || !dms->groups)
+-		return 0;
+-
+-	for (group_id = 0; group_id <= dms->max_region; group_id++)
+-		if (dms->groups[group_id].group_id
+-		    != DM_STATS_GROUP_NOT_PRESENT)
+-			nr_groups++;
+-
+-	return nr_groups;
+-}
+-
+-/**
+- * Test whether region_id is present in this set of stats data.
+- */
+-int dm_stats_region_present(const struct dm_stats *dms, uint64_t region_id)
+-{
+-	if (!dms->regions)
+-		return_0;
+-
+-	if (region_id > dms->max_region)
+-		return 0;
+-
+-	return _stats_region_present(&dms->regions[region_id]);
+-}
+-
+-static int _dm_stats_populate_region(struct dm_stats *dms, uint64_t region_id,
+-				     const char *resp)
+-{
+-	struct dm_stats_region *region = &dms->regions[region_id];
+-
+-	if (!_stats_bound(dms))
+-		return_0;
+-
+-	if (!region) {
+-		log_error("Cannot populate empty handle before dm_stats_list().");
+-		return 0;
+-	}
+-	if (!_stats_parse_region(dms, resp, region, region->timescale)) {
+-		log_error("Could not parse @stats_print message response.");
+-		return 0;
+-	}
+-	region->region_id = region_id;
+-	return 1;
+-}
+-
+-int dm_stats_populate(struct dm_stats *dms, const char *program_id,
+-		      uint64_t region_id)
+-{
+-	int all_regions = (region_id == DM_STATS_REGIONS_ALL);
+-	struct dm_task *dmt = NULL; /* @stats_print task */
+-	uint64_t saved_flags; /* saved walk flags */
+-	const char *resp;
+-
+-	/*
+-	 * We are about do destroy and re-create the region table, so it
+-	 * is safe to use the cursor embedded in the stats handle: just
+-	 * save a copy of the current walk_flags to restore later.
+-	 */
+-	saved_flags = dms->walk_flags;
+-
+-	if (!_stats_bound(dms))
+-		return_0;
+-
+-	if ((!all_regions) && (region_id & DM_STATS_WALK_GROUP)) {
+-		log_error("Invalid region_id for dm_stats_populate: "
+-			  "DM_STATS_WALK_GROUP");
+-		return 0;
+-	}
+-
+-	if (!dms->nr_regions) {
+-		log_error("No regions registered.");
+-		return 0;
+-	}
+-
+-	/* allow zero-length program_id for populate */
+-	if (!program_id)
+-		program_id = dms->program_id;
+-
+-	if (all_regions && !dm_stats_list(dms, program_id)) {
+-		log_error("Could not parse @stats_list response.");
+-		goto bad;
+-	} else if (!_stats_set_name_cache(dms)) {
+-		goto_bad;
+-	}
+-
+-	dms->walk_flags = DM_STATS_WALK_REGION;
+-	dm_stats_walk_start(dms);
+-	do {
+-		region_id = (all_regions)
+-			     ? dm_stats_get_current_region(dms) : region_id;
+-
+-		/* obtain all lines and clear counter values */
+-		if (!(dmt = _stats_print_region(dms, region_id, 0, 0, 1)))
+-			goto_bad;
+-
+-		resp = dm_task_get_message_response(dmt);
+-		if (!_dm_stats_populate_region(dms, region_id, resp)) {
+-			dm_task_destroy(dmt);
+-			goto_bad;
+-		}
+-
+-		dm_task_destroy(dmt);
+-		dm_stats_walk_next(dms);
+-
+-	} while (all_regions && !dm_stats_walk_end(dms));
+-
+-	dms->walk_flags = saved_flags;
+-	return 1;
+-
+-bad:
+-	dms->walk_flags = saved_flags;
+-	_stats_regions_destroy(dms);
+-	dms->regions = NULL;
+-	return 0;
+-}
+-
+-/**
+- * destroy a dm_stats object and all associated regions and counter sets.
+- */
+-void dm_stats_destroy(struct dm_stats *dms)
+-{
+-	if (!dms)
+-		return;
+-
+-	_stats_regions_destroy(dms);
+-	_stats_groups_destroy(dms);
+-	_stats_clear_binding(dms);
+-	dm_pool_destroy(dms->mem);
+-	dm_pool_destroy(dms->hist_mem);
+-	dm_pool_destroy(dms->group_mem);
+-	free(dms->program_id);
+-	free((char *) dms->name);
+-	free(dms);
+-}
+-
+-/*
+- * Walk each area that is a member of region_id rid.
+- * i is a variable of type int that holds the current area_id.
+- */
+-#define _foreach_region_area(dms, rid, i)				\
+-for ((i) = 0; (i) < _nr_areas_region(&dms->regions[(rid)]); (i)++)	\
+-
+-/*
+- * Walk each region that is a member of group_id gid.
+- * i is a variable of type int that holds the current region_id.
+- */
+-#define _foreach_group_region(dms, gid, i)			\
+-for ((i) = dm_bit_get_first((dms)->groups[(gid)].regions);	\
+-     (i) != DM_STATS_GROUP_NOT_PRESENT;				\
+-     (i) = dm_bit_get_next((dms)->groups[(gid)].regions, (i)))	\
+-
+-/*
+- * Walk each region that is a member of group_id gid visiting each
+- * area within the region.
+- * i is a variable of type int that holds the current region_id.
+- * j is a variable of type int variable that holds the current area_id.
+- */
+-#define _foreach_group_area(dms, gid, i, j)			\
+-_foreach_group_region(dms, gid, i)				\
+-	_foreach_region_area(dms, i, j)
+-
+-static uint64_t _stats_get_counter(const struct dm_stats *dms,
+-				   const struct dm_stats_counters *area,
+-				   dm_stats_counter_t counter)
+-{
+-	switch(counter) {
+-	case DM_STATS_READS_COUNT:
+-		return area->reads;
+-	case DM_STATS_READS_MERGED_COUNT:
+-		return area->reads_merged;
+-	case DM_STATS_READ_SECTORS_COUNT:
+-		return area->read_sectors;
+-	case DM_STATS_READ_NSECS:
+-		return area->read_nsecs;
+-	case DM_STATS_WRITES_COUNT:
+-		return area->writes;
+-	case DM_STATS_WRITES_MERGED_COUNT:
+-		return area->writes_merged;
+-	case DM_STATS_WRITE_SECTORS_COUNT:
+-		return area->write_sectors;
+-	case DM_STATS_WRITE_NSECS:
+-		return area->write_nsecs;
+-	case DM_STATS_IO_IN_PROGRESS_COUNT:
+-		return area->io_in_progress;
+-	case DM_STATS_IO_NSECS:
+-		return area->io_nsecs;
+-	case DM_STATS_WEIGHTED_IO_NSECS:
+-		return area->weighted_io_nsecs;
+-	case DM_STATS_TOTAL_READ_NSECS:
+-		return area->total_read_nsecs;
+-	case DM_STATS_TOTAL_WRITE_NSECS:
+-		return area->total_write_nsecs;
+-	case DM_STATS_NR_COUNTERS:
+-	default:
+-		log_error("Attempt to read invalid counter: %d", counter);
+-	}
+-	return 0;
+-}
+-
+-uint64_t dm_stats_get_counter(const struct dm_stats *dms,
+-			      dm_stats_counter_t counter,
+-			      uint64_t region_id, uint64_t area_id)
+-{
+-	uint64_t i, j, sum = 0; /* aggregation */
+-	int sum_regions = 0;
+-	struct dm_stats_region *region;
+-	struct dm_stats_counters *area;
+-
+-	region_id = (region_id == DM_STATS_REGION_CURRENT)
+-		     ? dms->cur_region : region_id ;
+-	area_id = (area_id == DM_STATS_REGION_CURRENT)
+-		   ? dms->cur_area : area_id ;
+-
+-	sum_regions = !!(region_id & DM_STATS_WALK_GROUP);
+-
+-	if (region_id == DM_STATS_WALK_GROUP)
+-		/* group walk using the cursor */
+-		region_id = dms->cur_group;
+-	else if (region_id & DM_STATS_WALK_GROUP)
+-		/* group walk using immediate group_id */
+-		region_id &= ~DM_STATS_WALK_GROUP;
+-	region = &dms->regions[region_id];
+-
+-	/*
+-	 * All statistics aggregation takes place here: aggregate metrics
+-	 * are calculated as normal using the aggregated counter values
+-	 * returned for the region or group specified.
+-	 */
+-
+-	if (_stats_region_is_grouped(dms, region_id) && (sum_regions)) {
+-		/* group */
+-		if (area_id & DM_STATS_WALK_GROUP)
+-			_foreach_group_area(dms, region->group_id, i, j) {
+-				area = &dms->regions[i].counters[j];
+-				sum += _stats_get_counter(dms, area, counter);
+-			}
+-		else
+-			_foreach_group_region(dms, region->group_id, i) {
+-				area = &dms->regions[i].counters[area_id];
+-				sum += _stats_get_counter(dms, area, counter);
+-			}
+-	} else if (area_id == DM_STATS_WALK_REGION) {
+-		/* aggregate region */
+-		_foreach_region_area(dms, region_id, j) {
+-			area = &dms->regions[region_id].counters[j];
+-			sum += _stats_get_counter(dms, area, counter);
+-		}
+-	} else {
+-		/* plain region / area */
+-		area = &region->counters[area_id];
+-		sum = _stats_get_counter(dms, area, counter);
+-	}
+-
+-	return sum;
+-}
+-
+-/*
+- * Methods for accessing named counter fields. All methods share the
+- * following naming scheme and prototype:
+- *
+- * uint64_t dm_stats_get_COUNTER(const struct dm_stats *, uint64_t, uint64_t)
+- *
+- * Where the two integer arguments are the region_id and area_id
+- * respectively.
+- *
+- * name is the name of the counter (lower case)
+- * counter is the part of the enum name following DM_STATS_ (upper case)
+- */
+-#define MK_STATS_GET_COUNTER_FN(name, counter)				\
+-uint64_t dm_stats_get_ ## name(const struct dm_stats *dms,		\
+-			       uint64_t region_id, uint64_t area_id)	\
+-{									\
+-	return dm_stats_get_counter(dms, DM_STATS_ ## counter,		\
+-				    region_id, area_id);		\
+-}
+-
+-MK_STATS_GET_COUNTER_FN(reads, READS_COUNT)
+-MK_STATS_GET_COUNTER_FN(reads_merged, READS_MERGED_COUNT)
+-MK_STATS_GET_COUNTER_FN(read_sectors, READ_SECTORS_COUNT)
+-MK_STATS_GET_COUNTER_FN(read_nsecs, READ_NSECS)
+-MK_STATS_GET_COUNTER_FN(writes, WRITES_COUNT)
+-MK_STATS_GET_COUNTER_FN(writes_merged, WRITES_MERGED_COUNT)
+-MK_STATS_GET_COUNTER_FN(write_sectors, WRITE_SECTORS_COUNT)
+-MK_STATS_GET_COUNTER_FN(write_nsecs, WRITE_NSECS)
+-MK_STATS_GET_COUNTER_FN(io_in_progress, IO_IN_PROGRESS_COUNT)
+-MK_STATS_GET_COUNTER_FN(io_nsecs, IO_NSECS)
+-MK_STATS_GET_COUNTER_FN(weighted_io_nsecs, WEIGHTED_IO_NSECS)
+-MK_STATS_GET_COUNTER_FN(total_read_nsecs, TOTAL_READ_NSECS)
+-MK_STATS_GET_COUNTER_FN(total_write_nsecs, TOTAL_WRITE_NSECS)
+-#undef MK_STATS_GET_COUNTER_FN
+-
+-/*
+- * Floating point stats metric functions
+- *
+- * Called from dm_stats_get_metric() to calculate the value of
+- * the requested metric.
+- *
+- * int _metric_name(const struct dm_stats *dms,
+- * 		    struct dm_stats_counters *c,
+- * 		    double *value);
+- *
+- * Calculate a metric value from the counter data for the given
+- * identifiers and store it in the memory pointed to by value,
+- * applying group or region aggregation if enabled.
+- *
+- * Return one on success or zero on failure.
+- *
+- * To add a new metric:
+- *
+- * o Add a new name to the dm_stats_metric_t enum.
+- * o Create a _metric_fn() to calculate the new metric.
+- * o Add _metric_fn to the _metrics function table
+- *   (entries in enum order).
+- * o Do not add a new named public function for the metric -
+- *   users of new metrics are encouraged to convert to the enum
+- *   based metric interface.
+- *
+- */
+-
+-static int _rd_merges_per_sec(const struct dm_stats *dms, double *rrqm,
+-			      uint64_t region_id, uint64_t area_id)
+-{
+-	double mrgs;
+-	mrgs = (double) dm_stats_get_counter(dms, DM_STATS_READS_MERGED_COUNT,
+-					     region_id, area_id);
+-
+-	*rrqm = mrgs / (double) dms->interval_ns;
+-
+-	return 1;
+-}
+-
+-static int _wr_merges_per_sec(const struct dm_stats *dms, double *wrqm,
+-			      uint64_t region_id, uint64_t area_id)
+-{
+-	double mrgs;
+-	mrgs = (double) dm_stats_get_counter(dms, DM_STATS_WRITES_MERGED_COUNT,
+-					     region_id, area_id);
+-
+-	*wrqm = mrgs / (double) dms->interval_ns;
+-
+-	return 1;
+-}
+-
+-static int _reads_per_sec(const struct dm_stats *dms, double *rd_s,
+-			  uint64_t region_id, uint64_t area_id)
+-{
+-	double reads;
+-	reads = (double) dm_stats_get_counter(dms, DM_STATS_READS_COUNT,
+-					      region_id, area_id);
+-
+-	*rd_s = (reads * NSEC_PER_SEC) / (double) dms->interval_ns;
+-
+-	return 1;
+-}
+-
+-static int _writes_per_sec(const struct dm_stats *dms, double *wr_s,
+-			   uint64_t region_id, uint64_t area_id)
+-{
+-	double writes;
+-	writes = (double) dm_stats_get_counter(dms, DM_STATS_WRITES_COUNT,
+-					       region_id, area_id);
+-
+-	*wr_s = (writes * NSEC_PER_SEC) / (double) dms->interval_ns;
+-
+-	return 1;
+-}
+-
+-static int _read_sectors_per_sec(const struct dm_stats *dms, double *rsec_s,
+-				 uint64_t region_id, uint64_t area_id)
+-{
+-	double sect;
+-	sect = (double) dm_stats_get_counter(dms, DM_STATS_READ_SECTORS_COUNT,
+-					     region_id, area_id);
+-
+-	*rsec_s = (sect * (double) NSEC_PER_SEC) / (double) dms->interval_ns;
+-
+-	return 1;
+-}
+-
+-static int _write_sectors_per_sec(const struct dm_stats *dms, double *wsec_s,
+-				  uint64_t region_id, uint64_t area_id)
+-{
+-	double sect;
+-	sect = (double) dm_stats_get_counter(dms, DM_STATS_WRITE_SECTORS_COUNT,
+-					     region_id, area_id);
+-
+-	*wsec_s = (sect * (double) NSEC_PER_SEC) / (double) dms->interval_ns;
+-
+-	return 1;
+-}
+-
+-static int _average_request_size(const struct dm_stats *dms, double *arqsz,
+-				 uint64_t region_id, uint64_t area_id)
+-{
+-	double ios, sectors;
+-
+-	ios = (double) (dm_stats_get_counter(dms, DM_STATS_READS_COUNT,
+-					     region_id, area_id)
+-			+ dm_stats_get_counter(dms, DM_STATS_WRITES_COUNT,
+-					       region_id, area_id));
+-	sectors = (double) (dm_stats_get_counter(dms, DM_STATS_READ_SECTORS_COUNT,
+-						 region_id, area_id)
+-			    + dm_stats_get_counter(dms, DM_STATS_WRITE_SECTORS_COUNT,
+-						   region_id, area_id));
+-
+-	if (ios > 0.0)
+-		*arqsz = sectors / ios;
+-	else
+-		*arqsz = 0.0;
+-
+-	return 1;
+-}
+-
+-static int _average_queue_size(const struct dm_stats *dms, double *qusz,
+-			       uint64_t region_id, uint64_t area_id)
+-{
+-	double io_ticks;
+-	io_ticks = (double) dm_stats_get_counter(dms, DM_STATS_WEIGHTED_IO_NSECS,
+-						 region_id, area_id);
+-
+-	if (io_ticks > 0.0)
+-		*qusz = io_ticks / (double) dms->interval_ns;
+-	else
+-		*qusz = 0.0;
+-
+-	return 1;
+-}
+-
+-static int _average_wait_time(const struct dm_stats *dms, double *await,
+-			      uint64_t region_id, uint64_t area_id)
+-{
+-	uint64_t io_ticks, nr_ios;
+-
+-	io_ticks = dm_stats_get_counter(dms, DM_STATS_READ_NSECS,
+-					region_id, area_id);
+-	io_ticks += dm_stats_get_counter(dms, DM_STATS_WRITE_NSECS,
+-					 region_id, area_id);
+-
+-	nr_ios = dm_stats_get_counter(dms, DM_STATS_READS_COUNT,
+-				      region_id, area_id);
+-	nr_ios += dm_stats_get_counter(dms, DM_STATS_WRITES_COUNT,
+-				       region_id, area_id);
+-
+-	if (nr_ios > 0)
+-		*await = (double) io_ticks / (double) nr_ios;
+-	else
+-		*await = 0.0;
+-
+-	return 1;
+-}
+-
+-static int _average_rd_wait_time(const struct dm_stats *dms, double *await,
+-				 uint64_t region_id, uint64_t area_id)
+-{
+-	uint64_t rd_io_ticks, nr_rd_ios;
+-
+-	rd_io_ticks = dm_stats_get_counter(dms, DM_STATS_READ_NSECS,
+-					   region_id, area_id);
+-	nr_rd_ios = dm_stats_get_counter(dms, DM_STATS_READS_COUNT,
+-					 region_id, area_id);
+-
+-	/*
+-	 * If rd_io_ticks is > 0 this should imply that nr_rd_ios is
+-	 * also > 0 (unless a kernel bug exists). Test for both here
+-	 * before using the IO count as a divisor (Coverity).
+-	 */
+-	if (rd_io_ticks > 0 && nr_rd_ios > 0)
+-		*await = (double) rd_io_ticks / (double) nr_rd_ios;
+-	else
+-		*await = 0.0;
+-
+-	return 1;
+-}
+-
+-static int _average_wr_wait_time(const struct dm_stats *dms, double *await,
+-				 uint64_t region_id, uint64_t area_id)
+-{
+-	uint64_t wr_io_ticks, nr_wr_ios;
+-
+-	wr_io_ticks = dm_stats_get_counter(dms, DM_STATS_WRITE_NSECS,
+-					   region_id, area_id);
+-	nr_wr_ios = dm_stats_get_counter(dms, DM_STATS_WRITES_COUNT,
+-					 region_id, area_id);
+-
+-	/*
+-	 * If wr_io_ticks is > 0 this should imply that nr_wr_ios is
+-	 * also > 0 (unless a kernel bug exists). Test for both here
+-	 * before using the IO count as a divisor (Coverity).
+-	 */
+-	if (wr_io_ticks > 0 && nr_wr_ios > 0)
+-		*await = (double) wr_io_ticks / (double) nr_wr_ios;
+-	else
+-		*await = 0.0;
+-
+-	return 1;
+-}
+-
+-static int _throughput(const struct dm_stats *dms, double *tput,
+-		       uint64_t region_id, uint64_t area_id)
+-{
+-	uint64_t nr_ios;
+-
+-	nr_ios = dm_stats_get_counter(dms, DM_STATS_READS_COUNT,
+-				      region_id, area_id);
+-	nr_ios += dm_stats_get_counter(dms, DM_STATS_WRITES_COUNT,
+-				       region_id, area_id);
+-
+-	*tput = ((double) NSEC_PER_SEC * (double) nr_ios)
+-		/ (double) (dms->interval_ns);
+-
+-	return 1;
+-}
+-
+-static int _utilization(const struct dm_stats *dms, double *util,
+-			uint64_t region_id, uint64_t area_id)
+-{
+-	uint64_t io_nsecs, interval_ns = dms->interval_ns;
+-
+-	/**
+-	 * If io_nsec > interval_ns there is something wrong with the clock
+-	 * for the last interval; do not allow a value > 100% utilization
+-	 * to be passed to a dm_make_percent() call. We expect to see these
+-	 * at startup if counters have not been cleared before the first read.
+-	 *
+-	 * A zero interval_ns is also an error since metrics cannot be
+-	 * calculated without a defined interval - return zero and emit a
+-	 * backtrace in this case.
+-	 */
+-	io_nsecs = dm_stats_get_counter(dms, DM_STATS_IO_NSECS,
+-					region_id, area_id);
+-
+-	if (!interval_ns) {
+-		*util = 0.0;
+-		return_0;
+-	}
+-
+-	io_nsecs = ((io_nsecs < interval_ns) ? io_nsecs : interval_ns);
+-
+-	*util = (double) io_nsecs / (double) interval_ns;
+-
+-	return 1;
+-}
+-
+-static int _service_time(const struct dm_stats *dms, double *svctm,
+-			 uint64_t region_id, uint64_t area_id)
+-{
+-	double tput, util;
+-
+-	if (!_throughput(dms, &tput, region_id, area_id))
+-		return 0;
+-
+-	if (!_utilization(dms, &util, region_id, area_id))
+-		return 0;
+-
+-	util *= 100;
+-
+-	/* avoid NAN with zero counter values */
+-	if ( (uint64_t) tput == 0 || (uint64_t) util == 0) {
+-		*svctm = 0.0;
+-		return 1;
+-	}
+-
+-	*svctm = ((double) NSEC_PER_SEC * dm_percent_to_float(util))
+-		  / (100.0 * tput);
+-
+-	return 1;
+-}
+-
+-/*
+- * Table in enum order:
+- *      DM_STATS_RD_MERGES_PER_SEC,
+- *      DM_STATS_WR_MERGES_PER_SEC,
+- *      DM_STATS_READS_PER_SEC,
+- *      DM_STATS_WRITES_PER_SEC,
+- *      DM_STATS_READ_SECTORS_PER_SEC,
+- *      DM_STATS_WRITE_SECTORS_PER_SEC,
+- *      DM_STATS_AVERAGE_REQUEST_SIZE,
+- *      DM_STATS_AVERAGE_QUEUE_SIZE,
+- *      DM_STATS_AVERAGE_WAIT_TIME,
+- *      DM_STATS_AVERAGE_RD_WAIT_TIME,
+- *      DM_STATS_AVERAGE_WR_WAIT_TIME
+- *      DM_STATS_SERVICE_TIME,
+- *      DM_STATS_THROUGHPUT,
+- *      DM_STATS_UTILIZATION
+- *
+-*/
+-
+-typedef int (*_metric_fn_t)(const struct dm_stats *, double *,
+-			    uint64_t, uint64_t);
+-
+-_metric_fn_t _metrics[DM_STATS_NR_METRICS] = {
+-	_rd_merges_per_sec,
+-	_wr_merges_per_sec,
+-	_reads_per_sec,
+-	_writes_per_sec,
+-	_read_sectors_per_sec,
+-	_write_sectors_per_sec,
+-	_average_request_size,
+-	_average_queue_size,
+-	_average_wait_time,
+-	_average_rd_wait_time,
+-	_average_wr_wait_time,
+-	_service_time,
+-	_throughput,
+-	_utilization
+-};
+-
+-int dm_stats_get_metric(const struct dm_stats *dms, int metric,
+-			uint64_t region_id, uint64_t area_id, double *value)
+-{
+-	if (!dms->interval_ns)
+-		return_0;
+-
+-	/*
+-	 * Decode DM_STATS_{REGION,AREA}_CURRENT here; counters will then
+-	 * be returned for the actual current region and area.
+-	 *
+-	 * DM_STATS_WALK_GROUP is passed through to the counter methods -
+-	 * aggregates for the group are returned and used to calculate
+-	 * the metric for the group totals.
+-	 */
+-	region_id = (region_id == DM_STATS_REGION_CURRENT)
+-		     ? dms->cur_region : region_id ;
+-	area_id = (area_id == DM_STATS_REGION_CURRENT)
+-		   ? dms->cur_area : area_id ;
+-
+-	if (metric < 0 || metric >= DM_STATS_NR_METRICS) {
+-		log_error("Attempt to read invalid metric: %d", metric);
+-		return 0;
+-	}
+-
+-	return _metrics[metric](dms, value, region_id, area_id);
+-}
+-
+-/**
+- * Methods for accessing stats metrics. All methods share the
+- * following naming scheme and prototype:
+- *
+- * uint64_t dm_stats_get_metric(struct dm_stats *,
+- * 				int, int,
+- * 				uint64_t, uint64_t,
+- * 				double *v)
+- *
+- * Where the two integer arguments are the region_id and area_id
+- * respectively.
+- *
+- * name is the name of the metric (lower case)
+- * metric is the part of the enum name following DM_STATS_ (upper case)
+- */
+-#define MK_STATS_GET_METRIC_FN(name, metric, meta)			\
+-int dm_stats_get_ ## name(const struct dm_stats *dms, double *meta,	\
+-			  uint64_t region_id, uint64_t area_id)		\
+-{									\
+-	return dm_stats_get_metric(dms, DM_STATS_ ## metric, 		\
+-				   region_id, area_id, meta);		\
+-}
+-
+-MK_STATS_GET_METRIC_FN(rd_merges_per_sec, RD_MERGES_PER_SEC, rrqm)
+-MK_STATS_GET_METRIC_FN(wr_merges_per_sec, WR_MERGES_PER_SEC, wrqm)
+-MK_STATS_GET_METRIC_FN(reads_per_sec, READS_PER_SEC, rd_s)
+-MK_STATS_GET_METRIC_FN(writes_per_sec, WRITES_PER_SEC, wr_s)
+-MK_STATS_GET_METRIC_FN(read_sectors_per_sec, READ_SECTORS_PER_SEC, rsec_s)
+-MK_STATS_GET_METRIC_FN(write_sectors_per_sec, WRITE_SECTORS_PER_SEC, wsec_s)
+-MK_STATS_GET_METRIC_FN(average_request_size, AVERAGE_REQUEST_SIZE, arqsz)
+-MK_STATS_GET_METRIC_FN(average_queue_size, AVERAGE_QUEUE_SIZE, qusz)
+-MK_STATS_GET_METRIC_FN(average_wait_time, AVERAGE_WAIT_TIME, await)
+-MK_STATS_GET_METRIC_FN(average_rd_wait_time, AVERAGE_RD_WAIT_TIME, await)
+-MK_STATS_GET_METRIC_FN(average_wr_wait_time, AVERAGE_WR_WAIT_TIME, await)
+-MK_STATS_GET_METRIC_FN(service_time, SERVICE_TIME, svctm)
+-MK_STATS_GET_METRIC_FN(throughput, THROUGHPUT, tput)
+-
+-/*
+- * Utilization is an exception since it used the dm_percent_t type in the
+- * original named function based interface: preserve this behaviour for
+- * backwards compatibility with existing users.
+- *
+- * The same metric may be accessed as a double via the enum based metric
+- * interface.
+- */
+-int dm_stats_get_utilization(const struct dm_stats *dms, dm_percent_t *util,
+-			     uint64_t region_id, uint64_t area_id)
+-{
+-	double _util;
+-
+-	if (!dm_stats_get_metric(dms, DM_STATS_UTILIZATION,
+-				 region_id, area_id, &_util))
+-		return_0;
+-	/* scale up utilization value in the range [0.00..1.00] */
+-	*util = dm_make_percent(DM_PERCENT_1 * _util, DM_PERCENT_1);
+-	return 1;
+-}
+-
+-void dm_stats_set_sampling_interval_ms(struct dm_stats *dms, uint64_t interval_ms)
+-{
+-	/* All times use nsecs internally. */
+-	dms->interval_ns = interval_ms * NSEC_PER_MSEC;
+-}
+-
+-void dm_stats_set_sampling_interval_ns(struct dm_stats *dms, uint64_t interval_ns)
+-{
+-	dms->interval_ns = interval_ns;
+-}
+-
+-uint64_t dm_stats_get_sampling_interval_ms(const struct dm_stats *dms)
+-{
+-	/* All times use nsecs internally. */
+-	return (dms->interval_ns / NSEC_PER_MSEC);
+-}
+-
+-uint64_t dm_stats_get_sampling_interval_ns(const struct dm_stats *dms)
+-{
+-	/* All times use nsecs internally. */
+-	return (dms->interval_ns);
+-}
+-
+-int dm_stats_set_program_id(struct dm_stats *dms, int allow_empty,
+-			    const char *program_id)
+-{
+-	if (!allow_empty && (!program_id || !strlen(program_id))) {
+-		log_error("Empty program_id not permitted without "
+-			  "allow_empty=1");
+-		return 0;
+-	}
+-
+-	if (!program_id)
+-		program_id = "";
+-
+-	free(dms->program_id);
+-
+-	if (!(dms->program_id = strdup(program_id)))
+-		return_0;
+-
+-	return 1;
+-}
+-
+-uint64_t dm_stats_get_current_region(const struct dm_stats *dms)
+-{
+-	return dms->cur_region;
+-}
+-
+-uint64_t dm_stats_get_current_area(const struct dm_stats *dms)
+-{
+-	return dms->cur_area & ~DM_STATS_WALK_ALL;
+-}
+-
+-int dm_stats_get_region_start(const struct dm_stats *dms, uint64_t *start,
+-			      uint64_t region_id)
+-{
+-	if (!dms || !dms->regions)
+-		return_0;
+-
+-	/* start is unchanged when aggregating areas */
+-	if (region_id & DM_STATS_WALK_REGION)
+-		region_id &= ~DM_STATS_WALK_REGION;
+-
+-	/* use start of first region as group start */
+-	if (region_id & DM_STATS_WALK_GROUP) {
+-		if (region_id == DM_STATS_WALK_GROUP)
+-			region_id = dms->cur_group;
+-		else
+-			region_id &= ~DM_STATS_WALK_GROUP;
+-	}
+-
+-	*start = dms->regions[region_id].start;
+-	return 1;
+-}
+-
+-int dm_stats_get_region_len(const struct dm_stats *dms, uint64_t *len,
+-			    uint64_t region_id)
+-{
+-	uint64_t i;
+-	if (!dms || !dms->regions)
+-		return_0;
+-
+-	*len = 0;
+-
+-	/* length is unchanged when aggregating areas */
+-	if (region_id & DM_STATS_WALK_REGION)
+-		region_id &= ~DM_STATS_WALK_REGION;
+-
+-	if (region_id & DM_STATS_WALK_GROUP) {
+-		/* decode region / group ID */
+-		if (region_id == DM_STATS_WALK_GROUP)
+-			region_id = dms->cur_group;
+-		else
+-			region_id &= ~DM_STATS_WALK_GROUP;
+-
+-		/* use sum of region sizes as group size */
+-		if (_stats_region_is_grouped(dms, region_id))
+-			_foreach_group_region(dms, dms->cur_group, i)
+-				*len += dms->regions[i].len;
+-		else {
+-			log_error("Group ID " FMTu64 " does not exist",
+-				  region_id);
+-			return 0;
+-		}
+-	} else
+-		*len = dms->regions[region_id].len;
+-
+-	return 1;
+-}
+-
+-int dm_stats_get_region_area_len(const struct dm_stats *dms, uint64_t *len,
+-				 uint64_t region_id)
+-{
+-	if (!dms || !dms->regions)
+-		return_0;
+-
+-	/* groups are not subdivided - area size equals group size */
+-	if (region_id & (DM_STATS_WALK_GROUP | DM_STATS_WALK_REGION))
+-		/* get_region_len will decode region_id */
+-		return dm_stats_get_region_len(dms, len, region_id);
+-
+-	*len = dms->regions[region_id].step;
+-	return 1;
+-}
+-
+-int dm_stats_get_current_region_start(const struct dm_stats *dms,
+-				      uint64_t *start)
+-{
+-	return dm_stats_get_region_start(dms, start, dms->cur_region);
+-}
+-
+-int dm_stats_get_current_region_len(const struct dm_stats *dms,
+-				    uint64_t *len)
+-{
+-	return dm_stats_get_region_len(dms, len, dms->cur_region);
+-}
+-
+-int dm_stats_get_current_region_area_len(const struct dm_stats *dms,
+-					 uint64_t *step)
+-{
+-	return dm_stats_get_region_area_len(dms, step, dms->cur_region);
+-}
+-
+-int dm_stats_get_area_start(const struct dm_stats *dms, uint64_t *start,
+-			    uint64_t region_id, uint64_t area_id)
+-{
+-	struct dm_stats_region *region;
+-	if (!dms || !dms->regions)
+-		return_0;
+-
+-	/* group or region area start equals region start */
+-	if (region_id & (DM_STATS_WALK_GROUP | DM_STATS_WALK_REGION))
+-		return dm_stats_get_region_start(dms, start, region_id);
+-
+-	region = &dms->regions[region_id];
+-	*start = region->start + region->step * area_id;
+-	return 1;
+-}
+-
+-int dm_stats_get_area_offset(const struct dm_stats *dms, uint64_t *offset,
+-			     uint64_t region_id, uint64_t area_id)
+-{
+-	if (!dms || !dms->regions)
+-		return_0;
+-
+-	/* no areas for groups or aggregate regions */
+-	if (region_id & (DM_STATS_WALK_GROUP | DM_STATS_WALK_REGION))
+-		*offset = 0;
+-	else
+-		*offset = dms->regions[region_id].step * area_id;
+-
+-	return 1;
+-}
+-
+-int dm_stats_get_current_area_start(const struct dm_stats *dms,
+-				    uint64_t *start)
+-{
+-	return dm_stats_get_area_start(dms, start,
+-				       dms->cur_region, dms->cur_area);
+-}
+-
+-int dm_stats_get_current_area_offset(const struct dm_stats *dms,
+-					  uint64_t *offset)
+-{
+-	return dm_stats_get_area_offset(dms, offset,
+-				       dms->cur_region, dms->cur_area);
+-}
+-
+-int dm_stats_get_current_area_len(const struct dm_stats *dms,
+-				  uint64_t *len)
+-{
+-	return dm_stats_get_region_area_len(dms, len, dms->cur_region);
+-}
+-
+-const char *dm_stats_get_region_program_id(const struct dm_stats *dms,
+-					   uint64_t region_id)
+-{
+-	const char *program_id = NULL;
+-
+-	if (region_id & DM_STATS_WALK_GROUP)
+-		return dms->program_id;
+-
+-	if (region_id & DM_STATS_WALK_REGION)
+-		region_id &= ~DM_STATS_WALK_REGION;
+-
+-	program_id = dms->regions[region_id].program_id;
+-	return (program_id) ? program_id : "";
+-}
+-
+-const char *dm_stats_get_region_aux_data(const struct dm_stats *dms,
+-					 uint64_t region_id)
+-{
+-	const char *aux_data = NULL;
+-
+-	if (region_id & DM_STATS_WALK_GROUP)
+-		return "";
+-
+-	if (region_id & DM_STATS_WALK_REGION)
+-		region_id &= ~DM_STATS_WALK_REGION;
+-
+-	aux_data = dms->regions[region_id].aux_data;
+-	return (aux_data) ? aux_data : "" ;
+-}
+-
+-int dm_stats_set_alias(struct dm_stats *dms, uint64_t group_id, const char *alias)
+-{
+-	struct dm_stats_group *group = NULL;
+-	const char *old_alias = NULL;
+-
+-	if (!dms->regions || !dms->groups || !alias)
+-		return_0;
+-
+-	if (!_stats_region_is_grouped(dms, group_id)) {
+-		log_error("Cannot set alias for ungrouped region ID "
+-			  FMTu64, group_id);
+-		return 0;
+-	}
+-
+-	if (group_id & DM_STATS_WALK_GROUP) {
+-		if (group_id == DM_STATS_WALK_GROUP)
+-			group_id = dms->cur_group;
+-		else
+-			group_id &= ~DM_STATS_WALK_GROUP;
+-	}
+-
+-	if (group_id != dms->regions[group_id].group_id) {
+-		/* dm_stats_set_alias() must be called on the group ID. */
+-		log_error("Cannot set alias for group member " FMTu64 ".",
+-			  group_id);
+-		return 0;
+-	}
+-
+-	group = &dms->groups[group_id];
+-	old_alias = group->alias;
+-
+-	group->alias = strdup(alias);
+-	if (!group->alias) {
+-		log_error("Could not allocate memory for alias.");
+-		goto bad;
+-	}
+-
+-	if (!_stats_set_aux(dms, group_id, dms->regions[group_id].aux_data)) {
+-		log_error("Could not set new aux_data");
+-		goto bad;
+-	}
+-
+-	free((char *) old_alias);
+-
+-	return 1;
+-
+-bad:
+-	free((char *) group->alias);
+-	group->alias = old_alias;
+-	return 0;
+-}
+-
+-const char *dm_stats_get_alias(const struct dm_stats *dms, uint64_t id)
+-{
+-	const struct dm_stats_region *region;
+-
+-	id = (id == DM_STATS_REGION_CURRENT) ? dms->cur_region : id;
+-
+-	if (id & DM_STATS_WALK_GROUP) {
+-		if (id == DM_STATS_WALK_GROUP)
+-			id = dms->cur_group;
+-		else
+-			id &= ~DM_STATS_WALK_GROUP;
+-	}
+-
+-	region = &dms->regions[id];
+-	if (!_stats_region_is_grouped(dms, id)
+-	    || !dms->groups[region->group_id].alias)
+-		return dms->name;
+-
+-	return dms->groups[region->group_id].alias;
+-}
+-
+-const char *dm_stats_get_current_region_program_id(const struct dm_stats *dms)
+-{
+-	return dm_stats_get_region_program_id(dms, dms->cur_region);
+-}
+-
+-const char *dm_stats_get_current_region_aux_data(const struct dm_stats *dms)
+-{
+-	return dm_stats_get_region_aux_data(dms, dms->cur_region);
+-}
+-
+-int dm_stats_get_region_precise_timestamps(const struct dm_stats *dms,
+-					   uint64_t region_id)
+-{
+-	struct dm_stats_region *region;
+-
+-	if (region_id == DM_STATS_REGION_CURRENT)
+-		region_id = dms->cur_region;
+-
+-	if (region_id == DM_STATS_WALK_GROUP)
+-		region_id = dms->cur_group;
+-	else if (region_id & DM_STATS_WALK_GROUP)
+-		region_id &= ~DM_STATS_WALK_GROUP;
+-
+-	region = &dms->regions[region_id];
+-	return region->timescale == 1;
+-}
+-
+-int dm_stats_get_current_region_precise_timestamps(const struct dm_stats *dms)
+-{
+-	return dm_stats_get_region_precise_timestamps(dms,
+-						      DM_STATS_REGION_CURRENT);
+-}
+-
+-/*
+- * Histogram access methods.
+- */
+-
+-static void _sum_histogram_bins(const struct dm_stats *dms,
+-				struct dm_histogram *dmh_aggr,
+-				uint64_t region_id, uint64_t area_id)
+-{
+-	struct dm_stats_region *region;
+-	struct dm_histogram_bin *bins;
+-	struct dm_histogram *dmh_cur;
+-	int bin;
+-
+-	region = &dms->regions[region_id];
+-	dmh_cur = region->counters[area_id].histogram;
+-	bins = dmh_aggr->bins;
+-
+-	for (bin = 0; bin < dmh_aggr->nr_bins; bin++)
+-		bins[bin].count += dmh_cur->bins[bin].count;
+-}
+-
+-/*
+- * Create an aggregate histogram for a sub-divided region or a group.
+- */
+-static struct dm_histogram *_aggregate_histogram(const struct dm_stats *dms,
+-						 uint64_t region_id,
+-						 uint64_t area_id)
+-{
+-	struct dm_histogram *dmh_aggr, *dmh_cur, **dmh_cachep;
+-	uint64_t group_id = DM_STATS_GROUP_NOT_PRESENT;
+-	int bin, nr_bins, group = 1;
+-	size_t hist_size;
+-
+-	if (area_id == DM_STATS_WALK_REGION) {
+-		/* region aggregation */
+-		group = 0;
+-		if (!_stats_region_present(&dms->regions[region_id]))
+-			return_NULL;
+-
+-		if (!dms->regions[region_id].bounds)
+-			return_NULL;
+-
+-		if (!dms->regions[region_id].counters)
+-			return dms->regions[region_id].bounds;
+-
+-		if (dms->regions[region_id].histogram)
+-			return dms->regions[region_id].histogram;
+-
+-		dmh_cur = dms->regions[region_id].counters[0].histogram;
+-		dmh_cachep = &dms->regions[region_id].histogram;
+-		nr_bins = dms->regions[region_id].bounds->nr_bins;
+-	} else {
+-		/* group aggregation */
+-		group_id = region_id;
+-		area_id = DM_STATS_WALK_GROUP;
+-		if (!_stats_group_id_present(dms, group_id))
+-			return_NULL;
+-
+-		if (!dms->regions[group_id].bounds)
+-			return_NULL;
+-
+-		if (!dms->regions[group_id].counters)
+-			return dms->regions[group_id].bounds;
+-
+-		if (dms->groups[group_id].histogram)
+-			return dms->groups[group_id].histogram;
+-
+-		dmh_cur = dms->regions[group_id].counters[0].histogram;
+-		dmh_cachep = &dms->groups[group_id].histogram;
+-		nr_bins = dms->regions[group_id].bounds->nr_bins;
+-	}
+-
+-	hist_size = sizeof(*dmh_aggr)
+-		     + nr_bins * sizeof(struct dm_histogram_bin);
+-
+-	if (!(dmh_aggr = dm_pool_zalloc(dms->hist_mem, hist_size))) {
+-		log_error("Could not allocate group histogram");
+-		return 0;
+-	}
+-
+-	dmh_aggr->nr_bins = dmh_cur->nr_bins;
+-	dmh_aggr->dms = dms;
+-
+-	if (!group)
+-		_foreach_region_area(dms, region_id, area_id) {
+-			_sum_histogram_bins(dms, dmh_aggr, region_id, area_id);
+-		}
+-	else {
+-		_foreach_group_area(dms, group_id, region_id, area_id) {
+-			_sum_histogram_bins(dms, dmh_aggr, region_id, area_id);
+-		}
+-	}
+-
+-	for (bin = 0; bin < nr_bins; bin++) {
+-		dmh_aggr->sum += dmh_aggr->bins[bin].count;
+-		dmh_aggr->bins[bin].upper = dmh_cur->bins[bin].upper;
+-	}
+-
+-	/* cache aggregate histogram for subsequent access */
+-	*dmh_cachep = dmh_aggr;
+-
+-	return dmh_aggr;
+-}
+-
+-struct dm_histogram *dm_stats_get_histogram(const struct dm_stats *dms,
+-					    uint64_t region_id,
+-					    uint64_t area_id)
+-{
+-	int aggr = 0;
+-
+-	if (region_id == DM_STATS_REGION_CURRENT) {
+-		region_id = dms->cur_region;
+-		if (region_id & DM_STATS_WALK_GROUP) {
+-			region_id = dms->cur_group;
+-			aggr = 1;
+-		}
+-	} else if (region_id & DM_STATS_WALK_GROUP) {
+-		region_id &= ~DM_STATS_WALK_GROUP;
+-		aggr = 1;
+-	}
+-
+-	area_id = (area_id == DM_STATS_AREA_CURRENT)
+-		   ? dms->cur_area : area_id ;
+-
+-	if (area_id == DM_STATS_WALK_REGION)
+-		aggr = 1;
+-
+-	if (aggr)
+-		return _aggregate_histogram(dms, region_id, area_id);
+-
+-	if (region_id & DM_STATS_WALK_REGION)
+-		region_id &= ~DM_STATS_WALK_REGION;
+-
+-	if (!dms->regions[region_id].counters)
+-		return dms->regions[region_id].bounds;
+-
+-	return dms->regions[region_id].counters[area_id].histogram;
+-}
+-
+-int dm_histogram_get_nr_bins(const struct dm_histogram *dmh)
+-{
+-	return dmh->nr_bins;
+-}
+-
+-uint64_t dm_histogram_get_bin_lower(const struct dm_histogram *dmh, int bin)
+-{
+-	return (!bin) ? 0 : dmh->bins[bin - 1].upper;
+-}
+-
+-uint64_t dm_histogram_get_bin_upper(const struct dm_histogram *dmh, int bin)
+-{
+-	return dmh->bins[bin].upper;
+-}
+-
+-uint64_t dm_histogram_get_bin_width(const struct dm_histogram *dmh, int bin)
+-{
+-	uint64_t upper, lower;
+-	upper = dm_histogram_get_bin_upper(dmh, bin);
+-	lower = dm_histogram_get_bin_lower(dmh, bin);
+-	return (upper - lower);
+-}
+-
+-uint64_t dm_histogram_get_bin_count(const struct dm_histogram *dmh, int bin)
+-{
+-	return dmh->bins[bin].count;
+-}
+-
+-uint64_t dm_histogram_get_sum(const struct dm_histogram *dmh)
+-{
+-	return dmh->sum;
+-}
+-
+-dm_percent_t dm_histogram_get_bin_percent(const struct dm_histogram *dmh,
+-					  int bin)
+-{
+-	uint64_t value = dm_histogram_get_bin_count(dmh, bin);
+-	uint64_t width = dm_histogram_get_bin_width(dmh, bin);
+-	uint64_t total = dm_histogram_get_sum(dmh);
+-
+-	double val = (double) value;
+-
+-	if (!total || !value || !width)
+-		return DM_PERCENT_0;
+-
+-	return dm_make_percent((uint64_t) val, total);
+-}
+-
+-/*
+- * Histogram string helper functions: used to construct histogram and
+- * bin boundary strings from numeric data.
+- */
+-
+-/*
+- * Allocate an unbound histogram object with nr_bins bins. Only used
+- * for histograms used to hold bounds values as arguments for calls to
+- * dm_stats_create_region().
+- */
+-static struct dm_histogram *_alloc_dm_histogram(int nr_bins)
+-{
+-	/* Allocate space for dm_histogram + nr_entries. */
+-	size_t size = sizeof(struct dm_histogram) +
+-		(unsigned) nr_bins * sizeof(struct dm_histogram_bin);
+-	return zalloc(size);
+-}
+-
+-/*
+- * Parse a histogram bounds string supplied by the user. The string
+- * consists of a list of numbers, "n1,n2,n3,..." with optional 'ns',
+- * 'us', 'ms', or 's' unit suffixes.
+- *
+- * The scale parameter indicates the timescale used for this region: one
+- * for nanoscale resolution and NSEC_PER_MSEC for miliseconds.
+- *
+- * On return bounds contains a pointer to an array of uint64_t
+- * histogram bounds values expressed in units of nanoseconds.
+- */
+-struct dm_histogram *dm_histogram_bounds_from_string(const char *bounds_str)
+-{
+-	static const char _valid_chars[] = "0123456789,muns";
+-	uint64_t this_val = 0, mult = 1;
+-	const char *c, *v, *val_start;
+-	struct dm_histogram_bin *cur;
+-	struct dm_histogram *dmh;
+-	int nr_entries = 1;
+-	char *endptr;
+-
+-	c = bounds_str;
+-
+-	/* Count number of bounds entries. */
+-	while(*c)
+-		if (*(c++) == ',')
+-			nr_entries++;
+-
+-	c = bounds_str;
+-
+-	if (!(dmh = _alloc_dm_histogram(nr_entries)))
+-		return_0;
+-
+-	dmh->nr_bins = nr_entries;
+-
+-	cur = dmh->bins;
+-
+-	do {
+-		for (v = _valid_chars; *v; v++)
+-			if (*c == *v)
+-				break;
+-
+-		if (!*v) {
+-			stack;
+-			goto badchar;
+-		}
+-
+-		if (*c == ',') {
+-			log_error("Empty histogram bin not allowed: %s",
+-				  bounds_str);
+-			goto bad;
+-		} else {
+-			val_start = c;
+-			endptr = NULL;
+-
+-			this_val = strtoull(val_start, &endptr, 10);
+-			if (!endptr) {
+-				log_error("Could not parse histogram bound.");
+-				goto bad;
+-			}
+-			c = endptr; /* Advance to units, comma, or end. */
+-
+-			if (*c == 's') {
+-				mult = NSEC_PER_SEC;
+-				c++; /* Advance over 's'. */
+-			} else if (*(c + 1) == 's') {
+-				if (*c == 'm')
+-					mult = NSEC_PER_MSEC;
+-				else if (*c == 'u')
+-					mult = NSEC_PER_USEC;
+-				else if (*c == 'n')
+-					mult = 1;
+-				else {
+-					stack;
+-					goto badchar;
+-				}
+-				c += 2; /* Advance over 'ms', 'us', or 'ns'. */
+-			} else if (*c == ',')
+-				c++;
+-			else if (*c) { /* Expected ',' or NULL. */
+-				stack;
+-				goto badchar;
+-			}
+-
+-			if (*c == ',')
+-				c++;
+-			this_val *= mult;
+-			(cur++)->upper = this_val;
+-		}
+-	} while (*c);
+-
+-	/* Bounds histograms have no owner. */
+-	dmh->dms = NULL;
+-	dmh->region = NULL;
+-
+-	return dmh;
+-
+-badchar:
+-	log_error("Invalid character in histogram: %c", *c);
+-bad:
+-	free(dmh);
+-	return NULL;
+-}
+-
+-struct dm_histogram *dm_histogram_bounds_from_uint64(const uint64_t *bounds)
+-{
+-	const uint64_t *entry = bounds;
+-	struct dm_histogram_bin *cur;
+-	struct dm_histogram *dmh;
+-	int nr_entries = 1;
+-
+-	if (!bounds || !bounds[0]) {
+-		log_error("Could not parse empty histogram bounds array");
+-		return 0;
+-	}
+-
+-	/* Count number of bounds entries. */
+-	while(*entry)
+-		if (*(++entry))
+-			nr_entries++;
+-
+-	entry = bounds;
+-
+-	if (!(dmh = _alloc_dm_histogram(nr_entries)))
+-		return_0;
+-
+-	dmh->nr_bins = nr_entries;
+-
+-	cur = dmh->bins;
+-
+-	while (*entry)
+-		(cur++)->upper = *(entry++);
+-
+-	/* Bounds histograms have no owner. */
+-	dmh->dms = NULL;
+-	dmh->region = NULL;
+-
+-	return dmh;
+-}
+-
+-void dm_histogram_bounds_destroy(struct dm_histogram *bounds)
+-{
+-	if (!bounds)
+-		return;
+-
+-	/* Bounds histograms are not bound to any handle or region. */
+-	if (bounds->dms || bounds->region) {
+-		log_error("Freeing invalid histogram bounds pointer %p.",
+-			  (void *) bounds);
+-		stack;
+-	}
+-	/* free() expects a (void *). */
+-	free((void *) bounds);
+-}
+-
+-/*
+- * Scale a bounds value down from nanoseconds to the largest possible
+- * whole unit suffix.
+- */
+-static void _scale_bound_value_to_suffix(uint64_t *bound, const char **suffix)
+-{
+-	*suffix = "ns";
+-	if (!(*bound % NSEC_PER_SEC)) {
+-		*bound /= NSEC_PER_SEC;
+-		*suffix = "s";
+-	} else if (!(*bound % NSEC_PER_MSEC)) {
+-		*bound /= NSEC_PER_MSEC;
+-		*suffix = "ms";
+-	} else if (!(*bound % NSEC_PER_USEC)) {
+-		*bound /= NSEC_PER_USEC;
+-		*suffix = "us";
+-	}
+-}
+-
+-#define DM_HISTOGRAM_BOUNDS_MASK 0x30
+-#define BOUNDS_LEN 64
+-
+-static int _make_bounds_string(char *buf, size_t size, uint64_t lower,
+-			       uint64_t upper, int flags, int width)
+-{
+-	char bound_buf[BOUNDS_LEN];
+-	const char *l_suff = NULL;
+-	const char *u_suff = NULL;
+-	const char *sep = "";
+-	int bounds = flags & DM_HISTOGRAM_BOUNDS_MASK;
+-
+-	if (!bounds)
+-		return_0;
+-
+-	*buf = '\0';
+-
+-	if (flags & DM_HISTOGRAM_SUFFIX) {
+-		_scale_bound_value_to_suffix(&lower, &l_suff);
+-		_scale_bound_value_to_suffix(&upper, &u_suff);
+-	} else
+-		l_suff = u_suff = "";
+-
+-	if (flags & DM_HISTOGRAM_VALUES)
+-		sep = ":";
+-
+-	if (bounds > DM_HISTOGRAM_BOUNDS_LOWER) {
+-		/* Handle infinite uppermost bound. */
+-		if (upper == UINT64_MAX) {
+-			if (dm_snprintf(bound_buf, sizeof(bound_buf),
+-					 ">" FMTu64 "%s", lower, l_suff) < 0)
+-				goto_out;
+-			/* Only display an 'upper' string for final bin. */
+-			bounds = DM_HISTOGRAM_BOUNDS_UPPER;
+-		} else {
+-			if (dm_snprintf(bound_buf, sizeof(bound_buf),
+-					 FMTu64 "%s", upper, u_suff) < 0)
+-				goto_out;
+-		}
+-	} else if (bounds == DM_HISTOGRAM_BOUNDS_LOWER) {
+-		if ((dm_snprintf(bound_buf, sizeof(bound_buf), FMTu64 "%s",
+-				 lower, l_suff)) < 0)
+-			goto_out;
+-	}
+-
+-	switch (bounds) {
+-	case DM_HISTOGRAM_BOUNDS_LOWER:
+-	case DM_HISTOGRAM_BOUNDS_UPPER:
+-		return dm_snprintf(buf, size, "%*s%s", width, bound_buf, sep);
+-	case DM_HISTOGRAM_BOUNDS_RANGE:
+-		return dm_snprintf(buf, size,  FMTu64 "%s-%s%s",
+-				   lower, l_suff, bound_buf, sep);
+-	}
+-out:
+-	return 0;
+-}
+-
+-#define BOUND_WIDTH_NOSUFFIX 10 /* 999999999 nsecs */
+-#define BOUND_WIDTH 6 /* bounds string up to 9999xs */
+-#define COUNT_WIDTH 6 /* count string: up to 9999 */
+-#define PERCENT_WIDTH 6 /* percent string : 0.00-100.00% */
+-#define DM_HISTOGRAM_VALUES_MASK 0x06
+-
+-const char *dm_histogram_to_string(const struct dm_histogram *dmh, int bin,
+-				   int width, int flags)
+-{
+-	char buf[BOUNDS_LEN], bounds_buf[BOUNDS_LEN];
+-	int minwidth, bounds, values, start, last;
+-	uint64_t lower, upper, val_u64; /* bounds of the current bin. */
+-	/* Use the histogram pool for string building. */
+-	struct dm_pool *mem = dmh->dms->hist_mem;
+-	const char *sep = "";
+-	int bounds_width;
+-	ssize_t len = 0;
+-	float val_flt;
+-
+-	bounds = flags & DM_HISTOGRAM_BOUNDS_MASK;
+-	values = flags & DM_HISTOGRAM_VALUES;
+-
+-	if (bin < 0) {
+-		start = 0;
+-		last = dmh->nr_bins - 1;
+-	} else
+-		start = last = bin;
+-
+-	minwidth = width;
+-
+-	if (width < 0 || !values)
+-		width = minwidth = 0; /* no padding */
+-	else if (flags & DM_HISTOGRAM_PERCENT)
+-		width = minwidth = (width) ? : PERCENT_WIDTH;
+-	else if (flags & DM_HISTOGRAM_VALUES)
+-		width = minwidth = (width) ? : COUNT_WIDTH;
+-
+-	if (values && !width)
+-		sep = ":";
+-
+-	/* Set bounds string to the empty string. */
+-	bounds_buf[0] = '\0';
+-
+-	if (!dm_pool_begin_object(mem, 64))
+-		return_0;
+-
+-	for (bin = start; bin <= last; bin++) {
+-		if (bounds) {
+-			/* Default bounds width depends on time suffixes. */
+-			bounds_width = (!(flags & DM_HISTOGRAM_SUFFIX))
+-					? BOUND_WIDTH_NOSUFFIX
+-					: BOUND_WIDTH ;
+-
+-			bounds_width = (!width) ? width : bounds_width;
+-
+-			lower = dm_histogram_get_bin_lower(dmh, bin);
+-			upper = dm_histogram_get_bin_upper(dmh, bin);
+-
+-			len = sizeof(bounds_buf);
+-			len = _make_bounds_string(bounds_buf, len,
+-						  lower, upper, flags,
+-						  bounds_width);
+-			/*
+-			 * Comma separates "bounds: value" pairs unless
+-			 * --noheadings is used.
+-			 */
+-			sep = (width || !values) ? "," : ":";
+-
+-			/* Adjust width by real bounds length if set. */
+-			width -= (width) ? (len - (bounds_width + 1)) : 0;
+-
+-			/* -ve width indicates specified width was overrun. */
+-			width = (width > 0) ? width : 0;
+-		}
+-
+-		if (bin == last)
+-			sep = "";
+-
+-		if (flags & DM_HISTOGRAM_PERCENT) {
+-			dm_percent_t pr;
+-			pr = dm_histogram_get_bin_percent(dmh, bin);
+-			val_flt = dm_percent_to_float(pr);
+-			len = dm_snprintf(buf, sizeof(buf), "%s%*.2f%%%s",
+-					  bounds_buf, width, val_flt, sep);
+-		} else if (values) {
+-			val_u64 = dmh->bins[bin].count;
+-			len = dm_snprintf(buf, sizeof(buf), "%s%*"PRIu64"%s",
+-					  bounds_buf, width, val_u64, sep);
+-		} else if (bounds)
+-			len = dm_snprintf(buf, sizeof(buf), "%s%s", bounds_buf,
+-					  sep);
+-		else {
+-			*buf = '\0';
+-			len = 0;
+-		}
+-
+-		if (len < 0)
+-			goto_bad;
+-
+-		width = minwidth; /* re-set histogram column width. */
+-		if (!dm_pool_grow_object(mem, buf, (size_t) len))
+-			goto_bad;
+-	}
+-
+-	if (!dm_pool_grow_object(mem, "\0", 1))
+-		goto_bad;
+-
+-	return (const char *) dm_pool_end_object(mem);
+-
+-bad:
+-	dm_pool_abandon_object(mem);
+-	return NULL;
+-}
+-
+-/*
+- * A lightweight representation of an extent (region, area, file
+- * system block or extent etc.). A table of extents can be used
+- * to sort and to efficiently find holes or overlaps among a set
+- * of tuples of the form (id, start, len).
+- */
+-struct _extent {
+-	struct dm_list list;
+-	uint64_t id;
+-	uint64_t start;
+-	uint64_t len;
+-};
+-
+-/* last address in an extent */
+-#define _extent_end(a) (@->start + (a)->len - 1)
+-
+-/* a and b must be sorted by increasing start sector */
+-#define _extents_overlap(a, b) (_extent_end(a) > (b)->start)
+-
+-/*
+- * Comparison function to sort extents in ascending start order.
+- */
+-static int _extent_start_compare(const void *p1, const void *p2)
+-{
+-	const struct _extent *r1, *r2;
+-	r1 = (const struct _extent *) p1;
+-	r2 = (const struct _extent *) p2;
+-
+-	if (r1->start < r2->start)
+-		return -1;
+-	else if (r1->start == r2->start)
+-		return 0;
+-	return 1;
+-}
+-
+-static int _stats_create_group(struct dm_stats *dms, dm_bitset_t regions,
+-			       const char *alias, uint64_t *group_id)
+-{
+-	struct dm_stats_group *group;
+-	*group_id = dm_bit_get_first(regions);
+-
+-	/* group has no regions? */
+-	if (*group_id == DM_STATS_GROUP_NOT_PRESENT)
+-		return_0;
+-
+-	group = &dms->groups[*group_id];
+-
+-	if (group->regions) {
+-		log_error(INTERNAL_ERROR "Unexpected group state while"
+-			  "creating group ID bitmap" FMTu64, *group_id);
+-		return 0;
+-	}
+-
+-	group->group_id = *group_id;
+-	group->regions = regions;
+-
+-	if (alias)
+-		group->alias = strdup(alias);
+-	else
+-		group->alias = NULL;
+-
+-	/* force an update of the group tag stored in aux_data */
+-	if (!_stats_set_aux(dms, *group_id, dms->regions[*group_id].aux_data))
+-		return 0;
+-
+-	return 1;
+-}
+-
+-static int _stats_group_check_overlap(const struct dm_stats *dms,
+-				      dm_bitset_t regions, int count)
+-{
+-	struct dm_list ext_list = DM_LIST_HEAD_INIT(ext_list);
+-	struct _extent *ext, *tmp, *next, *map = NULL;
+-	size_t map_size = (dms->max_region + 1) * sizeof(*map);
+-	int i = 0, id, overlap, merged;
+-
+-	map = dm_pool_alloc(dms->mem, map_size);
+-	if (!map) {
+-		log_error("Could not allocate memory for region map");
+-		return 0;
+-	}
+-
+-	/* build a table of extents in order of region_id */
+-	for (id = dm_bit_get_first(regions); id >= 0;
+-	     id = dm_bit_get_next(regions, id)) {
+-		dm_list_init(&map[i].list);
+-		map[i].id = id;
+-		map[i].start = dms->regions[id].start;
+-		map[i].len = dms->regions[id].len;
+-		i++;
+-	}
+-
+-	/* A single region cannot overlap itself. */
+-	if (i == 1) {
+-		dm_pool_free(dms->mem, map);
+-		return 1;
+-	}
+-
+-	/* sort by extent.start */
+-	qsort(map, count, sizeof(*map), _extent_start_compare);
+-
+-	for (i = 0; i < count; i++)
+-		dm_list_add(&ext_list, &map[i].list);
+-
+-	overlap = 0;
+-merge:
+-	merged = 0;
+-	dm_list_iterate_items_safe(ext, tmp, &ext_list) {
+-		next = dm_list_item(dm_list_next(&ext_list, &ext->list),
+-				    struct _extent);
+-		if (!next)
+-			continue;
+-
+-		if (_extents_overlap(ext, next)) {
+-			log_warn("WARNING: region IDs " FMTu64 " and "
+-				 FMTu64 " overlap. Some events will be "
+-				 "counted twice.", ext->id, next->id);
+-			/* merge larger extent into smaller */
+-			if (_extent_end(ext) > _extent_end(next)) {
+-				next->id = ext->id;
+-				next->len = ext->len;
+-			}
+-			if (ext->start < next->start)
+-				next->start = ext->start;
+-			dm_list_del(&ext->list);
+-			overlap = merged = 1;
+-		}
+-	}
+-	/* continue until no merge candidates remain */
+-	if (merged)
+-		goto merge;
+-
+-	dm_pool_free(dms->mem, map);
+-	return (overlap == 0);
+-}
+-
+-static void _stats_copy_histogram_bounds(struct dm_histogram *to,
+-					 struct dm_histogram *from)
+-{
+-	int i;
+-
+-	to->nr_bins = from->nr_bins;
+-
+-	for (i = 0; i < to->nr_bins; i++)
+-		to->bins[i].upper = from->bins[i].upper;
+-}
+-
+-/*
+- * Compare histogram bounds h1 and h2, and return 1 if they match (i.e.
+- * have the same number of bins and identical bin boundary values), or 0
+- * otherwise.
+- */
+-static int _stats_check_histogram_bounds(struct dm_histogram *h1,
+-					 struct dm_histogram *h2)
+-{
+-	int i;
+-
+-	if (!h1 || !h2)
+-		return 0;
+-
+-	if (h1->nr_bins != h2->nr_bins)
+-		return 0;
+-
+-	for (i = 0; i < h1->nr_bins; i++)
+-		if (h1->bins[i].upper != h2->bins[i].upper)
+-			return 0;
+-	return 1;
+-}
+-
+-/*
+- * Create a new group in stats handle dms from the group description
+- * passed in group.
+- */
+-int dm_stats_create_group(struct dm_stats *dms, const char *members,
+-			  const char *alias, uint64_t *group_id)
+-{
+-	struct dm_histogram *check = NULL, *bounds;
+-	int i, count = 0, precise = 0;
+-	dm_bitset_t regions;
+-
+-	if (!dms->regions || !dms->groups) {
+-		log_error("Could not create group: no regions found.");
+-		return 0;
+-	};
+-
+-	if (!(regions = dm_bitset_parse_list(members, NULL, 0))) {
+-		log_error("Could not parse list: '%s'", members);
+-		return 0;
+-	}
+-
+-	if (!(check = dm_pool_zalloc(dms->hist_mem, sizeof(*check)))) {
+-		log_error("Could not allocate memory for bounds check");
+-		goto bad;
+-	}
+-
+-	/* too many bits? */
+-	if ((*regions - 1) > dms->max_region) {
+-		log_error("Invalid region ID: %d", *regions - 1);
+-		goto bad;
+-	}
+-
+-	/*
+-	 * Check that each region_id in the bitmap meets the group
+-	 * constraints: present, not already grouped, and if any
+-	 * histogram is present that they all have the same bounds.
+-	 */
+-	for (i = dm_bit_get_first(regions); i >= 0;
+-	     i = dm_bit_get_next(regions, i)) {
+-		if (!dm_stats_region_present(dms, i)) {
+-			log_error("Region ID %d does not exist", i);
+-			goto bad;
+-		}
+-		if (_stats_region_is_grouped(dms, i)) {
+-			log_error("Region ID %d already a member of group ID "
+-				  FMTu64, i, dms->regions[i].group_id);
+-			goto bad;
+-		}
+-		if (dms->regions[i].timescale == 1)
+-			precise++;
+-
+-		/* check for matching histogram bounds */
+-		bounds = dms->regions[i].bounds;
+-		if (bounds && !check->nr_bins)
+-			_stats_copy_histogram_bounds(check, bounds);
+-		else if (bounds) {
+-			if (!_stats_check_histogram_bounds(check, bounds)) {
+-				log_error("All region histogram bounds "
+-					  "must match exactly");
+-				goto bad;
+-			}
+-		}
+-		count++;
+-	}
+-
+-	if (precise && (precise != count))
+-		log_warn("WARNING: Grouping regions with different clock resolution: "
+-			 "precision may be lost.");
+-
+-	if (!_stats_group_check_overlap(dms, regions, count))
+-		log_very_verbose("Creating group with overlapping regions.");
+-
+-	if (!_stats_create_group(dms, regions, alias, group_id))
+-		goto bad;
+-
+-	dm_pool_free(dms->hist_mem, check);
+-	return 1;
+-
+-bad:
+-	dm_pool_free(dms->hist_mem, check);
+-	dm_bitset_destroy(regions);
+-	return 0;
+-}
+-
+-/*
+- * Remove the specified group_id.
+- */
+-int dm_stats_delete_group(struct dm_stats *dms, uint64_t group_id,
+-			  int remove_regions)
+-{
+-	struct dm_stats_region *leader;
+-	dm_bitset_t regions;
+-	uint64_t i;
+-
+-	if (group_id > dms->max_region) {
+-		log_error("Invalid group ID: " FMTu64, group_id);
+-		return 0;
+-	}
+-
+-	if (!_stats_group_id_present(dms, group_id)) {
+-		log_error("Group ID " FMTu64 " does not exist", group_id);
+-		return 0;
+-	}
+-
+-	regions = dms->groups[group_id].regions;
+-	leader = &dms->regions[group_id];
+-
+-	/* delete all but the group leader */
+-	for (i = (*regions - 1); i > leader->region_id; i--) {
+-		if (dm_bit(regions, i)) {
+-			dm_bit_clear(regions, i);
+-			if (remove_regions && !dm_stats_delete_region(dms, i))
+-				log_warn("WARNING: Failed to delete region "
+-					 FMTu64 " on %s.", i, dms->name);
+-		}
+-	}
+-
+-	/* clear group and mark as not present */
+-	_stats_clear_group_regions(dms, group_id);
+-	_stats_group_destroy(&dms->groups[group_id]);
+-
+-	/* delete leader or clear aux_data */
+-	if (remove_regions)
+-		return dm_stats_delete_region(dms, group_id);
+-	else if (!_stats_set_aux(dms, group_id, leader->aux_data))
+-		return 0;
+-
+-	return 1;
+-}
+-
+-uint64_t dm_stats_get_group_id(const struct dm_stats *dms, uint64_t region_id)
+-{
+-	region_id = (region_id == DM_STATS_REGION_CURRENT)
+-		     ? dms->cur_region : region_id;
+-
+-	if (region_id & DM_STATS_WALK_GROUP) {
+-		if (region_id == DM_STATS_WALK_GROUP)
+-			return dms->cur_group;
+-		else
+-			return region_id & ~DM_STATS_WALK_GROUP;
+-	}
+-
+-	if (region_id & DM_STATS_WALK_REGION)
+-		region_id &= ~DM_STATS_WALK_REGION;
+-
+-	return dms->regions[region_id].group_id;
+-}
+-
+-int dm_stats_get_group_descriptor(const struct dm_stats *dms,
+-				  uint64_t group_id, char **buf)
+-{
+-	dm_bitset_t regions = dms->groups[group_id].regions;
+-	size_t buflen;
+-
+-	buflen = _stats_group_tag_len(dms, regions);
+-
+-	*buf = dm_pool_alloc(dms->mem, buflen);
+-	if (!*buf) {
+-		log_error("Could not allocate memory for regions string");
+-		return 0;
+-	}
+-
+-	if (!_stats_group_tag_fill(dms, regions, *buf, buflen))
+-		return 0;
+-
+-	return 1;
+-}
+-
+-#ifdef HAVE_LINUX_FIEMAP_H
+-/*
+- * Resize the group bitmap corresponding to group_id so that it can
+- * contain at least num_regions members.
+- */
+-static int _stats_resize_group(struct dm_stats_group *group,
+-			       uint64_t num_regions)
+-{
+-	uint64_t last_bit = dm_bit_get_last(group->regions);
+-	dm_bitset_t new, old;
+-
+-	if (last_bit >= num_regions) {
+-		log_error("Cannot resize group bitmap to " FMTu64
+-			  " with bit " FMTu64 " set.", num_regions, last_bit);
+-		return 0;
+-	}
+-
+-	log_very_verbose("Resizing group bitmap from " FMTu32 " to " FMTu64
+-			 " (last_bit: " FMTu64 ").", group->regions[0],
+-			 num_regions, last_bit);
+-
+-	new = dm_bitset_create(NULL, (unsigned) num_regions);
+-	if (!new) {
+-		log_error("Could not allocate memory for new group bitmap.");
+-		return 0;
+-	}
+-
+-	old = group->regions;
+-	dm_bit_copy(new, old);
+-	group->regions = new;
+-	dm_bitset_destroy(old);
+-	return 1;
+-}
+-
+-/*
+- * Group a table of region_ids corresponding to the extents of a file.
+- */
+-static int _stats_group_file_regions(struct dm_stats *dms, uint64_t *region_ids,
+-				     uint64_t count, const char *alias)
+-{
+-	dm_bitset_t regions = dm_bitset_create(NULL, dms->nr_regions);
+-	uint64_t i, group_id = DM_STATS_GROUP_NOT_PRESENT;
+-	char *members = NULL;
+-	size_t buflen;
+-
+-	if (!regions) {
+-		log_error("Cannot map file: failed to allocate group bitmap.");
+-		return 0;
+-	}
+-
+-	for (i = 0; i < count; i++)
+-		dm_bit_set(regions, region_ids[i]);
+-
+-	buflen = _stats_group_tag_len(dms, regions);
+-	members = malloc(buflen);
+-
+-	if (!members) {
+-		log_error("Cannot map file: failed to allocate group "
+-			  "descriptor.");
+-		dm_bitset_destroy(regions);
+-		return 0;
+-	}
+-
+-	if (!_stats_group_tag_fill(dms, regions, members, buflen))
+-		goto bad;
+-
+-	/*
+-	 * overlaps should not be possible: overlapping file extents
+-	 * returned by FIEMAP imply a kernel bug or a corrupt fs.
+-	 */
+-	if (!_stats_group_check_overlap(dms, regions, count))
+-		log_very_verbose("Creating group with overlapping regions.");
+-
+-	if (!_stats_create_group(dms, regions, alias, &group_id))
+-		goto bad;
+-
+-	free(members);
+-	return 1;
+-bad:
+-	dm_bitset_destroy(regions);
+-	free(members);
+-	return 0;
+-}
+-
+-static int _stats_add_file_extent(int fd, struct dm_pool *mem, uint64_t id,
+-				  struct fiemap_extent *fm_ext)
+-{
+-	struct _extent extent;
+-
+-	/* final address of list is unknown */
+-	memset(&extent.list, 0, sizeof(extent.list));
+-
+-	/* convert bytes to dm (512b) sectors */
+-	extent.start = fm_ext->fe_physical >> SECTOR_SHIFT;
+-	extent.len = fm_ext->fe_length >> SECTOR_SHIFT;
+-	extent.id = id;
+-
+-	log_very_verbose("Extent " FMTu64 " on fd %d at " FMTu64 "+"
+-			 FMTu64, extent.id, fd, extent.start, extent.len);
+-
+-	if (!dm_pool_grow_object(mem, &extent,
+-				 sizeof(extent))) {
+-		log_error("Cannot map file: failed to grow extent map.");
 -		return 0;
 -	}
 -	return 1;
 -}
 -
--static int _daemonise(struct filemap_monitor *fm)
--{
--	pid_t pid = 0, sid;
--	int fd;
+-/* test for the boundary of an extent */
+-#define ext_boundary(ext, exp)		\
+-((ext).fe_logical != 0) &&		\
+-((ext).fe_physical != (exp))
 -
--	if (!(sid = setsid())) {
--		_early_log("setsid failed.");
+-/*
+- * Copy fields from fiemap_extent 'from' to the fiemap_extent
+- * pointed to by 'to'.
+- */
+-#define ext_copy(to, from)	\
+-do {				\
+-	*(to) = *(from);	\
+-} while (0)
+-
+-static uint64_t _stats_map_extents(int fd, struct dm_pool *mem,
+-				   struct fiemap *fiemap,
+-				   struct fiemap_extent *fm_ext,
+-				   struct fiemap_extent *fm_last,
+-				   struct fiemap_extent *fm_pending,
+-				   uint64_t next_extent,
+-				   int *eof)
+-{
+-	uint64_t expected = 0, nr_extents = next_extent;
+-	unsigned int i;
+-
+-	/*
+-	 * Loop over the returned extents adding the fm_pending extent
+-	 * to the table of extents each time a discontinuity (or eof)
+-	 * is detected.
+-	 *
+-	 * We use a pointer to fm_pending in the caller since it is
+-	 * possible that logical extents comprising a single physical
+-	 * extent are returned by successive FIEMAP calls.
+-	 */
+-	for (i = 0; i < fiemap->fm_mapped_extents; i++) {
+-		expected = fm_last->fe_physical + fm_last->fe_length;
+-
+-		if (fm_ext[i].fe_flags & FIEMAP_EXTENT_LAST)
+-			*eof = 1;
+-
+-		/* cannot map extents that are not yet allocated. */
+-		if (fm_ext[i].fe_flags
+-		    & (FIEMAP_EXTENT_UNKNOWN | FIEMAP_EXTENT_DELALLOC))
+-			continue;
+-
+-		/*
+-		 * Begin a new extent if the current physical address differs
+-		 * from the expected address yielded by fm_last.fe_physical +
+-		 * fm_last.fe_length.
+-		 *
+-		 * A logical discontinuity is seen at the start of the file if
+-		 * unwritten space exists before the first extent: do not add
+-		 * any extent record until we have accumulated a non-zero length
+-		 * in fm_pending.
+-		 */
+-		if (fm_pending->fe_length &&
+-		    ext_boundary(fm_ext[i], expected)) {
+-			if (!_stats_add_file_extent(fd, mem, nr_extents,
+-						    fm_pending))
+-				goto_bad;
+-			nr_extents++;
+-			/* Begin a new pending extent. */
+-			ext_copy(fm_pending, fm_ext + i);
+-		} else {
+-			expected = 0;
+-			/* Begin a new pending extent for extent 0. If there is
+-			 * a hole at the start of the file, the first allocated
+-			 * extent will have a non-zero fe_logical. Detect this
+-			 * case by testing fm_pending->fe_length: if no length
+-			 * has been accumulated we are handling the first
+-			 * physical extent of the file.
+-			 */
+-			if (!fm_pending->fe_length || fm_ext[i].fe_logical == 0)
+-				ext_copy(fm_pending, fm_ext + i);
+-			else
+-				/* accumulate this logical extent's length */
+-				fm_pending->fe_length += fm_ext[i].fe_length;
+-		}
+-		*fm_last = fm_ext[i];
+-	}
+-
+-	/*
+-	 * If the file only has a single extent, no boundary is ever
+-	 * detected to trigger addition of the first extent.
+-	 */
+-	if (*eof || (fm_ext[i - 1].fe_logical == 0)) {
+-		_stats_add_file_extent(fd, mem, nr_extents, fm_pending);
+-		nr_extents++;
+-	}
+-
+-	fiemap->fm_start = (fm_ext[i - 1].fe_logical +
+-			    fm_ext[i - 1].fe_length);
+-
+-	/* return the number of extents found in this call. */
+-	return nr_extents - next_extent;
+-bad:
+-	/* signal mapping error to caller */
+-	*eof = -1;
+-	return 0;
+-}
+-
+-/*
+- * Read the extents of an open file descriptor into a table of struct _extent.
+- *
+- * Based on e2fsprogs/misc/filefrag.c::filefrag_fiemap().
+- *
+- * Copyright 2003 by Theodore Ts'o.
+- *
+- */
+-static struct _extent *_stats_get_extents_for_file(struct dm_pool *mem, int fd,
+-						   uint64_t *count)
+-{
+-	struct fiemap_extent fm_last = {0}, fm_pending = {0}, *fm_ext = NULL;
+-	struct fiemap *fiemap = NULL;
+-	int eof = 0, nr_extents = 0;
+-	struct _extent *extents;
+-	unsigned long flags = 0;
+-	uint64_t *buf;
+-
+-	/* grow temporary extent table in the pool */
+-	if (!dm_pool_begin_object(mem, sizeof(*extents)))
+-		return NULL;
+-
+-	buf = zalloc(STATS_FIE_BUF_LEN);
+-	if (!buf) {
+-		log_error("Could not allocate memory for FIEMAP buffer.");
+-		goto bad;
+-	}
+-
+-	/* initialise pointers into the ioctl buffer. */
+-	fiemap = (struct fiemap *) buf;
+-	fm_ext = &fiemap->fm_extents[0];
+-
+-	/* space available per ioctl */
+-	*count = (STATS_FIE_BUF_LEN - sizeof(*fiemap))
+-		  / sizeof(struct fiemap_extent);
+-
+-	flags = FIEMAP_FLAG_SYNC;
+-
+-	do {
+-		/* start of ioctl loop - zero size and set count to bufsize */
+-		fiemap->fm_length = ~0ULL;
+-		fiemap->fm_flags = flags;
+-		fiemap->fm_extent_count = *count;
+-
+-		/* get count-sized chunk of extents */
+-		if (ioctl(fd, FS_IOC_FIEMAP, (unsigned long) fiemap) < 0) {
+-			if (errno == EBADR)
+-				log_err_once("FIEMAP failed with unknown "
+-					     "flags %x.", fiemap->fm_flags);
+-			goto bad;
+-		}
+-
+-		/* If 0 extents are returned, more ioctls are not needed */
+-		if (fiemap->fm_mapped_extents == 0)
+-			break;
+-
+-		nr_extents += _stats_map_extents(fd, mem, fiemap, fm_ext,
+-						 &fm_last, &fm_pending,
+-						 nr_extents, &eof);
+-
+-		/* check for extent mapping error */
+-		if (eof < 0)
+-			goto bad;
+-
+-	} while (eof == 0);
+-
+-	if (!nr_extents) {
+-		log_error("Cannot map file: no allocated extents.");
+-		goto bad;
+-	}
+-
+-	/* return total number of extents */
+-	*count = nr_extents;
+-	extents = dm_pool_end_object(mem);
+-
+-	/* free FIEMAP buffer. */
+-	free(buf);
+-
+-	return extents;
+-
+-bad:
+-	*count = 0;
+-	dm_pool_abandon_object(mem);
+-	free(buf);
+-	return NULL;
+-}
+-
+-#define MATCH_EXTENT(e, s, l) \
+-(((e).start == (s)) && ((e).len == (l)))
+-
+-static struct _extent *_find_extent(uint64_t nr_extents, struct _extent *extents,
+-				    uint64_t start, uint64_t len)
+-{
+-	size_t i;
+-	for (i = 0; i < nr_extents; i++)
+-		if (MATCH_EXTENT(extents[i], start, len))
+-			return extents + i;
+-	return NULL;
+-}
+-
+-/*
+- * Clean up a table of region_id values that were created during a
+- * failed dm_stats_create_regions_from_fd, or dm_stats_update_regions_from_fd
+- * operation.
+- */
+-static void _stats_cleanup_region_ids(struct dm_stats *dms, uint64_t *regions,
+-				      uint64_t nr_regions)
+-{
+-	uint64_t i;
+-
+-	for (i = 0; i < nr_regions; i++)
+-		if (!_stats_delete_region(dms, regions[i]))
+-			log_error("Could not delete region " FMTu64 ".", i);
+-}
+-
+-/*
+- * First update pass: prune no-longer-allocated extents from the group
+- * and build a table of the remaining extents so that their creation
+- * can be skipped in the second pass.
+- */
+-static int _stats_unmap_regions(struct dm_stats *dms, uint64_t group_id,
+-				struct dm_pool *mem, struct _extent *extents,
+-				struct _extent **old_extents, uint64_t *count,
+-				int *regroup)
+-{
+-	struct dm_stats_region *region = NULL;
+-	struct dm_stats_group *group = NULL;
+-	uint64_t nr_kept, nr_old;
+-	struct _extent ext;
+-	int64_t i;
+-
+-	group = &dms->groups[group_id];
+-
+-	log_very_verbose("Checking for changed file extents in group ID "
+-			 FMTu64, group_id);
+-
+-	if (!dm_pool_begin_object(mem, sizeof(**old_extents))) {
+-		log_error("Could not allocate extent table.");
 -		return 0;
 -	}
 -
--	if ((pid = fork()) < 0) {
--		_early_log("Failed to fork daemon process.");
+-	nr_kept = nr_old = 0; /* counts of old and retained extents */
+-
+-	/*
+-	 * First pass: delete de-allocated extents and set regroup=1 if
+-	 * deleting the current group leader.
+-	 */
+-	i = dm_bit_get_last(group->regions);
+-	for (; i >= 0; i = dm_bit_get_prev(group->regions, i)) {
+-		region = &dms->regions[i];
+-		nr_old++;
+-
+-		if (extents && _find_extent(*count, extents,
+-				  region->start, region->len)) {
+-			ext.start = region->start;
+-			ext.len = region->len;
+-			ext.id = i;
+-			nr_kept++;
+-
+-			if (!dm_pool_grow_object(mem, &ext, sizeof(ext)))
+-				goto out;
+-
+-			log_very_verbose("Kept region " FMTu64, i);
+-		} else {
+-
+-			if (i == group_id)
+-				*regroup = 1;
+-
+-			if (!_stats_delete_region(dms, i)) {
+-				log_error("Could not remove region ID " FMTu64,
+-					  i);
+-				goto out;
+-			}
+-
+-			log_very_verbose("Deleted region " FMTu64, i);
+-		}
+-	}
+-
+-	*old_extents = dm_pool_end_object(mem);
+-	if (!*old_extents) {
+-		log_error("Could not finalize region extent table.");
+-		goto out;
+-	}
+-	log_very_verbose("Kept " FMTd64 " of " FMTd64 " old extents",
+-			 nr_kept, nr_old);
+-	log_very_verbose("Found " FMTu64 " new extents",
+-			 *count - nr_kept);
+-
+-	return (int) nr_kept;
+-out:
+-	dm_pool_abandon_object(mem);
+-	return -1;
+-}
+-
+-/*
+- * Create or update a set of regions representing the extents of a file
+- * and return a table of uint64_t region_id values. The number of regions
+- * created is returned in the memory pointed to by count (which must be
+- * non-NULL).
+- *
+- * If group_id is not equal to DM_STATS_GROUP_NOT_PRESENT, it is assumed
+- * that group_id corresponds to a group containing existing regions that
+- * were mapped to this file at an earlier time: regions will be added or
+- * removed to reflect the current status of the file.
+- */
+-static uint64_t *_stats_map_file_regions(struct dm_stats *dms, int fd,
+-					 struct dm_histogram *bounds,
+-					 int precise, uint64_t group_id,
+-					 uint64_t *count, int *regroup)
+-{
+-	struct _extent *extents = NULL, *old_extents = NULL;
+-	uint64_t *regions = NULL, fail_region, i, num_bits;
+-	struct dm_stats_group *group = NULL;
+-	struct dm_pool *extent_mem = NULL;
+-	struct _extent *old_ext;
+-	char *hist_arg = NULL;
+-	struct statfs fsbuf;
+-	int64_t nr_kept = 0;
+-	struct stat buf;
+-	int update;
+-
+-	*count = 0;
+-	update = _stats_group_id_present(dms, group_id);
+-
+-#ifdef BTRFS_SUPER_MAGIC
+-	if (fstatfs(fd, &fsbuf)) {
+-		log_error("fstatfs failed for fd %d", fd);
+-		return 0;
+-	}
+-
+-	if (fsbuf.f_type == BTRFS_SUPER_MAGIC) {
+-		log_error("Cannot map file: btrfs does not provide "
+-			  "physical FIEMAP extent data.");
+-		return 0;
+-	}
+-#endif
+-
+-	if (fstat(fd, &buf)) {
+-		log_error("fstat failed for fd %d", fd);
+-		return 0;
+-	}
+-
+-	if (!(buf.st_mode & S_IFREG)) {
+-		log_error("Not a regular file");
+-		return 0;
+-	}
+-
+-	if (!dm_is_dm_major(major(buf.st_dev))) {
+-		log_error("Cannot map file: not a device-mapper device.");
+-		return 0;
+-	}
+-
+-	/*
+-	 * If regroup is set here, we are creating a new filemap: otherwise
+-	 * we are updating a group with a valid group identifier in group_id.
+-	 */
+-	if (update)
+-		log_very_verbose("Updating extents from fd %d with group ID "
+-				 FMTu64 " on (%d:%d)", fd, group_id,
+-				 major(buf.st_dev), minor(buf.st_dev));
+-	else
+-		log_very_verbose("Mapping extents from fd %d on (%d:%d)",
+-				 fd, major(buf.st_dev), minor(buf.st_dev));
+-
+-	/* Use a temporary, private pool for the extent table. This avoids
+-         * hijacking the dms->mem (region table) pool which would lead to
+-         * interleaving temporary allocations with dm_stats_list() data,
+-         * causing complications in the error path.
+-         */
+-	if (!(extent_mem = dm_pool_create("extents", sizeof(*extents))))
+-		return_NULL;
+-
+-	if (!(extents = _stats_get_extents_for_file(extent_mem, fd, count))) {
+-		log_very_verbose("No extents found in fd %d", fd);
+-		if (!update)
+-			goto out;
+-	}
+-
+-	if (update) {
+-		group = &dms->groups[group_id];
+-		if ((nr_kept = _stats_unmap_regions(dms, group_id, extent_mem,
+-						     extents, &old_extents,
+-						     count, regroup)) < 0)
+-			goto_out;
+-	}
+-
+-        if (bounds)
+-                if (!(hist_arg = _build_histogram_arg(bounds, &precise)))
+-                        goto_out;
+-
+-	/* make space for end-of-table marker */
+-	if (!(regions = malloc((1 + *count) * sizeof(*regions)))) {
+-		log_error("Could not allocate memory for region IDs.");
+-		goto_out;
+-	}
+-
+-	/*
+-	 * Second pass (first for non-update case): create regions for
+-	 * all extents not retained from the prior mapping, and insert
+-	 * retained regions into the table of region_id values.
+-	 *
+-	 * If a regroup is not scheduled, set group bits for newly
+-	 * created regions in the group leader bitmap.
+-	 */
+-	for (i = 0; i < *count; i++) {
+-		if (update) {
+-			if ((old_ext = _find_extent((uint64_t) nr_kept,
+-						    old_extents,
+-						    extents[i].start,
+-						    extents[i].len))) {
+-				regions[i] = old_ext->id;
+-				continue;
+-			}
+-		}
+-		if (!_stats_create_region(dms, regions + i, extents[i].start,
+-					  extents[i].len, -1, precise, hist_arg,
+-					  dms->program_id, "")) {
+-			log_error("Failed to create region " FMTu64 " of "
+-				  FMTu64 " at " FMTu64 ".", i, *count,
+-				  extents[i].start);
+-			goto out_remove;
+-		}
+-
+-		log_very_verbose("Created new region mapping " FMTu64 "+" FMTu64
+-				 " with region ID " FMTu64, extents[i].start,
+-				 extents[i].len, regions[i]);
+-
+-		if (!*regroup && update) {
+-			/* expand group bitmap */
+-			if (regions[i] > (group->regions[0] - 1)) {
+-				num_bits = regions[i] + *count;
+-				if (!_stats_resize_group(group, num_bits)) {
+-					log_error("Failed to resize group "
+-						  "bitmap.");
+-					goto out_remove;
+-				}
+-			}
+-			dm_bit_set(group->regions, regions[i]);
+-		}
+-
+-	}
+-	regions[*count] = DM_STATS_REGION_NOT_PRESENT;
+-
+-	/* Update group leader aux_data for new group members. */
+-	if (!*regroup && update)
+-		if (!_stats_set_aux(dms, group_id,
+-				    dms->regions[group_id].aux_data))
+-			log_error("Failed to update group aux_data.");
+-
+-	if (bounds)
+-		free(hist_arg);
+-
+-	/* the extent table will be empty if the file has been truncated. */
+-	if (extents)
+-		dm_pool_free(extent_mem, extents);
+-
+-	dm_pool_destroy(extent_mem);
+-
+-	return regions;
+-
+-out_remove:
+-	/* New region creation may begin to fail part-way through creating
+-	 * a set of file mapped regions: in this case we need to roll back
+-	 * the regions that were already created and return the handle to
+-	 * a consistent state. A listed handle is required for this: use a
+-	 * single list operation and call _stats_delete_region() directly
+-	 * to avoid a @stats_list ioctl and list parsing for each region.
+-	 */
+-	if (!dm_stats_list(dms, NULL))
+-		goto out;
+-
+-	fail_region = i;
+-	_stats_cleanup_region_ids(dms, regions, fail_region);
+-	*count = 0;
+-
+-out:
+-	dm_pool_destroy(extent_mem);
+-	free(hist_arg);
+-	free(regions);
+-	return NULL;
+-}
+-
+-uint64_t *dm_stats_create_regions_from_fd(struct dm_stats *dms, int fd,
+-					  int group, int precise,
+-					  struct dm_histogram *bounds,
+-					  const char *alias)
+-{
+-	uint64_t *regions, count;
+-	int regroup = 1;
+-
+-	if (alias && !group) {
+-		log_error("Cannot set alias without grouping regions.");
+-		return NULL;
+-	}
+-
+-	if (!(regions = _stats_map_file_regions(dms, fd, bounds, precise,
+-						DM_STATS_GROUP_NOT_PRESENT,
+-						&count, &regroup)))
+-		return NULL;
+-
+-	if (!group)
+-		return regions;
+-
+-	/* refresh handle */
+-	if (!dm_stats_list(dms, NULL))
+-		goto_out;
+-
+-	if (!_stats_group_file_regions(dms, regions, count, alias))
+-		goto_out;
+-
+-	return regions;
+-out:
+-	_stats_cleanup_region_ids(dms, regions, count);
+-	free(regions);
+-	return NULL;
+-}
+-
+-uint64_t *dm_stats_update_regions_from_fd(struct dm_stats *dms, int fd,
+-					  uint64_t group_id)
+-{
+-	struct dm_histogram *bounds = NULL;
+-	int nr_bins, precise, regroup;
+-	uint64_t *regions, count = 0;
+-	const char *alias = NULL;
+-
+-	if (!dms->regions || !dm_stats_group_present(dms, group_id)) {
+-		if (!dm_stats_list(dms, dms->program_id)) {
+-			log_error("Could not obtain region list while "
+-				  "updating group " FMTu64 ".", group_id);
+-			return NULL;
+-		}
+-	}
+-
+-	if (!dm_stats_group_present(dms, group_id)) {
+-		log_error("Group ID " FMTu64 " does not exist.", group_id);
+-		return NULL;
+-	}
+-
+-	/*
+-	 * If the extent corresponding to the group leader's region has been
+-	 * deallocated, _stats_map_file_regions() will remove the region and
+-	 * the group. In this case, regroup will be set by the call and the
+-	 * group will be re-created using saved values.
+-	 */
+-	regroup = 0;
+-
+-	/*
+-	 * A copy of the alias is needed to re-create the group when regroup=1.
+-	 */
+-	if (dms->groups[group_id].alias) {
+-		alias = strdup(dms->groups[group_id].alias);
+-		if (!alias) {
+-			log_error("Failed to allocate group alias string.");
+-			return NULL;
+-		}
+-	}
+-
+-	if (dms->regions[group_id].bounds) {
+-		/*
+-		 * A copy of the histogram bounds must be passed to
+-		 * _stats_map_file_regions() to be used when creating new
+-		 * regions: it is not safe to use the copy in the current group
+-		 * leader since it may be destroyed during the first group
+-		 * update pass.
+-		 */
+-		nr_bins = dms->regions[group_id].bounds->nr_bins;
+-		bounds = _alloc_dm_histogram(nr_bins);
+-		if (!bounds) {
+-			log_error("Could not allocate memory for group "
+-				  "histogram bounds.");
+-			goto out;
+-		}
+-		_stats_copy_histogram_bounds(bounds,
+-					     dms->regions[group_id].bounds);
+-	}
+-
+-	precise = (dms->regions[group_id].timescale == 1);
+-
+-	regions = _stats_map_file_regions(dms, fd, bounds, precise,
+-					  group_id, &count, &regroup);
+-
+-	if (!regions)
+-		goto bad;
+-
+-	if (!dm_stats_list(dms, NULL))
+-		goto bad;
+-
+-	/* regroup if there are regions to group */
+-	if (regroup && (*regions != DM_STATS_REGION_NOT_PRESENT))
+-		if (!_stats_group_file_regions(dms, regions, count, alias))
+-			goto bad;
+-
+-	free(bounds);
+-	free((char *) alias);
+-	return regions;
+-bad:
+-	_stats_cleanup_region_ids(dms, regions, count);
+-	free(bounds);
+-	free(regions);
+-out:
+-	free((char *) alias);
+-	return NULL;
+-}
+-#else /* !HAVE_LINUX_FIEMAP */
+-uint64_t *dm_stats_create_regions_from_fd(struct dm_stats *dms, int fd,
+-					  int group, int precise,
+-					  struct dm_histogram *bounds,
+-					  const char *alias)
+-{
+-	log_error("File mapping requires FIEMAP ioctl support.");
+-	return 0;
+-}
+-
+-uint64_t *dm_stats_update_regions_from_fd(struct dm_stats *dms, int fd,
+-					  uint64_t group_id)
+-{
+-	log_error("File mapping requires FIEMAP ioctl support.");
+-	return 0;
+-}
+-#endif /* HAVE_LINUX_FIEMAP */
+-
+-#ifdef DMFILEMAPD
+-static const char *_filemapd_mode_names[] = {
+-	"inode",
+-	"path",
+-	NULL
+-};
+-
+-dm_filemapd_mode_t dm_filemapd_mode_from_string(const char *mode_str)
+-{
+-	dm_filemapd_mode_t mode = DM_FILEMAPD_FOLLOW_INODE;
+-	const char **mode_name;
+-
+-	if (mode_str) {
+-		for (mode_name = _filemapd_mode_names; *mode_name; mode_name++)
+-			if (!strcmp(*mode_name, mode_str))
+-				break;
+-		if (*mode_name)
+-			mode = DM_FILEMAPD_FOLLOW_INODE
+-				+ (mode_name - _filemapd_mode_names);
+-		else {
+-			log_error("Could not parse dmfilemapd mode: %s",
+-				  mode_str);
+-			return DM_FILEMAPD_FOLLOW_NONE;
+-		}
+-	}
+-	return mode;
+-}
+-
+-#define DM_FILEMAPD "dmfilemapd"
+-#define NR_FILEMAPD_ARGS 7 /* includes argv[0] */
+-/*
+- * Start dmfilemapd to monitor the specified file descriptor, and to
+- * update the group given by 'group_id' when the file's allocation
+- * changes.
+- *
+- * usage: dmfilemapd <fd> <group_id> <mode> [<foreground>[<log_level>]]
+- */
+-int dm_stats_start_filemapd(int fd, uint64_t group_id, const char *path,
+-			    dm_filemapd_mode_t mode, unsigned foreground,
+-			    unsigned verbose)
+-{
+-	char fd_str[8], group_str[8], fg_str[2], verb_str[2];
+-	const char *mode_str = _filemapd_mode_names[mode];
+-	char *args[NR_FILEMAPD_ARGS + 1];
+-	pid_t pid = 0;
+-	int argc = 0;
+-
+-	if (fd < 0) {
+-		log_error("dmfilemapd file descriptor must be "
+-			  "non-negative: %d", fd);
+-		return 0;
+-	}
+-
+-	if (path[0] != '/') {
+-		log_error("Path argument must specify an absolute path.");
+-		return 0;
+-	}
+-
+-	if (mode > DM_FILEMAPD_FOLLOW_PATH) {
+-		log_error("Invalid dmfilemapd mode argument: "
+-			  "Must be DM_FILEMAPD_FOLLOW_INODE or "
+-			  "DM_FILEMAPD_FOLLOW_PATH");
+-		return 0;
+-	}
+-
+-	if (foreground > 1) {
+-		log_error("Invalid dmfilemapd foreground argument. "
+-			  "Must be 0 or 1: %d.", foreground);
+-		return 0;
+-	}
+-
+-	if (verbose > 3) {
+-		log_error("Invalid dmfilemapd verbose argument. "
+-			  "Must be 0..3: %d.", verbose);
+-		return 0;
+-	}
+-
+-	/* set argv[0] */
+-	args[argc++] = (char *) DM_FILEMAPD;
+-
+-	/* set <fd> */
+-	if ((dm_snprintf(fd_str, sizeof(fd_str), "%d", fd)) < 0) {
+-		log_error("Could not format fd argument.");
+-		return 0;
+-	}
+-	args[argc++] = fd_str;
+-
+-	/* set <group_id> */
+-	if ((dm_snprintf(group_str, sizeof(group_str), FMTu64, group_id)) < 0) {
+-		log_error("Could not format group_id argument.");
+-		return 0;
+-	}
+-	args[argc++] = group_str;
+-
+-	/* set <path> */
+-	args[argc++] = (char *) path;
+-
+-	/* set <mode> */
+-	args[argc++] = (char *) mode_str;
+-
+-	/* set <foreground> */
+-	if ((dm_snprintf(fg_str, sizeof(fg_str), "%u", foreground)) < 0) {
+-		log_error("Could not format foreground argument.");
+-		return 0;
+-	}
+-	args[argc++] = fg_str;
+-
+-	/* set <verbose> */
+-	if ((dm_snprintf(verb_str, sizeof(verb_str), "%u", verbose)) < 0) {
+-		log_error("Could not format verbose argument.");
+-		return 0;
+-	}
+-	args[argc++] = verb_str;
+-
+-	/* terminate args[argc] */
+-	args[argc] = NULL;
+-
+-	log_very_verbose("Spawning daemon as '%s %d " FMTu64 " %s %s %u %u'",
+-			 *args, fd, group_id, path, mode_str,
+-			 foreground, verbose);
+-
+-	if (!foreground && ((pid = fork()) < 0)) {
+-		log_error("Failed to fork dmfilemapd process.");
 -		return 0;
 -	}
 -
 -	if (pid > 0) {
--		if (_verbose)
--			_early_log("Started dmfilemapd with pid=%d", pid);
--		exit(0);
+-		log_very_verbose("Forked dmfilemapd process as pid %d", pid);
+-		return 1;
 -	}
 -
--	if (chdir("/")) {
--		_early_log("Failed to change directory.");
--		return 0;
--	}
--
--	if (!_verbose) {
--		if (close(STDIN_FILENO))
--			_early_log("Error closing stdin");
--		if (close(STDOUT_FILENO))
--			_early_log("Error closing stdout");
--		if (close(STDERR_FILENO))
--			_early_log("Error closing stderr");
--		if ((open("/dev/null", O_RDONLY) < 0) ||
--	            (open("/dev/null", O_WRONLY) < 0) ||
--		    (open("/dev/null", O_WRONLY) < 0)) {
--			_early_log("Error opening stdio streams.");
--			return 0;
--		}
--	}
--	/* TODO: Use libdaemon/server/daemon-server.c _daemonise() */
--	for (fd = (int) sysconf(_SC_OPEN_MAX) - 1; fd > STDERR_FILENO; fd--) {
--		if (fd == fm->fd)
--			continue;
--		(void) close(fd);
--	}
--
--	return 1;
--}
--
--static int _update_regions(struct dm_stats *dms, struct filemap_monitor *fm)
--{
--	uint64_t *regions = NULL, *region, nr_regions = 0;
--
--	regions = dm_stats_update_regions_from_fd(dms, fm->fd, fm->group_id);
--	if (!regions) {
--		log_error("Failed to update filemap regions for group_id="
--			  FMTu64 ".", fm->group_id);
--		return 0;
--	}
--
--	for (region = regions; *region != DM_STATS_REGIONS_ALL; region++)
--		nr_regions++;
--
--	if (!nr_regions)
--		log_warn("File contains no extents: exiting.");
--
--	if (nr_regions && (regions[0] != fm->group_id)) {
--		log_warn("group_id changed from " FMTu64 " to " FMTu64,
--			 fm->group_id, regions[0]);
--		fm->group_id = regions[0];
--	}
--	free(regions);
--	fm->nr_regions = nr_regions;
--	return 1;
--}
--
--static int _dmfilemapd(struct filemap_monitor *fm)
--{
--	int running = 1, check = 0, open = 0;
--	const char *program_id;
--	struct dm_stats *dms;
--
--	/*
--	 * The correct program_id is retrieved from the group leader
--	 * following the call to dm_stats_list().
--	 */
--	if (!(dms = dm_stats_create(NULL)))
--		goto_bad;
--
--	if (!dm_stats_bind_from_fd(dms, fm->fd)) {
--		log_error("Could not bind dm_stats handle to file descriptor "
--			  "%d", fm->fd);
--		goto bad;
--	}
--
--	if (!_filemap_monitor_set_notify(fm))
--		goto bad;
--
--	if (!_filemap_fd_update_blocks(fm))
--		goto bad;
--
--	if (!dm_stats_list(dms, DM_STATS_ALL_PROGRAMS)) {
--		log_error("Failed to list stats handle.");
--		goto bad;
--	}
--
--	/*
--	 * Take the program_id for new regions (created by calls to
--	 * dm_stats_update_regions_from_fd()) from the value used by
--	 * the group leader.
--	 */
--	program_id = dm_stats_get_region_program_id(dms, fm->group_id);
--	if (program_id)
--		fm->program_id = strdup(program_id);
--	else
--		fm->program_id = NULL;
--	dm_stats_set_program_id(dms, 1, program_id);
--
--	do {
--		if (!dm_stats_group_present(dms, fm->group_id)) {
--			log_info("Filemap group removed: exiting.");
--			running = 0;
--			continue;
--		}
--
--		if ((check = _filemap_monitor_get_events(fm)) < 0)
--			goto bad;
--
--		if (!check)
--			goto wait;
--
--		if ((check = _filemap_fd_check_changed(fm)) < 0)
--			goto bad;
--
--		if (check && !_update_regions(dms, fm))
--			goto bad;
--
--		running = !!fm->nr_regions;
--		if (!running)
--			continue;
--
--wait:
--		_filemap_monitor_wait(FILEMAPD_WAIT_USECS);
--
--		/* mode=inode termination condions */
--		if (fm->mode == DM_FILEMAPD_FOLLOW_INODE) {
--			if (!_filemap_monitor_check_file_unlinked(fm))
--				goto bad;
--			if (fm->deleted && !(open = _is_open(fm->path))) {
--				log_info("File unlinked and closed: exiting.");
--				running = 0;
--			} else if (fm->deleted && open)
--				log_verbose("File unlinked and open: "
--					     "continuing.");
--		}
--
--		if (!dm_stats_list(dms, NULL)) {
--			log_error("Failed to list stats handle.");
--			goto bad;
--		}
--
--	} while (running);
--
--	_filemap_monitor_destroy(fm);
--	dm_stats_destroy(dms);
+-	execvp(args[0], args);
+-	log_sys_error("execvp", args[0]);
+-	if (!foreground)
+-		_exit(127);
 -	return 0;
--
--bad:
--	_filemap_monitor_destroy(fm);
--	dm_stats_destroy(dms);
--	log_error("Exiting");
--	return 1;
 -}
--
--static const char * const _mode_names[] = {
--	"inode",
--	"path"
+-# else /* !DMFILEMAPD */
+-dm_filemapd_mode_t dm_filemapd_mode_from_string(const char *mode_str)
+-{
+-	return 0;
 -};
 -
--/*
-- * dmfilemapd <fd> <group_id> <path> <mode> [<foreground>[<log_level>]]
-- */
--int main(int argc, char **argv)
+-int dm_stats_start_filemapd(int fd, uint64_t group_id, const char *path,
+-			    dm_filemapd_mode_t mode, unsigned foreground,
+-			    unsigned verbose)
 -{
--	struct filemap_monitor fm;
--
--	memset(&fm, 0, sizeof(fm));
--
--	if (!_parse_args(argc, argv, &fm)) {
--		free(fm.path);
--		return 1;
--	}
--
--	_setup_logging();
--
--	log_info("Starting dmfilemapd with fd=%d, group_id=" FMTu64 " "
--		 "mode=%s, path=%s", fm.fd, fm.group_id,
--		 _mode_names[fm.mode], fm.path);
--
--	if (!_foreground && !_daemonise(&fm)) {
--		free(fm.path);
--		return 1;
--	}
--
--	return _dmfilemapd(&fm);
+-	log_error("dmfilemapd support disabled.");
+-	return 0;
 -}
-diff --git a/libdm/dm-tools/.gitignore b/libdm/dm-tools/.gitignore
-index c42a5e0..5274cda 100644
---- a/libdm/dm-tools/.gitignore
-+++ b/libdm/dm-tools/.gitignore
-@@ -1 +1,2 @@
- dmsetup
-+dmfilemapd
-diff --git a/libdm/dm-tools/Makefile.in b/libdm/dm-tools/Makefile.in
-index b8d83ac..39d411d 100644
---- a/libdm/dm-tools/Makefile.in
-+++ b/libdm/dm-tools/Makefile.in
-@@ -16,8 +16,6 @@ srcdir = @srcdir@
- top_srcdir = @top_srcdir@
- top_builddir = @top_builddir@
- 
--SOURCES=\
+-#endif /* DMFILEMAPD */
 -
- SOURCES2=\
- 	dmsetup.c
- 
-@@ -36,8 +34,6 @@ CLEAN_TARGETS = $(TARGETS_DM) \
- 
- include $(top_builddir)/libdm/make.tmpl
- 
--device-mapper: $(TARGETS_DM)
+-/*
+- * Backward compatible dm_stats_create_region() implementations.
+- *
+- * Keep these at the end of the file to avoid adding clutter around the
+- * current dm_stats_create_region() version.
+- */
 -
- CFLAGS_dmsetup.o += $(UDEV_CFLAGS) $(EXTRA_EXEC_CFLAGS)
- 
- dmsetup: dmsetup.o
-@@ -67,3 +63,41 @@ install_dmsetup_static: dmsetup.static
- install_device-mapper: $(INSTALL_DMSETUP_TARGETS)
- 
- install: install_device-mapper
-+
-+# dmfilemapd support
-+ifeq ("@BUILD_DMFILEMAPD@", "yes")
-+  SOURCES += dmfilemapd.c
-+  TARGETS_DM += dmfilemapd
-+  .PHONY: install_dmfilemapd install_dmfilemapd_static
-+  INSTALL_DMFILEMAPD_TARGETS = install_dmfilemapd_dynamic
-+  ifeq ("@STATIC_LINK@", "yes")
-+    TARGETS_DM += dmfilemapd.static
-+  else
-+    TARGETS_DM += dmfilemapd
-+  endif
-+  CLEAN_TARGETS+= dmfilemapd.static
-+  
-+  CFLAGS_dmfilemapd.o += $(EXTRA_EXEC_CFLAGS)
-+
-+  dmfilemapd: $(LIB_SHARED) dmfilemapd.o
-+	$(CC) $(CFLAGS) $(LDFLAGS) $(EXTRA_EXEC_LDFLAGS) $(ELDFLAGS) \
-+		-o $@ dmfilemapd.o -L$(top_builddir)/libdm -ldevmapper $(DL_LIBS) $(LIBS)
-+
-+  dmfilemapd.static: $(LIB_STATIC) dmfilemapd.o
-+	$(CC) $(CFLAGS) $(LDFLAGS) $(ELDFLAGS) -static -L$(interfacebuilddir) \
-+		-o $@ dmfilemapd.o $(DL_LIBS) $(LIBS) $(STATIC_LIBS)
-+
-+  install_dmfilemapd_dynamic: dmfilemapd
-+	$(INSTALL_PROGRAM) -D $< $(sbindir)/$(<F)
-+
-+  install_dmfilemapd_static: dmfilemapd.static
-+	$(INSTALL_PROGRAM) -D $< $(staticdir)/$(<F)
-+
-+  install_dmfilemapd: $(INSTALL_DMFILEMAPD_TARGETS)
-+
-+  install_device-mapper: install_dmfilemapd
-+
-+  install: install_dmfilemapd
-+endif
-+
-+device-mapper: $(TARGETS_DM)
-diff --git a/libdm/dm-tools/dmfilemapd.c b/libdm/dm-tools/dmfilemapd.c
-new file mode 100644
-index 0000000..0b17c2b
---- /dev/null
-+++ b/libdm/dm-tools/dmfilemapd.c
-@@ -0,0 +1,835 @@
-+/*
-+ * Copyright (C) 2016 Red Hat, Inc. All rights reserved.
-+ *
-+ * This file is part of the device-mapper userspace tools.
-+ *
-+ * It includes tree drawing code based on pstree: http://psmisc.sourceforge.net/
-+ *
-+ * This copyrighted material is made available to anyone wishing to use,
-+ * modify, copy, or redistribute it subject to the terms and conditions
-+ * of the GNU General Public License v.2.
-+ *
-+ * You should have received a copy of the GNU General Public License
-+ * along with this program; if not, write to the Free Software Foundation,
-+ * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
-+ */
-+
-+#include "util.h"
-+#include "libdm/misc/dm-logging.h"
-+
-+#include <sys/types.h>
-+#include <sys/stat.h>
-+#include <unistd.h>
-+#include <fcntl.h>
-+#include <sys/inotify.h>
-+#include <dirent.h>
-+#include <ctype.h>
-+
-+#ifdef __linux__
-+#  include "libdm/misc/kdev_t.h"
-+#else
-+#  define MAJOR(x) major((x))
-+#  define MINOR(x) minor((x))
-+#  define MKDEV(x,y) makedev((x),(y))
-+#endif
-+
-+#define DEFAULT_PROC_DIR "/proc"
-+
-+/* limit to two updates/sec */
-+#define FILEMAPD_WAIT_USECS 500000
-+
-+/* how long to wait for unlinked files */
-+#define FILEMAPD_NOFILE_WAIT_USECS 100000
-+#define FILEMAPD_NOFILE_WAIT_TRIES 10
-+
-+struct filemap_monitor {
-+	dm_filemapd_mode_t mode;
-+	const char *program_id;
-+	uint64_t group_id;
-+	char *path;
-+	int fd;
-+
-+	int inotify_fd;
-+	int inotify_watch_fd;
-+
-+	/* monitoring heuristics */
-+	int64_t blocks; /* allocated blocks, from stat.st_blocks */
-+	uint64_t nr_regions;
-+	int deleted;
-+};
-+
-+static int _foreground;
-+static int _verbose;
-+
-+const char *const _usage = "dmfilemapd <fd> <group_id> <abs_path> <mode> "
-+			   "[<foreground>[<log_level>]]";
-+
-+/*
-+ * Daemon logging. By default, all messages are thrown away: messages
-+ * are only written to the terminal if the daemon is run in the foreground.
-+ */
-+__attribute__((format(printf, 5, 0)))
-+static void _dmfilemapd_log_line(int level,
-+				 const char *file __attribute__((unused)),
-+				 int line __attribute__((unused)),
-+				 int dm_errno_or_class,
-+				 const char *f, va_list ap)
-+{
-+	static int _abort_on_internal_errors = -1;
-+	FILE *out = log_stderr(level) ? stderr : stdout;
-+
-+	level = log_level(level);
-+
-+	if (level <= _LOG_WARN || _verbose) {
-+		if (level < _LOG_WARN)
-+			out = stderr;
-+		vfprintf(out, f, ap);
-+		fputc('\n', out);
-+	}
-+
-+	if (_abort_on_internal_errors < 0)
-+		/* Set when env DM_ABORT_ON_INTERNAL_ERRORS is not "0" */
-+		_abort_on_internal_errors =
-+			strcmp(getenv("DM_ABORT_ON_INTERNAL_ERRORS") ? : "0", "0");
-+
-+	if (_abort_on_internal_errors &&
-+	    !strncmp(f, INTERNAL_ERROR, sizeof(INTERNAL_ERROR) - 1))
-+		abort();
-+}
-+
-+__attribute__((format(printf, 5, 6)))
-+static void _dmfilemapd_log_with_errno(int level,
-+				       const char *file, int line,
-+				       int dm_errno_or_class,
-+				       const char *f, ...)
-+{
-+	va_list ap;
-+
-+	va_start(ap, f);
-+	_dmfilemapd_log_line(level, file, line, dm_errno_or_class, f, ap);
-+	va_end(ap);
-+}
-+
-+/*
-+ * Only used for reporting errors before daemonise().
-+ */
-+__attribute__((format(printf, 1, 2)))
-+static void _early_log(const char *fmt, ...)
-+{
-+	va_list ap;
-+
-+	va_start(ap, fmt);
-+	vfprintf(stderr, fmt, ap);
-+	fputc('\n', stderr);
-+	va_end(ap);
-+}
-+
-+static void _setup_logging(void)
-+{
-+	dm_log_init_verbose(_verbose - 1);
-+	dm_log_with_errno_init(_dmfilemapd_log_with_errno);
-+}
-+
-+#define PROC_FD_DELETED_STR "(deleted)"
-+/*
-+ * Scan the /proc/<pid>/fd directory for pid and check for an fd
-+ * symlink whose contents match path.
-+ */
-+static int _is_open_in_pid(pid_t pid, const char *path)
-+{
-+	char deleted_path[PATH_MAX + sizeof(PROC_FD_DELETED_STR)];
-+	struct dirent *pid_dp = NULL;
-+	char path_buf[PATH_MAX];
-+	char link_buf[PATH_MAX];
-+	DIR *pid_d = NULL;
-+	ssize_t len;
-+
-+	if (pid == getpid())
-+		return 0;
-+
-+	if (dm_snprintf(path_buf, sizeof(path_buf),
-+			DEFAULT_PROC_DIR "%d/fd", pid) < 0) {
-+		log_error("Could not format pid path.");
-+		return 0;
-+	}
-+
-+	/*
-+	 * Test for the kernel 'file (deleted)' form when scanning.
-+	 */
-+	if (dm_snprintf(deleted_path, sizeof(deleted_path), "%s %s",
-+			path, PROC_FD_DELETED_STR) < 0) {
-+		log_error("Could not format check path.");
-+		return 0;
-+	}
-+
-+	pid_d = opendir(path_buf);
-+	if (!pid_d) {
-+		log_error("Could not open proc path: %s.", path_buf);
-+		return 0;
-+	}
-+
-+	while ((pid_dp = readdir(pid_d)) != NULL) {
-+		if (pid_dp->d_name[0] == '.')
-+			continue;
-+		if ((len = readlinkat(dirfd(pid_d), pid_dp->d_name, link_buf,
-+				      sizeof(link_buf))) < 0) {
-+			log_error("readlink failed for " DEFAULT_PROC_DIR
-+				  "/%d/fd/.", pid);
-+			goto bad;
-+		}
-+		link_buf[len] = '\0';
-+		if (!strcmp(deleted_path, link_buf)) {
-+			if (closedir(pid_d))
-+				log_sys_error("closedir", path_buf);
-+			return 1;
-+		}
-+	}
-+
-+bad:
-+	if (closedir(pid_d))
-+		log_sys_error("closedir", path_buf);
-+
-+	return 0;
-+}
-+
-+/*
-+ * Attempt to determine whether a file is open by any process by
-+ * scanning symbolic links in /proc/<pid>/fd.
-+ *
-+ * This is a heuristic since it cannot guarantee to detect brief
-+ * access in all cases: a process that opens and then closes the
-+ * file rapidly may never be seen by the scan.
-+ *
-+ * The method will also give false-positives if a process exists
-+ * that has a deleted file open that had the same path, but a
-+ * different inode number, to the file being monitored.
-+ *
-+ * For this reason the daemon only uses _is_open() for unlinked
-+ * files when the mode is DM_FILEMAPD_FOLLOW_INODE, since these
-+ * files can no longer be newly opened by processes.
-+ *
-+ * In this situation !is_open(path) provides an indication that
-+ * the daemon should shut down: the file has been unlinked from
-+ * the file system and we appear to hold the final reference.
-+ */
-+static int _is_open(const char *path)
-+{
-+	struct dirent *proc_dp = NULL;
-+	DIR *proc_d = NULL;
-+	pid_t pid;
-+
-+	proc_d = opendir(DEFAULT_PROC_DIR);
-+	if (!proc_d)
-+		return 0;
-+	while ((proc_dp = readdir(proc_d)) != NULL) {
-+		if (!isdigit(proc_dp->d_name[0]))
-+			continue;
-+		errno = 0;
-+		pid = (pid_t) strtol(proc_dp->d_name, NULL, 10);
-+		if (errno || !pid)
-+			continue;
-+		if (_is_open_in_pid(pid, path)) {
-+			if (closedir(proc_d))
-+				log_sys_error("closedir", DEFAULT_PROC_DIR);
-+			return 1;
-+		}
-+	}
-+
-+	if (closedir(proc_d))
-+		log_sys_error("closedir", DEFAULT_PROC_DIR);
-+
-+	return 0;
-+}
-+
-+static void _filemap_monitor_wait(uint64_t usecs)
-+{
-+	if (_verbose) {
-+		if (usecs == FILEMAPD_WAIT_USECS)
-+			log_very_verbose("Waiting for check interval");
-+		if (usecs == FILEMAPD_NOFILE_WAIT_USECS)
-+			log_very_verbose("Waiting for unlinked path");
-+	}
-+	usleep((useconds_t) usecs);
-+}
-+
-+static int _parse_args(int argc, char **argv, struct filemap_monitor *fm)
-+{
-+	char *endptr;
-+
-+	/* we don't care what is in argv[0]. */
-+	argc--;
-+	argv++;
-+
-+	if (argc < 5) {
-+		_early_log("Wrong number of arguments.");
-+		_early_log("usage: %s", _usage);
-+		return 0;
-+	}
-+
-+	/*
-+	 * We don't know the true nr_regions at daemon start time,
-+	 * and it is not worth a dm_stats_list()/group walk to count:
-+	 * we can assume that there is@least one region or the
-+	 * daemon would not have been started.
-+	 *
-+	 * A correct value will be obtained following the first update
-+	 * of the group's regions.
-+	 */
-+	fm->nr_regions = 1;
-+
-+	/* parse <fd> */
-+	errno = 0;
-+	fm->fd = (int) strtol(argv[0], &endptr, 10);
-+	if (errno || *endptr) {
-+		_early_log("Could not parse file descriptor: %s", argv[0]);
-+		return 0;
-+	}
-+
-+	argc--;
-+	argv++;
-+
-+	/* parse <group_id> */
-+	errno = 0;
-+	fm->group_id = strtoull(argv[0], &endptr, 10);
-+	if (*endptr || errno) {
-+		_early_log("Could not parse group identifier: %s", argv[0]);
-+		return 0;
-+	}
-+
-+	argc--;
-+	argv++;
-+
-+	/* parse <path> */
-+	if (!argv[0] || !strlen(argv[0])) {
-+		_early_log("Path argument is required.");
-+		return 0;
-+	}
-+
-+	if (*argv[0] != '/') {
-+		_early_log("Path argument must specify an absolute path.");
-+		return 0;
-+	}
-+
-+	fm->path = strdup(argv[0]);
-+	if (!fm->path) {
-+		_early_log("Could not allocate memory for path argument.");
-+		return 0;
-+	}
-+
-+	argc--;
-+	argv++;
-+
-+	/* parse <mode> */
-+	if (!argv[0] || !strlen(argv[0])) {
-+		_early_log("Mode argument is required.");
-+		return 0;
-+	}
-+
-+	fm->mode = dm_filemapd_mode_from_string(argv[0]);
-+	if (fm->mode == DM_FILEMAPD_FOLLOW_NONE)
-+		return 0;
-+
-+	argc--;
-+	argv++;
-+
-+	/* parse [<foreground>[<verbose>]] */
-+	if (argc) {
-+		errno = 0;
-+		_foreground = (int) strtol(argv[0], &endptr, 10);
-+		if (errno || *endptr) {
-+			_early_log("Could not parse debug argument: %s.",
-+				   argv[0]);
-+			return 0;
-+		}
-+		argc--;
-+		argv++;
-+		if (argc) {
-+			errno = 0;
-+			_verbose = (int) strtol(argv[0], &endptr, 10);
-+			if (errno || *endptr) {
-+				_early_log("Could not parse verbose "
-+					   "argument: %s", argv[0]);
-+				return 0;
-+			}
-+			if (_verbose < 0 || _verbose > 3) {
-+				_early_log("Verbose argument out of range: %d.",
-+					   _verbose);
-+				return 0;
-+			}
-+		}
-+	}
-+	return 1;
-+}
-+
-+static int _filemap_fd_update_blocks(struct filemap_monitor *fm)
-+{
-+	struct stat buf;
-+
-+	if (fm->fd < 0) {
-+		log_error("Filemap fd is not open.");
-+		return 0;
-+	}
-+
-+	if (fstat(fm->fd, &buf)) {
-+		log_error("Failed to fstat filemap file descriptor.");
-+		return 0;
-+	}
-+
-+	fm->blocks = buf.st_blocks;
-+
-+	return 1;
-+}
-+
-+static int _filemap_fd_check_changed(struct filemap_monitor *fm)
-+{
-+	int64_t old_blocks;
-+
-+	old_blocks = fm->blocks;
-+
-+	if (!_filemap_fd_update_blocks(fm))
-+		return -1;
-+
-+	return (fm->blocks != old_blocks);
-+}
-+
-+static void _filemap_monitor_close_fd(struct filemap_monitor *fm)
-+{
-+	if (close(fm->fd))
-+		log_error("Error closing file descriptor.");
-+	fm->fd = -1;
-+}
-+
-+static void _filemap_monitor_end_notify(struct filemap_monitor *fm)
-+{
-+	inotify_rm_watch(fm->inotify_fd, fm->inotify_watch_fd);
-+}
-+
-+static int _filemap_monitor_set_notify(struct filemap_monitor *fm)
-+{
-+	int inotify_fd, watch_fd;
-+
-+	/*
-+	 * Set IN_NONBLOCK since we do not want to block in event read()
-+	 * calls. Do not set IN_CLOEXEC as dmfilemapd is single-threaded
-+	 * and does not fork or exec.
-+	 */
-+	if ((inotify_fd = inotify_init1(IN_NONBLOCK)) < 0) {
-+		log_sys_error("inotify_init1", "IN_NONBLOCK");
-+		return 0;
-+	}
-+
-+	if ((watch_fd = inotify_add_watch(inotify_fd, fm->path,
-+					  IN_MODIFY | IN_DELETE_SELF)) < 0) {
-+		log_sys_error("inotify_add_watch", fm->path);
-+		return 0;
-+	}
-+	fm->inotify_fd = inotify_fd;
-+	fm->inotify_watch_fd = watch_fd;
-+	return 1;
-+}
-+
-+static int _filemap_monitor_reopen_fd(struct filemap_monitor *fm)
-+{
-+	int tries = FILEMAPD_NOFILE_WAIT_TRIES;
-+
-+	/*
-+	 * In DM_FILEMAPD_FOLLOW_PATH mode, inotify watches must be
-+	 * re-established whenever the file at the watched path is
-+	 * changed.
-+	 *
-+	 * FIXME: stat file and skip if inode is unchanged.
-+	 */
-+	if (fm->fd > 0)
-+		log_error("Filemap file descriptor already open.");
-+
-+	while ((fm->fd < 0) && --tries)
-+		if (((fm->fd = open(fm->path, O_RDONLY)) < 0) && tries)
-+			_filemap_monitor_wait(FILEMAPD_NOFILE_WAIT_USECS);
-+
-+	if (!tries && (fm->fd < 0)) {
-+		log_error("Could not re-open file descriptor.");
-+		return 0;
-+	}
-+
-+	return _filemap_monitor_set_notify(fm);
-+}
-+
-+static int _filemap_monitor_get_events(struct filemap_monitor *fm)
-+{
-+	/* alignment as per man(7) inotify */
-+	char buf[sizeof(struct inotify_event) + NAME_MAX + 1]
-+		__attribute__ ((aligned(__alignof__(struct inotify_event))));
-+
-+	struct inotify_event *event;
-+	int check = 0;
-+	ssize_t len;
-+	char *ptr;
-+
-+	/*
-+	 * Close the file descriptor for the file being monitored here
-+	 * when mode=path: this will allow the inode to be de-allocated,
-+	 * and an IN_DELETE_SELF event generated in the case that the
-+	 * daemon is holding the last open reference to the file.
-+	 */
-+	if (fm->mode == DM_FILEMAPD_FOLLOW_PATH) {
-+		_filemap_monitor_end_notify(fm);
-+		_filemap_monitor_close_fd(fm);
-+	}
-+
-+	len = read(fm->inotify_fd, (void *) &buf, sizeof(buf));
-+
-+	/* no events to read? */
-+	if (len < 0 && (errno == EAGAIN))
-+		goto out;
-+
-+	/* interrupted by signal? */
-+	if (len < 0 && (errno == EINTR))
-+		goto out;
-+
-+	if (len < 0)
-+		return -1;
-+
-+	if (!len)
-+		goto out;
-+
-+	for (ptr = buf; ptr < buf + len; ptr += sizeof(*event) + event->len) {
-+		event = (struct inotify_event *) ptr;
-+		if (event->mask & IN_DELETE_SELF)
-+			fm->deleted = 1;
-+		if (event->mask & IN_MODIFY)
-+			check = 1;
-+		/*
-+		 * Event IN_IGNORED is generated when a file has been deleted
-+		 * and IN_DELETE_SELF generated, and indicates that the file
-+		 * watch has been automatically removed.
-+		 *
-+		 * This can only happen for the DM_FILEMAPD_FOLLOW_PATH mode,
-+		 * since inotify IN_DELETE events are generated at the time
-+		 * the inode is destroyed: DM_FILEMAPD_FOLLOW_INODE will hold
-+		 * the file descriptor open, meaning that the event will not
-+		 * be generated until after the daemon closes the file.
-+		 *
-+		 * The event is ignored here since inotify monitoring will
-+		 * be reestablished (or the daemon will terminate) following
-+		 * deletion of a DM_FILEMAPD_FOLLOW_PATH monitored file.
-+		 */
-+		if (event->mask & IN_IGNORED)
-+			log_very_verbose("Inotify watch removed: IN_IGNORED "
-+					 "in event->mask");
-+	}
-+
-+out:
-+	/*
-+	 * Re-open file descriptor if required and log disposition.
-+	 */
-+	if (fm->mode == DM_FILEMAPD_FOLLOW_PATH)
-+		if (!_filemap_monitor_reopen_fd(fm))
-+			return -1;
-+
-+	log_very_verbose("exiting _filemap_monitor_get_events() with "
-+			 "deleted=%d, check=%d", fm->deleted, check);
-+	return check;
-+}
-+
-+static void _filemap_monitor_destroy(struct filemap_monitor *fm)
-+{
-+	if (fm->fd > 0) {
-+		_filemap_monitor_end_notify(fm);
-+		_filemap_monitor_close_fd(fm);
-+	}
-+	free((void *) fm->program_id);
-+	free(fm->path);
-+}
-+
-+static int _filemap_monitor_check_same_file(int fd1, int fd2)
-+{
-+	struct stat buf1, buf2;
-+
-+	if ((fd1 < 0) || (fd2 < 0))
-+		return 0;
-+
-+	if (fstat(fd1, &buf1)) {
-+		log_error("Failed to fstat file descriptor %d", fd1);
-+		return -1;
-+	}
-+
-+	if (fstat(fd2, &buf2)) {
-+		log_error("Failed to fstat file descriptor %d", fd2);
-+		return -1;
-+	}
-+
-+	return ((buf1.st_dev == buf2.st_dev) && (buf1.st_ino == buf2.st_ino));
-+}
-+
-+static int _filemap_monitor_check_file_unlinked(struct filemap_monitor *fm)
-+{
-+	char path_buf[PATH_MAX];
-+	char link_buf[PATH_MAX];
-+	int same, fd;
-+	ssize_t len;
-+
-+	fm->deleted = 0;
-+	same = 0;
-+
-+	if ((fd = open(fm->path, O_RDONLY)) < 0)
-+		goto check_unlinked;
-+
-+	same = _filemap_monitor_check_same_file(fm->fd, fd);
-+
-+	if (close(fd))
-+		log_error("Error closing fd %d", fd);
-+
-+	if (same < 0)
-+		return 0;
-+
-+	if (same)
-+		return 1;
-+
-+check_unlinked:
-+	/*
-+	 * The file has been unlinked from its original location: test
-+	 * whether it is still reachable in the filesystem, or if it is
-+	 * unlinked and anonymous.
-+	 */
-+	if (dm_snprintf(path_buf, sizeof(path_buf), DEFAULT_PROC_DIR
-+			"/%d/fd/%d", getpid(), fm->fd) < 0) {
-+		log_error("Could not format pid path.");
-+		return 0;
-+	}
-+	if ((len = readlink(path_buf, link_buf, sizeof(link_buf) - 1)) < 0) {
-+		log_error("readlink failed for " DEFAULT_PROC_DIR "/%d/fd/%d.",
-+			  getpid(), fm->fd);
-+		return 0;
-+	}
-+	link_buf[len] = '\0';
-+
-+	/*
-+	 * Try to re-open the file, from the path now reported in /proc/pid/fd.
-+	 */
-+	if ((fd = open(link_buf, O_RDONLY)) < 0)
-+		fm->deleted = 1;
-+	else
-+		same = _filemap_monitor_check_same_file(fm->fd, fd);
-+
-+	if ((fd >= 0) && close(fd))
-+		log_error("Error closing fd %d", fd);
-+
-+	if (same < 0)
-+		return 0;
-+
-+	/* Should not happen with normal /proc. */
-+	if ((fd > 0) && !same) {
-+		log_error("File descriptor mismatch: %d and %s (read from %s) "
-+			  "are not the same file!", fm->fd, link_buf, path_buf);
-+		return 0;
-+	}
-+	return 1;
-+}
-+
-+static int _daemonise(struct filemap_monitor *fm)
-+{
-+	pid_t pid = 0, sid;
-+	int fd;
-+
-+	if (!(sid = setsid())) {
-+		_early_log("setsid failed.");
-+		return 0;
-+	}
-+
-+	if ((pid = fork()) < 0) {
-+		_early_log("Failed to fork daemon process.");
-+		return 0;
-+	}
-+
-+	if (pid > 0) {
-+		if (_verbose)
-+			_early_log("Started dmfilemapd with pid=%d", pid);
-+		exit(0);
-+	}
-+
-+	if (chdir("/")) {
-+		_early_log("Failed to change directory.");
-+		return 0;
-+	}
-+
-+	if (!_verbose) {
-+		if (close(STDIN_FILENO))
-+			_early_log("Error closing stdin");
-+		if (close(STDOUT_FILENO))
-+			_early_log("Error closing stdout");
-+		if (close(STDERR_FILENO))
-+			_early_log("Error closing stderr");
-+		if ((open("/dev/null", O_RDONLY) < 0) ||
-+	            (open("/dev/null", O_WRONLY) < 0) ||
-+		    (open("/dev/null", O_WRONLY) < 0)) {
-+			_early_log("Error opening stdio streams.");
-+			return 0;
-+		}
-+	}
-+	/* TODO: Use libdaemon/server/daemon-server.c _daemonise() */
-+	for (fd = (int) sysconf(_SC_OPEN_MAX) - 1; fd > STDERR_FILENO; fd--) {
-+		if (fd == fm->fd)
-+			continue;
-+		(void) close(fd);
-+	}
-+
-+	return 1;
-+}
-+
-+static int _update_regions(struct dm_stats *dms, struct filemap_monitor *fm)
-+{
-+	uint64_t *regions = NULL, *region, nr_regions = 0;
-+
-+	regions = dm_stats_update_regions_from_fd(dms, fm->fd, fm->group_id);
-+	if (!regions) {
-+		log_error("Failed to update filemap regions for group_id="
-+			  FMTu64 ".", fm->group_id);
-+		return 0;
-+	}
-+
-+	for (region = regions; *region != DM_STATS_REGIONS_ALL; region++)
-+		nr_regions++;
-+
-+	if (!nr_regions)
-+		log_warn("File contains no extents: exiting.");
-+
-+	if (nr_regions && (regions[0] != fm->group_id)) {
-+		log_warn("group_id changed from " FMTu64 " to " FMTu64,
-+			 fm->group_id, regions[0]);
-+		fm->group_id = regions[0];
-+	}
-+	free(regions);
-+	fm->nr_regions = nr_regions;
-+	return 1;
-+}
-+
-+static int _dmfilemapd(struct filemap_monitor *fm)
-+{
-+	int running = 1, check = 0, open = 0;
-+	const char *program_id;
-+	struct dm_stats *dms;
-+
-+	/*
-+	 * The correct program_id is retrieved from the group leader
-+	 * following the call to dm_stats_list().
-+	 */
-+	if (!(dms = dm_stats_create(NULL)))
-+		goto_bad;
-+
-+	if (!dm_stats_bind_from_fd(dms, fm->fd)) {
-+		log_error("Could not bind dm_stats handle to file descriptor "
-+			  "%d", fm->fd);
-+		goto bad;
-+	}
-+
-+	if (!_filemap_monitor_set_notify(fm))
-+		goto bad;
-+
-+	if (!_filemap_fd_update_blocks(fm))
-+		goto bad;
-+
-+	if (!dm_stats_list(dms, DM_STATS_ALL_PROGRAMS)) {
-+		log_error("Failed to list stats handle.");
-+		goto bad;
-+	}
-+
-+	/*
-+	 * Take the program_id for new regions (created by calls to
-+	 * dm_stats_update_regions_from_fd()) from the value used by
-+	 * the group leader.
-+	 */
-+	program_id = dm_stats_get_region_program_id(dms, fm->group_id);
-+	if (program_id)
-+		fm->program_id = strdup(program_id);
-+	else
-+		fm->program_id = NULL;
-+	dm_stats_set_program_id(dms, 1, program_id);
-+
-+	do {
-+		if (!dm_stats_group_present(dms, fm->group_id)) {
-+			log_info("Filemap group removed: exiting.");
-+			running = 0;
-+			continue;
-+		}
-+
-+		if ((check = _filemap_monitor_get_events(fm)) < 0)
-+			goto bad;
-+
-+		if (!check)
-+			goto wait;
-+
-+		if ((check = _filemap_fd_check_changed(fm)) < 0)
-+			goto bad;
-+
-+		if (check && !_update_regions(dms, fm))
-+			goto bad;
-+
-+		running = !!fm->nr_regions;
-+		if (!running)
-+			continue;
-+
-+wait:
-+		_filemap_monitor_wait(FILEMAPD_WAIT_USECS);
-+
-+		/* mode=inode termination condions */
-+		if (fm->mode == DM_FILEMAPD_FOLLOW_INODE) {
-+			if (!_filemap_monitor_check_file_unlinked(fm))
-+				goto bad;
-+			if (fm->deleted && !(open = _is_open(fm->path))) {
-+				log_info("File unlinked and closed: exiting.");
-+				running = 0;
-+			} else if (fm->deleted && open)
-+				log_verbose("File unlinked and open: "
-+					     "continuing.");
-+		}
-+
-+		if (!dm_stats_list(dms, NULL)) {
-+			log_error("Failed to list stats handle.");
-+			goto bad;
-+		}
-+
-+	} while (running);
-+
-+	_filemap_monitor_destroy(fm);
-+	dm_stats_destroy(dms);
-+	return 0;
-+
-+bad:
-+	_filemap_monitor_destroy(fm);
-+	dm_stats_destroy(dms);
-+	log_error("Exiting");
-+	return 1;
-+}
-+
-+static const char * const _mode_names[] = {
-+	"inode",
-+	"path"
-+};
-+
-+/*
-+ * dmfilemapd <fd> <group_id> <path> <mode> [<foreground>[<log_level>]]
-+ */
-+int main(int argc, char **argv)
-+{
-+	struct filemap_monitor fm;
-+
-+	memset(&fm, 0, sizeof(fm));
-+
-+	if (!_parse_args(argc, argv, &fm)) {
-+		free(fm.path);
-+		return 1;
-+	}
-+
-+	_setup_logging();
-+
-+	log_info("Starting dmfilemapd with fd=%d, group_id=" FMTu64 " "
-+		 "mode=%s, path=%s", fm.fd, fm.group_id,
-+		 _mode_names[fm.mode], fm.path);
-+
-+	if (!_foreground && !_daemonise(&fm)) {
-+		free(fm.path);
-+		return 1;
-+	}
-+
-+	return _dmfilemapd(&fm);
-+}
+-#if defined(__GNUC__)
+-int dm_stats_create_region_v1_02_106(struct dm_stats *dms, uint64_t *region_id,
+-				     uint64_t start, uint64_t len, int64_t step,
+-				     int precise, const char *program_id,
+-				     const char *aux_data);
+-int dm_stats_create_region_v1_02_106(struct dm_stats *dms, uint64_t *region_id,
+-				     uint64_t start, uint64_t len, int64_t step,
+-				     int precise, const char *program_id,
+-				     const char *aux_data)
+-{
+-	/* 1.02.106 lacks histogram argument. */
+-	return _stats_create_region(dms, region_id, start, len, step, precise,
+-				    NULL, program_id, aux_data);
+-}
+-
+-int dm_stats_create_region_v1_02_104(struct dm_stats *dms, uint64_t *region_id,
+-				     uint64_t start, uint64_t len, int64_t step,
+-				     const char *program_id, const char *aux_data);
+-int dm_stats_create_region_v1_02_104(struct dm_stats *dms, uint64_t *region_id,
+-				     uint64_t start, uint64_t len, int64_t step,
+-				     const char *program_id, const char *aux_data)
+-{
+-	/* 1.02.104 lacks histogram and precise arguments. */
+-	return _stats_create_region(dms, region_id, start, len, step, 0, NULL,
+-				    program_id, aux_data);
+-}
+-#endif
 
 
