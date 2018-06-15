@@ -1,115 +1,273 @@
 From: David Teigland <teigland@sourceware.org>
-Date: Fri, 15 Jun 2018 15:05:48 -0400
-Subject: master - config: add deprecated version for recently removed settings
-Message-ID: <201806151905.w5FJ5mc5012181@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Fri, 15 Jun 2018 15:05:49 -0400
+Subject: master - Remove unused device error counting
+Message-ID: <201806151905.w5FJ5nn7012191@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=54f61e7dccf82471dd4a963bfcbcf14802806ca9
-Commit:        54f61e7dccf82471dd4a963bfcbcf14802806ca9
-Parent:        3fd75d1bcd714b02fb2b843d1928b2a875402f37
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=328303d4d45b4e9480cc806ef84e843e2176f584
+Commit:        328303d4d45b4e9480cc806ef84e843e2176f584
+Parent:        54f61e7dccf82471dd4a963bfcbcf14802806ca9
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Fri Jun 15 13:56:26 2018 -0500
+AuthorDate:    Fri Jun 15 14:04:39 2018 -0500
 Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Fri Jun 15 13:56:26 2018 -0500
+CommitterDate: Fri Jun 15 14:04:39 2018 -0500
 
-config: add deprecated version for recently removed settings
+Remove unused device error counting
 
-assumes that the next version from this branch is 3.0.0
 ---
- lib/config/config_settings.h |   32 ++++++++++++++++----------------
- 1 files changed, 16 insertions(+), 16 deletions(-)
+ lib/commands/toolcontext.c   |    3 ---
+ lib/config/config_settings.h |    8 ++------
+ lib/config/defaults.h        |    3 ---
+ lib/device/dev-cache.c       |   19 +++----------------
+ lib/device/dev-io.c          |   24 ------------------------
+ lib/device/device.h          |    2 --
+ lib/misc/lvm-globals.c       |   11 -----------
+ lib/misc/lvm-globals.h       |    4 ----
+ 8 files changed, 5 insertions(+), 69 deletions(-)
 
+diff --git a/lib/commands/toolcontext.c b/lib/commands/toolcontext.c
+index a76c68d..723f882 100644
+--- a/lib/commands/toolcontext.c
++++ b/lib/commands/toolcontext.c
+@@ -974,9 +974,6 @@ static int _init_dev_cache(struct cmd_context *cmd)
+ 	int len_diff;
+ 	int device_list_from_udev;
+ 
+-	init_dev_disable_after_error_count(
+-		find_config_tree_int(cmd, devices_disable_after_error_count_CFG, NULL));
+-
+ 	if (!dev_cache_init(cmd))
+ 		return_0;
+ 
 diff --git a/lib/config/config_settings.h b/lib/config/config_settings.h
-index a730afb..ff098d8 100644
+index ff098d8..ac0f0ff 100644
 --- a/lib/config/config_settings.h
 +++ b/lib/config/config_settings.h
-@@ -315,13 +315,13 @@ cfg_array(devices_global_filter_CFG, "global_filter", devices_CFG_SECTION, CFG_D
- cfg_runtime(devices_cache_CFG, "cache", devices_CFG_SECTION, 0, CFG_TYPE_STRING, vsn(1, 0, 0), vsn(1, 2, 19), NULL,
- 	"This setting is no longer used.\n")
+@@ -410,12 +410,8 @@ cfg(devices_ignore_lvm_mirrors_CFG, "ignore_lvm_mirrors", devices_CFG_SECTION, 0
+ 	"apply to LVM RAID types like 'raid1' which handle failures in a\n"
+ 	"different way, making them a better choice for VG stacking.\n")
  
--cfg_runtime(devices_cache_dir_CFG, "cache_dir", devices_CFG_SECTION, 0, CFG_TYPE_STRING, vsn(1, 2, 19), 0, NULL,
-+cfg_runtime(devices_cache_dir_CFG, "cache_dir", devices_CFG_SECTION, 0, CFG_TYPE_STRING, vsn(1, 2, 19), vsn(3, 0, 0), NULL,
- 	"This setting is no longer used.\n")
+-cfg(devices_disable_after_error_count_CFG, "disable_after_error_count", devices_CFG_SECTION, 0, CFG_TYPE_INT, DEFAULT_DISABLE_AFTER_ERROR_COUNT, vsn(2, 2, 75), NULL, 0, NULL,
+-	"Number of I/O errors after which a device is skipped.\n"
+-	"During each LVM operation, errors received from each device are\n"
+-	"counted. If the counter of a device exceeds the limit set here,\n"
+-	"no further I/O is sent to that device for the remainder of the\n"
+-	"operation. Setting this to 0 disables the counters altogether.\n")
++cfg(devices_disable_after_error_count_CFG, "disable_after_error_count", devices_CFG_SECTION, 0, CFG_TYPE_INT, 0, vsn(2, 2, 75), NULL, vsn(3, 0, 0), NULL,
++	"This setting is no longer used.\n")
  
--cfg(devices_cache_file_prefix_CFG, "cache_file_prefix", devices_CFG_SECTION, CFG_ALLOW_EMPTY, CFG_TYPE_STRING, DEFAULT_CACHE_FILE_PREFIX, vsn(1, 2, 19), NULL, 0, NULL,
-+cfg(devices_cache_file_prefix_CFG, "cache_file_prefix", devices_CFG_SECTION, CFG_ALLOW_EMPTY, CFG_TYPE_STRING, DEFAULT_CACHE_FILE_PREFIX, vsn(1, 2, 19), NULL, vsn(3, 0, 0), NULL,
- 	"This setting is no longer used.\n")
+ cfg(devices_require_restorefile_with_uuid_CFG, "require_restorefile_with_uuid", devices_CFG_SECTION, 0, CFG_TYPE_BOOL, DEFAULT_REQUIRE_RESTOREFILE_WITH_UUID, vsn(2, 2, 73), NULL, 0, NULL,
+ 	"Allow use of pvcreate --uuid without requiring --restorefile.\n")
+diff --git a/lib/config/defaults.h b/lib/config/defaults.h
+index 7cebd84..084d365 100644
+--- a/lib/config/defaults.h
++++ b/lib/config/defaults.h
+@@ -39,7 +39,6 @@
+ #define DEFAULT_IGNORE_LVM_MIRRORS 1
+ #define DEFAULT_MULTIPATH_COMPONENT_DETECTION 1
+ #define DEFAULT_IGNORE_SUSPENDED_DEVICES 0
+-#define DEFAULT_DISABLE_AFTER_ERROR_COUNT 0
+ #define DEFAULT_REQUIRE_RESTOREFILE_WITH_UUID 1
+ #define DEFAULT_DATA_ALIGNMENT_OFFSET_DETECTION 1
+ #define DEFAULT_DATA_ALIGNMENT_DETECTION 1
+@@ -206,8 +205,6 @@
  
--cfg(devices_write_cache_state_CFG, "write_cache_state", devices_CFG_SECTION, 0, CFG_TYPE_BOOL, 1, vsn(1, 0, 0), NULL, 0, NULL,
-+cfg(devices_write_cache_state_CFG, "write_cache_state", devices_CFG_SECTION, 0, CFG_TYPE_BOOL, 1, vsn(1, 0, 0), NULL, vsn(3, 0, 0), NULL,
- 	"This setting is no longer used.\n")
+ #define DEFAULT_MAX_HISTORY 100
  
- cfg_array(devices_types_CFG, "types", devices_CFG_SECTION, CFG_DEFAULT_UNDEFINED | CFG_ADVANCED, CFG_TYPE_INT | CFG_TYPE_STRING, NULL, vsn(1, 0, 0), NULL, 0, NULL,
-@@ -760,13 +760,13 @@ cfg(global_activation_CFG, "activation", global_CFG_SECTION, 0, CFG_TYPE_BOOL, D
- 	"is not present in the kernel, disabling this should suppress\n"
- 	"the error messages.\n")
+-#define DEFAULT_MAX_ERROR_COUNT	NO_DEV_ERROR_COUNT_LIMIT
+-
+ #define DEFAULT_REP_COMPACT_OUTPUT 0
+ #define DEFAULT_REP_ALIGNED 1
+ #define DEFAULT_REP_BUFFERED 1
+diff --git a/lib/device/dev-cache.c b/lib/device/dev-cache.c
+index 1635c99..a0d98a3 100644
+--- a/lib/device/dev-cache.c
++++ b/lib/device/dev-cache.c
+@@ -62,13 +62,12 @@ static int _insert(const char *path, const struct stat *info,
+ 		   int rec, int check_with_udev_db);
  
--cfg(global_fallback_to_lvm1_CFG, "fallback_to_lvm1", global_CFG_SECTION, CFG_DEFAULT_COMMENTED, CFG_TYPE_BOOL, 0, vsn(1, 0, 18), NULL, 0, NULL,
-+cfg(global_fallback_to_lvm1_CFG, "fallback_to_lvm1", global_CFG_SECTION, CFG_DEFAULT_COMMENTED, CFG_TYPE_BOOL, 0, vsn(1, 0, 18), NULL, vsn(3, 0, 0), NULL,
- 	"This setting is no longer used.\n")
+ /* Setup non-zero members of passed zeroed 'struct device' */
+-static void _dev_init(struct device *dev, int max_error_count)
++static void _dev_init(struct device *dev)
+ {
+ 	dev->phys_block_size = -1;
+ 	dev->block_size = -1;
+ 	dev->fd = -1;
+ 	dev->read_ahead = -1;
+-	dev->max_error_count = max_error_count;
  
--cfg(global_format_CFG, "format", global_CFG_SECTION, CFG_DEFAULT_COMMENTED, CFG_TYPE_STRING, DEFAULT_FORMAT, vsn(1, 0, 0), NULL, 0, NULL,
-+cfg(global_format_CFG, "format", global_CFG_SECTION, CFG_DEFAULT_COMMENTED, CFG_TYPE_STRING, DEFAULT_FORMAT, vsn(1, 0, 0), NULL, vsn(3, 0, 0), NULL,
- 	"This setting is no longer used.\n")
+ 	dev->ext.enabled = 0;
+ 	dev->ext.src = DEV_EXT_NONE;
+@@ -129,7 +128,7 @@ struct device *dev_create_file(const char *filename, struct device *dev,
+ 		return NULL;
+ 	}
  
--cfg_array(global_format_libraries_CFG, "format_libraries", global_CFG_SECTION, CFG_DEFAULT_UNDEFINED, CFG_TYPE_STRING, NULL, vsn(1, 0, 0), NULL, 0, NULL,
-+cfg_array(global_format_libraries_CFG, "format_libraries", global_CFG_SECTION, CFG_DEFAULT_UNDEFINED, CFG_TYPE_STRING, NULL, vsn(1, 0, 0), NULL, vsn(3, 0, 0), NULL,
- 	"This setting is no longer used.")
+-	_dev_init(dev, NO_DEV_ERROR_COUNT_LIMIT);
++	_dev_init(dev);
+ 	dev->flags = DEV_REGULAR | ((use_malloc) ? DEV_ALLOCED : 0);
+ 	dm_list_add(&dev->aliases, &alias->list);
  
- cfg_array(global_segment_libraries_CFG, "segment_libraries", global_CFG_SECTION, CFG_DEFAULT_UNDEFINED, CFG_TYPE_STRING, NULL, vsn(1, 0, 18), NULL, 0, NULL, NULL)
-@@ -777,16 +777,16 @@ cfg(global_proc_CFG, "proc", global_CFG_SECTION, CFG_ADVANCED, CFG_TYPE_STRING,
- cfg(global_etc_CFG, "etc", global_CFG_SECTION, 0, CFG_TYPE_STRING, DEFAULT_ETC_DIR, vsn(2, 2, 117), "@CONFDIR@", 0, NULL,
- 	"Location of /etc system configuration directory.\n")
+@@ -145,7 +144,7 @@ static struct device *_dev_create(dev_t d)
+ 		return NULL;
+ 	}
  
--cfg(global_locking_type_CFG, "locking_type", global_CFG_SECTION, 0, CFG_TYPE_INT, 1, vsn(1, 0, 0), NULL, 0, NULL,
-+cfg(global_locking_type_CFG, "locking_type", global_CFG_SECTION, 0, CFG_TYPE_INT, 1, vsn(1, 0, 0), NULL, vsn(3, 0, 0), NULL,
- 	"This setting is no longer used.")
+-	_dev_init(dev, dev_disable_after_error_count());
++	_dev_init(dev);
+ 	dev->dev = d;
  
- cfg(global_wait_for_locks_CFG, "wait_for_locks", global_CFG_SECTION, 0, CFG_TYPE_BOOL, DEFAULT_WAIT_FOR_LOCKS, vsn(2, 2, 50), NULL, 0, NULL,
- 	"When disabled, fail if a lock request would block.\n")
+ 	return dev;
+@@ -1690,18 +1689,6 @@ struct device *dev_iter_get(struct cmd_context *cmd, struct dev_iter *iter)
+ 	return NULL;
+ }
  
--cfg(global_fallback_to_clustered_locking_CFG, "fallback_to_clustered_locking", global_CFG_SECTION, 0, CFG_TYPE_BOOL, DEFAULT_FALLBACK_TO_CLUSTERED_LOCKING, vsn(2, 2, 42), NULL, 0, NULL,
-+cfg(global_fallback_to_clustered_locking_CFG, "fallback_to_clustered_locking", global_CFG_SECTION, 0, CFG_TYPE_BOOL, DEFAULT_FALLBACK_TO_CLUSTERED_LOCKING, vsn(2, 2, 42), NULL, vsn(3, 0, 0), NULL,
- 	"This setting is no longer used.\n")
+-void dev_reset_error_count(struct cmd_context *cmd)
+-{
+-	struct dev_iter iter;
+-
+-	if (!_cache.devices)
+-		return;
+-
+-	iter.current = btree_first(_cache.devices);
+-	while (iter.current)
+-		_iter_next(&iter)->error_count = 0;
+-}
+-
+ int dev_fd(struct device *dev)
+ {
+ 	return dev->fd;
+diff --git a/lib/device/dev-io.c b/lib/device/dev-io.c
+index ffdf75e..43c2c2d 100644
+--- a/lib/device/dev-io.c
++++ b/lib/device/dev-io.c
+@@ -689,20 +689,6 @@ int dev_close_immediate(struct device *dev)
+ 	return _dev_close(dev, 1);
+ }
  
--cfg(global_fallback_to_local_locking_CFG, "fallback_to_local_locking", global_CFG_SECTION, 0, CFG_TYPE_BOOL, DEFAULT_FALLBACK_TO_LOCAL_LOCKING, vsn(2, 2, 42), NULL, 0, NULL,
-+cfg(global_fallback_to_local_locking_CFG, "fallback_to_local_locking", global_CFG_SECTION, 0, CFG_TYPE_BOOL, DEFAULT_FALLBACK_TO_LOCAL_LOCKING, vsn(2, 2, 42), NULL, vsn(3, 0, 0), NULL,
- 	"This setting is no longer used.\n")
+-static inline int _dev_is_valid(struct device *dev)
+-{
+-	return (dev->max_error_count == NO_DEV_ERROR_COUNT_LIMIT ||
+-		dev->error_count < dev->max_error_count);
+-}
+-
+-static void _dev_inc_error_count(struct device *dev)
+-{
+-	if (++dev->error_count == dev->max_error_count)
+-		log_warn("WARNING: Error counts reached a limit of %d. "
+-			 "Device %s was disabled",
+-			 dev->max_error_count, dev_name(dev));
+-}
+-
+ int dev_read(struct device *dev, uint64_t offset, size_t len, dev_io_reason_t reason, void *buffer)
+ {
+ 	struct device_area where;
+@@ -711,16 +697,11 @@ int dev_read(struct device *dev, uint64_t offset, size_t len, dev_io_reason_t re
+ 	if (!dev->open_count)
+ 		return_0;
  
- cfg(global_locking_dir_CFG, "locking_dir", global_CFG_SECTION, 0, CFG_TYPE_STRING, DEFAULT_LOCK_DIR, vsn(1, 0, 0), "@DEFAULT_LOCK_DIR@", 0, NULL,
-@@ -806,7 +806,7 @@ cfg(global_prioritise_write_locks_CFG, "prioritise_write_locks", global_CFG_SECT
- cfg(global_library_dir_CFG, "library_dir", global_CFG_SECTION, CFG_DEFAULT_UNDEFINED, CFG_TYPE_STRING, NULL, vsn(1, 0, 0), NULL, 0, NULL,
- 	"Search this directory first for shared libraries.\n")
+-	if (!_dev_is_valid(dev))
+-		return 0;
+-
+ 	where.dev = dev;
+ 	where.start = offset;
+ 	where.size = len;
  
--cfg(global_locking_library_CFG, "locking_library", global_CFG_SECTION, CFG_ALLOW_EMPTY | CFG_DEFAULT_COMMENTED, CFG_TYPE_STRING, DEFAULT_LOCKING_LIB, vsn(1, 0, 0), NULL, 0, NULL,
-+cfg(global_locking_library_CFG, "locking_library", global_CFG_SECTION, CFG_ALLOW_EMPTY | CFG_DEFAULT_COMMENTED, CFG_TYPE_STRING, DEFAULT_LOCKING_LIB, vsn(1, 0, 0), NULL, vsn(3, 0, 0), NULL,
- 	"This setting is no longer used.\n")
+ 	ret = _aligned_io(&where, buffer, 0, reason);
+-	if (!ret)
+-		_dev_inc_error_count(dev);
  
- cfg(global_abort_on_internal_errors_CFG, "abort_on_internal_errors", global_CFG_SECTION, 0, CFG_TYPE_BOOL, DEFAULT_ABORT_ON_INTERNAL_ERRORS, vsn(2, 2, 57), NULL, 0, NULL,
-@@ -1501,14 +1501,14 @@ cfg(metadata_pvmetadataignore_CFG, "pvmetadataignore", metadata_CFG_SECTION, CFG
+ 	return ret;
+ }
+@@ -783,9 +764,6 @@ int dev_write(struct device *dev, uint64_t offset, size_t len, dev_io_reason_t r
+ 	if (!dev->open_count)
+ 		return_0;
  
- cfg(metadata_stripesize_CFG, "stripesize", metadata_CFG_SECTION, CFG_ADVANCED | CFG_DEFAULT_COMMENTED, CFG_TYPE_INT, DEFAULT_STRIPESIZE, vsn(1, 0, 0), NULL, 0, NULL, NULL)
+-	if (!_dev_is_valid(dev))
+-		return 0;
+-
+ 	if (!len) {
+ 		log_error(INTERNAL_ERROR "Attempted to write 0 bytes to %s at " FMTu64, dev_name(dev), offset);
+ 		return 0;
+@@ -798,8 +776,6 @@ int dev_write(struct device *dev, uint64_t offset, size_t len, dev_io_reason_t r
+ 	dev->flags |= DEV_ACCESSED_W;
  
--cfg_array(metadata_dirs_CFG, "dirs", metadata_CFG_SECTION, CFG_ADVANCED | CFG_DEFAULT_UNDEFINED, CFG_TYPE_STRING, NULL, vsn(1, 0, 0), NULL, 0, NULL,
-+cfg_array(metadata_dirs_CFG, "dirs", metadata_CFG_SECTION, CFG_ADVANCED | CFG_DEFAULT_UNDEFINED, CFG_TYPE_STRING, NULL, vsn(1, 0, 0), NULL, vsn(3, 0, 0), NULL,
- 	  "This setting is no longer used.\n")
+ 	ret = _aligned_io(&where, buffer, 1, reason);
+-	if (!ret)
+-		_dev_inc_error_count(dev);
  
--cfg_section(metadata_disk_areas_CFG_SUBSECTION, "disk_areas", metadata_CFG_SECTION, CFG_UNSUPPORTED | CFG_DEFAULT_COMMENTED, vsn(1, 0, 0), 0, NULL, NULL)
--cfg_section(disk_area_CFG_SUBSECTION, "disk_area", metadata_disk_areas_CFG_SUBSECTION, CFG_NAME_VARIABLE | CFG_UNSUPPORTED | CFG_DEFAULT_COMMENTED, vsn(1, 0, 0), 0, NULL, NULL)
--cfg(disk_area_start_sector_CFG, "start_sector", disk_area_CFG_SUBSECTION, CFG_UNSUPPORTED | CFG_DEFAULT_COMMENTED, CFG_TYPE_INT, 0, vsn(1, 0, 0), NULL, 0, NULL, NULL)
--cfg(disk_area_size_CFG, "size", disk_area_CFG_SUBSECTION, CFG_UNSUPPORTED | CFG_DEFAULT_COMMENTED, CFG_TYPE_INT, 0, vsn(1, 0, 0), NULL, 0, NULL, NULL)
--cfg(disk_area_id_CFG, "id", disk_area_CFG_SUBSECTION, CFG_UNSUPPORTED | CFG_DEFAULT_UNDEFINED, CFG_TYPE_STRING, NULL, vsn(1, 0, 0), NULL, 0, NULL, NULL)
-+cfg_section(metadata_disk_areas_CFG_SUBSECTION, "disk_areas", metadata_CFG_SECTION, CFG_UNSUPPORTED | CFG_DEFAULT_COMMENTED, vsn(1, 0, 0), vsn(3, 0, 0), NULL, NULL)
-+cfg_section(disk_area_CFG_SUBSECTION, "disk_area", metadata_disk_areas_CFG_SUBSECTION, CFG_NAME_VARIABLE | CFG_UNSUPPORTED | CFG_DEFAULT_COMMENTED, vsn(1, 0, 0), vsn(3, 0, 0), NULL, NULL)
-+cfg(disk_area_start_sector_CFG, "start_sector", disk_area_CFG_SUBSECTION, CFG_UNSUPPORTED | CFG_DEFAULT_COMMENTED, CFG_TYPE_INT, 0, vsn(1, 0, 0), NULL, vsn(3, 0, 0), NULL, NULL)
-+cfg(disk_area_size_CFG, "size", disk_area_CFG_SUBSECTION, CFG_UNSUPPORTED | CFG_DEFAULT_COMMENTED, CFG_TYPE_INT, 0, vsn(1, 0, 0), NULL, vsn(3, 0, 0), NULL, NULL)
-+cfg(disk_area_id_CFG, "id", disk_area_CFG_SUBSECTION, CFG_UNSUPPORTED | CFG_DEFAULT_UNDEFINED, CFG_TYPE_STRING, NULL, vsn(1, 0, 0), NULL, vsn(3, 0, 0), NULL, NULL)
+ 	return ret;
+ }
+diff --git a/lib/device/device.h b/lib/device/device.h
+index 8f9ed55..00e398a 100644
+--- a/lib/device/device.h
++++ b/lib/device/device.h
+@@ -64,8 +64,6 @@ struct device {
+ 	/* private */
+ 	int fd;
+ 	int open_count;
+-	int error_count;
+-	int max_error_count;
+ 	int phys_block_size;
+ 	int block_size;
+ 	int read_ahead;
+diff --git a/lib/misc/lvm-globals.c b/lib/misc/lvm-globals.c
+index 9377588..86e6cf4 100644
+--- a/lib/misc/lvm-globals.c
++++ b/lib/misc/lvm-globals.c
+@@ -49,7 +49,6 @@ static int _udev_checking = 1;
+ static int _retry_deactivation = DEFAULT_RETRY_DEACTIVATION;
+ static int _activation_checks = 0;
+ static char _sysfs_dir_path[PATH_MAX] = "";
+-static int _dev_disable_after_error_count = DEFAULT_DISABLE_AFTER_ERROR_COUNT;
+ static uint64_t _pv_min_size = (DEFAULT_PV_MIN_SIZE_KB * 1024L >> SECTOR_SHIFT);
+ static const char *_unknown_device_name = DEFAULT_UNKNOWN_DEVICE_NAME;
  
- cfg(report_output_format_CFG, "output_format", report_CFG_SECTION, CFG_PROFILABLE | CFG_DEFAULT_COMMENTED | CFG_DISALLOW_INTERACTIVE, CFG_TYPE_STRING, DEFAULT_REP_OUTPUT_FORMAT, vsn(2, 2, 158), NULL, 0, NULL,
- 	"Format of LVM command's report output.\n"
+@@ -173,11 +172,6 @@ void init_activation_checks(int checks)
+ 		log_debug_activation("LVM activation checks disabled");
+ }
+ 
+-void init_dev_disable_after_error_count(int value)
+-{
+-	_dev_disable_after_error_count = value;
+-}
+-
+ void init_pv_min_size(uint64_t sectors)
+ {
+ 	_pv_min_size = sectors;
+@@ -345,11 +339,6 @@ const char *sysfs_dir_path(void)
+ 	return _sysfs_dir_path;
+ }
+ 
+-int dev_disable_after_error_count(void)
+-{
+-	return _dev_disable_after_error_count;
+-}
+-
+ uint64_t pv_min_size(void)
+ {
+ 	return _pv_min_size;
+diff --git a/lib/misc/lvm-globals.h b/lib/misc/lvm-globals.h
+index 55a9399..6fc26cc 100644
+--- a/lib/misc/lvm-globals.h
++++ b/lib/misc/lvm-globals.h
+@@ -45,7 +45,6 @@ void init_ignore_lvm_mirrors(int scan);
+ void init_error_message_produced(int produced);
+ void init_is_static(unsigned value);
+ void init_udev_checking(int checking);
+-void init_dev_disable_after_error_count(int value);
+ void init_pv_min_size(uint64_t sectors);
+ void init_activation_checks(int checks);
+ void init_retry_deactivation(int retry);
+@@ -84,7 +83,4 @@ const char *unknown_device_name(void);
+ #define DMEVENTD_MONITOR_IGNORE -1
+ int dmeventd_monitor_mode(void);
+ 
+-#define NO_DEV_ERROR_COUNT_LIMIT 0
+-int dev_disable_after_error_count(void);
+-
+ #endif
 
 
