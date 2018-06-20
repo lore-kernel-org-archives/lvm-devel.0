@@ -1,20 +1,20 @@
 From: David Teigland <teigland@sourceware.org>
-Date: Wed, 20 Jun 2018 13:05:50 -0400
-Subject: 2018-06-01-stable - scan: work around udev problems by avoiding open RDWR
-Message-ID: <201806201705.w5KH5ovr009390@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Wed, 20 Jun 2018 15:08:41 -0400
+Subject: master - scan: work around udev problems by avoiding open RDWR
+Message-ID: <201806201908.w5KJ8fLC024342@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=a30e6222799409ab6e6151683c95eb13f4abaefb
-Commit:        a30e6222799409ab6e6151683c95eb13f4abaefb
-Parent:        76075ff55d7d23731b91929ef992fe6bdd32a964
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=42f7caf1c267a5b75ee38ea77a7e2fd7c582e704
+Commit:        42f7caf1c267a5b75ee38ea77a7e2fd7c582e704
+Parent:        f85a010a6bc9dc0414ccdf9c6b195c78231f1914
 Author:        David Teigland <teigland@redhat.com>
 AuthorDate:    Wed Jun 20 11:32:45 2018 -0500
 Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Wed Jun 20 12:05:04 2018 -0500
+CommitterDate: Wed Jun 20 14:08:12 2018 -0500
 
 scan: work around udev problems by avoiding open RDWR
 
@@ -30,7 +30,7 @@ rereading.
  2 files changed, 55 insertions(+), 2 deletions(-)
 
 diff --git a/lib/device/device.h b/lib/device/device.h
-index c8ccd73..bbd965a 100644
+index 00e398a..e879dbb 100644
 --- a/lib/device/device.h
 +++ b/lib/device/device.h
 @@ -35,6 +35,7 @@
@@ -42,10 +42,10 @@ index c8ccd73..bbd965a 100644
  /*
   * Support for external device info.
 diff --git a/lib/label/label.c b/lib/label/label.c
-index d7d3f9e..ca465dd 100644
+index 065c01f..d2c8685 100644
 --- a/lib/label/label.c
 +++ b/lib/label/label.c
-@@ -464,12 +464,24 @@ static int _scan_dev_open(struct device *dev)
+@@ -467,12 +467,24 @@ static int _scan_dev_open(struct device *dev)
  	name_sl = dm_list_item(name_list, struct dm_str_list);
  	name = name_sl->str;
  
@@ -72,7 +72,7 @@ index d7d3f9e..ca465dd 100644
  
  retry_open:
  
-@@ -1107,7 +1119,14 @@ int label_scan_open(struct device *dev)
+@@ -1124,7 +1136,14 @@ int label_scan_open(struct device *dev)
  
  int label_scan_open_excl(struct device *dev)
  {
@@ -87,7 +87,7 @@ index d7d3f9e..ca465dd 100644
  	return label_scan_open(dev);
  }
  
-@@ -1149,8 +1168,19 @@ bool dev_write_bytes(struct device *dev, uint64_t start, size_t len, void *data)
+@@ -1166,8 +1185,19 @@ bool dev_write_bytes(struct device *dev, uint64_t start, size_t len, void *data)
  		return false;
  	}
  
@@ -107,7 +107,7 @@ index d7d3f9e..ca465dd 100644
  		if (!label_scan_open(dev)) {
  			log_error("Error opening device %s for writing at %llu length %u.",
  				  dev_name(dev), (unsigned long long)start, (uint32_t)len);
-@@ -1184,8 +1214,19 @@ bool dev_write_zeros(struct device *dev, uint64_t start, size_t len)
+@@ -1201,8 +1231,19 @@ bool dev_write_zeros(struct device *dev, uint64_t start, size_t len)
  		return false;
  	}
  
@@ -127,7 +127,7 @@ index d7d3f9e..ca465dd 100644
  		if (!label_scan_open(dev)) {
  			log_error("Error opening device %s for writing at %llu length %u.",
  				  dev_name(dev), (unsigned long long)start, (uint32_t)len);
-@@ -1219,8 +1260,19 @@ bool dev_set_bytes(struct device *dev, uint64_t start, size_t len, uint8_t val)
+@@ -1236,8 +1277,19 @@ bool dev_set_bytes(struct device *dev, uint64_t start, size_t len, uint8_t val)
  		return false;
  	}
  
