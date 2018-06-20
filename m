@@ -1,55 +1,151 @@
 From: David Teigland <teigland@sourceware.org>
-Date: Mon, 18 Jun 2018 15:15:56 -0400
-Subject: 2018-06-01-stable - clvmd: fix leak of saved_vg struct
-Message-ID: <201806181915.w5IJFubD005660@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Wed, 20 Jun 2018 13:05:50 -0400
+Subject: 2018-06-01-stable - scan: work around udev problems by avoiding open RDWR
+Message-ID: <201806201705.w5KH5ovr009390@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=76075ff55d7d23731b91929ef992fe6bdd32a964
-Commit:        76075ff55d7d23731b91929ef992fe6bdd32a964
-Parent:        bfb904af1cb0a48a4ac44eb72179f628fda4fd03
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=a30e6222799409ab6e6151683c95eb13f4abaefb
+Commit:        a30e6222799409ab6e6151683c95eb13f4abaefb
+Parent:        76075ff55d7d23731b91929ef992fe6bdd32a964
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Mon Jun 18 14:10:48 2018 -0500
+AuthorDate:    Wed Jun 20 11:32:45 2018 -0500
 Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Mon Jun 18 14:14:38 2018 -0500
+CommitterDate: Wed Jun 20 12:05:04 2018 -0500
 
-clvmd: fix leak of saved_vg struct
+scan: work around udev problems by avoiding open RDWR
 
-Commit c016b573ee32f "clvmd: separate saved_vg from vginfo"
-created a separate hash table for the saved_vg structs.
-The vg's referenced by the saved_vg struct were all being
-freed properly, but the svg wrapper struct itself was not
-being freed.
+udev creates a train wreck of events if we open devices
+with RDWR.  Until we can fix/disable/scrap udev, work around
+this by opening RDONLY and then closing/reopening RDWR when
+a write is needed.  This invalidates the bcache blocks for
+the device before writing so it can trigger unnecessary
+rereading.
 ---
- lib/cache/lvmcache.c |    6 ++++++
- 1 files changed, 6 insertions(+), 0 deletions(-)
+ lib/device/device.h |    1 +
+ lib/label/label.c   |   56 +++++++++++++++++++++++++++++++++++++++++++++++++-
+ 2 files changed, 55 insertions(+), 2 deletions(-)
 
-diff --git a/lib/cache/lvmcache.c b/lib/cache/lvmcache.c
-index c306a3a..1b405e7 100644
---- a/lib/cache/lvmcache.c
-+++ b/lib/cache/lvmcache.c
-@@ -295,6 +295,11 @@ static void _drop_metadata(const char *vgname, int drop_precommitted)
- 		_saved_vg_free(svg, 0, 1);
- 	else
- 		_saved_vg_free(svg, 1, 1);
+diff --git a/lib/device/device.h b/lib/device/device.h
+index c8ccd73..bbd965a 100644
+--- a/lib/device/device.h
++++ b/lib/device/device.h
+@@ -35,6 +35,7 @@
+ #define DEV_BCACHE_EXCL		0x00001000      /* bcache_fd should be open EXCL */
+ #define DEV_FILTER_AFTER_SCAN	0x00002000	/* apply filter after bcache has data */
+ #define DEV_FILTER_OUT_SCAN	0x00004000	/* filtered out during label scan */
++#define DEV_BCACHE_WRITE	0x00008000      /* bcache_fd is open with RDWR */
+ 
+ /*
+  * Support for external device info.
+diff --git a/lib/label/label.c b/lib/label/label.c
+index d7d3f9e..ca465dd 100644
+--- a/lib/label/label.c
++++ b/lib/label/label.c
+@@ -464,12 +464,24 @@ static int _scan_dev_open(struct device *dev)
+ 	name_sl = dm_list_item(name_list, struct dm_str_list);
+ 	name = name_sl->str;
+ 
+-	flags |= O_RDWR;
+ 	flags |= O_DIRECT;
+ 	flags |= O_NOATIME;
+ 
+-	if (dev->flags & DEV_BCACHE_EXCL)
++	/*
++	 * FIXME: udev is a train wreck when we open RDWR and close, so we
++	 * need to only use RDWR when we actually need to write, and use
++	 * RDONLY otherwise.  Fix, disable or scrap udev nonsense so we can
++	 * just open with RDWR by default.
++	 */
 +
-+	if (!svg->saved_vg_old && !svg->saved_vg_new) {
-+		dm_hash_remove(_saved_vg_hash, svg->vgid);
-+		dm_free(svg);
++	if (dev->flags & DEV_BCACHE_EXCL) {
+ 		flags |= O_EXCL;
++		flags |= O_RDWR;
++	} else if (dev->flags & DEV_BCACHE_WRITE) {
++		flags |= O_RDWR;
++	} else {
++		flags |= O_RDONLY;
 +	}
- }
  
- void lvmcache_save_vg(struct volume_group *vg, int precommitted)
-@@ -2515,6 +2520,7 @@ static void _lvmcache_destroy_lockname(struct dm_hash_node *n)
- static void _destroy_saved_vg(struct saved_vg *svg)
+ retry_open:
+ 
+@@ -1107,7 +1119,14 @@ int label_scan_open(struct device *dev)
+ 
+ int label_scan_open_excl(struct device *dev)
  {
- 	_saved_vg_free(svg, 1, 1);
-+	dm_free(svg);
++	if (_in_bcache(dev) && !(dev->flags & DEV_BCACHE_EXCL)) {
++		/* FIXME: avoid tossing out bcache blocks just to replace fd. */
++		log_debug("Close and reopen excl %s", dev_name(dev));
++		bcache_invalidate_fd(scan_bcache, dev->bcache_fd);
++		_scan_dev_close(dev);
++	}
+ 	dev->flags |= DEV_BCACHE_EXCL;
++	dev->flags |= DEV_BCACHE_WRITE;
+ 	return label_scan_open(dev);
  }
  
- void lvmcache_destroy(struct cmd_context *cmd, int retain_orphans, int reset)
+@@ -1149,8 +1168,19 @@ bool dev_write_bytes(struct device *dev, uint64_t start, size_t len, void *data)
+ 		return false;
+ 	}
+ 
++	if (!(dev->flags & DEV_BCACHE_WRITE)) {
++		/* FIXME: avoid tossing out bcache blocks just to replace fd. */
++		log_debug("Close and reopen to write %s", dev_name(dev));
++		bcache_invalidate_fd(scan_bcache, dev->bcache_fd);
++		_scan_dev_close(dev);
++
++		dev->flags |= DEV_BCACHE_WRITE;
++		label_scan_open(dev);
++	}
++
+ 	if (dev->bcache_fd <= 0) {
+ 		/* This is not often needed, perhaps only with lvmetad. */
++		dev->flags |= DEV_BCACHE_WRITE;
+ 		if (!label_scan_open(dev)) {
+ 			log_error("Error opening device %s for writing at %llu length %u.",
+ 				  dev_name(dev), (unsigned long long)start, (uint32_t)len);
+@@ -1184,8 +1214,19 @@ bool dev_write_zeros(struct device *dev, uint64_t start, size_t len)
+ 		return false;
+ 	}
+ 
++	if (!(dev->flags & DEV_BCACHE_WRITE)) {
++		/* FIXME: avoid tossing out bcache blocks just to replace fd. */
++		log_debug("Close and reopen to write %s", dev_name(dev));
++		bcache_invalidate_fd(scan_bcache, dev->bcache_fd);
++		_scan_dev_close(dev);
++
++		dev->flags |= DEV_BCACHE_WRITE;
++		label_scan_open(dev);
++	}
++
+ 	if (dev->bcache_fd <= 0) {
+ 		/* This is not often needed, perhaps only with lvmetad. */
++		dev->flags |= DEV_BCACHE_WRITE;
+ 		if (!label_scan_open(dev)) {
+ 			log_error("Error opening device %s for writing at %llu length %u.",
+ 				  dev_name(dev), (unsigned long long)start, (uint32_t)len);
+@@ -1219,8 +1260,19 @@ bool dev_set_bytes(struct device *dev, uint64_t start, size_t len, uint8_t val)
+ 		return false;
+ 	}
+ 
++	if (!(dev->flags & DEV_BCACHE_WRITE)) {
++		/* FIXME: avoid tossing out bcache blocks just to replace fd. */
++		log_debug("Close and reopen to write %s", dev_name(dev));
++		bcache_invalidate_fd(scan_bcache, dev->bcache_fd);
++		_scan_dev_close(dev);
++
++		dev->flags |= DEV_BCACHE_WRITE;
++		label_scan_open(dev);
++	}
++
+ 	if (dev->bcache_fd <= 0) {
+ 		/* This is not often needed, perhaps only with lvmetad. */
++		dev->flags |= DEV_BCACHE_WRITE;
+ 		if (!label_scan_open(dev)) {
+ 			log_error("Error opening device %s for writing at %llu length %u.",
+ 				  dev_name(dev), (unsigned long long)start, (uint32_t)len);
 
 
