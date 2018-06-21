@@ -1,38 +1,39 @@
-From: David Teigland <teigland@sourceware.org>
-Date: Wed, 20 Jun 2018 15:32:53 -0400
-Subject: 2018-06-01-stable - WHATS_NEW: recent changes
-Message-ID: <201806201932.w5KJWrN1027857@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: Marian Csontos <mcsontos@sourceware.org>
+Date: Thu, 21 Jun 2018 04:25:46 -0400
+Subject: 2018-06-01-stable - libdm: fix buffer overflow
+Message-ID: <201806210825.w5L8Pk7N022836@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=8bd9a89c148fa66c343e1754485af2387e5fbed1
-Commit:        8bd9a89c148fa66c343e1754485af2387e5fbed1
-Parent:        a30e6222799409ab6e6151683c95eb13f4abaefb
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Wed Jun 20 14:32:29 2018 -0500
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Wed Jun 20 14:32:29 2018 -0500
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=8a0af1bec882de66677e1a0cdceff841c39f92b0
+Commit:        8a0af1bec882de66677e1a0cdceff841c39f92b0
+Parent:        8bd9a89c148fa66c343e1754485af2387e5fbed1
+Author:        Marian Csontos <mcsontos@redhat.com>
+AuthorDate:    Thu Jun 21 10:20:09 2018 +0200
+Committer:     Marian Csontos <mcsontos@redhat.com>
+CommitterDate: Thu Jun 21 10:22:24 2018 +0200
 
-WHATS_NEW: recent changes
+libdm: fix buffer overflow
 
 ---
- WHATS_NEW |    2 ++
- 1 files changed, 2 insertions(+), 0 deletions(-)
+ libdm/libdm-common.c |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index e4342a1..b12ca25 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,7 @@
- Version 2.02.180 - 
- =================================
-+  Reopen devices RDWR before writing to avoid udev issues.
-+  Fix mem leak in clvmd.
- 
- Version 2.02.179 - 18th June 2018
- =================================
+diff --git a/libdm/libdm-common.c b/libdm/libdm-common.c
+index 094e618..40b366b 100644
+--- a/libdm/libdm-common.c
++++ b/libdm/libdm-common.c
+@@ -1763,7 +1763,7 @@ static int _mountinfo_parse_line(const char *line, unsigned *maj, unsigned *min,
+ 			return 0;
+ 		}
+ 		devmapper += 12; /* skip fixed prefix */
+-		for (i = 0; devmapper[i] && devmapper[i] != ' ' && i < sizeof(root); ++i)
++		for (i = 0; devmapper[i] && devmapper[i] != ' ' && i < sizeof(root)-1; ++i)
+ 			root[i] = devmapper[i];
+ 		root[i] = 0;
+ 		_unmangle_mountinfo_string(root, buf);
 
 
