@@ -1,54 +1,42 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Fri, 22 Jun 2018 09:07:55 -0400
-Subject: 2018-06-01-stable - systemd: add conficting sockets
-Message-ID: <201806221307.w5MD7tuk019637@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Fri, 22 Jun 2018 09:07:58 -0400
+Subject: 2018-06-01-stable - pvresize: update message
+Message-ID: <201806221307.w5MD7wAa019647@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=9546edeef90af11cd8d80fc586caf40aad3640a0
-Commit:        9546edeef90af11cd8d80fc586caf40aad3640a0
-Parent:        716199334c09b4acf9f536ee6d4ca5e1d52f37db
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=e0bfc946cb182a021bb7a74a11ec7ac51ad9a7b0
+Commit:        e0bfc946cb182a021bb7a74a11ec7ac51ad9a7b0
+Parent:        9546edeef90af11cd8d80fc586caf40aad3640a0
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Jun 12 16:27:42 2018 +0200
+AuthorDate:    Tue Jun 5 23:09:55 2018 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Fri Jun 22 12:32:31 2018 +0200
+CommitterDate: Fri Jun 22 12:34:24 2018 +0200
 
-systemd: add conficting sockets
+pvresize: update message
 
-Since we are using "DefaultDependencies=no" we do not get automatic STOP
-job on socket connection - so automatically refuse connection on
-shutdown by adding this Conflict definition to socket Unit.
+There is always at least PV header update even if the size
+of PV remains same (so it's not really resized).
+Try to make it a slightly less confusing.
 ---
- scripts/lvm2_lvmetad_systemd_red_hat.socket.in  |    1 +
- scripts/lvm2_lvmpolld_systemd_red_hat.socket.in |    1 +
- 2 files changed, 2 insertions(+), 0 deletions(-)
+ tools/pvresize.c |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
 
-diff --git a/scripts/lvm2_lvmetad_systemd_red_hat.socket.in b/scripts/lvm2_lvmetad_systemd_red_hat.socket.in
-index 9575f98..2663c72 100644
---- a/scripts/lvm2_lvmetad_systemd_red_hat.socket.in
-+++ b/scripts/lvm2_lvmetad_systemd_red_hat.socket.in
-@@ -2,6 +2,7 @@
- Description=LVM2 metadata daemon socket
- Documentation=man:lvmetad(8)
- DefaultDependencies=no
-+Conflicts=shutdown.target
+diff --git a/tools/pvresize.c b/tools/pvresize.c
+index 8a65952..e951f11 100644
+--- a/tools/pvresize.c
++++ b/tools/pvresize.c
+@@ -96,7 +96,7 @@ int pvresize(struct cmd_context *cmd, int argc, char **argv)
  
- [Socket]
- ListenStream=@DEFAULT_RUN_DIR@/lvmetad.socket
-diff --git a/scripts/lvm2_lvmpolld_systemd_red_hat.socket.in b/scripts/lvm2_lvmpolld_systemd_red_hat.socket.in
-index ca9f123..0537d7f 100644
---- a/scripts/lvm2_lvmpolld_systemd_red_hat.socket.in
-+++ b/scripts/lvm2_lvmpolld_systemd_red_hat.socket.in
-@@ -2,6 +2,7 @@
- Description=LVM2 poll daemon socket
- Documentation=man:lvmpolld(8)
- DefaultDependencies=no
-+Conflicts=shutdown.target
+ 	ret = process_each_pv(cmd, argc, argv, NULL, 0, READ_FOR_UPDATE | READ_ALLOW_EXPORTED, handle, _pvresize_single);
  
- [Socket]
- ListenStream=@DEFAULT_RUN_DIR@/lvmpolld.socket
+-	log_print_unless_silent("%d physical volume(s) resized / %d physical volume(s) "
++	log_print_unless_silent("%d physical volume(s) resized or updated / %d physical volume(s) "
+ 				"not resized", params.done, params.total - params.done);
+ out:
+ 	destroy_processing_handle(cmd, handle);
 
 
