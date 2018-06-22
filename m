@@ -1,59 +1,54 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Fri, 22 Jun 2018 09:08:12 -0400
-Subject: 2018-06-01-stable - cache: cleaner policy also uses fmt2
-Message-ID: <201806221308.w5MD8CYV019689@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Fri, 22 Jun 2018 09:08:18 -0400
+Subject: 2018-06-01-stable - fsadm: missing -l description
+Message-ID: <201806221308.w5MD8Isq019699@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=39e3b5d8ac58dda328ddbc97daafb9800d7e954b
-Commit:        39e3b5d8ac58dda328ddbc97daafb9800d7e954b
-Parent:        39fc98d7314b8bf4b66118b7ae72674383209c1f
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=e0c94d883a3ca033df562d63a1074b4be97d98ef
+Commit:        e0c94d883a3ca033df562d63a1074b4be97d98ef
+Parent:        39e3b5d8ac58dda328ddbc97daafb9800d7e954b
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Jun 8 12:37:07 2018 +0200
+AuthorDate:    Fri Jun 22 15:00:52 2018 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Fri Jun 22 15:00:10 2018 +0200
+CommitterDate: Fri Jun 22 15:00:52 2018 +0200
 
-cache:  cleaner policy also uses fmt2
+fsadm: missing -l description
 
-Format 2 is also with cleaner policy.
 ---
- WHATS_NEW                  |    1 +
- lib/metadata/cache_manip.c |    5 +++--
- 2 files changed, 4 insertions(+), 2 deletions(-)
+ WHATS_NEW        |    1 +
+ man/fsadm.8_main |    5 +++++
+ 2 files changed, 6 insertions(+), 0 deletions(-)
 
 diff --git a/WHATS_NEW b/WHATS_NEW
-index d432cea..6560e57 100644
+index 6560e57..36523f5 100644
 --- a/WHATS_NEW
 +++ b/WHATS_NEW
 @@ -1,5 +1,6 @@
  Version 2.02.180 - 
  =================================
-+  Cache can uses metadata format 2 with cleaner policy.
++  Add missing -l description in fsadm man page.
+   Cache can uses metadata format 2 with cleaner policy.
    Avoid showing internal error in lvs output or pvmoved LVs.
    Fix check if resized PV can also fit metadata area.
-   Reopen devices RDWR before writing to avoid udev issues.
-diff --git a/lib/metadata/cache_manip.c b/lib/metadata/cache_manip.c
-index 3ed8ce8..c15f117 100644
---- a/lib/metadata/cache_manip.c
-+++ b/lib/metadata/cache_manip.c
-@@ -843,12 +843,13 @@ int cache_set_metadata_format(struct lv_segment *seg, cache_metadata_format_t fo
- 
- 	/*
- 	 * If policy is unselected, but format 2 is selected, policy smq is enforced.
--	 * ATM no other then smq policy is allowed to select format 2.
-+	 * ATM no other then smq & cleaner policy is allowed to select format 2.
- 	 */
- 	if (!seg->policy_name) {
- 		if (format == CACHE_METADATA_FORMAT_2)
- 			seg->policy_name = "smq";
--	} else if (strcmp(seg->policy_name, "smq")) {
-+	} else if (strcmp(seg->policy_name, "smq") &&
-+		   strcmp(seg->policy_name, "cleaner")) {
- 		seg->cache_metadata_format = CACHE_METADATA_FORMAT_1;
- 		return 1;
- 	}
+diff --git a/man/fsadm.8_main b/man/fsadm.8_main
+index 799cb25..92ee902 100644
+--- a/man/fsadm.8_main
++++ b/man/fsadm.8_main
+@@ -40,6 +40,11 @@ filesystem.
+ Unmount ext2/ext3/ext4 filesystem before doing resize.
+ .
+ .HP
++.BR -l | --lvresize
++.br
++Resize given device if it is LVM device.
++.
++.HP
+ .BR -f | --force
+ .br
+ Bypass some sanity checks.
 
 
