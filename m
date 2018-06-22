@@ -1,57 +1,41 @@
-From: Gang He <ghe@suse.com>
-Date: Fri, 22 Jun 2018 03:31:23 -0600
-Subject: lvresize in test mode sends BLKDISCARD to SSD block devices, this will result in the file system corruption
-Message-ID: <5B2CC1EB020000F900024F32@prv1-mh.provo.novell.com>
+From: Zdenek Kabelac <zkabelac@sourceware.org>
+Date: Fri, 22 Jun 2018 09:07:49 -0400
+Subject: 2018-06-01-stable - vgchange: fix error code in error path
+Message-ID: <201806221307.w5MD7n7n019624@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Hello List,
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=4479228d324fff4863a068ae02c775fd52fb58fb
+Commit:        4479228d324fff4863a068ae02c775fd52fb58fb
+Parent:        4afb5971b93af79f81dfb3fff33b25fec270ac37
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Wed Jun 13 15:57:51 2018 +0200
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Fri Jun 22 12:29:42 2018 +0200
 
-I found a bug for lvresize command, this issue can be reproduced by lvm2-2.02.178 code base.
-The reproduce steps are as below,
-1) create a LV on a SSD based partition, then format this LV with ext4 file system, and mount this LV. 
-e.g.
-linux-cy2k:/ # lsblk
-...
-sdc                               8:32   0  37.3G  0 disk
-??sdc1                            8:33   0     2G  0 part [SWAP]
-??sdc2                            8:34   0  14.7G  0 part
-? ??cluster--vg1-test--lv       254:20   0    14G  0 lvm  /mnt/ext4  <<= this LV
-??sdc3                            8:35   0  20.6G  0 part
+vgchange: fix error code in error path
 
-2) enable issue discards to a logical volumes's underlying physical volume via edit "/etc/lvm/lvm.conf" file.
-e.g.
-linux-cy2k:/ # vi /etc/lvm/lvm.conf 
-set "issue_discards = 1"
+This rather hard to hit error path used wrong return value to signal
+real error.
+---
+ tools/vgchange.c |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
 
-3) run lvresize command in test mode.
-e.g.
-inux-cy2k:/ # lvresize -v -n -L -10GB /dev/cluster-vg1/test-lv --test
-
-4) unmount this LV, then mount this LV again.
-You will probably encounter the file system on this LV is corrupted.
-e.g. 
-linux-cy2k:~ # mount /dev/cluster-vg1/test-lv /mnt/ext4/
-mount: wrong fs type, bad option, bad superblock on /dev/mapper/cluster--vg1-test--lv,
-       missing codepage or helper program, or other error
-
-       In some cases useful info is found in syslog - try
-       dmesg | tail or so.
-
-linux-cy2k:~ # dmesg
-[3711112.342424] JBD2: no valid journal superblock found
-[3711112.342429] EXT4-fs (dm-20): error loading journal
-
-To summarize, I think this behavior is a bug and is very dangerous, 
-the command in test mode should not send BLKDISCARD to the underlying block device,
-the BLKDISCARD command will make the related sectors on the block device be trimmed (lost data).
-
-
-Thanks
-Gang
+diff --git a/tools/vgchange.c b/tools/vgchange.c
+index 531bedc..623517b 100644
+--- a/tools/vgchange.c
++++ b/tools/vgchange.c
+@@ -199,7 +199,7 @@ int vgchange_activate(struct cmd_context *cmd, struct volume_group *vg,
+ 	    strcmp(vg->system_id, cmd->system_id) &&
+ 	    do_activate) {
+ 		log_error("Cannot activate LVs in a foreign VG.");
+-		return ECMD_FAILED;
++		return 0;
+ 	}
  
+ 	/*
 
 
