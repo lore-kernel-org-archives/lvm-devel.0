@@ -1,42 +1,67 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Fri, 22 Jun 2018 09:07:58 -0400
-Subject: 2018-06-01-stable - pvresize: update message
-Message-ID: <201806221307.w5MD7wAa019647@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Fri, 22 Jun 2018 09:07:59 -0400
+Subject: 2018-06-01-stable - pvscan: code reshape
+Message-ID: <201806221307.w5MD7xql019652@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=e0bfc946cb182a021bb7a74a11ec7ac51ad9a7b0
-Commit:        e0bfc946cb182a021bb7a74a11ec7ac51ad9a7b0
-Parent:        9546edeef90af11cd8d80fc586caf40aad3640a0
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=716199334c09b4acf9f536ee6d4ca5e1d52f37db
+Commit:        716199334c09b4acf9f536ee6d4ca5e1d52f37db
+Parent:        4479228d324fff4863a068ae02c775fd52fb58fb
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Jun 5 23:09:55 2018 +0200
+AuthorDate:    Thu Jun 14 21:07:15 2018 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Fri Jun 22 12:34:24 2018 +0200
+CommitterDate: Fri Jun 22 12:31:32 2018 +0200
 
-pvresize: update message
+pvscan: code reshape
 
-There is always at least PV header update even if the size
-of PV remains same (so it's not really resized).
-Try to make it a slightly less confusing.
 ---
- tools/pvresize.c |    2 +-
- 1 files changed, 1 insertions(+), 1 deletions(-)
+ tools/pvscan.c |   29 +++++++++++++++--------------
+ 1 files changed, 15 insertions(+), 14 deletions(-)
 
-diff --git a/tools/pvresize.c b/tools/pvresize.c
-index 8a65952..e951f11 100644
---- a/tools/pvresize.c
-+++ b/tools/pvresize.c
-@@ -96,7 +96,7 @@ int pvresize(struct cmd_context *cmd, int argc, char **argv)
+diff --git a/tools/pvscan.c b/tools/pvscan.c
+index 8493eaa..2915db5 100644
+--- a/tools/pvscan.c
++++ b/tools/pvscan.c
+@@ -318,21 +318,22 @@ static int _pvscan_cache(struct cmd_context *cmd, int argc, char **argv)
+ 	dm_list_init(&found_vgnames);
+ 	dm_list_init(&pp.changed_vgnames);
  
- 	ret = process_each_pv(cmd, argc, argv, NULL, 0, READ_FOR_UPDATE | READ_ALLOW_EXPORTED, handle, _pvresize_single);
+-	do_activate = arg_is_set(cmd, activate_ARG);
+-
+-	if (!lvmetad_used() && !do_activate) {
+-		log_verbose("Ignoring pvscan --cache because lvmetad is not in use.");
+-		return ret;
+-	}
+-
+-	if (do_activate && (arg_uint_value(cmd, activate_ARG, CHANGE_AAY) != CHANGE_AAY)) {
+-		log_error("Only --activate ay allowed with pvscan.");
+-		return 0;
+-	}
++	if ((do_activate = arg_is_set(cmd, activate_ARG))) {
++		if (arg_uint_value(cmd, activate_ARG, 0) != CHANGE_AAY) {
++			log_error("Only --activate ay allowed with pvscan.");
++			return EINVALID_CMD_LINE;
++		}
  
--	log_print_unless_silent("%d physical volume(s) resized / %d physical volume(s) "
-+	log_print_unless_silent("%d physical volume(s) resized or updated / %d physical volume(s) "
- 				"not resized", params.done, params.total - params.done);
- out:
- 	destroy_processing_handle(cmd, handle);
+-	if (!lvmetad_used() && do_activate && !find_config_tree_bool(cmd, global_use_lvmetad_CFG, NULL)) {
+-		log_verbose("Ignoring pvscan --cache -aay because lvmetad is not in use.");
+-		return ret;
++		if (!lvmetad_used() &&
++		    !find_config_tree_bool(cmd, global_use_lvmetad_CFG, NULL)) {
++			log_verbose("Ignoring pvscan --cache -aay because lvmetad is not in use.");
++			return ret;
++		}
++	} else {
++		if (!lvmetad_used()) {
++			log_verbose("Ignoring pvscan --cache because lvmetad is not in use.");
++			return ret;
++		}
+ 	}
+ 
+ 	if (arg_is_set(cmd, major_ARG) + arg_is_set(cmd, minor_ARG))
 
 
