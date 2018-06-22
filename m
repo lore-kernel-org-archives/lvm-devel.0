@@ -1,134 +1,144 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Fri, 22 Jun 2018 17:38:45 -0400
-Subject: master - build: support --disable-silent-rules
-Message-ID: <201806222138.w5MLcjWL018653@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Fri, 22 Jun 2018 17:38:51 -0400
+Subject: master - utils: add clzll
+Message-ID: <201806222138.w5MLcpI4018665@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=fa58fc32576a08bf11fa98623473f5e6ec5b6d68
-Commit:        fa58fc32576a08bf11fa98623473f5e6ec5b6d68
-Parent:        c728d88e11ffed97f8a5b96e1c0595a2462c5edc
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=6c84a36b539d02a5f975a1e5e98c180621078498
+Commit:        6c84a36b539d02a5f975a1e5e98c180621078498
+Parent:        8215e3503d0799211d268c3e2a0f1b648d5f9584
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Jun 22 23:30:42 2018 +0200
+AuthorDate:    Tue Jun 19 19:35:48 2018 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Fri Jun 22 23:36:19 2018 +0200
+CommitterDate: Fri Jun 22 23:37:02 2018 +0200
 
-build: support --disable-silent-rules
+utils: add clzll
 
-Add support for standardized option for have verbose builds.
-Useful for distro builds where more details can be useful.
+Check for __builtin_clzll and add wrapper when missing.
 ---
- WHATS_NEW    |    1 +
- configure    |   17 +++++++++++++++++
- configure.ac |   10 ++++++++++
- make.tmpl.in |    4 ++++
- 4 files changed, 32 insertions(+), 0 deletions(-)
+ configure              |   44 ++++++++++++++++++++++++++++++++++++++++++++
+ configure.ac           |    1 +
+ include/configure.h.in |    3 +++
+ lib/misc/util.h        |   15 ++++++++++++++-
+ 4 files changed, 62 insertions(+), 1 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index a875553..70fb76a 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 3.0.0
- =============
-+  Configure supports --disable-silent-rules for verbose builds.
-   Fix unmonitoring of merging snapshots.
-   Cache can uses metadata format 2 with cleaner policy.
-   Fix check if resized PV can also fit metadata area.
 diff --git a/configure b/configure
-index 4536b03..7dee110 100755
+index 7dee110..deaa8e9 100755
 --- a/configure
 +++ b/configure
-@@ -643,6 +643,7 @@ DMEVENTD_PIDFILE
- WRITE_INSTALL
- VALGRIND_POOL
- USRSBINDIR
-+SILENT_RULES
- USE_TRACKING
- UDEV_HAS_BUILTIN_BLKID
- UDEV_RULE_EXEC_DETECTION
-@@ -885,6 +886,7 @@ ac_subst_files=''
- ac_user_opts='
- enable_option_checking
- enable_dependency_tracking
-+enable_silent_rules
- enable_static_link
- with_user
- with_group
-@@ -1622,6 +1624,7 @@ Optional Features:
-   --enable-FEATURE[=ARG]  include FEATURE [ARG=yes]
-   --disable-dependency-tracking
-                           speeds up one-time build.
-+  --disable-silent-rules  disable silent building
-   --enable-static_link    use this to link the tools to their libraries
-                           statically (default is dynamic linking
-   --disable-thin_check_needs_check
-@@ -8044,6 +8047,20 @@ fi
- $as_echo "$USE_TRACKING" >&6; }
+@@ -6581,6 +6581,50 @@ fi
  
- ################################################################################
-+{ $as_echo "$as_me:${as_lineno-$LINENO}: checking whether to build silently" >&5
-+$as_echo_n "checking whether to build silently... " >&6; }
-+# Check whether --enable-silent-rules was given.
-+if test "${enable_silent_rules+set}" = set; then :
-+  enableval=$enable_silent_rules; SILENT_RULES=$enableval
+ 
+ 
++
++
++    { $as_echo "$as_me:${as_lineno-$LINENO}: checking for __builtin_clzll" >&5
++$as_echo_n "checking for __builtin_clzll... " >&6; }
++if ${ax_cv_have___builtin_clzll+:} false; then :
++  $as_echo_n "(cached) " >&6
 +else
-+  SILENT_RULES=yes
++
++        cat confdefs.h - <<_ACEOF >conftest.$ac_ext
++/* end confdefs.h.  */
++
++int
++main ()
++{
++
++            __builtin_clzll(0)
++
++  ;
++  return 0;
++}
++_ACEOF
++if ac_fn_c_try_link "$LINENO"; then :
++  ax_cv_have___builtin_clzll=yes
++else
++  ax_cv_have___builtin_clzll=no
++fi
++rm -f core conftest.err conftest.$ac_objext \
++    conftest$ac_exeext conftest.$ac_ext
++
++fi
++{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $ax_cv_have___builtin_clzll" >&5
++$as_echo "$ax_cv_have___builtin_clzll" >&6; }
++
++    if test yes = $ax_cv_have___builtin_clzll; then :
++
++cat >>confdefs.h <<_ACEOF
++#define HAVE___BUILTIN_CLZLL 1
++_ACEOF
++
 +fi
 +
-+{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $SILENT_RULES" >&5
-+$as_echo "$SILENT_RULES" >&6; }
 +
 +
-+################################################################################
- { $as_echo "$as_me:${as_lineno-$LINENO}: checking whether to use static linking" >&5
- $as_echo_n "checking whether to use static linking... " >&6; }
- # Check whether --enable-static_link was given.
++
+ ################################################################################
+ for ac_func in ftruncate gethostname getpagesize gettimeofday localtime_r \
+   memchr memset mkdir mkfifo munmap nl_langinfo realpath rmdir setenv \
 diff --git a/configure.ac b/configure.ac
-index 05b13e0..c3197b7 100644
+index c3197b7..699bbb6 100644
 --- a/configure.ac
 +++ b/configure.ac
-@@ -171,6 +171,15 @@ AC_ARG_ENABLE(dependency-tracking,
- AC_MSG_RESULT($USE_TRACKING)
+@@ -140,6 +140,7 @@ AC_TYPE_UINT16_T
+ AC_TYPE_UINT32_T
+ AC_TYPE_UINT64_T
+ AX_GCC_BUILTIN([__builtin_clz])
++AX_GCC_BUILTIN([__builtin_clzll])
  
  ################################################################################
-+dnl -- Disable silence rules
-+AC_MSG_CHECKING(whether to build silently)
-+AC_ARG_ENABLE(silent-rules,
-+	      AC_HELP_STRING([--disable-silent-rules], [disable silent building]),
-+	      SILENT_RULES=$enableval, SILENT_RULES=yes)
-+AC_MSG_RESULT($SILENT_RULES)
-+
-+
-+################################################################################
- dnl -- Enables statically-linked tools
- AC_MSG_CHECKING(whether to use static linking)
- AC_ARG_ENABLE(static_link,
-@@ -1726,6 +1735,7 @@ AC_SUBST(UDEV_SYSTEMD_BACKGROUND_JOBS)
- AC_SUBST(UDEV_RULE_EXEC_DETECTION)
- AC_SUBST(UDEV_HAS_BUILTIN_BLKID)
- AC_SUBST(USE_TRACKING)
-+AC_SUBST(SILENT_RULES)
- AC_SUBST(USRSBINDIR)
- AC_SUBST(VALGRIND_POOL)
- AC_SUBST(WRITE_INSTALL)
-diff --git a/make.tmpl.in b/make.tmpl.in
-index 07cb18a..38fdc73 100644
---- a/make.tmpl.in
-+++ b/make.tmpl.in
-@@ -13,6 +13,10 @@
- # along with this program; if not, write to the Free Software Foundation,
- # Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
+ dnl -- Check for functions
+diff --git a/include/configure.h.in b/include/configure.h.in
+index b1b2db3..50e35f7 100644
+--- a/include/configure.h.in
++++ b/include/configure.h.in
+@@ -528,6 +528,9 @@
+ /* Define to 1 if the system has the `__builtin_clz' built-in function */
+ #undef HAVE___BUILTIN_CLZ
  
-+ifneq ("@SILENT_RULES@","yes")
-+	V ?= 1
-+endif
++/* Define to 1 if the system has the `__builtin_clzll' built-in function */
++#undef HAVE___BUILTIN_CLZLL
 +
- ifeq ($(V),1)
- 	Q=
- else
+ /* Internalization package */
+ #undef INTL_PACKAGE
+ 
+diff --git a/lib/misc/util.h b/lib/misc/util.h
+index 9231ea9..a42ecb3 100644
+--- a/lib/misc/util.h
++++ b/lib/misc/util.h
+@@ -43,7 +43,7 @@
+ #ifdef HAVE___BUILTIN_CLZ
+ #define clz(x) __builtin_clz((x))
+ #else /* ifdef HAVE___BUILTIN_CLZ */
+-unsigned _dm_clz(unsigned x)
++static unsigned _dm_clz(unsigned x)
+ {
+ 	int n;
+ 
+@@ -76,6 +76,19 @@ unsigned _dm_clz(unsigned x)
+ #define clz(x) _dm_clz((x))
+ #endif /* ifdef HAVE___BUILTIN_CLZ */
+ 
++#ifdef HAVE___BUILTIN_CLZLL
++#define clzll(x) __builtin_clzll((x))
++#else /* ifdef HAVE___BUILTIN_CLZ */
++static unsigned _dm_clzll(unsigned long long x)
++{
++	if (x <= 0xffffffff)
++		return 32 + clz((unsigned) (x & 0xffffffff));
++
++	return clz(x >> 32);
++}
++#define clzll(x) _dm_clzll((x))
++#endif /* ifdef HAVE___BUILTIN_CLZLL */
++
+ #define KERNEL_VERSION(major, minor, release) (((major) << 16) + ((minor) << 8) + (release))
+ 
+ /* Define some portable printing types */
 
 
