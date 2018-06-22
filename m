@@ -1,88 +1,134 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Fri, 22 Jun 2018 17:38:44 -0400
-Subject: master - tests: fix rules for mke2fs.conf install
-Message-ID: <201806222138.w5MLcisS018643@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Fri, 22 Jun 2018 17:38:45 -0400
+Subject: master - build: support --disable-silent-rules
+Message-ID: <201806222138.w5MLcjWL018653@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=8215e3503d0799211d268c3e2a0f1b648d5f9584
-Commit:        8215e3503d0799211d268c3e2a0f1b648d5f9584
-Parent:        fa58fc32576a08bf11fa98623473f5e6ec5b6d68
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=fa58fc32576a08bf11fa98623473f5e6ec5b6d68
+Commit:        fa58fc32576a08bf11fa98623473f5e6ec5b6d68
+Parent:        c728d88e11ffed97f8a5b96e1c0595a2462c5edc
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Jun 22 22:43:58 2018 +0200
+AuthorDate:    Fri Jun 22 23:30:42 2018 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Fri Jun 22 23:36:54 2018 +0200
+CommitterDate: Fri Jun 22 23:36:19 2018 +0200
 
-tests: fix rules for mke2fs.conf install
+build: support --disable-silent-rules
 
+Add support for standardized option for have verbose builds.
+Useful for distro builds where more details can be useful.
 ---
- test/Makefile.in |   17 +++++++++--------
- 1 files changed, 9 insertions(+), 8 deletions(-)
+ WHATS_NEW    |    1 +
+ configure    |   17 +++++++++++++++++
+ configure.ac |   10 ++++++++++
+ make.tmpl.in |    4 ++++
+ 4 files changed, 32 insertions(+), 0 deletions(-)
 
-diff --git a/test/Makefile.in b/test/Makefile.in
-index 39093bf..5b7578c 100644
---- a/test/Makefile.in
-+++ b/test/Makefile.in
-@@ -34,7 +34,7 @@ CXXFLAGS += $(EXTRA_EXEC_CFLAGS)
+diff --git a/WHATS_NEW b/WHATS_NEW
+index a875553..70fb76a 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 3.0.0
+ =============
++  Configure supports --disable-silent-rules for verbose builds.
+   Fix unmonitoring of merging snapshots.
+   Cache can uses metadata format 2 with cleaner policy.
+   Fix check if resized PV can also fit metadata area.
+diff --git a/configure b/configure
+index 4536b03..7dee110 100755
+--- a/configure
++++ b/configure
+@@ -643,6 +643,7 @@ DMEVENTD_PIDFILE
+ WRITE_INSTALL
+ VALGRIND_POOL
+ USRSBINDIR
++SILENT_RULES
+ USE_TRACKING
+ UDEV_HAS_BUILTIN_BLKID
+ UDEV_RULE_EXEC_DETECTION
+@@ -885,6 +886,7 @@ ac_subst_files=''
+ ac_user_opts='
+ enable_option_checking
+ enable_dependency_tracking
++enable_silent_rules
+ enable_static_link
+ with_user
+ with_group
+@@ -1622,6 +1624,7 @@ Optional Features:
+   --enable-FEATURE[=ARG]  include FEATURE [ARG=yes]
+   --disable-dependency-tracking
+                           speeds up one-time build.
++  --disable-silent-rules  disable silent building
+   --enable-static_link    use this to link the tools to their libraries
+                           statically (default is dynamic linking
+   --disable-thin_check_needs_check
+@@ -8044,6 +8047,20 @@ fi
+ $as_echo "$USE_TRACKING" >&6; }
  
- CLEAN_DIRS += dbus/__pycache__ $(LVM_TEST_RESULTS)
- ifneq (.,$(firstword $(srcdir)))
--CLEAN_TARGETS += $(RUN_BASE) $(addprefix lib/,$(LIB_LVMLOCKD_CONF))
-+CLEAN_TARGETS += $(RUN_BASE) $(addprefix lib/,$(LIB_LVMLOCKD_CONF) $(LIB_MKE2FS_CONF))
- endif
- 
- CLEAN_TARGETS += .lib-dir-stamp .tests-stamp $(LIB) $(addprefix lib/,\
-@@ -239,7 +239,10 @@ LIB_LVMLOCKD_CONF = \
-  test-dlm-conf \
-  test-sanlock-conf
- 
--LIB_LOCAL = paths runner mke2fs.conf
-+LIB_MKE2FS_CONF = \
-+  mke2fs.conf
+ ################################################################################
++{ $as_echo "$as_me:${as_lineno-$LINENO}: checking whether to build silently" >&5
++$as_echo_n "checking whether to build silently... " >&6; }
++# Check whether --enable-silent-rules was given.
++if test "${enable_silent_rules+set}" = set; then :
++  enableval=$enable_silent_rules; SILENT_RULES=$enableval
++else
++  SILENT_RULES=yes
++fi
 +
-+LIB_LOCAL = paths runner
- LIB_NOT = not
- LIB_LINK_NOT = invalid fail should
- LIB_SHARED = check aux inittest utils get lvm-wrapper
-@@ -249,13 +252,13 @@ install: .tests-stamp lib/paths-installed
- 	$(INSTALL_DIR) $(DATADIR)/{shell,unit,lib,dbus} $(EXECDIR)
- 	$(INSTALL_DATA) shell/*.sh $(DATADIR)/shell
- 	$(INSTALL_DATA) unit/*.sh $(DATADIR)/unit
--	$(INSTALL_DATA) lib/mke2fs.conf $(DATADIR)/lib
- 	-$(INSTALL_PROGRAM) unit/unit-test $(DATADIR)/unit
- 	-$(INSTALL_PROGRAM) dbus/*.py $(DATADIR)/dbus/
- 	$(INSTALL_DATA) lib/paths-installed $(DATADIR)/lib/paths
- 	cd lib && $(INSTALL_DATA) \
- 		$(LIB_FLAVOURS) \
- 		$(LIB_LVMLOCKD_CONF) \
-+		$(LIB_MKE2FS_CONF) \
- 		dm-version-expected \
- 		version-expected \
- 		$(DATADIR)/lib
-@@ -340,9 +343,6 @@ lib/version-expected: $(top_srcdir)/VERSION .lib-dir-stamp
- lib/dm-version-expected: $(top_srcdir)/VERSION_DM .lib-dir-stamp
- 	cut -f 1 -d ' ' <$< >$@
++{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $SILENT_RULES" >&5
++$as_echo "$SILENT_RULES" >&6; }
++
++
++################################################################################
+ { $as_echo "$as_me:${as_lineno-$LINENO}: checking whether to use static linking" >&5
+ $as_echo_n "checking whether to use static linking... " >&6; }
+ # Check whether --enable-static_link was given.
+diff --git a/configure.ac b/configure.ac
+index 05b13e0..c3197b7 100644
+--- a/configure.ac
++++ b/configure.ac
+@@ -171,6 +171,15 @@ AC_ARG_ENABLE(dependency-tracking,
+ AC_MSG_RESULT($USE_TRACKING)
  
--lib/mke2fs.conf: $(srcdir)/lib/mke2fs.conf
--	$(LN_S) -f $< $@
--
- CMDS = lvm $(shell cat $(top_builddir)/tools/.commands 2>/dev/null)
- LIB = $(addprefix lib/, $(LIB_SHARED) $(LIB_LOCAL) $(LIB_NOT) $(LIB_LINK_NOT) $(LIB_FLAVOURS))
+ ################################################################################
++dnl -- Disable silence rules
++AC_MSG_CHECKING(whether to build silently)
++AC_ARG_ENABLE(silent-rules,
++	      AC_HELP_STRING([--disable-silent-rules], [disable silent building]),
++	      SILENT_RULES=$enableval, SILENT_RULES=yes)
++AC_MSG_RESULT($SILENT_RULES)
++
++
++################################################################################
+ dnl -- Enables statically-linked tools
+ AC_MSG_CHECKING(whether to use static linking)
+ AC_ARG_ENABLE(static_link,
+@@ -1726,6 +1735,7 @@ AC_SUBST(UDEV_SYSTEMD_BACKGROUND_JOBS)
+ AC_SUBST(UDEV_RULE_EXEC_DETECTION)
+ AC_SUBST(UDEV_HAS_BUILTIN_BLKID)
+ AC_SUBST(USE_TRACKING)
++AC_SUBST(SILENT_RULES)
+ AC_SUBST(USRSBINDIR)
+ AC_SUBST(VALGRIND_POOL)
+ AC_SUBST(WRITE_INSTALL)
+diff --git a/make.tmpl.in b/make.tmpl.in
+index 07cb18a..38fdc73 100644
+--- a/make.tmpl.in
++++ b/make.tmpl.in
+@@ -13,6 +13,10 @@
+ # along with this program; if not, write to the Free Software Foundation,
+ # Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  
-@@ -369,8 +369,9 @@ LIB = $(addprefix lib/, $(LIB_SHARED) $(LIB_LOCAL) $(LIB_NOT) $(LIB_LINK_NOT) $(
- 	$(LN_S) -f $(abs_top_srcdir)/conf/lvmdbusd.profile lib/
- 	$(LN_S) -f $(abs_top_srcdir)/conf/thin-performance.profile lib/
- 	$(LN_S) -f $(abs_top_srcdir)/scripts/fsadm.sh lib/fsadm
--	test "$(srcdir)" = . || for i in $(LIB_LVMLOCKD_CONF); do \
--		$(LN_S) -f $(abs_top_srcdir)/test/lib/$$i lib/; done
-+	test "$(srcdir)" = . || \
-+		for i in $(LIB_LVMLOCKD_CONF) $(LIB_MKE2FS_CONF); do \
-+			$(LN_S) -f $(abs_top_srcdir)/test/lib/$$i lib/; done
- 	touch $@
- 
- Makefile: $(srcdir)/Makefile.in $(top_builddir)/config.status
++ifneq ("@SILENT_RULES@","yes")
++	V ?= 1
++endif
++
+ ifeq ($(V),1)
+ 	Q=
+ else
 
 
