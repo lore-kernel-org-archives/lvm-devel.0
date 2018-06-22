@@ -1,43 +1,79 @@
-From: Marian Csontos <mcsontos@sourceware.org>
-Date: Fri, 22 Jun 2018 09:14:12 -0400
-Subject: 2018-06-01-stable - filter: make pointers distinguishable
-Message-ID: <201806221314.w5MDEC40019874@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Fri, 22 Jun 2018 15:34:25 +0200
+Subject: lvresize in test mode sends BLKDISCARD to SSD block devices, this will result in the file system corruption
+In-Reply-To: <5B2CC1EB020000F900024F32@prv1-mh.provo.novell.com>
+References: <5B2CC1EB020000F900024F32@prv1-mh.provo.novell.com>
+Message-ID: <87afa0a1-c256-60a9-2603-57e7be9a00d3@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=24aee732a58a8d45acf90cbdf1d0cf30fe603a09
-Commit:        24aee732a58a8d45acf90cbdf1d0cf30fe603a09
-Parent:        ba6ed5c90c5a191f63c14ee9795f298eba689932
-Author:        Marian Csontos <mcsontos@redhat.com>
-AuthorDate:    Fri Jun 22 15:07:07 2018 +0200
-Committer:     Marian Csontos <mcsontos@redhat.com>
-CommitterDate: Fri Jun 22 15:13:24 2018 +0200
+Dne 22.6.2018 v 11:31 Gang He napsal(a):
+> Hello List,
+> 
+> I found a bug for lvresize command, this issue can be reproduced by lvm2-2.02.178 code base.
+> The reproduce steps are as below,
 
-filter: make pointers distinguishable
 
-This ammends commit: 4afb5971b93a with suggestions to improve debugging
-from Nir Soffer.
----
- lib/filters/filter-persistent.c |    4 ++--
- 1 files changed, 2 insertions(+), 2 deletions(-)
+Hi
 
-diff --git a/lib/filters/filter-persistent.c b/lib/filters/filter-persistent.c
-index bbfd858..1d24af8 100644
---- a/lib/filters/filter-persistent.c
-+++ b/lib/filters/filter-persistent.c
-@@ -50,8 +50,8 @@ struct pfilter {
-  * by default.  The old code for it should be removed.
-  */
- 
--static int _good_device;
--static int _bad_device;
-+static char* _good_device = "good";
-+static char* _bad_device = "bad";
- 
- /*
-  * The hash table holds one of these two states
+Good catch - yep - it seem in this case  ioctl operation are flowing to device 
+even in test mode.
+
+Please create BZ for lvm2 on this issue.
+
+
+Zdenek
+
+
+> 1) create a LV on a SSD based partition, then format this LV with ext4 file system, and mount this LV.
+> e.g.
+> linux-cy2k:/ # lsblk
+> ...
+> sdc                               8:32   0  37.3G  0 disk
+> ??sdc1                            8:33   0     2G  0 part [SWAP]
+> ??sdc2                            8:34   0  14.7G  0 part
+> ? ??cluster--vg1-test--lv       254:20   0    14G  0 lvm  /mnt/ext4  <<= this LV
+> ??sdc3                            8:35   0  20.6G  0 part
+> 
+> 2) enable issue discards to a logical volumes's underlying physical volume via edit "/etc/lvm/lvm.conf" file.
+> e.g.
+> linux-cy2k:/ # vi /etc/lvm/lvm.conf
+> set "issue_discards = 1"
+> 
+> 3) run lvresize command in test mode.
+> e.g.
+> inux-cy2k:/ # lvresize -v -n -L -10GB /dev/cluster-vg1/test-lv --test
+> 
+> 4) unmount this LV, then mount this LV again.
+> You will probably encounter the file system on this LV is corrupted.
+> e.g.
+> linux-cy2k:~ # mount /dev/cluster-vg1/test-lv /mnt/ext4/
+> mount: wrong fs type, bad option, bad superblock on /dev/mapper/cluster--vg1-test--lv,
+>         missing codepage or helper program, or other error
+> 
+>         In some cases useful info is found in syslog - try
+>         dmesg | tail or so.
+> 
+> linux-cy2k:~ # dmesg
+> [3711112.342424] JBD2: no valid journal superblock found
+> [3711112.342429] EXT4-fs (dm-20): error loading journal
+> 
+> To summarize, I think this behavior is a bug and is very dangerous,
+> the command in test mode should not send BLKDISCARD to the underlying block device,
+> the BLKDISCARD command will make the related sectors on the block device be trimmed (lost data).
+> 
+> 
+> Thanks
+> Gang
+>   
+> 
+> --
+> lvm-devel mailing list
+> lvm-devel at redhat.com
+> https://www.redhat.com/mailman/listinfo/lvm-devel
+> 
 
 
