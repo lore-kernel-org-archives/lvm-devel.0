@@ -1,498 +1,281 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Fri, 22 Jun 2018 17:38:36 -0400
-Subject: master - build: make generate
-Message-ID: <201806222138.w5MLcawG018622@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Fri, 22 Jun 2018 17:38:41 -0400
+Subject: master - build: include configure.h
+Message-ID: <201806222138.w5MLcffx018633@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=086f1ef4a0f59ee247067e850b9b9ef0cdf5b1c3
-Commit:        086f1ef4a0f59ee247067e850b9b9ef0cdf5b1c3
-Parent:        254e5c5d119447bcb8b160a4b4e5b0c36e9af5ba
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=c728d88e11ffed97f8a5b96e1c0595a2462c5edc
+Commit:        c728d88e11ffed97f8a5b96e1c0595a2462c5edc
+Parent:        086f1ef4a0f59ee247067e850b9b9ef0cdf5b1c3
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Jun 19 15:07:50 2018 +0200
+AuthorDate:    Tue Jun 19 20:43:31 2018 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Fri Jun 22 15:36:34 2018 +0200
+CommitterDate: Fri Jun 22 23:11:44 2018 +0200
 
-build: make generate
+build: include configure.h
 
+It's important to consistenly include  configure.h as the 1st. header.
+It containts #defines influencing behavior of other included header
+files.
 ---
- conf/example.conf.in        |   33 +++++----------------------------
- man/lvchange.8_pregen       |   15 ---------------
- man/lvdisplay.8_pregen      |   11 -----------
- man/lvm-fullreport.8_pregen |   11 -----------
- man/lvs.8_pregen            |   11 -----------
- man/pvchange.8_pregen       |   11 -----------
- man/pvdisplay.8_pregen      |   11 -----------
- man/pvs.8_pregen            |   11 -----------
- man/vgchange.8_pregen       |   31 -------------------------------
- man/vgconvert.8_pregen      |    9 +++++----
- man/vgdisplay.8_pregen      |   11 -----------
- man/vgs.8_pregen            |   11 -----------
- 12 files changed, 10 insertions(+), 166 deletions(-)
+ daemons/dmeventd/dmeventd.c           |    1 +
+ daemons/dmeventd/libdevmapper-event.c |    2 +-
+ device_mapper/all.h                   |    6 +++---
+ device_mapper/libdm-common.c          |    6 +++---
+ device_mapper/vdo/status.c            |    1 +
+ lib/device/bcache.h                   |    1 +
+ libdm/dm-tools/dmsetup.c              |    4 ++--
+ test/unit/activation-generator_t.c    |    3 +--
+ test/unit/bcache_t.c                  |    7 +++----
+ test/unit/bcache_utils_t.c            |    3 +--
+ test/unit/framework.h                 |    1 +
+ test/unit/io_engine_t.c               |    7 +++----
+ test/unit/radix_tree_t.c              |    3 +--
+ test/unit/vdo_t.c                     |    3 +--
+ 14 files changed, 23 insertions(+), 25 deletions(-)
 
-diff --git a/conf/example.conf.in b/conf/example.conf.in
-index 97daab2..83f9f42 100644
---- a/conf/example.conf.in
-+++ b/conf/example.conf.in
-@@ -151,21 +151,15 @@ devices {
- 	# global_filter = [ "a|.*/|" ]
+diff --git a/daemons/dmeventd/dmeventd.c b/daemons/dmeventd/dmeventd.c
+index 3ad81ce..dcc743d 100644
+--- a/daemons/dmeventd/dmeventd.c
++++ b/daemons/dmeventd/dmeventd.c
+@@ -16,6 +16,7 @@
+  * dmeventd - dm event daemon to monitor active mapped devices
+  */
  
- 	# Configuration option devices/cache_dir.
--	# Directory in which to store the device cache file.
--	# The results of filtering are cached on disk to avoid rescanning dud
--	# devices (which can take a very long time). By default this cache is
--	# stored in a file named .cache. It is safe to delete this file; the
--	# tools regenerate it. If obtain_device_list_from_udev is enabled, the
--	# list of devices is obtained from udev and any existing .cache file
--	# is removed.
-+	# This setting is no longer used.
- 	cache_dir = "@DEFAULT_SYS_DIR@/@DEFAULT_CACHE_SUBDIR@"
++#include "device_mapper/misc/dmlib.h"
+ #include "base/memory/zalloc.h"
+ #include "device_mapper/misc/dm-logging.h"
  
- 	# Configuration option devices/cache_file_prefix.
--	# A prefix used before the .cache file name. See devices/cache_dir.
-+	# This setting is no longer used.
- 	cache_file_prefix = ""
+diff --git a/daemons/dmeventd/libdevmapper-event.c b/daemons/dmeventd/libdevmapper-event.c
+index 157b5f1..e58a0ce 100644
+--- a/daemons/dmeventd/libdevmapper-event.c
++++ b/daemons/dmeventd/libdevmapper-event.c
+@@ -12,9 +12,9 @@
+  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
+  */
  
- 	# Configuration option devices/write_cache_state.
--	# Enable/disable writing the cache file. See devices/cache_dir.
-+	# This setting is no longer used.
- 	write_cache_state = 1
++#include "device_mapper/misc/dmlib.h"
+ #include "base/memory/zalloc.h"
+ #include "device_mapper/misc/dm-logging.h"
+-#include "device_mapper/misc/dmlib.h"
+ #include "daemons/dmeventd/libdevmapper-event.h"
+ #include "dmeventd.h"
+ #include "lib/misc/intl.h"
+diff --git a/device_mapper/all.h b/device_mapper/all.h
+index 8dcb38c..602b7ba 100644
+--- a/device_mapper/all.h
++++ b/device_mapper/all.h
+@@ -17,6 +17,9 @@
+ #ifndef LIB_DEVICE_MAPPER_H
+ #define LIB_DEVICE_MAPPER_H
  
- 	# Configuration option devices/types.
-@@ -269,11 +263,7 @@ devices {
- 	ignore_lvm_mirrors = 1
++#include "base/data-struct/list.h"
++#include "base/data-struct/hash.h"
++
+ #include <inttypes.h>
+ #include <stdarg.h>
+ #include <sys/types.h>
+@@ -31,9 +34,6 @@
+ #include <stdlib.h>
+ #include <stdio.h>
  
- 	# Configuration option devices/disable_after_error_count.
--	# Number of I/O errors after which a device is skipped.
--	# During each LVM operation, errors received from each device are
--	# counted. If the counter of a device exceeds the limit set here,
--	# no further I/O is sent to that device for the remainder of the
--	# operation. Setting this to 0 disables the counters altogether.
-+	# This setting is no longer used.
- 	disable_after_error_count = 0
- 
- 	# Configuration option devices/require_restorefile_with_uuid.
-@@ -1557,20 +1547,7 @@ activation {
- 	# stripesize = 64
- 
- 	# Configuration option metadata/dirs.
--	# Directories holding live copies of text format metadata.
--	# These directories must not be on logical volumes!
--	# It's possible to use LVM with a couple of directories here,
--	# preferably on different (non-LV) filesystems, and with no other
--	# on-disk metadata (pvmetadatacopies = 0). Or this can be in addition
--	# to on-disk metadata areas. The feature was originally added to
--	# simplify testing and is not supported under low memory situations -
--	# the machine could lock up. Never edit any files in these directories
--	# by hand unless you are absolutely sure you know what you are doing!
--	# Use the supplied toolset to make changes (e.g. vgcfgrestore).
--	# 
--	# Example
--	# dirs = [ "/etc/lvm/metadata", "/mnt/disk2/lvm/metadata2" ]
--	# 
-+	# This setting is no longer used.
- 	# This configuration option is advanced.
- 	# This configuration option does not have a default value defined.
- # }
-diff --git a/man/lvchange.8_pregen b/man/lvchange.8_pregen
-index 8f9783a..03e0b1c 100644
---- a/man/lvchange.8_pregen
-+++ b/man/lvchange.8_pregen
-@@ -97,10 +97,6 @@ lvchange - Change the attributes of logical volume(s)
- .ad b
- .br
- .ad l
--    \fB--ignoreskippedcluster\fP
--.ad b
--.br
--.ad l
-     \fB--lockopt\fP \fIString\fP
- .ad b
- .br
-@@ -520,10 +516,6 @@ Common options for command:
- .ad b
- .br
- .ad l
--[    \fB--ignoreskippedcluster\fP ]
--.ad b
--.br
--.ad l
- [    \fB--noudevsync\fP ]
- .ad b
- .br
-@@ -818,13 +810,6 @@ Do not use this if dmeventd is already monitoring a device.
- .ad b
- .HP
- .ad l
--\fB--ignoreskippedcluster\fP
--.br
--Use to avoid exiting with an non-zero status code if the command is run
--without clustered locking and clustered VGs are skipped.
--.ad b
--.HP
--.ad l
- \fB--lockopt\fP \fIString\fP
- .br
- Used to pass options for special cases to lvmlockd.
-diff --git a/man/lvdisplay.8_pregen b/man/lvdisplay.8_pregen
-index 6211a47..9a8962b 100644
---- a/man/lvdisplay.8_pregen
-+++ b/man/lvdisplay.8_pregen
-@@ -72,10 +72,6 @@ and more, using a more compact and configurable output format.
- .ad b
- .br
- .ad l
--[    \fB--ignoreskippedcluster\fP ]
--.ad b
--.br
--.ad l
- [    \fB--logonly\fP ]
- .ad b
- .br
-@@ -284,13 +280,6 @@ operations after locking failures.
- .ad b
- .HP
- .ad l
--\fB--ignoreskippedcluster\fP
--.br
--Use to avoid exiting with an non-zero status code if the command is run
--without clustered locking and clustered VGs are skipped.
--.ad b
--.HP
--.ad l
- \fB--lockopt\fP \fIString\fP
- .br
- Used to pass options for special cases to lvmlockd.
-diff --git a/man/lvm-fullreport.8_pregen b/man/lvm-fullreport.8_pregen
-index 4a8d7b3..111b8ef 100644
---- a/man/lvm-fullreport.8_pregen
-+++ b/man/lvm-fullreport.8_pregen
-@@ -56,10 +56,6 @@ if information changes between commands.
- .ad b
- .br
- .ad l
--[    \fB--ignoreskippedcluster\fP ]
--.ad b
--.br
--.ad l
- [    \fB--logonly\fP ]
- .ad b
- .br
-@@ -255,13 +251,6 @@ operations after locking failures.
- .ad b
- .HP
- .ad l
--\fB--ignoreskippedcluster\fP
--.br
--Use to avoid exiting with an non-zero status code if the command is run
--without clustered locking and clustered VGs are skipped.
--.ad b
--.HP
--.ad l
- \fB--lockopt\fP \fIString\fP
- .br
- Used to pass options for special cases to lvmlockd.
-diff --git a/man/lvs.8_pregen b/man/lvs.8_pregen
-index b5128f9..fecca99 100644
---- a/man/lvs.8_pregen
-+++ b/man/lvs.8_pregen
-@@ -60,10 +60,6 @@ lvs produces formatted output about LVs.
- .ad b
- .br
- .ad l
--[    \fB--ignoreskippedcluster\fP ]
--.ad b
--.br
--.ad l
- [    \fB--logonly\fP ]
- .ad b
- .br
-@@ -270,13 +266,6 @@ operations after locking failures.
- .ad b
- .HP
- .ad l
--\fB--ignoreskippedcluster\fP
--.br
--Use to avoid exiting with an non-zero status code if the command is run
--without clustered locking and clustered VGs are skipped.
--.ad b
--.HP
--.ad l
- \fB--lockopt\fP \fIString\fP
- .br
- Used to pass options for special cases to lvmlockd.
-diff --git a/man/pvchange.8_pregen b/man/pvchange.8_pregen
-index 5da8eca..8c9288d 100644
---- a/man/pvchange.8_pregen
-+++ b/man/pvchange.8_pregen
-@@ -98,10 +98,6 @@ Common options for command:
- .ad b
- .br
- .ad l
--[    \fB--ignoreskippedcluster\fP ]
--.ad b
--.br
--.ad l
- [    \fB--reportformat\fP \fBbasic\fP|\fBjson\fP ]
- .ad b
- .RE
-@@ -244,13 +240,6 @@ Display help text.
- .ad b
- .HP
- .ad l
--\fB--ignoreskippedcluster\fP
--.br
--Use to avoid exiting with an non-zero status code if the command is run
--without clustered locking and clustered VGs are skipped.
--.ad b
--.HP
--.ad l
- \fB--lockopt\fP \fIString\fP
- .br
- Used to pass options for special cases to lvmlockd.
-diff --git a/man/pvdisplay.8_pregen b/man/pvdisplay.8_pregen
-index 5f39e7b..9dbcac3 100644
---- a/man/pvdisplay.8_pregen
-+++ b/man/pvdisplay.8_pregen
-@@ -72,10 +72,6 @@ and more, using a more compact and configurable output format.
- .ad b
- .br
- .ad l
--[    \fB--ignoreskippedcluster\fP ]
--.ad b
--.br
--.ad l
- [    \fB--logonly\fP ]
- .ad b
- .br
-@@ -271,13 +267,6 @@ operations after locking failures.
- .ad b
- .HP
- .ad l
--\fB--ignoreskippedcluster\fP
--.br
--Use to avoid exiting with an non-zero status code if the command is run
--without clustered locking and clustered VGs are skipped.
--.ad b
--.HP
--.ad l
- \fB--lockopt\fP \fIString\fP
- .br
- Used to pass options for special cases to lvmlockd.
-diff --git a/man/pvs.8_pregen b/man/pvs.8_pregen
-index 59f1e3d..53c259c 100644
---- a/man/pvs.8_pregen
-+++ b/man/pvs.8_pregen
-@@ -56,10 +56,6 @@ pvs produces formatted output about PVs.
- .ad b
- .br
- .ad l
--[    \fB--ignoreskippedcluster\fP ]
--.ad b
--.br
--.ad l
- [    \fB--logonly\fP ]
- .ad b
- .br
-@@ -257,13 +253,6 @@ operations after locking failures.
- .ad b
- .HP
- .ad l
--\fB--ignoreskippedcluster\fP
--.br
--Use to avoid exiting with an non-zero status code if the command is run
--without clustered locking and clustered VGs are skipped.
--.ad b
--.HP
--.ad l
- \fB--lockopt\fP \fIString\fP
- .br
- Used to pass options for special cases to lvmlockd.
-diff --git a/man/vgchange.8_pregen b/man/vgchange.8_pregen
-index a9ac546..94dbd88 100644
---- a/man/vgchange.8_pregen
-+++ b/man/vgchange.8_pregen
-@@ -75,10 +75,6 @@ vgchange - Change volume group attributes
- .ad b
- .br
- .ad l
--    \fB--ignoreskippedcluster\fP
--.ad b
--.br
--.ad l
-     \fB--lockopt\fP \fIString\fP
- .ad b
- .br
-@@ -279,10 +275,6 @@ required, after which the others are optional.
- .ad b
- .br
- .ad l
--[    \fB--ignoreskippedcluster\fP ]
--.ad b
--.br
--.ad l
- [    \fB--noudevsync\fP ]
- .ad b
- .br
-@@ -333,10 +325,6 @@ Start or stop monitoring LVs from dmeventd.
- .ad b
- .br
- .ad l
--[    \fB--ignoreskippedcluster\fP ]
--.ad b
--.br
--.ad l
- [    \fB--noudevsync\fP ]
- .ad b
- .br
-@@ -379,10 +367,6 @@ Start or stop processing LV conversions.
- .ad b
- .br
- .ad l
--[    \fB--ignoreskippedcluster\fP ]
--.ad b
--.br
--.ad l
- [    \fB--noudevsync\fP ]
- .ad b
- .br
-@@ -449,10 +433,6 @@ Activate or deactivate LVs.
- .ad b
- .br
- .ad l
--[    \fB--ignoreskippedcluster\fP ]
--.ad b
--.br
--.ad l
- [    \fB--noudevsync\fP ]
- .ad b
- .br
-@@ -503,10 +483,6 @@ Reactivate LVs using the latest metadata.
- .ad b
- .br
- .ad l
--[    \fB--ignoreskippedcluster\fP ]
--.ad b
--.br
--.ad l
- [    \fB--noudevsync\fP ]
- .ad b
- .br
-@@ -800,13 +776,6 @@ Do not use this if dmeventd is already monitoring a device.
- .ad b
- .HP
- .ad l
--\fB--ignoreskippedcluster\fP
--.br
--Use to avoid exiting with an non-zero status code if the command is run
--without clustered locking and clustered VGs are skipped.
--.ad b
--.HP
--.ad l
- \fB--lockopt\fP \fIString\fP
- .br
- Used to pass options for special cases to lvmlockd.
-diff --git a/man/vgconvert.8_pregen b/man/vgconvert.8_pregen
-index 16e1fc8..b2a6027 100644
---- a/man/vgconvert.8_pregen
-+++ b/man/vgconvert.8_pregen
-@@ -8,9 +8,9 @@ vgconvert - Change volume group metadata format
-     [ \fIoption_args\fP ]
- .br
- .SH DESCRIPTION
--vgconvert converts VG metadata from one format to another.  This command
--is no longer used because this version of lvm no longer supports the LVM1
--format.
-+vgconvert is no longer a part of LVM.  It was removed along with
-+support for the LVM1 format.  Use an older version of LVM to
-+convert VGs from the LVM1 format to LVM2.
- .SH USAGE
- \fBvgconvert\fP \fIVG\fP ...
- .br
-@@ -46,7 +46,6 @@ format.
- [ COMMON_OPTIONS ]
- .RE
- .br
+-#include "base/data-struct/list.h"
+-#include "base/data-struct/hash.h"
 -
- Common options for lvm:
- .
- .RS 4
-@@ -106,6 +105,7 @@ Common options for lvm:
- [    \fB--version\fP ]
- .ad b
- .RE
-+
- .SH OPTIONS
- .HP
- .ad l
-@@ -301,6 +301,7 @@ capital letters mean multiple of 1000.)
- .SH ENVIRONMENT VARIABLES
- See \fBlvm\fP(8) for information about environment variables used by lvm.
- For example, LVM_VG_NAME can generally be substituted for a required VG parameter.
-+
- .SH SEE ALSO
+ #ifndef __GNUC__
+ # define __typeof__ typeof
+ #endif
+diff --git a/device_mapper/libdm-common.c b/device_mapper/libdm-common.c
+index d46d4b0..111fff6 100644
+--- a/device_mapper/libdm-common.c
++++ b/device_mapper/libdm-common.c
+@@ -13,12 +13,12 @@
+  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
+  */
  
- .BR lvm (8)
-diff --git a/man/vgdisplay.8_pregen b/man/vgdisplay.8_pregen
-index 89e3603..7c8fb12 100644
---- a/man/vgdisplay.8_pregen
-+++ b/man/vgdisplay.8_pregen
-@@ -67,10 +67,6 @@ and more, using a more compact and configurable output format.
- .ad b
- .br
- .ad l
--[    \fB--ignoreskippedcluster\fP ]
--.ad b
--.br
--.ad l
- [    \fB--logonly\fP ]
- .ad b
- .br
-@@ -266,13 +262,6 @@ operations after locking failures.
- .ad b
- .HP
- .ad l
--\fB--ignoreskippedcluster\fP
--.br
--Use to avoid exiting with an non-zero status code if the command is run
--without clustered locking and clustered VGs are skipped.
--.ad b
--.HP
--.ad l
- \fB--lockopt\fP \fIString\fP
- .br
- Used to pass options for special cases to lvmlockd.
-diff --git a/man/vgs.8_pregen b/man/vgs.8_pregen
-index 681711b..c8a9611 100644
---- a/man/vgs.8_pregen
-+++ b/man/vgs.8_pregen
-@@ -52,10 +52,6 @@ vgs produces formatted output about VGs.
- .ad b
- .br
- .ad l
--[    \fB--ignoreskippedcluster\fP ]
--.ad b
--.br
--.ad l
- [    \fB--logonly\fP ]
- .ad b
- .br
-@@ -252,13 +248,6 @@ operations after locking failures.
- .ad b
- .HP
- .ad l
--\fB--ignoreskippedcluster\fP
--.br
--Use to avoid exiting with an non-zero status code if the command is run
--without clustered locking and clustered VGs are skipped.
--.ad b
--.HP
--.ad l
- \fB--lockopt\fP \fIString\fP
- .br
- Used to pass options for special cases to lvmlockd.
+-#include "base/memory/zalloc.h"
+-#include "device_mapper/misc/dmlib.h"
+-#include "ioctl/libdm-targets.h"
++#include "misc/dmlib.h"
+ #include "libdm-common.h"
++#include "ioctl/libdm-targets.h"
+ #include "misc/kdev_t.h"
+ #include "misc/dm-ioctl.h"
++#include "base/memory/zalloc.h"
+ 
+ #include <stdarg.h>
+ #include <sys/param.h>
+diff --git a/device_mapper/vdo/status.c b/device_mapper/vdo/status.c
+index 7a26e1a..f423ca1 100644
+--- a/device_mapper/vdo/status.c
++++ b/device_mapper/vdo/status.c
+@@ -1,3 +1,4 @@
++#include "configure.h"
+ #include "target.h"
+ 
+ // For DM_ARRAY_SIZE!
+diff --git a/lib/device/bcache.h b/lib/device/bcache.h
+index cb36c30..ae5e69c 100644
+--- a/lib/device/bcache.h
++++ b/lib/device/bcache.h
+@@ -15,6 +15,7 @@
+ #ifndef BCACHE_H
+ #define BCACHE_H
+ 
++#include "configure.h"
+ #include "device_mapper/all.h"
+ 
+ #include <linux/fs.h>
+diff --git a/libdm/dm-tools/dmsetup.c b/libdm/dm-tools/dmsetup.c
+index 83786f4..44386a6 100644
+--- a/libdm/dm-tools/dmsetup.c
++++ b/libdm/dm-tools/dmsetup.c
+@@ -18,11 +18,10 @@
+ 
+ // For canonicalize_file_name()
+ #define _GNU_SOURCE
+-#include <stdlib.h>
+ 
++#include "configure.h"
+ #include "libdm/misc/dm-logging.h"
+ #include "libdm/dm-tools/util.h"
+-#include "configure.h"
+ 
+ #include <ctype.h>
+ #include <dirent.h>
+@@ -35,6 +34,7 @@
+ #include <sys/wait.h>
+ #include <time.h>
+ #include <unistd.h>
++#include <stdlib.h>
+ 
+ #ifdef UDEV_SYNC_SUPPORT
+ #  include <sys/types.h>
+diff --git a/test/unit/activation-generator_t.c b/test/unit/activation-generator_t.c
+index 9f6b661..cff0968 100644
+--- a/test/unit/activation-generator_t.c
++++ b/test/unit/activation-generator_t.c
+@@ -12,9 +12,8 @@
+  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
+  */
+ 
+-#include "scripts/generator-internals.c"
+-#include "framework.h"
+ #include "units.h"
++#include "scripts/generator-internals.c"
+ 
+ #include "device_mapper/all.h"
+ 
+diff --git a/test/unit/bcache_t.c b/test/unit/bcache_t.c
+index 5e07005..92c2d57 100644
+--- a/test/unit/bcache_t.c
++++ b/test/unit/bcache_t.c
+@@ -12,15 +12,14 @@
+  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
+  */
+ 
++#include "units.h"
++#include "lib/device/bcache.h"
++
+ #include <errno.h>
+ #include <stdio.h>
+ #include <stdlib.h>
+ #include <unistd.h>
+ 
+-#include "lib/device/bcache.h"
+-#include "framework.h"
+-#include "units.h"
+-
+ #define SHOW_MOCK_CALLS 0
+ 
+ /*----------------------------------------------------------------
+diff --git a/test/unit/bcache_utils_t.c b/test/unit/bcache_utils_t.c
+index 66780ea..2e08320 100644
+--- a/test/unit/bcache_utils_t.c
++++ b/test/unit/bcache_utils_t.c
+@@ -14,9 +14,8 @@
+ 
+ #define _GNU_SOURCE
+ 
+-#include "lib/device/bcache.h"
+-#include "framework.h"
+ #include "units.h"
++#include "lib/device/bcache.h"
+ 
+ #include <errno.h>
+ #include <stdio.h>
+diff --git a/test/unit/framework.h b/test/unit/framework.h
+index 0c45596..d5a2cdd 100644
+--- a/test/unit/framework.h
++++ b/test/unit/framework.h
+@@ -1,6 +1,7 @@
+ #ifndef TEST_UNIT_FRAMEWORK_H
+ #define TEST_UNIT_FRAMEWORK_H
+ 
++#include "configure.h"
+ #include "device_mapper/all.h"
+ 
+ #include <stdbool.h>
+diff --git a/test/unit/io_engine_t.c b/test/unit/io_engine_t.c
+index 1a4f638..bac9c38 100644
+--- a/test/unit/io_engine_t.c
++++ b/test/unit/io_engine_t.c
+@@ -14,6 +14,9 @@
+ 
+ #define _GNU_SOURCE
+ 
++#include "units.h"
++#include "lib/device/bcache.h"
++
+ #include <errno.h>
+ #include <stdio.h>
+ #include <stdlib.h>
+@@ -22,10 +25,6 @@
+ #include <fcntl.h>
+ #include <unistd.h>
+ 
+-#include "lib/device/bcache.h"
+-#include "framework.h"
+-#include "units.h"
+-
+ //----------------------------------------------------------------
+ 
+ #define SECTOR_SIZE 512
+diff --git a/test/unit/radix_tree_t.c b/test/unit/radix_tree_t.c
+index 2fba15f..e5d3e98 100644
+--- a/test/unit/radix_tree_t.c
++++ b/test/unit/radix_tree_t.c
+@@ -10,11 +10,10 @@
+ // along with this program; if not, write to the Free Software Foundation,
+ // Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
+  
++#include "units.h"
+ #include "base/data-struct/radix-tree.h"
+ #include "base/memory/container_of.h"
+ 
+-#include "units.h"
+-
+ #include <stdio.h>
+ #include <stdlib.h>
+ 
+diff --git a/test/unit/vdo_t.c b/test/unit/vdo_t.c
+index 9c41887..a26c0b9 100644
+--- a/test/unit/vdo_t.c
++++ b/test/unit/vdo_t.c
+@@ -12,9 +12,8 @@
+  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
+  */
+ 
+-#include "device_mapper/vdo/target.h"
+-#include "framework.h"
+ #include "units.h"
++#include "device_mapper/vdo/target.h"
+ 
+ //----------------------------------------------------------------
+ 
 
 
