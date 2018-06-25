@@ -1,42 +1,40 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Mon, 25 Jun 2018 09:10:02 -0400
-Subject: master - cache: use new api function
-Message-ID: <201806251310.w5PDA2lL031425@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Mon, 25 Jun 2018 09:10:10 -0400
+Subject: master - tests: update with --yes
+Message-ID: <201806251310.w5PDAAGQ031441@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=357e9f9572361ec2ea89ca0bf165a30545fa747f
-Commit:        357e9f9572361ec2ea89ca0bf165a30545fa747f
-Parent:        9c0d92d9575da63b38685c385917644d9ac9445d
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=19b92ae3f3185919a0a1cef849a9a003101d4429
+Commit:        19b92ae3f3185919a0a1cef849a9a003101d4429
+Parent:        cea88a9e4ee5a2aa28b52d673fba66327e88ff6e
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Sat Jun 23 11:47:33 2018 +0200
+AuthorDate:    Sun Jun 24 20:49:59 2018 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Mon Jun 25 15:07:55 2018 +0200
 
-cache: use new api function
+tests: update with --yes
 
+vgcfgrestore needs to confirm restore while LVs from VG are present.
 ---
- lib/metadata/cache_manip.c |    3 +--
- 1 files changed, 1 insertions(+), 2 deletions(-)
+ test/shell/thin-restore.sh |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
 
-diff --git a/lib/metadata/cache_manip.c b/lib/metadata/cache_manip.c
-index e347144..4132e2f 100644
---- a/lib/metadata/cache_manip.c
-+++ b/lib/metadata/cache_manip.c
-@@ -620,10 +620,9 @@ int lv_cache_remove(struct logical_volume *cache_lv)
- 	if (!(cache_seg->segtype = get_segtype_from_string(corigin_lv->vg->cmd, SEG_TYPE_NAME_CACHE)))
- 		return_0;
+diff --git a/test/shell/thin-restore.sh b/test/shell/thin-restore.sh
+index 3682a8c..d8bae3c 100644
+--- a/test/shell/thin-restore.sh
++++ b/test/shell/thin-restore.sh
+@@ -33,7 +33,7 @@ vgcfgbackup -f backup $vg
+ # use of --force is mandatory
+ not vgcfgrestore -f backup $vg
  
--	if (!(cache_seg->areas = dm_pool_zalloc(cache_lv->vg->vgmem, sizeof(*cache_seg->areas))))
-+	if (!add_lv_segment_areas(cache_seg, 1))
- 		return_0;
+-vgcfgrestore -f backup --force $vg
++vgcfgrestore -y -f backup --force $vg
  
--	cache_seg->area_count = 1;
- 	if (!set_lv_segment_area_lv(cache_seg, 0, cache_lv, 0, 0))
- 		return_0;
+ check lv_field $vg/pool transaction_id 1
  
 
 
