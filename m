@@ -1,101 +1,39 @@
-From: Gang He <ghe@suse.com>
-Date: Tue, 26 Jun 2018 20:42:52 -0600
-Subject: lvresize in test mode sends BLKDISCARD to SSD block devices, this will result in the file system corruption
-In-Reply-To: <87afa0a1-c256-60a9-2603-57e7be9a00d3@redhat.com>
-References: <5B2CC1EB020000F900024F32@prv1-mh.provo.novell.com>
-	<87afa0a1-c256-60a9-2603-57e7be9a00d3@redhat.com>
-Message-ID: <5B32F9AC020000F900025DF6@prv1-mh.provo.novell.com>
+From: David Teigland <teigland@sourceware.org>
+Date: Wed, 27 Jun 2018 10:20:06 -0400
+Subject: 2018-06-01-stable - Revert "man: fix lvreduce example"
+Message-ID: <201806271420.w5REK6EA007492@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Hello Zdenek,
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=814dd84e0769da568232a19f798baf24b8a26127
+Commit:        814dd84e0769da568232a19f798baf24b8a26127
+Parent:        d5bcc56eefde8349ffee93d0411c6f9fd71ceb84
+Author:        David Teigland <teigland@redhat.com>
+AuthorDate:    Wed Jun 27 09:19:01 2018 -0500
+Committer:     David Teigland <teigland@redhat.com>
+CommitterDate: Wed Jun 27 09:19:01 2018 -0500
 
-Thank for your quick response.
-I opened a bug in redhat bugzilla for this issue.
-The bug link is https://bugzilla.redhat.com/show_bug.cgi?id=1595500
+Revert "man: fix lvreduce example"
 
-Thanks
-Gang
+ -l -3 is correct, meaning reduce by 3.
 
+This reverts commit d5bcc56eefde8349ffee93d0411c6f9fd71ceb84.
+---
+ man/lvreduce.8_end |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
 
->>> On 6/22/2018 at  9:34 pm, in message
-<87afa0a1-c256-60a9-2603-57e7be9a00d3@redhat.com>, Zdenek Kabelac
-<zkabelac@redhat.com> wrote:
-> Dne 22.6.2018 v 11:31 Gang He napsal(a):
->> Hello List,
->> 
->> I found a bug for lvresize command, this issue can be reproduced by 
-> lvm2-2.02.178 code base.
->> The reproduce steps are as below,
-> 
-> 
-> Hi
-> 
-> Good catch - yep - it seem in this case  ioctl operation are flowing to 
-> device 
-> even in test mode.
-> 
-> Please create BZ for lvm2 on this issue.
-> 
-> 
-> Zdenek
-> 
-> 
->> 1) create a LV on a SSD based partition, then format this LV with ext4 file 
-> system, and mount this LV.
->> e.g.
->> linux-cy2k:/ # lsblk
->> ...
->> sdc                               8:32   0  37.3G  0 disk
->> ??sdc1                            8:33   0     2G  0 part [SWAP]
->> ??sdc2                            8:34   0  14.7G  0 part
->> ? ??cluster--vg1-test--lv       254:20   0    14G  0 lvm  /mnt/ext4  <<= this 
-> LV
->> ??sdc3                            8:35   0  20.6G  0 part
->> 
->> 2) enable issue discards to a logical volumes's underlying physical volume 
-> via edit "/etc/lvm/lvm.conf" file.
->> e.g.
->> linux-cy2k:/ # vi /etc/lvm/lvm.conf
->> set "issue_discards = 1"
->> 
->> 3) run lvresize command in test mode.
->> e.g.
->> inux-cy2k:/ # lvresize -v -n -L -10GB /dev/cluster-vg1/test-lv --test
->> 
->> 4) unmount this LV, then mount this LV again.
->> You will probably encounter the file system on this LV is corrupted.
->> e.g.
->> linux-cy2k:~ # mount /dev/cluster-vg1/test-lv /mnt/ext4/
->> mount: wrong fs type, bad option, bad superblock on 
-> /dev/mapper/cluster--vg1-test--lv,
->>         missing codepage or helper program, or other error
->> 
->>         In some cases useful info is found in syslog - try
->>         dmesg | tail or so.
->> 
->> linux-cy2k:~ # dmesg
->> [3711112.342424] JBD2: no valid journal superblock found
->> [3711112.342429] EXT4-fs (dm-20): error loading journal
->> 
->> To summarize, I think this behavior is a bug and is very dangerous,
->> the command in test mode should not send BLKDISCARD to the underlying block 
-> device,
->> the BLKDISCARD command will make the related sectors on the block device be 
-> trimmed (lost data).
->> 
->> 
->> Thanks
->> Gang
->>   
->> 
->> --
->> lvm-devel mailing list
->> lvm-devel at redhat.com 
->> https://www.redhat.com/mailman/listinfo/lvm-devel 
->> 
+diff --git a/man/lvreduce.8_end b/man/lvreduce.8_end
+index a9cb035..53f1ac7 100644
+--- a/man/lvreduce.8_end
++++ b/man/lvreduce.8_end
+@@ -2,4 +2,4 @@
+ 
+ Reduce the size of an LV by 3 logical extents:
+ .br
+-.B lvreduce -l 3 vg00/lvol1
++.B lvreduce -l -3 vg00/lvol1
 
 
