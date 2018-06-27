@@ -1,72 +1,101 @@
-From: David Teigland <teigland@sourceware.org>
-Date: Tue, 26 Jun 2018 13:16:59 -0400
-Subject: 2018-06-01-stable - devs: use bcache fd for read ahead ioctl
-Message-ID: <201806261716.w5QHGxu0005710@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: Gang He <ghe@suse.com>
+Date: Tue, 26 Jun 2018 20:42:52 -0600
+Subject: lvresize in test mode sends BLKDISCARD to SSD block devices, this will result in the file system corruption
+In-Reply-To: <87afa0a1-c256-60a9-2603-57e7be9a00d3@redhat.com>
+References: <5B2CC1EB020000F900024F32@prv1-mh.provo.novell.com>
+	<87afa0a1-c256-60a9-2603-57e7be9a00d3@redhat.com>
+Message-ID: <5B32F9AC020000F900025DF6@prv1-mh.provo.novell.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=f7ffba204e06ae432ae2c7943cb41eec5b8e8bb1
-Commit:        f7ffba204e06ae432ae2c7943cb41eec5b8e8bb1
-Parent:        90e419c645ac5ad3b82044fd3422f956442935a6
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Tue Jun 26 12:05:39 2018 -0500
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Tue Jun 26 12:15:43 2018 -0500
+Hello Zdenek,
 
-devs: use bcache fd for read ahead ioctl
+Thank for your quick response.
+I opened a bug in redhat bugzilla for this issue.
+The bug link is https://bugzilla.redhat.com/show_bug.cgi?id=1595500
 
-to avoid an unnecessary open of the device in
-most cases.
----
- lib/device/dev-io.c |   18 ++++++++++++------
- 1 files changed, 12 insertions(+), 6 deletions(-)
+Thanks
+Gang
 
-diff --git a/lib/device/dev-io.c b/lib/device/dev-io.c
-index 9a03d3a..145093f 100644
---- a/lib/device/dev-io.c
-+++ b/lib/device/dev-io.c
-@@ -367,18 +367,24 @@ static int _dev_get_size_dev(struct device *dev, uint64_t *size)
- static int _dev_read_ahead_dev(struct device *dev, uint32_t *read_ahead)
- {
- 	long read_ahead_long;
-+	int fd = dev->bcache_fd;
-+	int do_close = 0;
- 
- 	if (dev->read_ahead != -1) {
- 		*read_ahead = (uint32_t) dev->read_ahead;
- 		return 1;
- 	}
- 
--	if (!dev_open_readonly(dev))
--		return_0;
-+	if (fd <= 0) {
-+		if (!dev_open_readonly(dev))
-+			return_0;
-+		fd = dev_fd(dev);
-+		do_close = 1;
-+	}
- 
--	if (ioctl(dev->fd, BLKRAGET, &read_ahead_long) < 0) {
-+	if (ioctl(fd, BLKRAGET, &read_ahead_long) < 0) {
- 		log_sys_error("ioctl BLKRAGET", dev_name(dev));
--		if (!dev_close_immediate(dev))
-+		if (do_close && !dev_close_immediate(dev))
- 			stack;
- 		return 0;
- 	}
-@@ -389,8 +395,8 @@ static int _dev_read_ahead_dev(struct device *dev, uint32_t *read_ahead)
- 	log_very_verbose("%s: read_ahead is %u sectors",
- 			 dev_name(dev), *read_ahead);
- 
--	if (!dev_close_immediate(dev))
--		stack;
-+	if (do_close && !dev_close_immediate(dev))
-+		log_sys_error("close", dev_name(dev));
- 
- 	return 1;
- }
+
+>>> On 6/22/2018 at  9:34 pm, in message
+<87afa0a1-c256-60a9-2603-57e7be9a00d3@redhat.com>, Zdenek Kabelac
+<zkabelac@redhat.com> wrote:
+> Dne 22.6.2018 v 11:31 Gang He napsal(a):
+>> Hello List,
+>> 
+>> I found a bug for lvresize command, this issue can be reproduced by 
+> lvm2-2.02.178 code base.
+>> The reproduce steps are as below,
+> 
+> 
+> Hi
+> 
+> Good catch - yep - it seem in this case  ioctl operation are flowing to 
+> device 
+> even in test mode.
+> 
+> Please create BZ for lvm2 on this issue.
+> 
+> 
+> Zdenek
+> 
+> 
+>> 1) create a LV on a SSD based partition, then format this LV with ext4 file 
+> system, and mount this LV.
+>> e.g.
+>> linux-cy2k:/ # lsblk
+>> ...
+>> sdc                               8:32   0  37.3G  0 disk
+>> ??sdc1                            8:33   0     2G  0 part [SWAP]
+>> ??sdc2                            8:34   0  14.7G  0 part
+>> ? ??cluster--vg1-test--lv       254:20   0    14G  0 lvm  /mnt/ext4  <<= this 
+> LV
+>> ??sdc3                            8:35   0  20.6G  0 part
+>> 
+>> 2) enable issue discards to a logical volumes's underlying physical volume 
+> via edit "/etc/lvm/lvm.conf" file.
+>> e.g.
+>> linux-cy2k:/ # vi /etc/lvm/lvm.conf
+>> set "issue_discards = 1"
+>> 
+>> 3) run lvresize command in test mode.
+>> e.g.
+>> inux-cy2k:/ # lvresize -v -n -L -10GB /dev/cluster-vg1/test-lv --test
+>> 
+>> 4) unmount this LV, then mount this LV again.
+>> You will probably encounter the file system on this LV is corrupted.
+>> e.g.
+>> linux-cy2k:~ # mount /dev/cluster-vg1/test-lv /mnt/ext4/
+>> mount: wrong fs type, bad option, bad superblock on 
+> /dev/mapper/cluster--vg1-test--lv,
+>>         missing codepage or helper program, or other error
+>> 
+>>         In some cases useful info is found in syslog - try
+>>         dmesg | tail or so.
+>> 
+>> linux-cy2k:~ # dmesg
+>> [3711112.342424] JBD2: no valid journal superblock found
+>> [3711112.342429] EXT4-fs (dm-20): error loading journal
+>> 
+>> To summarize, I think this behavior is a bug and is very dangerous,
+>> the command in test mode should not send BLKDISCARD to the underlying block 
+> device,
+>> the BLKDISCARD command will make the related sectors on the block device be 
+> trimmed (lost data).
+>> 
+>> 
+>> Thanks
+>> Gang
+>>   
+>> 
+>> --
+>> lvm-devel mailing list
+>> lvm-devel at redhat.com 
+>> https://www.redhat.com/mailman/listinfo/lvm-devel 
+>> 
 
 
