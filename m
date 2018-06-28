@@ -1,40 +1,64 @@
-From: Karel Zak <kzak@redhat.com>
-Date: Thu, 4 Oct 2018 11:43:29 +0200
-Subject: libblkid filesystem block size
-In-Reply-To: <alpine.LRH.2.02.1810031724070.7859@file01.intranet.prod.int.rdu2.redhat.com>
-References: <alpine.LRH.2.02.1810031724070.7859@file01.intranet.prod.int.rdu2.redhat.com>
-Message-ID: <20181004094329.z6b7y4ahhmb4ayj6@ws.net.home>
+From: Bryn Reeves <bmr@sourceware.org>
+Date: Thu, 28 Jun 2018 09:26:19 -0400
+Subject: master - dmsetup: fix error propagation in _display_info_cols()
+Message-ID: <201806281326.w5SDQJOU021139@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=29b9ccd261be025aaf75e58e5d2547e818ef22c3
+Commit:        29b9ccd261be025aaf75e58e5d2547e818ef22c3
+Parent:        f96fd9961d1a80999a38b45c1d173e3df1de83e5
+Author:        Bryn M. Reeves <bmr@redhat.com>
+AuthorDate:    Thu Jun 28 14:25:30 2018 +0100
+Committer:     Bryn M. Reeves <bmr@redhat.com>
+CommitterDate: Thu Jun 28 14:25:30 2018 +0100
 
- Ahoj,
+dmsetup: fix error propagation in _display_info_cols()
 
-On Wed, Oct 03, 2018 at 05:41:59PM -0400, Mikulas Patocka wrote:
-> As you maintain libblkid, I'd like to ask - would it be possible to add 
-> detection of filesystem block size to it? libblkid already has description 
-> of various filesystem superblocks, so it shouldn't be too hard.
+Commit 3f35146 added a check on the value returned by the
+_display_info_cols() function:
 
-we had something like this (and also FS size) in our TODO for years.
-So, I don't see problem to add it now. Send patch ;-)
+  1024         if (!_switches[COLS_ARG])
+  1025                 _display_info_long(dmt, &info);
+  1026         else
+  1027                 r = _display_info_cols(dmt, &info);
+  1028
+  1029         return r;
 
-All you need is to add 
+This exposes a bug in the dmstats code in _display_info_cols:
+the fact that a device has no regions is explicitly not an error
+(and is documented as such in the code), but since the return
+code is not changed before leaving the function it is now treated
+as an error leading to:
 
- libblkid/src/superblocks/superblocks.c: blkid_probe_set_fs_blocksize() 
+  # dmstats list
+  Command failed.
 
-to add "BLKSZ" variable to the probing result (use for example
-blkid_probe_set_version() as a template).
+When no regions exist.
 
-And then use this function in FS specific probers. The variable will
-automatically visible for udev as ID_FS_BLKSZ=.
+Set the return code to the correct value before returning.
+---
+ libdm/dm-tools/dmsetup.c |    4 +++-
+ 1 files changed, 3 insertions(+), 1 deletions(-)
 
-    Karel
-
--- 
- Karel Zak  <kzak@redhat.com>
- http://karelzak.blogspot.com
+diff --git a/libdm/dm-tools/dmsetup.c b/libdm/dm-tools/dmsetup.c
+index 44386a6..fb1a574 100644
+--- a/libdm/dm-tools/dmsetup.c
++++ b/libdm/dm-tools/dmsetup.c
+@@ -943,8 +943,10 @@ static int _display_info_cols(struct dm_task *dmt, struct dm_info *info)
+ 			goto_out;
+ 
+ 		/* No regions to report is not an error */
+-		if (!dm_stats_get_nr_regions(obj.stats))
++		if (!dm_stats_get_nr_regions(obj.stats)) {
++			r = 1;
+ 			goto out;
++		}
+ 	}
+ 
+ 	/* group report with no groups? */
 
 
