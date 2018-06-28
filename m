@@ -1,39 +1,64 @@
-From: David Teigland <teigland@sourceware.org>
-Date: Wed, 27 Jun 2018 10:20:32 -0400
-Subject: master - Revert "man: fix lvreduce example"
-Message-ID: <201806271420.w5REKW8r007519@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: Bryn Reeves <bmr@sourceware.org>
+Date: Thu, 28 Jun 2018 09:26:12 -0400
+Subject: master - dmsetup: fix error propagation in _display_info_cols()
+Message-ID: <201806281326.w5SDQCDN021126@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=f96fd9961d1a80999a38b45c1d173e3df1de83e5
-Commit:        f96fd9961d1a80999a38b45c1d173e3df1de83e5
-Parent:        163a30d7844e07a678c5eea8f38b5f5b2ea58d24
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Wed Jun 27 09:19:01 2018 -0500
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Wed Jun 27 09:20:21 2018 -0500
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=29b9ccd261be025aaf75e58e5d2547e818ef22c3
+Commit:        29b9ccd261be025aaf75e58e5d2547e818ef22c3
+Parent:        f96fd9961d1a80999a38b45c1d173e3df1de83e5
+Author:        Bryn M. Reeves <bmr@redhat.com>
+AuthorDate:    Thu Jun 28 14:25:30 2018 +0100
+Committer:     Bryn M. Reeves <bmr@redhat.com>
+CommitterDate: Thu Jun 28 14:25:30 2018 +0100
 
-Revert "man: fix lvreduce example"
+dmsetup: fix error propagation in _display_info_cols()
 
- -l -3 is correct, meaning reduce by 3.
+Commit 3f35146 added a check on the value returned by the
+_display_info_cols() function:
 
-This reverts commit d5bcc56eefde8349ffee93d0411c6f9fd71ceb84.
+  1024         if (!_switches[COLS_ARG])
+  1025                 _display_info_long(dmt, &info);
+  1026         else
+  1027                 r = _display_info_cols(dmt, &info);
+  1028
+  1029         return r;
+
+This exposes a bug in the dmstats code in _display_info_cols:
+the fact that a device has no regions is explicitly not an error
+(and is documented as such in the code), but since the return
+code is not changed before leaving the function it is now treated
+as an error leading to:
+
+  # dmstats list
+  Command failed.
+
+When no regions exist.
+
+Set the return code to the correct value before returning.
 ---
- man/lvreduce.8_end |    2 +-
- 1 files changed, 1 insertions(+), 1 deletions(-)
+ libdm/dm-tools/dmsetup.c |    4 +++-
+ 1 files changed, 3 insertions(+), 1 deletions(-)
 
-diff --git a/man/lvreduce.8_end b/man/lvreduce.8_end
-index a9cb035..53f1ac7 100644
---- a/man/lvreduce.8_end
-+++ b/man/lvreduce.8_end
-@@ -2,4 +2,4 @@
+diff --git a/libdm/dm-tools/dmsetup.c b/libdm/dm-tools/dmsetup.c
+index 44386a6..fb1a574 100644
+--- a/libdm/dm-tools/dmsetup.c
++++ b/libdm/dm-tools/dmsetup.c
+@@ -943,8 +943,10 @@ static int _display_info_cols(struct dm_task *dmt, struct dm_info *info)
+ 			goto_out;
  
- Reduce the size of an LV by 3 logical extents:
- .br
--.B lvreduce -l 3 vg00/lvol1
-+.B lvreduce -l -3 vg00/lvol1
+ 		/* No regions to report is not an error */
+-		if (!dm_stats_get_nr_regions(obj.stats))
++		if (!dm_stats_get_nr_regions(obj.stats)) {
++			r = 1;
+ 			goto out;
++		}
+ 	}
+ 
+ 	/* group report with no groups? */
 
 
