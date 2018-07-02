@@ -1,56 +1,66 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Mon, 2 Jul 2018 04:27:09 -0400
-Subject: master - device_mapper: deactive new nodes when load fails
-Message-ID: <201807020827.w628R96V026003@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Mon, 2 Jul 2018 04:27:11 -0400
+Subject: master - device_mapper: relocate code for sending messages
+Message-ID: <201807020827.w628RBM2026012@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=d56e400d448c79a269591ac065e087bc2cc69609
-Commit:        d56e400d448c79a269591ac065e087bc2cc69609
-Parent:        f2b856c9940cf3b4cf4bb35bf1a145a8f5f76e13
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=c1a6b10d09aae6179e4f08c7d8c03d5e3068ad94
+Commit:        c1a6b10d09aae6179e4f08c7d8c03d5e3068ad94
+Parent:        d56e400d448c79a269591ac065e087bc2cc69609
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Jun 29 17:25:38 2018 +0200
+AuthorDate:    Sat Jun 23 23:03:25 2018 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Mon Jul 2 10:25:35 2018 +0200
 
-device_mapper: deactive new nodes when load fails
+device_mapper: relocate code for sending messages
 
-When node loading fails, there is not much the caller can do,
-since there is 'unknown' set of devices preloaded.
-
-Only suspend during preload knows future precommitted 'metadata',
-so it's non-trivial to drop 'preloaded' entries with any later call.
-
-However dm tree tracks newly loaded entries - so in this case it
-may simplify the recovery path by dropping preloaded entries so
-they are not leaked in the DM table.
+To be able to send messages for recently resumed devices,
+move code into inner loop.
 ---
- device_mapper/libdm-deptree.c |   10 ++++++++--
- 1 files changed, 8 insertions(+), 2 deletions(-)
+ device_mapper/libdm-deptree.c |   22 +++++++++++-----------
+ 1 files changed, 11 insertions(+), 11 deletions(-)
 
 diff --git a/device_mapper/libdm-deptree.c b/device_mapper/libdm-deptree.c
-index bb552b6..4609796 100644
+index 4609796..2dc33ae 100644
 --- a/device_mapper/libdm-deptree.c
 +++ b/device_mapper/libdm-deptree.c
-@@ -2877,8 +2877,14 @@ int dm_tree_preload_children(struct dm_tree_node *dnode,
- 			 * insufficient to remove those - only the node
- 			 * encountering the table load failure is removed.
- 			 */
--			if (node_created && !_remove_node(child))
--				return_0;
-+			if (node_created) {
-+				if (!_remove_node(child))
-+					return_0;
-+				if (!dm_udev_wait(dm_tree_get_cookie(dnode)))
-+					stack;
-+				dm_tree_set_cookie(dnode, 0);
-+				(void) _dm_tree_revert_activated(child);
-+			}
- 			return_0;
+@@ -1953,22 +1953,22 @@ int dm_tree_activate_children(struct dm_tree_node *dnode,
+ 				r = 0;
+ 				continue;
+ 			}
++
++			/*
++			 * FIXME: Implement delayed error reporting
++			 * activation should be stopped only in the case,
++			 * the submission of transation_id message fails,
++			 * resume should continue further, just whole command
++			 * has to report failure.
++			 */
++			if (r && (child->props.send_messages > 1) &&
++			    !(r = _node_send_messages(child, uuid_prefix, uuid_prefix_len, 1)))
++				stack;
  		}
+ 		if (awaiting_peer_rename)
+ 			priority--; /* redo priority level */
+ 	}
+ 
+-	/*
+-	 * FIXME: Implement delayed error reporting
+-	 * activation should be stopped only in the case,
+-	 * the submission of transation_id message fails,
+-	 * resume should continue further, just whole command
+-	 * has to report failure.
+-	 */
+-	if (r && (dnode->props.send_messages > 1) &&
+-	    !(r = _node_send_messages(dnode, uuid_prefix, uuid_prefix_len, 1)))
+-		stack;
+-
+ 	return r;
+ }
  
 
 
