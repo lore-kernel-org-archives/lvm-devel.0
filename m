@@ -1,47 +1,45 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Mon, 2 Jul 2018 04:26:53 -0400
-Subject: master - locking: memory locking ONLY with suspending reason
-Message-ID: <201807020826.w628QriZ025656@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Mon, 2 Jul 2018 04:27:04 -0400
+Subject: master - lv_manip: do not check extents for any virtual target
+Message-ID: <201807020827.w628R4Hh025980@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=0bae9a1bffe34170569ce37bd7effbdfe0603fa1
-Commit:        0bae9a1bffe34170569ce37bd7effbdfe0603fa1
-Parent:        b55d30956d77afec7a985132225d5b64d072b598
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=f2b856c9940cf3b4cf4bb35bf1a145a8f5f76e13
+Commit:        f2b856c9940cf3b4cf4bb35bf1a145a8f5f76e13
+Parent:        2bb9627d01dc138c56d0262f918462324782d3c7
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Sat Jun 30 10:35:08 2018 +0200
+AuthorDate:    Fri Jun 29 11:25:08 2018 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Mon Jul 2 10:21:42 2018 +0200
+CommitterDate: Mon Jul 2 10:24:23 2018 +0200
 
-locking: memory locking ONLY with suspending reason
+lv_manip: do not check extents for any virtual target
 
-It's important to lock memory beforo running SUSPEND ioctl - but whole
-lvm preload runs in memory unlocked environment - as in this phase
-memory allocation is allowed and is meant to happen.
+Allow creation of any virtual segment type with just --virtualsize
+specified without any real extent size give.
 
-Once all targets are preload and ready (confirmed from all targets)
-we start suspending tree - and here the memory allocation (or i.e.
-opening files) is no longer allowed - as it may cause kernel deadlock.
+TODO: likely --type error,zero might be later enhanced to use -V
+(along with -L) - but since those targets do not allocate real
+space, supporting -V makes sense with them.
 ---
- lib/mm/memlock.c |    3 +--
- 1 files changed, 1 insertions(+), 2 deletions(-)
+ lib/metadata/lv_manip.c |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
 
-diff --git a/lib/mm/memlock.c b/lib/mm/memlock.c
-index 65f13c4..9ebf96d 100644
---- a/lib/mm/memlock.c
-+++ b/lib/mm/memlock.c
-@@ -604,8 +604,7 @@ static void _unlock_mem_if_possible(struct cmd_context *cmd)
- void critical_section_inc(struct cmd_context *cmd, const char *reason)
- {
- 	if (!_critical_section &&
--	    ((strcmp(reason, "suspending") == 0) ||
--	     (strcmp(reason, "locking for suspend") == 0))) {
-+	    (strcmp(reason, "suspending") == 0)) {
- 		/*
- 		 * Profiles are loaded on-demand so make sure that before
- 		 * entering the critical section all needed profiles are
+diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
+index fc55c98..a382e27 100644
+--- a/lib/metadata/lv_manip.c
++++ b/lib/metadata/lv_manip.c
+@@ -7427,7 +7427,7 @@ static struct logical_volume *_lv_create_an_lv(struct volume_group *vg,
+ 
+ 	lp->extents = _round_to_stripe_boundary(vg, lp->extents, lp->stripes, 1);
+ 
+-	if (!lp->extents && !seg_is_thin_volume(lp)) {
++	if (!lp->extents && !seg_is_virtual(lp)) {
+ 		log_error(INTERNAL_ERROR "Unable to create new logical volume with no extents.");
+ 		return NULL;
+ 	}
 
 
