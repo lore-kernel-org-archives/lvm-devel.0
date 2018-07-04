@@ -1,391 +1,145 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Mon, 2 Jul 2018 04:27:20 -0400
-Subject: master - vdo: enhance status parser
-Message-ID: <201807020827.w628RKlA026041@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Wed, 4 Jul 2018 07:41:56 -0400
+Subject: 2018-06-01-stable - vcfgrestore: add prompt with active volumes
+Message-ID: <201807041141.w64Bfu4V019129@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=c96400b6c7b8ba5124c045a2ae9475e3224ec284
-Commit:        c96400b6c7b8ba5124c045a2ae9475e3224ec284
-Parent:        c1a6b10d09aae6179e4f08c7d8c03d5e3068ad94
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=99cddd67a9dfcd6400640ac8ebf8d6d568ce19d6
+Commit:        99cddd67a9dfcd6400640ac8ebf8d6d568ce19d6
+Parent:        814dd84e0769da568232a19f798baf24b8a26127
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed Jun 27 16:18:53 2018 +0200
+AuthorDate:    Fri Jun 22 18:45:48 2018 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Mon Jul 2 10:25:35 2018 +0200
+CommitterDate: Wed Jul 4 13:40:50 2018 +0200
 
-vdo: enhance status parser
+vcfgrestore: add prompt with active volumes
 
-Add support for using mempool for allocations inside status parser.
-Convert some string pointers to arrays.
-Reindent tabs.
+Add check for active device with names matching restored VG.
+When such devices are present in dm table, prompt user, if he
+wish to continue.
 ---
- device_mapper/vdo/status.c |  195 +++++++++++++++++++++-----------------------
- device_mapper/vdo/target.h |    5 +-
- test/unit/vdo_t.c          |    4 +-
- 3 files changed, 98 insertions(+), 106 deletions(-)
+ WHATS_NEW            |    1 +
+ tools/vgcfgrestore.c |   75 +++++++++++++++++++++++++++++++++++++++++++++++++-
+ 2 files changed, 75 insertions(+), 1 deletions(-)
 
-diff --git a/device_mapper/vdo/status.c b/device_mapper/vdo/status.c
-index f423ca1..7323a35 100644
---- a/device_mapper/vdo/status.c
-+++ b/device_mapper/vdo/status.c
-@@ -10,28 +10,14 @@
+diff --git a/WHATS_NEW b/WHATS_NEW
+index d2142fc..ff0746e 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.180 - 
+ =================================
++  Enhance vgcfgrestore to check for active LVs in restored VG.
+   lvconvert: provide possible layouts between linear and striped/raid
+   Fix unmonitoring of merging snapshots.
+   Add missing -l description in fsadm man page.
+diff --git a/tools/vgcfgrestore.c b/tools/vgcfgrestore.c
+index e9f1a4c..48a2fa4 100644
+--- a/tools/vgcfgrestore.c
++++ b/tools/vgcfgrestore.c
+@@ -1,6 +1,6 @@
+ /*
+  * Copyright (C) 2001-2004 Sistina Software, Inc. All rights reserved.
+- * Copyright (C) 2004-2009 Red Hat, Inc. All rights reserved.
++ * Copyright (C) 2004-2018 Red Hat, Inc. All rights reserved.
+  *
+  * This file is part of LVM2.
+  *
+@@ -15,11 +15,69 @@
  
- //----------------------------------------------------------------
- 
--static char *_tok_cpy(const char *b, const char *e)
--{
--	char *new = malloc((e - b) + 1);
--	char *ptr = new;
--
--	if (new) {
--        	while (b != e)
--                	*ptr++ = *b++;
--                *ptr = '\0';
--	}
--
--	return new;
--}
--
- static bool _tok_eq(const char *b, const char *e, const char *str)
- {
- 	while (b != e) {
- 		if (!*str || *b != *str)
--        		return false;
-+			return false;
- 
--        	b++;
--        	str++;
-+		b++;
-+		str++;
- 	}
- 
- 	return !*str;
-@@ -39,22 +25,22 @@ static bool _tok_eq(const char *b, const char *e, const char *str)
- 
- static bool _parse_operating_mode(const char *b, const char *e, void *context)
- {
--	static struct {
--        	const char *str;
--        	enum vdo_operating_mode mode;
-+	static const struct {
-+		const char str[12];
-+		enum vdo_operating_mode mode;
- 	} _table[] = {
--        	{"recovering", VDO_MODE_RECOVERING},
--        	{"read-only", VDO_MODE_READ_ONLY},
--        	{"normal", VDO_MODE_NORMAL}
-+		{"recovering", VDO_MODE_RECOVERING},
-+		{"read-only", VDO_MODE_READ_ONLY},
-+		{"normal", VDO_MODE_NORMAL}
- 	};
- 
--        enum vdo_operating_mode *r = context;
-+	enum vdo_operating_mode *r = context;
- 	unsigned i;
- 	for (i = 0; i < DM_ARRAY_SIZE(_table); i++) {
--        	if (_tok_eq(b, e, _table[i].str)) {
--                	*r = _table[i].mode;
--                	return true;
--        	}
-+		if (_tok_eq(b, e, _table[i].str)) {
-+			*r = _table[i].mode;
-+			return true;
-+		}
- 	}
- 
- 	return false;
-@@ -62,21 +48,21 @@ static bool _parse_operating_mode(const char *b, const char *e, void *context)
- 
- static bool _parse_compression_state(const char *b, const char *e, void *context)
- {
--	static struct {
--        	const char *str;
--        	enum vdo_compression_state state;
-+	static const struct {
-+		const char str[8];
-+		enum vdo_compression_state state;
- 	} _table[] = {
--        	{"online", VDO_COMPRESSION_ONLINE},
--        	{"offline", VDO_COMPRESSION_OFFLINE}
-+		{"online", VDO_COMPRESSION_ONLINE},
-+		{"offline", VDO_COMPRESSION_OFFLINE}
- 	};
- 
--        enum vdo_compression_state *r = context;
-+	enum vdo_compression_state *r = context;
- 	unsigned i;
- 	for (i = 0; i < DM_ARRAY_SIZE(_table); i++) {
--        	if (_tok_eq(b, e, _table[i].str)) {
--                	*r = _table[i].state;
--                	return true;
--        	}
-+		if (_tok_eq(b, e, _table[i].str)) {
-+			*r = _table[i].state;
-+			return true;
-+		}
- 	}
- 
- 	return false;
-@@ -84,55 +70,55 @@ static bool _parse_compression_state(const char *b, const char *e, void *context
- 
- static bool _parse_recovering(const char *b, const char *e, void *context)
- {
--        bool *r = context;
-+	bool *r = context;
- 
- 	if (_tok_eq(b, e, "recovering"))
- 		*r = true;
- 
- 	else if (_tok_eq(b, e, "-"))
--        	*r = false;
-+		*r = false;
- 
--        else
--        	return false;
-+	else
-+		return false;
- 
--        return true;
-+	return true;
- }
- 
- static bool _parse_index_state(const char *b, const char *e, void *context)
- {
--        static struct {
--                const char *str;
--                enum vdo_index_state state;
--        } _table[] = {
--                {"error", VDO_INDEX_ERROR},
--                {"closed", VDO_INDEX_CLOSED},
--                {"opening", VDO_INDEX_OPENING},
--                {"closing", VDO_INDEX_CLOSING},
--                {"offline", VDO_INDEX_OFFLINE},
--                {"online", VDO_INDEX_ONLINE},
--                {"unknown", VDO_INDEX_UNKNOWN}
--        };
--
--        enum vdo_index_state *r = context;
-+	static const struct {
-+		const char str[8];
-+		enum vdo_index_state state;
-+	} _table[] = {
-+		{"error", VDO_INDEX_ERROR},
-+		{"closed", VDO_INDEX_CLOSED},
-+		{"opening", VDO_INDEX_OPENING},
-+		{"closing", VDO_INDEX_CLOSING},
-+		{"offline", VDO_INDEX_OFFLINE},
-+		{"online", VDO_INDEX_ONLINE},
-+		{"unknown", VDO_INDEX_UNKNOWN}
-+	};
+ #include "tools.h"
+ #include "lvmetad-client.h"
++#include "dm-ioctl.h"
 +
-+	enum vdo_index_state *r = context;
- 	unsigned i;
- 	for (i = 0; i < DM_ARRAY_SIZE(_table); i++) {
--        	if (_tok_eq(b, e, _table[i].str)) {
--                	*r = _table[i].state;
--                	return true;
--        	}
-+		if (_tok_eq(b, e, _table[i].str)) {
-+			*r = _table[i].state;
-+			return true;
++/*
++ * Check if there are any active volumes from restored vg_name.
++ * We can prompt user, as such operation may make some serious
++ * troubles later, when user will try to continue such devices.
++ */
++static int _check_all_dm_devices(const char *vg_name, unsigned *found)
++{
++	struct dm_task *dmt;
++	struct dm_names *names;
++	char vgname_buf[DM_NAME_LEN * 2];
++	char *vgname, *lvname, *lvlayer;
++	unsigned next = 0;
++	int r = 1;
++
++	if (!(dmt = dm_task_create(DM_DEVICE_LIST)))
++		return_0;
++
++	if (!dm_task_run(dmt)) {
++		r = 0;
++		goto_out;
++	}
++
++	if (!(names = dm_task_get_names(dmt))) {
++		r = 0;
++		goto_out;
++	}
++
++	if (!names->dev) {
++		log_verbose("No devices found.");
++		goto out;
++	}
++
++	do {
++		/* TODO: Do we want to validate UUID LVM- prefix as well ? */
++		names = (struct dm_names *)((char *) names + next);
++		if (!dm_strncpy(vgname_buf, names->name, sizeof(vgname_buf))) {
++			r = 0;
++			goto_out;
 +		}
- 	}
- 
--        return false;
-+	return false;
- }
- 
- static bool _parse_uint64(const char *b, const char *e, void *context)
- {
--        uint64_t *r = context, n;
-+	uint64_t *r = context, n;
- 
- 	n = 0;
- 	while (b != e) {
--        	if (!isdigit(*b))
--                	return false;
-+		if (!isdigit(*b))
-+			return false;
- 
- 		n = (n * 10) + (*b - '0');
- 		b++;
-@@ -145,81 +131,82 @@ static bool _parse_uint64(const char *b, const char *e, void *context)
- static const char *_eat_space(const char *b, const char *e)
- {
- 	while (b != e && isspace(*b))
--        	b++;
-+		b++;
- 
--        return b;
-+	return b;
- }
- 
- static const char *_next_tok(const char *b, const char *e)
- {
--        const char *te = b;
-+	const char *te = b;
- 	while (te != e && !isspace(*te))
--        	te++;
-+		te++;
- 
--        return te == b ? NULL : te;
-+	return te == b ? NULL : te;
- }
- 
- static void _set_error(struct vdo_status_parse_result *result, const char *fmt, ...)
--	__attribute__ ((format(printf, 2, 3)));
-+__attribute__ ((format(printf, 2, 3)));
- 
- static void _set_error(struct vdo_status_parse_result *result, const char *fmt, ...)
- {
--        va_list ap;
-+	va_list ap;
- 
--        va_start(ap, fmt);
-+	va_start(ap, fmt);
- 	vsnprintf(result->error, sizeof(result->error), fmt, ap);
--        va_end(ap);
-+	va_end(ap);
- }
- 
- static bool _parse_field(const char **b, const char *e,
--                         bool (*p_fn)(const char *, const char *, void *),
--                         void *field, const char *field_name,
--                         struct vdo_status_parse_result *result)
-+			 bool (*p_fn)(const char *, const char *, void *),
-+			 void *field, const char *field_name,
-+			 struct vdo_status_parse_result *result)
- {
--        const char *te;
-+	const char *te;
- 
--        te = _next_tok(*b, e);
--        if (!te) {
--                _set_error(result, "couldn't get token for '%s'", field_name);
--                return false;
--        }
-+	te = _next_tok(*b, e);
-+	if (!te) {
-+		_set_error(result, "couldn't get token for '%s'", field_name);
-+		return false;
-+	}
- 
--        if (!p_fn(*b, te, field)) {
--                _set_error(result, "couldn't parse '%s'", field_name);
--                return false;
--        }
-+	if (!p_fn(*b, te, field)) {
-+		_set_error(result, "couldn't parse '%s'", field_name);
-+		return false;
-+	}
- 
- 	*b = _eat_space(te, e);
--        return true;
-+	return true;
- 
- }
- 
--bool vdo_status_parse(const char *input, struct vdo_status_parse_result *result)
-+bool vdo_status_parse(struct dm_pool *mem, const char *input,
-+		      struct vdo_status_parse_result *result)
- {
- 	const char *b = b = input;
- 	const char *e = input + strlen(input);
- 	const char *te;
--	struct vdo_status *s = malloc(sizeof(*s));
-+	struct vdo_status *s;
++		vgname = vgname_buf;
++		if (!dm_split_lvm_name(NULL, NULL, &vgname, &lvname, &lvlayer)) {
++			r = 0;
++			goto_out;
++		}
++		if (strcmp(vgname, vg_name) == 0) {
++			log_print("Volume group %s has active volume: %s.", vgname, lvname);
++			(*found)++;
++		}
++		next = names->next;
++	} while (next);
 +
-+	s = (!mem) ? malloc(sizeof(*s)) : dm_pool_zalloc(mem, sizeof(*s));
++out:
++	dm_task_destroy(dmt);
++	return r;
++}
  
- 	if (!s) {
--        	_set_error(result, "out of memory");
--        	return false;
-+		_set_error(result, "out of memory");
-+		return false;
+ int vgcfgrestore(struct cmd_context *cmd, int argc, char **argv)
+ {
+ 	const char *vg_name = NULL;
+ 	int lvmetad_rescan = 0;
++	unsigned found = 0;
+ 	int ret;
+ 
+ 	if (argc == 1) {
+@@ -47,6 +105,21 @@ int vgcfgrestore(struct cmd_context *cmd, int argc, char **argv)
+ 		return ECMD_PROCESSED;
  	}
  
- 	b = _eat_space(b, e);
- 	te = _next_tok(b, e);
- 	if (!te) {
--        	_set_error(result, "couldn't get token for device");
--        	free(s);
--        	return false;
-+		_set_error(result, "couldn't get token for device");
-+		goto bad;
- 	}
- 
--	s->device = _tok_cpy(b, te);
--	if (!s->device) {
-+	if (!(s->device = (!mem) ? malloc((e - b) + 1) : dm_pool_alloc(mem, (e - b) + 1))) {
- 		_set_error(result, "out of memory");
--		free(s);
--		return false;
-+		goto bad;
- 	}
-+	dm_strncpy(s->device, b, te - b);
- 
- 	b = _eat_space(te, e);
- 
-@@ -237,12 +224,14 @@ bool vdo_status_parse(const char *input, struct vdo_status_parse_result *result)
- 		goto bad;
- 	}
- 
--        result->status = s;
--        return true;
-+	result->status = s;
-+	return true;
- 
- bad:
--	free(s->device);
--	free(s);
-+	if (s && !mem) {
-+		free(s->device);
-+		free(s);
++	if (!_check_all_dm_devices(vg_name, &found)) {
++		log_warn("WARNING: Failed to check for active volumes in volume group \"%s\".", vg_name);
++	} else if (found) {
++		log_warn("WARNING: Found %u active volume(s) in volume group \"%s\".",
++			 found, vg_name);
++		log_print("Restoring VG with active LVs, may cause mismatch with its metadata.");
++		if (!arg_is_set(cmd, yes_ARG) &&
++		    yes_no_prompt("Do you really want to proceed with restore of volume group \"%s\", "
++				  "while %u volume(s) are active? [y/n]: ",
++				  vg_name, found) == 'n') {
++			log_error("Restore aborted.");
++			return ECMD_FAILED;
++		}
 +	}
- 	return false;
- }
- 
-diff --git a/device_mapper/vdo/target.h b/device_mapper/vdo/target.h
-index 3137e2c..edf72a6 100644
---- a/device_mapper/vdo/target.h
-+++ b/device_mapper/vdo/target.h
-@@ -60,8 +60,11 @@ struct vdo_status_parse_result {
- 	struct vdo_status *status;
- };
- 
-+struct dm_pool;
 +
- // Parses the status line from the kernel target.
--bool vdo_status_parse(const char *input, struct vdo_status_parse_result *result);
-+bool vdo_status_parse(struct dm_pool *mem, const char *input,
-+		      struct vdo_status_parse_result *result);
- 
- //----------------------------------------------------------------
- 
-diff --git a/test/unit/vdo_t.c b/test/unit/vdo_t.c
-index a26c0b9..7355928 100644
---- a/test/unit/vdo_t.c
-+++ b/test/unit/vdo_t.c
-@@ -91,7 +91,7 @@ static void _check_good(struct example_good *es, unsigned count)
-                 struct example_good *e = es + i;
-                 struct vdo_status_parse_result pr;
- 
--                T_ASSERT(vdo_status_parse(e->input, &pr));
-+                T_ASSERT(vdo_status_parse(NULL, e->input, &pr));
- #if 0
-                 _print_status(stderr, pr.status);
-                 fprintf(stderr, "\n");
-@@ -116,7 +116,7 @@ static void _check_bad(struct example_bad *es, unsigned count)
-                 struct example_bad *e = es + i;
-                 struct vdo_status_parse_result pr;
- 
--                T_ASSERT(!vdo_status_parse(e->input, &pr));
-+                T_ASSERT(!vdo_status_parse(NULL, e->input, &pr));
-                 T_ASSERT(!strcmp(e->reason, pr.error));
-         }
- }
+ 	/*
+ 	 * lvmetad does not handle a VG being restored, which would require
+ 	 * vg_remove of the existing VG, then vg_update of the restored VG.  A
 
 
