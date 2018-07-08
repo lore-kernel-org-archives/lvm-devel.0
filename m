@@ -1,82 +1,71 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Wed, 4 Jul 2018 07:42:21 -0400
-Subject: 2018-06-01-stable - memlock: extend exception list
-Message-ID: <201807041142.w64BgLGY019181@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Sun, 8 Jul 2018 18:26:12 -0400
+Subject: master - allocator: fix thin-pool allocation
+Message-ID: <201807082226.w68MQC0Q015960@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=df8eef70961686c32e7409551d9c2633eb629fc9
-Commit:        df8eef70961686c32e7409551d9c2633eb629fc9
-Parent:        c1dbb22ba44460bf75c2dc7c0f72434abab40219
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=b697aa96466b6a5f479df41a213fc1fd583dc743
+Commit:        b697aa96466b6a5f479df41a213fc1fd583dc743
+Parent:        c96400b6c7b8ba5124c045a2ae9475e3224ec284
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Sat Jun 30 11:05:14 2018 +0200
+AuthorDate:    Sun Jul 8 18:34:38 2018 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Wed Jul 4 13:41:08 2018 +0200
+CommitterDate: Mon Jul 9 00:19:30 2018 +0200
 
-memlock: extend exception list
+allocator: fix thin-pool allocation
 
-Amound of linked libraries grows.
-Most of them we don't need to lock in, since we are not using
-them in locked section, so skip locking them in memory.
+When allocating thin-pool with more then 1 device - try to
+allocate 'metadataLV' with reuse of log-type allocation for mirror LV.
+It should be naturally place on other device then 'dataLV'.
+
+However due to somewhat hard to follow allocation logic code,
+it's been rejected allocation in cases where there was not
+enough space for data or metadata on single PV, thus to successed,
+usage of segments was mandatory.
+
+While user may use:
+
+allocation/thin_pool_metadata_require_separate_pvs=1
+
+to enforce separe meta and data LV - on default settings, this is not
+enable thus segment allocation is meant to work.
+
+NOTE:
+
+As already said - the original intention of this whole  'if()' is unclear,
+so try to split this test into multiple more simple tests that are more readable.
+
+TODO: more validation.
 ---
- WHATS_NEW        |    1 +
- lib/mm/memlock.c |   19 +++++++++++++------
- 2 files changed, 14 insertions(+), 6 deletions(-)
+ lib/metadata/lv_manip.c |   10 ++++++----
+ 1 files changed, 6 insertions(+), 4 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index ff0746e..99dc056 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.02.180 - 
- =================================
-+  Extend list of non-memlocked areas with newly linked libs.
-   Enhance vgcfgrestore to check for active LVs in restored VG.
-   lvconvert: provide possible layouts between linear and striped/raid
-   Fix unmonitoring of merging snapshots.
-diff --git a/lib/mm/memlock.c b/lib/mm/memlock.c
-index b15058e..c8e6ef1 100644
---- a/lib/mm/memlock.c
-+++ b/lib/mm/memlock.c
-@@ -105,23 +105,30 @@ static const char * const _blacklist_maps[] = {
- 	"/LC_MESSAGES/",
- 	"gconv/gconv-modules.cache",
- 	"/ld-2.",		/* not using dlopen,dlsym during mlock */
-+	"/libaio.so.",		/* not using aio during mlock */
- 	"/libattr.so.",		/* not using during mlock (udev) */
--	"/libblkid.so.",	/* not using lzma during mlock (selinux) */
-+	"/libblkid.so.",	/* not using blkid during mlock (udev) */
- 	"/libbz2.so.",		/* not using during mlock (udev) */
--	"/libcap.so.",		/* not using during mlock (udev) */
-+	"/libcap.so.",		/* not using during mlock (systemd) */
-+	"/libdl-",		/* not using dlopen,dlsym during mlock */
- 	"/libdw-",		/* not using during mlock (udev) */
- 	"/libelf-",		/* not using during mlock (udev) */
--	"/liblzma.so.",	/* not using lzma during mlock (selinux) */
-+	"/libgcrypt.so.",	/* not using during mlock (systemd) */
-+	"/libgpg-error.so.",	/* not using gpg-error during mlock (systemd) */
-+	"/liblz4.so.",		/* not using lz4 during mlock (systemd) */
-+	"/liblzma.so.",		/* not using lzma during mlock (systemd) */
-+	"/libmount.so.",	/* not using mount during mlock (udev) */
- 	"/libncurses.so.",	/* not using ncurses during mlock */
--	"/libpcre.so.",	/* not using pcre during mlock (selinux) */
-+	"/libpcre.so.",		/* not using pcre during mlock (selinux) */
-+	"/libpcre2-",		/* not using pcre during mlock (selinux) */
- 	"/libreadline.so.",	/* not using readline during mlock */
--	"/libresolv-",	/* not using during mlock (udev) */
-+	"/libresolv-",		/* not using during mlock (udev) */
- 	"/libselinux.so.",	/* not using selinux during mlock */
- 	"/libsepol.so.",	/* not using sepol during mlock */
-+	"/libsystemd.so.",	/* not using systemd during mlock */
- 	"/libtinfo.so.",	/* not using tinfo during mlock */
- 	"/libudev.so.",		/* not using udev during mlock */
- 	"/libuuid.so.",		/* not using uuid during mlock (blkid) */
--	"/libdl-",		/* not using dlopen,dlsym during mlock */
- 	"/libz.so.",		/* not using during mlock (udev) */
- 	"/etc/selinux",		/* not using selinux during mlock */
- 	/* "/libdevmapper-event.so" */
+diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
+index a382e27..b315a87 100644
+--- a/lib/metadata/lv_manip.c
++++ b/lib/metadata/lv_manip.c
+@@ -2966,12 +2966,14 @@ static int _find_some_parallel_space(struct alloc_handle *ah,
+ 		       (*(alloc_state->areas + alloc_state->num_positional_areas + ix - 1 -
+ 			  too_small_for_log_count)).used < ah->log_len)
+ 			too_small_for_log_count++;
+-		ix_log_offset = alloc_state->num_positional_areas + ix - too_small_for_log_count - ah->log_area_count;
++		if (ah->mirror_logs_separate && (too_small_for_log_count >= devices_needed))
++			return 1;
++		if ((alloc_state->num_positional_areas + ix) < (too_small_for_log_count + ah->log_area_count))
++			return 1;
++		ix_log_offset = alloc_state->num_positional_areas + ix - (too_small_for_log_count + ah->log_area_count);
+ 	}
+ 
+-	if (ix + alloc_state->num_positional_areas < devices_needed +
+-	    (alloc_state->log_area_count_still_needed ? alloc_state->log_area_count_still_needed +
+-				    too_small_for_log_count : 0))
++	if (ix + alloc_state->num_positional_areas < devices_needed)
+ 		return 1;
+ 
+ 	/*
 
 
