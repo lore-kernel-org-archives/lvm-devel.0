@@ -1,43 +1,55 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
 Date: Sun, 8 Jul 2018 18:26:18 -0400
-Subject: master - cleanup: use last_seg
-Message-ID: <201807082226.w68MQIPO015981@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Subject: master - build: libdm preload dir is no longer needed
+Message-ID: <201807082226.w68MQInn015986@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=6d1c983122bc2a17bbfbac234f9a73ee9c27f161
-Commit:        6d1c983122bc2a17bbfbac234f9a73ee9c27f161
-Parent:        a55d4b6051ed2edecf14549b8fef437023e1e272
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=a55d4b6051ed2edecf14549b8fef437023e1e272
+Commit:        a55d4b6051ed2edecf14549b8fef437023e1e272
+Parent:        c8b4f9414cf1f7dde8b73c7085e8c3628205b0eb
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Sat Jul 7 21:35:07 2018 +0200
+AuthorDate:    Tue Jul 3 11:12:04 2018 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Mon Jul 9 00:23:35 2018 +0200
+CommitterDate: Mon Jul 9 00:23:32 2018 +0200
 
-cleanup: use last_seg
+build: libdm preload dir is no longer needed
 
-More readable code.
+Since we do not build lvm code with libdm, drop preload.
 ---
- lib/metadata/lv_manip.c |    5 ++---
- 1 files changed, 2 insertions(+), 3 deletions(-)
+ WHATS_NEW        |    2 ++
+ conf/Makefile.in |    4 ++--
+ 2 files changed, 4 insertions(+), 2 deletions(-)
 
-diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
-index b315a87..7674a3e 100644
---- a/lib/metadata/lv_manip.c
-+++ b/lib/metadata/lv_manip.c
-@@ -3149,9 +3149,8 @@ static int _allocate(struct alloc_handle *ah,
- 	if (ah->alloc == ALLOC_CONTIGUOUS)
- 		can_split = 0;
+diff --git a/WHATS_NEW b/WHATS_NEW
+index 4919f24..54d6790 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,7 @@
+ Version 3.0.0
+ =============
++  Never send any discard ioctl with test mode.
++  Fix thin-pool alloc which needs same PV for data and metadata.
+   Extend list of non-memlocked areas with newly linked libs.
+   Enhance vgcfgrestore to check for active LVs in restored VG.
+   Configure supports --disable-silent-rules for verbose builds.
+diff --git a/conf/Makefile.in b/conf/Makefile.in
+index 5330c07..d47c759 100644
+--- a/conf/Makefile.in
++++ b/conf/Makefile.in
+@@ -32,8 +32,8 @@ include $(top_builddir)/make.tmpl
+ .PHONY: install_conf install_localconf install_profiles
  
--	if (lv && !dm_list_empty(&lv->segments))
--		prev_lvseg = dm_list_item(dm_list_last(&lv->segments),
--				       struct lv_segment);
-+	if (lv)
-+		prev_lvseg = last_seg(lv);
- 	/*
- 	 * Build the sets of available areas on the pv's.
- 	 */
+ generate:
+-	LD_LIBRARY_PATH=$(top_builddir)/libdm:$(LD_LIBRARY_PATH) $(top_builddir)/tools/lvm dumpconfig --type default --unconfigured --withgeneralpreamble --withcomments --ignorelocal --withspaces > example.conf.in
+-	LD_LIBRARY_PATH=$(top_builddir)/libdm:$(LD_LIBRARY_PATH) $(top_builddir)/tools/lvm dumpconfig --type default --unconfigured --withlocalpreamble --withcomments --withspaces local > lvmlocal.conf.in
++	$(top_builddir)/tools/lvm dumpconfig --type default --unconfigured --withgeneralpreamble --withcomments --ignorelocal --withspaces > example.conf.in
++	$(top_builddir)/tools/lvm dumpconfig --type default --unconfigured --withlocalpreamble --withcomments --withspaces local > lvmlocal.conf.in
+ 
+ install_conf: $(CONFSRC)
+ 	@if [ ! -e $(confdir)/$(CONFDEST) ]; then \
 
 
