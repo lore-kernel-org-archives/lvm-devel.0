@@ -1,225 +1,440 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Mon, 9 Jul 2018 04:34:28 -0400
-Subject: master - device_mapper: convert vdo to use dm_ prefix
-Message-ID: <201807090834.w698YSqx024646@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Mon, 9 Jul 2018 04:35:22 -0400
+Subject: master - tests: update vdo unit test to dm prefix
+Message-ID: <201807090835.w698ZMB9024708@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=9b6b4f14d89c661683b2095999126e652fb92f53
-Commit:        9b6b4f14d89c661683b2095999126e652fb92f53
-Parent:        4a64bb9573bb3c54cfac0b4f588cd80dba01d60d
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=5f3eff8eaecdb6e8f97b3904d5c43d36700709f3
+Commit:        5f3eff8eaecdb6e8f97b3904d5c43d36700709f3
+Parent:        9b6b4f14d89c661683b2095999126e652fb92f53
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Mon Jul 9 10:04:51 2018 +0200
+AuthorDate:    Mon Jul 9 10:05:06 2018 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Mon Jul 9 10:30:34 2018 +0200
 
-device_mapper: convert vdo to use dm_ prefix
+tests: update vdo unit test to dm prefix
 
-Keep using DM_/dm_ prefixes for device_mapper code.
+Update prefix and reindent.
 ---
- device_mapper/vdo/status.c |   49 ++++++++++++++++++++++---------------------
- device_mapper/vdo/target.h |   48 +++++++++++++++++++++---------------------
- 2 files changed, 49 insertions(+), 48 deletions(-)
+ test/unit/vdo_t.c |  264 ++++++++++++++++++++++++++--------------------------
+ 1 files changed, 132 insertions(+), 132 deletions(-)
 
-diff --git a/device_mapper/vdo/status.c b/device_mapper/vdo/status.c
-index a0eba49..6831195 100644
---- a/device_mapper/vdo/status.c
-+++ b/device_mapper/vdo/status.c
-@@ -3,6 +3,7 @@
- 
- // For DM_ARRAY_SIZE!
- #include "device_mapper/all.h"
-+#include "base/memory/zalloc.h"
- 
- #include <ctype.h>
- #include <stdlib.h>
-@@ -27,14 +28,14 @@ static bool _parse_operating_mode(const char *b, const char *e, void *context)
- {
- 	static const struct {
- 		const char str[12];
--		enum vdo_operating_mode mode;
-+		enum dm_vdo_operating_mode mode;
- 	} _table[] = {
--		{"recovering", VDO_MODE_RECOVERING},
--		{"read-only", VDO_MODE_READ_ONLY},
--		{"normal", VDO_MODE_NORMAL}
-+		{"recovering", DM_VDO_MODE_RECOVERING},
-+		{"read-only", DM_VDO_MODE_READ_ONLY},
-+		{"normal", DM_VDO_MODE_NORMAL}
- 	};
- 
--	enum vdo_operating_mode *r = context;
-+	enum dm_vdo_operating_mode *r = context;
- 	unsigned i;
- 	for (i = 0; i < DM_ARRAY_SIZE(_table); i++) {
- 		if (_tok_eq(b, e, _table[i].str)) {
-@@ -50,13 +51,13 @@ static bool _parse_compression_state(const char *b, const char *e, void *context
- {
- 	static const struct {
- 		const char str[8];
--		enum vdo_compression_state state;
-+		enum dm_vdo_compression_state state;
- 	} _table[] = {
--		{"online", VDO_COMPRESSION_ONLINE},
--		{"offline", VDO_COMPRESSION_OFFLINE}
-+		{"online", DM_VDO_COMPRESSION_ONLINE},
-+		{"offline", DM_VDO_COMPRESSION_OFFLINE}
- 	};
- 
--	enum vdo_compression_state *r = context;
-+	enum dm_vdo_compression_state *r = context;
- 	unsigned i;
- 	for (i = 0; i < DM_ARRAY_SIZE(_table); i++) {
- 		if (_tok_eq(b, e, _table[i].str)) {
-@@ -88,18 +89,18 @@ static bool _parse_index_state(const char *b, const char *e, void *context)
- {
- 	static const struct {
- 		const char str[8];
--		enum vdo_index_state state;
-+		enum dm_vdo_index_state state;
- 	} _table[] = {
--		{"error", VDO_INDEX_ERROR},
--		{"closed", VDO_INDEX_CLOSED},
--		{"opening", VDO_INDEX_OPENING},
--		{"closing", VDO_INDEX_CLOSING},
--		{"offline", VDO_INDEX_OFFLINE},
--		{"online", VDO_INDEX_ONLINE},
--		{"unknown", VDO_INDEX_UNKNOWN}
-+		{"error", DM_VDO_INDEX_ERROR},
-+		{"closed", DM_VDO_INDEX_CLOSED},
-+		{"opening", DM_VDO_INDEX_OPENING},
-+		{"closing", DM_VDO_INDEX_CLOSING},
-+		{"offline", DM_VDO_INDEX_OFFLINE},
-+		{"online", DM_VDO_INDEX_ONLINE},
-+		{"unknown", DM_VDO_INDEX_UNKNOWN}
- 	};
- 
--	enum vdo_index_state *r = context;
-+	enum dm_vdo_index_state *r = context;
- 	unsigned i;
- 	for (i = 0; i < DM_ARRAY_SIZE(_table); i++) {
- 		if (_tok_eq(b, e, _table[i].str)) {
-@@ -145,10 +146,10 @@ static const char *_next_tok(const char *b, const char *e)
- 	return te == b ? NULL : te;
- }
- 
--static void _set_error(struct vdo_status_parse_result *result, const char *fmt, ...)
-+static void _set_error(struct dm_vdo_status_parse_result *result, const char *fmt, ...)
- __attribute__ ((format(printf, 2, 3)));
- 
--static void _set_error(struct vdo_status_parse_result *result, const char *fmt, ...)
-+static void _set_error(struct dm_vdo_status_parse_result *result, const char *fmt, ...)
- {
- 	va_list ap;
- 
-@@ -160,7 +161,7 @@ static void _set_error(struct vdo_status_parse_result *result, const char *fmt,
- static bool _parse_field(const char **b, const char *e,
- 			 bool (*p_fn)(const char *, const char *, void *),
- 			 void *field, const char *field_name,
--			 struct vdo_status_parse_result *result)
-+			 struct dm_vdo_status_parse_result *result)
- {
- 	const char *te;
- 
-@@ -180,13 +181,13 @@ static bool _parse_field(const char **b, const char *e,
- 
- }
- 
--bool vdo_status_parse(struct dm_pool *mem, const char *input,
--		      struct vdo_status_parse_result *result)
-+bool dm_vdo_status_parse(struct dm_pool *mem, const char *input,
-+			 struct dm_vdo_status_parse_result *result)
- {
- 	const char *b = b = input;
- 	const char *e = input + strlen(input);
- 	const char *te;
--	struct vdo_status *s;
-+	struct dm_vdo_status *s;
- 
- 	s = (!mem) ? zalloc(sizeof(*s)) : dm_pool_zalloc(mem, sizeof(*s));
- 
-diff --git a/device_mapper/vdo/target.h b/device_mapper/vdo/target.h
-index edf72a6..3d8722b 100644
---- a/device_mapper/vdo/target.h
-+++ b/device_mapper/vdo/target.h
-@@ -20,51 +20,51 @@
+diff --git a/test/unit/vdo_t.c b/test/unit/vdo_t.c
+index 7355928..27ad26b 100644
+--- a/test/unit/vdo_t.c
++++ b/test/unit/vdo_t.c
+@@ -17,7 +17,7 @@
  
  //----------------------------------------------------------------
  
--enum vdo_operating_mode {
--	VDO_MODE_RECOVERING,
--	VDO_MODE_READ_ONLY,
--	VDO_MODE_NORMAL
-+enum dm_vdo_operating_mode {
-+	DM_VDO_MODE_RECOVERING,
-+	DM_VDO_MODE_READ_ONLY,
-+	DM_VDO_MODE_NORMAL
+-static bool _status_eq(struct vdo_status *lhs, struct vdo_status *rhs)
++static bool _status_eq(struct dm_vdo_status *lhs, struct dm_vdo_status *rhs)
+ {
+ 	return !strcmp(lhs->device, rhs->device) &&
+ 		(lhs->operating_mode == rhs->operating_mode) &&
+@@ -29,49 +29,49 @@ static bool _status_eq(struct vdo_status *lhs, struct vdo_status *rhs)
+ }
+ 
+ #if 0
+-static const char *_op_mode(enum vdo_operating_mode m)
++static const char *_op_mode(enum dm_vdo_operating_mode m)
+ {
+-        switch (m) {
+-        case VDO_MODE_RECOVERING:
+-                return "recovering";
+-        case VDO_MODE_READ_ONLY:
+-                return "read-only";
+-        case VDO_MODE_NORMAL:
+-                return "normal";
+-        }
+-
+-        return "<unknown>";
++	switch (m) {
++	case DM_VDO_MODE_RECOVERING:
++		return "recovering";
++	case DM_VDO_MODE_READ_ONLY:
++		return "read-only";
++	case DM_VDO_MODE_NORMAL:
++		return "normal";
++	}
++
++	return "<unknown>";
+ }
+ 
+-static const char *_index_state(enum vdo_index_state is)
++static const char *_index_state(enum dm_vdo_index_state is)
+ {
+-        switch (is) {
+-	case VDO_INDEX_ERROR:
+-        	return "error";
+-        case VDO_INDEX_CLOSED:
+-                return "closed";
+-        case VDO_INDEX_OPENING:
+-                return "opening";
+-        case VDO_INDEX_CLOSING:
+-                return "closing";
+-        case VDO_INDEX_OFFLINE:
+-                return "offline";
+-        case VDO_INDEX_ONLINE:
+-                return "online";
+-        case VDO_INDEX_UNKNOWN:
+-                return "unknown";
+-        }
+-
+-        return "<unknown>";
++	switch (is) {
++	case DM_VDO_INDEX_ERROR:
++		return "error";
++	case DM_VDO_INDEX_CLOSED:
++		return "closed";
++	case DM_VDO_INDEX_OPENING:
++		return "opening";
++	case DM_VDO_INDEX_CLOSING:
++		return "closing";
++	case DM_VDO_INDEX_OFFLINE:
++		return "offline";
++	case DM_VDO_INDEX_ONLINE:
++		return "online";
++	case DM_VDO_INDEX_UNKNOWN:
++		return "unknown";
++	}
++
++	return "<unknown>";
+ }
+ 
+-static void _print_status(FILE *stream, struct vdo_status *s)
++static void _print_status(FILE *stream, struct dm_vdo_status *s)
+ {
+ 	fprintf(stream, "<status| %s ", s->device);
+ 	fprintf(stream, "%s ", _op_mode(s->operating_mode));
+ 	fprintf(stream, "%s ", s->recovering ? "recovering" : "-");
+ 	fprintf(stream, "%s ", _index_state(s->index_state));
+-	fprintf(stream, "%s ", s->compression_state == VDO_COMPRESSION_ONLINE ? "online" : "offline");
++	fprintf(stream, "%s ", s->compression_state == DM_VDO_COMPRESSION_ONLINE ? "online" : "offline");
+ 	fprintf(stream, "%llu ", (unsigned long long) s->used_blocks);
+ 	fprintf(stream, "%llu", (unsigned long long) s->total_blocks);
+ 	fprintf(stream, ">");
+@@ -80,55 +80,55 @@ static void _print_status(FILE *stream, struct vdo_status *s)
+ 
+ struct example_good {
+ 	const char *input;
+-	struct vdo_status status;
++	struct dm_vdo_status status;
  };
  
--enum vdo_compression_state {
--	VDO_COMPRESSION_ONLINE,
--	VDO_COMPRESSION_OFFLINE
-+enum dm_vdo_compression_state {
-+	DM_VDO_COMPRESSION_ONLINE,
-+	DM_VDO_COMPRESSION_OFFLINE
+ static void _check_good(struct example_good *es, unsigned count)
+ {
+-        unsigned i;
++	unsigned i;
+ 
+-        for (i = 0; i < count; i++) {
+-                struct example_good *e = es + i;
+-                struct vdo_status_parse_result pr;
++	for (i = 0; i < count; i++) {
++		struct example_good *e = es + i;
++		struct dm_vdo_status_parse_result pr;
+ 
+-                T_ASSERT(vdo_status_parse(NULL, e->input, &pr));
++		T_ASSERT(dm_vdo_status_parse(NULL, e->input, &pr));
+ #if 0
+-                _print_status(stderr, pr.status);
+-                fprintf(stderr, "\n");
+-                _print_status(stderr, &e->status);
+-                fprintf(stderr, "\n");
++		_print_status(stderr, pr.status);
++		fprintf(stderr, "\n");
++		_print_status(stderr, &e->status);
++		fprintf(stderr, "\n");
+ #endif
+-                T_ASSERT(_status_eq(&e->status, pr.status));
+-                free(pr.status);
+-        }
++		T_ASSERT(_status_eq(&e->status, pr.status));
++		free(pr.status);
++	}
+ }
+ 
+ struct example_bad {
+-        const char *input;
+-        const char *reason;
++	const char *input;
++	const char *reason;
  };
  
--enum vdo_index_state {
--	VDO_INDEX_ERROR,
--	VDO_INDEX_CLOSED,
--	VDO_INDEX_OPENING,
--	VDO_INDEX_CLOSING,
--	VDO_INDEX_OFFLINE,
--	VDO_INDEX_ONLINE,
--	VDO_INDEX_UNKNOWN
-+enum dm_vdo_index_state {
-+	DM_VDO_INDEX_ERROR,
-+	DM_VDO_INDEX_CLOSED,
-+	DM_VDO_INDEX_OPENING,
-+	DM_VDO_INDEX_CLOSING,
-+	DM_VDO_INDEX_OFFLINE,
-+	DM_VDO_INDEX_ONLINE,
-+	DM_VDO_INDEX_UNKNOWN
- };
+ static void _check_bad(struct example_bad *es, unsigned count)
+ {
+-        unsigned i;
++	unsigned i;
  
--struct vdo_status {
-+struct dm_vdo_status {
- 	char *device;
--	enum vdo_operating_mode operating_mode;
-+	enum dm_vdo_operating_mode operating_mode;
- 	bool recovering;
--	enum vdo_index_state index_state;
--	enum vdo_compression_state compression_state;
-+	enum dm_vdo_index_state index_state;
-+	enum dm_vdo_compression_state compression_state;
- 	uint64_t used_blocks;
- 	uint64_t total_blocks;
- };
+-        for (i = 0; i < count; i++) {
+-                struct example_bad *e = es + i;
+-                struct vdo_status_parse_result pr;
++	for (i = 0; i < count; i++) {
++		struct example_bad *e = es + i;
++		struct dm_vdo_status_parse_result pr;
  
--void vdo_status_destroy(struct vdo_status *s);
-+void dm_vdo_status_destroy(struct dm_vdo_status *s);
+-                T_ASSERT(!vdo_status_parse(NULL, e->input, &pr));
+-                T_ASSERT(!strcmp(e->reason, pr.error));
+-        }
++		T_ASSERT(!dm_vdo_status_parse(NULL, e->input, &pr));
++		T_ASSERT(!strcmp(e->reason, pr.error));
++	}
+ }
  
- #define VDO_MAX_ERROR 256
+ static void _test_device_names_good(void *fixture)
+ {
+ 	static struct example_good _es[] = {
+-                {"foo1234 read-only - error online 0 1234",
+-                 {(char *) "foo1234", VDO_MODE_READ_ONLY, false, VDO_INDEX_ERROR, VDO_COMPRESSION_ONLINE, 0, 1234}},
+-                {"f read-only - error online 0 1234",
+-                 {(char *) "f", VDO_MODE_READ_ONLY, false, VDO_INDEX_ERROR, VDO_COMPRESSION_ONLINE, 0, 1234}},
+-        };
++		{"foo1234 read-only - error online 0 1234",
++		{(char *) "foo1234", DM_VDO_MODE_READ_ONLY, false, DM_VDO_INDEX_ERROR, DM_VDO_COMPRESSION_ONLINE, 0, 1234}},
++		{"f read-only - error online 0 1234",
++		{(char *) "f", DM_VDO_MODE_READ_ONLY, false, DM_VDO_INDEX_ERROR, DM_VDO_COMPRESSION_ONLINE, 0, 1234}},
++	};
  
--struct vdo_status_parse_result {
-+struct dm_vdo_status_parse_result {
- 	char error[VDO_MAX_ERROR];
--	struct vdo_status *status;
-+	struct dm_vdo_status *status;
- };
+ 	_check_good(_es, DM_ARRAY_SIZE(_es));
+ }
+@@ -136,13 +136,13 @@ static void _test_device_names_good(void *fixture)
+ static void _test_operating_mode_good(void *fixture)
+ {
+ 	static struct example_good _es[] = {
+-                {"device-name recovering - error online 0 1234",
+-                 {(char *) "device-name", VDO_MODE_RECOVERING, false, VDO_INDEX_ERROR, VDO_COMPRESSION_ONLINE, 0, 1234}},
+-                {"device-name read-only - error online 0 1234",
+-                 {(char *) "device-name", VDO_MODE_READ_ONLY, false, VDO_INDEX_ERROR, VDO_COMPRESSION_ONLINE, 0, 1234}},
+-                {"device-name normal - error online 0 1234",
+-                 {(char *) "device-name", VDO_MODE_NORMAL, false, VDO_INDEX_ERROR, VDO_COMPRESSION_ONLINE, 0, 1234}},
+-        };
++		{"device-name recovering - error online 0 1234",
++		{(char *) "device-name", DM_VDO_MODE_RECOVERING, false, DM_VDO_INDEX_ERROR, DM_VDO_COMPRESSION_ONLINE, 0, 1234}},
++		{"device-name read-only - error online 0 1234",
++		{(char *) "device-name", DM_VDO_MODE_READ_ONLY, false, DM_VDO_INDEX_ERROR, DM_VDO_COMPRESSION_ONLINE, 0, 1234}},
++		{"device-name normal - error online 0 1234",
++		{(char *) "device-name", DM_VDO_MODE_NORMAL, false, DM_VDO_INDEX_ERROR, DM_VDO_COMPRESSION_ONLINE, 0, 1234}},
++	};
  
- struct dm_pool;
+ 	_check_good(_es, DM_ARRAY_SIZE(_es));
+ }
+@@ -150,20 +150,20 @@ static void _test_operating_mode_good(void *fixture)
+ static void _test_operating_mode_bad(void *fixture)
+ {
+ 	static struct example_bad _es[] = {
+-        	{"device-name investigating - error online 0 1234",
+-                 "couldn't parse 'operating mode'"}};
++		{"device-name investigating - error online 0 1234",
++		"couldn't parse 'operating mode'"}};
  
- // Parses the status line from the kernel target.
--bool vdo_status_parse(struct dm_pool *mem, const char *input,
--		      struct vdo_status_parse_result *result);
-+bool dm_vdo_status_parse(struct dm_pool *mem, const char *input,
-+			 struct dm_vdo_status_parse_result *result);
+-        _check_bad(_es, DM_ARRAY_SIZE(_es));
++	_check_bad(_es, DM_ARRAY_SIZE(_es));
+ }
  
- //----------------------------------------------------------------
+ static void _test_recovering_good(void *fixture)
+ {
+ 	static struct example_good _es[] = {
+-                {"device-name recovering - error online 0 1234",
+-                 {(char *) "device-name", VDO_MODE_RECOVERING, false, VDO_INDEX_ERROR, VDO_COMPRESSION_ONLINE, 0, 1234}},
+-                {"device-name read-only recovering error online 0 1234",
+-                 {(char *) "device-name", VDO_MODE_READ_ONLY, true, VDO_INDEX_ERROR, VDO_COMPRESSION_ONLINE, 0, 1234}},
+-        };
++		{"device-name recovering - error online 0 1234",
++		{(char *) "device-name", DM_VDO_MODE_RECOVERING, false, DM_VDO_INDEX_ERROR, DM_VDO_COMPRESSION_ONLINE, 0, 1234}},
++		{"device-name read-only recovering error online 0 1234",
++		{(char *) "device-name", DM_VDO_MODE_READ_ONLY, true, DM_VDO_INDEX_ERROR, DM_VDO_COMPRESSION_ONLINE, 0, 1234}},
++	};
  
+ 	_check_good(_es, DM_ARRAY_SIZE(_es));
+ }
+@@ -171,30 +171,30 @@ static void _test_recovering_good(void *fixture)
+ static void _test_recovering_bad(void *fixture)
+ {
+ 	static struct example_bad _es[] = {
+-        	{"device-name normal fish error online 0 1234",
+-                 "couldn't parse 'recovering'"}};
++		{"device-name normal fish error online 0 1234",
++		"couldn't parse 'recovering'"}};
+ 
+-        _check_bad(_es, DM_ARRAY_SIZE(_es));
++	_check_bad(_es, DM_ARRAY_SIZE(_es));
+ }
+ 
+ static void _test_index_state_good(void *fixture)
+ {
+ 	static struct example_good _es[] = {
+-                {"device-name recovering - error online 0 1234",
+-                 {(char *) "device-name", VDO_MODE_RECOVERING, false, VDO_INDEX_ERROR, VDO_COMPRESSION_ONLINE, 0, 1234}},
+-                {"device-name recovering - closed online 0 1234",
+-                 {(char *) "device-name", VDO_MODE_RECOVERING, false, VDO_INDEX_CLOSED, VDO_COMPRESSION_ONLINE, 0, 1234}},
+-                {"device-name recovering - opening online 0 1234",
+-                 {(char *) "device-name", VDO_MODE_RECOVERING, false, VDO_INDEX_OPENING, VDO_COMPRESSION_ONLINE, 0, 1234}},
+-                {"device-name recovering - closing online 0 1234",
+-                 {(char *) "device-name", VDO_MODE_RECOVERING, false, VDO_INDEX_CLOSING, VDO_COMPRESSION_ONLINE, 0, 1234}},
+-                {"device-name recovering - offline online 0 1234",
+-                 {(char *) "device-name", VDO_MODE_RECOVERING, false, VDO_INDEX_OFFLINE, VDO_COMPRESSION_ONLINE, 0, 1234}},
+-                {"device-name recovering - online online 0 1234",
+-                 {(char *) "device-name", VDO_MODE_RECOVERING, false, VDO_INDEX_ONLINE, VDO_COMPRESSION_ONLINE, 0, 1234}},
+-                {"device-name recovering - unknown online 0 1234",
+-                 {(char *) "device-name", VDO_MODE_RECOVERING, false, VDO_INDEX_UNKNOWN, VDO_COMPRESSION_ONLINE, 0, 1234}},
+-        };
++		{"device-name recovering - error online 0 1234",
++		{(char *) "device-name", DM_VDO_MODE_RECOVERING, false, DM_VDO_INDEX_ERROR, DM_VDO_COMPRESSION_ONLINE, 0, 1234}},
++		{"device-name recovering - closed online 0 1234",
++		{(char *) "device-name", DM_VDO_MODE_RECOVERING, false, DM_VDO_INDEX_CLOSED, DM_VDO_COMPRESSION_ONLINE, 0, 1234}},
++		{"device-name recovering - opening online 0 1234",
++		{(char *) "device-name", DM_VDO_MODE_RECOVERING, false, DM_VDO_INDEX_OPENING, DM_VDO_COMPRESSION_ONLINE, 0, 1234}},
++		{"device-name recovering - closing online 0 1234",
++		{(char *) "device-name", DM_VDO_MODE_RECOVERING, false, DM_VDO_INDEX_CLOSING, DM_VDO_COMPRESSION_ONLINE, 0, 1234}},
++		{"device-name recovering - offline online 0 1234",
++		{(char *) "device-name", DM_VDO_MODE_RECOVERING, false, DM_VDO_INDEX_OFFLINE, DM_VDO_COMPRESSION_ONLINE, 0, 1234}},
++		{"device-name recovering - online online 0 1234",
++		{(char *) "device-name", DM_VDO_MODE_RECOVERING, false, DM_VDO_INDEX_ONLINE, DM_VDO_COMPRESSION_ONLINE, 0, 1234}},
++		{"device-name recovering - unknown online 0 1234",
++		{(char *) "device-name", DM_VDO_MODE_RECOVERING, false, DM_VDO_INDEX_UNKNOWN, DM_VDO_COMPRESSION_ONLINE, 0, 1234}},
++	};
+ 
+ 	_check_good(_es, DM_ARRAY_SIZE(_es));
+ }
+@@ -202,20 +202,20 @@ static void _test_index_state_good(void *fixture)
+ static void _test_index_state_bad(void *fixture)
+ {
+ 	static struct example_bad _es[] = {
+-        	{"device-name normal - fish online 0 1234",
+-                 "couldn't parse 'index state'"}};
++		{"device-name normal - fish online 0 1234",
++		"couldn't parse 'index state'"}};
+ 
+-        _check_bad(_es, DM_ARRAY_SIZE(_es));
++	_check_bad(_es, DM_ARRAY_SIZE(_es));
+ }
+ 
+ static void _test_compression_state_good(void *fixture)
+ {
+ 	static struct example_good _es[] = {
+-                {"device-name recovering - error online 0 1234",
+-                 {(char *) "device-name", VDO_MODE_RECOVERING, false, VDO_INDEX_ERROR, VDO_COMPRESSION_ONLINE, 0, 1234}},
+-                {"device-name read-only - error offline 0 1234",
+-                 {(char *) "device-name", VDO_MODE_READ_ONLY, false, VDO_INDEX_ERROR, VDO_COMPRESSION_OFFLINE, 0, 1234}},
+-        };
++		{"device-name recovering - error online 0 1234",
++		{(char *) "device-name", DM_VDO_MODE_RECOVERING, false, DM_VDO_INDEX_ERROR, DM_VDO_COMPRESSION_ONLINE, 0, 1234}},
++		{"device-name read-only - error offline 0 1234",
++		{(char *) "device-name", DM_VDO_MODE_READ_ONLY, false, DM_VDO_INDEX_ERROR, DM_VDO_COMPRESSION_OFFLINE, 0, 1234}},
++	};
+ 
+ 	_check_good(_es, DM_ARRAY_SIZE(_es));
+ }
+@@ -223,24 +223,24 @@ static void _test_compression_state_good(void *fixture)
+ static void _test_compression_state_bad(void *fixture)
+ {
+ 	static struct example_bad _es[] = {
+-        	{"device-name normal - error fish 0 1234",
+-                 "couldn't parse 'compression state'"}};
++		{"device-name normal - error fish 0 1234",
++		"couldn't parse 'compression state'"}};
+ 
+-        _check_bad(_es, DM_ARRAY_SIZE(_es));
++	_check_bad(_es, DM_ARRAY_SIZE(_es));
+ }
+ 
+ static void _test_used_blocks_good(void *fixture)
+ {
+ 	static struct example_good _es[] = {
+-                {"device-name recovering - error online 0 1234",
+-                 {(char *) "device-name", VDO_MODE_RECOVERING, false, VDO_INDEX_ERROR, VDO_COMPRESSION_ONLINE, 0, 1234}},
+-                {"device-name read-only - error offline 1 1234",
+-                 {(char *) "device-name", VDO_MODE_READ_ONLY, false, VDO_INDEX_ERROR, VDO_COMPRESSION_OFFLINE, 1, 1234}},
+-                {"device-name read-only - error offline 12 1234",
+-                 {(char *) "device-name", VDO_MODE_READ_ONLY, false, VDO_INDEX_ERROR, VDO_COMPRESSION_OFFLINE, 12, 1234}},
+-                {"device-name read-only - error offline 3456 1234",
+-                 {(char *) "device-name", VDO_MODE_READ_ONLY, false, VDO_INDEX_ERROR, VDO_COMPRESSION_OFFLINE, 3456, 1234}},
+-        };
++		{"device-name recovering - error online 0 1234",
++		{(char *) "device-name", DM_VDO_MODE_RECOVERING, false, DM_VDO_INDEX_ERROR, DM_VDO_COMPRESSION_ONLINE, 0, 1234}},
++		{"device-name read-only - error offline 1 1234",
++		{(char *) "device-name", DM_VDO_MODE_READ_ONLY, false, DM_VDO_INDEX_ERROR, DM_VDO_COMPRESSION_OFFLINE, 1, 1234}},
++		{"device-name read-only - error offline 12 1234",
++		{(char *) "device-name", DM_VDO_MODE_READ_ONLY, false, DM_VDO_INDEX_ERROR, DM_VDO_COMPRESSION_OFFLINE, 12, 1234}},
++		{"device-name read-only - error offline 3456 1234",
++		{(char *) "device-name", DM_VDO_MODE_READ_ONLY, false, DM_VDO_INDEX_ERROR, DM_VDO_COMPRESSION_OFFLINE, 3456, 1234}},
++	};
+ 
+ 	_check_good(_es, DM_ARRAY_SIZE(_es));
+ }
+@@ -248,22 +248,22 @@ static void _test_used_blocks_good(void *fixture)
+ static void _test_used_blocks_bad(void *fixture)
+ {
+ 	static struct example_bad _es[] = {
+-        	{"device-name normal - error online fish 1234",
+-                 "couldn't parse 'used blocks'"}};
++		{"device-name normal - error online fish 1234",
++		"couldn't parse 'used blocks'"}};
+ 
+-        _check_bad(_es, DM_ARRAY_SIZE(_es));
++	_check_bad(_es, DM_ARRAY_SIZE(_es));
+ }
+ 
+ static void _test_total_blocks_good(void *fixture)
+ {
+ 	static struct example_good _es[] = {
+-                {"device-name recovering - error online 0 1234",
+-                 {(char *) "device-name", VDO_MODE_RECOVERING, false, VDO_INDEX_ERROR, VDO_COMPRESSION_ONLINE, 0, 1234}},
+-                {"device-name recovering - error online 0 1",
+-                 {(char *) "device-name", VDO_MODE_RECOVERING, false, VDO_INDEX_ERROR, VDO_COMPRESSION_ONLINE, 0, 1}},
+-                {"device-name recovering - error online 0 0",
+-                 {(char *) "device-name", VDO_MODE_RECOVERING, false, VDO_INDEX_ERROR, VDO_COMPRESSION_ONLINE, 0, 0}},
+-        };
++		{"device-name recovering - error online 0 1234",
++		{(char *) "device-name", DM_VDO_MODE_RECOVERING, false, DM_VDO_INDEX_ERROR, DM_VDO_COMPRESSION_ONLINE, 0, 1234}},
++		{"device-name recovering - error online 0 1",
++		{(char *) "device-name", DM_VDO_MODE_RECOVERING, false, DM_VDO_INDEX_ERROR, DM_VDO_COMPRESSION_ONLINE, 0, 1}},
++		{"device-name recovering - error online 0 0",
++		{(char *) "device-name", DM_VDO_MODE_RECOVERING, false, DM_VDO_INDEX_ERROR, DM_VDO_COMPRESSION_ONLINE, 0, 0}},
++	};
+ 
+ 	_check_good(_es, DM_ARRAY_SIZE(_es));
+ }
+@@ -271,18 +271,18 @@ static void _test_total_blocks_good(void *fixture)
+ static void _test_total_blocks_bad(void *fixture)
+ {
+ 	static struct example_bad _es[] = {
+-        	{"device-name normal - error online 0 fish",
+-                 "couldn't parse 'total blocks'"}};
++		{"device-name normal - error online 0 fish",
++		"couldn't parse 'total blocks'"}};
+ 
+-        _check_bad(_es, DM_ARRAY_SIZE(_es));
++	_check_bad(_es, DM_ARRAY_SIZE(_es));
+ }
+ 
+ static void _test_status_bad(void *fixture)
+ {
+-        struct example_bad _bad[] = {
+-                {"", "couldn't get token for device"},
+-                {"device-name read-only - error online 0 1000 lksd", "too many tokens"}
+-        };
++	struct example_bad _bad[] = {
++		{"", "couldn't get token for device"},
++		{"device-name read-only - error online 0 1000 lksd", "too many tokens"}
++	};
+ 
+ 	_check_bad(_bad, DM_ARRAY_SIZE(_bad));
+ }
+@@ -295,8 +295,8 @@ static struct test_suite *_tests(void)
+ {
+ 	struct test_suite *ts = test_suite_create(NULL, NULL);
+ 	if (!ts) {
+-        	fprintf(stderr, "out of memory\n");
+-        	exit(1);
++		fprintf(stderr, "out of memory\n");
++		exit(1);
+ 	};
+ 
+ 	T("device-names", "parse various device names", _test_device_names_good);
 
 
