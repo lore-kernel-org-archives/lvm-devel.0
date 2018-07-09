@@ -1,54 +1,103 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
 Date: Mon, 9 Jul 2018 09:34:44 -0400
-Subject: master - vdo: component activation of VDO data LV
-Message-ID: <201807091334.w69DYi2o030673@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Subject: master - vdo: support functions to map enums to string names
+Message-ID: <201807091334.w69DYihG030674@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=aff69ecf396a858d684cd3e54baea131e229f5a2
-Commit:        aff69ecf396a858d684cd3e54baea131e229f5a2
-Parent:        4b7a57c9ed5187e32394a983e08be3b4a0b19079
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=aa63dfbe39860f04d8965e2afc4959cd20988411
+Commit:        aa63dfbe39860f04d8965e2afc4959cd20988411
+Parent:        aff69ecf396a858d684cd3e54baea131e229f5a2
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Jul 3 11:05:50 2018 +0200
+AuthorDate:    Mon Jul 2 21:58:18 2018 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Mon Jul 9 15:28:35 2018 +0200
 
-vdo: component activation of VDO data LV
+vdo: support functions to map enums to string names
 
-Allow component activation of VDO data LV.
+Translate VDO enums to printable strings.
 ---
- lib/metadata/metadata-exported.h |    1 +
- lib/misc/lvm-string.c            |    3 ++-
- 2 files changed, 3 insertions(+), 1 deletions(-)
+ lib/metadata/metadata-exported.h |    3 ++
+ lib/metadata/vdo_manip.c         |   50 ++++++++++++++++++++++++++++++++++++++
+ 2 files changed, 53 insertions(+), 0 deletions(-)
 
 diff --git a/lib/metadata/metadata-exported.h b/lib/metadata/metadata-exported.h
-index 4a9f2e0..f5b540a 100644
+index f5b540a..b221139 100644
 --- a/lib/metadata/metadata-exported.h
 +++ b/lib/metadata/metadata-exported.h
-@@ -267,6 +267,7 @@
- #define lv_is_component(lv) (lv_is_cache_origin(lv) || ((lv)->status & (\
- 	CACHE_POOL_DATA |\
- 	CACHE_POOL_METADATA |\
-+	LV_VDO_POOL_DATA |\
- 	MIRROR_IMAGE |\
- 	MIRROR_LOG |\
- 	RAID_IMAGE |\
-diff --git a/lib/misc/lvm-string.c b/lib/misc/lvm-string.c
-index 689a6b5..901243c 100644
---- a/lib/misc/lvm-string.c
-+++ b/lib/misc/lvm-string.c
-@@ -162,7 +162,8 @@ static const char *_lvname_has_reserved_component_string(const char *lvname)
- 		"_rimage",
- 		"_rmeta",
- 		"_tdata",
--		"_tmeta"
-+		"_tmeta",
-+		"_vdata"
- 	};
- 	unsigned i;
+@@ -1251,6 +1251,9 @@ int wipe_cache_pool(struct logical_volume *cache_pool_lv);
  
+ /* ++  metadata/vdo_manip.c */
+ 
++const char *get_vdo_compression_state_name(enum dm_vdo_compression_state state);
++const char *get_vdo_index_state_name(enum dm_vdo_index_state state);
++const char *get_vdo_operating_mode_name(enum dm_vdo_operating_mode mode);
+ uint64_t get_vdo_pool_virtual_size(const struct lv_segment *vdo_pool_seg);
+ struct logical_volume *convert_vdo_pool_lv(struct logical_volume *data_lv,
+ 					   const struct dm_vdo_target_params *vtp,
+diff --git a/lib/metadata/vdo_manip.c b/lib/metadata/vdo_manip.c
+index 451c8bd..8aee3dc 100644
+--- a/lib/metadata/vdo_manip.c
++++ b/lib/metadata/vdo_manip.c
+@@ -25,6 +25,56 @@
+ #include "lib/misc/lvm-signal.h"
+ #include "lib/misc/lvm-exec.h"
+ 
++const char *get_vdo_compression_state_name(enum dm_vdo_compression_state state)
++{
++	switch (state) {
++	case DM_VDO_COMPRESSION_ONLINE:
++		return "online";
++	default:
++		log_debug(INTERNAL_ERROR "Unrecognized compression state: %u.", state);
++		/* Fall through */
++	case DM_VDO_COMPRESSION_OFFLINE:
++		return "offline";
++	}
++}
++
++const char *get_vdo_index_state_name(enum dm_vdo_index_state state)
++{
++	switch (state) {
++	case DM_VDO_INDEX_ERROR:
++		return "error";
++	case DM_VDO_INDEX_CLOSED:
++		return "closed";
++	case DM_VDO_INDEX_OPENING:
++		return "opening";
++	case DM_VDO_INDEX_CLOSING:
++		return "closing";
++	case DM_VDO_INDEX_OFFLINE:
++		return "offline";
++	case DM_VDO_INDEX_ONLINE:
++		return "online";
++	default:
++		log_debug(INTERNAL_ERROR "Unrecognized index state: %u.", state);
++		/* Fall through */
++	case DM_VDO_INDEX_UNKNOWN:
++		return "unknown";
++	}
++}
++
++const char *get_vdo_operating_mode_name(enum dm_vdo_operating_mode mode)
++{
++	switch (mode) {
++	case DM_VDO_MODE_RECOVERING:
++		return "recovering";
++	case DM_VDO_MODE_READ_ONLY:
++		return "read-only";
++	default:
++		log_debug(INTERNAL_ERROR "Unrecognized operating mode: %u.", mode);
++		/* Fall through */
++	case DM_VDO_MODE_NORMAL:
++		return "normal";
++	}
++}
+ 
+ /*
+  * Size of VDO virtual LV is adding header_size in front and back of device
 
 
