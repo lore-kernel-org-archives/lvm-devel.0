@@ -1,42 +1,50 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Sun, 8 Jul 2018 19:00:33 -0400
-Subject: master - allocation: add check for passing log allocation
-Message-ID: <201807082300.w68N0XXl019174@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Mon, 9 Jul 2018 04:34:14 -0400
+Subject: master - vdo: fix parsing vdo status
+Message-ID: <201807090834.w698YEZE024625@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=e9d1f676b3768844471f8c6d3345a1b60bc2c94e
-Commit:        e9d1f676b3768844471f8c6d3345a1b60bc2c94e
-Parent:        333eb8667e73439c71dc351a02612c1c7601e8ec
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=5cf0923e1840375d23c4fd6035b919613ce6573b
+Commit:        5cf0923e1840375d23c4fd6035b919613ce6573b
+Parent:        e9d1f676b3768844471f8c6d3345a1b60bc2c94e
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
 AuthorDate:    Mon Jul 9 00:54:16 2018 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Mon Jul 9 00:59:34 2018 +0200
+CommitterDate: Mon Jul 9 10:30:34 2018 +0200
 
-allocation: add check for passing log allocation
+vdo: fix parsing vdo status
 
-Updates previous commit.
+Recent updates relay on zerod status structure memory (device ptr is
+NULL) and also dm_strncpy need to count with '\0'.
 ---
- lib/metadata/lv_manip.c |    4 +++-
- 1 files changed, 3 insertions(+), 1 deletions(-)
+ device_mapper/vdo/status.c |    4 ++--
+ 1 files changed, 2 insertions(+), 2 deletions(-)
 
-diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
-index 7674a3e..6bf851e 100644
---- a/lib/metadata/lv_manip.c
-+++ b/lib/metadata/lv_manip.c
-@@ -2966,7 +2966,9 @@ static int _find_some_parallel_space(struct alloc_handle *ah,
- 		       (*(alloc_state->areas + alloc_state->num_positional_areas + ix - 1 -
- 			  too_small_for_log_count)).used < ah->log_len)
- 			too_small_for_log_count++;
--		if (ah->mirror_logs_separate && (too_small_for_log_count >= devices_needed))
-+		if (ah->mirror_logs_separate &&
-+		    too_small_for_log_count &&
-+		    (too_small_for_log_count >= devices_needed))
- 			return 1;
- 		if ((alloc_state->num_positional_areas + ix) < (too_small_for_log_count + ah->log_area_count))
- 			return 1;
+diff --git a/device_mapper/vdo/status.c b/device_mapper/vdo/status.c
+index 7323a35..a0eba49 100644
+--- a/device_mapper/vdo/status.c
++++ b/device_mapper/vdo/status.c
+@@ -188,7 +188,7 @@ bool vdo_status_parse(struct dm_pool *mem, const char *input,
+ 	const char *te;
+ 	struct vdo_status *s;
+ 
+-	s = (!mem) ? malloc(sizeof(*s)) : dm_pool_zalloc(mem, sizeof(*s));
++	s = (!mem) ? zalloc(sizeof(*s)) : dm_pool_zalloc(mem, sizeof(*s));
+ 
+ 	if (!s) {
+ 		_set_error(result, "out of memory");
+@@ -206,7 +206,7 @@ bool vdo_status_parse(struct dm_pool *mem, const char *input,
+ 		_set_error(result, "out of memory");
+ 		goto bad;
+ 	}
+-	dm_strncpy(s->device, b, te - b);
++	dm_strncpy(s->device, b, te - b + 1);
+ 
+ 	b = _eat_space(te, e);
+ 
 
 
