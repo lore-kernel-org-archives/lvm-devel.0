@@ -1,421 +1,829 @@
-From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Mon, 9 Jul 2018 09:35:49 -0400
-Subject: master - tests: initial vdo tests
-Message-ID: <201807091335.w69DZnbg030875@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: David Teigland <teigland@sourceware.org>
+Date: Tue, 10 Jul 2018 11:51:20 -0400
+Subject: master - pvscan: autoactivate without lvmetad
+Message-ID: <201807101551.w6AFpKVt002089@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=c47655f23154c5483c6f097cdd1918deb9fe2f89
-Commit:        c47655f23154c5483c6f097cdd1918deb9fe2f89
-Parent:        faa126882a9cf2fb64dd143bb96414399e30edf2
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Sun Jun 24 20:06:59 2018 +0200
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Mon Jul 9 15:29:16 2018 +0200
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=db741e75a21bd9327ed1478e42495f2b0a419be9
+Commit:        db741e75a21bd9327ed1478e42495f2b0a419be9
+Parent:        c47655f23154c5483c6f097cdd1918deb9fe2f89
+Author:        David Teigland <teigland@redhat.com>
+AuthorDate:    Thu Jun 28 14:48:03 2018 -0500
+Committer:     David Teigland <teigland@redhat.com>
+CommitterDate: Mon Jul 9 16:11:24 2018 -0500
 
-tests: initial vdo tests
+pvscan: autoactivate without lvmetad
 
-Basic functionality of lvcreate, lvchange.
+When lvmetad is not used, use temporary files to record
+which PVs have appeared.  Use these temp files to determine
+when a VG is complete, to trigger autoactivation.
+
+This change allows us to remove lvmetad while keeping the
+same autoactivation behavior that lvmetad provides.
+
+The temp files are created in /run/lvm/pvs_online/ and are
+named for the PVID of the PV.  The files contain the
+major:minor of the device the PV was read from.
+
+e.g. if VG foo has dev1 and dev2, then:
+
+. pvscan --cache -aay dev1
+  reads vg metadata from dev1
+  creates /run/lvm/pvs_online/<pvid-of-dev1>
+  checks if all vg->pvs are online: no
+
+. pvscan --cache -aay dev2
+  reads vg metadata from dev2
+  creates /run/lvm/pvs_online/<pvid-of-dev2>
+  checks if all vg->pvs are online: yes
+  autoactivates vg
+
+A 'pvscan --cache dev' (without -aay) still records that
+dev is online.
+
+A 'pvscan --cache --major X --minor Y' after a device is
+gone will remove the temp file for it.
+
+A 'pvscan --cache [-aay]' (no devs) resets the state of
+temp files by removing them all, then scanning all devs
+and creating temp files for PVs that are found.
+
+If no online files exist, the first pvscan --cache scans
+all devs and creates temp files for any PVs found.
+
+The scope of the temp files is only pvscan, and they are only
+used for pvscan-based autoactivation.  No other commands are
+concerned with or aware of these temp files.  When lvm creates
+or removes PVs, no attempt is made to update the temp files.
 ---
- test/lib/aux.sh             |    8 +++
- test/shell/lvchange-vdo.sh  |  142 +++++++++++++++++++++++++++++++++++++++++++
- test/shell/lvconvert-vdo.sh |   72 ++++++++++++++++++++++
- test/shell/lvcreate-vdo.sh  |   83 +++++++++++++++++++++++++
- test/shell/profiles-vdo.sh  |   50 +++++++++++++++
- 5 files changed, 355 insertions(+), 0 deletions(-)
+ lib/cache/lvmcache.c |   12 +-
+ lib/cache/lvmcache.h |    2 +
+ tools/pvscan.c       |  655 +++++++++++++++++++++++++++++++++++++++++++++++++-
+ 3 files changed, 659 insertions(+), 10 deletions(-)
 
-diff --git a/test/lib/aux.sh b/test/lib/aux.sh
-index 4eb9260..f72c851 100644
---- a/test/lib/aux.sh
-+++ b/test/lib/aux.sh
-@@ -1552,6 +1552,14 @@ have_thin() {
- 	fi
+diff --git a/lib/cache/lvmcache.c b/lib/cache/lvmcache.c
+index f15b352..f20928b 100644
+--- a/lib/cache/lvmcache.c
++++ b/lib/cache/lvmcache.c
+@@ -419,7 +419,7 @@ int vg_has_duplicate_pvs(struct volume_group *vg)
+ 	return 0;
  }
  
-+have_vdo() {
-+	lvm segtypes 2>/dev/null | grep -q vdo$ || {
-+		echo "VDO is not built-in." >&2
-+		return 1
-+	}
-+	target_at_least dm-vdo "$@"
-+}
-+
- have_raid() {
- 	target_at_least dm-raid "$@"
+-static int _dev_in_device_list(struct device *dev, struct dm_list *head)
++int dev_in_device_list(struct device *dev, struct dm_list *head)
+ {
+ 	struct device_list *devl;
  
-diff --git a/test/shell/lvchange-vdo.sh b/test/shell/lvchange-vdo.sh
-new file mode 100644
-index 0000000..6d2b451
---- /dev/null
-+++ b/test/shell/lvchange-vdo.sh
-@@ -0,0 +1,142 @@
-+#!/usr/bin/env bash
-+
-+# Copyright (C) 2018 Red Hat, Inc. All rights reserved.
-+#
-+# This copyrighted material is made available to anyone wishing to use,
-+# modify, copy, or redistribute it subject to the terms and conditions
-+# of the GNU General Public License v.2.
-+#
-+# You should have received a copy of the GNU General Public License
-+# along with this program; if not, write to the Free Software Foundation,
-+# Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
-+
-+
-+SKIP_WITH_LVMPOLLD=1
-+
-+. lib/inittest
-+
-+aux have_vdo 6 2 0 || skip
-+
-+aux prepare_vg 2 6400
-+
-+lvcreate --vdo -L5G -n $lv1 $vg/vdopool
-+
-+# deduplication_ARG  (default is 'yes')
-+# compression_ARG  (default is 'yes')
-+
-+# Wait till index gets openned
-+for i in {1..10} ; do
-+	sleep .1
-+	check grep_dmsetup status $vg-vdopool " online online " || continue
-+	break
-+done
-+
-+
-+# compression_ARG
-+lvchange --compression n $vg/vdopool
-+check grep_dmsetup status $vg-vdopool " online offline "
-+lvchange --compression y $vg/vdopool
-+check grep_dmsetup status $vg-vdopool " online online "
-+
-+# dedulication_ARG
-+lvchange --deduplication n $vg/vdopool
-+check grep_dmsetup status $vg-vdopool " offline online "
-+lvchange --deduplication y $vg/vdopool
-+check grep_dmsetup status $vg-vdopool " online online "
-+
-+
-+lvchange --compression n --deduplication n $vg/vdopool
-+check grep_dmsetup status $vg-vdopool " offline offline "
-+
-+
-+lvchange -an $vg/$lv1
-+
-+# Test activation
-+lvchange -aly $vg/$lv1
-+check active $vg $lv1
-+
-+lvchange -aln $vg/$lv1
-+check inactive $vg $lv1
-+
-+# Test for allowable changes
-+#
-+# contiguous_ARG
-+lvchange -C y $vg/$lv1
-+lvchange -C n $vg/$lv1
-+
-+# permission_ARG
-+lvchange -p r $vg/$lv1
-+lvchange -p rw $vg/$lv1
-+
-+# FIXME
-+#should lvchange -p r $vg/vdopool
-+#should lvchange -p rw $vg/vdopool
-+
-+# readahead_ARG
-+lvchange -r none $vg/$lv1
-+lvchange -r auto $vg/$lv1
-+# FIXME
-+# Think about more support
-+
-+# minor_ARG
-+lvchange --yes -M y --minor 234 --major 253 $vg/$lv1
-+lvchange -M n $vg/$lv1
-+
-+# cannot change major minor for pools
-+not lvchange --yes -M y --minor 235 --major 253 $vg/vdopool
-+not lvchange -M n $vg/vdopool
-+
-+# addtag_ARG
-+lvchange --addtag foo $vg/$lv1
-+lvchange --addtag foo $vg/vdopool
-+
-+# deltag_ARG
-+lvchange --deltag foo $vg/$lv1
-+lvchange --deltag foo $vg/vdopool
-+
-+
-+#
-+# Test for disallowed metadata changes
-+#
-+# resync_ARG
-+not lvchange --resync $vg/$lv1
-+
-+# alloc_ARG
-+#not lvchange --alloc anywhere $vg/$lv1
-+
-+# discards_ARG
-+not lvchange --discards ignore $vg/$lv1
-+
-+# zero_ARG
-+not lvchange --zero y $vg/$lv1
-+
-+
-+#
-+# Ensure that allowed args don't cause disallowed args to get through
-+#
-+not lvchange --resync -ay $vg/$lv1
-+not lvchange --resync --addtag foo $vg/$lv1
-+
-+#
-+# Play with tags and activation
-+#
-+TAG=$(uname -n)
-+aux lvmconf "activation/volume_list = [ \"$vg/$lv2\", \"@mytag\" ]"
-+
-+lvchange -ay $vg/$lv1
-+check inactive $vg $lv1
-+
-+lvchange --addtag mytag $vg/$lv1
-+
-+lvchange -ay @mytag_fake
-+check inactive $vg $lv1
-+
-+lvchange -ay $vg/$lv1
-+# Volume has matching tag
-+check active $vg $lv1
-+lvchange -an $vg/$lv1
-+
-+lvchange -ay @mytag
-+check active $vg $lv1
-+
-+vgremove -ff $vg
-diff --git a/test/shell/lvconvert-vdo.sh b/test/shell/lvconvert-vdo.sh
-new file mode 100644
-index 0000000..529f325
---- /dev/null
-+++ b/test/shell/lvconvert-vdo.sh
-@@ -0,0 +1,72 @@
-+#!/usr/bin/env bash
-+
-+# Copyright (C) 2018 Red Hat, Inc. All rights reserved.
-+#
-+# This copyrighted material is made available to anyone wishing to use,
-+# modify, copy, or redistribute it subject to the terms and conditions
-+# of the GNU General Public License v.2.
-+#
-+# You should have received a copy of the GNU General Public License
-+# along with this program; if not, write to the Free Software Foundation,
-+# Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
-+
-+SKIP_WITH_LVMLOCKD=1
-+SKIP_WITH_LVMPOLLD=1
-+
-+. lib/inittest
-+
-+#
-+# Main
-+#
-+aux have_vdo 6 2 0 || skip
-+
-+aux prepare_vg 2 6400
-+
-+# Conversion to vdo-pool
-+lvcreate -L5G -n $lv1 $vg
-+# Check there is big prompting warning
-+not lvconvert --type vdo-pool $vg/$lv1 |& tee out
-+grep "WARNING" out
-+
-+
-+lvconvert -y --type vdo-pool $vg/$lv1
-+lvremove -f $vg
-+
-+
-+# 
-+lvcreate -L5G -n $lv1 $vg
-+lvconvert -y --vdopool $vg/$lv1
-+lvremove -f $vg
-+
-+
-+lvcreate -L5G -n $lv1 $vg
-+lvconvert -y --vdopool $vg/$lv1 -n $lv2
-+check lv_field $vg/$lv1 segtype vdo-pool
-+check lv_field $vg/${lv1}_vdata segtype linear -a
-+check lv_field $vg/$lv2 segtype vdo
-+lvremove -f $vg
-+
-+
-+lvcreate -L5G -n $lv1 $vg
-+lvconvert -y --type vdo-pool $vg/$lv1 -n $lv2 -V10G
-+lvremove -f $vg
-+
-+
-+lvcreate -L5G -n $lv1 $vg
-+lvconvert -y --vdopool $vg/$lv1 -n $lv2 -V10G --compression n --deduplication n
-+check lv_field $vg/$lv1 size "5.00g"
-+check lv_field $vg/${lv1}_vdata size "5.00g" -a
-+check lv_field $vg/$lv2 size "10.00g"
-+lvremove -f $vg
-+
-+
-+# Simple stacking works...
-+# Just be sure test do not try to synchronize 5G of mirror!!
-+lvcreate -L5G --type mirror --nosync -n $lv1 $vg
-+lvconvert -y --vdopool $vg/$lv1 -n $lv2
-+lvs -a $vg
-+check lv_field $vg/${lv1}_vdata segtype mirror -a
-+lvremove -f $vg
-+
-+
-+vgremove -ff $vg
-diff --git a/test/shell/lvcreate-vdo.sh b/test/shell/lvcreate-vdo.sh
-new file mode 100644
-index 0000000..64377cd
---- /dev/null
-+++ b/test/shell/lvcreate-vdo.sh
-@@ -0,0 +1,83 @@
-+#!/usr/bin/env bash
-+
-+# Copyright (C) 2018 Red Hat, Inc. All rights reserved.
-+#
-+# This copyrighted material is made available to anyone wishing to use,
-+# modify, copy, or redistribute it subject to the terms and conditions
-+# of the GNU General Public License v.2.
-+#
-+# You should have received a copy of the GNU General Public License
-+# along with this program; if not, write to the Free Software Foundation,
-+# Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
-+
-+
-+SKIP_WITH_LVMPOLLD=1
-+
-+
-+. lib/inittest
-+
-+#
-+# Main
-+#
-+aux have_vdo 6 2 0 || skip
-+which mkfs.ext4 || skip
-+
-+aux prepare_pvs 2 6400
-+get_devs
-+
-+#aux lvmconf 'allocation/vdo_use_read_cache = 1' 'allocation/vdo_read_cache_size_mb = 64'
-+
-+#aux lvmconf 'allocation/vdo_use_compression = 0' 'allocation/vdo_use_deduplication = 0'
-+
-+#aux lvmconf 'allocation/vdo_hash_zone_threads = 0' \
-+#	'allocation/vdo_logical_threads = 0' \
-+#	'allocation/vdo_physical_threads = 0' \
-+#	'allocation/vdo_cpu_threads = 1'
-+
-+aux lvmconf 'allocation/vdo_slab_size_mb = 128'
-+
-+
-+vgcreate $SHARED -s 64K "$vg" "${DEVICES[@]}"
-+
-+# Create VDO device  (vdo-pool is ATM internal volume type)
-+lvcreate --type vdo -L4G -n $lv1 $vg/$lv2
-+check lv_field $vg/$lv1 size "1.24g"
-+check lv_field $vg/${lv2} size "4.00g"
-+check lv_field $vg/${lv2}_vdata size "4.00g"
-+lvremove -ff $vg
-+
-+
-+lvcreate --vdo -L4G -V8G -n $lv1 $vg/$lv2
-+check lv_field $vg/$lv1 size "8.00g"
-+check lv_field $vg/${lv2} size "4.00g"
-+check lv_field $vg/${lv2}_vdata size "4.00g"
-+lvs -a $vg
-+
-+dmsetup table | grep $vg
-+dmsetup status | grep $vg
-+
-+# Resize not yet supported
-+not lvresize -y $vg/$lv1
-+not lvresize -y $vg/${lv2}
-+not lvresize -y $vg/${lv2}_vdata
-+
-+# Discard is very slow with VDO ATM so try to avoid it
-+#time blkdiscard "$DM_DEV_DIR/$vg/$lv1"
-+time mkfs.ext4 -E nodiscard "$DM_DEV_DIR/$vg/$lv1"
-+#time mkfs.ext4 "$DM_DEV_DIR/$vg/$lv1"
-+fsck -n "$DM_DEV_DIR/$vg/$lv1"
-+
-+# vpool itself is NOT usable filesystem
-+not fsck -n "$DM_DEV_DIR/mapper/$vg-${lv2}"
-+# not usable even when there is no linear mapping on top of it
-+dmsetup remove ${vg}-$lv1
-+not fsck -n "$DM_DEV_DIR/mapper/$vg-${lv2}"
-+
-+lvremove -ff $vg
-+
-+
-+lvcreate --type vdo -L10G -V1T -n $lv1 $vg
-+lvs -a $vg
-+lvremove -ff $vg
-+
-+vgremove -ff $vg
-diff --git a/test/shell/profiles-vdo.sh b/test/shell/profiles-vdo.sh
-new file mode 100644
-index 0000000..4a0f07e
---- /dev/null
-+++ b/test/shell/profiles-vdo.sh
-@@ -0,0 +1,50 @@
-+#!/usr/bin/env bash
-+
-+# Copyright (C) 2018 Red Hat, Inc. All rights reserved.
-+#
-+# This copyrighted material is made available to anyone wishing to use,
-+# modify, copy, or redistribute it subject to the terms and conditions
-+# of the GNU General Public License v.2.
-+#
-+# You should have received a copy of the GNU General Public License
-+# along with this program; if not, write to the Free Software Foundation,
-+# Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
-+
-+# Exercise obtaining cache parameter from various sources
-+# Either commmand line or metadata profile or implicit default...
-+
-+
-+SKIP_WITH_LVMPOLLD=1
-+
-+. lib/inittest
-+
-+aux have_cache 1 8 0 || skip
-+
-+PDIR="$LVM_SYSTEM_DIR/profile"
-+PFILE="vdo-test"
-+
-+aux prepare_profiles
-+
-+cat <<EOF > "$PDIR/${PFILE}.profile"
-+allocation {
-+	vdo_use_compression = 0
-+	vdo_use_deduplication = 0
-+	vdo_slab_size_mb = 128
+@@ -432,7 +432,7 @@ static int _dev_in_device_list(struct device *dev, struct dm_list *head)
+ 
+ int lvmcache_dev_is_unchosen_duplicate(struct device *dev)
+ {
+-	return _dev_in_device_list(dev, &_unused_duplicate_devs);
++	return dev_in_device_list(dev, &_unused_duplicate_devs);
+ }
+ 
+ /*
+@@ -601,8 +601,8 @@ next:
+ 			continue;
+ 		}
+ 
+-		prev_unchosen1 = _dev_in_device_list(dev1, &_unused_duplicate_devs);
+-		prev_unchosen2 = _dev_in_device_list(dev2, &_unused_duplicate_devs);
++		prev_unchosen1 = dev_in_device_list(dev1, &_unused_duplicate_devs);
++		prev_unchosen2 = dev_in_device_list(dev2, &_unused_duplicate_devs);
+ 
+ 		if (!prev_unchosen1 && !prev_unchosen2) {
+ 			/*
+@@ -612,8 +612,8 @@ next:
+ 			 * want the same duplicate preference to be preserved
+ 			 * in each instance of lvmcache for a single command.
+ 			 */
+-			prev_unchosen1 = _dev_in_device_list(dev1, &cmd->unused_duplicate_devs);
+-			prev_unchosen2 = _dev_in_device_list(dev2, &cmd->unused_duplicate_devs);
++			prev_unchosen1 = dev_in_device_list(dev1, &cmd->unused_duplicate_devs);
++			prev_unchosen2 = dev_in_device_list(dev2, &cmd->unused_duplicate_devs);
+ 		}
+ 
+ 		dev1_major = MAJOR(dev1->dev);
+diff --git a/lib/cache/lvmcache.h b/lib/cache/lvmcache.h
+index 008f110..92e27a2 100644
+--- a/lib/cache/lvmcache.h
++++ b/lib/cache/lvmcache.h
+@@ -210,4 +210,6 @@ struct volume_group *lvmcache_get_saved_vg(const char *vgid, int precommitted);
+ struct volume_group *lvmcache_get_saved_vg_latest(const char *vgid);
+ void lvmcache_drop_saved_vgid(const char *vgid);
+ 
++int dev_in_device_list(struct device *dev, struct dm_list *head);
++
+ #endif
+diff --git a/tools/pvscan.c b/tools/pvscan.c
+index 17fc1a6..393edb5 100644
+--- a/tools/pvscan.c
++++ b/tools/pvscan.c
+@@ -17,6 +17,11 @@
+ 
+ #include "lib/cache/lvmetad.h"
+ #include "lib/cache/lvmcache.h"
++#include "lib/metadata/metadata.h"
++
++#include <dirent.h>
++
++static int _pvscan_online_aa(struct cmd_context *cmd, int argc, char **argv);
+ 
+ struct pvscan_params {
+ 	int new_pvs_found;
+@@ -35,7 +40,7 @@ struct pvscan_aa_params {
+ 	struct dm_list changed_vgnames;
+ };
+ 
+-static int _pvscan_display_single(struct cmd_context *cmd,
++static int _pvscan_display_pv(struct cmd_context *cmd,
+ 				  struct physical_volume *pv,
+ 				  struct pvscan_params *params)
+ {
+@@ -101,7 +106,7 @@ static int _pvscan_display_single(struct cmd_context *cmd,
+ 	return ECMD_PROCESSED;
+ }
+ 
+-static int _pvscan_single(struct cmd_context *cmd, struct volume_group *vg,
++static int _pvscan_display_single(struct cmd_context *cmd, struct volume_group *vg,
+ 			  struct physical_volume *pv, struct processing_handle *handle)
+ {
+ 	struct pvscan_params *params = (struct pvscan_params *)handle->custom_handle;
+@@ -122,7 +127,7 @@ static int _pvscan_single(struct cmd_context *cmd, struct volume_group *vg,
+ 		params->size_total += (uint64_t) pv_pe_count(pv) * pv_pe_size(pv);
+ 	}
+ 
+-	_pvscan_display_single(cmd, pv, params);
++	_pvscan_display_pv(cmd, pv, params);
+ 	return ECMD_PROCESSED;
+ }
+ 
+@@ -650,6 +655,9 @@ int pvscan(struct cmd_context *cmd, int argc, char **argv)
+ 	const char *reason = NULL;
+ 	int ret;
+ 
++	if (arg_is_set(cmd, cache_long_ARG) && !lvmetad_used())
++		return _pvscan_online_aa(cmd, argc, argv);
++
+ 	if (arg_is_set(cmd, cache_long_ARG))
+ 		return _pvscan_cache(cmd, argc, argv);
+ 
+@@ -704,7 +712,7 @@ int pvscan(struct cmd_context *cmd, int argc, char **argv)
+ 
+ 	handle->custom_handle = &params;
+ 
+-	ret = process_each_pv(cmd, argc, argv, NULL, 0, 0, handle, _pvscan_single);
++	ret = process_each_pv(cmd, argc, argv, NULL, 0, 0, handle, _pvscan_display_single);
+ 
+ 	if (!params.pvs_found)
+ 		log_print_unless_silent("No matching physical volumes found");
+@@ -722,3 +730,642 @@ out:
+ 
+ 	return ret;
+ }
++
++static const char *_pvs_online_dir = DEFAULT_RUN_DIR "/pvs_online";
++
++/*
++ * When a device goes offline we only know its major:minor, not its PVID.
++ * Since the dev isn't around, we can't read it to get its PVID, so we have to
++ * read the PVID files to find the one containing this major:minor and remove
++ * that one. This means that the PVID files need to contain the devno's they
++ * were created from.
++ */
++
++static void _online_pvid_file_remove_devno(int major, int minor)
++{
++	char path[PATH_MAX];
++	char buf[32];
++	char buf_in[32];
++	DIR *dir;
++	struct dirent *de;
++	int fd, rv;
++
++	memset(buf, 0, sizeof(buf));
++	snprintf(buf, sizeof(buf), "%d:%d\n", major, minor);
++
++	log_debug("Remove pv online devno %d:%d", major, minor);
++
++	if (!(dir = opendir(_pvs_online_dir)))
++		return;
++
++	while ((de = readdir(dir))) {
++		if (de->d_name[0] == '.')
++			continue;
++
++		memset(path, 0, sizeof(path));
++		snprintf(path, sizeof(path), "%s/%s", _pvs_online_dir, de->d_name);
++
++		fd = open(path, O_RDONLY);
++		if (fd < 0) {
++			log_debug("Failed to open %s", path);
++			continue;
++		}
++
++		rv = read(fd, buf_in, sizeof(buf_in));
++		if (!rv || rv < 0) {
++			log_debug("Failed to read %s", path);
++			continue;
++		}
++
++		if (!strncmp(buf, buf_in, strlen(buf))) {
++			log_debug("Unlink pv online %s %s", buf, path);
++			unlink(path);
++			break;
++		}
++	}
++	closedir(dir);
 +}
-+EOF
 +
-+aux prepare_vg 2 1000000
++static void _online_pvid_files_remove(void)
++{
++	char path[PATH_MAX];
++	DIR *dir;
++	struct dirent *de;
 +
-+# Check chunk_size is grabbed from configuration
-+lvcreate --vdo -L5G --config 'allocation/vdo_use_compression=0' $vg/vdopool
-+lvdisplay -m $vg/vdopool | tee out
-+grep "Compression.*no" out
-+lvremove -f $vg
++	if (!(dir = opendir(_pvs_online_dir)))
++		return;
 +
-+# Without profile using 128MB slab it would NOT even pass
-+lvcreate --vdo -L4G --metadataprofile "$PFILE" $vg/vdopool
-+lvdisplay -m $vg/vdopool | tee out
-+grep "Compression.*no" out
-+lvremove -f $vg
++	while ((de = readdir(dir))) {
++		if (de->d_name[0] == '.')
++			continue;
 +
-+vgremove -ff $vg
++		memset(path, 0, sizeof(path));
++		snprintf(path, sizeof(path), "%s/%s", _pvs_online_dir, de->d_name);
++		unlink(path);
++	}
++	closedir(dir);
++}
++
++static void _online_pvid_file_create(struct device *dev)
++{
++	char path[PATH_MAX];
++	char buf[32];
++	int major, minor;
++	int fd;
++	int rv;
++
++	memset(path, 0, sizeof(path));
++
++	major = (int)MAJOR(dev->dev);
++	minor = (int)MINOR(dev->dev);
++
++	snprintf(path, sizeof(path), "%s/%s", _pvs_online_dir, dev->pvid);
++
++	snprintf(buf, sizeof(buf), "%d:%d\n", major, minor);
++
++	log_debug("Create pv online: %s %d:%d %s", path, major, minor, dev_name(dev));
++
++	fd = open(path, O_CREAT | O_TRUNC | O_RDWR, S_IRUSR | S_IWUSR);
++	if (fd < 0) {
++		log_warn("Failed to open %s: %d", path, errno);
++		return;
++	}
++
++	rv = write(fd, buf, strlen(buf));
++	if (!rv || rv < 0)
++		log_warn("Failed to write fd %d buf %s dev %s to %s: %d",
++			 fd, buf, dev_name(dev), path, errno);
++
++	/* We don't care about syncing, these files are not even persistent. */
++
++	close(fd);
++}
++
++static int _online_pvid_file_exists(const char *pvid)
++{
++	char path[PATH_MAX];
++	struct stat buf;
++	int rv;
++
++	memset(path, 0, sizeof(path));
++
++	snprintf(path, sizeof(path), "%s/%s", _pvs_online_dir, pvid);
++
++	log_debug("Check pv online: %s", path);
++
++	rv = stat(path, &buf);
++	if (!rv) {
++		log_debug("Check pv online: yes");
++		return 1;
++	}
++	log_debug("Check pv online: no");
++	return 0;
++}
++
++static void _online_pvid_dir_setup(void)
++{
++	struct stat st;
++	int rv;
++
++	if (!stat(_pvs_online_dir, &st))
++		return;
++
++	dm_prepare_selinux_context(_pvs_online_dir, S_IFDIR);
++	rv = mkdir(_pvs_online_dir, 0777);
++	dm_prepare_selinux_context(NULL, 0);
++
++	if (rv < 0)
++		log_debug("Failed to create %s", _pvs_online_dir);
++}
++
++static int _online_pvid_files_missing(void)
++{
++	DIR *dir;
++	struct dirent *de;
++
++	if (!(dir = opendir(_pvs_online_dir))) {
++		log_debug("Failed to open %s", _pvs_online_dir);
++		return 1;
++	}
++
++	while ((de = readdir(dir))) {
++		if (de->d_name[0] == '.')
++			continue;
++		closedir(dir);
++		return 0;
++	}
++	closedir(dir);
++	return 1;
++}
++
++static int _online_pv_found(struct cmd_context *cmd,
++			    struct device *dev, struct dm_list *dev_args,
++			    struct volume_group *vg,
++			    struct dm_list *found_vgnames)
++{
++	struct pv_list *pvl;
++	int pvids_not_online = 0;
++	int dev_args_in_vg = 0;
++
++	/*
++	 * Create file named for pvid to record this PV is online.
++	 */
++
++	_online_pvid_file_create(dev);
++
++	if (!vg || !found_vgnames)
++		return 1;
++
++	/*
++	 * Check if all the PVs for this VG are online.  This is only
++	 * needed when autoactivating the VG which should be run only
++	 * when the VG is complete.  If the arrival of this dev completes
++	 * the VG, then we want to activate the VG.
++	 */
++
++	dm_list_iterate_items(pvl, &vg->pvs) {
++		if (!_online_pvid_file_exists((const char *)&pvl->pv->id.uuid))
++			pvids_not_online++;
++
++		/* Check if one of the devs on the command line is in this VG. */
++		if (dev_args && dev_in_device_list(pvl->pv->dev, dev_args))
++			dev_args_in_vg = 1;
++	}
++
++	/*
++	 * Return if we did not find an online file for one of the PVIDs
++	 * in the VG, which means the VG is not yet complete.
++	 */
++
++	if (pvids_not_online)
++		return 1;
++
++	/*
++	 * When all PVIDs from the VG are online, then add vgname to
++	 * found_vgnames.
++	 */
++
++	log_debug("online dev %s completes VG %s.", dev_name(dev), vg->name);
++
++	/*
++	 * We either want to return all complete VGs that are found on any devs
++	 * we are scanning, or we want to return complete VGs only when they
++	 * contain PVs that were specified on the command line.
++	 */
++
++	if (!dev_args || dev_args_in_vg) {
++		log_debug("online dev %s can autoactivate VG %s", dev_name(dev), vg->name);
++		if (!str_list_add(cmd->mem, found_vgnames, dm_pool_strdup(cmd->mem, vg->name)))
++			stack;
++	}
++
++	return 1;
++}
++
++struct _pvscan_baton {
++	struct cmd_context *cmd;
++	struct volume_group *vg;
++	struct format_instance *fid;
++};
++
++static int _online_pvscan_single(struct metadata_area *mda, void *baton)
++{
++	struct _pvscan_baton *b = baton;
++	struct volume_group *vg;
++
++	if (mda_is_ignored(mda) ||
++	    !(vg = mda->ops->vg_read(b->fid, "", mda, NULL, NULL)))
++		return 1;
++
++	/* FIXME Also ensure contents match etc. */
++	if (!b->vg || vg->seqno > b->vg->seqno)
++		b->vg = vg;
++	else if (b->vg)
++		release_vg(vg);
++
++	return 1;
++}
++
++/*
++ * disable_remove is 1 when resetting the online state, which begins with
++ * removing all pvid files, and then creating new pvid files for PVs that
++ * are found, so we don't need to try to remove pvid files here when a PV
++ * is not found on a device.
++ */
++
++static int _online_pvscan_one(struct cmd_context *cmd, struct device *dev,
++			      struct dm_list *dev_args,
++			      struct dm_list *found_vgnames,
++			      int disable_remove,
++			      const char **pvid_without_metadata)
++{
++	struct label *label;
++	struct lvmcache_info *info;
++	struct _pvscan_baton baton;
++	const struct format_type *fmt;
++	/* Create a dummy instance. */
++	struct format_instance_ctx fic = { .type = 0 };
++	int ret = 0;
++
++	log_debug("pvscan metadata from dev %s", dev_name(dev));
++
++	if (udev_dev_is_mpath_component(dev)) {
++		log_debug("Ignore multipath component for pvscan.");
++		return 1;
++	}
++
++	if (!(info = lvmcache_info_from_pvid(dev->pvid, dev, 0))) {
++		log_debug("No PV info found on %s for PVID %s.", dev_name(dev), dev->pvid);
++		if (!disable_remove)
++			_online_pvid_file_remove_devno((int)MAJOR(dev->dev), (int)MINOR(dev->dev));
++		return 1;
++	}
++
++	if (!(label = lvmcache_get_label(info))) {
++		log_debug("No PV label found for %s.", dev_name(dev));
++		if (!disable_remove)
++			_online_pvid_file_remove_devno((int)MAJOR(dev->dev), (int)MINOR(dev->dev));
++		return 1;
++	}
++
++	fmt = lvmcache_fmt(info);
++
++	baton.cmd = cmd;
++	baton.vg = NULL;
++	baton.fid = fmt->ops->create_instance(fmt, &fic);
++
++	if (!baton.fid) {
++		ret = 0;
++		goto_out;
++	}
++
++	lvmcache_foreach_mda(info, _online_pvscan_single, &baton);
++
++	if (!baton.vg) {
++		if (pvid_without_metadata)
++			*pvid_without_metadata = dm_pool_strdup(cmd->mem, dev->pvid);
++		fmt->ops->destroy_instance(baton.fid);
++	}
++
++	ret = _online_pv_found(cmd, dev, dev_args, baton.vg, found_vgnames);
++
++	release_vg(baton.vg);
++out:
++	return ret;
++}
++
++/*
++ * dev_args is the list of devices that were specified on the
++ * pvscan command line.
++ *
++ * . When dev_args is NULL, any complete VGs that are found will
++ *   be returned in found_vgnames.
++ *
++ * . When dev_args is set, then complete VGs that that contain
++ *   devs in dev_args will be returned in found_vgnames.
++ */
++
++static void _online_pvscan_all_devs(struct cmd_context *cmd,
++				    struct dm_list *found_vgnames,
++				    struct dm_list *dev_args)
++{
++	struct dev_iter *iter;
++	struct device *dev;
++
++	label_scan(cmd);
++
++	if (!(iter = dev_iter_create(cmd->lvmetad_filter, 1))) {
++		log_error("dev_iter creation failed");
++		return;
++	}
++
++	while ((dev = dev_iter_get(cmd, iter))) {
++		if (sigint_caught()) {
++			stack;
++			break;
++		}
++
++		if (!_online_pvscan_one(cmd, dev, dev_args, found_vgnames, 1, NULL)) {
++			stack;
++			break;
++		}
++	}
++
++	dev_iter_destroy(iter);
++}
++
++static int _pvscan_aa_single(struct cmd_context *cmd, const char *vg_name,
++			     struct volume_group *vg, struct processing_handle *handle)
++{
++	struct pvscan_aa_params *pp = (struct pvscan_aa_params *)handle->custom_handle;
++
++	if (vg_is_clustered(vg))
++		return ECMD_PROCESSED;
++
++	if (vg_is_exported(vg))
++		return ECMD_PROCESSED;
++
++	if (vg_is_shared(vg))
++		return ECMD_PROCESSED;
++
++	log_debug("pvscan autoactivating VG %s.", vg_name);
++
++	if (!vgchange_activate(cmd, vg, CHANGE_AAY)) {
++		log_error("%s: autoactivation failed.", vg->name);
++		pp->activate_errors++;
++	}
++
++	return ECMD_PROCESSED;
++}
++
++static int _pvscan_aa(struct cmd_context *cmd, struct pvscan_aa_params *pp,
++		      int all_vgs, struct dm_list *vgnames)
++{
++	struct processing_handle *handle = NULL;
++	int ret;
++
++	if (!all_vgs && dm_list_empty(vgnames)) {
++		log_debug("No VGs to autoactivate.");
++		return ECMD_PROCESSED;
++	}
++
++	if (!(handle = init_processing_handle(cmd, NULL))) {
++		log_error("Failed to initialize processing handle.");
++		return ECMD_FAILED;
++	}
++
++	handle->custom_handle = pp;
++
++	if (all_vgs) {
++		cmd->cname->flags |= ALL_VGS_IS_DEFAULT;
++		pp->refresh_all = 1;
++	}
++
++	ret = process_each_vg(cmd, 0, NULL, NULL, vgnames, READ_FOR_UPDATE, 0, handle, _pvscan_aa_single);
++
++	destroy_processing_handle(cmd, handle);
++
++	return ret;
++}
++
++static int _pvscan_online_aa(struct cmd_context *cmd, int argc, char **argv)
++{
++	struct pvscan_aa_params pp = { 0 };
++	struct dm_list single_devs;
++	struct dm_list found_vgnames;
++	struct device *dev;
++	struct device_list *devl;
++	const char *pv_name;
++	const char *pvid_without_metadata = NULL;
++	int32_t major = -1;
++	int32_t minor = -1;
++	int devno_args = 0;
++	struct arg_value_group_list *current_group;
++	dev_t devno;
++	int do_activate = arg_is_set(cmd, activate_ARG);
++	int all_vgs = 0;
++	int add_errors = 0;
++	int ret = ECMD_PROCESSED;
++
++	dm_list_init(&found_vgnames);
++
++	if (arg_is_set(cmd, major_ARG) + arg_is_set(cmd, minor_ARG))
++		devno_args = 1;
++
++	if (devno_args && (!arg_is_set(cmd, major_ARG) || !arg_is_set(cmd, minor_ARG))) {
++		log_error("Both --major and --minor required to identify devices.");
++		return EINVALID_CMD_LINE;
++	}
++
++	_online_pvid_dir_setup();
++	
++	if (!lock_vol(cmd, VG_GLOBAL, LCK_VG_READ, NULL)) {
++		log_error("Unable to obtain global lock.");
++		return ECMD_FAILED;
++	}
++
++	/*
++	 * Scan all devices when no args are given.
++	 */
++	if (!argc && !devno_args) {
++		log_verbose("pvscan all devices.");
++		_online_pvid_files_remove();
++		_online_pvscan_all_devs(cmd, NULL, NULL);
++		all_vgs = 1;
++		goto activate;
++	}
++
++	if (_online_pvid_files_missing()) {
++		log_verbose("pvscan all devices to initialize available PVs.");
++		_online_pvid_files_remove();
++		_online_pvscan_all_devs(cmd, NULL, NULL);
++		all_vgs = 1;
++		goto activate;
++	}
++
++	if (argc || devno_args) {
++		log_verbose("pvscan devices on command line.");
++		cmd->pvscan_cache_single = 1;
++	}
++
++	/* Creates a list of dev names from /dev, sysfs, etc; does not read any. */
++	dev_cache_scan();
++
++	dm_list_init(&single_devs);
++
++	while (argc--) {
++		pv_name = *argv++;
++		if (pv_name[0] == '/') {
++			if (!(dev = dev_cache_get(cmd, pv_name, cmd->lvmetad_filter))) {
++				log_debug("pvscan arg %s not found.", pv_name);
++				if ((dev = dev_cache_get(cmd, pv_name, NULL))) {
++					/* nothing to do for this dev name */
++				} else {
++					log_error("Physical Volume %s not found.", pv_name);
++					ret = ECMD_FAILED;
++				}
++			} else {
++				/*
++				 * Scan device.  This dev could still be removed
++				 * below if it doesn't pass other filters.
++				 */
++				log_debug("pvscan arg %s found.", pv_name);
++
++				if (!(devl = dm_pool_zalloc(cmd->mem, sizeof(*devl))))
++					return_0;
++				devl->dev = dev;
++				dm_list_add(&single_devs, &devl->list);
++			}
++		} else {
++			if (sscanf(pv_name, "%d:%d", &major, &minor) != 2) {
++				log_warn("WARNING: Failed to parse major:minor from %s, skipping.", pv_name);
++				continue;
++			}
++			devno = MKDEV((dev_t)major, (dev_t)minor);
++
++			if (!(dev = dev_cache_get_by_devt(cmd, devno, cmd->lvmetad_filter))) {
++				log_debug("pvscan arg %d:%d not found.", major, minor);
++				_online_pvid_file_remove_devno(major, minor);
++			} else {
++				/*
++				 * Scan device.  This dev could still be removed
++				 * below if it doesn't pass other filters.
++				 */
++				log_debug("pvscan arg %d:%d found.", major, minor);
++
++				if (!(devl = dm_pool_zalloc(cmd->mem, sizeof(*devl))))
++					return_0;
++				devl->dev = dev;
++				dm_list_add(&single_devs, &devl->list);
++			}
++		}
++
++		if (sigint_caught()) {
++			ret = ECMD_FAILED;
++			goto_out;
++		}
++	}
++
++	if (!dm_list_empty(&single_devs)) {
++		label_scan_devs(cmd, cmd->lvmetad_filter, &single_devs);
++
++		dm_list_iterate_items(devl, &single_devs) {
++			dev = devl->dev;
++
++			if (dev->flags & DEV_FILTER_OUT_SCAN)
++				continue;
++
++			/*
++			 * Devices that exist and pass the lvmetad filter
++			 * are online.
++			 */
++			if (!_online_pvscan_one(cmd, dev, NULL, &found_vgnames, 0, &pvid_without_metadata))
++				add_errors++;
++		}
++	}
++
++	if (!devno_args)
++		goto activate;
++
++	dm_list_init(&single_devs);
++
++	/* Process any grouped --major --minor args */
++	dm_list_iterate_items(current_group, &cmd->arg_value_groups) {
++		major = grouped_arg_int_value(current_group->arg_values, major_ARG, major);
++		minor = grouped_arg_int_value(current_group->arg_values, minor_ARG, minor);
++
++		if (major < 0 || minor < 0)
++			continue;
++
++		devno = MKDEV((dev_t)major, (dev_t)minor);
++
++		if (!(dev = dev_cache_get_by_devt(cmd, devno, cmd->lvmetad_filter))) {
++			log_debug("pvscan arg %d:%d not found.", major, minor);
++			_online_pvid_file_remove_devno(major, minor);
++		} else {
++			log_debug("pvscan arg %d:%d found.", major, minor);
++
++			if (!(devl = dm_pool_zalloc(cmd->mem, sizeof(*devl))))
++				return_0;
++			devl->dev = dev;
++			dm_list_add(&single_devs, &devl->list);
++		}
++
++		if (sigint_caught()) {
++			ret = ECMD_FAILED;
++			goto_out;
++		}
++	}
++
++	if (!dm_list_empty(&single_devs)) {
++		label_scan_devs(cmd, cmd->lvmetad_filter, &single_devs);
++
++		dm_list_iterate_items(devl, &single_devs) {
++			dev = devl->dev;
++
++			if (dev->flags & DEV_FILTER_OUT_SCAN)
++				continue;
++
++			/*
++			 * Devices that exist and pass the lvmetad filter
++			 * are online.
++			 */
++			if (!_online_pvscan_one(cmd, devl->dev, NULL, &found_vgnames, 0, &pvid_without_metadata))
++				add_errors++;
++		}
++	}
++
++activate:
++	/*
++	 * Special case: pvscan --cache -aay dev 
++	 * where dev has no VG metadata, and it's the final device to
++	 * complete the VG.  In this case we want to autoactivate the
++	 * VG, but the scanned device does not know what VG it's in or
++	 * whether that VG is now complete.  In this case we need to
++	 * scan all devs and pick out the complete VG holding this
++	 * device so we can then autoactivate that VG.
++	 */
++	if (!dm_list_empty(&single_devs) && dm_list_empty(&found_vgnames) &&
++	    pvid_without_metadata && do_activate) {
++		log_verbose("pvscan all devices for PV without metadata: %s.", pvid_without_metadata);
++		_online_pvscan_all_devs(cmd, &found_vgnames, &single_devs);
++	}
++
++	/*
++	 * Step 2: when the PV was recorded online, we check if all the
++	 * PVs for the VG are online.  If so, the vgname was added to the
++	 * list, and we can attempt to autoactivate LVs in the VG.
++	 */
++	if (do_activate)
++		ret = _pvscan_aa(cmd, &pp, all_vgs, &found_vgnames);
++
++out:
++	if (add_errors || pp.activate_errors)
++		ret = ECMD_FAILED;
++
++	if (!sync_local_dev_names(cmd))
++		stack;
++	unlock_vg(cmd, NULL, VG_GLOBAL);
++	return ret;
++}
++
 
 
