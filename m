@@ -1,101 +1,51 @@
-From: David Teigland <teigland@sourceware.org>
-Date: Mon, 23 Jul 2018 13:32:32 -0400
-Subject: 2018-06-01-stable - lvconvert: restrict command matching for no option variant
-Message-ID: <201807231732.w6NHWWCA002954@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: Heinz Mauelshagen <heinzm@sourceware.org>
+Date: Mon, 23 Jul 2018 13:35:55 -0400
+Subject: master - lvconvert: reject conversions of LVs under snapshot
+Message-ID: <201807231735.w6NHZtb5003082@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=9e296c9c6f3fa92fdc839b30012b51ee28d23d1a
-Commit:        9e296c9c6f3fa92fdc839b30012b51ee28d23d1a
-Parent:        5b87f5fb72ec763ff431c1bedb5fab38f332b9b2
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Mon Jul 23 11:08:12 2018 -0500
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Mon Jul 23 12:31:23 2018 -0500
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=2214dc12c34890c78b05456f58d0aa5d6dd08f4c
+Commit:        2214dc12c34890c78b05456f58d0aa5d6dd08f4c
+Parent:        778ce8d80830a60d258b419720be3e45a7ee9f0b
+Author:        Heinz Mauelshagen <heinzm@redhat.com>
+AuthorDate:    Mon Jul 23 19:20:18 2018 +0200
+Committer:     Heinz Mauelshagen <heinzm@redhat.com>
+CommitterDate: Mon Jul 23 19:35:34 2018 +0200
 
-lvconvert: restrict command matching for no option variant
+lvconvert: reject conversions of LVs under snapshot
 
-The 'lvconvert LV' command def has caused multiple problems
-for command matching because it matches the required options
-of any lvconvert command.  Any lvconvert with incorrect options
-ends up matching 'lvconvert LV', which then produces an error
-about incorrect options being used for 'lvconvert LV'.  This
-prevents suggestions from nearest-command partial command matches.
+Conversions of LVs under snapshot to thinpool or cachepool
+correctly fail but leave them inactive and provide cryptic
+error messages like 'Internal error: #LVs (10) != #visible
+LVs (2) + #snapshots (1) + #internal LVs (5) in VG VG'.
 
-Add a special case for 'lvconvert LV' so that it won't be used
-as a partial match for a command that has options specified.
+Reject and provide better error message.
+
+Resolves: rhbz1514146
 ---
- lib/commands/toolcontext.h |    1 +
- tools/command-lines.in     |    2 +-
- tools/lvmcmdline.c         |   14 ++++++++++++++
- 3 files changed, 16 insertions(+), 1 deletions(-)
+ tools/lvconvert.c |    6 ++++++
+ 1 files changed, 6 insertions(+), 0 deletions(-)
 
-diff --git a/lib/commands/toolcontext.h b/lib/commands/toolcontext.h
-index bc05736..da5d582 100644
---- a/lib/commands/toolcontext.h
-+++ b/lib/commands/toolcontext.h
-@@ -95,6 +95,7 @@ struct cmd_context {
- 	char **argv;
- 	struct arg_values *opt_arg_values;
- 	struct dm_list arg_value_groups;
-+	int opt_count; /* total number of options (beginning with - or --) */
+diff --git a/tools/lvconvert.c b/tools/lvconvert.c
+index 0bb1dc9..4871f7f 100644
+--- a/tools/lvconvert.c
++++ b/tools/lvconvert.c
+@@ -4235,6 +4235,12 @@ static int _lvconvert_to_pool_or_swap_metadata_single(struct cmd_context *cmd,
+ 		return 0;
+ 	};
  
- 	/*
- 	 * Position args remaining after command name
-diff --git a/tools/command-lines.in b/tools/command-lines.in
-index 9d407d0..b7aefa3 100644
---- a/tools/command-lines.in
-+++ b/tools/command-lines.in
-@@ -700,7 +700,7 @@ RULE: all and lv_is_converting
- # for compat since this was how it used to be done.
- lvconvert LV_mirror_raid
- OO: OO_LVCONVERT
--ID: lvconvert_start_poll
-+ID: lvconvert_plain
- DESC: Poll LV to continue conversion (also see --startpoll)
- DESC: or waits till conversion/mirror syncing is finished
- FLAGS: SECONDARY_SYNTAX
-diff --git a/tools/lvmcmdline.c b/tools/lvmcmdline.c
-index 0dd24ec..298ead7 100644
---- a/tools/lvmcmdline.c
-+++ b/tools/lvmcmdline.c
-@@ -118,6 +118,7 @@ static const struct command_function _command_functions[CMD_COUNT] = {
- 
- 	/* lvconvert utility to trigger polling on an LV. */
- 	{ lvconvert_start_poll_CMD, lvconvert_start_poll_cmd },
-+	{ lvconvert_plain_CMD, lvconvert_start_poll_cmd },
- 
- 	/* lvconvert utilities for creating/maintaining thin and cache objects. */
- 	{ lvconvert_to_thinpool_CMD,			lvconvert_to_pool_cmd },
-@@ -1578,6 +1579,17 @@ static struct command *_find_command(struct cmd_context *cmd, const char *path,
- 		if (arg_is_set(cmd, help_ARG) || arg_is_set(cmd, help2_ARG) || arg_is_set(cmd, longhelp_ARG) || arg_is_set(cmd, version_ARG))
- 			return &commands[i];
- 
-+		/*
-+		 * The 'lvconvert LV' cmd def matches any lvconvert cmd which throws off
-+		 * nearest-command partial-match suggestions.  Make it a special case so
-+		 * that it won't be used as a close match.  If the command has any option
-+		 * set (other than -v), don't attempt to match it to 'lvconvert LV'.
-+		 */
-+		if (commands[i].command_enum == lvconvert_plain_CMD) {
-+			if (cmd->opt_count - cmd->opt_arg_values[verbose_ARG].count)
-+				continue;
-+		}
++	if (lv_is_origin(lv)) {
++		log_error("Cannot convert logical volume %s under snapshot.",
++			  display_lvname(lv));
++		return 0;
++	};
 +
- 		match_required = 0;	/* required parameters that match */
- 		match_ro = 0;		/* required opt_args that match */
- 		match_rp = 0;		/* required pos_args that match */
-@@ -2096,6 +2108,8 @@ static int _process_command_line(struct cmd_context *cmd, int *argc, char ***arg
- 		if (goval == '?')
- 			return 0;
- 
-+		cmd->opt_count++;
-+
- 		/*
- 		 * translate the option value used by getopt into the enum
- 		 * value (e.g. foo_ARG) from the args array.
+ 	if (cmd->position_argc > 1) {
+ 		/* First pos arg is required LV, remaining are optional PVs. */
+ 		if (!(use_pvh = create_pv_list(cmd->mem, lv->vg, cmd->position_argc - 1, cmd->position_argv + 1, 0)))
 
 
