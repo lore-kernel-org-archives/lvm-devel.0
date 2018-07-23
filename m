@@ -1,96 +1,101 @@
 From: David Teigland <teigland@sourceware.org>
 Date: Mon, 23 Jul 2018 13:32:32 -0400
-Subject: 2018-06-01-stable - lvconvert: improve text about splitmirrors
-Message-ID: <201807231732.w6NHWW4P002955@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Subject: 2018-06-01-stable - lvconvert: restrict command matching for no option variant
+Message-ID: <201807231732.w6NHWWCA002954@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=b394a9f63fd01c926c8c00d78f43afb223b2d203
-Commit:        b394a9f63fd01c926c8c00d78f43afb223b2d203
-Parent:        9e296c9c6f3fa92fdc839b30012b51ee28d23d1a
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=9e296c9c6f3fa92fdc839b30012b51ee28d23d1a
+Commit:        9e296c9c6f3fa92fdc839b30012b51ee28d23d1a
+Parent:        5b87f5fb72ec763ff431c1bedb5fab38f332b9b2
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Mon Jul 23 12:28:48 2018 -0500
+AuthorDate:    Mon Jul 23 11:08:12 2018 -0500
 Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Mon Jul 23 12:31:28 2018 -0500
+CommitterDate: Mon Jul 23 12:31:23 2018 -0500
 
-lvconvert: improve text about splitmirrors
+lvconvert: restrict command matching for no option variant
 
-in messages and man page.
+The 'lvconvert LV' command def has caused multiple problems
+for command matching because it matches the required options
+of any lvconvert command.  Any lvconvert with incorrect options
+ends up matching 'lvconvert LV', which then produces an error
+about incorrect options being used for 'lvconvert LV'.  This
+prevents suggestions from nearest-command partial command matches.
+
+Add a special case for 'lvconvert LV' so that it won't be used
+as a partial match for a command that has options specified.
 ---
- lib/metadata/raid_manip.c |    4 ++--
- tools/args.h              |   14 +++++++++-----
- tools/command-lines.in    |    2 +-
- 3 files changed, 12 insertions(+), 8 deletions(-)
+ lib/commands/toolcontext.h |    1 +
+ tools/command-lines.in     |    2 +-
+ tools/lvmcmdline.c         |   14 ++++++++++++++
+ 3 files changed, 16 insertions(+), 1 deletions(-)
 
-diff --git a/lib/metadata/raid_manip.c b/lib/metadata/raid_manip.c
-index 8f78e1a..705a7f9 100644
---- a/lib/metadata/raid_manip.c
-+++ b/lib/metadata/raid_manip.c
-@@ -3563,7 +3563,7 @@ int lv_raid_merge(struct logical_volume *image_lv)
- 	struct volume_group *vg = image_lv->vg;
+diff --git a/lib/commands/toolcontext.h b/lib/commands/toolcontext.h
+index bc05736..da5d582 100644
+--- a/lib/commands/toolcontext.h
++++ b/lib/commands/toolcontext.h
+@@ -95,6 +95,7 @@ struct cmd_context {
+ 	char **argv;
+ 	struct arg_values *opt_arg_values;
+ 	struct dm_list arg_value_groups;
++	int opt_count; /* total number of options (beginning with - or --) */
  
- 	if (image_lv->status & LVM_WRITE) {
--		log_error("%s is not read-only - refusing to merge.",
-+		log_error("%s cannot be merged because --trackchanges was not used.",
- 			  display_lvname(image_lv));
- 		return 0;
- 	}
-@@ -3572,7 +3572,7 @@ int lv_raid_merge(struct logical_volume *image_lv)
- 		return_0;
- 
- 	if (!(p = strstr(lv_name, "_rimage_"))) {
--		log_error("Unable to merge non-mirror image %s.",
-+		log_error("Unable to merge non-raid image %s.",
- 			  display_lvname(image_lv));
- 		return 0;
- 	}
-diff --git a/tools/args.h b/tools/args.h
-index 603a0cf..c2fbac6 100644
---- a/tools/args.h
-+++ b/tools/args.h
-@@ -611,7 +611,9 @@ arg(splitcache_ARG, '\0', "splitcache", 0, 0, 0,
- arg(splitmirrors_ARG, '\0', "splitmirrors", number_VAL, 0, 0,
-     "Splits the specified number of images from a raid1 or mirror LV\n"
-     "and uses them to create a new LV. If --trackchanges is also specified,\n"
--    "changes to the raid1 LV are tracked while the split LV remains detached.\n")
-+    "changes to the raid1 LV are tracked while the split LV remains detached.\n"
-+    "If --name is specified, then the images are permanently split from the\n"
-+    "original LV and changes are not tracked.\n")
- 
- arg(splitsnapshot_ARG, '\0', "splitsnapshot", 0, 0, 0,
-     "Separates a COW snapshot from its origin LV. The LV that is split off\n"
-@@ -691,10 +693,12 @@ arg(thinpool_ARG, '\0', "thinpool", lv_VAL, 0, 0,
- arg(trackchanges_ARG, '\0', "trackchanges", 0, 0, 0,
-     "Can be used with --splitmirrors on a raid1 LV. This causes\n"
-     "changes to the original raid1 LV to be tracked while the split images\n"
--    "remain detached. This allows the read-only detached image(s) to be\n"
--    "merged efficiently back into the raid1 LV later. Only the regions with\n"
--    "changed data are resynchronized during merge. (This option only applies\n"
--    "when using the raid1 LV type.)\n")
-+    "remain detached. This is a temporary state that allows the read-only\n"
-+    "detached image to be merged efficiently back into the raid1 LV later.\n"
-+    "Only the regions with changed data are resynchronized during merge.\n"
-+    "While a raid1 LV is tracking changes, operations on it are limited to\n"
-+    "merging the split image (see --mergemirrors) or permanently splitting\n"
-+    "the image (see --splitmirrors with --name.\n")
- 
- /* TODO: hide this? */
- arg(trustcache_ARG, '\0', "trustcache", 0, 0, 0,
+ 	/*
+ 	 * Position args remaining after command name
 diff --git a/tools/command-lines.in b/tools/command-lines.in
-index b7aefa3..a8c06ba 100644
+index 9d407d0..b7aefa3 100644
 --- a/tools/command-lines.in
 +++ b/tools/command-lines.in
-@@ -399,7 +399,7 @@ lvconvert --splitmirrors Number --trackchanges LV_raid1_cache
+@@ -700,7 +700,7 @@ RULE: all and lv_is_converting
+ # for compat since this was how it used to be done.
+ lvconvert LV_mirror_raid
  OO: OO_LVCONVERT
- OP: PV ...
- ID: lvconvert_split_mirror_images
--DESC: Split images from a raid1 LV and track changes to origin.
-+DESC: Split images from a raid1 LV and track changes to origin for later merge.
- RULE: all not lv_is_locked lv_is_pvmove
+-ID: lvconvert_start_poll
++ID: lvconvert_plain
+ DESC: Poll LV to continue conversion (also see --startpoll)
+ DESC: or waits till conversion/mirror syncing is finished
+ FLAGS: SECONDARY_SYNTAX
+diff --git a/tools/lvmcmdline.c b/tools/lvmcmdline.c
+index 0dd24ec..298ead7 100644
+--- a/tools/lvmcmdline.c
++++ b/tools/lvmcmdline.c
+@@ -118,6 +118,7 @@ static const struct command_function _command_functions[CMD_COUNT] = {
  
- lvconvert --mergemirrors LV_linear_raid|VG|Tag ...
+ 	/* lvconvert utility to trigger polling on an LV. */
+ 	{ lvconvert_start_poll_CMD, lvconvert_start_poll_cmd },
++	{ lvconvert_plain_CMD, lvconvert_start_poll_cmd },
+ 
+ 	/* lvconvert utilities for creating/maintaining thin and cache objects. */
+ 	{ lvconvert_to_thinpool_CMD,			lvconvert_to_pool_cmd },
+@@ -1578,6 +1579,17 @@ static struct command *_find_command(struct cmd_context *cmd, const char *path,
+ 		if (arg_is_set(cmd, help_ARG) || arg_is_set(cmd, help2_ARG) || arg_is_set(cmd, longhelp_ARG) || arg_is_set(cmd, version_ARG))
+ 			return &commands[i];
+ 
++		/*
++		 * The 'lvconvert LV' cmd def matches any lvconvert cmd which throws off
++		 * nearest-command partial-match suggestions.  Make it a special case so
++		 * that it won't be used as a close match.  If the command has any option
++		 * set (other than -v), don't attempt to match it to 'lvconvert LV'.
++		 */
++		if (commands[i].command_enum == lvconvert_plain_CMD) {
++			if (cmd->opt_count - cmd->opt_arg_values[verbose_ARG].count)
++				continue;
++		}
++
+ 		match_required = 0;	/* required parameters that match */
+ 		match_ro = 0;		/* required opt_args that match */
+ 		match_rp = 0;		/* required pos_args that match */
+@@ -2096,6 +2108,8 @@ static int _process_command_line(struct cmd_context *cmd, int *argc, char ***arg
+ 		if (goval == '?')
+ 			return 0;
+ 
++		cmd->opt_count++;
++
+ 		/*
+ 		 * translate the option value used by getopt into the enum
+ 		 * value (e.g. foo_ARG) from the args array.
 
 
