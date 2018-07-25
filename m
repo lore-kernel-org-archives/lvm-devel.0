@@ -1,65 +1,66 @@
-From: Heinz Mauelshagen <heinzm@sourceware.org>
-Date: Tue, 24 Jul 2018 14:41:46 -0400
-Subject: master - test: new lvcreate-raid1-error-read.sh
-Message-ID: <201807241841.w6OIfkLT027129@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: Marian Csontos <mcsontos@sourceware.org>
+Date: Wed, 25 Jul 2018 05:37:52 -0400
+Subject: 2018-06-01-stable - dmsetup: fix error propagation in _display_info_cols()
+Message-ID: <201807250937.w6P9bqaw028802@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=2f43f0393e9d7b85578895aa2e31314a4565e47d
-Commit:        2f43f0393e9d7b85578895aa2e31314a4565e47d
-Parent:        706606627f9b1ca75bb49466ae9aee04d858c2d9
-Author:        Heinz Mauelshagen <heinzm@redhat.com>
-AuthorDate:    Tue Jul 24 20:38:22 2018 +0200
-Committer:     Heinz Mauelshagen <heinzm@redhat.com>
-CommitterDate: Tue Jul 24 20:41:26 2018 +0200
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=951676a59eb2b3130abb9eec690206665708b0d0
+Commit:        951676a59eb2b3130abb9eec690206665708b0d0
+Parent:        4456d9aa77de7ac035ab975d87b0696e33370ab4
+Author:        Bryn M. Reeves <bmr@redhat.com>
+AuthorDate:    Thu Jun 28 14:25:30 2018 +0100
+Committer:     Marian Csontos <mcsontos@redhat.com>
+CommitterDate: Wed Jul 25 10:55:28 2018 +0200
 
-test: new lvcreate-raid1-error-read.sh
+dmsetup: fix error propagation in _display_info_cols()
 
-Test for MD RAID kernel bug in read_balance() preventing
-reads of failed sectors to get rescheduled to another leg.
+Commit 3f35146 added a check on the value returned by the
+_display_info_cols() function:
+
+  1024         if (!_switches[COLS_ARG])
+  1025                 _display_info_long(dmt, &info);
+  1026         else
+  1027                 r = _display_info_cols(dmt, &info);
+  1028
+  1029         return r;
+
+This exposes a bug in the dmstats code in _display_info_cols:
+the fact that a device has no regions is explicitly not an error
+(and is documented as such in the code), but since the return
+code is not changed before leaving the function it is now treated
+as an error leading to:
+
+  # dmstats list
+  Command failed.
+
+When no regions exist.
+
+Set the return code to the correct value before returning.
+
+(cherry picked from commit 29b9ccd261be025aaf75e58e5d2547e818ef22c3)
 ---
- test/shell/lvcreate-raid1-read-error.sh |   31 +++++++++++++++++++++++++++++++
- 1 files changed, 31 insertions(+), 0 deletions(-)
+ tools/dmsetup.c |    4 +++-
+ 1 files changed, 3 insertions(+), 1 deletions(-)
 
-diff --git a/test/shell/lvcreate-raid1-read-error.sh b/test/shell/lvcreate-raid1-read-error.sh
-new file mode 100644
-index 0000000..6907758
---- /dev/null
-+++ b/test/shell/lvcreate-raid1-read-error.sh
-@@ -0,0 +1,31 @@
-+#!/bin/sh
-+# Copyright (C) 2018 Red Hat, Inc. All rights reserved.
-+#
-+# This copyrighted material is made available to anyone wishing to use,
-+# modify, copy, or redistribute it subject to the terms and conditions
-+# of the GNU General Public License v.2.
-+#
-+# You should have received a copy of the GNU General Public License
-+# along with this program; if not, write to the Free Software Foundation,
-+# Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
-+
-+SKIP_WITH_LVMLOCKD=1
-+SKIP_WITH_LVMPOLLD=1
-+
-+. lib/inittest
-+
-+# Test for MD raid1 kernel bug causing read
-+# errors on failing first leg sectors.
-+
-+# Create VG with 2 PVs
-+aux prepare_vg 2 2
-+
-+# Create 2-legged raid1 LV
-+lvcreate --yes --type raid1 --mirrors 1 --extents 1 --name $lv $vg
-+aux wait_for_sync $vg $lv
-+
-+aux error_dev "$dev1" 20:500
-+
-+dd if=$DM_DEV_DIR/$vg/$lv iflag=direct,fullblock of=/dev/zero bs=128K count=1
-+
-+vgremove --force $vg
+diff --git a/tools/dmsetup.c b/tools/dmsetup.c
+index 95a15dd..3cdf862 100644
+--- a/tools/dmsetup.c
++++ b/tools/dmsetup.c
+@@ -939,8 +939,10 @@ static int _display_info_cols(struct dm_task *dmt, struct dm_info *info)
+ 			goto_out;
+ 
+ 		/* No regions to report is not an error */
+-		if (!dm_stats_get_nr_regions(obj.stats))
++		if (!dm_stats_get_nr_regions(obj.stats)) {
++			r = 1;
+ 			goto out;
++		}
+ 	}
+ 
+ 	/* group report with no groups? */
 
 
