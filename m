@@ -1,23 +1,24 @@
 From: Marian Csontos <mcsontos@sourceware.org>
-Date: Thu, 26 Jul 2018 09:03:52 -0400
-Subject: master - test: Check flavour is used and exists
-Message-ID: <201807261303.w6QD3qp4018309@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Thu, 26 Jul 2018 09:18:14 -0400
+Subject: 2018-06-01-stable - test: Check flavour is used and exists
+Message-ID: <201807261318.w6QDIEXp021369@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=9cd05d1f1eef6ceb2dd0b18f792730f711334578
-Commit:        9cd05d1f1eef6ceb2dd0b18f792730f711334578
-Parent:        7f49d463d6c362a472d3ba721f91558602901a33
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=48594d007a88791c4e2dedbddd40fca97bcf5ed2
+Commit:        48594d007a88791c4e2dedbddd40fca97bcf5ed2
+Parent:        50a603de6fd860fc9009e512978b8899407c4980
 Author:        Marian Csontos <mcsontos@redhat.com>
 AuthorDate:    Thu Jul 26 15:01:50 2018 +0200
 Committer:     Marian Csontos <mcsontos@redhat.com>
-CommitterDate: Thu Jul 26 15:01:50 2018 +0200
+CommitterDate: Thu Jul 26 15:04:16 2018 +0200
 
 test: Check flavour is used and exists
 
+(cherry picked from commit 9cd05d1f1eef6ceb2dd0b18f792730f711334578)
 ---
  test/lib/inittest.sh |    8 +++++---
  1 files changed, 5 insertions(+), 3 deletions(-)
