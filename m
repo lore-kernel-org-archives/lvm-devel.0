@@ -1,27 +1,26 @@
 From: Heinz Mauelshagen <heinzm@sourceware.org>
-Date: Wed, 25 Jul 2018 19:35:28 -0400
-Subject: master - lvconvert: reject split trackchanges conversions
-Message-ID: <201807252335.w6PNZSue029168@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Wed, 25 Jul 2018 20:08:34 -0400
+Subject: master - lvconvert: reject conversions on raid1 split trackchanges SubLVs
+Message-ID: <201807260008.w6Q08Yfv001889@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=67b3a44a74352d9eb9bf435aeef631dfc3b874ab
-Commit:        67b3a44a74352d9eb9bf435aeef631dfc3b874ab
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=8b0729af0fd357e66e95834e92913ea2a42d4e93
+Commit:        8b0729af0fd357e66e95834e92913ea2a42d4e93
 Parent:        2f43f0393e9d7b85578895aa2e31314a4565e47d
 Author:        Heinz Mauelshagen <heinzm@redhat.com>
 AuthorDate:    Thu Jul 26 01:00:11 2018 +0200
 Committer:     Heinz Mauelshagen <heinzm@redhat.com>
-CommitterDate: Thu Jul 26 01:34:55 2018 +0200
+CommitterDate: Thu Jul 26 02:05:49 2018 +0200
 
-lvconvert: reject split trackchanges conversions
+lvconvert: reject conversions on raid1 split trackchanges SubLVs
 
 Prohibit conversions of raid1 split trackchanges SubLVs
 because they will fail to get merged back into the RaidLV.
 
-Resolves: rhbz1579072
 Resolves: rhbz1579438
 ---
  WHATS_NEW                                        |    1 +
