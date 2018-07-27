@@ -1,20 +1,20 @@
 From: Marian Csontos <mcsontos@sourceware.org>
-Date: Fri, 27 Jul 2018 11:09:43 -0400
-Subject: 2018-06-01-stable - Add BSD 2-Clause License
-Message-ID: <201807271509.w6RF9hvc027591@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Fri, 27 Jul 2018 11:10:23 -0400
+Subject: master - Add BSD 2-Clause License
+Message-ID: <201807271510.w6RFANxL027629@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=0174ba692cff6858525cea749ad59125ad0ac3ca
-Commit:        0174ba692cff6858525cea749ad59125ad0ac3ca
-Parent:        48594d007a88791c4e2dedbddd40fca97bcf5ed2
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=aa464aa2f6b438092a50ca20f149557550c7147b
+Commit:        aa464aa2f6b438092a50ca20f149557550c7147b
+Parent:        9cd05d1f1eef6ceb2dd0b18f792730f711334578
 Author:        Marian Csontos <mcsontos@redhat.com>
 AuthorDate:    Fri Jul 27 17:08:19 2018 +0200
 Committer:     Marian Csontos <mcsontos@redhat.com>
-CommitterDate: Fri Jul 27 17:09:03 2018 +0200
+CommitterDate: Fri Jul 27 17:09:46 2018 +0200
 
 Add BSD 2-Clause License
 
