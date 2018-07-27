@@ -1,53 +1,58 @@
 From: Marian Csontos <mcsontos@sourceware.org>
-Date: Thu, 26 Jul 2018 09:18:14 -0400
-Subject: 2018-06-01-stable - test: Check flavour is used and exists
-Message-ID: <201807261318.w6QDIEXp021369@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Fri, 27 Jul 2018 11:09:43 -0400
+Subject: 2018-06-01-stable - Add BSD 2-Clause License
+Message-ID: <201807271509.w6RF9hvc027591@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=48594d007a88791c4e2dedbddd40fca97bcf5ed2
-Commit:        48594d007a88791c4e2dedbddd40fca97bcf5ed2
-Parent:        50a603de6fd860fc9009e512978b8899407c4980
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=0174ba692cff6858525cea749ad59125ad0ac3ca
+Commit:        0174ba692cff6858525cea749ad59125ad0ac3ca
+Parent:        48594d007a88791c4e2dedbddd40fca97bcf5ed2
 Author:        Marian Csontos <mcsontos@redhat.com>
-AuthorDate:    Thu Jul 26 15:01:50 2018 +0200
+AuthorDate:    Fri Jul 27 17:08:19 2018 +0200
 Committer:     Marian Csontos <mcsontos@redhat.com>
-CommitterDate: Thu Jul 26 15:04:16 2018 +0200
+CommitterDate: Fri Jul 27 17:09:03 2018 +0200
 
-test: Check flavour is used and exists
+Add BSD 2-Clause License
 
-(cherry picked from commit 9cd05d1f1eef6ceb2dd0b18f792730f711334578)
+This is required by C++ test harness.
 ---
- test/lib/inittest.sh |    8 +++++---
- 1 files changed, 5 insertions(+), 3 deletions(-)
+ COPYING.BSD |   25 +++++++++++++++++++++++++
+ 1 files changed, 25 insertions(+), 0 deletions(-)
 
-diff --git a/test/lib/inittest.sh b/test/lib/inittest.sh
-index c48ea13..967fc1f 100644
---- a/test/lib/inittest.sh
-+++ b/test/lib/inittest.sh
-@@ -25,6 +25,8 @@ TESTNAME=${0##*/}
- PS4='#${BASH_SOURCE[0]##*/}:${LINENO}+ '
- export TESTNAME PS4
- 
-+LVM_TEST_FLAVOUR=${LVM_TEST_FLAVOUR-}
+diff --git a/COPYING.BSD b/COPYING.BSD
+new file mode 100644
+index 0000000..20322c9
+--- /dev/null
++++ b/COPYING.BSD
+@@ -0,0 +1,25 @@
++BSD 2-Clause License
 +
- LVM_TEST_BACKING_DEVICE=${LVM_TEST_BACKING_DEVICE-}
- LVM_TEST_DEVDIR=${LVM_TEST_DEVDIR-}
- LVM_TEST_NODEBUG=${LVM_TEST_NODEBUG-}
-@@ -49,9 +51,9 @@ SKIP_WITH_LVMPOLLD=${SKIP_WITH_LVMPOLLD-}
- SKIP_WITH_LVMLOCKD=${SKIP_WITH_LVMLOCKD-}
- SKIP_ROOT_DM_CHECK=${SKIP_ROOT_DM_CHECK-}
- 
--if test -n "$LVM_TEST_FLAVOUR"; then
--	. "lib/flavour-$LVM_TEST_FLAVOUR"
--fi
-+test -n "$LVM_TEST_FLAVOUR" || { echo "NOTE: Empty flavour">&2; initskip; }
-+test -f "lib/flavour-$LVM_TEST_FLAVOUR" || { echo "NOTE: Flavour '$LVM_TEST_FLAVOUR' does not exist">&2; initskip; }
-+. "lib/flavour-$LVM_TEST_FLAVOUR"
- 
- test -n "$SKIP_WITHOUT_CLVMD" && test "$LVM_TEST_LOCKING" -ne 3 && initskip
- test -n "$SKIP_WITH_CLVMD" && test "$LVM_TEST_LOCKING" = 3 && initskip
++Copyright (c) 2014, Red Hat, Inc.
++All rights reserved.
++
++Redistribution and use in source and binary forms, with or without
++modification, are permitted provided that the following conditions are met:
++
++1. Redistributions of source code must retain the above copyright notice, this
++   list of conditions and the following disclaimer.
++
++2. Redistributions in binary form must reproduce the above copyright notice,
++   this list of conditions and the following disclaimer in the documentation
++   and/or other materials provided with the distribution.
++
++THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
++ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
++WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
++DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
++FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
++DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
++SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
++CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
++OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
++OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 
