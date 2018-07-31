@@ -1,1034 +1,594 @@
-From: David Teigland <teigland@sourceware.org>
-Date: Wed, 11 Jul 2018 12:28:40 -0400
-Subject: master - tests: remove lvmetad tests
-Message-ID: <201807111628.w6BGSeir009386@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: Zdenek Kabelac <zkabelac@sourceware.org>
+Date: Tue, 31 Jul 2018 09:04:46 -0400
+Subject: 2018-06-01-stable - dmeventd: base vdo plugin
+Message-ID: <201807311304.w6VD4kbW002831@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=63ec42f428e010dcc638d887a5089d491b36b0e9
-Commit:        63ec42f428e010dcc638d887a5089d491b36b0e9
-Parent:        117160b27e510dceb1ed6acf995115c040acd88d
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Tue Jul 10 14:40:48 2018 -0500
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Wed Jul 11 11:27:54 2018 -0500
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=4ed9b0738022d32ecd7d3fffc89df89d48869df1
+Commit:        4ed9b0738022d32ecd7d3fffc89df89d48869df1
+Parent:        0174ba692cff6858525cea749ad59125ad0ac3ca
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Mon Jul 9 11:41:26 2018 +0200
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Tue Jul 31 14:53:27 2018 +0200
 
-tests: remove lvmetad tests
+dmeventd: base vdo plugin
 
+Introduce VDO plugin for monitoring VDO devices.
+
+This plugin can be used also by other users, as plugin checks
+for UUID prefix 'LVM-' and run  lvm actions only on those
+devices.
+
+Non LVM- device are only monitored and log warnings
+when usage threshold reaches 80%.
 ---
- test/Makefile.in                    |   67 +++-------------------
- test/shell/lvmetad-ambiguous.sh     |   73 ------------------------
- test/shell/lvmetad-autoshutdown.sh  |   58 -------------------
- test/shell/lvmetad-client-filter.sh |   22 -------
- test/shell/lvmetad-disabled.sh      |  107 -----------------------------------
- test/shell/lvmetad-dump.sh          |   26 ---------
- test/shell/lvmetad-lvscan-cache.sh  |   35 -----------
- test/shell/lvmetad-no-cluster.sh    |   24 --------
- test/shell/lvmetad-override.sh      |   54 ------------------
- test/shell/lvmetad-pvs.sh           |   25 --------
- test/shell/lvmetad-pvscan-filter.sh |   57 ------------------
- test/shell/lvmetad-pvscan-md.sh     |   38 ------------
- test/shell/lvmetad-pvscan-nomda.sh  |   59 -------------------
- test/shell/lvmetad-restart.sh       |   29 ---------
- test/shell/lvmetad-sysinit.sh       |   92 ------------------------------
- test/shell/lvmetad-test.sh          |   38 ------------
- 16 files changed, 8 insertions(+), 796 deletions(-)
+ WHATS_NEW_DM                                   |    1 +
+ configure                                      |    3 +-
+ configure.ac                                   |    1 +
+ daemons/dmeventd/libdevmapper-event.c          |    1 +
+ daemons/dmeventd/plugins/Makefile.in           |    9 +-
+ daemons/dmeventd/plugins/vdo/.exported_symbols |    3 +
+ daemons/dmeventd/plugins/vdo/Makefile.in       |   36 ++
+ daemons/dmeventd/plugins/vdo/dmeventd_vdo.c    |  406 ++++++++++++++++++++++++
+ 8 files changed, 453 insertions(+), 7 deletions(-)
 
-diff --git a/test/Makefile.in b/test/Makefile.in
-index 5b7578c..5185322 100644
---- a/test/Makefile.in
-+++ b/test/Makefile.in
-@@ -38,7 +38,7 @@ CLEAN_TARGETS += $(RUN_BASE) $(addprefix lib/,$(LIB_LVMLOCKD_CONF) $(LIB_MKE2FS_
- endif
+diff --git a/WHATS_NEW_DM b/WHATS_NEW_DM
+index e77352a..c42ee17 100644
+--- a/WHATS_NEW_DM
++++ b/WHATS_NEW_DM
+@@ -1,5 +1,6 @@
+ Version 1.02.150 - 
+ =================================
++  Add vdo plugin for monitoring VDO devices.
  
- CLEAN_TARGETS += .lib-dir-stamp .tests-stamp $(LIB) $(addprefix lib/,\
--	$(CMDS) clvmd dmeventd dmsetup dmstats lvmetad lvmpolld \
-+	$(CMDS) clvmd dmeventd dmsetup dmstats lvmpolld \
- 	harness lvmdbusd.profile thin-performance.profile fsadm \
- 	dm-version-expected version-expected \
- 	paths-installed paths-installed-t paths-common paths-common-t)
-@@ -54,16 +54,10 @@ comma = ,
- RUN := $(shell find -L $(srcdir) -regextype posix-egrep \( -path \*/shell/\*.sh -or -path \*/unit/\*.sh \) -and -regex "$(srcdir)/.*($(subst $(comma),|,$(T))).*" -and -not -regex "$(srcdir)/.*($(subst $(comma),|,$(S))).*" | $(SORT))
- RUN_BASE = $(subst $(srcdir)/,,$(RUN))
+ Version 1.02.149 - 19th July 2018
+ =================================
+diff --git a/configure b/configure
+index 7d945df..908dc7c 100755
+--- a/configure
++++ b/configure
+@@ -15559,7 +15559,7 @@ _ACEOF
  
--ifeq ("@BUILD_LVMETAD@", "yes")
--LVMETAD_RUN_BASE = $(RUN_BASE)
--LVMETAD_NDEV_FLAVOUR = ,ndev-lvmetad
--LVMETAD_UDEV_FLAVOUR = ,udev-lvmetad
+ 
+ ################################################################################
+-ac_config_files="$ac_config_files Makefile make.tmpl daemons/Makefile daemons/clvmd/Makefile daemons/cmirrord/Makefile daemons/dmeventd/Makefile daemons/dmeventd/libdevmapper-event.pc daemons/dmeventd/plugins/Makefile daemons/dmeventd/plugins/lvm2/Makefile daemons/dmeventd/plugins/raid/Makefile daemons/dmeventd/plugins/mirror/Makefile daemons/dmeventd/plugins/snapshot/Makefile daemons/dmeventd/plugins/thin/Makefile daemons/dmfilemapd/Makefile daemons/lvmdbusd/Makefile daemons/lvmdbusd/lvmdbusd daemons/lvmdbusd/lvmdb.py daemons/lvmdbusd/lvm_shell_proxy.py daemons/lvmdbusd/path.py daemons/lvmetad/Makefile daemons/lvmpolld/Makefile daemons/lvmlockd/Makefile device_mapper/Makefile conf/Makefile conf/example.conf conf/lvmlocal.conf conf/command_profile_template.profile conf/metadata_profile_template.profile include/.symlinks include/Makefile lib/Makefile lib/locking/Makefile include/lvm-version.h libdaemon/Makefile libdaemon/client/Makefile libdaemon/server/Makefile libdm/Makefile libdm/
+ libdevmapper.pc liblvm/Makefile liblvm/liblvm2app.pc man/Makefile po/Makefile python/Makefile python/setup.py scripts/blkdeactivate.sh scripts/blk_availability_init_red_hat scripts/blk_availability_systemd_red_hat.service scripts/clvmd_init_red_hat scripts/cmirrord_init_red_hat scripts/com.redhat.lvmdbus1.service scripts/dm_event_systemd_red_hat.service scripts/dm_event_systemd_red_hat.socket scripts/lvm2_cluster_activation_red_hat.sh scripts/lvm2_cluster_activation_systemd_red_hat.service scripts/lvm2_clvmd_systemd_red_hat.service scripts/lvm2_cmirrord_systemd_red_hat.service scripts/lvm2_lvmdbusd_systemd_red_hat.service scripts/lvm2_lvmetad_init_red_hat scripts/lvm2_lvmetad_systemd_red_hat.service scripts/lvm2_lvmetad_systemd_red_hat.socket scripts/lvm2_lvmpolld_init_red_hat scripts/lvm2_lvmpolld_systemd_red_hat.service scripts/lvm2_lvmpolld_systemd_red_hat.socket scripts/lvm2_lvmlockd_systemd_red_hat.service scripts/lvm2_lvmlocking_systemd_red_hat.service scripts/lvm2_monitoring_
+ init_red_hat scripts/lvm2_monitoring_systemd_red_hat.service scripts/lvm2_pvscan_systemd_red_hat at .service scripts/lvm2_tmpfiles_red_hat.conf scripts/lvmdump.sh scripts/Makefile test/Makefile test/api/Makefile test/api/python_lvm_unit.py test/unit/Makefile tools/Makefile udev/Makefile"
++ac_config_files="$ac_config_files Makefile make.tmpl daemons/Makefile daemons/clvmd/Makefile daemons/cmirrord/Makefile daemons/dmeventd/Makefile daemons/dmeventd/libdevmapper-event.pc daemons/dmeventd/plugins/Makefile daemons/dmeventd/plugins/lvm2/Makefile daemons/dmeventd/plugins/raid/Makefile daemons/dmeventd/plugins/mirror/Makefile daemons/dmeventd/plugins/snapshot/Makefile daemons/dmeventd/plugins/thin/Makefile daemons/dmeventd/plugins/vdo/Makefile daemons/dmfilemapd/Makefile daemons/lvmdbusd/Makefile daemons/lvmdbusd/lvmdbusd daemons/lvmdbusd/lvmdb.py daemons/lvmdbusd/lvm_shell_proxy.py daemons/lvmdbusd/path.py daemons/lvmetad/Makefile daemons/lvmpolld/Makefile daemons/lvmlockd/Makefile device_mapper/Makefile conf/Makefile conf/example.conf conf/lvmlocal.conf conf/command_profile_template.profile conf/metadata_profile_template.profile include/.symlinks include/Makefile lib/Makefile lib/locking/Makefile include/lvm-version.h libdaemon/Makefile libdaemon/client/Makefile libdaemon
+ /server/Makefile libdm/Makefile libdm/libdevmapper.pc liblvm/Makefile liblvm/liblvm2app.pc man/Makefile po/Makefile python/Makefile python/setup.py scripts/blkdeactivate.sh scripts/blk_availability_init_red_hat scripts/blk_availability_systemd_red_hat.service scripts/clvmd_init_red_hat scripts/cmirrord_init_red_hat scripts/com.redhat.lvmdbus1.service scripts/dm_event_systemd_red_hat.service scripts/dm_event_systemd_red_hat.socket scripts/lvm2_cluster_activation_red_hat.sh scripts/lvm2_cluster_activation_systemd_red_hat.service scripts/lvm2_clvmd_systemd_red_hat.service scripts/lvm2_cmirrord_systemd_red_hat.service scripts/lvm2_lvmdbusd_systemd_red_hat.service scripts/lvm2_lvmetad_init_red_hat scripts/lvm2_lvmetad_systemd_red_hat.service scripts/lvm2_lvmetad_systemd_red_hat.socket scripts/lvm2_lvmpolld_init_red_hat scripts/lvm2_lvmpolld_systemd_red_hat.service scripts/lvm2_lvmpolld_systemd_red_hat.socket scripts/lvm2_lvmlockd_systemd_red_hat.service scripts/lvm2_lvmlocking_systemd_re
+ d_hat.service scripts/lvm2_monitoring_init_red_hat scripts/lvm2_monitoring_systemd_red_hat.service scripts/lvm2_pvscan_systemd_red_hat at .service scripts/lvm2_tmpfiles_red_hat.conf scripts/lvmdump.sh scripts/Makefile test/Makefile test/api/Makefile test/api/python_lvm_unit.py test/unit/Makefile tools/Makefile udev/Makefile"
+ 
+ cat >confcache <<\_ACEOF
+ # This file is a shell script that caches the results of configure
+@@ -16267,6 +16267,7 @@ do
+     "daemons/dmeventd/plugins/mirror/Makefile") CONFIG_FILES="$CONFIG_FILES daemons/dmeventd/plugins/mirror/Makefile" ;;
+     "daemons/dmeventd/plugins/snapshot/Makefile") CONFIG_FILES="$CONFIG_FILES daemons/dmeventd/plugins/snapshot/Makefile" ;;
+     "daemons/dmeventd/plugins/thin/Makefile") CONFIG_FILES="$CONFIG_FILES daemons/dmeventd/plugins/thin/Makefile" ;;
++    "daemons/dmeventd/plugins/vdo/Makefile") CONFIG_FILES="$CONFIG_FILES daemons/dmeventd/plugins/vdo/Makefile" ;;
+     "daemons/dmfilemapd/Makefile") CONFIG_FILES="$CONFIG_FILES daemons/dmfilemapd/Makefile" ;;
+     "daemons/lvmdbusd/Makefile") CONFIG_FILES="$CONFIG_FILES daemons/lvmdbusd/Makefile" ;;
+     "daemons/lvmdbusd/lvmdbusd") CONFIG_FILES="$CONFIG_FILES daemons/lvmdbusd/lvmdbusd" ;;
+diff --git a/configure.ac b/configure.ac
+index e427708..b9691ea 100644
+--- a/configure.ac
++++ b/configure.ac
+@@ -2099,6 +2099,7 @@ daemons/dmeventd/plugins/raid/Makefile
+ daemons/dmeventd/plugins/mirror/Makefile
+ daemons/dmeventd/plugins/snapshot/Makefile
+ daemons/dmeventd/plugins/thin/Makefile
++daemons/dmeventd/plugins/vdo/Makefile
+ daemons/dmfilemapd/Makefile
+ daemons/lvmdbusd/Makefile
+ daemons/lvmdbusd/lvmdbusd
+diff --git a/daemons/dmeventd/libdevmapper-event.c b/daemons/dmeventd/libdevmapper-event.c
+index 9aeb4c5..f9a8a2b 100644
+--- a/daemons/dmeventd/libdevmapper-event.c
++++ b/daemons/dmeventd/libdevmapper-event.c
+@@ -645,6 +645,7 @@ int dm_event_register_handler(const struct dm_event_handler *dmevh)
+ 	uuid = dm_task_get_uuid(dmt);
+ 
+ 	if (!strstr(dmevh->dso, "libdevmapper-event-lvm2thin.so") &&
++	    !strstr(dmevh->dso, "libdevmapper-event-lvm2vdo.so") &&
+ 	    !strstr(dmevh->dso, "libdevmapper-event-lvm2snapshot.so") &&
+ 	    !strstr(dmevh->dso, "libdevmapper-event-lvm2mirror.so") &&
+ 	    !strstr(dmevh->dso, "libdevmapper-event-lvm2raid.so"))
+diff --git a/daemons/dmeventd/plugins/Makefile.in b/daemons/dmeventd/plugins/Makefile.in
+index 27edf55..951dd2b 100644
+--- a/daemons/dmeventd/plugins/Makefile.in
++++ b/daemons/dmeventd/plugins/Makefile.in
+@@ -1,6 +1,6 @@
+ #
+ # Copyright (C) 2001-2004 Sistina Software, Inc. All rights reserved.
+-# Copyright (C) 2004-2005, 2011 Red Hat, Inc. All rights reserved.
++# Copyright (C) 2004-2018 Red Hat, Inc. All rights reserved.
+ #
+ # This file is part of LVM2.
+ #
+@@ -16,11 +16,7 @@ srcdir = @srcdir@
+ top_srcdir = @top_srcdir@
+ top_builddir = @top_builddir@
+ 
+-SUBDIRS += lvm2 snapshot raid thin mirror
+-
+-ifeq ($(MAKECMDGOALS),distclean)
+-  SUBDIRS = lvm2 mirror snapshot raid thin
 -endif
--
- ifeq ("@BUILD_LVMPOLLD@", "yes")
- LVMPOLLD_RUN_BASE = $(RUN_BASE)
--LVMPOLLD_NDEV_FLAVOUR = ,ndev-lvmpolld,ndev-cluster-lvmpolld,ndev-lvmetad-lvmpolld
--LVMPOLLD_UDEV_FLAVOUR = ,udev-lvmpolld,udev-cluster-lvmpolld,udev-lvmetad-lvmpolld
-+LVMPOLLD_NDEV_FLAVOUR = ,ndev-lvmpolld
-+LVMPOLLD_UDEV_FLAVOUR = ,udev-lvmpolld
- endif
++SUBDIRS += lvm2 snapshot raid thin mirror vdo
  
- ifeq ("@BUILD_LVMLOCKD@", "yes")
-@@ -85,17 +79,12 @@ help:
- 	@echo "  all			Default target, run check."
- 	@echo "  check			Run all tests."
- 	@echo "  check_system		Run all tests using udev."
--	@echo "  check_local		Run tests without clvmd and lvmetad."
--	@echo "  check_cluster		Run tests with cluster daemon."
--	@echo "  check_lvmetad		Run tests with lvmetad daemon."
-+	@echo "  check_local		Run tests."
- 	@echo "  check_lvmpolld         Run tests with lvmpolld daemon."
--	@echo "  check_cluster_lvmpolld Run tests with clvmd and lvmpolld daemon."
--	@echo "  check_lvmetad_lvmpolld Run tests with lvmetad and lvmpolld daemon."
- 	@echo "  check_all_lvmpolld     Run all tests with lvmpolld daemon."
- 	@echo "  check_lvmlockd_sanlock Run tests with lvmlockd and sanlock."
- 	@echo "  check_lvmlockd_dlm     Run tests with lvmlockd and dlm."
- 	@echo "  check_lvmlockd_test    Run tests with lvmlockd --test."
--	@echo "  check_lvmlockd_test_lvmetad Run tests with lvmlockd --test and lvmetad."
- 	@echo "  run-unit-test          Run only unit tests (root not needed)."
- 	@echo "  clean			Clean dir."
- 	@echo "  help			Display callable targets."
-@@ -107,7 +96,6 @@ help:
- 	@echo "  LVM_TEST_PREFER_BRD	Prefer using brd (ramdisk) over loop for testing [1]."
- 	@echo "  LVM_TEST_DIR		Where to create test files  [$(LVM_TEST_DIR)]."
- 	@echo "  LVM_TEST_LOCKING	Normal (1), Cluster (3)."
--	@echo "  LVM_TEST_LVMETAD	Start lvmetad (1)."
- 	@echo "  LVM_TEST_LVMETAD_DEBUG_OPTS  Allows to override debug opts [-l all]."
- 	@echo "  LVM_TEST_LVMPOLLD	Start lvmpolld"
- 	@echo "  LVM_TEST_NODEBUG	Do not debug lvm commands."
-@@ -124,7 +112,6 @@ help:
- 	@echo "  LVM_TEST_UNLIMITED	Set to get unlimited test log (>32MB)"
- 	@echo "  LVM_VALGRIND		Enable valgrind testing, execs $$"VALGRIND.
- 	@echo "  LVM_VALGRIND_DMEVENTD	Enable valgrind testing of dmeventd (1)."
--	@echo "  LVM_VALGRIND_LVMETAD	Enable valgrind testing of lvmetad (1)."
- 	@echo "  LVM_STRACE		Enable strace logging."
- 	@echo "  LVM_DEBUG_LEVEL	Sets debuging level for valgrind/strace (use > 0)."
- 	@echo "  LVM_VERIFY_UDEV	Default verify state for lvm.conf."
-@@ -136,50 +123,28 @@ help:
- check: .tests-stamp
- 	VERBOSE=$(VERBOSE) ./lib/runner \
- 		--testdir . --outdir $(LVM_TEST_RESULTS) \
--		--flavours ndev-vanilla,ndev-cluster$(LVMETAD_NDEV_FLAVOUR)$(LVMPOLLD_NDEV_FLAVOUR) --only $(T) --skip $(S)
-+		--flavours ndev-vanilla,$(LVMETAD_NDEV_FLAVOUR)$(LVMPOLLD_NDEV_FLAVOUR) --only $(T) --skip $(S)
+ include $(top_builddir)/make.tmpl
  
- check_system: .tests-stamp
- 	VERBOSE=$(VERBOSE) ./lib/runner \
- 		--testdir . --outdir $(LVM_TEST_RESULTS) \
--		--flavours udev-vanilla,udev-cluster$(LVMETAD_UDEV_FLAVOUR)$(LVMPOLLD_UDEV_FLAVOUR)$(LVMLOCKD_UDEV_FLAVOUR) --only $(T) --skip $(S)
--
--check_cluster: .tests-stamp
--	VERBOSE=$(VERBOSE) ./lib/runner \
--		--testdir . --outdir $(LVM_TEST_RESULTS) \
--		--flavours ndev-cluster --only $(T) --skip $(S)
-+		--flavours udev-vanilla,$(LVMETAD_UDEV_FLAVOUR)$(LVMPOLLD_UDEV_FLAVOUR)$(LVMLOCKD_UDEV_FLAVOUR) --only $(T) --skip $(S)
- 
- check_local: .tests-stamp
- 	VERBOSE=$(VERBOSE) ./lib/runner \
- 		--testdir . --outdir $(LVM_TEST_RESULTS) \
- 		--flavours ndev-vanilla --only $(T) --skip $(S)
- 
--ifeq ("@BUILD_LVMETAD@", "yes")
--check_lvmetad: .tests-stamp
--	VERBOSE=$(VERBOSE) ./lib/runner \
--		--testdir . --outdir $(LVM_TEST_RESULTS) \
--		--flavours ndev-lvmetad --only $(T) --skip $(S)
--endif
--
- ifeq ("@BUILD_LVMPOLLD@", "yes")
- check_lvmpolld: .tests-stamp
- 	VERBOSE=$(VERBOSE) ./lib/runner \
- 		--testdir . --outdir results \
- 		--flavours ndev-lvmpolld --only $(T) --skip $(S)
- 
--check_cluster_lvmpolld: .tests-stamp
--	VERBOSE=$(VERBOSE) ./lib/runner \
--		--testdir . --outdir results \
--		--flavours ndev-cluster-lvmpolld --only $(T) --skip $(S)
--
--check_lvmetad_lvmpolld: .tests-stamp
--	VERBOSE=$(VERBOSE) ./lib/runner \
--		--testdir . --outdir results \
--		--flavours ndev-lvmetad-lvmpolld --only $(T) --skip $(S)
--
- check_all_lvmpolld: .tests-stamp
- 	VERBOSE=$(VERBOSE) ./lib/runner \
- 		--testdir . --outdir results \
--		--flavours ndev-lvmpolld,ndev-cluster-lvmpolld,ndev-lvmetad-lvmpolld --only $(T) --skip $(S)
-+		--flavours ndev-lvmpolld --only $(T) --skip $(S)
- endif
- 
- ifeq ("@BUILD_LVMLOCKD@", "yes")
-@@ -203,13 +168,6 @@ check_lvmlockd_test: .tests-stamp
- 		--flavours udev-lvmlockd-test --only $(T) --skip $(S)
- endif
- 
--ifeq ("@BUILD_LVMLOCKD@", "yes")
--check_lvmlockd_test_lvmetad: .tests-stamp
--	VERBOSE=$(VERBOSE) ./lib/runner \
--		--testdir . --outdir results \
--		--flavours udev-lvmlockd-test-lvmetad --only $(T) --skip $(S)
--endif
--
- run-unit-test unit-test:
- 	$(MAKE) -C unit $(@)
- 
-@@ -217,21 +175,12 @@ DATADIR = $(datadir)/lvm2-testsuite
- EXECDIR = $(libexecdir)/lvm2-testsuite
- 
- LIB_FLAVOURS = \
-- flavour-ndev-cluster-lvmpolld\
-- flavour-ndev-cluster\
-- flavour-ndev-lvmetad-lvmpolld\
-- flavour-ndev-lvmetad\
-  flavour-ndev-lvmpolld\
-  flavour-ndev-vanilla\
-- flavour-udev-cluster-lvmpolld\
-- flavour-udev-cluster\
-- flavour-udev-lvmetad-lvmpolld\
-- flavour-udev-lvmetad\
-  flavour-udev-lvmpolld\
-  flavour-udev-lvmlockd-sanlock\
-  flavour-udev-lvmlockd-dlm\
-  flavour-udev-lvmlockd-test\
-- flavour-udev-lvmlockd-test-lvmetad\
-  flavour-udev-vanilla
- 
- LIB_LVMLOCKD_CONF = \
-@@ -362,7 +311,7 @@ LIB = $(addprefix lib/, $(LIB_SHARED) $(LIB_LOCAL) $(LIB_NOT) $(LIB_LINK_NOT) $(
- 	$(RM) lib/clvmd
- 	for i in $(CMDS); do $(LN_S) -f lvm-wrapper lib/$$i; done
- 	for i in daemons/dmeventd/dmeventd \
--		libdm/dm-tools/dmsetup daemons/lvmetad/lvmetad \
-+		libdm/dm-tools/dmsetup \
- 		daemons/lvmpolld/lvmpolld ; do \
- 		$(LN_S) -f $(abs_top_builddir)/$$i lib/; done
- 	$(LN_S) -f $(abs_top_builddir)/libdm/dm-tools/dmsetup lib/dmstats
-diff --git a/test/shell/lvmetad-ambiguous.sh b/test/shell/lvmetad-ambiguous.sh
-deleted file mode 100644
-index 4b69c13..0000000
---- a/test/shell/lvmetad-ambiguous.sh
-+++ /dev/null
-@@ -1,73 +0,0 @@
--#!/usr/bin/env bash
--
--# Copyright (C) 2012 Red Hat, Inc. All rights reserved.
--#
--# This copyrighted material is made available to anyone wishing to use,
--# modify, copy, or redistribute it subject to the terms and conditions
--# of the GNU General Public License v.2.
--#
--# You should have received a copy of the GNU General Public License
--# along with this program; if not, write to the Free Software Foundation,
--# Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
--
--SKIP_WITH_LVMLOCKD=1
--SKIP_WITHOUT_LVMETAD=1
--SKIP_WITH_LVMPOLLD=1
--
--. lib/inittest
--
--aux prepare_pvs 2
--
--# flip the devices around
--init_udev_transaction
--dmsetup remove "$dev1"
--dmsetup remove "$dev2"
--dmsetup create -u TEST-${PREFIX}pv1 ${PREFIX}pv2 ${PREFIX}pv2.table
--dmsetup create -u TEST-${PREFIX}pv2 ${PREFIX}pv1 ${PREFIX}pv1.table
--finish_udev_transaction
--dmsetup info -c
--
--# re-scan them
--pvscan --cache "$dev1" || true
--pvscan --cache "$dev2" || true
--
--# expect both to be there
--pvs -a -o name | tee out
--grep "$dev1" out
--grep "$dev2" out
--
--aux lvmetad_dump
--
--# flip the devices 2nd. time around
--init_udev_transaction
--dmsetup remove "$dev1"
--dmsetup remove "$dev2"
--dmsetup create -u TEST-${PREFIX}pv2 ${PREFIX}pv2 ${PREFIX}pv2.table
--dmsetup create -u TEST-${PREFIX}pv1 ${PREFIX}pv1 ${PREFIX}pv1.table
--finish_udev_transaction
--
--# re-scan them
--pvscan --cache "$dev1" || true
--pvscan --cache "$dev2" || true
--
--# expect both to be there
--pvs -a -o name | tee out
--grep "$dev1" out
--grep "$dev2" out
--
--aux lvmetad_dump
--
--# flip the devices 2nd. time around
--dmsetup remove -f "$dev1"
--dmsetup remove -f "$dev2"
--dmsetup create -u TEST-${PREFIX}pv1 ${PREFIX}pv2 ${PREFIX}pv2.table
--dmsetup create -u TEST-${PREFIX}pv2 ${PREFIX}pv1 ${PREFIX}pv1.table
--
--# re-scan them
--pvscan --cache "$dev1" || true
--pvscan --cache "$dev2" || true
--
--# expect both to be there
--pvs -a -o name | tee out
--grep "$dev1" out
--grep "$dev2" out
-diff --git a/test/shell/lvmetad-autoshutdown.sh b/test/shell/lvmetad-autoshutdown.sh
-deleted file mode 100644
-index c8a5c0c..0000000
---- a/test/shell/lvmetad-autoshutdown.sh
-+++ /dev/null
-@@ -1,58 +0,0 @@
--#!/usr/bin/env bash
--
--# Copyright (C) 2015 Red Hat, Inc. All rights reserved.
--#
--# This copyrighted material is made available to anyone wishing to use,
--# modify, copy, or redistribute it subject to the terms and conditions
--# of the GNU General Public License v.2.
--#
--# You should have received a copy of the GNU General Public License
--# along with this program; if not, write to the Free Software Foundation,
--# Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
--
--SKIP_WITH_LVMLOCKD=1
--SKIP_WITHOUT_LVMETAD=1
--SKIP_WITH_LVMPOLLD=1
--
--. lib/inittest
--
--kill -0 "$(< LOCAL_LVMETAD)" || die "lvmetad is already dead"
--
--lvmetad_timeout=3
--
--aux prepare_pvs 1
--
--vgcreate $vg1 "$dev1"
--
--kill "$(< LOCAL_LVMETAD)"
--aux prepare_lvmetad -t $lvmetad_timeout
--
--sleep $lvmetad_timeout
--
--# lvmetad should die after timeout, but give it some time to do so
--i=0
--while kill -0 "$(< LOCAL_LVMETAD)" 2>/dev/null; do
--	test $i -ge $((lvmetad_timeout*10)) && die "lvmetad didn't shutdown with optional timeout: $lvmetad_timeout seconds"
--	sleep .1
--	i=$((i+1))
--done
--
--aux prepare_lvmetad -t 0
--sleep 1
--# lvmetad must not die with -t 0 option
--kill -0 "$(< LOCAL_LVMETAD)" || die "lvmetad died"
--
--kill "$(< LOCAL_LVMETAD)"
--aux prepare_lvmetad -t $lvmetad_timeout
--
--sleep 1
--vgs
--sleep 1
--vgs
--sleep 1
--vgs
--
--# check that connection to lvmetad resets the timeout
--kill -0 "$(< LOCAL_LVMETAD)" || die "lvmetad died too soon"
--
--vgremove -ff $vg1
-diff --git a/test/shell/lvmetad-client-filter.sh b/test/shell/lvmetad-client-filter.sh
-deleted file mode 100644
-index 095099b..0000000
---- a/test/shell/lvmetad-client-filter.sh
-+++ /dev/null
-@@ -1,22 +0,0 @@
--#!/usr/bin/env bash
--
--# Copyright (C) 2014 Red Hat, Inc. All rights reserved.
--#
--# This copyrighted material is made available to anyone wishing to use,
--# modify, copy, or redistribute it subject to the terms and conditions
--# of the GNU General Public License v.2.
--#
--# You should have received a copy of the GNU General Public License
--# along with this program; if not, write to the Free Software Foundation,
--# Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
--
--SKIP_WITH_LVMLOCKD=1
--SKIP_WITHOUT_LVMETAD=1
--SKIP_WITH_LVMPOLLD=1
--
--. lib/inittest
--
--aux prepare_pvs 2
--
--pvs --config 'devices { filter = [ "r%.*%" ] }' 2>&1 | grep rejected
--pvs --config 'devices { filter = [ "r%.*%" ] }' 2>&1 | not grep 'No device found'
-diff --git a/test/shell/lvmetad-disabled.sh b/test/shell/lvmetad-disabled.sh
-deleted file mode 100644
-index 84d7b54..0000000
---- a/test/shell/lvmetad-disabled.sh
-+++ /dev/null
-@@ -1,107 +0,0 @@
--#!/usr/bin/env bash
--
--# Copyright (C) 2012 Red Hat, Inc. All rights reserved.
--#
--# This copyrighted material is made available to anyone wishing to use,
--# modify, copy, or redistribute it subject to the terms and conditions
--# of the GNU General Public License v.2.
--#
--# You should have received a copy of the GNU General Public License
--# along with this program; if not, write to the Free Software Foundation,
--# Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
--
--SKIP_WITH_LVMLOCKD=1
--SKIP_WITHOUT_LVMETAD=1
--SKIP_WITH_LVMPOLLD=1
--
--. lib/inittest
--
--aux prepare_devs 2
--
--kill "$(< LOCAL_LVMETAD)"
--for i in {200..0} ; do
--	test -e "$TESTDIR/lvmetad.socket" || break
--	test "$i" -eq 0 && die "Too slow closing of lvmetad.socket. Aborting test."
--	echo -n .; sleep .1;
--done # wait for the socket close
--test ! -e "$LVM_LVMETAD_PIDFILE"
--
--aux lvmconf "global/use_lvmetad = 0"
--
--pvcreate "$dev1"
--pvcreate "$dev2"
--vgcreate $vg1 "$dev1"
--vgcreate $vg2 "$dev2"
--
--lvcreate -n $lv1 -l1 $vg1
--
--pvs 2>&1 | tee out
--grep "$dev1" out
--grep "$dev2" out
--
--vgs 2>&1 | tee out
--grep $vg1 out
--grep $vg2 out
--
--aux lvmconf "global/use_lvmetad = 1"
--lvmetad
--while ! test -e "$TESTDIR/lvmetad.socket"; do echo -n .; sleep .1; done # wait for the socket
--test -e "$LVM_LVMETAD_PIDFILE"
--cp "$LVM_LVMETAD_PIDFILE" LOCAL_LVMETAD
--
--pvscan --cache
--pvs 2>&1 | tee out
--grep "$dev1" out
--grep "$dev2" out
--not grep "WARNING: Not using lvmetad" out
--
--# We don't care about the repair, and we know it's
--# not valid on this lv.  We are just running repair
--# because we know one side effect is to disable lvmetad.
--# FIXME: we should install lvmetactl so that we can
--# use that to directly disable lvmetad for tests like this.
--not lvconvert --repair $vg1/$lv1 2>&1 | tee out
--grep "WARNING: Disabling lvmetad cache" out
--
--pvs  -vvvv 2>&1 | tee out
--grep "$dev1" out
--grep "$dev2" out
--grep "WARNING: Not using lvmetad" out
--
--vgs  2>&1 | tee out
--grep $vg1 out
--grep $vg2 out
--grep "WARNING: Not using lvmetad" out
--
--vgchange -an $vg1
--vgremove -y $vg1 2>&1 | tee out
--grep "WARNING: Not using lvmetad" out
--
--pvremove "$dev1" 2>&1 | tee out
--grep "WARNING: Not using lvmetad" out
--
--pvscan --cache  2>&1 | tee out
--not grep "WARNING: Disabling lvmetad cache" out
--
--pvs 2>&1 | tee out
--not grep "$dev1" out
--grep "$dev2" out
--not grep "WARNING: Not using lvmetad" out
--
--vgs 2>&1 | tee out
--not grep $vg1 out
--grep $vg2 out
--not grep "WARNING: Not using lvmetad" out
--
--pvs --config 'global/use_lvmetad=0' 2>&1 | tee out
--not grep "$dev1" out
--grep "$dev2" out
--grep "WARNING: Not using lvmetad" out
--grep "use_lvmetad=0" out
--
--vgs --config 'global/use_lvmetad=0' 2>&1 | tee out
--not grep $vg1 out
--grep $vg2 out
--grep "WARNING: Not using lvmetad" out
--grep "use_lvmetad=0" out
--
-diff --git a/test/shell/lvmetad-dump.sh b/test/shell/lvmetad-dump.sh
-deleted file mode 100644
-index 8c9e74f..0000000
---- a/test/shell/lvmetad-dump.sh
-+++ /dev/null
-@@ -1,26 +0,0 @@
--#!/usr/bin/env bash
--
--# Copyright (C) 2012 Red Hat, Inc. All rights reserved.
--#
--# This copyrighted material is made available to anyone wishing to use,
--# modify, copy, or redistribute it subject to the terms and conditions
--# of the GNU General Public License v.2.
--#
--# You should have received a copy of the GNU General Public License
--# along with this program; if not, write to the Free Software Foundation,
--# Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
--
--SKIP_WITH_LVMLOCKD=1
--SKIP_WITHOUT_LVMETAD=1
--SKIP_WITH_LVMPOLLD=1
--
--. lib/inittest
--
--aux prepare_vg 2
--lvcreate -n bar -l 1 $vg
--
--aux lvmetad_dump | tee lvmetad.txt
--
--grep $vg lvmetad.txt
--
--vgremove -ff $vg
-diff --git a/test/shell/lvmetad-lvscan-cache.sh b/test/shell/lvmetad-lvscan-cache.sh
-deleted file mode 100644
-index 28b62fd..0000000
---- a/test/shell/lvmetad-lvscan-cache.sh
-+++ /dev/null
-@@ -1,35 +0,0 @@
--#!/usr/bin/env bash
--
--# Copyright (C) 2014 Red Hat, Inc. All rights reserved.
--#
--# This copyrighted material is made available to anyone wishing to use,
--# modify, copy, or redistribute it subject to the terms and conditions
--# of the GNU General Public License v.2.
--#
--# You should have received a copy of the GNU General Public License
--# along with this program; if not, write to the Free Software Foundation,
--# Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
--
--SKIP_WITH_LVMLOCKD=1
--SKIP_WITHOUT_LVMETAD=1
--SKIP_WITH_LVMPOLLD=1
--
--. lib/inittest
--
--aux prepare_pvs 2
--
--vgcreate $vg1 "$dev1" "$dev2"
--lvcreate -n testlv --type mirror -m 1 -l 1 $vg1
--vgs | grep $vg1
--
--lvscan --cache $vg1/testlv
--
--vgs | grep $vg1
--
--aux disable_dev "$dev2"
--
--# pvscan --cache already ran for the disabled device above, this should be a
--# no-op (but should not segfault!)
--lvscan --cache $vg1/testlv
--
--vgremove -ff $vg1
-diff --git a/test/shell/lvmetad-no-cluster.sh b/test/shell/lvmetad-no-cluster.sh
-deleted file mode 100644
-index d5eb23b..0000000
---- a/test/shell/lvmetad-no-cluster.sh
-+++ /dev/null
-@@ -1,24 +0,0 @@
--#!/usr/bin/env bash
--
--# Copyright (C) 2012 Red Hat, Inc. All rights reserved.
--#
--# This copyrighted material is made available to anyone wishing to use,
--# modify, copy, or redistribute it subject to the terms and conditions
--# of the GNU General Public License v.2.
--#
--# You should have received a copy of the GNU General Public License
--# along with this program; if not, write to the Free Software Foundation,
--# Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
--
--SKIP_WITH_LVMLOCKD=1
--SKIP_WITHOUT_CLVMD=1
--SKIP_WITH_LVMPOLLD=1
--
--. lib/inittest
--
--aux prepare_vg 2
--aux prepare_lvmetad
--vgs 2>&1 | tee out
--grep "WARNING: Not using lvmetad because locking_type is 3" out
--
--vgremove -ff $vg
-diff --git a/test/shell/lvmetad-override.sh b/test/shell/lvmetad-override.sh
-deleted file mode 100644
-index 91367ff..0000000
---- a/test/shell/lvmetad-override.sh
-+++ /dev/null
-@@ -1,54 +0,0 @@
--#!/usr/bin/env bash
--
--# Copyright (C) 2012 Red Hat, Inc. All rights reserved.
--#
--# This copyrighted material is made available to anyone wishing to use,
--# modify, copy, or redistribute it subject to the terms and conditions
--# of the GNU General Public License v.2.
--#
--# You should have received a copy of the GNU General Public License
--# along with this program; if not, write to the Free Software Foundation,
--# Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
--
--SKIP_WITH_LVMLOCKD=1
--SKIP_WITHOUT_LVMETAD=1
--SKIP_WITH_LVMPOLLD=1
--
--. lib/inittest
--
--aux prepare_pvs 2
--
--vgcreate $vg1 "$dev1" "$dev2"
--lvcreate -an -l1 --zero n -n $lv1 $vg1
--
--lvchange -ay $vg1 2>&1 | tee out
--not grep "WARNING: Failed to connect" out
--check active $vg1 $lv1
--lvchange -an $vg1
--check inactive $vg1 $lv1
--
--kill "$(< LOCAL_LVMETAD)"
--
--lvchange -ay $vg1 2>&1 | tee out
--grep "WARNING: Failed to connect" out
--check active $vg1 $lv1
--lvchange -an $vg1
--check inactive $vg1 $lv1
--
--lvchange -ay --config global/use_lvmetad=0 $vg1 2>&1 | tee out
--# FIXME: this warning appears when the command tries to connect to
--# lvmetad during refresh at the end after the --config is cleared.
--should not grep "WARNING: Failed to connect" out
--check active $vg1 $lv1
--lvchange -an $vg1
--check inactive $vg1 $lv1
--
--aux lvmconf "global/use_lvmetad = 0"
--
--lvchange -ay --config global/use_lvmetad=1 $vg1 2>&1 | tee out
--grep "WARNING: Failed to connect" out
--check active $vg1 $lv1
--lvchange -an $vg1
--check inactive $vg1 $lv1
--
--vgremove -ff $vg1
-diff --git a/test/shell/lvmetad-pvs.sh b/test/shell/lvmetad-pvs.sh
-deleted file mode 100644
-index dc4189d..0000000
---- a/test/shell/lvmetad-pvs.sh
-+++ /dev/null
-@@ -1,25 +0,0 @@
--#!/usr/bin/env bash
--
--# Copyright (C) 2012 Red Hat, Inc. All rights reserved.
--#
--# This copyrighted material is made available to anyone wishing to use,
--# modify, copy, or redistribute it subject to the terms and conditions
--# of the GNU General Public License v.2.
--#
--# You should have received a copy of the GNU General Public License
--# along with this program; if not, write to the Free Software Foundation,
--# Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
--
--
--SKIP_WITH_LVMPOLLD=1
--
--. lib/inittest
--
--aux prepare_pvs 1 20000
--get_devs
--
--pvs "${DEVICES[@]}" | grep "$dev1"
--
--# check for PV size overflows
--pvs "${DEVICES[@]}" | grep 19.53g
--pvs "${DEVICES[@]}" | not grep 16.00e
-diff --git a/test/shell/lvmetad-pvscan-filter.sh b/test/shell/lvmetad-pvscan-filter.sh
-deleted file mode 100644
-index 677b35f..0000000
---- a/test/shell/lvmetad-pvscan-filter.sh
-+++ /dev/null
-@@ -1,57 +0,0 @@
--#!/usr/bin/env bash
--
--# Copyright (C) 2012 Red Hat, Inc. All rights reserved.
--#
--# This copyrighted material is made available to anyone wishing to use,
--# modify, copy, or redistribute it subject to the terms and conditions
--# of the GNU General Public License v.2.
--#
--# You should have received a copy of the GNU General Public License
--# along with this program; if not, write to the Free Software Foundation,
--# Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
--
--SKIP_WITH_LVMLOCKD=1
--SKIP_WITHOUT_LVMETAD=1
--SKIP_WITH_LVMPOLLD=1
--
--. lib/inittest
--
--aux prepare_pvs 2
--
--maj=$(($(stat -L --printf=0x%t "$dev2")))
--min=$(($(stat -L --printf=0x%T "$dev2")))
--
--# Filter out device, pvscan should trigger
--# clearing of the device from lvmetad cache.
--
--# We can't use aux hide_dev here because that
--# changes the global_filter which triggers a
--# token mismatch rescan by subsequent pvscan
--# commands instead of the single-dev scans
--# that are testing here.
--
--mv "$dev2" "$dev2-HIDDEN"
--
--pvscan --cache "$dev2" 2>&1 | tee out || true
--grep "not found" out
--
--# pvscan with --major/--minor does not fail: lvmetad needs to
--# be notified about device removal on REMOVE uevent, hence
--# this should not fail so udev does not grab a "failed" state
--# incorrectly. We notify device addition and removal with
--# exactly the same command "pvscan --cache" - in case of removal,
--# this is detected by nonexistence of the device itself.
--
--pvscan --cache --major $maj --minor $min 2>&1 | tee out || true
--grep "not found" out
--
--# aux unhide_dev "$dev2"
--mv "$dev2-HIDDEN" "$dev2"
--
--pvscan --cache "$dev2" 2>&1 | tee out || true
--not grep "not found" out
--
--pvscan --cache --major $maj --minor $min 2>&1 | tee out || true
--not grep "not found" out
--
--pvs | grep "$dev2"
-diff --git a/test/shell/lvmetad-pvscan-md.sh b/test/shell/lvmetad-pvscan-md.sh
-deleted file mode 100644
-index 5fb4d50..0000000
---- a/test/shell/lvmetad-pvscan-md.sh
-+++ /dev/null
-@@ -1,38 +0,0 @@
--#!/usr/bin/env bash
--
--# Copyright (C) 2014-2015 Red Hat, Inc. All rights reserved.
--#
--# This copyrighted material is made available to anyone wishing to use,
--# modify, copy, or redistribute it subject to the terms and conditions
--# of the GNU General Public License v.2.
--#
--# You should have received a copy of the GNU General Public License
--# along with this program; if not, write to the Free Software Foundation,
--# Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
--
--SKIP_WITH_LVMLOCKD=1
--SKIP_WITHOUT_LVMETAD=1
--SKIP_WITH_LVMPOLLD=1
--
--. lib/inittest
--
--test -f /proc/mdstat && grep -q raid0 /proc/mdstat || \
--	modprobe raid0 || skip
--
--aux prepare_devs 2
--
--# create 2 disk MD raid0 array (stripe_width=128K)
--aux prepare_md_dev 0 64 2 "$dev1" "$dev2"
--
--aux lvmconf 'devices/md_component_detection = 1'
--aux extend_filter_LVMTEST "a|/dev/md|"
--
--pvdev=$(< MD_DEV_PV)
--
--pvcreate "$pvdev"
--
--# ensure that lvmetad can only see the toplevel MD device
--pvs | tee out
--grep "$pvdev" out
--not grep "$dev1" out
--not grep "$dev2" out
-diff --git a/test/shell/lvmetad-pvscan-nomda.sh b/test/shell/lvmetad-pvscan-nomda.sh
-deleted file mode 100644
-index c28d984..0000000
---- a/test/shell/lvmetad-pvscan-nomda.sh
-+++ /dev/null
-@@ -1,59 +0,0 @@
--#!/usr/bin/env bash
--
--# Copyright (C) 2012 Red Hat, Inc. All rights reserved.
--#
--# This copyrighted material is made available to anyone wishing to use,
--# modify, copy, or redistribute it subject to the terms and conditions
--# of the GNU General Public License v.2.
--#
--# You should have received a copy of the GNU General Public License
--# along with this program; if not, write to the Free Software Foundation,
--# Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
--
--SKIP_WITH_LVMLOCKD=1
--SKIP_WITHOUT_LVMETAD=1
--SKIP_WITH_LVMPOLLD=1
--
--. lib/inittest
--
--kill "$(< LOCAL_LVMETAD)"
--rm LOCAL_LVMETAD
--
--aux prepare_devs 2
--
--pvcreate --metadatacopies 0 "$dev1"
--pvcreate --metadatacopies 1 "$dev2"
--vgcreate $vg1 "$dev1" "$dev2"
--lvcreate -n foo -l 1 -an --zero n $vg1
--
--# start lvmetad but make sure it doesn't know about $dev1 or $dev2
--aux disable_dev "$dev1" "$dev2"
--aux prepare_lvmetad
--lvs
--mv LOCAL_LVMETAD XXX
--aux enable_dev "$dev2" "$dev1"
--mv XXX LOCAL_LVMETAD
--
--aux lvmconf 'global/use_lvmetad = 0'
--check inactive $vg1 foo
--aux lvmconf 'global/use_lvmetad = 1'
--
--# Tell lvmetad about dev2, but the VG is not complete with
--# only dev2, so the -aay should not yet activate the LV.
--
--pvscan --cache -aay "$dev2"
--
--aux lvmconf 'global/use_lvmetad = 0'
--check inactive $vg1 foo
--aux lvmconf 'global/use_lvmetad = 1'
--
--# Tell lvmetad about dev1, now the VG is complete with
--# both devs, so the -aay should activate the LV.
--
--pvscan --cache -aay "$dev1"
--
--aux lvmconf 'global/use_lvmetad = 0'
--check active $vg1 foo
--aux lvmconf 'global/use_lvmetad = 1'
--
--vgremove -ff $vg1
-diff --git a/test/shell/lvmetad-restart.sh b/test/shell/lvmetad-restart.sh
-deleted file mode 100644
-index 2e49f75..0000000
---- a/test/shell/lvmetad-restart.sh
-+++ /dev/null
-@@ -1,29 +0,0 @@
--#!/usr/bin/env bash
--
--# Copyright (C) 2012 Red Hat, Inc. All rights reserved.
--#
--# This copyrighted material is made available to anyone wishing to use,
--# modify, copy, or redistribute it subject to the terms and conditions
--# of the GNU General Public License v.2.
--#
--# You should have received a copy of the GNU General Public License
--# along with this program; if not, write to the Free Software Foundation,
--# Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
--
--SKIP_WITH_LVMLOCKD=1
--SKIP_WITHOUT_LVMETAD=1
--SKIP_WITH_LVMPOLLD=1
--
--. lib/inittest
--
--aux prepare_pvs 2
--
--vgcreate $vg1 "$dev1" "$dev2"
--vgs | grep $vg1
--
--kill "$(< LOCAL_LVMETAD)"
--aux prepare_lvmetad
--
--vgs | grep $vg1
--
--vgremove -ff $vg1
-diff --git a/test/shell/lvmetad-sysinit.sh b/test/shell/lvmetad-sysinit.sh
-deleted file mode 100644
-index 8116e51..0000000
---- a/test/shell/lvmetad-sysinit.sh
-+++ /dev/null
-@@ -1,92 +0,0 @@
--#!/usr/bin/env bash
--
--# Copyright (C) 2012 Red Hat, Inc. All rights reserved.
--#
--# This copyrighted material is made available to anyone wishing to use,
--# modify, copy, or redistribute it subject to the terms and conditions
--# of the GNU General Public License v.2.
--#
--# You should have received a copy of the GNU General Public License
--# along with this program; if not, write to the Free Software Foundation,
--# Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
--
--SKIP_WITH_LVMLOCKD=1
--SKIP_WITHOUT_LVMETAD=1
--SKIP_WITH_LVMPOLLD=1
--
--. lib/inittest
--
--aux prepare_pvs 2
--
--#
--# lvchange/vgchange -aay --sysinit should not activate LVs
--# if lvmetad is configured and running.
--#
--
--vgcreate $vg1 "$dev1" "$dev2"
--lvcreate -an -l1 --zero n -n $lv1 $vg1
--
--#
--# lvmetad is configured and running
--#
--
--lvchange -ay $vg1 2>&1 | tee out
--not grep "WARNING: Failed to connect" out
--not grep "WARNING: lvmetad is active, skipping direct activation during sysinit" out
--check active $vg1 $lv1
--lvchange -an $vg1
--check inactive $vg1 $lv1
--
--lvchange -aay --sysinit $vg1 2>&1 | tee out
--not grep "WARNING: Failed to connect" out
--grep "WARNING: lvmetad is active, skipping direct activation during sysinit" out
--check inactive $vg1 $lv1
--
--lvchange -ay --sysinit $vg1 2>&1 | tee out
--not grep "WARNING: Failed to connect" out
--not grep "WARNING: lvmetad is active, skipping direct activation during sysinit" out
--check active $vg1 $lv1
--lvchange -an $vg1
--check inactive $vg1 $lv1
--
--#
--# lvmetad is configured and not running
--#
--
--kill "$(< LOCAL_LVMETAD)"
--
--lvchange -ay $vg1 2>&1 | tee out
--grep "WARNING: Failed to connect" out
--not grep "WARNING: lvmetad is active, skipping direct activation during sysinit" out
--check active $vg1 $lv1
--lvchange -an $vg1
--check inactive $vg1 $lv1
--
--lvchange -aay --sysinit $vg1 2>&1 | tee out
--grep "WARNING: Failed to connect" out
--not grep "WARNING: lvmetad is active, skipping direct activation during sysinit" out
--check active $vg1 $lv1
--lvchange -an $vg1
--check inactive $vg1 $lv1
--
--#
--# lvmetad is not configured and not running
--#
--
--aux lvmconf 'global/use_lvmetad = 0'
--
--lvchange -ay $vg1 2>&1 | tee out
--not grep "WARNING: Failed to connect" out
--not grep "WARNING: lvmetad is active, skipping direct activation during sysinit" out
--check active $vg1 $lv1
--lvchange -an $vg1
--check inactive $vg1 $lv1
--
--lvchange -aay $vg1 --sysinit 2>&1 | tee out
--not grep "WARNING: Failed to connect"
--not grep "WARNING: lvmetad is active, skipping direct activation during sysinit" out
--check active $vg1 $lv1
--lvchange -an $vg1
--check inactive $vg1 $lv1
--
--vgremove -ff $vg1
-diff --git a/test/shell/lvmetad-test.sh b/test/shell/lvmetad-test.sh
-deleted file mode 100644
-index 0daf1e4..0000000
---- a/test/shell/lvmetad-test.sh
-+++ /dev/null
-@@ -1,38 +0,0 @@
--#!/usr/bin/env bash
--
--# Copyright (C) 2012 Red Hat, Inc. All rights reserved.
--#
--# This copyrighted material is made available to anyone wishing to use,
--# modify, copy, or redistribute it subject to the terms and conditions
--# of the GNU General Public License v.2.
--#
--# You should have received a copy of the GNU General Public License
--# along with this program; if not, write to the Free Software Foundation,
--# Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
--
--SKIP_WITH_LVMLOCKD=1
--SKIP_WITH_LVMPOLLD=1
--
--. lib/inittest
--
--aux prepare_pvs 2
--
--vgcreate $vg1 "$dev1" "$dev2" --test
--vgs | not grep $vg1
--vgcreate $vg1 "$dev1" "$dev2"
--vgs | grep $vg1
--
--lvcreate -n bar -l 1 $vg1 --test
--lvs | not grep bar
--lvcreate -n bar -l 1 $vg1
--lvs | grep bar
--
--lvremove $vg1/bar -f --test
--lvs | grep bar
--lvremove $vg1/bar -f
--lvs | not grep bar
--
--vgremove $vg1 --test
--vgs | grep $vg1
--vgremove $vg1
--vgs | not grep $vg1
+@@ -28,3 +24,4 @@ snapshot: lvm2
+ mirror: lvm2
+ raid: lvm2
+ thin: lvm2
++vdo: lvm2
+diff --git a/daemons/dmeventd/plugins/vdo/.exported_symbols b/daemons/dmeventd/plugins/vdo/.exported_symbols
+new file mode 100644
+index 0000000..b88c705
+--- /dev/null
++++ b/daemons/dmeventd/plugins/vdo/.exported_symbols
+@@ -0,0 +1,3 @@
++process_event
++register_device
++unregister_device
+diff --git a/daemons/dmeventd/plugins/vdo/Makefile.in b/daemons/dmeventd/plugins/vdo/Makefile.in
+new file mode 100644
+index 0000000..bda738a
+--- /dev/null
++++ b/daemons/dmeventd/plugins/vdo/Makefile.in
+@@ -0,0 +1,36 @@
++#
++# Copyright (C) 2018 Red Hat, Inc. All rights reserved.
++#
++# This file is part of LVM2.
++#
++# This copyrighted material is made available to anyone wishing to use,
++# modify, copy, or redistribute it subject to the terms and conditions
++# of the GNU General Public License v.2.
++#
++# You should have received a copy of the GNU General Public License
++# along with this program; if not, write to the Free Software Foundation,
++# Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
++
++srcdir = @srcdir@
++top_srcdir = @top_srcdir@
++top_builddir = @top_builddir@
++
++INCLUDES += -I$(top_srcdir)/daemons/dmeventd/plugins/lvm2
++CLDFLAGS += -L$(top_builddir)/daemons/dmeventd/plugins/lvm2
++
++SOURCES = dmeventd_vdo.c
++
++LIB_NAME = libdevmapper-event-lvm2vdo
++LIB_SHARED = $(LIB_NAME).$(LIB_SUFFIX)
++LIB_VERSION = $(LIB_VERSION_LVM)
++
++CFLOW_LIST = $(SOURCES)
++CFLOW_LIST_TARGET = $(LIB_NAME).cflow
++
++include $(top_builddir)/make.tmpl
++
++LIBS += -ldevmapper-event-lvm2 $(INTERNAL_LIBS)
++
++install_lvm2: install_dm_plugin
++
++install: install_lvm2
+diff --git a/daemons/dmeventd/plugins/vdo/dmeventd_vdo.c b/daemons/dmeventd/plugins/vdo/dmeventd_vdo.c
+new file mode 100644
+index 0000000..d77ca79
+--- /dev/null
++++ b/daemons/dmeventd/plugins/vdo/dmeventd_vdo.c
+@@ -0,0 +1,406 @@
++/*
++ * Copyright (C) 2018 Red Hat, Inc. All rights reserved.
++ *
++ * This file is part of LVM2.
++ *
++ * This copyrighted material is made available to anyone wishing to use,
++ * modify, copy, or redistribute it subject to the terms and conditions
++ * of the GNU Lesser General Public License v.2.1.
++ *
++ * You should have received a copy of the GNU Lesser General Public License
++ * along with this program; if not, write to the Free Software Foundation,
++ * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
++ */
++
++#include "lib/misc/lib.h"
++#include "dmeventd_lvm.h"
++#include "daemons/dmeventd/libdevmapper-event.h"
++#include "device_mapper/vdo/target.h"
++
++#include <sys/wait.h>
++#include <stdarg.h>
++
++/* First warning when VDO pool is 80% full. */
++#define WARNING_THRESH	(DM_PERCENT_1 * 80)
++/* Run a check every 5%. */
++#define CHECK_STEP	(DM_PERCENT_1 *  5)
++/* Do not bother checking VDO pool is less than 50% full. */
++#define CHECK_MINIMUM	(DM_PERCENT_1 * 50)
++
++#define MAX_FAILS	(256)  /* ~42 mins between cmd call retry with 10s delay */
++
++#define VDO_DEBUG 0
++
++struct dso_state {
++	struct dm_pool *mem;
++	int percent_check;
++	int percent;
++	uint64_t known_data_size;
++	unsigned fails;
++	unsigned max_fails;
++	int restore_sigset;
++	sigset_t old_sigset;
++	pid_t pid;
++	char *argv[3];
++	const char *cmd_str;
++	const char *name;
++};
++
++DM_EVENT_LOG_FN("vdo")
++
++static int _run_command(struct dso_state *state)
++{
++	char val[16];
++	int i;
++
++	/* Mark for possible lvm2 command we are running from dmeventd
++	 * lvm2 will not try to talk back to dmeventd while processing it */
++	(void) setenv("LVM_RUN_BY_DMEVENTD", "1", 1);
++
++	if (state->percent) {
++		/* Prepare some known data to env vars for easy use */
++		if (dm_snprintf(val, sizeof(val), "%d",
++				state->percent / DM_PERCENT_1) != -1)
++			(void) setenv("DMEVENTD_VDO_POOL", val, 1);
++	} else {
++		/* For an error event it's for a user to check status and decide */
++		log_debug("Error event processing.");
++	}
++
++	log_verbose("Executing command: %s", state->cmd_str);
++
++	/* TODO:
++	 *   Support parallel run of 'task' and it's waitpid maintainence
++	 *   ATM we can't handle signaling of  SIGALRM
++	 *   as signalling is not allowed while 'process_event()' is running
++	 */
++	if (!(state->pid = fork())) {
++		/* child */
++		(void) close(0);
++		for (i = 3; i < 255; ++i) (void) close(i);
++		execvp(state->argv[0], state->argv);
++		_exit(errno);
++	} else if (state->pid == -1) {
++		log_error("Can't fork command %s.", state->cmd_str);
++		state->fails = 1;
++		return 0;
++	}
++
++	return 1;
++}
++
++static int _use_policy(struct dm_task *dmt, struct dso_state *state)
++{
++#if VDO_DEBUG
++	log_debug("dmeventd executes: %s.", state->cmd_str);
++#endif
++	if (state->argv[0])
++		return _run_command(state);
++
++	if (!dmeventd_lvm2_run_with_lock(state->cmd_str)) {
++		log_error("Failed command for %s.", dm_task_get_name(dmt));
++		state->fails = 1;
++		return 0;
++	}
++
++	state->fails = 0;
++
++	return 1;
++}
++
++/* Check if executed command has finished
++ * Only 1 command may run */
++static int _wait_for_pid(struct dso_state *state)
++{
++	int status = 0;
++
++	if (state->pid == -1)
++		return 1;
++
++	if (!waitpid(state->pid, &status, WNOHANG))
++		return 0;
++
++	/* Wait for finish */
++	if (WIFEXITED(status)) {
++		log_verbose("Child %d exited with status %d.",
++			    state->pid, WEXITSTATUS(status));
++		state->fails = WEXITSTATUS(status) ? 1 : 0;
++	} else {
++		if (WIFSIGNALED(status))
++			log_verbose("Child %d was terminated with status %d.",
++				    state->pid, WTERMSIG(status));
++		state->fails = 1;
++	}
++
++	state->pid = -1;
++
++	return 1;
++}
++
++void process_event(struct dm_task *dmt,
++		   enum dm_event_mask event __attribute__((unused)),
++		   void **user)
++{
++	const char *device = dm_task_get_name(dmt);
++	struct dso_state *state = *user;
++	void *next = NULL;
++	uint64_t start, length;
++	char *target_type = NULL;
++	char *params;
++	int needs_policy = 0;
++	struct dm_task *new_dmt = NULL;
++	struct dm_vdo_status_parse_result vdop = { .status = NULL };
++
++#if VDO_DEBUG
++	log_debug("Watch for VDO %s:%.2f%%.", state->name,
++		  dm_percent_to_round_float(state->percent_check, 2));
++#endif
++	if (!_wait_for_pid(state)) {
++		log_warn("WARNING: Skipping event, child %d is still running (%s).",
++			 state->pid, state->cmd_str);
++		return;
++	}
++
++	if (event & DM_EVENT_DEVICE_ERROR) {
++#if VDO_DEBUG
++		log_debug("VDO event error.");
++#endif
++		/* Error -> no need to check and do instant resize */
++		state->percent = 0;
++		if (_use_policy(dmt, state))
++			goto out;
++
++		stack;
++
++		if (!(new_dmt = dm_task_create(DM_DEVICE_STATUS)))
++			goto_out;
++
++		if (!dm_task_set_uuid(new_dmt, dm_task_get_uuid(dmt)))
++			goto_out;
++
++		/* Non-blocking status read */
++		if (!dm_task_no_flush(new_dmt))
++			log_warn("WARNING: Can't set no_flush for dm status.");
++
++		if (!dm_task_run(new_dmt))
++			goto_out;
++
++		dmt = new_dmt;
++	}
++
++	dm_get_next_target(dmt, next, &start, &length, &target_type, &params);
++
++	if (!target_type || (strcmp(target_type, "vdo") != 0)) {
++		log_error("Invalid target type.");
++		goto out;
++	}
++
++	if (!dm_vdo_status_parse(state->mem, params, &vdop)) {
++		log_error("Failed to parse status.");
++		goto out;
++	}
++
++	state->percent = dm_make_percent(vdop.status->used_blocks,
++					 vdop.status->total_blocks);
++
++#if VDO_DEBUG
++	log_debug("VDO %s status  %.2f%% " FMTu64 "/" FMTu64 ".",
++		  state->name, dm_percent_to_round_float(state->percent, 2),
++		  vdop.status->used_blocks, vdop.status->total_blocks);
++#endif
++
++	/* VDO pool size had changed. Clear the threshold. */
++	if (state->known_data_size != vdop.status->total_blocks) {
++		state->percent_check = CHECK_MINIMUM;
++		state->known_data_size = vdop.status->total_blocks;
++		state->fails = 0;
++	}
++
++	/*
++	 * Trigger action when threshold boundary is exceeded.
++	 * Report 80% threshold warning when it's used above 80%.
++	 * Only 100% is exception as it cannot be surpased so policy
++	 * action is called for:  >50%, >55% ... >95%, 100%
++	 */
++	if ((state->percent > WARNING_THRESH) &&
++	    (state->percent > state->percent_check))
++		log_warn("WARNING: VDO %s %s is now %.2f%% full.",
++			 state->name, device,
++			 dm_percent_to_round_float(state->percent, 2));
++	if (state->percent > CHECK_MINIMUM) {
++		/* Run action when usage raised more than CHECK_STEP since the last time */
++		if (state->percent > state->percent_check)
++			needs_policy = 1;
++		state->percent_check = (state->percent / CHECK_STEP + 1) * CHECK_STEP;
++		if (state->percent_check == DM_PERCENT_100)
++			state->percent_check--; /* Can't get bigger then 100% */
++	} else
++		state->percent_check = CHECK_MINIMUM;
++
++	/* Reduce number of _use_policy() calls by power-of-2 factor till frequency of MAX_FAILS is reached.
++	 * Avoids too high number of error retries, yet shows some status messages in log regularly.
++	 * i.e. PV could have been pvmoved and VG/LV was locked for a while...
++	 */
++	if (state->fails) {
++		if (state->fails++ <= state->max_fails) {
++			log_debug("Postponing frequently failing policy (%u <= %u).",
++				  state->fails - 1, state->max_fails);
++			return;
++		}
++		if (state->max_fails < MAX_FAILS)
++			state->max_fails <<= 1;
++		state->fails = needs_policy = 1; /* Retry failing command */
++	} else
++		state->max_fails = 1; /* Reset on success */
++
++	/* FIXME: ATM nothing can be done, drop 0, once it becomes useful */
++	if (0 && needs_policy)
++		_use_policy(dmt, state);
++out:
++	if (vdop.status)
++		dm_pool_free(state->mem, vdop.status);
++
++	if (new_dmt)
++		dm_task_destroy(new_dmt);
++}
++
++/* Handle SIGCHLD for a thread */
++static void _sig_child(int signum __attribute__((unused)))
++{
++	/* empty SIG_IGN */;
++}
++
++/* Setup handler for SIGCHLD when executing external command
++ * to get quick 'waitpid()' reaction
++ * It will interrupt syscall just like SIGALRM and
++ * invoke process_event().
++ */
++static void _init_thread_signals(struct dso_state *state)
++{
++	struct sigaction act = { .sa_handler = _sig_child };
++	sigset_t my_sigset;
++
++	sigemptyset(&my_sigset);
++
++	if (sigaction(SIGCHLD, &act, NULL))
++		log_warn("WARNING: Failed to set SIGCHLD action.");
++	else if (sigaddset(&my_sigset, SIGCHLD))
++		log_warn("WARNING: Failed to add SIGCHLD to set.");
++	else if (pthread_sigmask(SIG_UNBLOCK, &my_sigset, &state->old_sigset))
++		log_warn("WARNING: Failed to unblock SIGCHLD.");
++	else
++		state->restore_sigset = 1;
++}
++
++static void _restore_thread_signals(struct dso_state *state)
++{
++	if (state->restore_sigset &&
++	    pthread_sigmask(SIG_SETMASK, &state->old_sigset, NULL))
++		log_warn("WARNING: Failed to block SIGCHLD.");
++}
++
++int register_device(const char *device,
++		    const char *uuid,
++		    int major __attribute__((unused)),
++		    int minor __attribute__((unused)),
++		    void **user)
++{
++	struct dso_state *state;
++	const char *cmd;
++	char *str;
++	char cmd_str[PATH_MAX + 128 + 2]; /* cmd ' ' vg/lv \0 */
++        const char *name = "pool";
++
++	if (!dmeventd_lvm2_init_with_pool("vdo_pool_state", state))
++		goto_bad;
++
++	state->cmd_str = "";
++
++	/* Search for command for LVM- prefixed devices only */
++	cmd = (strncmp(uuid, "LVM-", 4) == 0) ? "_dmeventd_vdo_command" : "";
++
++	if (!dmeventd_lvm2_command(state->mem, cmd_str, sizeof(cmd_str), cmd, device))
++		goto_bad;
++
++	if (strncmp(cmd_str, "lvm ", 4) == 0) {
++		if (!(state->cmd_str = dm_pool_strdup(state->mem, cmd_str + 4))) {
++			log_error("Failed to copy lvm VDO command.");
++				goto bad;
++		}
++	} else if (cmd_str[0] == '/') {
++		if (!(state->cmd_str = dm_pool_strdup(state->mem, cmd_str))) {
++			log_error("Failed to copy VDO command.");
++			goto bad;
++		}
++
++		/* Find last space before 'vg/lv' */
++		if (!(str = strrchr(state->cmd_str, ' ')))
++			goto inval;
++
++		if (!(state->argv[0] = dm_pool_strndup(state->mem, state->cmd_str,
++						       str - state->cmd_str))) {
++			log_error("Failed to copy command.");
++			goto bad;
++		}
++
++		state->argv[1] = str + 1;  /* 1 argument - vg/lv */
++		_init_thread_signals(state);
++	} else if (cmd[0] == 0) {
++		state->name = "volume"; /* What to use with 'others?' */
++	} else/* Unuspported command format */
++		goto inval;
++
++	state->pid = -1;
++	state->name = name;
++	*user = state;
++
++	log_info("Monitoring VDO %s %s.", name, device);
++
++	return 1;
++inval:
++	log_error("Invalid command for monitoring: %s.", cmd_str);
++bad:
++	log_error("Failed to monitor VDO %s %s.", name, device);
++
++	if (state)
++		dmeventd_lvm2_exit_with_pool(state);
++
++	return 0;
++}
++
++int unregister_device(const char *device,
++		      const char *uuid __attribute__((unused)),
++		      int major __attribute__((unused)),
++		      int minor __attribute__((unused)),
++		      void **user)
++{
++	struct dso_state *state = *user;
++	const char *name = state->name;
++	int i;
++
++	for (i = 0; !_wait_for_pid(state) && (i < 6); ++i) {
++		if (i == 0)
++			/* Give it 2 seconds, then try to terminate & kill it */
++			log_verbose("Child %d still not finished (%s) waiting.",
++				    state->pid, state->cmd_str);
++		else if (i == 3) {
++			log_warn("WARNING: Terminating child %d.", state->pid);
++			kill(state->pid, SIGINT);
++			kill(state->pid, SIGTERM);
++		} else if (i == 5) {
++			log_warn("WARNING: Killing child %d.", state->pid);
++			kill(state->pid, SIGKILL);
++		}
++		sleep(1);
++	}
++
++	if (state->pid != -1)
++		log_warn("WARNING: Cannot kill child %d!", state->pid);
++
++	_restore_thread_signals(state);
++
++	dmeventd_lvm2_exit_with_pool(state);
++	log_info("No longer monitoring VDO %s %s.", name, device);
++
++	return 1;
++}
 
 
