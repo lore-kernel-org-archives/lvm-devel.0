@@ -1,84 +1,69 @@
-From: Alasdair Kergon <agk@fedoraproject.org>
-Date: Fri, 29 Jun 2012 20:24:19 +0000 (UTC)
-Subject: master - toollib: fix ignored_mdas process_each_pv rescan
-Message-ID: <20120629202420.030B71707@lists.fedorahosted.org>
+From: Marian Csontos <mcsontos@sourceware.org>
+Date: Wed, 1 Aug 2018 10:59:19 -0400
+Subject: v2_02_181 annotated tag has been created
+Message-ID: <201808011459.w71ExJZK006733@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=1d0a2b919fe173e3a25e5f19d535588bb5b214e2
-Commit:        1d0a2b919fe173e3a25e5f19d535588bb5b214e2
-Parent:        d84e1ae5f2de569db06293aac371ce7dde1cfd62
-Author:        Alasdair G Kergon <agk@redhat.com>
-AuthorDate:    Fri Jun 29 21:22:09 2012 +0100
-Committer:     Alasdair G Kergon <agk@redhat.com>
-CommitterDate: Fri Jun 29 21:22:09 2012 +0100
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=560872f013c65f8c1ff463be59fde9382a1b0185
+Commit:        560872f013c65f8c1ff463be59fde9382a1b0185
+Parent:        0000000000000000000000000000000000000000
+Author:        Marian Csontos <mcsontos@redhat.com>
+AuthorDate:    2018-08-01 14:57 +0000
+Committer:     Marian Csontos <mcsontos@redhat.com>
+CommitterDate: 2018-08-01 14:57 +0000
 
-toollib: fix ignored_mdas process_each_pv rescan
+annotated tag: v2_02_181 has been created
+	    at 560872f013c65f8c1ff463be59fde9382a1b0185 (tag)
+       tagging a3353e766e6989147afb44b94767b54bc7827967 (commit)
+      replaces v2_02_180
 
-In process_each_pv() if we haven't yet scanned and the PV appears
-to be an orphan, we must scan the other PVs looking for mdas that
-reference it to find out what VG it is in.
+iRelease 2.02.181
 
-1. If the PV has no mdas, we must scan.
-2. If the PV has an mda that is not ignored we do not need to scan.
-3. If the PV has an mda that is ignored, we do need to scan.
+Bugfix release fixing mostly lvconvert command.
+-----BEGIN PGP SIGNATURE-----
+Version: GnuPG v2.0.22 (GNU/Linux)
 
-This patch fixes case 3.
+iQIcBAABAgAGBQJbYcp8AAoJELkRJDHlCQOfp/0P/1CvDalDgTkmZlVIElU5lSq8
+PVhfc6JK+yHjFz7b8uQ42Q+YGXLov5DFf7bwagsAeWOguGsRbO9hDleJwZ1iJFv1
+GBezEl73W49ug0ODnCus3nYFkTiuDk6v5LrnBPeNfjDi7c2lB76Ekzdl1rle7lCc
+szUk3T33AXqh6UdTiuhi94FrZEB9Oo5FWaFIapEXr0ce8GX8+DVJN6ubN92hIWxT
+zu5IM25w+rc57lSeLvVb372ZOkJ7Z8TJ7VcF+FUAiXsFTTmDgP+euqjdP8i7NFD7
+2p6EbJrp04ncK7k7DUPwMPkNQ78o3n/vdYjuxLGlWM28+c3SucfSboYUgI2ZUpCb
+IO9Y2p5UBy8gbG35rAr3bM4NNL5+8ecmrxpab/kLh0/q8LYSd5gu9bDfBXrwPYR0
+It59T4DPlP4kcwTddi1IKrerdpH7KFNLepNHKo5vp0/8uFcvtEo5wCEoHEKNFETn
+wtVzx3ySZlsZz31LP0S5/aaWTmul00rG/1uE24ZOmdCTEWiza84ZwWMydiV4r/gb
+WxFioJ4b/AHidDy/48Kv8rgYFnf0vPB2Qc/FQigLAY6lSjmw3Vd6g/EFvNSnEANU
+jVaOp0nCOD4GpxgU0W/WUiSsDKAflg4vWdgrYAXxhyOc2BiScqpTkmkOrSvc2F9k
+k1f+hAx0EL4J0fFdxecy
+=Un40
+-----END PGP SIGNATURE-----
 
-> pvs -o +mda_count,vg_mda_count /dev/loop[0123]
-  PV         VG   Fmt  Attr PSize  PFree  #PMda #VMda
-  /dev/loop0 vg3  lvm2 a-   96.00m 96.00m     0     1
-  /dev/loop1 vg3  lvm2 a-   96.00m 96.00m     1     1
-  /dev/loop2 vg2  lvm2 a-   96.00m 96.00m     1     2
-  /dev/loop3 vg2  lvm2 a-   28.00m 28.00m     1     2
+Bryn M. Reeves (1):
+      dmsetup: fix error propagation in _display_info_cols()
 
-Before:
-> pvs /dev/loop2 /dev/loop3 /dev/loop0 /dev/loop1 --unbuffered
-  PV         VG   Fmt  Attr PSize   PFree
-  /dev/loop2      lvm2 a--  100.00m 100.00m
-  /dev/loop3 vg2  lvm2 a--   28.00m  28.00m
-  /dev/loop0      lvm2 a--  100.00m 100.00m
-  /dev/loop1 vg3  lvm2 a--   96.00m  96.00m
+David Teigland (2):
+      lvconvert: restrict command matching for no option variant
+      lvconvert: improve text about splitmirrors
 
-After:
-> pvs /dev/loop2 /dev/loop3 /dev/loop0 /dev/loop1 --unbuffered
-  PV         VG   Fmt  Attr PSize  PFree
-  /dev/loop2 vg2  lvm2 a--  96.00m 96.00m
-  /dev/loop3 vg2  lvm2 a--  28.00m 28.00m
-  /dev/loop0 vg3  lvm2 a--  96.00m 96.00m
-  /dev/loop1 vg3  lvm2 a--  96.00m 96.00m
----
- WHATS_NEW       |    1 +
- tools/toollib.c |    3 +--
- 2 files changed, 2 insertions(+), 2 deletions(-)
+Heinz Mauelshagen (3):
+      lvconvert: reject conversions of LVs under snapshot
+      lvconvert: reject conversions on raid1 split trackchanges SubLVs
+      lvconvert: reject conversions on raid1 split trackchanges LVs
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index d19df2d..2e649b1 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.02.97 - 
- ===============================
-+  Fix test for PV with unknown VG in process_each_pv to ignore ignored mdas.
-   Update man pages with --activate ay option and auto_activation_volume_list.
-   Fix _alloc_parallel_area to avoid picking already-full areas for raid devices.
-   Use vgchange -aay instead of vgchange -ay in clmvd init script.
-diff --git a/tools/toollib.c b/tools/toollib.c
-index 142de55..0f6810b 100644
---- a/tools/toollib.c
-+++ b/tools/toollib.c
-@@ -770,8 +770,7 @@ int process_each_pv(struct cmd_context *cmd, int argc, char **argv,
- 				 * PV on the system.
- 				 */
- 				if (!scanned && is_orphan(pv) &&
--				    !dm_list_size(&pv->fid->metadata_areas_in_use) &&
--				    !dm_list_size(&pv->fid->metadata_areas_ignored)) {
-+				    !dm_list_size(&pv->fid->metadata_areas_in_use)) {
- 					if (!scan_label_only &&
- 					    !scan_vgs_for_pvs(cmd, 1)) {
- 						stack;
+Marian Csontos (6):
+      post-release
+      test: Check flavour is used and exists
+      Add BSD 2-Clause License
+      WHATS_NEW
+      build: make generate
+      pre-release
+
+Zdenek Kabelac (2):
+      dmeventd: base vdo plugin
+      dmeventd: rebase to stable branch
 
 
