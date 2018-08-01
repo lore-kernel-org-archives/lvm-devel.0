@@ -1,69 +1,89 @@
-From: Marian Csontos <mcsontos@sourceware.org>
-Date: Wed, 1 Aug 2018 10:59:19 -0400
-Subject: v2_02_181 annotated tag has been created
-Message-ID: <201808011459.w71ExJZK006733@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: David Teigland <teigland@sourceware.org>
+Date: Wed, 1 Aug 2018 11:39:46 -0400
+Subject: 2018-06-01-stable - vgcreate: close exclusive fd after pvcreate
+Message-ID: <201808011539.w71Fdk9a012941@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=560872f013c65f8c1ff463be59fde9382a1b0185
-Commit:        560872f013c65f8c1ff463be59fde9382a1b0185
-Parent:        0000000000000000000000000000000000000000
-Author:        Marian Csontos <mcsontos@redhat.com>
-AuthorDate:    2018-08-01 14:57 +0000
-Committer:     Marian Csontos <mcsontos@redhat.com>
-CommitterDate: 2018-08-01 14:57 +0000
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=a75eb8d74c367b88d5b323d5dfb2e6556f2ad680
+Commit:        a75eb8d74c367b88d5b323d5dfb2e6556f2ad680
+Parent:        12dfd0ed02e003e21072798d17dcec4a80fc466d
+Author:        David Teigland <teigland@redhat.com>
+AuthorDate:    Wed Aug 1 10:26:28 2018 -0500
+Committer:     David Teigland <teigland@redhat.com>
+CommitterDate: Wed Aug 1 10:26:28 2018 -0500
 
-annotated tag: v2_02_181 has been created
-	    at 560872f013c65f8c1ff463be59fde9382a1b0185 (tag)
-       tagging a3353e766e6989147afb44b94767b54bc7827967 (commit)
-      replaces v2_02_180
+vgcreate: close exclusive fd after pvcreate
 
-iRelease 2.02.181
+When vgcreate does an automatic pvcreate, it opens the
+dev with O_EXCL to ensure no other subsystem is using
+the device.  This exclusive fd remained in bcache and
+prevented activation parts of lvm from using the dev.
 
-Bugfix release fixing mostly lvconvert command.
------BEGIN PGP SIGNATURE-----
-Version: GnuPG v2.0.22 (GNU/Linux)
+This appeared with vgcreate of a sanlock VG because of
+the unique combination where the dev is not yet a PV,
+so pvcreate is needed, and the vgcreate also creates
+and activates an internal LV for sanlock.
 
-iQIcBAABAgAGBQJbYcp8AAoJELkRJDHlCQOfp/0P/1CvDalDgTkmZlVIElU5lSq8
-PVhfc6JK+yHjFz7b8uQ42Q+YGXLov5DFf7bwagsAeWOguGsRbO9hDleJwZ1iJFv1
-GBezEl73W49ug0ODnCus3nYFkTiuDk6v5LrnBPeNfjDi7c2lB76Ekzdl1rle7lCc
-szUk3T33AXqh6UdTiuhi94FrZEB9Oo5FWaFIapEXr0ce8GX8+DVJN6ubN92hIWxT
-zu5IM25w+rc57lSeLvVb372ZOkJ7Z8TJ7VcF+FUAiXsFTTmDgP+euqjdP8i7NFD7
-2p6EbJrp04ncK7k7DUPwMPkNQ78o3n/vdYjuxLGlWM28+c3SucfSboYUgI2ZUpCb
-IO9Y2p5UBy8gbG35rAr3bM4NNL5+8ecmrxpab/kLh0/q8LYSd5gu9bDfBXrwPYR0
-It59T4DPlP4kcwTddi1IKrerdpH7KFNLepNHKo5vp0/8uFcvtEo5wCEoHEKNFETn
-wtVzx3ySZlsZz31LP0S5/aaWTmul00rG/1uE24ZOmdCTEWiza84ZwWMydiV4r/gb
-WxFioJ4b/AHidDy/48Kv8rgYFnf0vPB2Qc/FQigLAY6lSjmw3Vd6g/EFvNSnEANU
-jVaOp0nCOD4GpxgU0W/WUiSsDKAflg4vWdgrYAXxhyOc2BiScqpTkmkOrSvc2F9k
-k1f+hAx0EL4J0fFdxecy
-=Un40
------END PGP SIGNATURE-----
+Fix this by closing the exclusive fd after it's used
+by pvcreate so that it won't interfere with other
+bits of lvm that may try to use the device.
+---
+ lib/label/label.c |    6 +++---
+ tools/toollib.c   |    7 +++++++
+ 2 files changed, 10 insertions(+), 3 deletions(-)
 
-Bryn M. Reeves (1):
-      dmsetup: fix error propagation in _display_info_cols()
-
-David Teigland (2):
-      lvconvert: restrict command matching for no option variant
-      lvconvert: improve text about splitmirrors
-
-Heinz Mauelshagen (3):
-      lvconvert: reject conversions of LVs under snapshot
-      lvconvert: reject conversions on raid1 split trackchanges SubLVs
-      lvconvert: reject conversions on raid1 split trackchanges LVs
-
-Marian Csontos (6):
-      post-release
-      test: Check flavour is used and exists
-      Add BSD 2-Clause License
-      WHATS_NEW
-      build: make generate
-      pre-release
-
-Zdenek Kabelac (2):
-      dmeventd: base vdo plugin
-      dmeventd: rebase to stable branch
+diff --git a/lib/label/label.c b/lib/label/label.c
+index ac37713..bafa543 100644
+--- a/lib/label/label.c
++++ b/lib/label/label.c
+@@ -1190,7 +1190,7 @@ bool dev_write_bytes(struct device *dev, uint64_t start, size_t len, void *data)
+ 		return false;
+ 	}
+ 
+-	if (!(dev->flags & DEV_BCACHE_WRITE)) {
++	if (_in_bcache(dev) && !(dev->flags & DEV_BCACHE_WRITE)) {
+ 		/* FIXME: avoid tossing out bcache blocks just to replace fd. */
+ 		log_debug("Close and reopen to write %s", dev_name(dev));
+ 		bcache_invalidate_fd(scan_bcache, dev->bcache_fd);
+@@ -1236,7 +1236,7 @@ bool dev_write_zeros(struct device *dev, uint64_t start, size_t len)
+ 		return false;
+ 	}
+ 
+-	if (!(dev->flags & DEV_BCACHE_WRITE)) {
++	if (_in_bcache(dev) && !(dev->flags & DEV_BCACHE_WRITE)) {
+ 		/* FIXME: avoid tossing out bcache blocks just to replace fd. */
+ 		log_debug("Close and reopen to write %s", dev_name(dev));
+ 		bcache_invalidate_fd(scan_bcache, dev->bcache_fd);
+@@ -1282,7 +1282,7 @@ bool dev_set_bytes(struct device *dev, uint64_t start, size_t len, uint8_t val)
+ 		return false;
+ 	}
+ 
+-	if (!(dev->flags & DEV_BCACHE_WRITE)) {
++	if (_in_bcache(dev) && !(dev->flags & DEV_BCACHE_WRITE)) {
+ 		/* FIXME: avoid tossing out bcache blocks just to replace fd. */
+ 		log_debug("Close and reopen to write %s", dev_name(dev));
+ 		bcache_invalidate_fd(scan_bcache, dev->bcache_fd);
+diff --git a/tools/toollib.c b/tools/toollib.c
+index 413937f..6ae78bd 100644
+--- a/tools/toollib.c
++++ b/tools/toollib.c
+@@ -5872,6 +5872,13 @@ do_command:
+ 					pd->name);
+ 	}
+ 
++	/*
++	 * Don't keep devs open excl in bcache because the excl will prevent
++	 * using that dev elsewhere.
++	 */
++	dm_list_iterate_items(devl, &rescan_devs)
++		label_scan_invalidate(devl->dev);
++
+ 	dm_list_iterate_items(pd, &pp->arg_fail)
+ 		log_debug("%s: command failed for %s.",
+ 			  cmd->command->name, pd->name);
 
 
