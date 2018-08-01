@@ -1,20 +1,20 @@
 From: David Teigland <teigland@sourceware.org>
-Date: Wed, 1 Aug 2018 11:39:46 -0400
-Subject: 2018-06-01-stable - vgcreate: close exclusive fd after pvcreate
-Message-ID: <201808011539.w71Fdk9a012941@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Wed, 1 Aug 2018 12:28:50 -0400
+Subject: master - vgcreate: close exclusive fd after pvcreate
+Message-ID: <201808011628.w71GSoRT021639@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=a75eb8d74c367b88d5b323d5dfb2e6556f2ad680
-Commit:        a75eb8d74c367b88d5b323d5dfb2e6556f2ad680
-Parent:        12dfd0ed02e003e21072798d17dcec4a80fc466d
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=763219611c30d6870013b7cb84d66ec67a5dd7ec
+Commit:        763219611c30d6870013b7cb84d66ec67a5dd7ec
+Parent:        aa464aa2f6b438092a50ca20f149557550c7147b
 Author:        David Teigland <teigland@redhat.com>
 AuthorDate:    Wed Aug 1 10:26:28 2018 -0500
 Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Wed Aug 1 10:26:28 2018 -0500
+CommitterDate: Wed Aug 1 11:22:23 2018 -0500
 
 vgcreate: close exclusive fd after pvcreate
 
@@ -37,10 +37,10 @@ bits of lvm that may try to use the device.
  2 files changed, 10 insertions(+), 3 deletions(-)
 
 diff --git a/lib/label/label.c b/lib/label/label.c
-index ac37713..bafa543 100644
+index d2c8685..9fe11f6 100644
 --- a/lib/label/label.c
 +++ b/lib/label/label.c
-@@ -1190,7 +1190,7 @@ bool dev_write_bytes(struct device *dev, uint64_t start, size_t len, void *data)
+@@ -1185,7 +1185,7 @@ bool dev_write_bytes(struct device *dev, uint64_t start, size_t len, void *data)
  		return false;
  	}
  
@@ -49,7 +49,7 @@ index ac37713..bafa543 100644
  		/* FIXME: avoid tossing out bcache blocks just to replace fd. */
  		log_debug("Close and reopen to write %s", dev_name(dev));
  		bcache_invalidate_fd(scan_bcache, dev->bcache_fd);
-@@ -1236,7 +1236,7 @@ bool dev_write_zeros(struct device *dev, uint64_t start, size_t len)
+@@ -1231,7 +1231,7 @@ bool dev_write_zeros(struct device *dev, uint64_t start, size_t len)
  		return false;
  	}
  
@@ -58,7 +58,7 @@ index ac37713..bafa543 100644
  		/* FIXME: avoid tossing out bcache blocks just to replace fd. */
  		log_debug("Close and reopen to write %s", dev_name(dev));
  		bcache_invalidate_fd(scan_bcache, dev->bcache_fd);
-@@ -1282,7 +1282,7 @@ bool dev_set_bytes(struct device *dev, uint64_t start, size_t len, uint8_t val)
+@@ -1277,7 +1277,7 @@ bool dev_set_bytes(struct device *dev, uint64_t start, size_t len, uint8_t val)
  		return false;
  	}
  
@@ -68,10 +68,10 @@ index ac37713..bafa543 100644
  		log_debug("Close and reopen to write %s", dev_name(dev));
  		bcache_invalidate_fd(scan_bcache, dev->bcache_fd);
 diff --git a/tools/toollib.c b/tools/toollib.c
-index 413937f..6ae78bd 100644
+index 36ae125..85d44b3 100644
 --- a/tools/toollib.c
 +++ b/tools/toollib.c
-@@ -5872,6 +5872,13 @@ do_command:
+@@ -5782,6 +5782,13 @@ do_command:
  					pd->name);
  	}
  
