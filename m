@@ -1,89 +1,67 @@
-From: David Teigland <teigland@sourceware.org>
-Date: Wed, 1 Aug 2018 12:28:50 -0400
-Subject: master - vgcreate: close exclusive fd after pvcreate
-Message-ID: <201808011628.w71GSoRT021639@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: Marian Csontos <mcsontos@sourceware.org>
+Date: Thu, 2 Aug 2018 02:23:22 -0400
+Subject: 2018-06-01-stable - pre-release
+Message-ID: <201808020623.w726NMVH010217@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=763219611c30d6870013b7cb84d66ec67a5dd7ec
-Commit:        763219611c30d6870013b7cb84d66ec67a5dd7ec
-Parent:        aa464aa2f6b438092a50ca20f149557550c7147b
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Wed Aug 1 10:26:28 2018 -0500
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Wed Aug 1 11:22:23 2018 -0500
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=0569add94cddfa4572a7a506311f59bdbb767295
+Commit:        0569add94cddfa4572a7a506311f59bdbb767295
+Parent:        12dfd0ed02e003e21072798d17dcec4a80fc466d
+Author:        Marian Csontos <mcsontos@redhat.com>
+AuthorDate:    Wed Aug 1 16:47:09 2018 +0200
+Committer:     Marian Csontos <mcsontos@redhat.com>
+CommitterDate: Wed Aug 1 16:47:09 2018 +0200
 
-vgcreate: close exclusive fd after pvcreate
+pre-release
 
-When vgcreate does an automatic pvcreate, it opens the
-dev with O_EXCL to ensure no other subsystem is using
-the device.  This exclusive fd remained in bcache and
-prevented activation parts of lvm from using the dev.
-
-This appeared with vgcreate of a sanlock VG because of
-the unique combination where the dev is not yet a PV,
-so pvcreate is needed, and the vgcreate also creates
-and activates an internal LV for sanlock.
-
-Fix this by closing the exclusive fd after it's used
-by pvcreate so that it won't interfere with other
-bits of lvm that may try to use the device.
 ---
- lib/label/label.c |    6 +++---
- tools/toollib.c   |    7 +++++++
- 2 files changed, 10 insertions(+), 3 deletions(-)
+ VERSION      |    2 +-
+ VERSION_DM   |    2 +-
+ WHATS_NEW    |    4 ++--
+ WHATS_NEW_DM |    4 ++--
+ 4 files changed, 6 insertions(+), 6 deletions(-)
 
-diff --git a/lib/label/label.c b/lib/label/label.c
-index d2c8685..9fe11f6 100644
---- a/lib/label/label.c
-+++ b/lib/label/label.c
-@@ -1185,7 +1185,7 @@ bool dev_write_bytes(struct device *dev, uint64_t start, size_t len, void *data)
- 		return false;
- 	}
+diff --git a/VERSION b/VERSION
+index e0672df..7da8561 100644
+--- a/VERSION
++++ b/VERSION
+@@ -1 +1 @@
+-2.02.181(2)-git (2018-07-19)
++2.02.181(2) (2018-08-01)
+diff --git a/VERSION_DM b/VERSION_DM
+index cd2a5f7..89ff3de 100644
+--- a/VERSION_DM
++++ b/VERSION_DM
+@@ -1 +1 @@
+-1.02.150-git (2018-07-19)
++1.02.150-git (2018-08-01)
+diff --git a/WHATS_NEW b/WHATS_NEW
+index 546d3e6..2087579 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,5 @@
+-Version 2.02.181 - 
+-=================================
++Version 2.02.181 - 02 Aug 2018
++==============================
+   Reject conversions on raid1 LVs with split tracked SubLVs.
+   Reject conversions on raid1 split tracked SubLVs.
+   Fix dmstats list failing when no regions exist.
+diff --git a/WHATS_NEW_DM b/WHATS_NEW_DM
+index c42ee17..0ba20b0 100644
+--- a/WHATS_NEW_DM
++++ b/WHATS_NEW_DM
+@@ -1,5 +1,5 @@
+-Version 1.02.150 - 
+-=================================
++Version 1.02.150 - 02 Aug 2018
++==============================
+   Add vdo plugin for monitoring VDO devices.
  
--	if (!(dev->flags & DEV_BCACHE_WRITE)) {
-+	if (_in_bcache(dev) && !(dev->flags & DEV_BCACHE_WRITE)) {
- 		/* FIXME: avoid tossing out bcache blocks just to replace fd. */
- 		log_debug("Close and reopen to write %s", dev_name(dev));
- 		bcache_invalidate_fd(scan_bcache, dev->bcache_fd);
-@@ -1231,7 +1231,7 @@ bool dev_write_zeros(struct device *dev, uint64_t start, size_t len)
- 		return false;
- 	}
- 
--	if (!(dev->flags & DEV_BCACHE_WRITE)) {
-+	if (_in_bcache(dev) && !(dev->flags & DEV_BCACHE_WRITE)) {
- 		/* FIXME: avoid tossing out bcache blocks just to replace fd. */
- 		log_debug("Close and reopen to write %s", dev_name(dev));
- 		bcache_invalidate_fd(scan_bcache, dev->bcache_fd);
-@@ -1277,7 +1277,7 @@ bool dev_set_bytes(struct device *dev, uint64_t start, size_t len, uint8_t val)
- 		return false;
- 	}
- 
--	if (!(dev->flags & DEV_BCACHE_WRITE)) {
-+	if (_in_bcache(dev) && !(dev->flags & DEV_BCACHE_WRITE)) {
- 		/* FIXME: avoid tossing out bcache blocks just to replace fd. */
- 		log_debug("Close and reopen to write %s", dev_name(dev));
- 		bcache_invalidate_fd(scan_bcache, dev->bcache_fd);
-diff --git a/tools/toollib.c b/tools/toollib.c
-index 36ae125..85d44b3 100644
---- a/tools/toollib.c
-+++ b/tools/toollib.c
-@@ -5782,6 +5782,13 @@ do_command:
- 					pd->name);
- 	}
- 
-+	/*
-+	 * Don't keep devs open excl in bcache because the excl will prevent
-+	 * using that dev elsewhere.
-+	 */
-+	dm_list_iterate_items(devl, &rescan_devs)
-+		label_scan_invalidate(devl->dev);
-+
- 	dm_list_iterate_items(pd, &pp->arg_fail)
- 		log_debug("%s: command failed for %s.",
- 			  cmd->command->name, pd->name);
+ Version 1.02.149 - 19th July 2018
 
 
