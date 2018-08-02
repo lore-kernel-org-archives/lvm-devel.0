@@ -1,28 +1,48 @@
-From: Marian Csontos <mcsontos@sourceware.org>
-Date: Thu, 2 Aug 2018 02:23:31 -0400
-Subject: 2018-06-01-stable - Merge branch '2018-06-01-stable' of git://sourceware.org/git/lvm2 into 2018-06-01-stable
-Message-ID: <201808020623.w726NVix010249@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: David Teigland <teigland@sourceware.org>
+Date: Thu, 2 Aug 2018 12:39:52 -0400
+Subject: 2018-06-01-stable - mirrors: fix read_only_volume_list
+Message-ID: <201808021639.w72Gdqx1005966@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=3ebc745f53a12848012c3345571a67bc9cd59cf7
-Commit:        3ebc745f53a12848012c3345571a67bc9cd59cf7
-Parent:        acd2c6f256077f07e3f8d34b2b824bf2b6b3dc8a a75eb8d74c367b88d5b323d5dfb2e6556f2ad680
-Author:        Marian Csontos <mcsontos@redhat.com>
-AuthorDate:    Thu Aug 2 08:08:51 2018 +0200
-Committer:     Marian Csontos <mcsontos@redhat.com>
-CommitterDate: Thu Aug 2 08:08:51 2018 +0200
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=5f648406b0f2e322851fce36b062a298cb3d6736
+Commit:        5f648406b0f2e322851fce36b062a298cb3d6736
+Parent:        3ebc745f53a12848012c3345571a67bc9cd59cf7
+Author:        David Teigland <teigland@redhat.com>
+AuthorDate:    Thu Aug 2 11:26:59 2018 -0500
+Committer:     David Teigland <teigland@redhat.com>
+CommitterDate: Thu Aug 2 11:39:08 2018 -0500
 
-Merge branch '2018-06-01-stable' of git://sourceware.org/git/lvm2 into 2018-06-01-stable
+mirrors: fix read_only_volume_list
 
-* '2018-06-01-stable' of git://sourceware.org/git/lvm2:
-  vgcreate: close exclusive fd after pvcreate
+If a mirror LV is listed in read_only_volume_list, it would
+still be activated rw.  The activation would initially be
+readonly, but the monitoring function would immediately
+change it to rw.  This was a regression from commit
 
- lib/label/label.c |    6 +++---
- tools/toollib.c   |    7 +++++++
- 2 files changed, 10 insertions(+), 3 deletions(-)
+fade45b1d14c mirror: improve table update
+
+The monitoring function needs to copy the read_only setting
+into the new set of mirror activation options it uses.
+---
+ lib/activate/activate.c |    2 ++
+ 1 files changed, 2 insertions(+), 0 deletions(-)
+
+diff --git a/lib/activate/activate.c b/lib/activate/activate.c
+index 56ec732..70cce30 100644
+--- a/lib/activate/activate.c
++++ b/lib/activate/activate.c
+@@ -1851,6 +1851,8 @@ int monitor_dev_for_events(struct cmd_context *cmd, const struct logical_volume
+ 
+ 	if (!laopts)
+ 		laopts = &zlaopts;
++	else
++		mirr_laopts.read_only = laopts->read_only;
+ 
+ 	/* skip dmeventd code altogether */
+ 	if (dmeventd_monitor_mode() == DMEVENTD_MONITOR_IGNORE)
 
 
