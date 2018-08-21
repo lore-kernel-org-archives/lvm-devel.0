@@ -1,177 +1,92 @@
-From: Joe Thornber <thornber@sourceware.org>
-Date: Mon, 20 Aug 2018 10:36:57 -0400
-Subject: master - radix-tree: Fix bug in remove_prefix()
-Message-ID: <201808201436.w7KEavgq012704@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: Heinz Mauelshagen <heinzm@sourceware.org>
+Date: Tue, 21 Aug 2018 11:29:18 -0400
+Subject: master - lvconvert: fix regression preventing direct striped conversion
+Message-ID: <201808211529.w7LFTInS001435@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=8b05f1f230517aa42878aa160d94383ed0534c64
-Commit:        8b05f1f230517aa42878aa160d94383ed0534c64
-Parent:        54668feaabead997cdf099c970999af667bcf274
-Author:        Joe Thornber <ejt@redhat.com>
-AuthorDate:    Mon Aug 20 15:23:40 2018 +0100
-Committer:     Joe Thornber <ejt@redhat.com>
-CommitterDate: Mon Aug 20 15:23:40 2018 +0100
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=4578411633a40c8c9068ff439ef3c33cbe78d25a
+Commit:        4578411633a40c8c9068ff439ef3c33cbe78d25a
+Parent:        8b05f1f230517aa42878aa160d94383ed0534c64
+Author:        Heinz Mauelshagen <heinzm@redhat.com>
+AuthorDate:    Tue Aug 21 17:12:33 2018 +0200
+Committer:     Heinz Mauelshagen <heinzm@redhat.com>
+CommitterDate: Tue Aug 21 17:28:56 2018 +0200
 
-radix-tree: Fix bug in remove_prefix()
+lvconvert: fix regression preventing direct striped conversion
 
-Accidental decrement of the nr entries when a n256 didn't have the
-entry in the first place.
+Conversion to striped from raid0/raid0_meta is directly possible.
+
+Fix a regression setting superfluous interim raid5_n conversion type
+introduced by commit bd7cdd0b09ba123b064937fddde08daacbed7dab.
+
+Add new test script lvconvert-raid0-striped.sh.
+
+Resolves: rhbz1608067
 ---
- base/data-struct/radix-tree.c |    3 +
- test/unit/radix_tree_t.c      |  116 +++++++++++++++++++++++++++++++++++++++++
- 2 files changed, 119 insertions(+), 0 deletions(-)
+ WHATS_NEW                             |    1 +
+ lib/metadata/raid_manip.c             |    3 +++
+ test/shell/lvconvert-raid0-striped.sh |   25 +++++++++++++++++++++++++
+ 3 files changed, 29 insertions(+), 0 deletions(-)
 
-diff --git a/base/data-struct/radix-tree.c b/base/data-struct/radix-tree.c
-index 1d24dad..1eef1f8 100644
---- a/base/data-struct/radix-tree.c
-+++ b/base/data-struct/radix-tree.c
-@@ -907,6 +907,9 @@ static bool _remove_subtree(struct radix_tree *rt, struct value *root, uint8_t *
+diff --git a/WHATS_NEW b/WHATS_NEW
+index 0a0b6e9..0ea2789 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 3.0.0
+ =============
++  Fix lvconvert raid0/raid0_meta -> striped regression.
+   Fix lvconvert --splitmirror for mirror type (2.02.178).
+   Do not pair cache policy and cache metadata format.
+   lvconvert: reject conversions on raid1 LVs with split tracked SubLVs
+diff --git a/lib/metadata/raid_manip.c b/lib/metadata/raid_manip.c
+index 931b411..5441527 100644
+--- a/lib/metadata/raid_manip.c
++++ b/lib/metadata/raid_manip.c
+@@ -6126,6 +6126,9 @@ static int _set_convenient_raid145610_segtype_to(const struct lv_segment *seg_fr
+ 		if (seg_from->area_count == 1)
+ 			seg_flag = SEG_RAID1;
  
- 	case NODE256:
- 		n256 = root->value.ptr;
-+		if (n256->values[*kb].type == UNSET)
-+			return true;  // No entries
++		else if (seg_is_any_raid0(seg_from) && segtype_is_striped(*segtype))
++			;
 +
- 		r = _remove_subtree(rt, n256->values + (*kb), kb + 1, ke, count);
- 		if (r && n256->values[*kb].type == UNSET) {
- 			n256->nr_entries--;
-diff --git a/test/unit/radix_tree_t.c b/test/unit/radix_tree_t.c
-index e5d3e98..0dde6b7 100644
---- a/test/unit/radix_tree_t.c
-+++ b/test/unit/radix_tree_t.c
-@@ -635,6 +635,121 @@ static void test_bcache_scenario(void *fixture)
- 
- //----------------------------------------------------------------
- 
-+static void _bcs2_step1(struct radix_tree *rt)
-+{
-+	unsigned i;
-+	uint8_t k[12];
-+	union radix_value v;
+ 		/* If this is any raid5 conversion request -> enforce raid5_n, because we convert from striped */
+ 		else if (((segtype_is_striped(*segtype) && !segtype_is_any_raid0(*segtype)) || segtype_is_any_raid5(*segtype)) &&
+ 			 !segtype_is_raid5_n(*segtype))
+diff --git a/test/shell/lvconvert-raid0-striped.sh b/test/shell/lvconvert-raid0-striped.sh
+new file mode 100644
+index 0000000..4521b34
+--- /dev/null
++++ b/test/shell/lvconvert-raid0-striped.sh
+@@ -0,0 +1,25 @@
++#!/usr/bin/env bash
 +
-+	memset(k, 0, sizeof(k));
-+	for (i = 0x6; i < 0x69; i++) {
-+		k[0] = i;
-+		v.n = i;
-+		T_ASSERT(radix_tree_insert(rt, k, k + sizeof(k), v));
-+	}
-+	T_ASSERT(radix_tree_is_well_formed(rt));
-+}
++# Copyright (C) 2018 Red Hat, Inc. All rights reserved.
++#
++# This copyrighted material is made available to anyone wishing to use,
++# modify, copy, or redistribute it subject to the terms and conditions
++# of the GNU General Public License v.2.
++#
++# You should have received a copy of the GNU General Public License
++# along with this program; if not, write to the Free Software Foundation,
++# Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 +
-+static void _bcs2_step2(struct radix_tree *rt)
-+{
-+	unsigned i;
-+	uint8_t k[12];
 +
-+	memset(k, 0, sizeof(k));
-+	for (i = 0x6; i < 0x69; i++) {
-+		k[0] = i;
-+		radix_tree_remove_prefix(rt, k, k + 4);
-+	}
-+	T_ASSERT(radix_tree_is_well_formed(rt));
-+}
++SKIP_WITH_LVMPOLLD=1
 +
-+static void test_bcache_scenario2(void *fixture)
-+{
-+	unsigned i;
-+	struct radix_tree *rt = fixture;
-+	uint8_t k[12];
-+	union radix_value v;
++. lib/inittest
 +
-+	_bcs2_step1(rt);
-+	_bcs2_step2(rt);
++aux have_raid 1 7 0 || skip
 +
-+	memset(k, 0, sizeof(k));
-+        for (i = 0; i < 50; i++) {
-+	        k[0] = 0x6;
-+	        v.n = 0x6;
-+	        T_ASSERT(radix_tree_insert(rt, k, k + sizeof(k), v));
-+	        radix_tree_remove_prefix(rt, k, k + 4);
-+        }
-+        T_ASSERT(radix_tree_is_well_formed(rt));
++aux prepare_vg 3 16
 +
-+	_bcs2_step1(rt);
-+	_bcs2_step2(rt);
-+	_bcs2_step1(rt);
-+	_bcs2_step2(rt);
-+
-+	memset(k, 0, sizeof(k));
-+	for(i = 0x6; i < 0x37; i++) {
-+		k[0] = i;
-+		k[4] = 0xf;
-+		k[5] = 0x1;
-+		T_ASSERT(radix_tree_insert(rt, k, k + sizeof(k), v));
-+		k[4] = 0;
-+		k[5] = 0;
-+		T_ASSERT(radix_tree_insert(rt, k, k + sizeof(k), v));
-+	}
-+	T_ASSERT(radix_tree_is_well_formed(rt));
-+
-+	memset(k, 0, sizeof(k));
-+	for (i = 0x38; i < 0x69; i++) {
-+		k[0] = i - 0x32;
-+		k[4] = 0xf;
-+		k[5] = 1;
-+		T_ASSERT(radix_tree_remove(rt, k, k + sizeof(k)));
-+
-+		k[0] = i;
-+		T_ASSERT(radix_tree_insert(rt, k, k + sizeof(k), v));
-+
-+		k[0] = i - 0x32;
-+		k[4] = 0;
-+		k[5] = 0;
-+		T_ASSERT(radix_tree_remove(rt, k, k + sizeof(k)));
-+
-+		k[0] = i;
-+		T_ASSERT(radix_tree_insert(rt, k, k + sizeof(k), v));
-+	}
-+	T_ASSERT(radix_tree_is_well_formed(rt));
-+
-+	memset(k, 0, sizeof(k));
-+	k[0] = 0x6;
-+	radix_tree_remove_prefix(rt, k, k + 4);
-+	T_ASSERT(radix_tree_is_well_formed(rt));
-+
-+	k[0] = 0x38;
-+	k[4] = 0xf;
-+	k[5] = 0x1;
-+	T_ASSERT(radix_tree_remove(rt, k, k + sizeof(k)));
-+	T_ASSERT(radix_tree_is_well_formed(rt));
-+
-+	memset(k, 0, sizeof(k));
-+	k[0] = 0x6;
-+	T_ASSERT(radix_tree_insert(rt, k, k + sizeof(k), v));
-+	T_ASSERT(radix_tree_is_well_formed(rt));
-+
-+	k[0] = 0x7;
-+	radix_tree_remove_prefix(rt, k, k + 4);
-+	T_ASSERT(radix_tree_is_well_formed(rt));
-+
-+	k[0] = 0x38;
-+	T_ASSERT(radix_tree_remove(rt, k, k + sizeof(k)));
-+	T_ASSERT(radix_tree_is_well_formed(rt));
-+
-+	k[0] = 7;
-+	T_ASSERT(radix_tree_insert(rt, k, k + sizeof(k), v));
-+	T_ASSERT(radix_tree_is_well_formed(rt));
-+}
-+
-+//----------------------------------------------------------------
-+
- #define T(path, desc, fn) register_test(ts, "/base/data-struct/radix-tree/" path, desc, fn)
- 
- void radix_tree_tests(struct dm_list *all_tests)
-@@ -668,6 +783,7 @@ void radix_tree_tests(struct dm_list *all_tests)
- 	T("remove-calls-dtr", "remove should call the dtr for the value", test_remove_calls_dtr);
- 	T("destroy-calls-dtr", "destroy should call the dtr for all values", test_destroy_calls_dtr);
- 	T("bcache-scenario", "A specific series of keys from a bcache scenario", test_bcache_scenario);
-+	T("bcache-scenario-2", "A second series of keys from a bcache scenario", test_bcache_scenario2);
- 
- 	dm_list_add(all_tests, &ts->list);
- }
++lvcreate -aey --type raid0 -i 3 -l3 -n $lv $vg
++lvconvert -y --type striped $vg/$lv
++check lv_field $vg/$lv segtype "striped"
++vgremove -ff $vg
 
 
