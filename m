@@ -1,41 +1,57 @@
-From: David Teigland <teigland@sourceware.org>
-Date: Tue, 21 Aug 2018 14:41:38 -0400
-Subject: master - config: improve use_blkid_wiping
-Message-ID: <201808211841.w7LIfcnj027050@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: Heinz Mauelshagen <heinzm@sourceware.org>
+Date: Wed, 22 Aug 2018 11:14:22 -0400
+Subject: master - test: add striped -> raid0 test script
+Message-ID: <201808221514.w7MFEMm3012101@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=10ede2cc0fdabaeb19c5b5b3341164432f6d4425
-Commit:        10ede2cc0fdabaeb19c5b5b3341164432f6d4425
-Parent:        4578411633a40c8c9068ff439ef3c33cbe78d25a
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Tue Aug 21 12:24:35 2018 -0500
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Tue Aug 21 12:24:35 2018 -0500
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=3c966e637fe1bec587ceb9ad13aa009db64b4f8e
+Commit:        3c966e637fe1bec587ceb9ad13aa009db64b4f8e
+Parent:        e83c4f07ca4a84808178d5d22cba655e5e370cd8
+Author:        Heinz Mauelshagen <heinzm@redhat.com>
+AuthorDate:    Wed Aug 22 17:11:03 2018 +0200
+Committer:     Heinz Mauelshagen <heinzm@redhat.com>
+CommitterDate: Wed Aug 22 17:12:44 2018 +0200
 
-config: improve use_blkid_wiping
+test: add striped -> raid0 test script
 
-mention that libblkid is used to both detect
-and erase signatures.
 ---
- lib/config/config_settings.h |    2 +-
- 1 files changed, 1 insertions(+), 1 deletions(-)
+ test/shell/lvconvert-striped-raid0.sh |   25 +++++++++++++++++++++++++
+ 1 files changed, 25 insertions(+), 0 deletions(-)
 
-diff --git a/lib/config/config_settings.h b/lib/config/config_settings.h
-index 7882e95..1d0cc79 100644
---- a/lib/config/config_settings.h
-+++ b/lib/config/config_settings.h
-@@ -471,7 +471,7 @@ cfg(allocation_maximise_cling_CFG, "maximise_cling", allocation_CFG_SECTION, 0,
- 	"and revert to the previous algorithm.\n")
- 
- cfg(allocation_use_blkid_wiping_CFG, "use_blkid_wiping", allocation_CFG_SECTION, 0, CFG_TYPE_BOOL, DEFAULT_USE_BLKID_WIPING, vsn(2, 2, 105), "@DEFAULT_USE_BLKID_WIPING@", 0, NULL,
--	"Use blkid to detect existing signatures on new PVs and LVs.\n"
-+	"Use blkid to detect and erase existing signatures on new PVs and LVs.\n"
- 	"The blkid library can detect more signatures than the native LVM\n"
- 	"detection code, but may take longer. LVM needs to be compiled with\n"
- 	"blkid wiping support for this setting to apply. LVM native detection\n"
+diff --git a/test/shell/lvconvert-striped-raid0.sh b/test/shell/lvconvert-striped-raid0.sh
+new file mode 100644
+index 0000000..5cfb792
+--- /dev/null
++++ b/test/shell/lvconvert-striped-raid0.sh
+@@ -0,0 +1,25 @@
++#!/usr/bin/env bash
++
++# Copyright (C) 2018 Red Hat, Inc. All rights reserved.
++#
++# This copyrighted material is made available to anyone wishing to use,
++# modify, copy, or redistribute it subject to the terms and conditions
++# of the GNU General Public License v.2.
++#
++# You should have received a copy of the GNU General Public License
++# along with this program; if not, write to the Free Software Foundation,
++# Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
++
++
++SKIP_WITH_LVMPOLLD=1
++
++. lib/inittest
++
++aux have_raid 1 7 0 || skip
++
++aux prepare_vg 3 16
++
++lvcreate -aey --type striped -i 3 -l3 -n $lv $vg
++lvconvert -y --type raid0_meta $vg/$lv
++check lv_field $vg/$lv segtype "raid0_meta"
++vgremove -ff $vg
 
 
