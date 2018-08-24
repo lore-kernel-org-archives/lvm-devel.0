@@ -1,58 +1,66 @@
-From: Marian Csontos <mcsontos@sourceware.org>
-Date: Thu, 23 Aug 2018 05:30:02 -0400
-Subject: 2018-06-01-stable - test: add striped -> raid0 test script
-Message-ID: <201808230930.w7N9U2kQ011316@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: David Teigland <teigland@sourceware.org>
+Date: Fri, 24 Aug 2018 15:51:06 -0400
+Subject: 2018-06-01-stable - bcache: reduce MAX_IO to 256
+Message-ID: <201808241951.w7OJp6PR005843@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=ab1aa0a4fb9b422b177bba35f1bd96fda2330189
-Commit:        ab1aa0a4fb9b422b177bba35f1bd96fda2330189
-Parent:        d910f75d89e02e46cd16f9ddbc8e8358c3c2efd3
-Author:        Heinz Mauelshagen <heinzm@redhat.com>
-AuthorDate:    Wed Aug 22 17:11:03 2018 +0200
-Committer:     Marian Csontos <mcsontos@redhat.com>
-CommitterDate: Thu Aug 23 11:29:24 2018 +0200
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=a991664dec02b62681a4a3eea7fbee2fc3a88700
+Commit:        a991664dec02b62681a4a3eea7fbee2fc3a88700
+Parent:        ab1aa0a4fb9b422b177bba35f1bd96fda2330189
+Author:        David Teigland <teigland@redhat.com>
+AuthorDate:    Fri Aug 24 14:46:51 2018 -0500
+Committer:     David Teigland <teigland@redhat.com>
+CommitterDate: Fri Aug 24 14:50:53 2018 -0500
 
-test: add striped -> raid0 test script
+bcache: reduce MAX_IO to 256
 
-(cherry picked from commit 3c966e637fe1bec587ceb9ad13aa009db64b4f8e)
+This is the number of concurrent async io requests that
+the scan layer will submit to the bcache layer.  There
+will be an open fd for each of these, so it is best to
+keep this well below the default limit for max open files
+(1024), otherwise lvm may get EMFILE from open(2) when
+there are around 1024 devices to scan on the system.
 ---
- test/shell/lvconvert-striped-raid0.sh |   25 +++++++++++++++++++++++++
- 1 files changed, 25 insertions(+), 0 deletions(-)
+ WHATS_NEW           |    1 +
+ lib/device/bcache.c |   10 +++++++++-
+ 2 files changed, 10 insertions(+), 1 deletions(-)
 
-diff --git a/test/shell/lvconvert-striped-raid0.sh b/test/shell/lvconvert-striped-raid0.sh
-new file mode 100644
-index 0000000..5cfb792
---- /dev/null
-+++ b/test/shell/lvconvert-striped-raid0.sh
-@@ -0,0 +1,25 @@
-+#!/usr/bin/env bash
+diff --git a/WHATS_NEW b/WHATS_NEW
+index 63ec994..1a00b78 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -4,6 +4,7 @@ Version 2.02.182 -
+   Fix lvconvert raid0/raid0_meta -> striped regression.
+   Fix lvconvert --splitmirror for mirror type (2.02.178).
+   Do not pair cache policy and cache metadata format.
++  Reduce max concurrent aios to avoid EMFILE with many devices.
+ 
+ Version 2.02.181 - 01 August 2018
+ =================================
+diff --git a/lib/device/bcache.c b/lib/device/bcache.c
+index b1f7d2a..531d83b 100644
+--- a/lib/device/bcache.c
++++ b/lib/device/bcache.c
+@@ -196,7 +196,15 @@ static bool _async_issue(struct io_engine *ioe, enum dir d, int fd,
+ 	return true;
+ }
+ 
+-#define MAX_IO 1024
++/*
++ * MAX_IO is returned to the layer above via bcache_max_prefetches() which
++ * tells the caller how many devices to submit io for concurrently.  There will
++ * be an open file descriptor for each of these, so keep it low enough to avoid
++ * reaching the default max open file limit (1024) when there are over 1024
++ * devices being scanned.
++ */
 +
-+# Copyright (C) 2018 Red Hat, Inc. All rights reserved.
-+#
-+# This copyrighted material is made available to anyone wishing to use,
-+# modify, copy, or redistribute it subject to the terms and conditions
-+# of the GNU General Public License v.2.
-+#
-+# You should have received a copy of the GNU General Public License
-+# along with this program; if not, write to the Free Software Foundation,
-+# Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
-+
-+
-+SKIP_WITH_LVMPOLLD=1
-+
-+. lib/inittest
-+
-+aux have_raid 1 7 0 || skip
-+
-+aux prepare_vg 3 16
-+
-+lvcreate -aey --type striped -i 3 -l3 -n $lv $vg
-+lvconvert -y --type raid0_meta $vg/$lv
-+check lv_field $vg/$lv segtype "raid0_meta"
-+vgremove -ff $vg
++#define MAX_IO 256
+ #define MAX_EVENT 64
+ 
+ static bool _async_wait(struct io_engine *ioe, io_complete_fn fn)
 
 
