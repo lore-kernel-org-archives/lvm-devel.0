@@ -1,86 +1,234 @@
-From: Marian Csontos <mcsontos@sourceware.org>
-Date: Mon, 27 Aug 2018 10:18:27 -0400
-Subject: 2018-06-01-stable - spec: Disable python bindings on newer versions
-Message-ID: <201808271418.w7REIRMF017460@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: David Teigland <teigland@sourceware.org>
+Date: Mon, 27 Aug 2018 15:41:59 -0400
+Subject: 2018-06-01-stable - lvmetad: improve scan for pvscan all
+Message-ID: <201808271941.w7RJfxoN025429@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=63d49838900cbd6d2f937d5ce75e70b32cf009a2
-Commit:        63d49838900cbd6d2f937d5ce75e70b32cf009a2
-Parent:        a991664dec02b62681a4a3eea7fbee2fc3a88700
-Author:        Marian Csontos <mcsontos@redhat.com>
-AuthorDate:    Mon Aug 27 16:17:11 2018 +0200
-Committer:     Marian Csontos <mcsontos@redhat.com>
-CommitterDate: Mon Aug 27 16:17:11 2018 +0200
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=c527a0cbfc391645d30407d2dc4a30275c6472f1
+Commit:        c527a0cbfc391645d30407d2dc4a30275c6472f1
+Parent:        63d49838900cbd6d2f937d5ce75e70b32cf009a2
+Author:        David Teigland <teigland@redhat.com>
+AuthorDate:    Mon Aug 27 11:15:35 2018 -0500
+Committer:     David Teigland <teigland@redhat.com>
+CommitterDate: Mon Aug 27 14:39:49 2018 -0500
 
-spec: Disable python bindings on newer versions
+lvmetad: improve scan for pvscan all
 
+For 'pvscan --cache' avoid using dev_iter in the loop
+after the label_scan by passing the necessary devs back
+from the label_scan for the continued pvscan.
+The dev_iter functions reapply the filters which will
+trigger more io when we don't need or want it.  With
+many devs, incidental opens from the filters (not controlled
+by the label scan) can lead to too many open files.
 ---
- spec/build.inc  |    1 +
- spec/source.inc |   22 +++++++++++-----------
- 2 files changed, 12 insertions(+), 11 deletions(-)
+ lib/cache/lvmetad.c |   34 ++++++++++++------------
+ lib/label/label.c   |   73 +++++++++++++++++++++++++++++++++++++++++++++++++++
+ lib/label/label.h   |    1 +
+ 3 files changed, 91 insertions(+), 17 deletions(-)
 
-diff --git a/spec/build.inc b/spec/build.inc
-index 5fb38f7..f317892 100644
---- a/spec/build.inc
-+++ b/spec/build.inc
-@@ -33,6 +33,7 @@
- %enableif %{enable_python} python2-bindings
- %enableif %{enable_python3} python3-bindings
- %enableif %{enable_python} applib
-+%enableif %{enable_python3} applib
- %enableif %{enable_dbusd} dbus-service
- %enableif %{enable_dbusd} notify-dbus
- %enableif %{enable_dmfilemapd} dmfilemapd
-diff --git a/spec/source.inc b/spec/source.inc
-index fb7ccf5..93f9c7b 100644
---- a/spec/source.inc
-+++ b/spec/source.inc
-@@ -79,15 +79,24 @@
- %global enable_python 0
- %endif
+diff --git a/lib/cache/lvmetad.c b/lib/cache/lvmetad.c
+index a1ab41a..acbb52e 100644
+--- a/lib/cache/lvmetad.c
++++ b/lib/cache/lvmetad.c
+@@ -2322,8 +2322,8 @@ bad:
  
--%if %{rhel} >= 8 || %{fedora} >= 20
-+%if %{rhel} > 7 || %{fedora} >= 20
- %global enable_python3 1
- %endif
+ int lvmetad_pvscan_all_devs(struct cmd_context *cmd, int do_wait)
+ {
+-	struct dev_iter *iter;
+-	struct device *dev;
++	struct device_list *devl, *devl2;
++	struct dm_list scan_devs;
+ 	daemon_reply reply;
+ 	char *future_token;
+ 	const char *reason;
+@@ -2339,6 +2339,8 @@ int lvmetad_pvscan_all_devs(struct cmd_context *cmd, int do_wait)
+ 	}
  
-+%if %{rhel} > 7 || %{fedora} >= 29
-+%global enable_python 0
-+%endif
+  retry:
++	dm_list_init(&scan_devs);
 +
-+%if %{rhel} > 7 || %{fedora} >= 23
-+%global enable_dbusd 1
-+%endif
-+
- %if %{enable_python}
-   %global buildreq_python2_devel python2-devel
-   %global buildreq_python_setuptools python-setuptools
- %endif
--%if %{enable_python3}
-+
-+%if %{enable_python3} || %{enable_dbusd}
-   %global buildreq_python3_devel python3-devel
-   %global buildreq_python_setuptools python-setuptools
- %endif
-@@ -100,15 +109,6 @@
+ 	/*
+ 	 * If another update is in progress, delay to allow it to finish,
+ 	 * rather than interrupting it with our own update.
+@@ -2348,7 +2350,7 @@ int lvmetad_pvscan_all_devs(struct cmd_context *cmd, int do_wait)
+ 		replacing_other_update = 1;
+ 	}
  
- ##############################################################
+-	label_scan(cmd);
++	label_scan_pvscan_all(cmd, &scan_devs);
  
--%if %{rhel} >= 8 || %{fedora} >= 23
--  %if %{enable_python3}
--    %global enable_dbusd 1
--  %else
--    # dbusd requires python3
--    false
--  %endif
--%endif
+ 	lvmcache_pvscan_duplicate_check(cmd);
+ 
+@@ -2357,19 +2359,14 @@ int lvmetad_pvscan_all_devs(struct cmd_context *cmd, int do_wait)
+ 		return 0;
+ 	}
+ 
+-	log_verbose("Scanning all devices to update lvmetad.");
 -
- %if %{enable_dbusd}
-   %global buildreq_python3_dbus python3-dbus
-   %global buildreq_python3_pyudev python3-pyudev
+-	if (!(iter = dev_iter_create(cmd->lvmetad_filter, 1))) {
+-		log_error("dev_iter creation failed");
+-		return 0;
+-	}
++	log_verbose("Scanning metadata from %d devices to update lvmetad.",
++		    dm_list_size(&scan_devs));
+ 
+ 	future_token = _lvmetad_token;
+ 	_lvmetad_token = (char *) LVMETAD_TOKEN_UPDATE_IN_PROGRESS;
+ 
+ 	if (!_token_update(&replaced_update)) {
+ 		log_error("Failed to update lvmetad which had an update in progress.");
+-		dev_iter_destroy(iter);
+ 		_lvmetad_token = future_token;
+ 		return 0;
+ 	}
+@@ -2385,12 +2382,10 @@ int lvmetad_pvscan_all_devs(struct cmd_context *cmd, int do_wait)
+ 		if (do_wait && !retries) {
+ 			retries = 1;
+ 			log_warn("WARNING: lvmetad update in progress, retrying update.");
+-			dev_iter_destroy(iter);
+ 			_lvmetad_token = future_token;
+ 			goto retry;
+ 		}
+ 		log_warn("WARNING: lvmetad update in progress, skipping update.");
+-		dev_iter_destroy(iter);
+ 		_lvmetad_token = future_token;
+ 		return 0;
+ 	}
+@@ -2404,15 +2399,22 @@ int lvmetad_pvscan_all_devs(struct cmd_context *cmd, int do_wait)
+ 	was_silent = silent_mode();
+ 	init_silent(1);
+ 
+-	while ((dev = dev_iter_get(iter))) {
++	dm_list_iterate_items_safe(devl, devl2, &scan_devs) {
+ 		if (sigint_caught()) {
+ 			ret = 0;
+ 			stack;
+ 			break;
+ 		}
+ 
+-		if (!lvmetad_pvscan_single(cmd, dev, NULL, NULL)) {
+-			ret = 0;
++		dm_list_del(&devl->list);
++
++		ret = lvmetad_pvscan_single(cmd, devl->dev, NULL, NULL);
++
++		label_scan_invalidate(devl->dev);
++
++		dm_free(devl);
++
++		if (!ret) {
+ 			stack;
+ 			break;
+ 		}
+@@ -2420,8 +2422,6 @@ int lvmetad_pvscan_all_devs(struct cmd_context *cmd, int do_wait)
+ 
+ 	init_silent(was_silent);
+ 
+-	dev_iter_destroy(iter);
+-
+ 	_lvmetad_token = future_token;
+ 
+ 	/*
+diff --git a/lib/label/label.c b/lib/label/label.c
+index bafa543..837033c 100644
+--- a/lib/label/label.c
++++ b/lib/label/label.c
+@@ -876,6 +876,79 @@ int label_scan(struct cmd_context *cmd)
+ 	return 1;
+ }
+ 
++int label_scan_pvscan_all(struct cmd_context *cmd, struct dm_list *scan_devs)
++{
++	struct dm_list all_devs;
++	struct dev_iter *iter;
++	struct device_list *devl, *devl2;
++	struct device *dev;
++
++	log_debug_devs("Finding devices to scan");
++
++	dm_list_init(&all_devs);
++
++	/*
++	 * Iterate through all the devices in dev-cache (block devs that appear
++	 * under /dev that could possibly hold a PV and are not excluded by
++	 * filters).  Read each to see if it's an lvm device, and if so
++	 * populate lvmcache with some basic info about the device and the VG
++	 * on it.  This info will be used by the vg_read() phase of the
++	 * command.
++	 */
++	dev_cache_scan();
++
++	if (!(iter = dev_iter_create(cmd->lvmetad_filter, 0))) {
++		log_error("Scanning failed to get devices.");
++		return 0;
++	}
++
++	while ((dev = dev_iter_get(iter))) {
++		if (!(devl = dm_zalloc(sizeof(*devl))))
++			return 0;
++		devl->dev = dev;
++		dm_list_add(&all_devs, &devl->list);
++
++		/*
++		 * label_scan should not generally be called a second time,
++		 * so this will usually not be true.
++		 */
++		if (_in_bcache(dev)) {
++			bcache_invalidate_fd(scan_bcache, dev->bcache_fd);
++			_scan_dev_close(dev);
++		}
++	};
++	dev_iter_destroy(iter);
++
++	log_debug_devs("Found %d devices to scan", dm_list_size(&all_devs));
++
++	if (!scan_bcache) {
++		if (!_setup_bcache(dm_list_size(&all_devs)))
++			return 0;
++	}
++
++	_scan_list(cmd, cmd->lvmetad_filter, &all_devs, NULL);
++
++	dm_list_iterate_items_safe(devl, devl2, &all_devs) {
++		dm_list_del(&devl->list);
++
++		/*
++		 * If this device is lvm's then, return it to pvscan
++		 * to do the further pvscan.  (We could have _scan_list
++		 * just set a result in devl indicating the result, but
++		 * instead we're just checking indirectly if _scan_list
++		 * saved lvmcache info for the dev which also means it's
++		 * an lvm device.)
++		 */
++
++		if (lvmcache_has_dev_info(devl->dev))
++			dm_list_add(scan_devs, &devl->list);
++		else
++			dm_free(devl);
++	}
++
++	return 1;
++}
++
+ /*
+  * Scan and cache lvm data from the listed devices.  If a device is already
+  * scanned and cached, this replaces the previously cached lvm data for the
+diff --git a/lib/label/label.h b/lib/label/label.h
+index 5ed8bc8..5b83bc7 100644
+--- a/lib/label/label.h
++++ b/lib/label/label.h
+@@ -116,6 +116,7 @@ void label_scan_confirm(struct device *dev);
+ int label_scan_setup_bcache(void);
+ int label_scan_open(struct device *dev);
+ int label_scan_open_excl(struct device *dev);
++int label_scan_pvscan_all(struct cmd_context *cmd, struct dm_list *scan_devs);
+ 
+ /*
+  * Wrappers around bcache equivalents.
 
 
