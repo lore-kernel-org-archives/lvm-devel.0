@@ -1,152 +1,139 @@
-From: Kylie McClain <somasissounds@gmail.com>
-Date: Mon, 30 May 2016 16:55:59 -0400
-Subject: [PATCH] Fix building on musl libc
-Message-ID: <20160530205559.10864-1-somasissounds@gmail.com>
+From: Zdenek Kabelac <zkabelac@sourceware.org>
+Date: Wed, 5 Sep 2018 08:40:30 -0400
+Subject: 2018-06-01-stable - dmeventd: lvm2 plugin uses envvar registry
+Message-ID: <201809051240.w85CeUds006976@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-From: Kylie McClain <somasis@exherbo.org>
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=a8d59404f7713ae4f9a3b172dd560ed1364d8bee
+Commit:        a8d59404f7713ae4f9a3b172dd560ed1364d8bee
+Parent:        a1a89a453f21e7359cea14dcf86920c1e3867ec3
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Mon Aug 27 10:18:26 2018 +0200
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Wed Sep 5 14:39:14 2018 +0200
 
-This patch fixes building and using lvm2 on musl libc. These are taken from
-Alpine Linux, with permission to submit upstream from Natanael Copa <ncopa@alpinelinux.org>.
+dmeventd: lvm2 plugin uses envvar registry
+
+Thin plugin started to use configuble setting to allow to configure
+usage of external scripts - however to read this value it needed to
+execute internal command as dmeventd itself has no access to lvm.conf
+and the API for dmeventd plugin has been kept stable.
+
+The call of command itself was not normally 'a big issue' until users
+started to use higher number of monitored LVs and execution of command
+got stuck because other monitored resource already started to execute
+some other lvm2 command and become blocked waiting on VG lock.
+
+This scenario revealed necesity to somehow avoid calling lvm2 command
+during resource registration - but this requires bigger changes - so
+meanwhile this patch tries to minimize the possibility to hit this race
+by obtaining any configurable setting just once - such patch is small
+and covers majority of problem - yet better solution needs to be
+introduced likely with bigger rework of dmeventd.
+
+TODO: Avoid blocking registration of resource with execution of lvm2
+commands since those can get stuck waiting on mutexes.
 ---
- lib/commands/toolcontext.c | 22 +++++++++++-----------
- lib/mm/memlock.c           |  2 +-
- tools/lvmcmdline.c         |  6 +++---
- 3 files changed, 15 insertions(+), 15 deletions(-)
+ WHATS_NEW_DM                                 |    1 +
+ daemons/dmeventd/plugins/lvm2/dmeventd_lvm.c |   49 ++++++++++++++++++++------
+ 2 files changed, 39 insertions(+), 11 deletions(-)
 
-diff --git a/lib/commands/toolcontext.c b/lib/commands/toolcontext.c
-index 1e3f14a..5c6a030 100644
---- a/lib/commands/toolcontext.c
-+++ b/lib/commands/toolcontext.c
-@@ -1645,7 +1645,10 @@ static void _init_globals(struct cmd_context *cmd)
- /*
-  * Close and reopen stream on file descriptor fd.
-  */
--static int _reopen_stream(FILE *stream, int fd, const char *mode, const char *name, FILE **new_stream)
-+#ifdef __GLIBC__
-+#define _reopen_stream(stream, fd, mode, name) __reopen_stream(stream, fd, mode, name, &stream)
+diff --git a/WHATS_NEW_DM b/WHATS_NEW_DM
+index 72e945d..91bbc57 100644
+--- a/WHATS_NEW_DM
++++ b/WHATS_NEW_DM
+@@ -1,5 +1,6 @@
+ Version 1.02.151 - 
+ ==============================
++  Add hot fix to avoiding locking collision when monitoring thin-pools.
+ 
+ Version 1.02.150 - 01 August 2018
+ =================================
+diff --git a/daemons/dmeventd/plugins/lvm2/dmeventd_lvm.c b/daemons/dmeventd/plugins/lvm2/dmeventd_lvm.c
+index 930f9fc..5be11f1 100644
+--- a/daemons/dmeventd/plugins/lvm2/dmeventd_lvm.c
++++ b/daemons/dmeventd/plugins/lvm2/dmeventd_lvm.c
+@@ -31,6 +31,13 @@ static pthread_mutex_t _register_mutex = PTHREAD_MUTEX_INITIALIZER;
+ static int _register_count = 0;
+ static struct dm_pool *_mem_pool = NULL;
+ static void *_lvm_handle = NULL;
++static DM_LIST_INIT(_env_registry);
 +
-+static int __reopen_stream(FILE *stream, int fd, const char *mode, const char *name, FILE **new_stream)
- {
- 	int fd_copy, new_fd;
++struct env_data {
++	struct dm_list list;
++	const char *cmd;
++	const char *data;
++};
  
-@@ -1672,6 +1675,9 @@ static int _reopen_stream(FILE *stream, int fd, const char *mode, const char *na
+ DM_EVENT_LOG_FN("#lvm")
  
- 	return 1;
- }
-+#else
-+#define _reopen_stream(stream, fd, mode, name) (freopen(NULL, mode, stream) != NULL)
-+#endif
+@@ -100,6 +107,7 @@ void dmeventd_lvm2_exit(void)
+ 		lvm2_run(_lvm_handle, "_memlock_dec");
+ 		dm_pool_destroy(_mem_pool);
+ 		_mem_pool = NULL;
++		dm_list_init(&_env_registry);
+ 		lvm2_exit(_lvm_handle);
+ 		_lvm_handle = NULL;
+ 		log_debug("lvm plugin exited.");
+@@ -124,6 +132,8 @@ int dmeventd_lvm2_command(struct dm_pool *mem, char *buffer, size_t size,
+ 	static char _internal_prefix[] =  "_dmeventd_";
+ 	char *vg = NULL, *lv = NULL, *layer;
+ 	int r;
++	struct env_data *env_data;
++	const char *env = NULL;
  
- /*
-  * init_connections();
-@@ -1828,7 +1834,6 @@ struct cmd_context *create_toolcontext(unsigned is_long_lived,
- 				       unsigned set_filters)
- {
- 	struct cmd_context *cmd;
--	FILE *new_stream;
- 	int flags;
+ 	if (!dm_split_lvm_name(mem, device, &vg, &lv, &layer)) {
+ 		log_error("Unable to determine VG name from %s.",
+@@ -137,18 +147,35 @@ int dmeventd_lvm2_command(struct dm_pool *mem, char *buffer, size_t size,
+ 		*layer = '\0';
  
- #ifdef M_MMAP_MAX
-@@ -1878,9 +1883,8 @@ struct cmd_context *create_toolcontext(unsigned is_long_lived,
- 		if (is_valid_fd(STDIN_FILENO) &&
- 		    ((flags = fcntl(STDIN_FILENO, F_GETFL)) > 0) &&
- 		    (flags & O_ACCMODE) != O_WRONLY) {
--			if (!_reopen_stream(stdin, STDIN_FILENO, "r", "stdin", &new_stream))
-+			if (!_reopen_stream(stdin, STDIN_FILENO, "r", "stdin"))
- 				goto_out;
--			stdin = new_stream;
- 			if (setvbuf(stdin, cmd->linebuffer, _IOLBF, linebuffer_size)) {
- 				log_sys_error("setvbuf", "");
- 				goto out;
-@@ -1890,9 +1894,8 @@ struct cmd_context *create_toolcontext(unsigned is_long_lived,
- 		if (is_valid_fd(STDOUT_FILENO) &&
- 		    ((flags = fcntl(STDOUT_FILENO, F_GETFL)) > 0) &&
- 		    (flags & O_ACCMODE) != O_RDONLY) {
--			if (!_reopen_stream(stdout, STDOUT_FILENO, "w", "stdout", &new_stream))
-+			if (!_reopen_stream(stdout, STDOUT_FILENO, "w", "stdout"))
- 				goto_out;
--			stdout = new_stream;
- 			if (setvbuf(stdout, cmd->linebuffer + linebuffer_size,
- 				     _IOLBF, linebuffer_size)) {
- 				log_sys_error("setvbuf", "");
-@@ -2218,7 +2221,6 @@ int refresh_toolcontext(struct cmd_context *cmd)
- void destroy_toolcontext(struct cmd_context *cmd)
- {
- 	struct dm_config_tree *cft_cmdline;
--	FILE *new_stream;
- 	int flags;
- 
- 	if (cmd->dump_filter && cmd->filter && cmd->filter->dump &&
-@@ -2254,8 +2256,7 @@ void destroy_toolcontext(struct cmd_context *cmd)
- 		if (is_valid_fd(STDIN_FILENO) &&
- 		    ((flags = fcntl(STDIN_FILENO, F_GETFL)) > 0) &&
- 		    (flags & O_ACCMODE) != O_WRONLY) {
--			if (_reopen_stream(stdin, STDIN_FILENO, "r", "stdin", &new_stream)) {
--				stdin = new_stream;
-+			if (_reopen_stream(stdin, STDIN_FILENO, "r", "stdin")) {
- 				setlinebuf(stdin);
- 			} else
- 				cmd->linebuffer = NULL;	/* Leave buffer in place (deliberate leak) */
-@@ -2264,8 +2265,7 @@ void destroy_toolcontext(struct cmd_context *cmd)
- 		if (is_valid_fd(STDOUT_FILENO) &&
- 		    ((flags = fcntl(STDOUT_FILENO, F_GETFL)) > 0) &&
- 		    (flags & O_ACCMODE) != O_RDONLY) {
--			if (_reopen_stream(stdout, STDOUT_FILENO, "w", "stdout", &new_stream)) {
--				stdout = new_stream;
-+			if (_reopen_stream(stdout, STDOUT_FILENO, "w", "stdout")) {
- 				setlinebuf(stdout);
- 			} else
- 				cmd->linebuffer = NULL;	/* Leave buffer in place (deliberate leak) */
-diff --git a/lib/mm/memlock.c b/lib/mm/memlock.c
-index 851cd33..1a1915b 100644
---- a/lib/mm/memlock.c
-+++ b/lib/mm/memlock.c
-@@ -145,7 +145,7 @@ static void _touch_memory(void *mem, size_t size)
- 
- static void _allocate_memory(void)
- {
--#ifndef VALGRIND_POOL
-+#if !defined(VALGRIND_POOL) && defined(__GLIBC__)
- 	void *stack_mem;
- 	struct rlimit limit;
- 	int i, area = 0, missing = _size_malloc_tmp, max_areas = 32, hblks;
-diff --git a/tools/lvmcmdline.c b/tools/lvmcmdline.c
-index be6821b..2095fbe 100644
---- a/tools/lvmcmdline.c
-+++ b/tools/lvmcmdline.c
-@@ -1798,7 +1798,7 @@ static int _check_standard_fds(void)
- 	int err = is_valid_fd(STDERR_FILENO);
- 
- 	if (!is_valid_fd(STDIN_FILENO) &&
--	    !(stdin = fopen(_PATH_DEVNULL, "r"))) {
-+	    !freopen(_PATH_DEVNULL, "r", stdin)) {
- 		if (err)
- 			perror("stdin stream open");
- 		else
-@@ -1808,7 +1808,7 @@ static int _check_standard_fds(void)
+ 	if (!strncmp(cmd, _internal_prefix, sizeof(_internal_prefix) - 1)) {
+-		dmeventd_lvm2_lock();
+-		/* output of internal command passed via env var */
+-		if (!dmeventd_lvm2_run(cmd))
+-			cmd = NULL;
+-		else if ((cmd = getenv(cmd)))
+-			cmd = dm_pool_strdup(mem, cmd); /* copy with lock */
+-		dmeventd_lvm2_unlock();
+-
+-		if (!cmd) {
+-			log_error("Unable to find configured command.");
+-			return 0;
++		/* check if ENVVAR wasn't already resolved */
++		dm_list_iterate_items(env_data, &_env_registry)
++			if (!strcmp(cmd, env_data->cmd)) {
++				env = env_data->data;
++				break;
++			}
++
++		if (!env) {
++			/* run lvm2 command to find out setting value */
++			dmeventd_lvm2_lock();
++			if (!dmeventd_lvm2_run(cmd) ||
++			    !(env = getenv(cmd))) {
++				log_error("Unable to find configured command.");
++				return 0;
++			}
++			/* output of internal command passed via env var */
++			env = dm_pool_strdup(_mem_pool, env); /* copy with lock */
++			dmeventd_lvm2_unlock();
++			if (!env ||
++			    !(env_data = dm_pool_zalloc(_mem_pool, sizeof(*env_data))) ||
++			    !(env_data->cmd = dm_pool_strdup(_mem_pool, cmd))) {
++				log_error("Unable to allocate env memory.");
++				return 0;
++			}
++			env_data->data = env;
++			/* add to ENVVAR registry */
++			dm_list_add(&_env_registry, &env_data->list);
+ 		}
++		cmd = env;
  	}
  
- 	if (!is_valid_fd(STDOUT_FILENO) &&
--	    !(stdout = fopen(_PATH_DEVNULL, "w"))) {
-+	    !freopen(_PATH_DEVNULL, "w", stdout)) {
- 		if (err)
- 			perror("stdout stream open");
- 		/* else no stdout */
-@@ -1816,7 +1816,7 @@ static int _check_standard_fds(void)
- 	}
- 
- 	if (!is_valid_fd(STDERR_FILENO) &&
--	    !(stderr = fopen(_PATH_DEVNULL, "w"))) {
-+	    !freopen(_PATH_DEVNULL, "w", stderr)) {
- 		printf("stderr stream open: %s\n",
- 		       strerror(errno));
- 		return 0;
--- 
-2.8.3
+ 	r = dm_snprintf(buffer, size, "%s %s/%s", cmd, vg, lv);
 
 
