@@ -1,98 +1,76 @@
-From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Wed, 5 Sep 2018 08:40:33 -0400
-Subject: 2018-06-01-stable - tests: check activation of many thin-pool
-Message-ID: <201809051240.w85CeXGm006991@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: Marian Csontos <mcsontos@sourceware.org>
+Date: Wed, 5 Sep 2018 09:02:33 -0400
+Subject: 2018-06-01-stable - scripts: add After=rbdmap.service to {lvm2-activation-net, blk-availability}.service
+Message-ID: <201809051302.w85D2XF5010826@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=6afb911252adf73c3bce2c708cc647866d144103
-Commit:        6afb911252adf73c3bce2c708cc647866d144103
-Parent:        a8d59404f7713ae4f9a3b172dd560ed1364d8bee
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed Sep 5 14:36:16 2018 +0200
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Wed Sep 5 14:40:01 2018 +0200
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=3374a592502ef099d38491b0c2020a6945d825b1
+Commit:        3374a592502ef099d38491b0c2020a6945d825b1
+Parent:        6afb911252adf73c3bce2c708cc647866d144103
+Author:        Peter Rajnoha <prajnoha@redhat.com>
+AuthorDate:    Thu Aug 30 12:35:58 2018 +0200
+Committer:     Marian Csontos <mcsontos@redhat.com>
+CommitterDate: Wed Sep 5 14:41:55 2018 +0200
 
-tests: check activation of many thin-pool
+scripts: add After=rbdmap.service to {lvm2-activation-net,blk-availability}.service
 
-Artifitical testing of monitoring of many thin-pools with low number
-of resources in use (need only few pools to actually hit the race).
+We need to have Ceph RBD devices mapped first before use in a stack
+where LVM is on top so make sure rbdmap.service is called before
+generated lvm2-activation-net.service.
+
+On shutdown, we need to stop blk-availability first before we stop the
+rbdmap.service.
+
+Resolves: rhbz1623479
+(cherry picked from commit cb17ef221bdefea3625a22c19c6d8f5504441771)
+
+Conflicts:
+	WHATS_NEW
 ---
- test/shell/thin-many-dmeventd.sh |   64 ++++++++++++++++++++++++++++++++++++++
- 1 files changed, 64 insertions(+), 0 deletions(-)
+ WHATS_NEW                                          |    1 +
+ .../blk_availability_systemd_red_hat.service.in    |    2 +-
+ .../lvm2_activation_generator_systemd_red_hat.c    |    2 +-
+ 3 files changed, 3 insertions(+), 2 deletions(-)
 
-diff --git a/test/shell/thin-many-dmeventd.sh b/test/shell/thin-many-dmeventd.sh
-new file mode 100644
-index 0000000..f73b516
---- /dev/null
-+++ b/test/shell/thin-many-dmeventd.sh
-@@ -0,0 +1,64 @@
-+#!/usr/bin/env bash
-+
-+# Copyright (C) 2018 Red Hat, Inc. All rights reserved.
-+#
-+# This copyrighted material is made available to anyone wishing to use,
-+# modify, copy, or redistribute it subject to the terms and conditions
-+# of the GNU General Public License v.2.
-+#
-+# You should have received a copy of the GNU General Public License
-+# along with this program; if not, write to the Free Software Foundation,
-+# Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
-+
-+# test activation of monitoring with more thin-pool
-+
-+SKIP_WITH_LVMLOCKD=1
-+SKIP_WITH_LVMPOLLD=1
-+
-+export LVM_TEST_THIN_REPAIR_CMD=${LVM_TEST_THIN_REPAIR_CMD-/bin/false}
-+
-+. lib/inittest
-+
-+#
-+# Main
-+#
-+aux have_thin 1 0 0 || skip
-+
-+aux prepare_dmeventd
-+aux prepare_vg 2 64
-+
-+# Create couple pools to later cause race in dmeventd during activation.
-+# each pool may add 1sec. extra delay
-+
-+for i in $(seq 1 5)
-+do
-+	lvcreate --errorwhenfull y -Zn -T -L4M -V4M $vg/pool_${i} -n $lv${i}
-+        # Fill thin-pool to some capacity >50%
-+	dd if=/dev/zero of="$DM_DEV_DIR/$vg/$lv${i}" bs=256K count=9 conv=fdatasync
-+done
-+
-+lvs -a $vg
-+vgchange -an $vg
-+
-+
-+# Try to now activate all existing pool - this will generate in about 10sec later
-+# storm of intial call of 'lvextend --use-policies'
-+vgchange -ay $vg
-+
-+# Every 10sec. ATM there is DM status monitoring made by dmeventd
-+sleep 9
-+
-+# Here try to hit the race by creating several new thin-pools in sequence.
-+# Creation meets with dmeventd running 'lvextend' command and taking
-+# it's internal lvm2 library lock - this used to make impossible to proceed with
-+# new thin-pool registration.
-+for i in $(seq 11 15)
-+do
-+	/usr/bin/time -o TM -f %e lvcreate --errorwhenfull y -Zn -T -L4M -V4M $vg/pool_${i} -n $lv${i}
-+        read -r t < TM
-+        test ${t%%.*} -lt 8 || die "Creation of thin pool took more then 8 second! ($t seconds)"
-+        # Fill thin-pool to some capacity >50%
-+	dd if=/dev/zero of="$DM_DEV_DIR/$vg/$lv${i}" bs=256K count=9 conv=fdatasync
-+done
-+
-+vgremove -f $vg
+diff --git a/WHATS_NEW b/WHATS_NEW
+index 85f4ed1..8def00d 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.182 - 
+ ==============================
++  Add After=rbdmap.service to {lvm2-activation-net,blk-availability}.service.
+   Fix pvs with lvmetad to avoid too many open files from filter reads.
+   Fix pvscan --cache to avoid too many open files from filter reads.
+   Reduce max concurrent aios to avoid EMFILE with many devices.
+diff --git a/scripts/blk_availability_systemd_red_hat.service.in b/scripts/blk_availability_systemd_red_hat.service.in
+index 1198baa..9462072 100644
+--- a/scripts/blk_availability_systemd_red_hat.service.in
++++ b/scripts/blk_availability_systemd_red_hat.service.in
+@@ -1,6 +1,6 @@
+ [Unit]
+ Description=Availability of block devices
+-After=lvm2-activation.service lvm2-lvmetad.service iscsi-shutdown.service iscsi.service iscsid.service fcoe.service
++After=lvm2-activation.service lvm2-lvmetad.service iscsi-shutdown.service iscsi.service iscsid.service fcoe.service rbdmap.service
+ DefaultDependencies=no
+ Conflicts=shutdown.target
+ 
+diff --git a/scripts/lvm2_activation_generator_systemd_red_hat.c b/scripts/lvm2_activation_generator_systemd_red_hat.c
+index 0f7f89c..487582f 100644
+--- a/scripts/lvm2_activation_generator_systemd_red_hat.c
++++ b/scripts/lvm2_activation_generator_systemd_red_hat.c
+@@ -128,7 +128,7 @@ static int generate_unit(const char *dir, int unit, int sysinit_needed)
+ 	      "DefaultDependencies=no\n", f);
+ 
+ 	if (unit == UNIT_NET) {
+-		fprintf(f, "After=%s iscsi.service fcoe.service\n"
++		fprintf(f, "After=%s iscsi.service fcoe.service rbdmap.service\n"
+ 			"Before=remote-fs-pre.target shutdown.target\n\n"
+ 			"[Service]\n"
+ 			"ExecStartPre=/usr/bin/udevadm settle\n", unit_names[UNIT_MAIN]);
 
 
