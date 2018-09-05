@@ -1,76 +1,58 @@
 From: Marian Csontos <mcsontos@sourceware.org>
-Date: Wed, 5 Sep 2018 09:02:33 -0400
-Subject: 2018-06-01-stable - scripts: add After=rbdmap.service to {lvm2-activation-net, blk-availability}.service
-Message-ID: <201809051302.w85D2XF5010826@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Wed, 5 Sep 2018 10:41:48 -0400
+Subject: 2018-06-01-stable - lvconvert: avoid superfluous interim raid type
+Message-ID: <201809051441.w85EfmJX023162@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=3374a592502ef099d38491b0c2020a6945d825b1
-Commit:        3374a592502ef099d38491b0c2020a6945d825b1
-Parent:        6afb911252adf73c3bce2c708cc647866d144103
-Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Thu Aug 30 12:35:58 2018 +0200
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=0e03c686191b036a7cd6e570888793ddbdd5f958
+Commit:        0e03c686191b036a7cd6e570888793ddbdd5f958
+Parent:        3374a592502ef099d38491b0c2020a6945d825b1
+Author:        Heinz Mauelshagen <heinzm@redhat.com>
+AuthorDate:    Fri Aug 31 19:03:52 2018 +0200
 Committer:     Marian Csontos <mcsontos@redhat.com>
-CommitterDate: Wed Sep 5 14:41:55 2018 +0200
+CommitterDate: Wed Sep 5 16:41:14 2018 +0200
 
-scripts: add After=rbdmap.service to {lvm2-activation-net,blk-availability}.service
+lvconvert: avoid superfluous interim raid type
 
-We need to have Ceph RBD devices mapped first before use in a stack
-where LVM is on top so make sure rbdmap.service is called before
-generated lvm2-activation-net.service.
+When converting striped/raid0*/raid6_n_6 <-> raid4,
+avoid superfluous interim raid5_n layout.
 
-On shutdown, we need to stop blk-availability first before we stop the
-rbdmap.service.
-
-Resolves: rhbz1623479
-(cherry picked from commit cb17ef221bdefea3625a22c19c6d8f5504441771)
-
-Conflicts:
-	WHATS_NEW
+Related: rhbz1447809
+(cherry picked from commit 22a13043683a5647e8cc4e3aead911e5269ffd2f)
 ---
- WHATS_NEW                                          |    1 +
- .../blk_availability_systemd_red_hat.service.in    |    2 +-
- .../lvm2_activation_generator_systemd_red_hat.c    |    2 +-
- 3 files changed, 3 insertions(+), 2 deletions(-)
+ lib/metadata/raid_manip.c |    9 ++++-----
+ 1 files changed, 4 insertions(+), 5 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index 85f4ed1..8def00d 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.02.182 - 
- ==============================
-+  Add After=rbdmap.service to {lvm2-activation-net,blk-availability}.service.
-   Fix pvs with lvmetad to avoid too many open files from filter reads.
-   Fix pvscan --cache to avoid too many open files from filter reads.
-   Reduce max concurrent aios to avoid EMFILE with many devices.
-diff --git a/scripts/blk_availability_systemd_red_hat.service.in b/scripts/blk_availability_systemd_red_hat.service.in
-index 1198baa..9462072 100644
---- a/scripts/blk_availability_systemd_red_hat.service.in
-+++ b/scripts/blk_availability_systemd_red_hat.service.in
-@@ -1,6 +1,6 @@
- [Unit]
- Description=Availability of block devices
--After=lvm2-activation.service lvm2-lvmetad.service iscsi-shutdown.service iscsi.service iscsid.service fcoe.service
-+After=lvm2-activation.service lvm2-lvmetad.service iscsi-shutdown.service iscsi.service iscsid.service fcoe.service rbdmap.service
- DefaultDependencies=no
- Conflicts=shutdown.target
+diff --git a/lib/metadata/raid_manip.c b/lib/metadata/raid_manip.c
+index d3e3a20..3eee77a 100644
+--- a/lib/metadata/raid_manip.c
++++ b/lib/metadata/raid_manip.c
+@@ -6140,7 +6140,7 @@ static int _set_convenient_raid145610_segtype_to(const struct lv_segment *seg_fr
+ 			seg_flag = SEG_RAID6_N_6;
  
-diff --git a/scripts/lvm2_activation_generator_systemd_red_hat.c b/scripts/lvm2_activation_generator_systemd_red_hat.c
-index 0f7f89c..487582f 100644
---- a/scripts/lvm2_activation_generator_systemd_red_hat.c
-+++ b/scripts/lvm2_activation_generator_systemd_red_hat.c
-@@ -128,7 +128,7 @@ static int generate_unit(const char *dir, int unit, int sysinit_needed)
- 	      "DefaultDependencies=no\n", f);
+ 		if (segtype_is_linear(*segtype) ||
+-		    (!segtype_is_raid10(*segtype) && !segtype_is_striped(*segtype)))
++		    (!segtype_is_raid4(*segtype) && !segtype_is_raid10(*segtype) && !segtype_is_striped(*segtype)))
+ 			seg_flag = SEG_RAID5_N;
  
- 	if (unit == UNIT_NET) {
--		fprintf(f, "After=%s iscsi.service fcoe.service\n"
-+		fprintf(f, "After=%s iscsi.service fcoe.service rbdmap.service\n"
- 			"Before=remote-fs-pre.target shutdown.target\n\n"
- 			"[Service]\n"
- 			"ExecStartPre=/usr/bin/udevadm settle\n", unit_names[UNIT_MAIN]);
+ 	/* raid1 -> */
+@@ -6209,10 +6209,9 @@ static int _set_convenient_raid145610_segtype_to(const struct lv_segment *seg_fr
+ 					  lvseg_name(seg_from), display_lvname(seg_from->lv), *new_image_count);
+ 		}
+ 
+-	/* raid4 -> !raid4/raid5* */
+-	} else if (seg_is_raid4(seg_from) &&
+-		   !segtype_is_raid4(*segtype) && !segtype_is_any_raid5(*segtype)) {
+-		seg_flag = SEG_RAID5_N;
++	/* raid4 -> * */
++	} else if (seg_is_raid4(seg_from) && !segtype_is_raid4(*segtype) && !segtype_is_striped(*segtype)) {
++		seg_flag = segtype_is_any_raid6(*segtype) ? SEG_RAID6_N_6 : SEG_RAID5_N;
+ 
+ 	/* raid6 -> striped/raid0/raid5/raid10 */
+ 	} else if (seg_is_any_raid6(seg_from)) {
 
 
