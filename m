@@ -1,58 +1,100 @@
-From: Marian Csontos <mcsontos@sourceware.org>
-Date: Wed, 5 Sep 2018 10:41:48 -0400
-Subject: 2018-06-01-stable - lvconvert: avoid superfluous interim raid type
-Message-ID: <201809051441.w85EfmJX023162@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: Heinz Mauelshagen <heinzm@sourceware.org>
+Date: Fri, 7 Sep 2018 07:49:37 -0400
+Subject: master - lvconvert: fix interim segtype regression on raid6 conversions
+Message-ID: <201809071149.w87Bnb6N013627@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=0e03c686191b036a7cd6e570888793ddbdd5f958
-Commit:        0e03c686191b036a7cd6e570888793ddbdd5f958
-Parent:        3374a592502ef099d38491b0c2020a6945d825b1
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=e2e30a64ab10602951443dfbd3481bd6b32f5459
+Commit:        e2e30a64ab10602951443dfbd3481bd6b32f5459
+Parent:        22a13043683a5647e8cc4e3aead911e5269ffd2f
 Author:        Heinz Mauelshagen <heinzm@redhat.com>
-AuthorDate:    Fri Aug 31 19:03:52 2018 +0200
-Committer:     Marian Csontos <mcsontos@redhat.com>
-CommitterDate: Wed Sep 5 16:41:14 2018 +0200
+AuthorDate:    Fri Sep 7 13:48:13 2018 +0200
+Committer:     Heinz Mauelshagen <heinzm@redhat.com>
+CommitterDate: Fri Sep 7 13:48:19 2018 +0200
 
-lvconvert: avoid superfluous interim raid type
+lvconvert: fix interim segtype regression on raid6 conversions
 
-When converting striped/raid0*/raid6_n_6 <-> raid4,
-avoid superfluous interim raid5_n layout.
+When converting from striped/raid0/raid0_meta
+to raid6 with > 2 stripes, allow possible
+direct conversion (to raid6_n_6).
 
-Related: rhbz1447809
-(cherry picked from commit 22a13043683a5647e8cc4e3aead911e5269ffd2f)
+In case of 2 stripes, first convert to raid5_n to restripe
+to at least 3 data stripes (the raid6 minimum in lvm2) in
+a second conversion before finally converting to raid6_n_6.
+
+As before, raid6_n_6 then can be converted
+to any other raid6 layout.
+
+Enhance lvconvert-raid-takeover.sh to test the
+2 stripes conversions to raid6.
+
+Resolves: rhbz1624038
 ---
- lib/metadata/raid_manip.c |    9 ++++-----
- 1 files changed, 4 insertions(+), 5 deletions(-)
+ WHATS_NEW                             |    1 +
+ lib/metadata/raid_manip.c             |    6 +++---
+ test/shell/lvconvert-raid-takeover.sh |   16 ++++++++++++----
+ 3 files changed, 16 insertions(+), 7 deletions(-)
 
+diff --git a/WHATS_NEW b/WHATS_NEW
+index 6003f0a..6575887 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 3.0.0
+ =============
++  Fix lvconvert striped/raid0/raid0_meta -> raid6 regression.
+   Add 'lvm2-activation-generator:' prefix for kmsg messages logged by generator.
+   Add After=rbdmap.service to {lvm2-activation-net,blk-availability}.service.
+   Reduce max concurrent aios to avoid EMFILE with many devices.
 diff --git a/lib/metadata/raid_manip.c b/lib/metadata/raid_manip.c
-index d3e3a20..3eee77a 100644
+index 2bc179a..130cd34 100644
 --- a/lib/metadata/raid_manip.c
 +++ b/lib/metadata/raid_manip.c
-@@ -6140,7 +6140,7 @@ static int _set_convenient_raid145610_segtype_to(const struct lv_segment *seg_fr
- 			seg_flag = SEG_RAID6_N_6;
+@@ -6127,10 +6127,10 @@ static int _set_convenient_raid145610_segtype_to(const struct lv_segment *seg_fr
+ 	/* striped/raid0 -> */
+ 	} else if (seg_is_striped(seg_from) || seg_is_any_raid0(seg_from)) {
+ 		if (segtype_is_any_raid6(*segtype))
+-			seg_flag = SEG_RAID6_N_6;
++			seg_flag = seg_from->area_count < 3 ? SEG_RAID5_N : SEG_RAID6_N_6;
  
- 		if (segtype_is_linear(*segtype) ||
--		    (!segtype_is_raid10(*segtype) && !segtype_is_striped(*segtype)))
-+		    (!segtype_is_raid4(*segtype) && !segtype_is_raid10(*segtype) && !segtype_is_striped(*segtype)))
+-		if (segtype_is_linear(*segtype) ||
+-		    (!segtype_is_raid4(*segtype) && !segtype_is_raid10(*segtype) && !segtype_is_striped(*segtype)))
++		else if (segtype_is_linear(*segtype) ||
++			 (!segtype_is_raid4(*segtype) && !segtype_is_raid10(*segtype) && !segtype_is_striped(*segtype)))
  			seg_flag = SEG_RAID5_N;
  
  	/* raid1 -> */
-@@ -6209,10 +6209,9 @@ static int _set_convenient_raid145610_segtype_to(const struct lv_segment *seg_fr
- 					  lvseg_name(seg_from), display_lvname(seg_from->lv), *new_image_count);
- 		}
+diff --git a/test/shell/lvconvert-raid-takeover.sh b/test/shell/lvconvert-raid-takeover.sh
+index d1c5d30..d22c11b 100644
+--- a/test/shell/lvconvert-raid-takeover.sh
++++ b/test/shell/lvconvert-raid-takeover.sh
+@@ -108,11 +108,19 @@ function _invalid_raid5_conversions
+ 	not _lvconvert raid6 raid6_n_6 4 6 $vg $lv1
+ }
  
--	/* raid4 -> !raid4/raid5* */
--	} else if (seg_is_raid4(seg_from) &&
--		   !segtype_is_raid4(*segtype) && !segtype_is_any_raid5(*segtype)) {
--		seg_flag = SEG_RAID5_N;
-+	/* raid4 -> * */
-+	} else if (seg_is_raid4(seg_from) && !segtype_is_raid4(*segtype) && !segtype_is_striped(*segtype)) {
-+		seg_flag = segtype_is_any_raid6(*segtype) ? SEG_RAID6_N_6 : SEG_RAID5_N;
+-# Check raid6 conversion constrainst of minimum 3 stripes
+-_lvcreate striped 2 2 4m $vg $lv1
+-not _lvconvert raid6 raid6_n_6 2 4 $vg $lv1
+-lvremove -y $vg
++# Check raid6 conversion constrainst for 2 stripes
++for type in striped raid0 raid0_meta
++do
++   _lvcreate $type 2 2 4m $vg $lv1
++   not _lvconvert raid6 raid6_n_6 2 4 $vg $lv1
++   _lvconvert raid6 raid5_n 2 3 $vg $lv1
++   _lvconvert raid6 raid5_n 3 4 $vg $lv1
++   _lvconvert raid6 raid6_n_6 3 5 $vg $lv1
++   lvremove -y $vg
++done
  
- 	/* raid6 -> striped/raid0/raid5/raid10 */
- 	} else if (seg_is_any_raid6(seg_from)) {
++
++# Check raid6 conversion constrainst of minimum 3 stripes
+ _lvcreate raid0 3 3 4m $vg $lv1
+ _lvconvert raid6 raid6_n_6 3 5 $vg $lv1
+ lvremove -y $vg
 
 
