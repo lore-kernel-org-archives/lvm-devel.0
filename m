@@ -1,20 +1,20 @@
-From: Heinz Mauelshagen <heinzm@sourceware.org>
-Date: Fri, 7 Sep 2018 07:49:37 -0400
-Subject: master - lvconvert: fix interim segtype regression on raid6 conversions
-Message-ID: <201809071149.w87Bnb6N013627@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: Marian Csontos <mcsontos@sourceware.org>
+Date: Mon, 10 Sep 2018 05:21:25 -0400
+Subject: 2018-06-01-stable - lvconvert: fix interim segtype regression on raid6 conversions
+Message-ID: <201809100921.w8A9LP8k028817@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=e2e30a64ab10602951443dfbd3481bd6b32f5459
-Commit:        e2e30a64ab10602951443dfbd3481bd6b32f5459
-Parent:        22a13043683a5647e8cc4e3aead911e5269ffd2f
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=c26bde42af0930bef2cee95c76951285d801ba70
+Commit:        c26bde42af0930bef2cee95c76951285d801ba70
+Parent:        0e03c686191b036a7cd6e570888793ddbdd5f958
 Author:        Heinz Mauelshagen <heinzm@redhat.com>
 AuthorDate:    Fri Sep 7 13:48:13 2018 +0200
-Committer:     Heinz Mauelshagen <heinzm@redhat.com>
-CommitterDate: Fri Sep 7 13:48:19 2018 +0200
+Committer:     Marian Csontos <mcsontos@redhat.com>
+CommitterDate: Mon Sep 10 11:21:02 2018 +0200
 
 lvconvert: fix interim segtype regression on raid6 conversions
 
@@ -33,6 +33,10 @@ Enhance lvconvert-raid-takeover.sh to test the
 2 stripes conversions to raid6.
 
 Resolves: rhbz1624038
+(cherry picked from commit e2e30a64ab10602951443dfbd3481bd6b32f5459)
+
+Conflicts:
+	WHATS_NEW
 ---
  WHATS_NEW                             |    1 +
  lib/metadata/raid_manip.c             |    6 +++---
@@ -40,21 +44,21 @@ Resolves: rhbz1624038
  3 files changed, 16 insertions(+), 7 deletions(-)
 
 diff --git a/WHATS_NEW b/WHATS_NEW
-index 6003f0a..6575887 100644
+index 8def00d..a6bd6a3 100644
 --- a/WHATS_NEW
 +++ b/WHATS_NEW
 @@ -1,5 +1,6 @@
- Version 3.0.0
- =============
+ Version 2.02.182 - 
+ ==============================
 +  Fix lvconvert striped/raid0/raid0_meta -> raid6 regression.
-   Add 'lvm2-activation-generator:' prefix for kmsg messages logged by generator.
    Add After=rbdmap.service to {lvm2-activation-net,blk-availability}.service.
-   Reduce max concurrent aios to avoid EMFILE with many devices.
+   Fix pvs with lvmetad to avoid too many open files from filter reads.
+   Fix pvscan --cache to avoid too many open files from filter reads.
 diff --git a/lib/metadata/raid_manip.c b/lib/metadata/raid_manip.c
-index 2bc179a..130cd34 100644
+index 3eee77a..cb7202a 100644
 --- a/lib/metadata/raid_manip.c
 +++ b/lib/metadata/raid_manip.c
-@@ -6127,10 +6127,10 @@ static int _set_convenient_raid145610_segtype_to(const struct lv_segment *seg_fr
+@@ -6137,10 +6137,10 @@ static int _set_convenient_raid145610_segtype_to(const struct lv_segment *seg_fr
  	/* striped/raid0 -> */
  	} else if (seg_is_striped(seg_from) || seg_is_any_raid0(seg_from)) {
  		if (segtype_is_any_raid6(*segtype))
