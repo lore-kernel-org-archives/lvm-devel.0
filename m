@@ -1,251 +1,233 @@
-From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Tue, 31 May 2016 06:46:43 +0000 (UTC)
-Subject: master - toollib: simplify internal selection calls for non-reporting tools
-Message-ID: <20160531064643.38B9F60535@fedorahosted.org>
+From: David Teigland <teigland@sourceware.org>
+Date: Mon, 10 Sep 2018 15:08:59 -0400
+Subject: master - tests: drop lvmetad parts of system_id test
+Message-ID: <201809101908.w8AJ8wlm005924@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=815f1ee26d5ee5c64493f83a78f8c074fc8c82d8
-Commit:        815f1ee26d5ee5c64493f83a78f8c074fc8c82d8
-Parent:        7d4d0ff606a78909041c0b734a3ceacc94a47fa0
-Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Mon May 30 16:28:47 2016 +0200
-Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Mon May 30 16:44:18 2016 +0200
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=b070c14a8b70dd8b8f4f3393e22ea9f1c584de76
+Commit:        b070c14a8b70dd8b8f4f3393e22ea9f1c584de76
+Parent:        3bcc6c7e6064bd9632557f9678d9d88526d9bbdc
+Author:        David Teigland <teigland@redhat.com>
+AuthorDate:    Mon Sep 10 14:08:27 2018 -0500
+Committer:     David Teigland <teigland@redhat.com>
+CommitterDate: Mon Sep 10 14:08:27 2018 -0500
 
-toollib: simplify internal selection calls for non-reporting tools
+tests: drop lvmetad parts of system_id test
 
-Some of the variables were set superfluously - we can just use existing
-"struct processing_handle" which includes "struct selection_handle".
 ---
- lib/report/report.h |    3 +-
- tools/reporter.c    |    3 +-
- tools/toollib.c     |   70 +++++++++++++++++++-------------------------------
- tools/toollib.h     |    6 ++--
- 4 files changed, 34 insertions(+), 48 deletions(-)
+ test/shell/system_id.sh |  192 -----------------------------------------------
+ 1 files changed, 0 insertions(+), 192 deletions(-)
 
-diff --git a/lib/report/report.h b/lib/report/report.h
-index 088a1ca..8db84e0 100644
---- a/lib/report/report.h
-+++ b/lib/report/report.h
-@@ -60,6 +60,7 @@ struct selection_handle {
+diff --git a/test/shell/system_id.sh b/test/shell/system_id.sh
+index c3fc311..8814d54 100644
+--- a/test/shell/system_id.sh
++++ b/test/shell/system_id.sh
+@@ -27,22 +27,6 @@ aux prepare_devs 1
+ SIDFILE="etc/lvm_test.conf"
+ LVMLOCAL="etc/lvmlocal.conf"
  
- struct field;
- struct report_handle;
-+struct processing_handle;
- 
- typedef int (*field_report_fn) (struct report_handle * dh, struct field * field,
- 				const void *data);
-@@ -72,7 +73,7 @@ void *report_init_for_selection(struct cmd_context *cmd, report_type_t *report_t
- 				const char *selection);
- const char *report_get_field_prefix(report_type_t report_type);
- int report_for_selection(struct cmd_context *cmd,
--			 struct selection_handle *sh,
-+			 struct processing_handle *parent_handle,
- 			 struct physical_volume *pv,
- 			 struct volume_group *vg,
- 			 struct logical_volume *lv);
-diff --git a/tools/reporter.c b/tools/reporter.c
-index bd77513..f572d31 100644
---- a/tools/reporter.c
-+++ b/tools/reporter.c
-@@ -549,11 +549,12 @@ static int _report_all_in_pv(struct cmd_context *cmd, struct processing_handle *
- }
- 
- int report_for_selection(struct cmd_context *cmd,
--			 struct selection_handle *sh,
-+			 struct processing_handle *parent_handle,
- 			 struct physical_volume *pv,
- 			 struct volume_group *vg,
- 			 struct logical_volume *lv)
- {
-+	struct selection_handle *sh = parent_handle->selection_handle;
- 	int args_are_pvs = sh->orig_report_type == PVS;
- 	int do_lv_info, do_lv_seg_status;
- 	struct processing_handle *handle;
-diff --git a/tools/toollib.c b/tools/toollib.c
-index 2f03a91..b86b8ff 100644
---- a/tools/toollib.c
-+++ b/tools/toollib.c
-@@ -1764,74 +1764,61 @@ void destroy_processing_handle(struct cmd_context *cmd, struct processing_handle
- 
- 
- int select_match_vg(struct cmd_context *cmd, struct processing_handle *handle,
--		    struct volume_group *vg, int *selected)
-+		    struct volume_group *vg)
- {
--	struct selection_handle *sh = handle->selection_handle;
+-# with clvm enabled, vgcreate with no -c option creates a clustered vg,
+-# which should have no system id
 -
--	if (!handle->internal_report_for_select) {
--		*selected = 1;
-+	if (!handle->internal_report_for_select)
- 		return 1;
--	}
- 
--	sh->orig_report_type = VGS;
+-if [ -e LOCAL_CLVMD ]; then
+-SID1=sidfoolocal
+-SID2=""
+-print_lvmlocal "  system_id = $SID1"
+-aux lvmconf "global/system_id_source = lvmlocal"
+-vgcreate $vg1 "$dev1"
+-vgs -o+systemid $vg1
+-check vg_field $vg1 systemid "$SID2"
+-vgremove $vg1
+-rm -f "$LVMLOCAL"
+-exit 0
+-fi
 -
--	if (!report_for_selection(cmd, sh, NULL, vg, NULL)) {
-+	handle->selection_handle->orig_report_type = VGS;
-+	if (!report_for_selection(cmd, handle, NULL, vg, NULL)) {
- 		log_error("Selection failed for VG %s.", vg->name);
- 		return 0;
- 	}
+ # create vg with system_id using each source
+ 
+ ## none
+@@ -596,179 +580,3 @@ check vg_field $vg1 systemid "$SID"
+ grep "No system ID found from system_id_source" err
+ vgremove $vg1
+ 
 -
--	sh->orig_report_type = 0;
--	*selected = sh->selected;
-+	handle->selection_handle->orig_report_type = 0;
- 
- 	return 1;
- }
- 
- int select_match_lv(struct cmd_context *cmd, struct processing_handle *handle,
--		    struct volume_group *vg, struct logical_volume *lv, int *selected)
-+		    struct volume_group *vg, struct logical_volume *lv)
- {
--	struct selection_handle *sh = handle->selection_handle;
+-# When a foreign vg is newer on disk than in lvmetad, using --foreign
+-# should find the newer version.  This simulates a foreign host changing
+-# foreign vg by turning off lvmetad when we create an lv in the vg.
+-SID1=sidfoofile1
+-SID2=sidfoofile2
+-echo "$SID1" > "$SIDFILE"
+-aux lvmconf "global/system_id_source = file" \
+-	    "global/system_id_file = \"$SIDFILE\""
+-# create a vg with an lv
+-vgcreate $vg1 "$dev1"
+-lvcreate -n $lv1 -l 2 -an $vg1
+-# normal vgs sees the vg and lv
+-vgs >err
+-grep $vg1 err
+-check lv_exists $vg1 $lv1
+-# go around lvmetad to create another lv in the vg,
+-# forcing the lvmetad copy to be older than on disk.
+-aux lvmconf 'global/use_lvmetad = 0'
+-lvcreate -n $lv2 -l 2 -an $vg1
+-aux lvmconf 'global/use_lvmetad = 1'
+-# verify that the second lv is not in lvmetad
+-lvs $vg1 >err
+-grep $lv1 err
+-not grep $lv2 err
+-# change our system_id, making the vg foreign
+-echo "$SID2" > "$SIDFILE"
+-vgs >err
+-not grep $vg1 err
+-# using --foreign, we will get the latest vg from disk
+-lvs --foreign $vg1 >err
+-grep $vg1 err
+-grep $lv1 err
+-grep $lv2 err
+-# change our system_id back to match the vg so it's not foreign
+-echo "$SID1" > "$SIDFILE"
+-lvremove $vg1/$lv1
+-lvremove $vg1/$lv2
+-vgremove $vg1
 -
--	if (!handle->internal_report_for_select) {
--		*selected = 1;
-+	if (!handle->internal_report_for_select)
- 		return 1;
--	}
- 
--	sh->orig_report_type = LVS;
+-# vgimport should find the exported vg on disk even though
+-# lvmetad's copy of the vg shows it's foreign.
+-SID1=sidfoofile1
+-SID2=sidfoofile2
+-echo "$SID1" > "$SIDFILE"
+-aux lvmconf "global/system_id_source = file" \
+-	    "global/system_id_file = \"$SIDFILE\""
+-# create a vg with an lv
+-vgcreate $vg1 "$dev1"
+-lvcreate -n $lv1 -l 2 -an $vg1
+-# normal vgs sees the vg and lv
+-vgs >err
+-grep $vg1 err
+-check lv_exists $vg1 $lv1
+-# go around lvmetad to export the vg so that lvmetad still
+-# has the original vg owned by SID1 in its cache
+-aux lvmconf 'global/use_lvmetad = 0'
+-vgexport $vg1
+-aux lvmconf 'global/use_lvmetad = 1'
+-# change the local system_id so the lvmetad copy of the vg is foreign
+-echo "$SID2" > "$SIDFILE"
+-# verify that lvmetad thinks the vg is foreign
+-# (don't use --foreign to verify this because that will cause
+-# the lvmetad cache to be updated, which we don't want yet)
+-not vgs $vg1
+-# attempt to import the vg that has been exported, but
+-# which lvmetad thinks is foreign
+-vgimport $vg1
+-# verify that the imported vg has our system_id
+-vgs -o+systemid $vg1 >err
+-grep $vg1 err
+-grep $SID2 err
+-check lv_exists $vg1 $lv1
+-lvremove $vg1/$lv1
+-vgremove $vg1
+-rm -f "$SIDFILE"
 -
--	if (!report_for_selection(cmd, sh, NULL, vg, lv)) {
-+	handle->selection_handle->orig_report_type = LVS;
-+	if (!report_for_selection(cmd, handle, NULL, vg, lv)) {
- 		log_error("Selection failed for LV %s.", lv->name);
- 		return 0;
- 	}
+-# pvscan --cache should cause the latest version of a foreign VG to be
+-# cached in lvmetad.  Without the --cache option, pvscan will see the old
+-# version of the VG.
+-SID1=sidfoofile1
+-SID2=sidfoofile2
+-echo "$SID1" > "$SIDFILE"
+-aux lvmconf "global/system_id_source = file" \
+-	    "global/system_id_file = \"$SIDFILE\""
+-# create a vg with an lv
+-vgcreate $vg1 "$dev1"
+-lvcreate -n $lv1 -l 2 -an $vg1
+-# normal vgs sees the vg and lv
+-vgs >err
+-grep $vg1 err
+-check lv_exists $vg1 $lv1
+-# go around lvmetad to create another lv in the vg,
+-# forcing the lvmetad copy to be older than on disk.
+-aux lvmconf 'global/use_lvmetad = 0'
+-lvcreate -n $lv2 -l 2 -an $vg1
+-aux lvmconf 'global/use_lvmetad = 1'
+-# verify that the second lv is not in lvmetad
+-lvs $vg1 >err
+-grep $lv1 err
+-not grep $lv2 err
+-# verify that after pvscan without --cache, lvmetad still
+-# reports the old version
+-pvscan
+-lvs $vg1 >err
+-grep $lv1 err
+-not grep $lv2 err
+-# change our system_id, making the vg foreign
+-echo "$SID2" > "$SIDFILE"
+-not vgs $vg1 >err
+-not grep $vg1 err
+-# use pvscan --cache to update the foreign vg in lvmetad
+-pvscan --cache
+-not vgs $vg1 >err
+-not grep $vg1 err
+-# change our system_id back to SID1 so we can check that
+-# lvmetad has the latest copy of the vg (without having
+-# to use --foreign to check)
+-echo "$SID1" > "$SIDFILE"
+-vgs $vg1 >err
+-grep $vg1 err
+-lvs $vg1 >err
+-grep $lv1 err
+-grep $lv2 err
+-lvremove $vg1/$lv1
+-lvremove $vg1/$lv2
+-vgremove $vg1
 -
--	sh->orig_report_type = 0;
--	*selected = sh->selected;
-+	handle->selection_handle->orig_report_type = 0;
- 
- 	return 1;
- }
- 
- int select_match_pv(struct cmd_context *cmd, struct processing_handle *handle,
--		    struct volume_group *vg, struct physical_volume *pv, int *selected)
-+		    struct volume_group *vg, struct physical_volume *pv)
- {
--	struct selection_handle *sh = handle->selection_handle;
--
--	if (!handle->internal_report_for_select) {
--		*selected = 1;
-+	if (!handle->internal_report_for_select)
- 		return 1;
--	}
- 
--	sh->orig_report_type = PVS;
--
--	if (!report_for_selection(cmd, sh, pv, vg, NULL)) {
-+	handle->selection_handle->orig_report_type = PVS;
-+	if (!report_for_selection(cmd, handle, pv, vg, NULL)) {
- 		log_error("Selection failed for PV %s.", dev_name(pv->dev));
- 		return 0;
- 	}
--
--	sh->orig_report_type = 0;
--	*selected = sh->selected;
-+	handle->selection_handle->orig_report_type = 0;
- 
- 	return 1;
- }
- 
-+static int _select_matches(struct processing_handle *handle)
-+{
-+	if (!handle->internal_report_for_select)
-+		return 1;
-+
-+	return handle->selection_handle->selected;
-+}
-+
- static int _process_vgnameid_list(struct cmd_context *cmd, uint32_t read_flags,
- 				  struct dm_list *vgnameids_to_process,
- 				  struct dm_list *arg_vgnames,
-@@ -1845,7 +1832,6 @@ static int _process_vgnameid_list(struct cmd_context *cmd, uint32_t read_flags,
- 	const char *vg_name;
- 	const char *vg_uuid;
- 	uint32_t lockd_state = 0;
--	int selected;
- 	int whole_selected = 0;
- 	int ret_max = ECMD_PROCESSED;
- 	int ret;
-@@ -1897,7 +1883,7 @@ static int _process_vgnameid_list(struct cmd_context *cmd, uint32_t read_flags,
- 		if ((process_all ||
- 		    (!dm_list_empty(arg_vgnames) && str_list_match_item(arg_vgnames, vg_name)) ||
- 		    (!dm_list_empty(arg_tags) && str_list_match_list(arg_tags, &vg->tags, NULL))) &&
--		    select_match_vg(cmd, handle, vg, &selected) && selected) {
-+		    select_match_vg(cmd, handle, vg) && _select_matches(handle)) {
- 
- 			log_very_verbose("Process single VG %s", vg_name);
- 
-@@ -2264,7 +2250,6 @@ int process_each_lv_in_vg(struct cmd_context *cmd, struct volume_group *vg,
- {
- 	int ret_max = ECMD_PROCESSED;
- 	int ret = 0;
--	int selected;
- 	int whole_selected = 0;
- 	int handle_supplied = handle != NULL;
- 	unsigned process_lv;
-@@ -2369,7 +2354,7 @@ int process_each_lv_in_vg(struct cmd_context *cmd, struct volume_group *vg,
- 		if (!process_lv && tags_supplied && str_list_match_list(tags_in, &lvl->lv->tags, NULL))
- 			process_lv = 1;
- 
--		process_lv = process_lv && select_match_lv(cmd, handle, vg, lvl->lv, &selected) && selected;
-+		process_lv = process_lv && select_match_lv(cmd, handle, vg, lvl->lv) && _select_matches(handle);
- 
- 		if (sigint_caught()) {
- 			ret_max = ECMD_FAILED;
-@@ -2432,7 +2417,7 @@ int process_each_lv_in_vg(struct cmd_context *cmd, struct volume_group *vg,
- 				process_lv = 1;
- 			}
- 
--			process_lv = process_lv && select_match_lv(cmd, handle, vg, lvl->lv, &selected) && selected;
-+			process_lv = process_lv && select_match_lv(cmd, handle, vg, lvl->lv) && _select_matches(handle);
- 
- 			if (sigint_caught()) {
- 				ret_max = ECMD_FAILED;
-@@ -3164,7 +3149,6 @@ static int _process_pvs_in_vg(struct cmd_context *cmd,
- 	struct pv_list *pvl;
- 	struct device_id_list *dil;
- 	const char *pv_name;
--	int selected;
- 	int process_pv;
- 	int ret_max = ECMD_PROCESSED;
- 	int ret = 0;
-@@ -3203,7 +3187,7 @@ static int _process_pvs_in_vg(struct cmd_context *cmd,
- 		    str_list_match_list(arg_tags, &pv->tags, NULL))
- 			process_pv = 1;
- 
--		process_pv = process_pv && select_match_pv(cmd, handle, vg, pv, &selected) && selected;
-+		process_pv = process_pv && select_match_pv(cmd, handle, vg, pv) && _select_matches(handle);
- 
- 		if (process_pv) {
- 			if (skip)
-diff --git a/tools/toollib.h b/tools/toollib.h
-index a366e68..06d0ef9 100644
---- a/tools/toollib.h
-+++ b/tools/toollib.h
-@@ -147,11 +147,11 @@ int init_selection_handle(struct cmd_context *cmd, struct processing_handle *han
- void destroy_processing_handle(struct cmd_context *cmd, struct processing_handle *handle);
- 
- int select_match_vg(struct cmd_context *cmd, struct processing_handle *handle,
--		    struct volume_group *vg, int *selected);
-+		    struct volume_group *vg);
- int select_match_lv(struct cmd_context *cmd, struct processing_handle *handle,
--		    struct volume_group *vg, struct logical_volume *lv, int *selected);
-+		    struct volume_group *vg, struct logical_volume *lv);
- int select_match_pv(struct cmd_context *cmd, struct processing_handle *handle,
--		    struct volume_group *vg, struct physical_volume *pv, int *selected);
-+		    struct volume_group *vg, struct physical_volume *pv);
- 
- const char *extract_vgname(struct cmd_context *cmd, const char *lv_name);
- const char *skip_dev_dir(struct cmd_context *cmd, const char *vg_name,
+-# repeat the same test for vgscan instead of pvscan
+-SID1=sidfoofile1
+-SID2=sidfoofile2
+-echo "$SID1" > "$SIDFILE"
+-aux lvmconf "global/system_id_source = file" \
+-	    "global/system_id_file = \"$SIDFILE\""
+-# create a vg with an lv
+-vgcreate $vg1 "$dev1"
+-lvcreate -n $lv1 -l 2 -an $vg1
+-# normal vgs sees the vg and lv
+-vgs >err
+-grep $vg1 err
+-check lv_exists $vg1 $lv1
+-# go around lvmetad to create another lv in the vg,
+-# forcing the lvmetad copy to be older than on disk.
+-aux lvmconf 'global/use_lvmetad = 0'
+-lvcreate -n $lv2 -l 2 -an $vg1
+-aux lvmconf 'global/use_lvmetad = 1'
+-# verify that the second lv is not in lvmetad
+-lvs $vg1 >err
+-grep $lv1 err
+-not grep $lv2 err
+-# verify that after vgscan without --cache, lvmetad still
+-# reports the old version
+-vgscan
+-lvs $vg1 >err
+-grep $lv1 err
+-not grep $lv2 err
+-# change our system_id, making the vg foreign
+-echo "$SID2" > "$SIDFILE"
+-not vgs $vg1 >err
+-not grep $vg1 err
+-# use vgscan --cache to update the foreign vg in lvmetad
+-vgscan --cache
+-not vgs $vg1 >err
+-not grep $vg1 err
+-# change our system_id back to SID1 so we can check that
+-# lvmetad has the latest copy of the vg (without having
+-# to use --foreign to check)
+-echo "$SID1" > "$SIDFILE"
+-vgs $vg1 >err
+-grep $vg1 err
+-lvs $vg1 >err
+-grep $lv1 err
+-grep $lv2 err
+-lvremove $vg1/$lv1
+-lvremove $vg1/$lv2
+-vgremove $vg1
 
 
