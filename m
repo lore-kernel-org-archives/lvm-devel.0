@@ -1,134 +1,128 @@
-From: Dave Wysochanski <wysochanski@pobox.com>
-Date: Thu, 11 Nov 2010 11:41:56 -0500
-Subject: [PATCH 2/3] Add lvm_vg_set_property() function.
-In-Reply-To: <1289493717-5790-1-git-send-email-wysochanski@pobox.com>
-References: <1289493717-5790-1-git-send-email-wysochanski@pobox.com>
-Message-ID: <1289493717-5790-3-git-send-email-wysochanski@pobox.com>
+From: David Teigland <teigland@sourceware.org>
+Date: Tue, 11 Sep 2018 14:55:55 -0400
+Subject: master - tests: add metadata-full
+Message-ID: <201809111855.w8BIttR2019938@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Implement lvm_vg_set_property() by calling internal 'set' property function.
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=17bd91e33e0d37d8cca03b42cee20251d7fa5e80
+Commit:        17bd91e33e0d37d8cca03b42cee20251d7fa5e80
+Parent:        5fb15b19349af607654f2429850a706bbac4b792
+Author:        David Teigland <teigland@redhat.com>
+AuthorDate:    Tue Sep 11 10:05:53 2018 -0500
+Committer:     David Teigland <teigland@redhat.com>
+CommitterDate: Tue Sep 11 12:05:46 2018 -0500
 
-Signed-off-by: Dave Wysochanski <wysochanski@pobox.com>
+tests: add metadata-full
+
 ---
- liblvm/lvm2app.h  |   30 ++++++++++++++++++++++++++++++
- liblvm/lvm_misc.c |   30 ++++++++++++++++++++++++++++++
- liblvm/lvm_misc.h |    2 ++
- liblvm/lvm_vg.c   |    6 ++++++
- 4 files changed, 68 insertions(+), 0 deletions(-)
+ test/shell/metadata-full.sh |   96 +++++++++++++++++++++++++++++++++++++++++++
+ 1 files changed, 96 insertions(+), 0 deletions(-)
 
-diff --git a/liblvm/lvm2app.h b/liblvm/lvm2app.h
-index a5f65e9..a871df3 100644
---- a/liblvm/lvm2app.h
-+++ b/liblvm/lvm2app.h
-@@ -911,6 +911,36 @@ struct dm_list *lvm_vg_get_tags(const vg_t vg);
-  */
- struct lvm_property_value lvm_vg_get_property(const vg_t vg, const char *name);
- 
-+/**
-+ * Set the value of a VG property.  Note that the property must be
-+ * a 'settable' property, as evidenced by the 'is_settable' flag
-+ * when querying the property.
-+ *
-+ * \memberof vg_t
-+ *
-+ * The memory allocated for a string property value is tied to the vg_t
-+ * handle and will be released when lvm_vg_close() is called.
-+ *
-+ * Example (integer):
-+ *      lvm_property_value copies;
-+ *
-+ *      if (lvm_vg_get_property(vg, "vg_mda_copies", &copies) < 0) {
-+ *              // Error - unable to query property
-+ *      }
-+ *      if (!copies.is_settable) {
-+ *              // Error - property not settable
-+ *      }
-+ *      copies.value.integer = 2;
-+ *      if (lvm_vg_set_property(vg, "vg_mda_copies", &copies) < 0) {
-+ *              // handle error
-+ *      }
-+ *
-+ * \return
-+ * 0 (success) or -1 (failure).
-+ */
-+int lvm_vg_set_property(const vg_t vg, const char *name,
-+			struct lvm_property_value *value);
+diff --git a/test/shell/metadata-full.sh b/test/shell/metadata-full.sh
+new file mode 100644
+index 0000000..388ebcd
+--- /dev/null
++++ b/test/shell/metadata-full.sh
+@@ -0,0 +1,96 @@
++#!/usr/bin/env bash
 +
- /************************** logical volume handling *************************/
- 
- /**
-diff --git a/liblvm/lvm_misc.c b/liblvm/lvm_misc.c
-index adec2bc..30984e8 100644
---- a/liblvm/lvm_misc.c
-+++ b/liblvm/lvm_misc.c
-@@ -78,3 +78,33 @@ struct lvm_property_value get_property(const pv_t pv, const vg_t vg,
- 	v.is_valid = 1;
- 	return v;
- }
++# Copyright (C) 2008-2013 Red Hat, Inc. All rights reserved.
++#
++# This copyrighted material is made available to anyone wishing to use,
++# modify, copy, or redistribute it subject to the terms and conditions
++# of the GNU General Public License v.2.
++#
++# You should have received a copy of the GNU General Public License
++# along with this program; if not, write to the Free Software Foundation,
++# Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
++
++test_description='Test full metadata'
++
++SKIP_WITH_LVMPOLLD=1
++
++. lib/inittest
++
++LVM_TEST_PVS=${LVM_TEST_PVS:-64}
++
++# aux prepare_vg $LVM_TEST_PVS
++
++unset LVM_LOG_FILE_MAX_LINES
++
++aux prepare_devs 64
++get_devs
++
++vgcreate $SHARED -s 512K --metadatacopies 8 $vg "${DEVICES[@]}"
++
++# have tested to see how many LVs can be created in a
++# vg set up like this and it's around 1190, so pick a
++# number less than that but over 1024 (in case there's
++# some issue at the number 1024 we want to find it.)
++#
++# uses long tags to increase the size of the metadata
++# more quickly
++#
++# the specific number of LVs in these loops isn't great
++# because it doesn't depend specified behavior, but it's
++# based on how much metadata it produces at the time this
++# is written.
 +
 +
-+int set_property(const pv_t pv, const vg_t vg, const lv_t lv,
-+		 const char *name, struct lvm_property_value *v)
-+{
-+	struct lvm_property_type prop;
++for i in `seq 1 1050`; do lvcreate -l1 -an --addtag A123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789 $vg; done
 +
-+	prop.id = name;
-+	if (v->is_string)
-+		prop.value.string = v->value.string;
-+	else
-+		prop.value.integer = v->value.integer;
-+	if (pv) {
-+		if (!pv_set_property(pv, &prop)) {
-+			v->is_valid = 0;
-+			return -1;
-+		}
-+	} else if (vg) {
-+		if (!vg_set_property(vg, &prop)) {
-+			v->is_valid = 0;
-+			return -1;
-+		}
-+	} else if (lv) {
-+		if (!lv_set_property(lv, &prop)) {
-+			v->is_valid = 0;
-+			return -1;
-+		}
-+	}
-+	return 0;
-+}
-diff --git a/liblvm/lvm_misc.h b/liblvm/lvm_misc.h
-index b4e675e..710c98d 100644
---- a/liblvm/lvm_misc.h
-+++ b/liblvm/lvm_misc.h
-@@ -19,5 +19,7 @@
- struct dm_list *tag_list_copy(struct dm_pool *p, struct dm_list *tag_list);
- struct lvm_property_value get_property(const pv_t pv, const vg_t vg,
- 				       const lv_t lv, const char *name);
-+int set_property(const pv_t pv, const vg_t vg, const lv_t lv,
-+		 const char *name, struct lvm_property_value *value);
- 
- #endif
-diff --git a/liblvm/lvm_vg.c b/liblvm/lvm_vg.c
-index 6970910..e6644ae 100644
---- a/liblvm/lvm_vg.c
-+++ b/liblvm/lvm_vg.c
-@@ -341,6 +341,12 @@ struct lvm_property_value lvm_vg_get_property(const vg_t vg, const char *name)
- 	return get_property(NULL, vg, NULL, name);
- }
- 
-+int lvm_vg_set_property(const vg_t vg, const char *name,
-+			struct lvm_property_value *value)
-+{
-+	return set_property(NULL, vg, NULL, name, value);
-+}
++# should show non-zero
++vgs -o+pv_mda_free
 +
- struct dm_list *lvm_list_vg_names(lvm_t libh)
- {
- 	return get_vgnames((struct cmd_context *)libh, 0);
--- 
-1.7.2.2
++# these addtag's will fail at some point when metadata space is full
++
++for i in `seq 1 1050`; do lvchange --addtag B123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789 $vg/lvol$i || true; done
++
++# should show 0
++vgs -o+pv_mda_free
++check vg_field $vg vg_mda_free 0
++
++# remove some of the tags to check that we can reduce the size of the
++# metadata, and continue using the vg
++
++for i in `seq 1 50`; do lvchange --deltag B123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789 $vg/lvol$i || true; done
++
++# should show non-zero
++vgs -o+pv_mda_free
++
++# these will fail at some point when metadata space is full again
++
++for i in `seq 1 50`; do lvcreate -l1 -an --addtag C123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789 $vg || true; done
++
++# should show 0
++vgs -o+pv_mda_free
++check vg_field $vg vg_mda_free 0
++
++# as long as we have a lot of LVs around, try to activate them all
++# (filters are already set up that exclude the activated LVs from
++# being scanned)
++
++time vgs
++
++vgchange -ay $vg
++
++time vgs
++
++vgchange -an $vg
++
++# see if we can remove LVs to make more metadata space,
++# and then create more LVs
++
++for i in `seq 1 50`; do lvremove -y $vg/lvol$i; done
++
++for i in `seq 1 10`; do lvcreate -l1 $vg; done
++
++# should show non-zero
++vgs -o+pv_mda_free
++
++vgremove -ff $vg
++
 
 
