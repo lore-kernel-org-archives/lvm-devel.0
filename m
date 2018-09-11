@@ -1,155 +1,65 @@
-From: mornfall@sourceware.org <mornfall@sourceware.org>
-Date: 17 Nov 2010 19:15:12 -0000
-Subject: LVM2/lib/report columns.h properties.c propert ...
-Message-ID: <20101117191512.26108.qmail@sourceware.org>
+From: Heinz Mauelshagen <heinzm@sourceware.org>
+Date: Tue, 11 Sep 2018 10:04:34 -0400
+Subject: master - tests: bump dm-raid version to 1.14.0
+Message-ID: <201809111404.w8BE4YTS014887@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	mornfall at sourceware.org	2010-11-17 19:15:11
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=99772e7e5b2d6dc881244429e2ab7ff2a664d00c
+Commit:        99772e7e5b2d6dc881244429e2ab7ff2a664d00c
+Parent:        df67b1da4d5ee4cf4514f655dbc5a58193364cbd
+Author:        Heinz Mauelshagen <heinzm@redhat.com>
+AuthorDate:    Tue Sep 11 15:58:43 2018 +0200
+Committer:     Heinz Mauelshagen <heinzm@redhat.com>
+CommitterDate: Tue Sep 11 16:03:57 2018 +0200
 
-Modified files:
-	lib/report     : columns.h properties.c properties.h 
+tests: bump dm-raid version to 1.14.0
 
-Log message:
-	Add generic infrastructure to internal library to 'set' a property.
-	Similar to 'get' property internal functions.
-	Add specific 'set' function for vg_mda_copies.
-	
-	Signed-off-by: Dave Wysochanski <wysochanski@pobox.com>
-	Reviewed-by: Petr Rockai <prockai@redhat.com>
+Commit 989626926c98cd00f0236c4fcac883107d76899d
+introduced 2 new tests
+lvconvert-raid-takeover-linear_to_raid4.sh and
+lvconvert-raid-takeover-linear_to_raid4.sh
+which involve raid reshaping.
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/report/columns.h.diff?cvsroot=lvm2&r1=1.45&r2=1.46
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/report/properties.c.diff?cvsroot=lvm2&r1=1.22&r2=1.23
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/report/properties.h.diff?cvsroot=lvm2&r1=1.5&r2=1.6
+Bump the checked dm-raid target version to 1.14.0
+which has reshape kernel fixes to avoid test suite
+runs to hang.
 
---- LVM2/lib/report/columns.h	2010/09/30 13:52:57	1.45
-+++ LVM2/lib/report/columns.h	2010/11/17 19:15:10	1.46
-@@ -121,7 +121,7 @@
- FIELD(VGS, vg, NUM, "#VMdaUse", cmd, 8, vgmdasused, vg_mda_used_count, "Number of metadata areas in use on this VG.", 0)
- FIELD(VGS, vg, NUM, "VMdaFree", cmd, 9, vgmdafree, vg_mda_free, "Free metadata area space for this VG in current units.", 0)
- FIELD(VGS, vg, NUM, "VMdaSize", cmd, 9, vgmdasize, vg_mda_size, "Size of smallest metadata area for this VG in current units.", 0)
--FIELD(VGS, vg, NUM, "#VMdaCps", cmd, 8, vgmdacopies, vg_mda_copies, "Target number of in use metadata areas in the VG.", 0)
-+FIELD(VGS, vg, NUM, "#VMdaCps", cmd, 8, vgmdacopies, vg_mda_copies, "Target number of in use metadata areas in the VG.", 1)
+diff --git a/test/shell/lvconvert-raid-takeover-raid4_to_linear.sh
+b/test/shell/lvconvert-raid-takeover-raid4_to_linear.sh
+---
+ .../lvconvert-raid-takeover-linear_to_raid4.sh     |    2 +-
+ .../lvconvert-raid-takeover-raid4_to_linear.sh     |    2 +-
+ 2 files changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/test/shell/lvconvert-raid-takeover-linear_to_raid4.sh b/test/shell/lvconvert-raid-takeover-linear_to_raid4.sh
+index 0360fa0..adaf8d3 100644
+--- a/test/shell/lvconvert-raid-takeover-linear_to_raid4.sh
++++ b/test/shell/lvconvert-raid-takeover-linear_to_raid4.sh
+@@ -16,7 +16,7 @@ SKIP_WITH_LVMPOLLD=1
+ . lib/inittest
  
- FIELD(SEGS, seg, STR, "Type", list, 4, segtype, segtype, "Type of LV segment.", 0)
- FIELD(SEGS, seg, NUM, "#Str", area_count, 4, uint32, stripes, "Number of stripes or mirror legs.", 0)
---- LVM2/lib/report/properties.c	2010/10/25 14:08:32	1.22
-+++ LVM2/lib/report/properties.c	2010/11/17 19:15:11	1.23
-@@ -35,6 +35,21 @@
- #define GET_LV_NUM_PROPERTY_FN(NAME, VALUE) \
- 	GET_NUM_PROPERTY_FN(NAME, VALUE, logical_volume, lv)
+ which mkfs.ext4 || skip
+-aux have_raid 1 9 1 || skip
++aux have_raid 1 14 0 || skip
  
-+#define SET_NUM_PROPERTY_FN(NAME, SETFN, TYPE, VAR)			\
-+static int _ ## NAME ## _set (void *obj, struct lvm_property_type *prop) \
-+{ \
-+	struct TYPE *VAR = (struct TYPE *)obj; \
-+\
-+	SETFN(VAR, prop->value.integer);		\
-+	return 1; \
-+}
-+#define SET_VG_NUM_PROPERTY_FN(NAME, SETFN) \
-+	SET_NUM_PROPERTY_FN(NAME, SETFN, volume_group, vg)
-+#define SET_PV_NUM_PROPERTY_FN(NAME, SETFN) \
-+	SET_NUM_PROPERTY_FN(NAME, SETFN, physical_volume, pv)
-+#define SET_LV_NUM_PROPERTY_FN(NAME, SETFN) \
-+	SET_NUM_PROPERTY_FN(NAME, SETFN, logical_volume, lv)
-+
- #define GET_STR_PROPERTY_FN(NAME, VALUE, TYPE, VAR)			\
- static int _ ## NAME ## _get (const void *obj, struct lvm_property_type *prop) \
- { \
-@@ -184,7 +199,7 @@
- GET_VG_NUM_PROPERTY_FN(vg_mda_size, (SECTOR_SIZE * vg_mda_size(vg)))
- #define _vg_mda_size_set _not_implemented_set
- GET_VG_NUM_PROPERTY_FN(vg_mda_copies, (vg_mda_copies(vg)))
--#define _vg_mda_copies_set _not_implemented_set
-+SET_VG_NUM_PROPERTY_FN(vg_mda_copies, vg_set_mda_copies)
+ aux prepare_vg 4 32
  
- /* LVSEG */
- #define _segtype_get _not_implemented_get
-@@ -267,6 +282,42 @@
- 	return 1;
- }
+diff --git a/test/shell/lvconvert-raid-takeover-raid4_to_linear.sh b/test/shell/lvconvert-raid-takeover-raid4_to_linear.sh
+index e571b82..a581846 100644
+--- a/test/shell/lvconvert-raid-takeover-raid4_to_linear.sh
++++ b/test/shell/lvconvert-raid-takeover-raid4_to_linear.sh
+@@ -16,7 +16,7 @@ SKIP_WITH_LVMPOLLD=1
+ . lib/inittest
  
-+static int _set_property(void *obj, struct lvm_property_type *prop,
-+			 report_type_t type)
-+{
-+	struct lvm_property_type *p;
-+
-+	p = _properties;
-+	while (p->id[0]) {
-+		if (!strcmp(p->id, prop->id))
-+			break;
-+		p++;
-+	}
-+	if (!p->id[0]) {
-+		log_errno(EINVAL, "Invalid property name %s", prop->id);
-+		return 0;
-+	}
-+	if (!p->is_settable) {
-+		log_errno(EINVAL, "Unable to set read-only property %s",
-+			  prop->id);
-+		return 0;
-+	}
-+	if (!(p->type & type)) {
-+		log_errno(EINVAL, "Property name %s does not match type %d",
-+			  prop->id, p->type);
-+		return 0;
-+	}
-+
-+	if (p->is_string)
-+		p->value.string = prop->value.string;
-+	else
-+		p->value.integer = prop->value.integer;
-+	if (!p->set(obj, p)) {
-+		return 0;
-+	}
-+	return 1;
-+}
-+
- int lv_get_property(const struct logical_volume *lv,
- 		    struct lvm_property_type *prop)
- {
-@@ -284,3 +335,21 @@
- {
- 	return _get_property(pv, prop, PVS | LABEL);
- }
-+
-+int lv_set_property(struct logical_volume *lv,
-+		    struct lvm_property_type *prop)
-+{
-+	return _set_property(lv, prop, LVS);
-+}
-+
-+int vg_set_property(struct volume_group *vg,
-+		    struct lvm_property_type *prop)
-+{
-+	return _set_property(vg, prop, VGS);
-+}
-+
-+int pv_set_property(struct physical_volume *pv,
-+		    struct lvm_property_type *prop)
-+{
-+	return _set_property(pv, prop, PVS | LABEL);
-+}
---- LVM2/lib/report/properties.h	2010/10/25 14:08:32	1.5
-+++ LVM2/lib/report/properties.h	2010/11/17 19:15:11	1.6
-@@ -39,5 +39,11 @@
- 		    struct lvm_property_type *prop);
- int pv_get_property(const struct physical_volume *pv,
- 		    struct lvm_property_type *prop);
-+int lv_set_property(struct logical_volume *lv,
-+		    struct lvm_property_type *prop);
-+int vg_set_property(struct volume_group *vg,
-+		    struct lvm_property_type *prop);
-+int pv_set_property(struct physical_volume *pv,
-+		    struct lvm_property_type *prop);
+ which mkfs.ext4 || skip
+-aux have_raid 1 9 1 || skip
++aux have_raid 1 14 0 || skip
  
- #endif
+ aux prepare_vg 4 32
+ 
 
 
