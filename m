@@ -1,103 +1,62 @@
-From: David Teigland <teigland@sourceware.org>
-Date: Thu, 13 Sep 2018 10:55:15 -0400
-Subject: master - lvmlockd: improve systemd service file
-Message-ID: <201809131455.w8DEtFMt015519@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: Heinz Mauelshagen <heinzm@sourceware.org>
+Date: Tue, 11 Sep 2018 10:06:21 -0400
+Subject: master - tests: bump dm-raid version to 1.14.0
+Message-ID: <201809111406.w8BE6LHQ015474@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=297f6d51228d0f0d5debca9e95785f3623e0ef9d
-Commit:        297f6d51228d0f0d5debca9e95785f3623e0ef9d
-Parent:        1365f0d4c8f977cd3e426708891ee8d39ffe6527
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Thu Sep 13 09:52:39 2018 -0500
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Thu Sep 13 09:52:39 2018 -0500
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=3832329a6b6a6430c84ea1aaacf17fb122a57b2a
+Commit:        3832329a6b6a6430c84ea1aaacf17fb122a57b2a
+Parent:        df67b1da4d5ee4cf4514f655dbc5a58193364cbd
+Author:        Heinz Mauelshagen <heinzm@redhat.com>
+AuthorDate:    Tue Sep 11 15:58:43 2018 +0200
+Committer:     Heinz Mauelshagen <heinzm@redhat.com>
+CommitterDate: Tue Sep 11 16:05:48 2018 +0200
 
-lvmlockd: improve systemd service file
+tests: bump dm-raid version to 1.14.0
 
-use notify type so the daemon is ready
-immediately after start.
+Commit 989626926c98cd00f0236c4fcac883107d76899d
+introduced 2 new tests
+lvconvert-raid-takeover-linear_to_raid4.sh and
+lvconvert-raid-takeover-raid4_to_linear.sh
+which involve raid reshaping.
+
+Bump the checked dm-raid target version to 1.14.0
+which has reshape kernel fixes to avoid test suite
+runs to hang.
 ---
- daemons/lvmlockd/Makefile.in                     |    8 ++++++++
- daemons/lvmlockd/lvmlockd-core.c                 |    8 ++++++++
- scripts/lvm2_lvmlockd_systemd_red_hat.service.in |    9 +++------
- 3 files changed, 19 insertions(+), 6 deletions(-)
+ .../lvconvert-raid-takeover-linear_to_raid4.sh     |    2 +-
+ .../lvconvert-raid-takeover-raid4_to_linear.sh     |    2 +-
+ 2 files changed, 2 insertions(+), 2 deletions(-)
 
-diff --git a/daemons/lvmlockd/Makefile.in b/daemons/lvmlockd/Makefile.in
-index 6dcc207..01abaca 100644
---- a/daemons/lvmlockd/Makefile.in
-+++ b/daemons/lvmlockd/Makefile.in
-@@ -15,6 +15,8 @@ srcdir = @srcdir@
- top_srcdir = @top_srcdir@
- top_builddir = @top_builddir@
+diff --git a/test/shell/lvconvert-raid-takeover-linear_to_raid4.sh b/test/shell/lvconvert-raid-takeover-linear_to_raid4.sh
+index 0360fa0..adaf8d3 100644
+--- a/test/shell/lvconvert-raid-takeover-linear_to_raid4.sh
++++ b/test/shell/lvconvert-raid-takeover-linear_to_raid4.sh
+@@ -16,7 +16,7 @@ SKIP_WITH_LVMPOLLD=1
+ . lib/inittest
  
-+USE_SD_NOTIFY=yes
-+
- SOURCES = lvmlockd-core.c
+ which mkfs.ext4 || skip
+-aux have_raid 1 9 1 || skip
++aux have_raid 1 14 0 || skip
  
- ifeq ("@BUILD_LOCKDSANLOCK@", "yes")
-@@ -40,6 +42,12 @@ INCLUDES += -I$(top_srcdir)/libdaemon/server
- LDFLAGS += -L$(top_builddir)/libdaemon/server $(EXTRA_EXEC_LDFLAGS) $(ELDFLAGS)
- LIBS += $(RT_LIBS) $(DAEMON_LIBS) $(PTHREAD_LIBS)
+ aux prepare_vg 4 32
  
-+
-+ifeq ($(USE_SD_NOTIFY),yes)
-+	CFLAGS += $(shell pkg-config --cflags libsystemd) -DUSE_SD_NOTIFY
-+	LDFLAGS += $(shell pkg-config --libs libsystemd)
-+endif
-+
- lvmlockd: $(OBJECTS) $(top_builddir)/libdaemon/client/libdaemonclient.a \
- 		    $(top_builddir)/libdaemon/server/libdaemonserver.a
- 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(OBJECTS) $(LOCK_LIBS) -ldaemonserver $(INTERNAL_LIBS) $(LIBS)
-diff --git a/daemons/lvmlockd/lvmlockd-core.c b/daemons/lvmlockd/lvmlockd-core.c
-index d6ff8cc..6490b40 100644
---- a/daemons/lvmlockd/lvmlockd-core.c
-+++ b/daemons/lvmlockd/lvmlockd-core.c
-@@ -35,6 +35,10 @@
- #include <sys/utsname.h>
- #include <sys/un.h>
+diff --git a/test/shell/lvconvert-raid-takeover-raid4_to_linear.sh b/test/shell/lvconvert-raid-takeover-raid4_to_linear.sh
+index e571b82..a581846 100644
+--- a/test/shell/lvconvert-raid-takeover-raid4_to_linear.sh
++++ b/test/shell/lvconvert-raid-takeover-raid4_to_linear.sh
+@@ -16,7 +16,7 @@ SKIP_WITH_LVMPOLLD=1
+ . lib/inittest
  
-+#ifdef USE_SD_NOTIFY
-+#include <systemd/sd-daemon.h>
-+#endif
-+
- #define EXTERN
- #include "lvmlockd-internal.h"
+ which mkfs.ext4 || skip
+-aux have_raid 1 9 1 || skip
++aux have_raid 1 14 0 || skip
  
-@@ -5786,6 +5790,10 @@ static int main_loop(daemon_state *ds_arg)
- 	setup_worker_thread();
- 	setup_restart();
- 
-+#ifdef USE_SD_NOTIFY
-+	sd_notify(0, "READY=1");
-+#endif
-+
- 	/*
- 	 * Attempt to rejoin lockspaces and adopt locks from a previous
- 	 * instance of lvmlockd that left behind lockspaces/locks.
-diff --git a/scripts/lvm2_lvmlockd_systemd_red_hat.service.in b/scripts/lvm2_lvmlockd_systemd_red_hat.service.in
-index 2a7544a..efe489a 100644
---- a/scripts/lvm2_lvmlockd_systemd_red_hat.service.in
-+++ b/scripts/lvm2_lvmlockd_systemd_red_hat.service.in
-@@ -1,13 +1,10 @@
- [Unit]
--Description=LVM2 lock daemon
-+Description=LVM lock daemon
- Documentation=man:lvmlockd(8)
--After=lvm2-lvmetad.service
- 
- [Service]
--Type=simple
--NonBlocking=true
--ExecStart=@SBINDIR@/lvmlockd -f
--Environment=SD_ACTIVATION=1
-+Type=notify
-+ExecStart=@SBINDIR@/lvmlockd --foreground
- PIDFile=@LVMLOCKD_PIDFILE@
- SendSIGKILL=no
+ aux prepare_vg 4 32
  
 
 
