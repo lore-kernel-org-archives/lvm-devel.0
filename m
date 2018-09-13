@@ -1,62 +1,1451 @@
-From: Heinz Mauelshagen <heinzm@sourceware.org>
-Date: Tue, 11 Sep 2018 10:06:21 -0400
-Subject: master - tests: bump dm-raid version to 1.14.0
-Message-ID: <201809111406.w8BE6LHQ015474@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: David Teigland <teigland@sourceware.org>
+Date: Thu, 13 Sep 2018 11:08:55 -0400
+Subject: master - Remove init scripts related to clvm and lvmetad
+Message-ID: <201809131508.w8DF8tb2018242@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=3832329a6b6a6430c84ea1aaacf17fb122a57b2a
-Commit:        3832329a6b6a6430c84ea1aaacf17fb122a57b2a
-Parent:        df67b1da4d5ee4cf4514f655dbc5a58193364cbd
-Author:        Heinz Mauelshagen <heinzm@redhat.com>
-AuthorDate:    Tue Sep 11 15:58:43 2018 +0200
-Committer:     Heinz Mauelshagen <heinzm@redhat.com>
-CommitterDate: Tue Sep 11 16:05:48 2018 +0200
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=81ca0cb1619b6ea22fa68f54783cd62dafbd2eaf
+Commit:        81ca0cb1619b6ea22fa68f54783cd62dafbd2eaf
+Parent:        297f6d51228d0f0d5debca9e95785f3623e0ef9d
+Author:        David Teigland <teigland@redhat.com>
+AuthorDate:    Thu Sep 13 10:08:03 2018 -0500
+Committer:     David Teigland <teigland@redhat.com>
+CommitterDate: Thu Sep 13 10:08:03 2018 -0500
 
-tests: bump dm-raid version to 1.14.0
+Remove init scripts related to clvm and lvmetad
 
-Commit 989626926c98cd00f0236c4fcac883107d76899d
-introduced 2 new tests
-lvconvert-raid-takeover-linear_to_raid4.sh and
-lvconvert-raid-takeover-raid4_to_linear.sh
-which involve raid reshaping.
-
-Bump the checked dm-raid target version to 1.14.0
-which has reshape kernel fixes to avoid test suite
-runs to hang.
 ---
- .../lvconvert-raid-takeover-linear_to_raid4.sh     |    2 +-
- .../lvconvert-raid-takeover-raid4_to_linear.sh     |    2 +-
- 2 files changed, 2 insertions(+), 2 deletions(-)
+ scripts/clvmd_fix_conf.sh                          |  161 -------
+ scripts/clvmd_init_red_hat.in                      |  214 ---------
+ scripts/lvm2_cluster_activation_red_hat.sh.in      |   62 ---
+ ...2_cluster_activation_systemd_red_hat.service.in |   17 -
+ scripts/lvm2_clvmd_systemd_red_hat.service.in      |   23 -
+ scripts/lvm2_lvmetad_init_red_hat.in               |  110 -----
+ scripts/lvm2_lvmetad_systemd_red_hat.service.in    |   15 -
+ scripts/lvm2_lvmetad_systemd_red_hat.socket.in     |   13 -
+ scripts/lvm2_pvscan_systemd_red_hat at .service.in    |   16 -
+ scripts/lvmconf.sh                                 |  459 --------------------
+ scripts/lvmconf_lockingtype2.sh                    |  259 -----------
+ 11 files changed, 0 insertions(+), 1349 deletions(-)
 
-diff --git a/test/shell/lvconvert-raid-takeover-linear_to_raid4.sh b/test/shell/lvconvert-raid-takeover-linear_to_raid4.sh
-index 0360fa0..adaf8d3 100644
---- a/test/shell/lvconvert-raid-takeover-linear_to_raid4.sh
-+++ b/test/shell/lvconvert-raid-takeover-linear_to_raid4.sh
-@@ -16,7 +16,7 @@ SKIP_WITH_LVMPOLLD=1
- . lib/inittest
- 
- which mkfs.ext4 || skip
--aux have_raid 1 9 1 || skip
-+aux have_raid 1 14 0 || skip
- 
- aux prepare_vg 4 32
- 
-diff --git a/test/shell/lvconvert-raid-takeover-raid4_to_linear.sh b/test/shell/lvconvert-raid-takeover-raid4_to_linear.sh
-index e571b82..a581846 100644
---- a/test/shell/lvconvert-raid-takeover-raid4_to_linear.sh
-+++ b/test/shell/lvconvert-raid-takeover-raid4_to_linear.sh
-@@ -16,7 +16,7 @@ SKIP_WITH_LVMPOLLD=1
- . lib/inittest
- 
- which mkfs.ext4 || skip
--aux have_raid 1 9 1 || skip
-+aux have_raid 1 14 0 || skip
- 
- aux prepare_vg 4 32
- 
+diff --git a/scripts/clvmd_fix_conf.sh b/scripts/clvmd_fix_conf.sh
+deleted file mode 100644
+index 5716d06..0000000
+--- a/scripts/clvmd_fix_conf.sh
++++ /dev/null
+@@ -1,161 +0,0 @@
+-#!/bin/bash
+-#
+-# Edit an lvm.conf file to enable cluster locking.
+-#
+-# $1 is the directory where the locking library is installed.
+-# $2 (optional) is the config file
+-# $3 (optional) is the locking library name
+-#
+-#
+-PREFIX=$1
+-LVMCONF=$2
+-LIB=$3
+-
+-if [ -z "$PREFIX" ]
+-then
+-  echo "usage: $0 <prefix> [<config file>] [<library>]"
+-  echo ""
+-  echo "<prefix>|UNDO  location of the cluster locking shared library. (no default)"
+-  echo "               UNDO will reset the locking back to local"
+-  echo "<config file>  name of the LVM config file (default: /etc/lvm/lvm.conf)"
+-  echo "<library>      name of the shared library (default: liblvm2clusterlock.so)"
+-  echo ""
+-  exit 0
+-fi
+-
+-[ -z "$LVMCONF" ] && LVMCONF="/etc/lvm/lvm.conf"
+-[ -z "$LIB" ] && LIB="liblvm2clusterlock.so"
+-
+-if [ "$PREFIX" = "UNDO" ]
+-then
+-  locking_type="1"
+-else
+-  locking_type="2"
+-
+-  if [ "${PREFIX:0:1}" != "/" ]
+-  then
+-    echo "Prefix must be an absolute path name (starting with a /)"
+-    exit 12
+-  fi
+-
+-  if [ ! -f "$PREFIX/$LIB" ]
+-  then
+-    echo "$PREFIX/$LIB does not exist, did you do a \"make install\" ?"
+-    exit 11
+-  fi
+-fi
+-
+-if [ ! -f "$LVMCONF" ]
+-then
+-  echo "$LVMCONF does not exist"
+-  exit 10
+-fi
+-
+-
+-SCRIPTFILE=$(mktemp -t lvmscript.XXXXXXXXXX)
+-TMPFILE=$(mktemp -t lvmtmp.XXXXXXXXXX)
+-
+-
+-# Flags so we know which parts of the file we can replace and which need
+-# adding. These are return codes from grep, so zero means it IS present!
+-have_type=1
+-have_dir=1
+-have_library=1
+-have_global=1
+-
+-grep -q '^[[:blank:]]*locking_type[[:blank:]]*=' "$LVMCONF"
+-have_type=$?
+-
+-grep -q '^[[:blank:]]*library_dir[[:blank:]]*=' "$LVMCONF"
+-have_dir=$?
+-
+-grep -q '^[[:blank:]]*locking_library[[:blank:]]*=' "$LVMCONF"
+-have_library=$?
+-
+-# Those options are in section "global {" so we must have one if any are present.
+-if [ "$have_type" = 0 ] || [ "$have_dir" = 0 ] || [ "$have_library" = 0 ] ; then
+-
+-    # See if we can find it...
+-    grep -q '^[[:blank:]]*global[[:blank:]]*{' "$LVMCONF"
+-    have_global=$?
+-    
+-    if [ "$have_global" = "1" ] 
+-	then
+-	echo "global keys but no 'global {' found, can't edit file"
+-	exit 12
+-    fi
+-fi
+-
+-# So if we don't have "global {" we need to create one and 
+-# populate it
+-
+-if [ "$have_global" = "1" ]
+-then
+-    cat "$LVMCONF" - <<EOF > "$TMPFILE"
+-global {
+-    # Enable locking for cluster LVM
+-    locking_type = $locking_type
+-    library_dir = "$PREFIX"
+-    locking_library = "$LIB"
+-}
+-EOF
+-    if [ $? != 0 ]
+-    then
+-	echo "failed to create temporary config file, $LVMCONF not updated"
+-	exit 1
+-    fi
+-else
+-    #
+-    # We have a "global {" section, so add or replace the
+-    # locking entries as appropriate
+-    #
+-
+-    if [ "$have_type" = "0" ] 
+-    then
+-	SEDCMD=" s/^[[:blank:]]*locking_type[[:blank:]]*=.*/\ \ \ \ locking_type = $locking_type/g"
+-    else
+-	SEDCMD=" /global[[:blank:]]*{/a\ \ \ \ locking_type = 2"
+-    fi
+-    
+-    if [ "$have_dir" = "0" ] 
+-    then
+-	SEDCMD="${SEDCMD}\ns'^[[:blank:]]*library_dir[[:blank:]]*=.*'\ \ \ \ library_dir = \"$PREFIX\"'g"
+-    else
+-	SEDCMD="${SEDCMD}\n/global[[:blank:]]*{/a\ \ \ \ library_dir = \"$PREFIX\""
+-    fi
+-
+-    if [ "$have_library" = "0" ] 
+-    then
+-	SEDCMD="${SEDCMD}\ns/^[[:blank:]]*locking_library[[:blank:]]*=.*/\ \ \ \ locking_library = \"$LIB\"/g"
+-    else
+-	SEDCMD="${SEDCMD}\n/global[[:blank:]]*{/a\ \ \ \ locking_library = \"$LIB\""
+-    fi
+-
+-    echo -e "$SEDCMD" > "$SCRIPTFILE"
+-    sed  <"$LVMCONF" >"$TMPFILE" -f "$SCRIPTFILE"
+-    if [ $? != 0 ]
+-    then
+-	echo "sed failed, $LVMCONF not updated"
+-	exit 1
+-    fi
+-fi
+-
+-# Now we have a suitably editted config file in a temp place,
+-# backup the original and copy our new one into place.
+-
+-cp "$LVMCONF" "$LVMCONF.nocluster"
+-if [ $? != 0 ]
+-    then
+-    echo "failed to backup old config file, $LVMCONF not updated"
+-    exit 2
+-fi
+-
+-cp "$TMPFILE" "$LVMCONF"
+-if [ $? != 0 ]
+-    then
+-    echo "failed to copy new config file into place, check $LVMCONF is still OK"
+-    exit 3
+-fi
+-
+-rm -f "$SCRIPTFILE" "$TMPFILE"
+-
+diff --git a/scripts/clvmd_init_red_hat.in b/scripts/clvmd_init_red_hat.in
+deleted file mode 100644
+index fff7912..0000000
+--- a/scripts/clvmd_init_red_hat.in
++++ /dev/null
+@@ -1,214 +0,0 @@
+-#!/bin/bash
+-#
+-# clvmd - Clustered LVM Daemon init script
+-#
+-# chkconfig: - 24 76
+-# description: Cluster daemon for userland logical volume management tools.
+-# pidfile: @CLVMD_PIDFILE@
+-#
+-# For Red-Hat-based distributions such as Fedora, RHEL, CentOS.
+-#
+-### BEGIN INIT INFO
+-# Provides:		clvmd
+-# Required-Start:	$local_fs at CLVMD_CMANAGERS@
+-# Required-Stop:	$local_fs at CLVMD_CMANAGERS@
+-# Short-Description:	This service is Clusterd LVM Daemon.
+-# Description:		Cluster daemon for userland logical volume management tools.
+-### END INIT INFO
+-
+-. /etc/rc.d/init.d/functions
+-
+-DAEMON=clvmd
+-
+-sbindir="@SBINDIR@"
+-usrsbindir="@USRSBINDIR@"
+-
+-lvm_vgchange="$sbindir/vgchange"
+-lvm_vgs="$sbindir/vgs"
+-lvm_vgscan="$sbindir/vgscan"
+-lvm_lvs="$sbindir/lvs"
+-
+-CLVMDOPTS="-T30"
+-
+-[ -f /etc/sysconfig/cluster ] && . /etc/sysconfig/cluster
+-[ -f "/etc/sysconfig/$DAEMON" ] && . "/etc/sysconfig/$DAEMON"
+-
+-[ -n "$CLVMD_CLUSTER_IFACE" ] && CLVMDOPTS="$CLVMDOPTS -I $CLVMD_CLUSTER_IFACE" 
+-
+-# allow up to $CLVMD_STOP_TIMEOUT seconds to clvmd to complete exit operations
+-# default to 10 seconds
+-
+-[ -z $CLVMD_STOP_TIMEOUT ] && CLVMD_STOP_TIMEOUT=10
+-
+-LOCK_FILE="/var/lock/subsys/$DAEMON"
+-
+-clustered_vgs() {
+-	"$lvm_vgs" --noheadings -o vg_name -S 'vg_clustered=1' 2>/dev/null
+-}
+-
+-clustered_active_lvs() {
+-	"$lvm_lvs" --noheadings -o lv_name -S 'vg_clustered=1 && lv_active!=""' 2>/dev/null
+-}
+-
+-rh_status() {
+-	status "$DAEMON"
+-}
+-
+-rh_status_q() {
+-	rh_status >/dev/null 2>&1
+-}
+-
+-start()
+-{
+-	if ! rh_status_q; then
+-		echo -n "Starting $DAEMON: "
+-		"$usrsbindir/$DAEMON" $CLVMDOPTS || return $?
+-		echo
+-	fi
+-
+-	# Refresh local cache.
+-	#
+-	# It's possible that new PVs were added to this, or other VGs
+-	# while this node was down. So we run vgscan here to avoid
+-	# any potential "Missing UUID" messages with subsequent
+-	# LVM commands.
+-
+-	# The following step would be better and more informative to the user:
+-	# 'action "Refreshing VG(s) local cache:" ${lvm_vgscan}'
+-	# but it could show warnings such as:
+-	# 'clvmd not running on node x-y-z  Unable to obtain global lock.'
+-	# and the action would be shown as FAILED when in reality it didn't.
+-	# Ideally vgscan should have a startup mode that would not print
+-	# unnecessary warnings.
+-
+-	"$lvm_vgscan" > /dev/null 2>&1
+-
+-	action "Activating VG(s):" "$lvm_vgchange" -aay $LVM_VGS || return $?
+-
+-	touch "$LOCK_FILE"
+-
+-	return 0
+-}
+-
+-wait_for_finish()
+-{
+-	count=0
+-	while [ "$count" -le "$CLVMD_STOP_TIMEOUT" ] && \
+-		 rh_status_q ]; do
+-		sleep 1
+-		count=$((count+1))
+-	done
+-
+-	! rh_status_q
+-}
+-
+-stop()
+-{
+-	rh_status_q || return 0
+-
+-	[ -z "$LVM_VGS" ] && LVM_VGS="$(clustered_vgs)"
+-	if [ -n "$LVM_VGS" ]; then
+-		action "Deactivating clustered VG(s):" "$lvm_vgchange" -anl $LVM_VGS || return $?
+-	fi
+-
+-	action "Signaling $DAEMON to exit" kill -TERM "$(pidofproc "$DAEMON")" || return $?
+-
+-	# wait half second before we start the waiting loop or we will show
+-	# the loop more time than really necessary
+-	usleep 500000
+-
+-	# clvmd could take some time to stop
+-	rh_status_q && action "Waiting for $DAEMON to exit:" wait_for_finish
+-
+-	if rh_status_q; then
+-		echo -n "$DAEMON failed to exit"
+-		failure
+-		echo
+-		return 1
+-	else
+-		echo -n "$DAEMON terminated"
+-		success
+-		echo
+-	fi
+-
+-	rm -f "$LOCK_FILE"
+-
+-	return 0
+-}
+-
+-reload() {
+-	rh_status_q || exit 7
+-	action "Reloading $DAEMON configuration: " "$usrsbindir/$DAEMON" -R || return $?
+-}
+-
+-restart() {
+-	# if stop fails, restart will return the error and not attempt
+-	# another start. Even if start is protected by rh_status_q,
+-	# that would avoid spawning another daemon, it would try to
+-	# reactivate the VGs.
+-
+-	# Try to get clvmd to restart itself. This will preserve 
+-	# exclusive LV locks
+-	action "Restarting $DAEMON: " "$usrsbindir/$DAEMON" -S
+-
+-	# If that fails then do a normal stop & restart
+-	if  [ $? != 0 ]; then
+-	    stop && start
+-	    return $?
+-	else
+-	    touch "$LOCK_FILE"
+-	    return 0
+-	fi
+-}
+-
+-[ "$EUID" != "0" ] && {
+-	echo "clvmd init script can only be executed as root user"
+-	exit 4
+-}
+-
+-# See how we were called.
+-case "$1" in
+-  start)
+-	start
+-	rtrn=$?
+-	;;
+-
+-  stop)
+-	stop
+-	rtrn=$?
+-	;;
+-
+-  restart|force-reload)
+-	restart
+-	rtrn=$?
+-	;;
+-
+-  condrestart|try-restart)
+-	rh_status_q || exit 0
+-	restart
+-	rtrn=$? 
+-	;;
+-
+-  reload)
+-	reload
+-	rtrn=$?
+-	;;
+-
+-  status)
+-	rh_status
+-	rtrn=$?
+-	if [ "$rtrn" = 0 ]; then
+-		cvgs="$(clustered_vgs)"
+-		echo Clustered Volume Groups: ${cvgs:-"(none)"}
+-		clvs="$(clustered_active_lvs)"
+-		echo Active clustered Logical Volumes: ${clvs:-"(none)"}
+-	fi
+-	;;
+-
+-  *)
+-	echo $"Usage: $0 {start|stop|status|restart|condrestart|try-restart|reload|force-reload}"
+-	rtrn=2
+-	;;
+-esac
+-
+-exit $rtrn
+diff --git a/scripts/lvm2_cluster_activation_red_hat.sh.in b/scripts/lvm2_cluster_activation_red_hat.sh.in
+deleted file mode 100644
+index e600745..0000000
+--- a/scripts/lvm2_cluster_activation_red_hat.sh.in
++++ /dev/null
+@@ -1,62 +0,0 @@
+-#!/bin/bash
+-
+-sbindir="@SBINDIR@"
+-
+-lvm_vgchange="$sbindir/vgchange"
+-lvm_vgscan="$sbindir/vgscan"
+-lvm_vgs="$sbindir/vgs"
+-lvm_lvm="$sbindir/lvm"
+-
+-clustered_vgs() {
+-	"$lvm_vgs" --noheadings -o vg_name -S 'vg_clustered=1' 2>/dev/null
+-}
+-
+-activate() {
+-	eval local "$("${lvm_lvm}" dumpconfig devices/obtain_device_list_from_udev 2>/dev/null)" 2>/dev/null
+-	if [ $? -ne 0 ]; then
+-		echo "Warning: expected single couple of key=value in output of dumpconfig"
+-	fi
+-
+-	if [ -z "$obtain_device_list_from_udev" ] || [ "$obtain_device_list_from_udev" -ne 1 ]; then
+-		echo -n "lvm.conf option obtain_device_list_from_udev!=1: Executing vgscan"
+-		"$lvm_vgscan" > /dev/null 2>&1
+-	fi
+-
+-	echo -n "Activating ${LVM_VGS:-"all VG(s)"}: "
+-	# Respect activation/auto_activation_volume_list!
+-	# Call "-aay" which is equal to "-aly" but respects this list.
+-        "$lvm_vgchange" -aay $LVM_VGS || return 1
+-
+-	return 0
+-}
+-
+-deactivate()
+-{
+-	# NOTE: following section will be replaced by blkdeactivate script
+-	# with option supporting request to deactivate all clustered volume
+-	# groups in the system
+-	[ -z "$LVM_VGS" ] && LVM_VGS="$(clustered_vgs)"
+-	if [ -n "$LVM_VGS" ]; then
+-		echo -n "Deactivating clustered VG(s): "
+-		"$lvm_vgchange" -anl $LVM_VGS || return 1
+-	fi
+-
+-	return 0
+-}
+-
+-case "$1" in
+-  deactivate)
+-	deactivate
+-	rtrn=$?
+-	;;
+-  activate)
+-	activate
+-	rtrn=$?
+-	;;
+-  *)
+-	echo $"Usage: $0 {activate|deactivate}"
+-	rtrn=3
+-	;;
+-esac
+-
+-exit "$rtrn"
+diff --git a/scripts/lvm2_cluster_activation_systemd_red_hat.service.in b/scripts/lvm2_cluster_activation_systemd_red_hat.service.in
+deleted file mode 100644
+index bf4aa1e..0000000
+--- a/scripts/lvm2_cluster_activation_systemd_red_hat.service.in
++++ /dev/null
+@@ -1,17 +0,0 @@
+-[Unit]
+-Description=Clustered LVM volumes activation service
+-Requires=lvm2-clvmd.service
+-After=lvm2-clvmd.service lvm2-cmirrord.service
+-OnFailure=lvm2-clvmd.service
+-DefaultDependencies=no
+-Conflicts=shutdown.target
+-
+-[Service]
+-Type=simple
+-RemainAfterExit=yes
+-EnvironmentFile=- at SYSCONFDIR@/sysconfig/clvmd
+-ExecStart=@systemdutildir@/lvm2-cluster-activation activate
+-ExecStop=@systemdutildir@/lvm2-cluster-activation deactivate
+-
+-[Install]
+-WantedBy=multi-user.target
+diff --git a/scripts/lvm2_clvmd_systemd_red_hat.service.in b/scripts/lvm2_clvmd_systemd_red_hat.service.in
+deleted file mode 100644
+index ced2774..0000000
+--- a/scripts/lvm2_clvmd_systemd_red_hat.service.in
++++ /dev/null
+@@ -1,23 +0,0 @@
+-[Unit]
+-Description=Clustered LVM daemon
+-Documentation=man:clvmd(8)
+-After=dlm.service corosync.service
+-Before=remote-fs-pre.target
+-Requires=network.target dlm.service corosync.service
+-RefuseManualStart=true
+-RefuseManualStop=true
+-StopWhenUnneeded=true
+-DefaultDependencies=no
+-Conflicts=shutdown.target
+-
+-[Service]
+-Type=forking
+-Environment=CLVMD_OPTS=-T30
+-EnvironmentFile=- at SYSCONFDIR@/sysconfig/clvmd
+-ExecStart=@USRSBINDIR@/clvmd $CLVMD_OPTS
+-SuccessExitStatus=5
+-TimeoutStartSec=30
+-TimeoutStopSec=10
+-OOMScoreAdjust=-1000
+-Restart=on-abort
+-PIDFile=@CLVMD_PIDFILE@
+diff --git a/scripts/lvm2_lvmetad_init_red_hat.in b/scripts/lvm2_lvmetad_init_red_hat.in
+deleted file mode 100644
+index daec7ac..0000000
+--- a/scripts/lvm2_lvmetad_init_red_hat.in
++++ /dev/null
+@@ -1,110 +0,0 @@
+-#!/bin/bash
+-#
+-# Copyright (C) 2012-2017 Red Hat, Inc. All rights reserved.
+-#
+-# This copyrighted material is made available to anyone wishing to use,
+-# modify, copy, or redistribute it subject to the terms and conditions
+-# of the GNU General Public License v.2.
+-#
+-# You should have received a copy of the GNU General Public License
+-# along with this program; if not, write to the Free Software Foundation,
+-# Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
+-#
+-# This file is part of LVM2.
+-# It is required for the proper handling of failures of LVM2 mirror
+-# devices that were created using the -m option of lvcreate.
+-#
+-#
+-# chkconfig: 12345 02 99
+-# description: Starts and stops LVM metadata daemon
+-#
+-# For Red-Hat-based distributions such as Fedora, RHEL, CentOS.
+-#
+-### BEGIN INIT INFO
+-# Provides: lvm2-lvmetad
+-# Required-Start: $local_fs
+-# Required-Stop: $local_fs
+-# Default-Start: 1 2 3 4 5
+-# Default-Stop: 0 6
+-# Short-Description: A daemon that maintains LVM metadata state for improved
+-#                    performance by avoiding further scans while running
+-#                    subsequent LVM commands or while using lvm2app library.
+-### END INIT INFO
+-
+-. /etc/init.d/functions
+-
+-DAEMON=lvmetad
+-
+-sbindir="@SBINDIR@"
+-
+-LOCK_FILE="@DEFAULT_SYS_LOCK_DIR@/subsys/$DAEMON"
+-PID_FILE="@LVMETAD_PIDFILE@"
+-
+-rh_status() {
+-	status -p "$PID_FILE" "$DAEMON"
+-}
+-
+-rh_status_q() {
+-	rh_status >/dev/null 2>&1
+-}
+-
+-start()
+-{
+-	ret=0
+-	action "Starting LVM metadata daemon:" "$sbindir/$DAEMON" || ret=$?
+-	return $ret
+-}
+-
+-stop()
+-{
+-	ret=0
+-	action "Signaling LVM metadata daemon to exit:" killproc -p "$PID_FILE" "$DAEMON" -TERM || ret=$?
+-	return $ret
+-}
+-
+-rtrn=1
+-
+-# See how we were called.
+-case "$1" in
+-  start)
+-	rh_status_q && exit 0
+-	start
+-	rtrn=$?
+-	[ "$rtrn" = 0 ] && touch "$LOCK_FILE"
+-	;;
+-
+-  stop|force-stop)
+-	rh_status_q || exit 0
+-	stop
+-	rtrn=$?
+-	[ "$rtrn" = 0 ] && rm -f "$LOCK_FILE"
+-	;;
+-
+-  restart)
+-	if stop
+-	then
+-		start
+-	fi
+-	rtrn=$?
+-	;;
+-
+-  condrestart|try-restart)
+-	rh_status_q || exit 0
+-	if stop
+-	then
+-		start
+-	fi
+-	rtrn=$?
+-	;;
+-
+-  status)
+-	rh_status
+-	rtrn=$?
+-	;;
+-
+-  *)
+-	echo $"Usage: $0 {start|stop|force-stop|restart|condrestart|try-restart|status}"
+-	;;
+-esac
+-
+-exit $rtrn
+diff --git a/scripts/lvm2_lvmetad_systemd_red_hat.service.in b/scripts/lvm2_lvmetad_systemd_red_hat.service.in
+deleted file mode 100644
+index 92e6d69..0000000
+--- a/scripts/lvm2_lvmetad_systemd_red_hat.service.in
++++ /dev/null
+@@ -1,15 +0,0 @@
+-[Unit]
+-Description=LVM2 metadata daemon
+-Documentation=man:lvmetad(8)
+-Requires=lvm2-lvmetad.socket
+-After=lvm2-lvmetad.socket
+-DefaultDependencies=no
+-Conflicts=shutdown.target
+-
+-[Service]
+-Type=simple
+-NonBlocking=true
+-ExecStart=@SBINDIR@/lvmetad -f
+-Environment=SD_ACTIVATION=1
+-Restart=on-abort
+-PIDFile=@LVMETAD_PIDFILE@
+diff --git a/scripts/lvm2_lvmetad_systemd_red_hat.socket.in b/scripts/lvm2_lvmetad_systemd_red_hat.socket.in
+deleted file mode 100644
+index 2663c72..0000000
+--- a/scripts/lvm2_lvmetad_systemd_red_hat.socket.in
++++ /dev/null
+@@ -1,13 +0,0 @@
+-[Unit]
+-Description=LVM2 metadata daemon socket
+-Documentation=man:lvmetad(8)
+-DefaultDependencies=no
+-Conflicts=shutdown.target
+-
+-[Socket]
+-ListenStream=@DEFAULT_RUN_DIR@/lvmetad.socket
+-SocketMode=0600
+-RemoveOnStop=true
+-
+-[Install]
+-WantedBy=sysinit.target
+diff --git a/scripts/lvm2_pvscan_systemd_red_hat at .service.in b/scripts/lvm2_pvscan_systemd_red_hat at .service.in
+deleted file mode 100644
+index 839bfd1..0000000
+--- a/scripts/lvm2_pvscan_systemd_red_hat at .service.in
++++ /dev/null
+@@ -1,16 +0,0 @@
+-[Unit]
+-Description=LVM2 PV scan on device %i
+-Documentation=man:pvscan(8)
+-DefaultDependencies=no
+-StartLimitInterval=0
+-BindsTo=dev-block-%i.device
+-Requires=lvm2-lvmetad.socket
+-After=lvm2-lvmetad.socket lvm2-lvmetad.service
+-Before=shutdown.target
+-Conflicts=shutdown.target
+-
+-[Service]
+-Type=oneshot
+-RemainAfterExit=yes
+-ExecStart=@SBINDIR@/lvm pvscan --cache --activate ay %i
+-ExecStop=@SBINDIR@/lvm pvscan --cache %i
+diff --git a/scripts/lvmconf.sh b/scripts/lvmconf.sh
+deleted file mode 100644
+index 8579338..0000000
+--- a/scripts/lvmconf.sh
++++ /dev/null
+@@ -1,459 +0,0 @@
+-#!/bin/bash
+-#
+-# Copyright (C) 2004-2009 Red Hat, Inc. All rights reserved.
+-#
+-# This file is part of the lvm2 package.
+-#
+-# This copyrighted material is made available to anyone wishing to use,
+-# modify, copy, or redistribute it subject to the terms and conditions
+-# of the GNU General Public License v.2.
+-#
+-# You should have received a copy of the GNU General Public License
+-# along with this program; if not, write to the Free Software Foundation,
+-# Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
+-
+-#
+-# Edit an lvm.conf file to adjust various properties
+-#
+-
+-# cluster with clvmd and/or locking lib?
+-HANDLE_CLUSTER=0
+-
+-# cluster without clvmd?
+-HANDLE_HALVM=0
+-
+-# also enable services appropriately (lvmetad, clvmd)?
+-HANDLE_SERVICES=0
+-
+-# also enable cmirrord service in addition?
+-HANDLE_MIRROR_SERVICE=0
+-
+-# also start/start services in addition to enabling/disabling them?
+-START_STOP_SERVICES=0
+-
+-function usage
+-{
+-    echo "Usage: $0 <command>"
+-    echo ""
+-    echo "Commands:"
+-    echo "Enable clvm:  --enable-cluster [--lockinglibdir <dir>] [--lockinglib <lib>]"
+-    echo "Disable clvm: --disable-cluster"
+-    echo "Enable halvm: --enable-halvm"
+-    echo "Disable halvm: --disable-halvm"
+-    echo "Set locking library: --lockinglibdir <dir> [--lockinglib <lib>]"
+-    echo ""
+-    echo "Global options:"
+-    echo "Config file location: --file <configfile>"
+-    echo "Set services: --services [--mirrorservice] [--startstopservices]"
+-    echo ""
+-    echo "Use the separate command 'lvmconfig' to display configuration information"
+-}
+-
+-function set_default_use_lvmetad_var
+-{
+-	eval "$(lvm dumpconfig --type default global/use_lvmetad 2>/dev/null)"
+-	if [ "$?" != 0 ]; then
+-		USE_LVMETAD=0
+-	else
+-                USE_LVMETAD=$use_lvmetad
+-	fi
+-}
+-
+-function parse_args
+-{
+-    while [ -n "$1" ]; do
+-        case "$1" in
+-            --enable-cluster)
+-                LOCKING_TYPE=3
+-                USE_LVMETAD=0
+-                HANDLE_CLUSTER=1
+-                shift
+-                ;;
+-            --disable-cluster)
+-                LOCKING_TYPE=1
+-                set_default_use_lvmetad_var
+-                HANDLE_CLUSTER=1
+-                shift
+-                ;;
+-            --enable-halvm)
+-                LOCKING_TYPE=1
+-		USE_LVMETAD=0
+-                HANDLE_HALVM=1
+-		shift
+-                ;;
+-            --disable-halvm)
+-                LOCKING_TYPE=1
+-                set_default_use_lvmetad_var
+-                HANDLE_HALVM=1
+-		shift
+-                ;;
+-            --lockinglibdir)
+-                if [ -n "$2" ]; then
+-                    LOCKINGLIBDIR=$2
+-                    shift 2
+-                else
+-                    usage
+-                    exit 1
+-                fi
+-                HANDLE_CLUSTER=1
+-                ;;
+-            --lockinglib)
+-                if [ -n "$2" ]; then
+-                    LOCKINGLIB=$2
+-                    shift 2
+-                else
+-                    usage
+-                    exit 1
+-                fi
+-                HANDLE_CLUSTER=1
+-                ;;
+-            --file)
+-                if [ -n "$2" ]; then
+-                    CONFIGFILE=$2
+-                    shift 2
+-                else
+-                    usage
+-                    exit 1
+-                fi
+-                ;;
+-            --services)
+-                HANDLE_SERVICES=1
+-                shift
+-                ;;
+-            --mirrorservice)
+-                HANDLE_MIRROR_SERVICE=1
+-                shift
+-                ;;
+-            --startstopservices)
+-                START_STOP_SERVICES=1
+-                shift
+-                ;;
+-            *)
+-                usage
+-                exit 1
+-        esac
+-    done
+-
+-    if [ -n "$LOCKINGLIBDIR" ] || [ -n "$LOCKINGLIB" ]; then
+-        LOCKING_TYPE=2
+-        USE_LVMETAD=0
+-    fi
+-}
+-
+-function validate_args
+-{
+-    [ -z "$CONFIGFILE" ] && CONFIGFILE="/etc/lvm/lvm.conf"
+-
+-    if [ ! -f "$CONFIGFILE" ]
+-            then
+-            echo "$CONFIGFILE does not exist"
+-            exit 10
+-    fi
+-
+-    if [ "$HANDLE_CLUSTER" = 1 ] && [ "$HANDLE_HALVM" = 1 ]; then
+-        echo "Either HA LVM or cluster method may be used at one time"
+-	    exit 18
+-    fi
+-
+-    if [ "$HANDLE_SERVICES" = 0 ]; then
+-        if [ "$HANDLE_MIRROR_SERVICE" = 1 ]; then
+-            echo "--mirrorservice may be used only with --services"
+-            exit 19
+-        fi
+-        if [ "$START_STOP_SERVICES" = 1 ]; then
+-            echo "--startstopservices may be used only with --services"
+-            exit 19
+-        fi
+-    fi
+-
+-    if [ -z "$LOCKING_TYPE" ] && [ -z "$LOCKINGLIBDIR" ]; then
+-        usage
+-        exit 1
+-    fi
+-
+-    if [ -n "$LOCKINGLIBDIR" ]; then
+-
+-        if [ "${LOCKINGLIBDIR:0:1}" != "/" ]
+-            then
+-            echo "Prefix must be an absolute path name (starting with a /)"
+-            exit 12
+-        fi
+-
+-        if [ -n "$LOCKINGLIB" ] && [ ! -f "$LOCKINGLIBDIR/$LOCKINGLIB" ]
+-            then
+-            echo "$LOCKINGLIBDIR/$LOCKINGLIB does not exist, did you do a \"make install\" ?"
+-            exit 11
+-        fi
+-
+-    fi
+-
+-    if [ "$LOCKING_TYPE" = 1 ] ; then
+-	if [ -n "$LOCKINGLIBDIR" ] || [ -n "$LOCKINGLIB" ]; then
+-		echo "Superfluous locking lib parameter, ignoring"
+-	fi
+-    fi
+-}
+-
+-umask 0077
+-
+-parse_args "$@"
+-
+-validate_args
+-
+-
+-SCRIPTFILE=/etc/lvm/.lvmconf-script.tmp
+-TMPFILE=/etc/lvm/.lvmconf-tmp.tmp
+-
+-
+-# Flags so we know which parts of the file we can replace and which need
+-# adding. These are return codes from grep, so zero means it IS present!
+-have_type=1
+-have_dir=1
+-have_library=1
+-have_use_lvmetad=1
+-have_global=1
+-
+-grep -q '^[[:blank:]]*locking_type[[:blank:]]*=' "$CONFIGFILE"
+-have_type=$?
+-
+-grep -q '^[[:blank:]]*library_dir[[:blank:]]*=' "$CONFIGFILE"
+-have_dir=$?
+-
+-grep -q '^[[:blank:]]*locking_library[[:blank:]]*=' "$CONFIGFILE"
+-have_library=$?
+-
+-grep -q '^[[:blank:]]*use_lvmetad[[:blank:]]*=' "$CONFIGFILE"
+-have_use_lvmetad=$?
+-
+-# Those options are in section "global {" so we must have one if any are present.
+-if [ "$have_type" = 0 ] || [ "$have_dir" = 0 ] || [ "$have_library" = 0 ] || [ "$have_use_lvmetad" = 0 ]
+-then
+-
+-    # See if we can find it...
+-    grep -q '^[[:blank:]]*global[[:blank:]]*{' $CONFIGFILE
+-    have_global=$?
+-
+-    if [ "$have_global" = 1 ] 
+-	then
+-	echo "global keys but no 'global {' found, can't edit file"
+-	exit 13
+-    fi
+-fi
+-
+-if [ "$LOCKING_TYPE" = 2 ] && [ -z "$LOCKINGLIBDIR" ] && [ "$have_dir" = 1 ]; then
+-	echo "no library_dir specified in $CONFIGFILE"
+-	exit 16
+-fi
+-
+-# So if we don't have "global {" we need to create one and 
+-# populate it
+-
+-if [ "$have_global" = 1 ]
+-then
+-    if [ -z "$LOCKING_TYPE" ]; then
+-	LOCKING_TYPE=1
+-    fi
+-    if [ "$LOCKING_TYPE" = 3 ] || [ "$LOCKING_TYPE" = 2 ]; then
+-        cat "$CONFIGFILE" - <<EOF > "$TMPFILE"
+-global {
+-    # Enable locking for cluster LVM
+-    locking_type = $LOCKING_TYPE
+-    library_dir = "$LOCKINGLIBDIR"
+-    # Disable lvmetad in cluster
+-    use_lvmetad = 0
+-EOF
+-        if [ $? != 0 ]
+-        then
+-    	    echo "failed to create temporary config file, $CONFIGFILE not updated"
+-	    exit 14
+-        fi
+-	if [ -n "$LOCKINGLIB" ]; then
+-	    cat - <<EOF >> "$TMPFILE"
+-    locking_library = "$LOCKINGLIB"
+-EOF
+-            if [ $? != 0 ]
+-            then
+-	        echo "failed to create temporary config file, $CONFIGFILE not updated"
+-	        exit 16
+-            fi
+-	fi
+-	cat - <<EOF >> "$TMPFILE"
+-}
+-EOF
+-    fi # if we aren't setting cluster locking, we don't need to create a global section
+-
+-    if [ $? != 0 ]
+-    then
+-	echo "failed to create temporary config file, $CONFIGFILE not updated"
+-	exit 17
+-    fi
+-else
+-    #
+-    # We have a "global {" section, so add or replace the
+-    # locking entries as appropriate
+-    #
+-
+-    if [ -n "$LOCKING_TYPE" ]; then
+-	if [ "$have_type" = 0 ] 
+-	then
+-	    SEDCMD=" s/^[[:blank:]]*locking_type[[:blank:]]*=.*/\ \ \ \ locking_type = $LOCKING_TYPE/g"
+-	else
+-	    SEDCMD=" /global[[:blank:]]*{/a\ \ \ \ locking_type = $LOCKING_TYPE"
+-	fi
+-    fi
+-
+-    if [ -n "$LOCKINGLIBDIR" ]; then
+-        if [ "$have_dir" = 0 ] 
+-            then
+-            SEDCMD="${SEDCMD}\ns'^[[:blank:]]*library_dir[[:blank:]]*=.*'\ \ \ \ library_dir = \"$LOCKINGLIBDIR\"'g"
+-        else
+-            SEDCMD="${SEDCMD}\n/global[[:blank:]]*{/a\ \ \ \ library_dir = \"$LOCKINGLIBDIR\""
+-        fi
+-    fi
+-
+-    if [ -n "$LOCKINGLIB" ]; then
+-        if [ "$have_library" = 0 ]
+-            then
+-            SEDCMD="${SEDCMD}\ns/^[[:blank:]]*locking_library[[:blank:]]*=.*/\ \ \ \ locking_library = \"$LOCKINGLIB\"/g"
+-        else
+-            SEDCMD="${SEDCMD}\n/global[[:blank:]]*{/a\ \ \ \ locking_library = \"$LOCKINGLIB\""
+-        fi
+-    fi
+-
+-    if [ "$have_use_lvmetad" = 0 ]
+-    then
+-        SEDCMD="${SEDCMD}\ns'^[[:blank:]]*use_lvmetad[[:blank:]]*=.*'\ \ \ \ use_lvmetad = $USE_LVMETAD'g"
+-    else
+-        SEDCMD="${SEDCMD}\n/global[[:blank:]]*{/a\ \ \ \ use_lvmetad = $USE_LVMETAD"
+-    fi
+-
+-    echo -e "$SEDCMD" > "$SCRIPTFILE"
+-    sed  <"$CONFIGFILE" >"$TMPFILE" -f "$SCRIPTFILE"
+-    if [ $? != 0 ]
+-    then
+-	echo "sed failed, $CONFIGFILE not updated"
+-	exit 15
+-    fi
+-fi
+-
+-# Now we have a suitably editted config file in a temp place,
+-# backup the original and copy our new one into place.
+-
+-cp "$CONFIGFILE" "$CONFIGFILE.lvmconfold"
+-if [ $? != 0 ]
+-    then
+-    echo "failed to backup old config file, $CONFIGFILE not updated"
+-    exit 2
+-fi
+-
+-cp "$TMPFILE" "$CONFIGFILE"
+-if [ $? != 0 ]
+-    then
+-    echo "failed to copy new config file into place, check $CONFIGFILE is still OK"
+-    exit 3
+-fi
+-
+-rm -f "$SCRIPTFILE" "$TMPFILE"
+-
+-function set_service {
+-    local type=$1
+-    local action=$2
+-    shift 2
+-
+-    if [ "$type" = "systemd" ]; then
+-        if [ "$action" = "activate" ]; then
+-            for i in "$@"; do
+-                unset LoadState
+-                eval "$($SYSTEMCTL_BIN show "$i" -p LoadState 2>/dev/null)"
+-                test  "$LoadState" = "loaded" || continue
+-                $SYSTEMCTL_BIN enable "$i"
+-                if [ "$START_STOP_SERVICES" = 1 ]; then
+-                    $SYSTEMCTL_BIN start "$i"
+-                fi
+-            done
+-        elif [ "$action" = "deactivate" ]; then
+-            for i in "$@"; do
+-                unset LoadState
+-                eval "$($SYSTEMCTL_BIN show "$i" -p LoadState 2>/dev/null)"
+-                test  "$LoadState" = "loaded" || continue
+-                "$SYSTEMCTL_BIN" disable "$i"
+-                if [ "$START_STOP_SERVICES" = 1 ]; then
+-                    "$SYSTEMCTL_BIN" stop "$i"
+-                fi
+-            done
+-        fi
+-    elif [ "$type" = "sysv" ]; then
+-        if [ "$action" = "activate" ]; then
+-            for i in "$@"; do
+-                "$CHKCONFIG_BIN" --list "$i" > /dev/null || continue
+-                "$CHKCONFIG_BIN" "$i" on
+-                if [ "$START_STOP_SERVICES" = 1 ]; then
+-                    "$SERVICE_BIN" "$i" start
+-                fi
+-            done
+-        elif [ "$action" = "deactivate" ]; then
+-            for i in "$@"; do
+-                "$CHKCONFIG_BIN" --list "$i" > /dev/null  || continue
+-                if [ "$START_STOP_SERVICES" = 1 ]; then
+-                    "$SERVICE_BIN" "$i" stop
+-                fi
+-                "$CHKCONFIG_BIN" "$i" off
+-            done
+-        fi
+-    fi
+-}
+-
+-# Start/stop and enable/disable services if needed.
+-
+-if [ "$HANDLE_SERVICES" = 1 ]; then
+-
+-    SYSTEMCTL_BIN=$(which systemctl 2>/dev/null)
+-    CHKCONFIG_BIN=$(which chkconfig 2>/dev/null)
+-    SERVICE_BIN=$(which service 2>/dev/null)
+-
+-    # Systemd services
+-    if [ -n "$SYSTEMCTL_BIN" ]; then
+-        if [ "$USE_LVMETAD" = 0 ]; then
+-            set_service systemd deactivate lvm2-lvmetad.service lvm2-lvmetad.socket
+-        else
+-            set_service systemd activate lvm2-lvmetad.socket
+-        fi
+-
+-        if [ "$LOCKING_TYPE" = 3 ]; then
+-            set_service systemd activate lvm2-cluster-activation.service
+-            if [ "$HANDLE_MIRROR_SERVICE" = 1 ]; then
+-                set_service activate lvm2-cmirrord.service
+-            fi
+-        else
+-            set_service systemd deactivate lvm2-cluster-activation.service
+-            if [ "$HANDLE_MIRROR_SERVICE" = 1 ]; then
+-                set_service systemd deactivate lvm2-cmirrord.service
+-            fi
+-        fi
+-
+-    # System V init scripts
+-    elif [ -n "$SERVICE_BIN" ] && [ -n "$CHKCONFIG_BIN" ]; then
+-        if [ "$USE_LVMETAD" = 0 ]; then
+-            set_service sysv deactivate lvm2-lvmetad
+-        else
+-            set_service sysv activate lvm2-lvmetad
+-        fi
+-
+-        if [ "$LOCKING_TYPE" = 3 ]; then
+-            set_service sysv activate clvmd
+-            if [ "$HANDLE_MIRROR_SERVICE" = 1 ]; then
+-                set_service sysv activate cmirrord
+-            fi
+-        else
+-            set_service sysv deactivate clvmd
+-            if [ "$HANDLE_MIRROR_SERVICE" = 1 ]; then
+-                set_service sysv deactivate cmirrord
+-            fi
+-        fi
+-
+-    # None of the service tools found, error out
+-    else
+-        echo "Missing tools to handle services"
+-        exit 20
+-    fi
+-fi
+diff --git a/scripts/lvmconf_lockingtype2.sh b/scripts/lvmconf_lockingtype2.sh
+deleted file mode 100644
+index 52929d3..0000000
+--- a/scripts/lvmconf_lockingtype2.sh
++++ /dev/null
+@@ -1,259 +0,0 @@
+-#!/bin/bash
+-#
+-# Copyright (C) 2004-2017 Red Hat, Inc. All rights reserved.
+-#
+-# This file is part of the lvm2-cluster package.
+-#
+-# This copyrighted material is made available to anyone wishing to use,
+-# modify, copy, or redistribute it subject to the terms and conditions
+-# of the GNU General Public License v.2.
+-#
+-# You should have received a copy of the GNU General Public License
+-# along with this program; if not, write to the Free Software Foundation,
+-# Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
+-
+-#
+-# Edit an lvm.conf file to adjust various properties
+-#
+-
+-function usage
+-{
+-    echo "usage: $0 <command>"
+-    echo ""
+-    echo "Commands:"
+-    echo "Enable clvm:  --enable-cluster [--lockinglibdir <dir>] [--lockinglib <lib>]"
+-    echo "Disable clvm: --disable-cluster"
+-    echo "Set locking library: --lockinglibdir <dir> [--lockinglib <lib>]"
+-    echo ""
+-    echo "Global options:"
+-    echo "Config file location: --file <configfile>"
+-    echo ""
+-}
+-
+-
+-function parse_args
+-{
+-    while [ -n "$1" ]; do
+-        case "$1" in
+-            --enable-cluster)
+-                LOCKING_TYPE=2
+-                shift
+-                ;;
+-            --disable-cluster)
+-                LOCKING_TYPE=1
+-                shift
+-                ;;
+-            --lockinglibdir)
+-                if [ -n "$2" ]; then
+-                    LOCKINGLIBDIR=$2
+-                    shift 2
+-                else
+-                    usage
+-                    exit 1
+-                fi
+-                ;;
+-            --lockinglib)
+-                if [ -n "$2" ]; then
+-                    LOCKINGLIB=$2
+-                    shift 2
+-                else
+-                    usage
+-                    exit 1
+-                fi
+-                ;;
+-            --file)
+-                if [ -n "$2" ]; then
+-                    CONFIGFILE=$2
+-                    shift 2
+-                else
+-                    usage
+-                    exit 1
+-                fi
+-                ;;
+-            *)
+-                usage
+-                exit 1
+-        esac
+-    done
+-}
+-
+-function validate_args
+-{
+-    [ -z "$CONFIGFILE" ] && CONFIGFILE="/etc/lvm/lvm.conf"
+-
+-    if [ ! -f "$CONFIGFILE" ]
+-            then
+-            echo "$CONFIGFILE does not exist"
+-            exit 10
+-    fi
+-
+-    if [ -z "$LOCKING_TYPE" ] && [ -z "$LOCKINGLIBDIR" ]; then
+-        usage
+-        exit 1
+-    fi
+-
+-    if [ -n "$LOCKINGLIBDIR" ]; then
+-
+-        [ -z "$LOCKINGLIB" ] && LOCKINGLIB="liblvm2clusterlock.so"
+-            
+-        if [ "${LOCKINGLIBDIR:0:1}" != "/" ]
+-            then
+-            echo "Prefix must be an absolute path name (starting with a /)"
+-            exit 12
+-        fi
+-    
+-        if [ ! -f "$LOCKINGLIBDIR/$LOCKINGLIB" ]
+-            then
+-            echo "$LOCKINGLIBDIR/$LOCKINGLIB does not exist, did you do a \"make install\" ?"
+-            exit 11
+-        fi
+-        
+-    fi
+-
+-    if [ "$LOCKING_TYPE" = "1" ] ; then
+-	if [ -n "$LOCKINGLIBDIR" ] || [ -n "$LOCKINGLIB" ]; then
+-	    echo "Superfluous locking lib parameter, ignoring"
+-	fi
+-    fi
+-}
+-
+-umask 0077
+-
+-parse_args "$@"
+-
+-validate_args
+-
+-
+-SCRIPTFILE=/etc/lvm/.lvmconf-script.tmp
+-TMPFILE=/etc/lvm/.lvmconf-tmp.tmp
+-
+-
+-# Flags so we know which parts of the file we can replace and which need
+-# adding. These are return codes from grep, so zero means it IS present!
+-have_type=1
+-have_dir=1
+-have_library=1
+-have_global=1
+-
+-grep -q '^[[:blank:]]*locking_type[[:blank:]]*=' "$CONFIGFILE"
+-have_type=$?
+-
+-grep -q '^[[:blank:]]*library_dir[[:blank:]]*=' "$CONFIGFILE"
+-have_dir=$?
+-
+-grep -q '^[[:blank:]]*locking_library[[:blank:]]*=' "$CONFIGFILE"
+-have_library=$?
+-
+-# Those options are in section "global {" so we must have one if any are present.
+-if [ "$have_type" = "0" ] || [ "$have_dir" = "0" ] || [ "$have_library" = "0" ]; then
+-    # See if we can find it...
+-    grep -q '^[[:blank:]]*global[[:blank:]]*{' "$CONFIGFILE"
+-    have_global=$?
+-    
+-    if [ "$have_global" = "1" ] 
+-	then
+-	echo "global keys but no 'global {' found, can't edit file"
+-	exit 13
+-    fi
+-fi
+-
+-if [ "$LOCKING_TYPE" = "2" ] && [ -z "$LOCKINGLIBDIR" ] && [ "$have_dir" = "1" ]; then
+-	echo "no library_dir specified in $CONFIGFILE"
+-	exit 16
+-fi
+-
+-# So if we don't have "global {" we need to create one and 
+-# populate it
+-
+-if [ "$have_global" = "1" ]
+-then
+-    if [ -z "$LOCKING_TYPE" ]; then
+-	LOCKING_TYPE=1
+-    fi
+-    if [ "$LOCKING_TYPE" = "2" ]; then
+-        cat "$CONFIGFILE" - <<EOF > $TMPFILE
+-global {
+-    # Enable locking for cluster LVM
+-    locking_type = $LOCKING_TYPE
+-    library_dir = "$LOCKINGLIBDIR"
+-    locking_library = "$LOCKINGLIB"
+-}
+-EOF
+-    fi # if we aren't setting cluster locking, we don't need to create a global section
+-
+-    if [ $? != 0 ]
+-    then
+-	echo "failed to create temporary config file, $CONFIGFILE not updated"
+-	exit 14
+-    fi
+-else
+-    #
+-    # We have a "global {" section, so add or replace the
+-    # locking entries as appropriate
+-    #
+-
+-    if [ -n "$LOCKING_TYPE" ]; then
+-	if [ "$have_type" = "0" ] 
+-	then
+-	    SEDCMD=" s/^[[:blank:]]*locking_type[[:blank:]]*=.*/\ \ \ \ locking_type = $LOCKING_TYPE/g"
+-	else
+-	    SEDCMD=" /global[[:blank:]]*{/a\ \ \ \ locking_type = $LOCKING_TYPE"
+-	fi
+-    fi
+-    
+-    if [ -n "$LOCKINGLIBDIR" ]; then
+-        if [ "$have_dir" = "0" ] 
+-            then
+-            SEDCMD="${SEDCMD}\ns'^[[:blank:]]*library_dir[[:blank:]]*=.*'\ \ \ \ library_dir = \"$LOCKINGLIBDIR\"'g"
+-        else
+-            SEDCMD="${SEDCMD}\n/global[[:blank:]]*{/a\ \ \ \ library_dir = \"$LOCKINGLIBDIR\""
+-        fi
+-
+-        if [ "$have_library" = "0" ] 
+-            then
+-            SEDCMD="${SEDCMD}\ns/^[[:blank:]]*locking_library[[:blank:]]*=.*/\ \ \ \ locking_library = \"$LOCKINGLIB\"/g"
+-        else
+-            SEDCMD="${SEDCMD}\n/global[[:blank:]]*{/a\ \ \ \ locking_library = \"$LOCKINGLIB\""
+-        fi
+-    fi
+-
+-    if [ "$LOCKING_TYPE" = "1" ]; then
+-        # if we're not using cluster locking, remove the library dir and locking library name
+-        if [ "$have_dir" = "0" ] 
+-            then
+-            SEDCMD="${SEDCMD}\n/^[[:blank:]]*library_dir[[:blank:]]*=.*/d"
+-        fi
+-
+-        if [ "$have_library" = "0" ] 
+-            then
+-            SEDCMD="${SEDCMD}\n/^[[:blank:]]*locking_library[[:blank:]]*=.*/d"
+-        fi
+-    fi
+-
+-    echo -e "$SEDCMD" > "$SCRIPTFILE"
+-    sed  <"$CONFIGFILE" >"$TMPFILE" -f "$SCRIPTFILE"
+-    if [ $? != 0 ]
+-    then
+-	echo "sed failed, $CONFIGFILE not updated"
+-	exit 15
+-    fi
+-fi
+-
+-# Now we have a suitably editted config file in a temp place,
+-# backup the original and copy our new one into place.
+-
+-cp "$CONFIGFILE" "$CONFIGFILE.lvmconfold"
+-if [ $? != 0 ]
+-    then
+-    echo "failed to backup old config file, $CONFIGFILE not updated"
+-    exit 2
+-fi
+-
+-cp "$TMPFILE" "$CONFIGFILE"
+-if [ $? != 0 ]
+-    then
+-    echo "failed to copy new config file into place, check $CONFIGFILE is still OK"
+-    exit 3
+-fi
+-
+-rm -f "$SCRIPTFILE" "$TMPFILE"
 
 
