@@ -1,40 +1,41 @@
-From: Marian Csontos <mcsontos@sourceware.org>
-Date: Fri, 14 Sep 2018 10:57:49 -0400
-Subject: master - libdm: fix buffer overflow
-Message-ID: <201809141457.w8EEvnsq024363@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: David Teigland <teigland@sourceware.org>
+Date: Mon, 17 Sep 2018 12:21:09 -0400
+Subject: master - radix-tree: default to simple version
+Message-ID: <201809171621.w8HGL9cv028399@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=fdb6ef8a85e9adc4805202b3200b17bd3b351982
-Commit:        fdb6ef8a85e9adc4805202b3200b17bd3b351982
-Parent:        0c00af776a27875ee5ffbf3ab2d3b73495ce8c52
-Author:        Marian Csontos <mcsontos@redhat.com>
-AuthorDate:    Thu Jun 21 10:20:09 2018 +0200
-Committer:     Marian Csontos <mcsontos@redhat.com>
-CommitterDate: Fri Sep 14 16:57:22 2018 +0200
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=41ef146dc3bf9bd2ecbcedb8c3cdbd2535149296
+Commit:        41ef146dc3bf9bd2ecbcedb8c3cdbd2535149296
+Parent:        fdb6ef8a85e9adc4805202b3200b17bd3b351982
+Author:        David Teigland <teigland@redhat.com>
+AuthorDate:    Mon Sep 17 11:19:53 2018 -0500
+Committer:     David Teigland <teigland@redhat.com>
+CommitterDate: Mon Sep 17 11:19:53 2018 -0500
 
-libdm: fix buffer overflow
+radix-tree: default to simple version
 
-(cherry picked from commit 8a0af1bec882de66677e1a0cdceff841c39f92b0)
+Avoid problems with the advanced version.
 ---
- libdm/libdm-common.c |    2 +-
- 1 files changed, 1 insertions(+), 1 deletions(-)
+ base/Makefile |    3 ++-
+ 1 files changed, 2 insertions(+), 1 deletions(-)
 
-diff --git a/libdm/libdm-common.c b/libdm/libdm-common.c
-index 7c740d8..5099f91 100644
---- a/libdm/libdm-common.c
-+++ b/libdm/libdm-common.c
-@@ -1763,7 +1763,7 @@ static int _mountinfo_parse_line(const char *line, unsigned *maj, unsigned *min,
- 			return 0;
- 		}
- 		devmapper += 12; /* skip fixed prefix */
--		for (i = 0; devmapper[i] && devmapper[i] != ' ' && i < sizeof(root); ++i)
-+		for (i = 0; devmapper[i] && devmapper[i] != ' ' && i < sizeof(root)-1; ++i)
- 			root[i] = devmapper[i];
- 		root[i] = 0;
- 		_unmangle_mountinfo_string(root, buf);
+diff --git a/base/Makefile b/base/Makefile
+index 1823c9b..ff77815 100644
+--- a/base/Makefile
++++ b/base/Makefile
+@@ -11,7 +11,8 @@
+ # Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
+ 
+ # Uncomment this to build the simple radix tree.  You'll need to make clean too.
+-# base/data-struct/radix-tree.o: CFLAGS += -DSIMPLE_RADIX_TREE
++# Comment to build the advanced radix tree.
++base/data-struct/radix-tree.o: CFLAGS += -DSIMPLE_RADIX_TREE
+ 
+ BASE_SOURCE=\
+ 	base/data-struct/radix-tree.c \
 
 
