@@ -1,45 +1,44 @@
 From: Joe Thornber <thornber@sourceware.org>
-Date: Thu, 20 Sep 2018 09:48:53 -0400
-Subject: master - [radix-tree] Fix bug in _degrade_to_n16
-Message-ID: <201809201348.w8KDmrZC008581@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Thu, 20 Sep 2018 09:49:12 -0400
+Subject: master - Merge branch '2018-09-13-radix-tree-bug'
+Message-ID: <201809201349.w8KDnCOb008599@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=ebd2d7773f2531bd5dddb97c061ddb74af117844
-Commit:        ebd2d7773f2531bd5dddb97c061ddb74af117844
-Parent:        0ac7913c6a43c5bcfbba735652041a0eae4180c6
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=8424655af9eed2f2422c904f8d3fa312fe61d00f
+Commit:        8424655af9eed2f2422c904f8d3fa312fe61d00f
+Parent:        945d13541e50a25f859e471abea4d86f00ce0964 bda4f3a7ae5a3879105466d24fa274dd1a3e5c7b
 Author:        Joe Thornber <ejt@redhat.com>
-AuthorDate:    Thu Sep 20 14:20:16 2018 +0100
+AuthorDate:    Thu Sep 20 14:43:51 2018 +0100
 Committer:     Joe Thornber <ejt@redhat.com>
-CommitterDate: Thu Sep 20 14:20:16 2018 +0100
+CommitterDate: Thu Sep 20 14:43:51 2018 +0100
 
-[radix-tree] Fix bug in _degrade_to_n16
+Merge branch '2018-09-13-radix-tree-bug'
 
-Values were getting shuffled
----
- base/data-struct/radix-tree-adaptive.c |    3 +--
- 1 files changed, 1 insertions(+), 2 deletions(-)
 
-diff --git a/base/data-struct/radix-tree-adaptive.c b/base/data-struct/radix-tree-adaptive.c
-index a657b2b..23e69f8 100644
---- a/base/data-struct/radix-tree-adaptive.c
-+++ b/base/data-struct/radix-tree-adaptive.c
-@@ -581,12 +581,11 @@ static void _degrade_to_n16(struct node48 *n48, struct value *result)
-         for (i = 0; i < 256; i++) {
- 	        if (n48->keys[i] < 48) {
- 		        n16->keys[count] = i;
-+		        n16->values[count] = n48->values[n48->keys[i]];
- 		        count++;
- 	        }
-         }
- 
--        memcpy(n16->values, n48->values, n48->nr_entries * sizeof(*n16->values));
--
-         free(n48);
- 
- 	result->type = NODE16;
+ base/Makefile                          |    2 +-
+ base/data-struct/radix-tree-adaptive.c |   48 +-
+ test/unit/Makefile                     |    2 +
+ test/unit/radix_tree_t.c               |   60 ++
+ test/unit/rt_case1.c                   | 1669 ++++++++++++++++++++++++++++++++
+ 5 files changed, 1769 insertions(+), 12 deletions(-)
+
+diff --cc base/Makefile
+index ff77815,7b21ca5..e30cb44
+--- a/base/Makefile
++++ b/base/Makefile
+@@@ -11,8 -11,7 +11,8 @@@
+  # Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
+  
+  # Uncomment this to build the simple radix tree.  You'll need to make clean too.
+ +# Comment to build the advanced radix tree.
+- base/data-struct/radix-tree.o: CFLAGS += -DSIMPLE_RADIX_TREE
++ #base/data-struct/radix-tree.o: CFLAGS += -DSIMPLE_RADIX_TREE
+  
+  BASE_SOURCE=\
+  	base/data-struct/radix-tree.c \
 
 
