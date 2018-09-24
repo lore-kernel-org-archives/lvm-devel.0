@@ -1,108 +1,80 @@
 From: David Teigland <teigland@sourceware.org>
-Date: Mon, 24 Sep 2018 16:16:20 -0400
-Subject: master - metadata: add direct size limit
-Message-ID: <201809242016.w8OKGKpw029227@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Mon, 24 Sep 2018 16:29:37 -0400
+Subject: master - metadata: clarify comments about max size
+Message-ID: <201809242029.w8OKTbZm030606@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=6be1efd13d212967e8518a46e5bce4ba81ab3b94
-Commit:        6be1efd13d212967e8518a46e5bce4ba81ab3b94
-Parent:        91c7e66f2b47f4ef814dcf85e1641d49e5123cc7
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=a49f494c4d9a3551fe63c702a9e8c3495fe066d0
+Commit:        a49f494c4d9a3551fe63c702a9e8c3495fe066d0
+Parent:        6be1efd13d212967e8518a46e5bce4ba81ab3b94
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Mon Sep 24 14:41:58 2018 -0500
+AuthorDate:    Mon Sep 24 15:27:03 2018 -0500
 Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Mon Sep 24 14:41:58 2018 -0500
+CommitterDate: Mon Sep 24 15:27:03 2018 -0500
 
-metadata: add direct size limit
+metadata: clarify comments about max size
 
-Previously the size was limited by checking if the
-old and new copies of the metadata overlapped.
-This generally limited the size to about half of
-the total space, but it could be larger given the
-size differences between old and new.  Now add a
-direct check to limit the size to half the space.
+Since there is now a direct limit of half the space.
 ---
- lib/format_text/format-text.c |   40 ++++++++++++++++++++++++++++++++++------
- 1 files changed, 34 insertions(+), 6 deletions(-)
+ lib/format_text/format-text.c |   28 +++++++++++++---------------
+ 1 files changed, 13 insertions(+), 15 deletions(-)
 
 diff --git a/lib/format_text/format-text.c b/lib/format_text/format-text.c
-index de4be47..c388a72 100644
+index c388a72..9634e47 100644
 --- a/lib/format_text/format-text.c
 +++ b/lib/format_text/format-text.c
-@@ -682,6 +682,7 @@ static int _vg_write_raw(struct format_instance *fid, struct volume_group *vg,
- 	struct pv_list *pvl;
- 	uint64_t old_start = 0, old_last = 0, old_size = 0, old_wrap = 0;
- 	uint64_t new_start = 0, new_last = 0, new_size = 0, new_wrap = 0;
+@@ -1441,22 +1441,21 @@ int read_metadata_location_summary(const struct format_type *fmt,
+ 	uint32_t wrap = 0;
+ 	unsigned int len = 0;
+ 	char buf[NAME_LEN + 1] __attribute__((aligned(8)));
+-
+-	/*
+-	 * For the case where the metadata area is unused, we say that half of
+-	 * it is available, based on the fact that we keep two consecutive
+-	 * copies of the metadata in the area, so each copy can be as large as
+-	 * half the area.  (Technically, one of those could be less than half
+-	 * and another could be more than half.)
+-	 */
+-	if (mda_free_sectors)
+-		*mda_free_sectors = ((dev_area->size - MDA_HEADER_SIZE) / 2) >> SECTOR_SHIFT;
 +	uint64_t max_size;
- 	char *new_buf = NULL;
- 	int overlap;
- 	int found = 0;
-@@ -722,6 +723,27 @@ static int _vg_write_raw(struct format_instance *fid, struct volume_group *vg,
+ 
+ 	if (!mdah) {
+ 		log_error(INTERNAL_ERROR "read_metadata_location_summary called with NULL pointer for mda_header");
+ 		return 0;
  	}
  
- 	/*
-+	 * The max size of a single copy of text metadata.
-+	 *
-+	 * The space available for all text metadata is the size of the
-+	 * metadata area (mdah->size) minus the sector used for the header.
-+	 * Two copies of the text metadata must fit in this space, so it is
-+	 * divided in two.  This result is then reduced by 512 because any
-+	 * single copy of metadata is rounded to begin on a sector boundary.
++	/*
++	 * For the case where the metadata area is unused, half is available.
 +	 */
-+
-+	max_size = ((mdah->size - MDA_HEADER_SIZE) / 2) - 512;
-+
-+	if (new_size > max_size) {
-+		log_error("VG %s metadata on %s (%llu bytes) exceeds maximum metadata size (%llu bytes)",
-+			  vg->name,
-+			  dev_name(mdac->area.dev),
-+			  (unsigned long long)new_size,
-+			  (unsigned long long)max_size);
-+		goto out;
++	if (mda_free_sectors) {
++		max_size = ((mdah->size - MDA_HEADER_SIZE) / 2) - 512;
++		*mda_free_sectors = max_size >> SECTOR_SHIFT;
 +	}
 +
-+	/*
- 	 * rlocn_old is the current, committed, raw_locn data in slot0 on disk.
- 	 *
- 	 * rlocn_new (mdac->rlocn) is the new, in-memory, raw_locn data for the
-@@ -816,6 +838,13 @@ static int _vg_write_raw(struct format_instance *fid, struct volume_group *vg,
+ 	rlocn = mdah->raw_locns; /* slot0, committed metadata */
+ 
  	/*
- 	 * If the new copy of the metadata would overlap the old copy of the
- 	 * metadata, it means that the circular metadata buffer is full.
-+	 *
-+	 * Given the max_size restriction above, two copies of metadata should
-+	 * never overlap, so these overlap checks should not be technically
-+	 * necessary, and a failure should not occur here.  It's left as a
-+	 * sanity check.  For some unknown time, lvm did not enforce a
-+	 * max_size, but rather detected the too-large failure by checking for
-+	 * overlap between old and new.
- 	 */
+@@ -1567,12 +1566,11 @@ int read_metadata_location_summary(const struct format_type *fmt,
  
- 	if (new_wrap && old_wrap) {
-@@ -1540,16 +1569,15 @@ int read_metadata_location_summary(const struct format_type *fmt,
+ 	if (mda_free_sectors) {
  		/*
- 		 * Report remaining space on the assumption that a single copy
- 		 * of metadata can be as large as half the total metadata
--		 * space.  Technically, it can be larger if the other copy is
--		 * less.  511 is subtracted from max because the next copy can
--		 * be rounded up by 511 bytes to start on a sector boundary.
-+		 * space, minus 512 because each copy is rounded to begin
-+		 * on a sector boundary.
+-		 * Report remaining space on the assumption that a single copy
+-		 * of metadata can be as large as half the total metadata
+-		 * space, minus 512 because each copy is rounded to begin
+-		 * on a sector boundary.
++		 * Report remaining space given that a single copy of metadata
++		 * can be as large as half the total metadata space, minus 512
++		 * because each copy is rounded to begin on a sector boundary.
  		 */
--		uint64_t max = (mdah->size - MDA_HEADER_SIZE - 511) / 2;
-+		uint64_t max_size = ((mdah->size - MDA_HEADER_SIZE) / 2) - 512;
+-		uint64_t max_size = ((mdah->size - MDA_HEADER_SIZE) / 2) - 512;
++		max_size = ((mdah->size - MDA_HEADER_SIZE) / 2) - 512;
  
--		if (rlocn->size >= max)
-+		if (rlocn->size >= max_size)
+ 		if (rlocn->size >= max_size)
  			*mda_free_sectors = UINT64_C(0);
- 		else
--			*mda_free_sectors = (max - rlocn->size) >> SECTOR_SHIFT;
-+			*mda_free_sectors = (max_size - rlocn->size) >> SECTOR_SHIFT;
- 	}
- 
- 	return 1;
 
 
