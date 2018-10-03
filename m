@@ -1,64 +1,47 @@
-From: Bryn Reeves <bmr@sourceware.org>
-Date: Thu, 28 Jun 2018 09:26:12 -0400
-Subject: master - dmsetup: fix error propagation in _display_info_cols()
-Message-ID: <201806281326.w5SDQCDN021126@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: Marian Csontos <mcsontos@sourceware.org>
+Date: Wed, 3 Oct 2018 14:05:56 -0400
+Subject: master - spec: No %ghost for dirs at tmpfiles.d
+Message-ID: <201810031805.w93I5uR0003322@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=29b9ccd261be025aaf75e58e5d2547e818ef22c3
-Commit:        29b9ccd261be025aaf75e58e5d2547e818ef22c3
-Parent:        f96fd9961d1a80999a38b45c1d173e3df1de83e5
-Author:        Bryn M. Reeves <bmr@redhat.com>
-AuthorDate:    Thu Jun 28 14:25:30 2018 +0100
-Committer:     Bryn M. Reeves <bmr@redhat.com>
-CommitterDate: Thu Jun 28 14:25:30 2018 +0100
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=11d4e6388875f06e152a035290dc41df19dc79b6
+Commit:        11d4e6388875f06e152a035290dc41df19dc79b6
+Parent:        a49f494c4d9a3551fe63c702a9e8c3495fe066d0
+Author:        Marian Csontos <mcsontos@redhat.com>
+AuthorDate:    Tue Oct 2 17:02:37 2018 +0200
+Committer:     Marian Csontos <mcsontos@redhat.com>
+CommitterDate: Wed Oct 3 20:05:37 2018 +0200
 
-dmsetup: fix error propagation in _display_info_cols()
+spec: No %ghost for dirs at tmpfiles.d
 
-Commit 3f35146 added a check on the value returned by the
-_display_info_cols() function:
+%ghost should not be used for directories created by systemd-tmpfiles.
 
-  1024         if (!_switches[COLS_ARG])
-  1025                 _display_info_long(dmt, &info);
-  1026         else
-  1027                 r = _display_info_cols(dmt, &info);
-  1028
-  1029         return r;
+This may prevent package from working right after installation without
+invoking systemd-tmpfiles.
 
-This exposes a bug in the dmstats code in _display_info_cols:
-the fact that a device has no regions is explicitly not an error
-(and is documented as such in the code), but since the return
-code is not changed before leaving the function it is now treated
-as an error leading to:
-
-  # dmstats list
-  Command failed.
-
-When no regions exist.
-
-Set the return code to the correct value before returning.
+See: https://pagure.io/packaging-committee/issue/439
 ---
- libdm/dm-tools/dmsetup.c |    4 +++-
- 1 files changed, 3 insertions(+), 1 deletions(-)
+ spec/packages.inc |    4 ++--
+ 1 files changed, 2 insertions(+), 2 deletions(-)
 
-diff --git a/libdm/dm-tools/dmsetup.c b/libdm/dm-tools/dmsetup.c
-index 44386a6..fb1a574 100644
---- a/libdm/dm-tools/dmsetup.c
-+++ b/libdm/dm-tools/dmsetup.c
-@@ -943,8 +943,10 @@ static int _display_info_cols(struct dm_task *dmt, struct dm_info *info)
- 			goto_out;
- 
- 		/* No regions to report is not an error */
--		if (!dm_stats_get_nr_regions(obj.stats))
-+		if (!dm_stats_get_nr_regions(obj.stats)) {
-+			r = 1;
- 			goto out;
-+		}
- 	}
- 
- 	/* group report with no groups? */
+diff --git a/spec/packages.inc b/spec/packages.inc
+index 67a521d..a1065a6 100644
+--- a/spec/packages.inc
++++ b/spec/packages.inc
+@@ -169,8 +169,8 @@ fi
+ %dir %{_sysconfdir}/lvm/backup
+ %dir %{_sysconfdir}/lvm/cache
+ %dir %{_sysconfdir}/lvm/archive
+-%ghost %dir %{_default_locking_dir}
+-%ghost %dir %{_default_run_dir}
++%dir %{_default_locking_dir}
++%dir %{_default_run_dir}
+ %if %{enable_systemd}
+  %{_tmpfilesdir}/%{name}.conf
+  %{_unitdir}/blk-availability.service
 
 
