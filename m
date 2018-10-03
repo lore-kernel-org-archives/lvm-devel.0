@@ -1,47 +1,31 @@
-From: Marian Csontos <mcsontos@sourceware.org>
-Date: Wed, 3 Oct 2018 14:05:56 -0400
-Subject: master - spec: No %ghost for dirs at tmpfiles.d
-Message-ID: <201810031805.w93I5uR0003322@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: Mikulas Patocka <mpatocka@redhat.com>
+Date: Wed, 3 Oct 2018 17:41:59 -0400 (EDT)
+Subject: libblkid filesystem block size
+Message-ID: <alpine.LRH.2.02.1810031724070.7859@file01.intranet.prod.int.rdu2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=11d4e6388875f06e152a035290dc41df19dc79b6
-Commit:        11d4e6388875f06e152a035290dc41df19dc79b6
-Parent:        a49f494c4d9a3551fe63c702a9e8c3495fe066d0
-Author:        Marian Csontos <mcsontos@redhat.com>
-AuthorDate:    Tue Oct 2 17:02:37 2018 +0200
-Committer:     Marian Csontos <mcsontos@redhat.com>
-CommitterDate: Wed Oct 3 20:05:37 2018 +0200
+Hi
 
-spec: No %ghost for dirs at tmpfiles.d
+As you maintain libblkid, I'd like to ask - would it be possible to add 
+detection of filesystem block size to it? libblkid already has description 
+of various filesystem superblocks, so it shouldn't be too hard.
 
-%ghost should not be used for directories created by systemd-tmpfiles.
+LVM needs to know the block size because when it enables caching for a 
+logical volume using the dm-writecache target or integrity protection 
+using the dm-integrity target, the block size of the device mapper target 
+should match the block size of the underlying filesystem (if the cache has 
+smaller block size than the filesystem, it is inefficient, if the cache 
+has larger block size than the filesystem, the filesystem won't mount).
 
-This may prevent package from working right after installation without
-invoking systemd-tmpfiles.
+Caching or integrity protection can be enabled on the fly for existing 
+logical volumes (mounted or not mounted). XFS creates filesystems with 
+512-byte block size even on some modern SSDs, so the problem with small 
+block size exists even today.
 
-See: https://pagure.io/packaging-committee/issue/439
----
- spec/packages.inc |    4 ++--
- 1 files changed, 2 insertions(+), 2 deletions(-)
-
-diff --git a/spec/packages.inc b/spec/packages.inc
-index 67a521d..a1065a6 100644
---- a/spec/packages.inc
-+++ b/spec/packages.inc
-@@ -169,8 +169,8 @@ fi
- %dir %{_sysconfdir}/lvm/backup
- %dir %{_sysconfdir}/lvm/cache
- %dir %{_sysconfdir}/lvm/archive
--%ghost %dir %{_default_locking_dir}
--%ghost %dir %{_default_run_dir}
-+%dir %{_default_locking_dir}
-+%dir %{_default_run_dir}
- %if %{enable_systemd}
-  %{_tmpfilesdir}/%{name}.conf
-  %{_unitdir}/blk-availability.service
+Mikulas
 
 
