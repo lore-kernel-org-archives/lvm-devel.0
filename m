@@ -1,31 +1,40 @@
-From: Mikulas Patocka <mpatocka@redhat.com>
-Date: Wed, 3 Oct 2018 17:41:59 -0400 (EDT)
+From: Karel Zak <kzak@redhat.com>
+Date: Thu, 4 Oct 2018 11:43:29 +0200
 Subject: libblkid filesystem block size
-Message-ID: <alpine.LRH.2.02.1810031724070.7859@file01.intranet.prod.int.rdu2.redhat.com>
+In-Reply-To: <alpine.LRH.2.02.1810031724070.7859@file01.intranet.prod.int.rdu2.redhat.com>
+References: <alpine.LRH.2.02.1810031724070.7859@file01.intranet.prod.int.rdu2.redhat.com>
+Message-ID: <20181004094329.z6b7y4ahhmb4ayj6@ws.net.home>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Hi
 
-As you maintain libblkid, I'd like to ask - would it be possible to add 
-detection of filesystem block size to it? libblkid already has description 
-of various filesystem superblocks, so it shouldn't be too hard.
+ Ahoj,
 
-LVM needs to know the block size because when it enables caching for a 
-logical volume using the dm-writecache target or integrity protection 
-using the dm-integrity target, the block size of the device mapper target 
-should match the block size of the underlying filesystem (if the cache has 
-smaller block size than the filesystem, it is inefficient, if the cache 
-has larger block size than the filesystem, the filesystem won't mount).
+On Wed, Oct 03, 2018 at 05:41:59PM -0400, Mikulas Patocka wrote:
+> As you maintain libblkid, I'd like to ask - would it be possible to add 
+> detection of filesystem block size to it? libblkid already has description 
+> of various filesystem superblocks, so it shouldn't be too hard.
 
-Caching or integrity protection can be enabled on the fly for existing 
-logical volumes (mounted or not mounted). XFS creates filesystems with 
-512-byte block size even on some modern SSDs, so the problem with small 
-block size exists even today.
+we had something like this (and also FS size) in our TODO for years.
+So, I don't see problem to add it now. Send patch ;-)
 
-Mikulas
+All you need is to add 
+
+ libblkid/src/superblocks/superblocks.c: blkid_probe_set_fs_blocksize() 
+
+to add "BLKSZ" variable to the probing result (use for example
+blkid_probe_set_version() as a template).
+
+And then use this function in FS specific probers. The variable will
+automatically visible for udev as ID_FS_BLKSZ=.
+
+    Karel
+
+-- 
+ Karel Zak  <kzak@redhat.com>
+ http://karelzak.blogspot.com
 
 
