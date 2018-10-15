@@ -1,50 +1,59 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Mon, 15 Oct 2018 11:55:06 -0400
-Subject: master - cov: dm stats missed terminating null
-Message-ID: <201810151555.w9FFt6X9020540@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Mon, 15 Oct 2018 11:55:12 -0400
+Subject: master - cov: add at least ASSERT
+Message-ID: <201810151555.w9FFtCgL020562@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=20971f7034cbd329f873e08869bfb7acf3f1ac0e
-Commit:        20971f7034cbd329f873e08869bfb7acf3f1ac0e
-Parent:        77aa055e8a34eb7f0036b6240f3f93dc429c0c02
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=30b1b575067bcab27ab1788247754b183387f55e
+Commit:        30b1b575067bcab27ab1788247754b183387f55e
+Parent:        eed8715e1d891665a6c9b8a39850e61f40ea453e
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Mon Oct 15 14:45:16 2018 +0200
+AuthorDate:    Mon Oct 15 14:53:36 2018 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Mon Oct 15 17:49:44 2018 +0200
 
-cov: dm stats missed terminating null
+cov: add at least ASSERT
 
-Coverity noticed allocating insufficient memory
-for the terminating null of the string.
+Seems lot of code here can't handle failing allocation.
+Meanwhile before bigger fix put in asserts in place.
 ---
- libdm/libdm-stats.c |    4 ++--
- 1 files changed, 2 insertions(+), 2 deletions(-)
+ base/data-struct/radix-tree-adaptive.c |    6 ++++++
+ 1 files changed, 6 insertions(+), 0 deletions(-)
 
-diff --git a/libdm/libdm-stats.c b/libdm/libdm-stats.c
-index e9bfa9d..ea8fdf2 100644
---- a/libdm/libdm-stats.c
-+++ b/libdm/libdm-stats.c
-@@ -1009,7 +1009,7 @@ static int _stats_parse_list(struct dm_stats *dms, const char *resp)
- 	 * dm_task_get_message_response() returns a 'const char *' but
- 	 * since fmemopen also permits "w" it expects a 'char *'.
- 	 */
--	if (!(list_rows = fmemopen((char *)resp, strlen(resp), "r")))
-+	if (!(list_rows = fmemopen((char *)resp, strlen(resp) + 1, "r")))
- 		return_0;
+diff --git a/base/data-struct/radix-tree-adaptive.c b/base/data-struct/radix-tree-adaptive.c
+index cbe8302..f5a8606 100644
+--- a/base/data-struct/radix-tree-adaptive.c
++++ b/base/data-struct/radix-tree-adaptive.c
+@@ -564,6 +564,8 @@ static void _degrade_to_n4(struct node16 *n16, struct value *result)
+ {
+         struct node4 *n4 = zalloc(sizeof(*n4));
  
- 	/* begin region table */
-@@ -1240,7 +1240,7 @@ static int _stats_parse_region(struct dm_stats *dms, const char *resp,
- 	 * dm_task_get_message_response() returns a 'const char *' but
- 	 * since fmemopen also permits "w" it expects a 'char *'.
- 	 */
--	stats_rows = fmemopen((char *)resp, strlen(resp), "r");
-+	stats_rows = fmemopen((char *)resp, strlen(resp) + 1, "r");
- 	if (!stats_rows)
- 		goto_bad;
++	assert(n4 != NULL);
++
+         n4->nr_entries = n16->nr_entries;
+         memcpy(n4->keys, n16->keys, n16->nr_entries * sizeof(*n4->keys));
+         memcpy(n4->values, n16->values, n16->nr_entries * sizeof(*n4->values));
+@@ -578,6 +580,8 @@ static void _degrade_to_n16(struct node48 *n48, struct value *result)
+ 	unsigned i, count = 0;
+         struct node16 *n16 = zalloc(sizeof(*n16));
  
++	assert(n16 != NULL);
++
+         n16->nr_entries = n48->nr_entries;
+         for (i = 0; i < 256; i++) {
+ 	        if (n48->keys[i] < 48) {
+@@ -598,6 +602,8 @@ static void _degrade_to_n48(struct node256 *n256, struct value *result)
+         unsigned i, count = 0;
+         struct node48 *n48 = zalloc(sizeof(*n48));
+ 
++	assert(n48 != NULL);
++
+         n48->nr_entries = n256->nr_entries;
+         for (i = 0; i < 256; i++) {
+ 		if (n256->values[i].type == UNSET)
 
 
