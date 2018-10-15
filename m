@@ -1,44 +1,57 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Mon, 15 Oct 2018 11:55:23 -0400
-Subject: master - cov: add check for positive value
-Message-ID: <201810151555.w9FFtNYi020594@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Mon, 15 Oct 2018 11:55:26 -0400
+Subject: master - cov: fix failing filter initialization
+Message-ID: <201810151555.w9FFtQ6E020607@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=eb566e034fecd27ced0dc1133e19ced2636b3714
-Commit:        eb566e034fecd27ced0dc1133e19ced2636b3714
-Parent:        9b7121226258f7dfe759cc1f8625cbfb80fec161
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=13c49033ede4bb57878361e5ae04c96d4930e9fa
+Commit:        13c49033ede4bb57878361e5ae04c96d4930e9fa
+Parent:        a7298810d1fd0f64be3fd903e9f9fcce9af7b84c
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Mon Oct 15 15:02:09 2018 +0200
+AuthorDate:    Mon Oct 15 15:17:07 2018 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Mon Oct 15 17:49:44 2018 +0200
 
-cov: add check for positive value
+cov: fix failing filter initialization
 
-As pgsize parameter for _init_free_list() can't be negative,
-report problem in case for any reason we would get negative number.
+When persistent_filter_create() fails, the existing passed filter
+should be preserved, so it could be properly deleted on
+error path - so new pfilter is assigned instead.
 ---
- lib/device/bcache.c |    5 +++++
- 1 files changed, 5 insertions(+), 0 deletions(-)
+ lib/commands/toolcontext.c |    6 +++---
+ 1 files changed, 3 insertions(+), 3 deletions(-)
 
-diff --git a/lib/device/bcache.c b/lib/device/bcache.c
-index 43ca63e..8b2c7f8 100644
---- a/lib/device/bcache.c
-+++ b/lib/device/bcache.c
-@@ -881,6 +881,11 @@ struct bcache *bcache_create(sector_t block_sectors, unsigned nr_cache_blocks,
- 	unsigned max_io = engine->max_io(engine);
- 	long pgsize = sysconf(_SC_PAGESIZE);
+diff --git a/lib/commands/toolcontext.c b/lib/commands/toolcontext.c
+index fa87bcc..9f00593 100644
+--- a/lib/commands/toolcontext.c
++++ b/lib/commands/toolcontext.c
+@@ -1167,7 +1167,7 @@ bad:
+  */
+ int init_filters(struct cmd_context *cmd, unsigned load_persistent_cache)
+ {
+-	struct dev_filter *filter = NULL, *filter_components[2] = {0};
++	struct dev_filter *pfilter, *filter = NULL, *filter_components[2] = {0};
  
-+	if (pgsize < 0) {
-+		log_warn("WARNING: _SC_PAGESIZE returns negative value.");
-+		return NULL;
-+	}
-+
- 	if (!nr_cache_blocks) {
- 		log_warn("bcache must have@least one cache block");
- 		return NULL;
+ 	if (!cmd->initialized.connections) {
+ 		log_error(INTERNAL_ERROR "connections must be initialized before filters");
+@@ -1192,12 +1192,12 @@ int init_filters(struct cmd_context *cmd, unsigned load_persistent_cache)
+ 	filter = cmd->lvmetad_filter;
+ 	cmd->lvmetad_filter = NULL;
+ 
+-	if (!(filter = persistent_filter_create(cmd->dev_types, filter))) {
++	if (!(pfilter = persistent_filter_create(cmd->dev_types, filter))) {
+ 		log_verbose("Failed to create persistent device filter.");
+ 		goto bad;
+ 	}
+ 
+-	cmd->filter = filter;
++	cmd->filter = filter = pfilter;
+ 
+ 	cmd->full_filter = filter;
+ 
 
 
