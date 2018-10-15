@@ -1,39 +1,51 @@
-From: Marian Csontos <mcsontos@sourceware.org>
-Date: Thu, 11 Oct 2018 05:07:46 -0400
-Subject: master - config: Fix version for VDO
-Message-ID: <201810110907.w9B97k4g028435@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: Zdenek Kabelac <zkabelac@sourceware.org>
+Date: Mon, 15 Oct 2018 11:54:43 -0400
+Subject: master - cov: missed return value test
+Message-ID: <201810151554.w9FFsh7j020438@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=48768cc5be64504863c80d61f3d8f6ec4fbfe589
-Commit:        48768cc5be64504863c80d61f3d8f6ec4fbfe589
-Parent:        6462e8dffc7ed53973ce796cec18fecc0fb89d77
-Author:        Marian Csontos <mcsontos@redhat.com>
-AuthorDate:    Thu Oct 11 10:53:28 2018 +0200
-Committer:     Marian Csontos <mcsontos@redhat.com>
-CommitterDate: Thu Oct 11 11:06:23 2018 +0200
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=5811fa33bbdb2065966489f334ba9fb1174369ca
+Commit:        5811fa33bbdb2065966489f334ba9fb1174369ca
+Parent:        954b885a08a733308e1117f166d41f4443cd13c3
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Mon Oct 15 14:12:18 2018 +0200
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Mon Oct 15 14:24:28 2018 +0200
 
-config: Fix version for VDO
+cov: missed return value test
 
+Check validity of read.
 ---
- lib/config/config_settings.h |    2 +-
- 1 files changed, 1 insertions(+), 1 deletions(-)
+ lib/format_text/format-text.c |    6 ++++--
+ 1 files changed, 4 insertions(+), 2 deletions(-)
 
-diff --git a/lib/config/config_settings.h b/lib/config/config_settings.h
-index b47b225..636446f 100644
---- a/lib/config/config_settings.h
-+++ b/lib/config/config_settings.h
-@@ -609,7 +609,7 @@ cfg_runtime(allocation_thin_pool_chunk_size_CFG, "thin_pool_chunk_size", allocat
- cfg(allocation_physical_extent_size_CFG, "physical_extent_size", allocation_CFG_SECTION, CFG_DEFAULT_COMMENTED, CFG_TYPE_INT, DEFAULT_EXTENT_SIZE, vsn(2, 2, 112), NULL, 0, NULL,
- 	"Default physical extent size in KiB to use for new VGs.\n")
+diff --git a/lib/format_text/format-text.c b/lib/format_text/format-text.c
+index 9634e47..99945b1 100644
+--- a/lib/format_text/format-text.c
++++ b/lib/format_text/format-text.c
+@@ -466,7 +466,8 @@ static struct raw_locn *_read_metadata_location_vg(struct device_area *dev_area,
+ 	 */
+ 	memset(vgnamebuf, 0, sizeof(vgnamebuf));
  
--#define VDO_1ST_VSN vsn(3, 0, 0)
-+#define VDO_1ST_VSN vsn(2, 3, 0)
- cfg(allocation_vdo_use_compression_CFG, "vdo_use_compression", allocation_CFG_SECTION, CFG_PROFILABLE | CFG_PROFILABLE_METADATA | CFG_DEFAULT_COMMENTED, CFG_TYPE_INT, DEFAULT_VDO_USE_COMPRESSION, VDO_1ST_VSN, NULL, 0, NULL,
- 	"Enables or disables compression when creating a VDO volume.\n"
- 	"Compression may be disabled if necessary to maximize performance\n"
+-	dev_read_bytes(dev_area->dev, dev_area->start + rlocn->offset, NAME_LEN, vgnamebuf);
++	if (!dev_read_bytes(dev_area->dev, dev_area->start + rlocn->offset, NAME_LEN, vgnamebuf))
++		return_NULL;
+ 
+ 	if (!strncmp(vgnamebuf, vgname, len = strlen(vgname)) &&
+ 	    (isspace(vgnamebuf[len]) || vgnamebuf[len] == '{'))
+@@ -1469,7 +1470,8 @@ int read_metadata_location_summary(const struct format_type *fmt,
+ 		return 0;
+ 	}
+ 
+-	dev_read_bytes(dev_area->dev, dev_area->start + rlocn->offset, NAME_LEN, buf);
++	if (!dev_read_bytes(dev_area->dev, dev_area->start + rlocn->offset, NAME_LEN, buf))
++		return_0;
+ 
+ 	while (buf[len] && !isspace(buf[len]) && buf[len] != '{' &&
+ 	       len < (NAME_LEN - 1))
 
 
