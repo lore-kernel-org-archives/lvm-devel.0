@@ -1,50 +1,41 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Mon, 15 Oct 2018 11:55:55 -0400
-Subject: master - cov: log failing unlink
-Message-ID: <201810151555.w9FFttxd020693@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Mon, 15 Oct 2018 11:55:58 -0400
+Subject: master - cov: make sure label scans valid lvinfo
+Message-ID: <201810151555.w9FFtwB5020707@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=70950bbd977020593b19ac704fd7571b4b2826cd
-Commit:        70950bbd977020593b19ac704fd7571b4b2826cd
-Parent:        f1ac130dc10ba22eaafd31e906b347a12b8cea16
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=b57e73a0f1376ea114451c0172f0ef0adbd3123f
+Commit:        b57e73a0f1376ea114451c0172f0ef0adbd3123f
+Parent:        70950bbd977020593b19ac704fd7571b4b2826cd
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Mon Oct 15 16:21:01 2018 +0200
+AuthorDate:    Mon Oct 15 16:29:09 2018 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Mon Oct 15 17:49:44 2018 +0200
 
-cov: log failing unlink
+cov: make sure label scans valid lvinfo
 
 ---
- tools/pvscan.c |    6 ++++--
- 1 files changed, 4 insertions(+), 2 deletions(-)
+ lib/label/label.c |    4 +++-
+ 1 files changed, 3 insertions(+), 1 deletions(-)
 
-diff --git a/tools/pvscan.c b/tools/pvscan.c
-index 6e80e3c..613a4c4 100644
---- a/tools/pvscan.c
-+++ b/tools/pvscan.c
-@@ -225,7 +225,8 @@ static void _online_pvid_file_remove_devno(int major, int minor)
+diff --git a/lib/label/label.c b/lib/label/label.c
+index 9fe11f6..3901a86 100644
+--- a/lib/label/label.c
++++ b/lib/label/label.c
+@@ -970,7 +970,9 @@ void label_scan_invalidate_lv(struct cmd_context *cmd, struct logical_volume *lv
+ 	struct device *dev;
+ 	dev_t devt;
  
- 		if (!strncmp(buf, buf_in, strlen(buf))) {
- 			log_debug("Unlink pv online %s %s", buf, path);
--			unlink(path);
-+			if (unlink(path))
-+				log_sys_debug("unlink", path);
- 			break;
- 		}
- 	}
-@@ -248,7 +249,8 @@ static void _online_pvid_files_remove(void)
- 
- 		memset(path, 0, sizeof(path));
- 		snprintf(path, sizeof(path), "%s/%s", _pvs_online_dir, de->d_name);
--		unlink(path);
-+		if (unlink(path))
-+			log_sys_debug("unlink", path);
- 	}
- 	if (closedir(dir))
- 		log_sys_debug("closedir", _pvs_online_dir);
+-	lv_info(cmd, lv, 0, &lvinfo, 0, 0);
++	if (!lv_info(cmd, lv, 0, &lvinfo, 0, 0))
++		return;
++
+ 	devt = MKDEV(lvinfo.major, lvinfo.minor);
+ 	if ((dev = dev_cache_get_by_devt(cmd, devt, NULL)))
+ 		label_scan_invalidate(dev);
 
 
