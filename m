@@ -1,50 +1,40 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Tue, 16 Oct 2018 15:56:59 -0400
-Subject: master - revert "cov: dm stats missed terminating null"
-Message-ID: <201810161956.w9GJuxLQ002184@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Tue, 16 Oct 2018 15:57:04 -0400
+Subject: master - tests: fix tested targeted
+Message-ID: <201810161957.w9GJv4KF002201@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=6179cab877442aac884a0bfcd5c5541396980cdf
-Commit:        6179cab877442aac884a0bfcd5c5541396980cdf
-Parent:        2217d6396aa6f6b8bc6421487ed6686d94668c2e
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=c15ac326cc29b5d91e726647d584c1b563c8c294
+Commit:        c15ac326cc29b5d91e726647d584c1b563c8c294
+Parent:        05b57748274492aa76e530e4513e5f8e9a39a735
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Oct 16 19:13:34 2018 +0200
+AuthorDate:    Tue Oct 16 19:05:19 2018 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Tue Oct 16 21:34:23 2018 +0200
+CommitterDate: Tue Oct 16 21:56:00 2018 +0200
 
-revert "cov: dm stats missed terminating null"
+tests: fix tested targeted
 
-This reverts commit 20971f7034cbd329f873e08869bfb7acf3f1ac0e
-as the parsing of 'dmstatus' started to fail on present \0 char.
+Fix cut&paste bug.
 ---
- libdm/libdm-stats.c |    4 ++--
- 1 files changed, 2 insertions(+), 2 deletions(-)
+ test/shell/profiles-vdo.sh |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
 
-diff --git a/libdm/libdm-stats.c b/libdm/libdm-stats.c
-index ea8fdf2..e9bfa9d 100644
---- a/libdm/libdm-stats.c
-+++ b/libdm/libdm-stats.c
-@@ -1009,7 +1009,7 @@ static int _stats_parse_list(struct dm_stats *dms, const char *resp)
- 	 * dm_task_get_message_response() returns a 'const char *' but
- 	 * since fmemopen also permits "w" it expects a 'char *'.
- 	 */
--	if (!(list_rows = fmemopen((char *)resp, strlen(resp) + 1, "r")))
-+	if (!(list_rows = fmemopen((char *)resp, strlen(resp), "r")))
- 		return_0;
+diff --git a/test/shell/profiles-vdo.sh b/test/shell/profiles-vdo.sh
+index 4a0f07e..c870315 100644
+--- a/test/shell/profiles-vdo.sh
++++ b/test/shell/profiles-vdo.sh
+@@ -18,7 +18,7 @@ SKIP_WITH_LVMPOLLD=1
  
- 	/* begin region table */
-@@ -1240,7 +1240,7 @@ static int _stats_parse_region(struct dm_stats *dms, const char *resp,
- 	 * dm_task_get_message_response() returns a 'const char *' but
- 	 * since fmemopen also permits "w" it expects a 'char *'.
- 	 */
--	stats_rows = fmemopen((char *)resp, strlen(resp) + 1, "r");
-+	stats_rows = fmemopen((char *)resp, strlen(resp), "r");
- 	if (!stats_rows)
- 		goto_bad;
+ . lib/inittest
  
+-aux have_cache 1 8 0 || skip
++aux have_vdo 6 2 0 || skip
+ 
+ PDIR="$LVM_SYSTEM_DIR/profile"
+ PFILE="vdo-test"
 
 
