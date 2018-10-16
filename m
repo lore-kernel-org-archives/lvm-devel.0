@@ -1,44 +1,42 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Tue, 16 Oct 2018 15:57:13 -0400
-Subject: master - tests: properly enforce v1
-Message-ID: <201810161957.w9GJvDMH002404@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Tue, 16 Oct 2018 17:50:33 -0400
+Subject: master - tests: fix conf generation with older shells
+Message-ID: <201810162150.w9GLoXrF017353@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=f1ac72c84804aa1c00aa385caec9eb007fd39aee
-Commit:        f1ac72c84804aa1c00aa385caec9eb007fd39aee
-Parent:        4db228b9079386b9e24e0389a080f86ac3008e69
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=69bebfd9587e2db292051501d1a1e83d4f4564a5
+Commit:        69bebfd9587e2db292051501d1a1e83d4f4564a5
+Parent:        f1ac72c84804aa1c00aa385caec9eb007fd39aee
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Oct 16 21:32:28 2018 +0200
+AuthorDate:    Tue Oct 16 23:44:45 2018 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Tue Oct 16 21:56:00 2018 +0200
+CommitterDate: Tue Oct 16 23:49:35 2018 +0200
 
-tests: properly enforce v1
+tests: fix conf generation with older shells
 
-Since with smq policy we can still pick format v2 - enforce
-format v1 explicitely.
+For shells without array support, fix selecting bug,
+and require keyword to end with some 'space' char,
+so  'scan' is not matched with  'scan_var'.
 ---
- test/shell/lvcreate-cache-no-tools.sh |    4 ++--
- 1 files changed, 2 insertions(+), 2 deletions(-)
+ test/lib/aux.sh |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
 
-diff --git a/test/shell/lvcreate-cache-no-tools.sh b/test/shell/lvcreate-cache-no-tools.sh
-index 23528e4..253c8a5 100644
---- a/test/shell/lvcreate-cache-no-tools.sh
-+++ b/test/shell/lvcreate-cache-no-tools.sh
-@@ -94,9 +94,9 @@ lvremove -f $vg
- 
- fi
- 
-+# Enforce older cache target format V1
-+aux lvmconf 'allocation/cache_metadata_format = 1'
- 
--# On older cache target that supports only V1 format
--aux lvmconf 'global/cache_disabled_features = [ "policy_smq" ]'
- rm -f fake-tool.sh
- 
- lvcreate -aey -l1 -n $lv1 $vg
+diff --git a/test/lib/aux.sh b/test/lib/aux.sh
+index c3aeb43..c75ca6d 100644
+--- a/test/lib/aux.sh
++++ b/test/lib/aux.sh
+@@ -1213,7 +1213,7 @@ EOF
+ 			echo "$s {"
+ 			local k
+ 			for k in $(grep ^"$s"/ "$config_values" | cut -f1 -d= | sed -e 's, *$,,' | sort | uniq); do
+-				grep "^$k" "$config_values" | tail -n 1 | sed -e "s,^$s/,	 ," || true
++				grep "^$k[ \t]" "$config_values" | tail -n 1 | sed -e "s,^$s/,	 ," || true
+ 			done
+ 			echo "}"
+ 			echo
 
 
