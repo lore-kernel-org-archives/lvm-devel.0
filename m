@@ -1,20 +1,20 @@
 From: David Teigland <teigland@sourceware.org>
-Date: Thu, 18 Oct 2018 13:37:37 -0400
-Subject: 2018-06-01-stable - tests: add new test for lvm on md devices
-Message-ID: <201810181737.w9IHbbvg008948@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Thu, 18 Oct 2018 14:07:28 -0400
+Subject: master - tests: add new test for lvm on md devices
+Message-ID: <201810181807.w9II7SYC012480@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=d1b652143abc9c0c02eea62dd424d0285ab8fb52
-Commit:        d1b652143abc9c0c02eea62dd424d0285ab8fb52
-Parent:        e7bb50880901a4462e350ce0d272a63aa8440781
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=7498f8383397a93db95655ca227257836cbcac82
+Commit:        7498f8383397a93db95655ca227257836cbcac82
+Parent:        9e1ee07d696fb0a1771f7dcd4490ed9ace0fa8d6
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Thu Oct 18 12:33:56 2018 -0500
+AuthorDate:    Thu Oct 18 13:06:42 2018 -0500
 Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Thu Oct 18 12:36:11 2018 -0500
+CommitterDate: Thu Oct 18 13:06:42 2018 -0500
 
 tests: add new test for lvm on md devices
 
