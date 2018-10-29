@@ -1,20 +1,20 @@
 From: David Teigland <teigland@sourceware.org>
-Date: Mon, 29 Oct 2018 17:40:53 -0400
+Date: Mon, 29 Oct 2018 17:49:18 -0400
 Subject: 2018-06-01-stable - metadata: prevent writing beyond metadata area
-Message-ID: <201810292140.w9TLerHe016466@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Message-ID: <201810292149.w9TLnIEv017577@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=dabbed4f6af9d37d56671dd68a048b2462cd1da2
-Commit:        dabbed4f6af9d37d56671dd68a048b2462cd1da2
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=ab27d5dc2a5c3bf23ab8fed438f1542015dc723d
+Commit:        ab27d5dc2a5c3bf23ab8fed438f1542015dc723d
 Parent:        bd872064a25a95dd8f51927efeb83762d442f975
 Author:        David Teigland <teigland@redhat.com>
 AuthorDate:    Mon Oct 29 11:06:00 2018 -0500
 Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Mon Oct 29 14:01:47 2018 -0500
+CommitterDate: Mon Oct 29 16:46:03 2018 -0500
 
 metadata: prevent writing beyond metadata area
 
@@ -35,11 +35,11 @@ past the end of the metadata area.
 ---
  lib/device/bcache.c           |   79 +++++++++++++++++++++++++++++++++++++++-
  lib/device/bcache.h           |    3 ++
- lib/format_text/format-text.c |    8 ++++
+ lib/format_text/format-text.c |   10 +++++
  lib/label/label.c             |   35 +++++++++++++++++-
  lib/label/label.h             |    2 +
  lib/metadata/mirror.c         |    4 ++
- 6 files changed, 128 insertions(+), 3 deletions(-)
+ 6 files changed, 130 insertions(+), 3 deletions(-)
 
 diff --git a/lib/device/bcache.c b/lib/device/bcache.c
 index 531d83b..6235256 100644
@@ -172,7 +172,7 @@ index b0aebb4..cb902ef 100644
  
  #endif
 diff --git a/lib/format_text/format-text.c b/lib/format_text/format-text.c
-index 5c7b72f..622611e 100644
+index 5c7b72f..4160ba8 100644
 --- a/lib/format_text/format-text.c
 +++ b/lib/format_text/format-text.c
 @@ -400,10 +400,14 @@ static int _raw_write_mda_header(const struct format_type *fmt,
@@ -190,7 +190,7 @@ index 5c7b72f..622611e 100644
  
  	return 1;
  }
-@@ -677,6 +681,8 @@ static int _vg_write_raw(struct format_instance *fid, struct volume_group *vg,
+@@ -677,10 +681,13 @@ static int _vg_write_raw(struct format_instance *fid, struct volume_group *vg,
  			    (unsigned long long)(mdac->rlocn.size - new_wrap),
  			    (unsigned long long)new_wrap);
  
@@ -199,7 +199,17 @@ index 5c7b72f..622611e 100644
  	if (!dev_write_bytes(mdac->area.dev, mdac->area.start + mdac->rlocn.offset,
  		                (size_t) (mdac->rlocn.size - new_wrap),
  		                fidtc->raw_metadata_buf)) {
-@@ -698,6 +704,8 @@ static int _vg_write_raw(struct format_instance *fid, struct volume_group *vg,
+ 		log_error("Failed to write metadata to %s fd %d", dev_name(mdac->area.dev), mdac->area.dev->bcache_fd);
++		dev_unset_last_byte(mdac->area.dev);
+ 		goto out;
+ 	}
+ 
+@@ -694,10 +701,13 @@ static int _vg_write_raw(struct format_instance *fid, struct volume_group *vg,
+ 			                (size_t) new_wrap,
+ 			                fidtc->raw_metadata_buf + mdac->rlocn.size - new_wrap)) {
+ 			log_error("Failed to write metadata wrap to %s fd %d", dev_name(mdac->area.dev), mdac->area.dev->bcache_fd);
++			dev_unset_last_byte(mdac->area.dev);
+ 			goto out;
  		}
  	}
  
