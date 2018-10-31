@@ -1,349 +1,38 @@
-From: David Teigland <teigland@sourceware.org>
-Date: Mon, 29 Oct 2018 18:08:14 -0400
-Subject: master - metadata: prevent writing beyond metadata area
-Message-ID: <201810292208.w9TM8EcM019937@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: Marian Csontos <mcsontos@sourceware.org>
+Date: Wed, 31 Oct 2018 03:51:12 -0400
+Subject: 2018-06-01-stable - Update WHATS_NEW
+Message-ID: <201810310751.w9V7pC0M003668@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=aecf542126640faa17c240afbb1ea61f11355c39
-Commit:        aecf542126640faa17c240afbb1ea61f11355c39
-Parent:        8df2dd66ce53817b250f5dd6bd05fda3a38ac26e
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Mon Oct 29 16:53:17 2018 -0500
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Mon Oct 29 16:53:17 2018 -0500
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=efa281685a4e2861973d131ccc31313ba31a97ef
+Commit:        efa281685a4e2861973d131ccc31313ba31a97ef
+Parent:        ab27d5dc2a5c3bf23ab8fed438f1542015dc723d
+Author:        Marian Csontos <mcsontos@redhat.com>
+AuthorDate:    Mon Oct 29 18:36:59 2018 +0100
+Committer:     Marian Csontos <mcsontos@redhat.com>
+CommitterDate: Tue Oct 30 10:00:24 2018 +0100
 
-metadata: prevent writing beyond metadata area
+Update WHATS_NEW
 
-lvm uses a bcache block size of 128K.  A bcache block
-at the end of the metadata area will overlap the PEs
-from which LVs are allocated.  How much depends on
-alignments.  When lvm reads and writes one of these
-bcache blocks to update VG metadata, it can also be
-reading and writing PEs that belong to an LV.
-
-If these overlapping PEs are being written to by the
-LV user (e.g. filesystem) at the same time that lvm
-is modifying VG metadata in the overlapping bcache
-block, then the user's updates to the PEs can be lost.
-
-This patch is a quick hack to prevent lvm from writing
-past the end of the metadata area.
 ---
- lib/device/bcache.c           |   79 +++++++++++++++++++++++++++++++++++++++-
- lib/device/bcache.h           |    3 ++
- lib/format_text/format-text.c |   10 +++++
- lib/label/label.c             |   35 +++++++++++++++++-
- lib/label/label.h             |    2 +
- lib/metadata/mirror.c         |    4 ++
- 6 files changed, 130 insertions(+), 3 deletions(-)
+ WHATS_NEW |    2 ++
+ 1 files changed, 2 insertions(+), 0 deletions(-)
 
-diff --git a/lib/device/bcache.c b/lib/device/bcache.c
-index 5e957fe..0183079 100644
---- a/lib/device/bcache.c
-+++ b/lib/device/bcache.c
-@@ -157,6 +157,10 @@ static void _async_destroy(struct io_engine *ioe)
- 	free(e);
- }
- 
-+static int _last_byte_fd;
-+static uint64_t _last_byte_offset;
-+static int _last_byte_sector_size;
-+
- static bool _async_issue(struct io_engine *ioe, enum dir d, int fd,
- 			 sector_t sb, sector_t se, void *data, void *context)
- {
-@@ -164,12 +168,53 @@ static bool _async_issue(struct io_engine *ioe, enum dir d, int fd,
- 	struct iocb *cb_array[1];
- 	struct control_block *cb;
- 	struct async_engine *e = _to_async(ioe);
-+	sector_t offset;
-+	sector_t nbytes;
-+	sector_t limit_nbytes;
-+	sector_t extra_nbytes = 0;
- 
- 	if (((uintptr_t) data) & e->page_mask) {
- 		log_warn("misaligned data buffer");
- 		return false;
- 	}
- 
-+	offset = sb << SECTOR_SHIFT;
-+	nbytes = (se - sb) << SECTOR_SHIFT;
-+
-+	/*
-+	 * If bcache block goes past where lvm wants to write, then clamp it.
-+	 */
-+	if ((d == DIR_WRITE) && _last_byte_offset && (fd == _last_byte_fd)) {
-+		if (offset > _last_byte_offset) {
-+			log_error("Limit write at %llu len %llu beyond last byte %llu",
-+				  (unsigned long long)offset,
-+				  (unsigned long long)nbytes,
-+				  (unsigned long long)_last_byte_offset);
-+			return false;
-+		}
-+
-+		if (offset + nbytes > _last_byte_offset) {
-+			limit_nbytes = _last_byte_offset - offset;
-+			if (limit_nbytes % _last_byte_sector_size)
-+				extra_nbytes = _last_byte_sector_size - (limit_nbytes % _last_byte_sector_size);
-+
-+			if (extra_nbytes) {
-+				log_debug("Limit write at %llu len %llu to len %llu rounded to %llu",
-+					  (unsigned long long)offset,
-+					  (unsigned long long)nbytes,
-+					  (unsigned long long)limit_nbytes,
-+					  (unsigned long long)(limit_nbytes + extra_nbytes));
-+				nbytes = limit_nbytes + extra_nbytes;
-+			} else {
-+				log_debug("Limit write at %llu len %llu to len %llu",
-+					  (unsigned long long)offset,
-+					  (unsigned long long)nbytes,
-+					  (unsigned long long)limit_nbytes);
-+				nbytes = limit_nbytes;
-+			}
-+		}
-+	}
-+
- 	cb = _cb_alloc(e->cbs, context);
- 	if (!cb) {
- 		log_warn("couldn't allocate control block");
-@@ -180,10 +225,22 @@ static bool _async_issue(struct io_engine *ioe, enum dir d, int fd,
- 
- 	cb->cb.aio_fildes = (int) fd;
- 	cb->cb.u.c.buf = data;
--	cb->cb.u.c.offset = sb << SECTOR_SHIFT;
--	cb->cb.u.c.nbytes = (se - sb) << SECTOR_SHIFT;
-+	cb->cb.u.c.offset = offset;
-+	cb->cb.u.c.nbytes = nbytes;
- 	cb->cb.aio_lio_opcode = (d == DIR_READ) ? IO_CMD_PREAD : IO_CMD_PWRITE;
- 
-+#if 0
-+	if (d == DIR_READ) {
-+		log_debug("io R off %llu bytes %llu",
-+			  (unsigned long long)cb->cb.u.c.offset,
-+			  (unsigned long long)cb->cb.u.c.nbytes);
-+	} else {
-+		log_debug("io W off %llu bytes %llu",
-+			  (unsigned long long)cb->cb.u.c.offset,
-+			  (unsigned long long)cb->cb.u.c.nbytes);
-+	}
-+#endif
-+
- 	cb_array[0] = &cb->cb;
- 	do {
- 		r = io_submit(e->aio_context, 1, cb_array);
-@@ -1174,3 +1231,21 @@ bool bcache_invalidate_fd(struct bcache *cache, int fd)
- 
- //----------------------------------------------------------------
- 
-+void bcache_set_last_byte(struct bcache *cache, int fd, uint64_t offset, int sector_size)
-+{
-+	_last_byte_fd = fd;
-+	_last_byte_offset = offset;
-+	_last_byte_sector_size = sector_size;
-+	if (!sector_size)
-+		_last_byte_sector_size = 512;
-+}
-+
-+void bcache_unset_last_byte(struct bcache *cache, int fd)
-+{
-+	if (_last_byte_fd == fd) {
-+		_last_byte_fd = 0;
-+		_last_byte_offset = 0;
-+		_last_byte_sector_size = 0;
-+	}
-+}
-+
-diff --git a/lib/device/bcache.h b/lib/device/bcache.h
-index 1d49af2..2edc54a 100644
---- a/lib/device/bcache.h
-+++ b/lib/device/bcache.h
-@@ -158,6 +158,9 @@ bool bcache_write_bytes(struct bcache *cache, int fd, uint64_t start, size_t len
- bool bcache_zero_bytes(struct bcache *cache, int fd, uint64_t start, size_t len);
- bool bcache_set_bytes(struct bcache *cache, int fd, uint64_t start, size_t len, uint8_t val);
- 
-+void bcache_set_last_byte(struct bcache *cache, int fd, uint64_t offset, int sector_size);
-+void bcache_unset_last_byte(struct bcache *cache, int fd);
-+
- //----------------------------------------------------------------
- 
- #endif
-diff --git a/lib/format_text/format-text.c b/lib/format_text/format-text.c
-index b41f2b2..7fba881 100644
---- a/lib/format_text/format-text.c
-+++ b/lib/format_text/format-text.c
-@@ -387,10 +387,14 @@ static int _raw_write_mda_header(const struct format_type *fmt,
- 					     MDA_HEADER_SIZE -
- 					     sizeof(mdah->checksum_xl)));
- 
-+	dev_set_last_byte(dev, start_byte + MDA_HEADER_SIZE);
-+
- 	if (!dev_write_bytes(dev, start_byte, MDA_HEADER_SIZE, mdah)) {
-+		dev_unset_last_byte(dev);
- 		log_error("Failed to write mda header to %s fd %d", dev_name(dev), dev->bcache_fd);
- 		return 0;
- 	}
-+	dev_unset_last_byte(dev);
- 
- 	return 1;
- }
-@@ -899,9 +903,12 @@ static int _vg_write_raw(struct format_instance *fid, struct volume_group *vg,
- 			    (unsigned long long)(rlocn_new->size - new_wrap),
- 			    (unsigned long long)new_wrap);
- 
-+	dev_set_last_byte(mdac->area.dev, mdac->area.start + mdah->size);
-+
- 	if (!dev_write_bytes(mdac->area.dev, mdac->area.start + rlocn_new->offset,
- 		                (size_t) (rlocn_new->size - new_wrap), new_buf)) {
- 		log_error("Failed to write metadata to %s fd %d", dev_name(mdac->area.dev), mdac->area.dev->bcache_fd);
-+		dev_unset_last_byte(mdac->area.dev);
- 		goto out;
- 	}
- 
-@@ -914,10 +921,13 @@ static int _vg_write_raw(struct format_instance *fid, struct volume_group *vg,
- 		if (!dev_write_bytes(mdac->area.dev, mdac->area.start + MDA_HEADER_SIZE,
- 			                (size_t) new_wrap, new_buf + rlocn_new->size - new_wrap)) {
- 			log_error("Failed to write metadata wrap to %s fd %d", dev_name(mdac->area.dev), mdac->area.dev->bcache_fd);
-+			dev_unset_last_byte(mdac->area.dev);
- 			goto out;
- 		}
- 	}
- 
-+	dev_unset_last_byte(mdac->area.dev);
-+
- 	rlocn_new->checksum = calc_crc(INITIAL_CRC,
- 				       (uint8_t *)new_buf,
- 				       (uint32_t)(rlocn_new->size - new_wrap));
-diff --git a/lib/label/label.c b/lib/label/label.c
-index 22b6bc2..c92d2cf 100644
---- a/lib/label/label.c
-+++ b/lib/label/label.c
-@@ -174,6 +174,7 @@ int label_write(struct device *dev, struct label *label)
- {
- 	char buf[LABEL_SIZE] __attribute__((aligned(8)));
- 	struct label_header *lh = (struct label_header *) buf;
-+	uint64_t offset;
- 	int r = 1;
- 
- 	if (!label->labeller->ops->write) {
-@@ -208,11 +209,17 @@ int label_write(struct device *dev, struct label *label)
- 		return 0;
- 	}
- 
--	if (!dev_write_bytes(dev, label->sector << SECTOR_SHIFT, LABEL_SIZE, buf)) {
-+	offset = label->sector << SECTOR_SHIFT;
-+
-+	dev_set_last_byte(dev, offset + LABEL_SIZE);
-+
-+	if (!dev_write_bytes(dev, offset, LABEL_SIZE, buf)) {
- 		log_debug_devs("Failed to write label to %s", dev_name(dev));
- 		r = 0;
- 	}
- 
-+	dev_unset_last_byte(dev);
-+
- 	return r;
- }
- 
-@@ -1256,9 +1263,12 @@ bool dev_write_zeros(struct device *dev, uint64_t start, size_t len)
- 		}
- 	}
- 
-+	dev_set_last_byte(dev, start + len);
-+
- 	if (!bcache_zero_bytes(scan_bcache, dev->bcache_fd, start, len)) {
- 		log_error("Error writing device %s at %llu length %u.",
- 			  dev_name(dev), (unsigned long long)start, (uint32_t)len);
-+		dev_unset_last_byte(dev);
- 		label_scan_invalidate(dev);
- 		return false;
- 	}
-@@ -1266,9 +1276,11 @@ bool dev_write_zeros(struct device *dev, uint64_t start, size_t len)
- 	if (!bcache_flush(scan_bcache)) {
- 		log_error("Error writing device %s at %llu length %u.",
- 			  dev_name(dev), (unsigned long long)start, (uint32_t)len);
-+		dev_unset_last_byte(dev);
- 		label_scan_invalidate(dev);
- 		return false;
- 	}
-+	dev_unset_last_byte(dev);
- 	return true;
- }
- 
-@@ -1302,9 +1314,12 @@ bool dev_set_bytes(struct device *dev, uint64_t start, size_t len, uint8_t val)
- 		}
- 	}
- 
-+	dev_set_last_byte(dev, start + len);
-+
- 	if (!bcache_set_bytes(scan_bcache, dev->bcache_fd, start, len, val)) {
- 		log_error("Error writing device %s at %llu length %u.",
- 			  dev_name(dev), (unsigned long long)start, (uint32_t)len);
-+		dev_unset_last_byte(dev);
- 		label_scan_invalidate(dev);
- 		return false;
- 	}
-@@ -1312,9 +1327,27 @@ bool dev_set_bytes(struct device *dev, uint64_t start, size_t len, uint8_t val)
- 	if (!bcache_flush(scan_bcache)) {
- 		log_error("Error writing device %s at %llu length %u.",
- 			  dev_name(dev), (unsigned long long)start, (uint32_t)len);
-+		dev_unset_last_byte(dev);
- 		label_scan_invalidate(dev);
- 		return false;
- 	}
-+
-+	dev_unset_last_byte(dev);
- 	return true;
- }
- 
-+void dev_set_last_byte(struct device *dev, uint64_t offset)
-+{
-+	unsigned int phys_block_size = 0;
-+	unsigned int block_size = 0;
-+
-+	dev_get_block_size(dev, &phys_block_size, &block_size);
-+
-+	bcache_set_last_byte(scan_bcache, dev->bcache_fd, offset, phys_block_size);
-+}
-+
-+void dev_unset_last_byte(struct device *dev)
-+{
-+	bcache_unset_last_byte(scan_bcache, dev->bcache_fd);
-+}
-+
-diff --git a/lib/label/label.h b/lib/label/label.h
-index 447fc86..5939655 100644
---- a/lib/label/label.h
-+++ b/lib/label/label.h
-@@ -124,5 +124,7 @@ bool dev_read_bytes(struct device *dev, uint64_t start, size_t len, void *data);
- bool dev_write_bytes(struct device *dev, uint64_t start, size_t len, void *data);
- bool dev_write_zeros(struct device *dev, uint64_t start, size_t len);
- bool dev_set_bytes(struct device *dev, uint64_t start, size_t len, uint8_t val);
-+void dev_set_last_byte(struct device *dev, uint64_t offset);
-+void dev_unset_last_byte(struct device *dev);
- 
- #endif
-diff --git a/lib/metadata/mirror.c b/lib/metadata/mirror.c
-index c86ff90..ba3f33d 100644
---- a/lib/metadata/mirror.c
-+++ b/lib/metadata/mirror.c
-@@ -302,10 +302,14 @@ static int _write_log_header(struct cmd_context *cmd, struct logical_volume *lv)
- 		return 0;
- 	}
- 
-+	dev_set_last_byte(dev, sizeof(log_header));
-+
- 	if (!dev_write_bytes(dev, UINT64_C(0), sizeof(log_header), &log_header)) {
-+		dev_unset_last_byte(dev);
- 		log_error("Failed to write log header to %s.", name);
- 		return 0;
- 	}
-+	dev_unset_last_byte(dev);
- 
- 	label_scan_invalidate(dev);
- 
+diff --git a/WHATS_NEW b/WHATS_NEW
+index a6bd6a3..79a8716 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,7 @@
+ Version 2.02.182 - 
+ ==============================
++  Fix possible write race between last metadata block and the first extent.
++  Fix filtering of md 1.0 devices so they are not seen as duplicate PVs.
+   Fix lvconvert striped/raid0/raid0_meta -> raid6 regression.
+   Add After=rbdmap.service to {lvm2-activation-net,blk-availability}.service.
+   Fix pvs with lvmetad to avoid too many open files from filter reads.
 
 
