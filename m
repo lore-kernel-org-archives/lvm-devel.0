@@ -1,20 +1,20 @@
 From: Bryn Reeves <bmr@sourceware.org>
-Date: Thu, 1 Nov 2018 12:53:38 -0400
-Subject: 2018-06-01-stable - dmsetup: fix stats report command output
-Message-ID: <201811011653.wA1GrcrI008901@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Thu, 1 Nov 2018 13:01:26 -0400
+Subject: master - dmsetup: fix stats report command output
+Message-ID: <201811011701.wA1H1Q88009389@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=613466aa8f315468d34f45a75c662335abbdab2f
-Commit:        613466aa8f315468d34f45a75c662335abbdab2f
-Parent:        813a83b2d6d9a35ead4f7b424fa39e513cb8b49e
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=925aaf0b874fd92aec1b34f42d23987f65205ff9
+Commit:        925aaf0b874fd92aec1b34f42d23987f65205ff9
+Parent:        19f2105b87773047854ef172de8fc48da110b2fa
 Author:        Bryn M. Reeves <bmr@redhat.com>
 AuthorDate:    Thu Nov 1 16:49:05 2018 +0000
 Committer:     Bryn M. Reeves <bmr@redhat.com>
-CommitterDate: Thu Nov 1 16:49:55 2018 +0000
+CommitterDate: Thu Nov 1 17:00:06 2018 +0000
 
 dmsetup: fix stats report command output
 
@@ -30,14 +30,14 @@ which logs a specific error for all other cases).
 
 Reported-by: Bryan Gurney <bgurney@redhat.com>
 ---
- tools/dmsetup.c |   10 +++-------
+ libdm/dm-tools/dmsetup.c |   10 +++-------
  1 files changed, 3 insertions(+), 7 deletions(-)
 
-diff --git a/tools/dmsetup.c b/tools/dmsetup.c
-index 3cdf862..0b5b808 100644
---- a/tools/dmsetup.c
-+++ b/tools/dmsetup.c
-@@ -910,17 +910,13 @@ static int _display_info_cols(struct dm_task *dmt, struct dm_info *info)
+diff --git a/libdm/dm-tools/dmsetup.c b/libdm/dm-tools/dmsetup.c
+index 835fdcd..93714ac 100644
+--- a/libdm/dm-tools/dmsetup.c
++++ b/libdm/dm-tools/dmsetup.c
+@@ -914,17 +914,13 @@ static int _display_info_cols(struct dm_task *dmt, struct dm_info *info)
  		if (!(obj.stats = dm_stats_create(DM_STATS_PROGRAM_ID)))
  			goto_out;
  
