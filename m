@@ -1,52 +1,61 @@
 From: David Teigland <teigland@sourceware.org>
-Date: Thu, 1 Nov 2018 14:26:11 -0400
-Subject: master - lvmlockd: deactivate lvmlock LV in vgchange
-Message-ID: <201811011826.wA1IQB88020335@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Fri, 2 Nov 2018 13:14:17 -0400
+Subject: master - lvmlockd: fix handling of sanlock release error
+Message-ID: <201811021714.wA2HEHWF025746@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=f6a54a50a0f5e1a06e1a4da6ca17f9e84773eb88
-Commit:        f6a54a50a0f5e1a06e1a4da6ca17f9e84773eb88
-Parent:        7a170873aa13cc09dcc2b4d0a918e45278c4c4dd
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=e7a56d5cd32654e4921e4c03bc434efd0e24b1c0
+Commit:        e7a56d5cd32654e4921e4c03bc434efd0e24b1c0
+Parent:        f6a54a50a0f5e1a06e1a4da6ca17f9e84773eb88
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Thu Oct 25 10:51:25 2018 -0500
+AuthorDate:    Fri Nov 2 12:11:09 2018 -0500
 Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Thu Nov 1 13:25:21 2018 -0500
+CommitterDate: Fri Nov 2 12:11:09 2018 -0500
 
-lvmlockd: deactivate lvmlock LV in vgchange
+lvmlockd: fix handling of sanlock release error
 
-When changing a VG to lock_type sanlock, the internal
-lvmlock LV was left active at the end of vgchange.
-It shouldn't be active until lockstart.
+When sanlock_release returns an error because of an i/o
+timeout releasing the lease on disk, lvmlockd should just
+consider the lock released.  sanlock will continue trying
+to release the lease on disk after the original request
+times out.
 ---
- tools/vgchange.c |   12 ++++++++++++
- 1 files changed, 12 insertions(+), 0 deletions(-)
+ daemons/lvmlockd/lvmlockd-sanlock.c |   18 +++++++++++++-----
+ 1 files changed, 13 insertions(+), 5 deletions(-)
 
-diff --git a/tools/vgchange.c b/tools/vgchange.c
-index c8f894d..13b72cc 100644
---- a/tools/vgchange.c
-+++ b/tools/vgchange.c
-@@ -993,6 +993,18 @@ static int _vgchange_locktype_single(struct cmd_context *cmd, const char *vg_nam
+diff --git a/daemons/lvmlockd/lvmlockd-sanlock.c b/daemons/lvmlockd/lvmlockd-sanlock.c
+index 892b446..9c950f3 100644
+--- a/daemons/lvmlockd/lvmlockd-sanlock.c
++++ b/daemons/lvmlockd/lvmlockd-sanlock.c
+@@ -2111,12 +2111,20 @@ int lm_unlock_sanlock(struct lockspace *ls, struct resource *r,
+ 	if (rv < 0)
+ 		log_error("S %s R %s unlock_san release error %d", ls->name, r->name, rv);
  
- 	backup(vg);
- 
+-	if (rv == -EIO)
+-		rv = -ELOCKIO;
+-	else if (rv < 0)
+-		rv = -ELMERR;
 +	/*
-+	 * When init_vg_sanlock is called for vgcreate, the lockspace remains
-+	 * started and lvmlock remains active, but when called for
-+	 * vgchange --locktype sanlock, the lockspace is not started so the
-+	 * lvmlock LV should be deactivated at the end.  vg_write writes the
-+	 * new leases to lvmlock, so we need to wait until after vg_write to
-+	 * deactivate it.
++	 * sanlock may return an error here if it fails to release the lease on
++	 * disk because of an io timeout.  But, sanlock will continue trying to
++	 * release the lease after this call returns.  We shouldn't return an
++	 * error here which would result in lvmlockd-core keeping the lock
++	 * around.  By releasing the lock in lvmlockd-core@this point,
++	 * lvmlockd may send another acquire request to lvmlockd.  If sanlock
++	 * has not been able to release the previous instance of the lock yet,
++	 * then it will return an error for the new request.  But, acquiring a
++	 * new lock is able o fail gracefully, until sanlock is finally able to
++	 * release the old lock.
 +	 */
-+	if (vg->lock_type && !strcmp(vg->lock_type, "sanlock") &&
-+	    (cmd->command->command_enum == vgchange_locktype_CMD))
-+		deactivate_lv(cmd, vg->sanlock_lv);
-+
- 	log_print_unless_silent("Volume group \"%s\" successfully changed", vg->name);
  
- 	return ECMD_PROCESSED;
+-	return rv;
++	return 0;
+ }
+ 
+ int lm_hosts_sanlock(struct lockspace *ls, int notify)
 
 
