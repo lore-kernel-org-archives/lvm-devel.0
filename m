@@ -1,141 +1,290 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Mon, 5 Nov 2018 11:27:32 -0500
-Subject: master - cov: remove unused assigns
-Message-ID: <201811051627.wA5GRWan005454@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Mon, 5 Nov 2018 11:27:36 -0500
+Subject: master - cleanup: move cast to det_t into MKDEV macro
+Message-ID: <201811051627.wA5GRaoG005474@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=70e3d0a613fb53e52f7a7cb31d65bcc2fa7ab738
-Commit:        70e3d0a613fb53e52f7a7cb31d65bcc2fa7ab738
-Parent:        a91ac41b93eff0f3ebd3af3319e8bbcb1fe8d00f
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=aa8b2d6a0feb91bb5ea4364cdc53a00dfa233dca
+Commit:        aa8b2d6a0feb91bb5ea4364cdc53a00dfa233dca
+Parent:        d3ebb18f4052fd90bb2d177089e79801b51f6242
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Sat Nov 3 16:48:20 2018 +0100
+AuthorDate:    Sat Nov 3 17:13:10 2018 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Mon Nov 5 17:25:11 2018 +0100
 
-cov: remove unused assigns
+cleanup: move cast to det_t into MKDEV macro
 
 ---
- lib/cache/lvmcache.c        |    3 ---
- lib/device/dev-cache.c      |    3 +--
- lib/metadata/metadata.c     |    6 ++----
- libdm/dm-tools/dmfilemapd.c |    4 ++--
- tools/pvscan.c              |    3 +--
- tools/vgchange.c            |    2 +-
- 6 files changed, 7 insertions(+), 14 deletions(-)
+ device_mapper/ioctl/libdm-iface.c |    8 ++++----
+ device_mapper/libdm-common.c      |    2 +-
+ device_mapper/libdm-deptree.c     |    4 ++--
+ device_mapper/misc/kdev_t.h       |    2 +-
+ lib/activate/dev_manager.c        |    2 +-
+ lib/device/dev-cache.c            |    4 ++--
+ lib/device/dev-type.c             |    4 ++--
+ libdm/ioctl/libdm-iface.c         |    8 ++++----
+ libdm/libdm-common.c              |    2 +-
+ libdm/libdm-deptree.c             |    4 ++--
+ libdm/misc/kdev_t.h               |    2 +-
+ tools/pvscan.c                    |    4 ++--
+ 12 files changed, 23 insertions(+), 23 deletions(-)
 
-diff --git a/lib/cache/lvmcache.c b/lib/cache/lvmcache.c
-index 46470a5..e681ed8 100644
---- a/lib/cache/lvmcache.c
-+++ b/lib/cache/lvmcache.c
-@@ -67,7 +67,6 @@ static DM_LIST_INIT(_vginfos);
- static DM_LIST_INIT(_found_duplicate_devs);
- static DM_LIST_INIT(_unused_duplicate_devs);
- static int _scanning_in_progress = 0;
--static int _has_scanned = 0;
- static int _vgs_locked = 0;
- static int _found_duplicate_pvs = 0;	/* If we never see a duplicate PV we can skip checking for them later. */
+diff --git a/device_mapper/ioctl/libdm-iface.c b/device_mapper/ioctl/libdm-iface.c
+index 733eece..27db622 100644
+--- a/device_mapper/ioctl/libdm-iface.c
++++ b/device_mapper/ioctl/libdm-iface.c
+@@ -32,7 +32,7 @@
+ #else
+ #  define MAJOR(x) major((x))
+ #  define MINOR(x) minor((x))
+-#  define MKDEV(x,y) makedev((x),(y))
++#  define MKDEV(x,y) makedev(((dev_t)x),((dev_t)y))
+ #endif
  
-@@ -1808,8 +1807,6 @@ void lvmcache_destroy(struct cmd_context *cmd, int retain_orphans, int reset)
+ #include "device_mapper/misc/dm-ioctl.h"
+@@ -261,7 +261,7 @@ static int _control_exists(const char *control, uint32_t major, uint32_t minor)
+ 		return -1;
+ 	}
+ 
+-	if (major && buf.st_rdev != MKDEV((dev_t)major, (dev_t)minor)) {
++	if (major && buf.st_rdev != MKDEV(major, minor)) {
+ 		log_verbose("%s: Wrong device number: (%u, %u) instead of "
+ 			    "(%u, %u)", control,
+ 			    MAJOR(buf.st_mode), MINOR(buf.st_mode),
+@@ -304,7 +304,7 @@ static int _create_control(const char *control, uint32_t major, uint32_t minor)
+ 	(void) dm_prepare_selinux_context(control, S_IFCHR);
+ 	old_umask = umask(DM_CONTROL_NODE_UMASK);
+ 	if (mknod(control, S_IFCHR | S_IRUSR | S_IWUSR,
+-		  MKDEV((dev_t)major, (dev_t)minor)) < 0)  {
++		  MKDEV(major, minor)) < 0)  {
+ 		log_sys_error("mknod", control);
+ 		ret = 0;
+ 	}
+@@ -1182,7 +1182,7 @@ static struct dm_ioctl *_flatten(struct dm_task *dmt, unsigned repeat_count)
+ 		}
+ 
+ 		dmi->flags |= DM_PERSISTENT_DEV_FLAG;
+-		dmi->dev = MKDEV((dev_t)dmt->major, (dev_t)dmt->minor);
++		dmi->dev = MKDEV(dmt->major, dmt->minor);
+ 	}
+ 
+ 	/* Does driver support device number referencing? */
+diff --git a/device_mapper/libdm-common.c b/device_mapper/libdm-common.c
+index eec31d7..45dcb4c 100644
+--- a/device_mapper/libdm-common.c
++++ b/device_mapper/libdm-common.c
+@@ -1042,7 +1042,7 @@ static int _add_dev_node(const char *dev_name, uint32_t major, uint32_t minor,
  {
- 	log_debug_cache("Dropping VG info");
+ 	char path[PATH_MAX];
+ 	struct stat info;
+-	dev_t dev = MKDEV((dev_t)major, (dev_t)minor);
++	dev_t dev = MKDEV(major, minor);
+ 	mode_t old_mask;
  
--	_has_scanned = 0;
--
- 	if (_vgid_hash) {
- 		dm_hash_destroy(_vgid_hash);
- 		_vgid_hash = NULL;
+ 	if (!_build_dev_path(path, sizeof(path), dev_name))
+diff --git a/device_mapper/libdm-deptree.c b/device_mapper/libdm-deptree.c
+index 5c5f12f..16858b4 100644
+--- a/device_mapper/libdm-deptree.c
++++ b/device_mapper/libdm-deptree.c
+@@ -531,7 +531,7 @@ static struct dm_tree_node *_create_dm_tree_node(struct dm_tree *dtree,
+ 	dm_list_init(&node->activated);
+ 	dm_list_init(&node->props.segs);
+ 
+-	dev = MKDEV((dev_t)info->major, (dev_t)info->minor);
++	dev = MKDEV(info->major, info->minor);
+ 
+ 	if (!dm_hash_insert_binary(dtree->devs, (const char *) &dev,
+ 				   sizeof(dev), node)) {
+@@ -554,7 +554,7 @@ static struct dm_tree_node *_create_dm_tree_node(struct dm_tree *dtree,
+ static struct dm_tree_node *_find_dm_tree_node(struct dm_tree *dtree,
+ 					       uint32_t major, uint32_t minor)
+ {
+-	dev_t dev = MKDEV((dev_t)major, (dev_t)minor);
++	dev_t dev = MKDEV(major, minor);
+ 
+ 	return dm_hash_lookup_binary(dtree->devs, (const char *) &dev,
+ 				     sizeof(dev));
+diff --git a/device_mapper/misc/kdev_t.h b/device_mapper/misc/kdev_t.h
+index f88bb0a..12780d2 100644
+--- a/device_mapper/misc/kdev_t.h
++++ b/device_mapper/misc/kdev_t.h
+@@ -17,6 +17,6 @@
+ 
+ #define MAJOR(dev)      ((dev & 0xfff00) >> 8)
+ #define MINOR(dev)      ((dev & 0xff) | ((dev >> 12) & 0xfff00))
+-#define MKDEV(ma,mi)    ((mi & 0xff) | (ma << 8) | ((mi & ~0xff) << 12))
++#define MKDEV(ma,mi)    (((dev_t)mi & 0xff) | ((dev_t)ma << 8) | (((dev_t)mi & ~0xff) << 12))
+ 
+ #endif
+diff --git a/lib/activate/dev_manager.c b/lib/activate/dev_manager.c
+index aaf113f..15dec6f 100644
+--- a/lib/activate/dev_manager.c
++++ b/lib/activate/dev_manager.c
+@@ -374,7 +374,7 @@ static int _ignore_blocked_mirror_devices(struct device *dev,
+ 			if (!(tmp_dev = dev_create_file(buf, NULL, NULL, 0)))
+ 				goto_out;
+ 
+-			tmp_dev->dev = MKDEV((dev_t)sm->logs[0].major, (dev_t)sm->logs[0].minor);
++			tmp_dev->dev = MKDEV(sm->logs[0].major, sm->logs[0].minor);
+ 			if (device_is_usable(tmp_dev, (struct dev_usable_check_params)
+ 					     { .check_empty = 1,
+ 					       .check_blocked = 1,
 diff --git a/lib/device/dev-cache.c b/lib/device/dev-cache.c
-index 9b141fe..fa92031 100644
+index fa92031..fb48f1a 100644
 --- a/lib/device/dev-cache.c
 +++ b/lib/device/dev-cache.c
-@@ -666,10 +666,9 @@ struct dm_list *dev_cache_get_dev_list_for_lvid(const char *lvid)
- 
- void dev_cache_failed_path(struct device *dev, const char *path)
- {
--	struct device *dev_by_path;
- 	struct dm_str_list *strl;
- 
--	if ((dev_by_path = (struct device *) dm_hash_lookup(_cache.names, path)))
-+	if (dm_hash_lookup(_cache.names, path))
- 		dm_hash_remove(_cache.names, path);
- 
- 	dm_list_iterate_items(strl, &dev->aliases) {
-diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
-index 3b28bf5..57e1842 100644
---- a/lib/metadata/metadata.c
-+++ b/lib/metadata/metadata.c
-@@ -1647,15 +1647,13 @@ struct generic_logical_volume *find_historical_glv(const struct volume_group *vg
- 
- int lv_name_is_used_in_vg(const struct volume_group *vg, const char *name, int *historical)
- {
--	struct generic_logical_volume *historical_lv;
--	struct logical_volume *lv;
- 	int found = 0;
- 
--	if ((lv = find_lv(vg, name))) {
-+	if (find_lv(vg, name)) {
- 		found = 1;
- 		if (historical)
- 			*historical = 0;
--	} else if ((historical_lv = find_historical_glv(vg, name, 0, NULL))) {
-+	} else if (find_historical_glv(vg, name, 0, NULL)) {
- 		found = 1;
- 		if (historical)
- 			*historical = 1;
-diff --git a/libdm/dm-tools/dmfilemapd.c b/libdm/dm-tools/dmfilemapd.c
-index 0b17c2b..856df3d 100644
---- a/libdm/dm-tools/dmfilemapd.c
-+++ b/libdm/dm-tools/dmfilemapd.c
-@@ -628,10 +628,10 @@ check_unlinked:
- 
- static int _daemonise(struct filemap_monitor *fm)
- {
--	pid_t pid = 0, sid;
-+	pid_t pid = 0;
- 	int fd;
- 
--	if (!(sid = setsid())) {
-+	if (!setsid()) {
- 		_early_log("setsid failed.");
- 		return 0;
+@@ -479,7 +479,7 @@ static struct device *_get_device_for_sysfs_dev_name_using_devno(const char *dev
+ 		return NULL;
  	}
+ 
+-	devno = MKDEV((dev_t)major, (dev_t)minor);
++	devno = MKDEV(major, minor);
+ 	if (!(dev = (struct device *) btree_lookup(_cache.devices, (uint32_t) devno))) {
+ 		/*
+ 		 * If we get here, it means the device is referenced in sysfs, but it's not yet in /dev.
+@@ -947,7 +947,7 @@ static int _dev_cache_iterate_sysfs_for_index(const char *path)
+ 			continue;
+ 		}
+ 
+-		devno = MKDEV((dev_t)major, (dev_t)minor);
++		devno = MKDEV(major, minor);
+ 		if (!(dev = (struct device *) btree_lookup(_cache.devices, (uint32_t) devno)) &&
+ 		    !(dev = (struct device *) btree_lookup(_cache.sysfs_only_devices, (uint32_t) devno))) {
+ 			if (!dm_device_get_name(major, minor, 1, devname, sizeof(devname)) ||
+diff --git a/lib/device/dev-type.c b/lib/device/dev-type.c
+index 0b7af1b..f2d193b 100644
+--- a/lib/device/dev-type.c
++++ b/lib/device/dev-type.c
+@@ -506,7 +506,7 @@ int dev_get_primary_dev(struct dev_types *dt, struct device *dev, dev_t *result)
+ 	 */
+ 	if ((parts = dt->dev_type_array[major].max_partitions) > 1) {
+ 		if ((residue = minor % parts)) {
+-			*result = MKDEV((dev_t)major, (dev_t)(minor - residue));
++			*result = MKDEV(major, (minor - residue));
+ 			ret = 2;
+ 		} else {
+ 			*result = dev->dev;
+@@ -576,7 +576,7 @@ int dev_get_primary_dev(struct dev_types *dt, struct device *dev, dev_t *result)
+ 			  path, buffer);
+ 		goto out;
+ 	}
+-	*result = MKDEV((dev_t)major, (dev_t)minor);
++	*result = MKDEV(major, minor);
+ 	ret = 2;
+ out:
+ 	if (fp && fclose(fp))
+diff --git a/libdm/ioctl/libdm-iface.c b/libdm/ioctl/libdm-iface.c
+index e775da7..6d87749 100644
+--- a/libdm/ioctl/libdm-iface.c
++++ b/libdm/ioctl/libdm-iface.c
+@@ -30,7 +30,7 @@
+ #else
+ #  define MAJOR(x) major((x))
+ #  define MINOR(x) minor((x))
+-#  define MKDEV(x,y) makedev((x),(y))
++#  define MKDEV(x,y) makedev(((dev_t)x),((dev_t)y))
+ #endif
+ 
+ #include "libdm/misc/dm-ioctl.h"
+@@ -259,7 +259,7 @@ static int _control_exists(const char *control, uint32_t major, uint32_t minor)
+ 		return -1;
+ 	}
+ 
+-	if (major && buf.st_rdev != MKDEV((dev_t)major, (dev_t)minor)) {
++	if (major && buf.st_rdev != MKDEV(major, minor)) {
+ 		log_verbose("%s: Wrong device number: (%u, %u) instead of "
+ 			    "(%u, %u)", control,
+ 			    MAJOR(buf.st_mode), MINOR(buf.st_mode),
+@@ -302,7 +302,7 @@ static int _create_control(const char *control, uint32_t major, uint32_t minor)
+ 	(void) dm_prepare_selinux_context(control, S_IFCHR);
+ 	old_umask = umask(DM_CONTROL_NODE_UMASK);
+ 	if (mknod(control, S_IFCHR | S_IRUSR | S_IWUSR,
+-		  MKDEV((dev_t)major, (dev_t)minor)) < 0)  {
++		  MKDEV(major, minor)) < 0)  {
+ 		log_sys_error("mknod", control);
+ 		ret = 0;
+ 	}
+@@ -1194,7 +1194,7 @@ static struct dm_ioctl *_flatten(struct dm_task *dmt, unsigned repeat_count)
+ 		}
+ 
+ 		dmi->flags |= DM_PERSISTENT_DEV_FLAG;
+-		dmi->dev = MKDEV((dev_t)dmt->major, (dev_t)dmt->minor);
++		dmi->dev = MKDEV(dmt->major, dmt->minor);
+ 	}
+ 
+ 	/* Does driver support device number referencing? */
+diff --git a/libdm/libdm-common.c b/libdm/libdm-common.c
+index 5099f91..7d19f75 100644
+--- a/libdm/libdm-common.c
++++ b/libdm/libdm-common.c
+@@ -1040,7 +1040,7 @@ static int _add_dev_node(const char *dev_name, uint32_t major, uint32_t minor,
+ {
+ 	char path[PATH_MAX];
+ 	struct stat info;
+-	dev_t dev = MKDEV((dev_t)major, (dev_t)minor);
++	dev_t dev = MKDEV(major, minor);
+ 	mode_t old_mask;
+ 
+ 	if (!_build_dev_path(path, sizeof(path), dev_name))
+diff --git a/libdm/libdm-deptree.c b/libdm/libdm-deptree.c
+index 3e602e2..3f95a0d 100644
+--- a/libdm/libdm-deptree.c
++++ b/libdm/libdm-deptree.c
+@@ -523,7 +523,7 @@ static struct dm_tree_node *_create_dm_tree_node(struct dm_tree *dtree,
+ 	dm_list_init(&node->activated);
+ 	dm_list_init(&node->props.segs);
+ 
+-	dev = MKDEV((dev_t)info->major, (dev_t)info->minor);
++	dev = MKDEV(info->major, info->minor);
+ 
+ 	if (!dm_hash_insert_binary(dtree->devs, (const char *) &dev,
+ 				   sizeof(dev), node)) {
+@@ -546,7 +546,7 @@ static struct dm_tree_node *_create_dm_tree_node(struct dm_tree *dtree,
+ static struct dm_tree_node *_find_dm_tree_node(struct dm_tree *dtree,
+ 					       uint32_t major, uint32_t minor)
+ {
+-	dev_t dev = MKDEV((dev_t)major, (dev_t)minor);
++	dev_t dev = MKDEV(major, minor);
+ 
+ 	return dm_hash_lookup_binary(dtree->devs, (const char *) &dev,
+ 				     sizeof(dev));
+diff --git a/libdm/misc/kdev_t.h b/libdm/misc/kdev_t.h
+index f88bb0a..12780d2 100644
+--- a/libdm/misc/kdev_t.h
++++ b/libdm/misc/kdev_t.h
+@@ -17,6 +17,6 @@
+ 
+ #define MAJOR(dev)      ((dev & 0xfff00) >> 8)
+ #define MINOR(dev)      ((dev & 0xff) | ((dev >> 12) & 0xfff00))
+-#define MKDEV(ma,mi)    ((mi & 0xff) | (ma << 8) | ((mi & ~0xff) << 12))
++#define MKDEV(ma,mi)    (((dev_t)mi & 0xff) | ((dev_t)ma << 8) | (((dev_t)mi & ~0xff) << 12))
+ 
+ #endif
 diff --git a/tools/pvscan.c b/tools/pvscan.c
-index d110a6b..e3cd410 100644
+index e3cd410..85b0e04 100644
 --- a/tools/pvscan.c
 +++ b/tools/pvscan.c
-@@ -452,7 +452,6 @@ static int _online_pvscan_one(struct cmd_context *cmd, struct device *dev,
- 			      int disable_remove,
- 			      const char **pvid_without_metadata)
- {
--	struct label *label;
- 	struct lvmcache_info *info;
- 	struct _pvscan_baton baton;
- 	const struct format_type *fmt;
-@@ -474,7 +473,7 @@ static int _online_pvscan_one(struct cmd_context *cmd, struct device *dev,
- 		return 1;
- 	}
+@@ -692,7 +692,7 @@ int pvscan_cache_cmd(struct cmd_context *cmd, int argc, char **argv)
+ 				log_warn("WARNING: Failed to parse major:minor from %s, skipping.", pv_name);
+ 				continue;
+ 			}
+-			devno = MKDEV((dev_t)major, (dev_t)minor);
++			devno = MKDEV(major, minor);
  
--	if (!(label = lvmcache_get_label(info))) {
-+	if (!lvmcache_get_label(info)) {
- 		log_debug("No PV label found for %s.", dev_name(dev));
- 		if (!disable_remove)
- 			_online_pvid_file_remove_devno((int)MAJOR(dev->dev), (int)MINOR(dev->dev));
-diff --git a/tools/vgchange.c b/tools/vgchange.c
-index 13b72cc..e8e302c 100644
---- a/tools/vgchange.c
-+++ b/tools/vgchange.c
-@@ -607,7 +607,7 @@ static int _vgchange_single(struct cmd_context *cmd, const char *vg_name,
- {
- 	int ret = ECMD_PROCESSED;
- 	unsigned i;
--	activation_change_t activate = CHANGE_AN;
-+	activation_change_t activate;
+ 			if (!(dev = dev_cache_get_by_devt(cmd, devno, cmd->lvmetad_filter))) {
+ 				log_debug("pvscan arg %d:%d not found.", major, minor);
+@@ -748,7 +748,7 @@ int pvscan_cache_cmd(struct cmd_context *cmd, int argc, char **argv)
+ 		if (major < 0 || minor < 0)
+ 			continue;
  
- 	static const struct {
- 		int arg;
+-		devno = MKDEV((dev_t)major, (dev_t)minor);
++		devno = MKDEV(major, minor);
+ 
+ 		if (!(dev = dev_cache_get_by_devt(cmd, devno, cmd->lvmetad_filter))) {
+ 			log_debug("pvscan arg %d:%d not found.", major, minor);
 
 
