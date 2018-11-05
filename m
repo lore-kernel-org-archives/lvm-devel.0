@@ -1,74 +1,66 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Mon, 5 Nov 2018 11:27:18 -0500
-Subject: master - cov: explicit ignore if failures
-Message-ID: <201811051627.wA5GRIm9005403@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Mon, 5 Nov 2018 11:27:20 -0500
+Subject: master - cov: mark warning as expected one
+Message-ID: <201811051627.wA5GRKRd005418@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=bc1976011adb51951dc0280817b2c047ab22ac7c
-Commit:        bc1976011adb51951dc0280817b2c047ab22ac7c
-Parent:        79879bd201d4156312bb03fc0b7228ce34a3bf38
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=9238b972c543a83fbd553cc44a916608809cfc53
+Commit:        9238b972c543a83fbd553cc44a916608809cfc53
+Parent:        0d934e730ec62d16c4f47dbb0d8e97ed16910786
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu Nov 1 15:38:30 2018 +0100
+AuthorDate:    Thu Nov 1 15:44:13 2018 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Sat Nov 3 16:09:36 2018 +0100
+CommitterDate: Sat Nov 3 16:10:32 2018 +0100
 
-cov: explicit ignore if failures
+cov: mark warning as expected one
 
-Here we can't do anything better than just ignore syscall failures
-(with silence as there is no loging mechanism)
 ---
- scripts/generator-internals.c |   14 +++++++-------
- 1 files changed, 7 insertions(+), 7 deletions(-)
+ base/data-struct/radix-tree-adaptive.c |    1 +
+ device_mapper/libdm-file.c             |    2 ++
+ libdm/libdm-file.c                     |    2 ++
+ 3 files changed, 5 insertions(+), 0 deletions(-)
 
-diff --git a/scripts/generator-internals.c b/scripts/generator-internals.c
-index 00a15e5..5acc969 100644
---- a/scripts/generator-internals.c
-+++ b/scripts/generator-internals.c
-@@ -42,18 +42,18 @@ static bool _open_child(struct child_process *child, const char *cmd, const char
+diff --git a/base/data-struct/radix-tree-adaptive.c b/base/data-struct/radix-tree-adaptive.c
+index f8f3322..25dfbee 100644
+--- a/base/data-struct/radix-tree-adaptive.c
++++ b/base/data-struct/radix-tree-adaptive.c
+@@ -354,6 +354,7 @@ static bool _insert_node16(struct radix_tree *rt, struct value *v, uint8_t *kb,
+ 			return false;
  
- 	child->pid = fork();
- 	if (child->pid < 0) {
--		close(pipe_fd[0]);
--		close(pipe_fd[1]);
-+		(void) close(pipe_fd[0]);
-+		(void) close(pipe_fd[1]);
- 		_error("call to fork() failed: %d\n", r);
- 		return false;
+ 		n48->nr_entries = 17;
++		/* coverity[bad_memset] intentional use of '0' */
+ 		memset(n48->keys, 48, sizeof(n48->keys));
+ 
+ 		for (i = 0; i < 16; i++) {
+diff --git a/device_mapper/libdm-file.c b/device_mapper/libdm-file.c
+index 096c796..37c6ce7 100644
+--- a/device_mapper/libdm-file.c
++++ b/device_mapper/libdm-file.c
+@@ -222,6 +222,8 @@ retry_fcntl:
+ 		goto fail_close_unlink;
  	}
  
- 	if (child->pid == 0) {
- 		// child
--		close(pipe_fd[0]);
-+		(void) close(pipe_fd[0]);
- 		if (pipe_fd[1] != STDOUT_FILENO) {
--			dup2(pipe_fd[1], STDOUT_FILENO);
--			close(pipe_fd[1]);
-+			(void) dup2(pipe_fd[1], STDOUT_FILENO);
-+			(void) close(pipe_fd[1]);
- 		}
++	/* coverity[leaked_handle] intentional leak of fd handle here  */
++
+ 	return 1;
  
- 		if (execv(cmd, (char *const *) argv) < 0)
-@@ -62,7 +62,7 @@ static bool _open_child(struct child_process *child, const char *cmd, const char
- 		exit(1);
- 	} else {
- 		// parent
--		close(pipe_fd[1]);
-+		(void) close(pipe_fd[1]);
- 		child->fp = fdopen(pipe_fd[0], "r");
- 		if (!child->fp) {
- 			_error("call to fdopen() failed\n");
-@@ -78,7 +78,7 @@ static bool _close_child(struct child_process *child)
- {
- 	int status;
+ fail_close_unlink:
+diff --git a/libdm/libdm-file.c b/libdm/libdm-file.c
+index fc93dda..290ad32 100644
+--- a/libdm/libdm-file.c
++++ b/libdm/libdm-file.c
+@@ -221,6 +221,8 @@ retry_fcntl:
+ 		goto fail_close_unlink;
+ 	}
  
--	fclose(child->fp);
-+	(void) fclose(child->fp);
++	/* coverity[leaked_handle] intentional leak of fd handle here  */
++
+ 	return 1;
  
- 	while (waitpid(child->pid, &status, 0) < 0)
- 		if (errno != EINTR)
+ fail_close_unlink:
 
 
