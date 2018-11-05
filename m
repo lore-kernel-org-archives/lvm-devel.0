@@ -1,66 +1,68 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
 Date: Mon, 5 Nov 2018 11:27:10 -0500
-Subject: master - cov: overflow before widen
-Message-ID: <201811051627.wA5GRAcv005342@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Subject: master - cov: remove uneeded code
+Message-ID: <201811051627.wA5GRAnf005347@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=c7789daec06110b7ed3663f1ba8cf91f40c8e572
-Commit:        c7789daec06110b7ed3663f1ba8cf91f40c8e572
-Parent:        bc1976011adb51951dc0280817b2c047ab22ac7c
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=6235861e64e9567493e14c6f227a6cc5ce609e07
+Commit:        6235861e64e9567493e14c6f227a6cc5ce609e07
+Parent:        1951e0db0f0cdeddc9d84fbea0fc174ed61e8b9a
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Nov 2 21:10:21 2018 +0100
+AuthorDate:    Thu Nov 1 15:29:05 2018 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Sat Nov 3 16:10:31 2018 +0100
+CommitterDate: Sat Nov 3 16:09:36 2018 +0100
 
-cov: overflow before widen
+cov: remove uneeded code
 
-Evaluate as 64bit arithmetic (instead of doing 32bit mults which can
-in this case purely teoretically overflow).
+Since clvmd was dropped this code become useless.
 ---
- base/data-struct/radix-tree-adaptive.c |    2 +-
- lib/locking/lvmlockd.c                 |    6 +++---
- 2 files changed, 4 insertions(+), 4 deletions(-)
+ lib/activate/activate.c |    9 ---------
+ 1 files changed, 0 insertions(+), 9 deletions(-)
 
-diff --git a/base/data-struct/radix-tree-adaptive.c b/base/data-struct/radix-tree-adaptive.c
-index f5a8606..f8f3322 100644
---- a/base/data-struct/radix-tree-adaptive.c
-+++ b/base/data-struct/radix-tree-adaptive.c
-@@ -623,7 +623,7 @@ static void _degrade_to_n48(struct node256 *n256, struct value *result)
- }
- 
- // Removes an entry in an array by sliding the values above it down.
--static void _erase_elt(void *array, unsigned obj_size, unsigned count, unsigned index)
-+static void _erase_elt(void *array, size_t obj_size, unsigned count, unsigned index)
+diff --git a/lib/activate/activate.c b/lib/activate/activate.c
+index 93448d3..1e195b6 100644
+--- a/lib/activate/activate.c
++++ b/lib/activate/activate.c
+@@ -2031,8 +2031,6 @@ static int _lv_suspend(struct cmd_context *cmd, const char *lvid_s,
+ 	               const struct logical_volume *lv, const struct logical_volume *lv_pre)
  {
- 	if (index == (count - 1))
- 		// The simple case
-diff --git a/lib/locking/lvmlockd.c b/lib/locking/lvmlockd.c
-index d65e06f..969a7fe 100644
---- a/lib/locking/lvmlockd.c
-+++ b/lib/locking/lvmlockd.c
-@@ -389,7 +389,7 @@ static int _extend_sanlock_lv(struct cmd_context *cmd, struct volume_group *vg,
- 		.resize = LV_EXTEND,
- 		.force = 1,
- 	};
--	int i;
-+	uint64_t i;
+ 	const struct logical_volume *pvmove_lv = NULL;
+-	const struct logical_volume *lv_to_free = NULL;
+-	const struct logical_volume *lv_pre_to_free = NULL;
+ 	struct logical_volume *lv_pre_tmp, *lv_tmp;
+ 	struct seg_list *sl;
+ 	struct lv_segment *snap_seg;
+@@ -2223,10 +2221,6 @@ static int _lv_suspend(struct cmd_context *cmd, const char *lvid_s,
+ out:
+ 	if (mem)
+ 		dm_pool_destroy(mem);
+-	if (lv_pre_to_free)
+-		release_vg(lv_pre_to_free->vg);
+-	if (lv_to_free)
+-		release_vg(lv_to_free->vg);
  
- 	extend_bytes = extend_mb * ONE_MB_IN_BYTES;
- 	extend_sectors = extend_bytes / SECTOR_SIZE;
-@@ -443,8 +443,8 @@ static int _extend_sanlock_lv(struct cmd_context *cmd, struct volume_group *vg,
+ 	return r;
+ }
+@@ -2387,7 +2381,6 @@ static int _lv_has_open_snapshots(const struct logical_volume *lv)
  
- 	for (i = 0; i < extend_mb; i++) {
- 		if (!dev_write_zeros(dev, old_size_bytes + (i * ONE_MB_IN_BYTES), ONE_MB_IN_BYTES)) {
--			log_error("Extend sanlock LV %s cannot zero device at %llu.", display_lvname(lv),
--				  (unsigned long long)(old_size_bytes + i * ONE_MB_IN_BYTES));
-+			log_error("Extend sanlock LV %s cannot zero device@" FMTu64 ".",
-+				  display_lvname(lv), (old_size_bytes + i * ONE_MB_IN_BYTES));
- 			label_scan_invalidate(dev);
- 			return 0;
- 		}
+ int lv_deactivate(struct cmd_context *cmd, const char *lvid_s, const struct logical_volume *lv)
+ {
+-	const struct logical_volume *lv_to_free = NULL;
+ 	struct lvinfo info;
+ 	static const struct lv_activate_opts laopts = { .skip_in_use = 1 };
+ 	struct dm_list *snh;
+@@ -2457,8 +2450,6 @@ int lv_deactivate(struct cmd_context *cmd, const char *lvid_s, const struct logi
+ 		r = 0;
+ 	}
+ out:
+-	if (lv_to_free)
+-		release_vg(lv_to_free->vg);
+ 
+ 	return r;
+ }
 
 
