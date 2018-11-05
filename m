@@ -1,53 +1,55 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Mon, 5 Nov 2018 11:27:41 -0500
-Subject: master - debug: tracing fclose failure
-Message-ID: <201811051627.wA5GRf9J005486@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Mon, 5 Nov 2018 11:27:44 -0500
+Subject: master - debug: missing backtrace
+Message-ID: <201811051627.wA5GRiCn005498@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=9d9979963ffa5ec72a188e123a89eeea8ea666c5
-Commit:        9d9979963ffa5ec72a188e123a89eeea8ea666c5
-Parent:        aa8b2d6a0feb91bb5ea4364cdc53a00dfa233dca
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=9a6f0e64f92bfb9f8c7fd4e5692a8107eba50034
+Commit:        9a6f0e64f92bfb9f8c7fd4e5692a8107eba50034
+Parent:        9d9979963ffa5ec72a188e123a89eeea8ea666c5
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Nov 2 22:00:26 2018 +0100
+AuthorDate:    Fri Nov 2 22:19:26 2018 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Mon Nov 5 17:25:11 2018 +0100
 
-debug: tracing fclose failure
+debug: missing backtrace
 
-Using log_debug (not returning error code) to trace possible
-failure of fclose().
 ---
- daemons/lvmlockd/lvmlockd-sanlock.c |    7 +++++--
- 1 files changed, 5 insertions(+), 2 deletions(-)
+ lib/cache/lvmcache.c |    3 ++-
+ lib/device/bcache.c  |    3 ++-
+ 2 files changed, 4 insertions(+), 2 deletions(-)
 
-diff --git a/daemons/lvmlockd/lvmlockd-sanlock.c b/daemons/lvmlockd/lvmlockd-sanlock.c
-index d22d009..993f2f5 100644
---- a/daemons/lvmlockd/lvmlockd-sanlock.c
-+++ b/daemons/lvmlockd/lvmlockd-sanlock.c
-@@ -307,7 +307,8 @@ static int read_host_id_file(void)
- 		}
- 	}
- 	if (fclose(file))
--		log_error("failed to close host id file %s", daemon_host_id_file);
-+		log_debug("Failed to fclose host id file %s (%s).",
-+			  daemon_host_id_file, strerror(errno));
- out:
- 	log_debug("host_id %d from %s", host_id, daemon_host_id_file);
- 	return host_id;
-@@ -365,7 +366,9 @@ static void _read_sysfs_size(dev_t devno, const char *name, unsigned int *val)
- 	if (strlen(buf))
- 		*val = atoi(buf);
- out:
--	fclose(fp);
-+	if (fclose(fp))
-+		log_debug("Failed to fclose host id file %s (%s).", path, strerror(errno));
-+
- }
+diff --git a/lib/cache/lvmcache.c b/lib/cache/lvmcache.c
+index e681ed8..d35b366 100644
+--- a/lib/cache/lvmcache.c
++++ b/lib/cache/lvmcache.c
+@@ -1848,7 +1848,8 @@ void lvmcache_destroy(struct cmd_context *cmd, int retain_orphans, int reset)
+ 	if (retain_orphans) {
+ 		struct format_type *fmt;
  
- /* Select sector/align size for a new VG based on what the device reports for
+-		lvmcache_init(cmd);
++		if (!lvmcache_init(cmd))
++			stack;
+ 
+ 		dm_list_iterate_items(fmt, &cmd->formats) {
+ 			if (!lvmcache_add_orphan_vginfo(fmt->orphan_vg_name, fmt))
+diff --git a/lib/device/bcache.c b/lib/device/bcache.c
+index 0183079..62970ef 100644
+--- a/lib/device/bcache.c
++++ b/lib/device/bcache.c
+@@ -1004,7 +1004,8 @@ void bcache_destroy(struct bcache *cache)
+ 	if (cache->nr_locked)
+ 		log_warn("some blocks are still locked");
+ 
+-	bcache_flush(cache);
++	if (!bcache_flush(cache))
++		stack;
+ 	_wait_all(cache);
+ 	_exit_free_list(cache);
+ 	radix_tree_destroy(cache->rtree);
 
 
