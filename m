@@ -1,39 +1,43 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Mon, 5 Nov 2018 11:27:27 -0500
-Subject: master - cov: hide intentionaly ptr arithmetic report
-Message-ID: <201811051627.wA5GRR1A005429@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Mon, 5 Nov 2018 11:27:30 -0500
+Subject: master - cov: avoid unsing unchecked label_scan_open
+Message-ID: <201811051627.wA5GRUU2005449@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=a91ac41b93eff0f3ebd3af3319e8bbcb1fe8d00f
-Commit:        a91ac41b93eff0f3ebd3af3319e8bbcb1fe8d00f
-Parent:        9238b972c543a83fbd553cc44a916608809cfc53
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=d3ebb18f4052fd90bb2d177089e79801b51f6242
+Commit:        d3ebb18f4052fd90bb2d177089e79801b51f6242
+Parent:        70e3d0a613fb53e52f7a7cb31d65bcc2fa7ab738
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Nov 2 22:29:43 2018 +0100
+AuthorDate:    Sat Nov 3 17:19:33 2018 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Sat Nov 3 16:10:32 2018 +0100
+CommitterDate: Mon Nov 5 17:25:11 2018 +0100
 
-cov: hide intentionaly ptr arithmetic report
+cov: avoid unsing unchecked label_scan_open
 
-Only single region count is ever replaced with on-stack uint64_t.
+Drop extra call too label_scan_open() without checking return value,
+and let code go through next call bellow.
 ---
- libdm/dm-tools/dmsetup.c |    1 +
- 1 files changed, 1 insertions(+), 0 deletions(-)
+ lib/label/label.c |    4 +---
+ 1 files changed, 1 insertions(+), 3 deletions(-)
 
-diff --git a/libdm/dm-tools/dmsetup.c b/libdm/dm-tools/dmsetup.c
-index 93714ac..4b14a23 100644
---- a/libdm/dm-tools/dmsetup.c
-+++ b/libdm/dm-tools/dmsetup.c
-@@ -5245,6 +5245,7 @@ static int _do_stats_create_regions(struct dm_stats *dms,
- 			 */
- 			this_start = (segments) ? segment_start : start;
- 			this_len = (segments) ? segment_len : this_len;
-+			/* coverity[ptr_arith] intentional */
- 			if (!(r = dm_stats_create_region(dms, &region_ids[count],
- 							 this_start, this_len, step,
- 							 precise, bounds,
+diff --git a/lib/label/label.c b/lib/label/label.c
+index ca8502d..5387161 100644
+--- a/lib/label/label.c
++++ b/lib/label/label.c
+@@ -1299,9 +1299,7 @@ bool dev_set_bytes(struct device *dev, uint64_t start, size_t len, uint8_t val)
+ 		log_debug("Close and reopen to write %s", dev_name(dev));
+ 		bcache_invalidate_fd(scan_bcache, dev->bcache_fd);
+ 		_scan_dev_close(dev);
+-
+-		dev->flags |= DEV_BCACHE_WRITE;
+-		label_scan_open(dev);
++		/* goes to label_scan_open() since bcache_fd < 0 */
+ 	}
+ 
+ 	if (dev->bcache_fd <= 0) {
 
 
