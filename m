@@ -1,58 +1,74 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Mon, 5 Nov 2018 11:27:17 -0500
-Subject: master - cov: trace failing pthread_kill
-Message-ID: <201811051627.wA5GRHcn005367@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Mon, 5 Nov 2018 11:27:18 -0500
+Subject: master - cov: explicit ignore if failures
+Message-ID: <201811051627.wA5GRIm9005403@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=0d934e730ec62d16c4f47dbb0d8e97ed16910786
-Commit:        0d934e730ec62d16c4f47dbb0d8e97ed16910786
-Parent:        813347cf84617a946d9184f44c5fbd275bb41766
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=bc1976011adb51951dc0280817b2c047ab22ac7c
+Commit:        bc1976011adb51951dc0280817b2c047ab22ac7c
+Parent:        79879bd201d4156312bb03fc0b7228ce34a3bf38
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Nov 2 22:11:18 2018 +0100
+AuthorDate:    Thu Nov 1 15:38:30 2018 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Sat Nov 3 16:10:32 2018 +0100
+CommitterDate: Sat Nov 3 16:09:36 2018 +0100
 
-cov: trace failing pthread_kill
+cov: explicit ignore if failures
 
+Here we can't do anything better than just ignore syscall failures
+(with silence as there is no loging mechanism)
 ---
- .../dmeventd/plugins/snapshot/dmeventd_snapshot.c  |    7 +++++--
- 1 files changed, 5 insertions(+), 2 deletions(-)
+ scripts/generator-internals.c |   14 +++++++-------
+ 1 files changed, 7 insertions(+), 7 deletions(-)
 
-diff --git a/daemons/dmeventd/plugins/snapshot/dmeventd_snapshot.c b/daemons/dmeventd/plugins/snapshot/dmeventd_snapshot.c
-index 6ffa9fc..9e9053c 100644
---- a/daemons/dmeventd/plugins/snapshot/dmeventd_snapshot.c
-+++ b/daemons/dmeventd/plugins/snapshot/dmeventd_snapshot.c
-@@ -175,6 +175,7 @@ void process_event(struct dm_task *dmt,
- 	const char *device = dm_task_get_name(dmt);
- 	int percent;
- 	struct dm_info info;
-+	int ret;
+diff --git a/scripts/generator-internals.c b/scripts/generator-internals.c
+index 00a15e5..5acc969 100644
+--- a/scripts/generator-internals.c
++++ b/scripts/generator-internals.c
+@@ -42,18 +42,18 @@ static bool _open_child(struct child_process *child, const char *cmd, const char
  
- 	/* No longer monitoring, waiting for remove */
- 	if (!state->percent_check)
-@@ -205,7 +206,8 @@ void process_event(struct dm_task *dmt,
- 		/* Maybe configurable ? */
- 		_remove(dm_task_get_uuid(dmt));
- #endif
--		pthread_kill(pthread_self(), SIGALRM);
-+		if ((ret = pthread_kill(pthread_self(), SIGALRM)) && (ret != ESRCH))
-+			log_sys_error("pthread_kill", "self");
- 		goto out;
+ 	child->pid = fork();
+ 	if (child->pid < 0) {
+-		close(pipe_fd[0]);
+-		close(pipe_fd[1]);
++		(void) close(pipe_fd[0]);
++		(void) close(pipe_fd[1]);
+ 		_error("call to fork() failed: %d\n", r);
+ 		return false;
  	}
  
-@@ -213,7 +215,8 @@ void process_event(struct dm_task *dmt,
- 		/* TODO eventually recognize earlier when room is enough */
- 		log_info("Dropping monitoring of fully provisioned snapshot %s.",
- 			 device);
--		pthread_kill(pthread_self(), SIGALRM);
-+		if ((ret = pthread_kill(pthread_self(), SIGALRM)) && (ret != ESRCH))
-+			log_sys_error("pthread_kill", "self");
- 		goto out;
- 	}
+ 	if (child->pid == 0) {
+ 		// child
+-		close(pipe_fd[0]);
++		(void) close(pipe_fd[0]);
+ 		if (pipe_fd[1] != STDOUT_FILENO) {
+-			dup2(pipe_fd[1], STDOUT_FILENO);
+-			close(pipe_fd[1]);
++			(void) dup2(pipe_fd[1], STDOUT_FILENO);
++			(void) close(pipe_fd[1]);
+ 		}
  
+ 		if (execv(cmd, (char *const *) argv) < 0)
+@@ -62,7 +62,7 @@ static bool _open_child(struct child_process *child, const char *cmd, const char
+ 		exit(1);
+ 	} else {
+ 		// parent
+-		close(pipe_fd[1]);
++		(void) close(pipe_fd[1]);
+ 		child->fp = fdopen(pipe_fd[0], "r");
+ 		if (!child->fp) {
+ 			_error("call to fdopen() failed\n");
+@@ -78,7 +78,7 @@ static bool _close_child(struct child_process *child)
+ {
+ 	int status;
+ 
+-	fclose(child->fp);
++	(void) fclose(child->fp);
+ 
+ 	while (waitpid(child->pid, &status, 0) < 0)
+ 		if (errno != EINTR)
 
 
