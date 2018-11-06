@@ -1,20 +1,20 @@
 From: David Teigland <teigland@sourceware.org>
-Date: Tue, 6 Nov 2018 17:36:40 -0500
-Subject: master - devices: reuse bcache fd when getting block size
-Message-ID: <201811062236.wA6MaeL5013526@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Tue, 6 Nov 2018 17:42:19 -0500
+Subject: 2018-06-01-stable - devices: reuse bcache fd when getting block size
+Message-ID: <201811062242.wA6MgJFU014494@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=1dc5603f73940bc59d09afa67c2e8c4da0ce8526
-Commit:        1dc5603f73940bc59d09afa67c2e8c4da0ce8526
-Parent:        3ae55695708b5d702f21daf776607d30cebe69c3
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=9799c8da07b77844451c64bcbbce0d9d43ce2552
+Commit:        9799c8da07b77844451c64bcbbce0d9d43ce2552
+Parent:        613466aa8f315468d34f45a75c662335abbdab2f
 Author:        David Teigland <teigland@redhat.com>
 AuthorDate:    Tue Nov 6 16:03:17 2018 -0600
 Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Tue Nov 6 16:36:18 2018 -0600
+CommitterDate: Tue Nov 6 16:41:04 2018 -0600
 
 devices: reuse bcache fd when getting block size
 
@@ -24,10 +24,10 @@ This avoids an unnecessary open() on the device.
  1 files changed, 19 insertions(+), 8 deletions(-)
 
 diff --git a/lib/device/dev-io.c b/lib/device/dev-io.c
-index dc95131..4460e55 100644
+index 2a4967f..2a83a96 100644
 --- a/lib/device/dev-io.c
 +++ b/lib/device/dev-io.c
-@@ -148,16 +148,27 @@ static int _io(struct device_area *where, char *buffer, int should_write, dev_io
+@@ -149,16 +149,27 @@ static int _io(struct device_area *where, char *buffer, int should_write, dev_io
  int dev_get_block_size(struct device *dev, unsigned int *physical_block_size, unsigned int *block_size)
  {
  	const char *name = dev_name(dev);
@@ -60,7 +60,7 @@ index dc95131..4460e55 100644
  			log_sys_error("ioctl BLKBSZGET", name);
  			r = 0;
  			goto out;
-@@ -168,7 +179,7 @@ int dev_get_block_size(struct device *dev, unsigned int *physical_block_size, un
+@@ -169,7 +180,7 @@ int dev_get_block_size(struct device *dev, unsigned int *physical_block_size, un
  #ifdef BLKPBSZGET
  	/* BLKPBSZGET is available in kernel >= 2.6.32 only */
  	if (dev->phys_block_size == -1) {
@@ -69,7 +69,7 @@ index dc95131..4460e55 100644
  			log_sys_error("ioctl BLKPBSZGET", name);
  			r = 0;
  			goto out;
-@@ -178,7 +189,7 @@ int dev_get_block_size(struct device *dev, unsigned int *physical_block_size, un
+@@ -179,7 +190,7 @@ int dev_get_block_size(struct device *dev, unsigned int *physical_block_size, un
  #elif defined (BLKSSZGET)
  	/* if we can't get physical block size, just use logical block size instead */
  	if (dev->phys_block_size == -1) {
@@ -78,7 +78,7 @@ index dc95131..4460e55 100644
  			log_sys_error("ioctl BLKSSZGET", name);
  			r = 0;
  			goto out;
-@@ -196,7 +207,7 @@ int dev_get_block_size(struct device *dev, unsigned int *physical_block_size, un
+@@ -197,7 +208,7 @@ int dev_get_block_size(struct device *dev, unsigned int *physical_block_size, un
  	*physical_block_size = (unsigned int) dev->phys_block_size;
  	*block_size = (unsigned int) dev->block_size;
  out:
