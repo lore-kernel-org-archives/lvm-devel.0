@@ -1,107 +1,174 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
 Date: Tue, 6 Nov 2018 09:08:37 -0500
-Subject: master - pvscan: add error checking for write of online files
-Message-ID: <201811061408.wA6E8b4t031900@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Subject: master - tests: add wait for udev
+Message-ID: <201811061408.wA6E8bIb031901@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=a1b1b3dbb620dd51123387828b4b936a47814853
-Commit:        a1b1b3dbb620dd51123387828b4b936a47814853
-Parent:        9a6f0e64f92bfb9f8c7fd4e5692a8107eba50034
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=ad0268e239a2d8445813733b70ea54a546f8b627
+Commit:        ad0268e239a2d8445813733b70ea54a546f8b627
+Parent:        a1b1b3dbb620dd51123387828b4b936a47814853
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Nov 6 15:04:35 2018 +0100
+AuthorDate:    Tue Nov 6 15:01:52 2018 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Tue Nov 6 15:05:44 2018 +0100
 
-pvscan: add error checking for write of online files
+tests: add wait for udev
 
-When there is any write failure during writting file,
-report this upward as error and fail command instead
-of continuing futher.
+Since the test is currently directly working with live directory,
+which can be getting updates from system's udev - add wait
+for settling so removal of all known PVs happens after that.
+But still this has major influce on behavior of running system,
+so the test should never be executed on a user used box.
 ---
- tools/pvscan.c |   37 +++++++++++++++++++++++++------------
- 1 files changed, 25 insertions(+), 12 deletions(-)
+ test/shell/pvscan-autoactivate.sh |   59 +++++++++++++++---------------------
+ 1 files changed, 25 insertions(+), 34 deletions(-)
 
-diff --git a/tools/pvscan.c b/tools/pvscan.c
-index 85b0e04..0f7603e 100644
---- a/tools/pvscan.c
-+++ b/tools/pvscan.c
-@@ -256,40 +256,52 @@ static void _online_pvid_files_remove(void)
- 		log_sys_debug("closedir", _pvs_online_dir);
- }
+diff --git a/test/shell/pvscan-autoactivate.sh b/test/shell/pvscan-autoactivate.sh
+index 5c5a3c6..b6db47a 100644
+--- a/test/shell/pvscan-autoactivate.sh
++++ b/test/shell/pvscan-autoactivate.sh
+@@ -12,6 +12,18 @@
  
--static void _online_pvid_file_create(struct device *dev)
-+static int _online_pvid_file_create(struct device *dev)
- {
- 	char path[PATH_MAX];
- 	char buf[32];
- 	int major, minor;
- 	int fd;
- 	int rv;
--
--	memset(path, 0, sizeof(path));
-+	int len;
+ SKIP_WITH_LVMPOLLD=1
  
- 	major = (int)MAJOR(dev->dev);
- 	minor = (int)MINOR(dev->dev);
- 
--	snprintf(path, sizeof(path), "%s/%s", _pvs_online_dir, dev->pvid);
-+	if (dm_snprintf(path, sizeof(path), "%s/%s", _pvs_online_dir, dev->pvid) < 0) {
-+		log_error("Path %s/%s is too long.", _pvs_online_dir, dev->pvid);
-+		return 0;
-+	}
- 
--	snprintf(buf, sizeof(buf), "%d:%d\n", major, minor);
-+	if ((len = dm_snprintf(buf, sizeof(buf), "%d:%d\n", major, minor)) < 0) {
-+		log_error("Device %d:%d is too long.", major, minor);
-+		return 0;
-+	}
- 
- 	log_debug("Create pv online: %s %d:%d %s", path, major, minor, dev_name(dev));
- 
- 	fd = open(path, O_CREAT | O_TRUNC | O_RDWR, S_IRUSR | S_IWUSR);
- 	if (fd < 0) {
--		log_warn("Failed to open %s: %d", path, errno);
--		return;
-+		log_error("Failed to open %s: %d", path, errno);
-+		return 0;
- 	}
- 
--	rv = write(fd, buf, strlen(buf));
--	if (!rv || rv < 0)
--		log_warn("Failed to write fd %d buf %s dev %s to %s: %d",
--			 fd, buf, dev_name(dev), path, errno);
-+	while (len > 0) {
-+		rv = write(fd, buf, len);
-+		if (rv < 0) {
-+			log_error("Failed to write fd %d buf %s dev %s to %s: %d",
-+				  fd, buf, dev_name(dev), path, errno);
-+			return 0;
-+		}
-+		len -= rv;
-+	}
- 
- 	/* We don't care about syncing, these files are not even persistent. */
- 
- 	if (close(fd))
- 		log_sys_debug("close", path);
++RUNDIR="/run"
++test -d "$RUNDIR" || RUNDIR="/var/run"
++ONLINEDIR="$RUNDIR/lvm/pvs_online"
 +
-+	return 1;
- }
++# FIXME: kills logic for running system
++_clear_online() {
++	# wait till udev is finished
++	aux udev_wait
++	rm -f "$ONLINEDIR/*"
++	test -n "${1+varset}" || touch "$ONLINEDIR/foo"
++}
++
+ . lib/inittest
  
- static int _online_pvid_file_exists(const char *pvid)
-@@ -364,7 +376,8 @@ static int _online_pv_found(struct cmd_context *cmd,
- 	 * Create file named for pvid to record this PV is online.
- 	 */
+ aux prepare_pvs 2
+@@ -19,13 +31,9 @@ aux prepare_pvs 2
+ vgcreate $vg1 "$dev1" "$dev2"
+ lvcreate -n $lv1 -l 4 -a n $vg1
  
--	_online_pvid_file_create(dev);
-+	if (!_online_pvid_file_create(dev))
-+		return_0;
+-RUNDIR="/run"
+-test -d "$RUNDIR" || RUNDIR="/var/run"
+-
+ # the first pvscan scans all devs
+-# FIXME: kills logic for running system
+-rm -rf "$RUNDIR/lvm/pvs_online"
+-mkdir "$RUNDIR/lvm/pvs_online" || true
++test -d "$ONLINEDIR" || mkdir "$ONLINEDIR"
++_clear_online nofoo
  
- 	if (!vg || !found_vgnames)
- 		return 1;
+ pvscan --cache -aay
+ check lv_field $vg1/$lv1 lv_active "active"
+@@ -34,8 +42,7 @@ lvchange -an $vg1
+ # the first pvscan scans all devs even when
+ # only one device is specified
+ 
+-# FIXME: kills logic for running system
+-rm "$RUNDIR/lvm/pvs_online/*"
++_clear_online nofoo
+ 
+ pvscan --cache -aay "$dev1"
+ check lv_field $vg1/$lv1 lv_active "active"
+@@ -43,10 +50,7 @@ lvchange -an $vg1
+ 
+ # touch foo to disable first-pvscan case,
+ # then check pvscan with no args scans all
+-
+-# FIXME: kills logic for running system
+-rm "$RUNDIR/lvm/pvs_online/*"
+-touch "$RUNDIR/lvm/pvs_online/foo"
++_clear_online
+ 
+ pvscan --cache -aay
+ check lv_field $vg1/$lv1 lv_active "active"
+@@ -56,13 +60,11 @@ lvchange -an $vg1
+ # then check that vg is activated only after
+ # both devs appear separately
+ 
+-# FIXME: kills logic for running system
+-rm "$RUNDIR/lvm/pvs_online/*"
+-touch "$RUNDIR/lvm/pvs_online/foo"
++_clear_online
+ 
+-pvscan --cache -aay "$dev1"
++pvscan -vvvv --cache -aay "$dev1"
+ check lv_field $vg1/$lv1 lv_active ""
+-pvscan --cache -aay "$dev2"
++pvscan -vvvv --cache -aay "$dev2"
+ check lv_field $vg1/$lv1 lv_active "active"
+ lvchange -an $vg1
+ 
+@@ -70,9 +72,7 @@ lvchange -an $vg1
+ # then check that vg is activated when both
+ # devs appear together
+ 
+-# FIXME: kills logic for running system
+-rm "$RUNDIR/lvm/pvs_online/*"
+-touch "$RUNDIR/lvm/pvs_online/foo"
++_clear_online
+ 
+ pvscan --cache -aay "$dev1" "$dev2"
+ check lv_field $vg1/$lv1 lv_active "active"
+@@ -92,9 +92,7 @@ lvcreate -n $lv1 -l 4 -a n $vg1
+ # touch foo to disable first-pvscan case,
+ # test case where dev with metadata appears first
+ 
+-# FIXME: kills logic for running system
+-rm "$RUNDIR/lvm/pvs_online/*"
+-touch "$RUNDIR/lvm/pvs_online/foo"
++_clear_online
+ 
+ pvscan --cache -aay "$dev2"
+ check lv_field $vg1/$lv1 lv_active ""
+@@ -106,9 +104,7 @@ lvchange -an $vg1
+ # test case where dev without metadata
+ # appears first which triggers scanning all
+ 
+-# FIXME: kills logic for running system
+-rm "$RUNDIR/lvm/pvs_online/*"
+-touch "$RUNDIR/lvm/pvs_online/foo"
++_clear_online
+ 
+ pvscan --cache -aay "$dev1"
+ check lv_field $vg1/$lv1 lv_active "active"
+@@ -119,8 +115,7 @@ lvchange -an $vg1
+ # dev without metadata is scanned, but
+ # first-pvscan case scans all devs
+ 
+-# FIXME: kills logic for running system
+-rm "$RUNDIR/lvm/pvs_online/*"
++_clear_online nofoo
+ 
+ pvscan --cache -aay "$dev1"
+ check lv_field $vg1/$lv1 lv_active "active"
+@@ -130,9 +125,7 @@ lvchange -an $vg1
+ # is online without the -aay option to
+ # activate until after they are online
+ 
+-# FIXME: kills logic for running system
+-rm "$RUNDIR/lvm/pvs_online/*"
+-touch "$RUNDIR/lvm/pvs_online/foo"
++_clear_online
+ 
+ pvscan --cache "$dev1"
+ check lv_field $vg1/$lv1 lv_active ""
+@@ -144,9 +137,7 @@ lvchange -an $vg1
+ 
+ # like previous
+ 
+-# FIXME: kills logic for running system
+-rm "$RUNDIR/lvm/pvs_online/*"
+-touch "$RUNDIR/lvm/pvs_online/foo"
++_clear_online
+ 
+ pvscan --cache "$dev1"
+ check lv_field $vg1/$lv1 lv_active ""
 
 
