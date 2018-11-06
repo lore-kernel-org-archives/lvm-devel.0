@@ -1,139 +1,76 @@
 From: David Teigland <teigland@sourceware.org>
-Date: Tue, 6 Nov 2018 16:43:21 -0500
-Subject: master - cache: factor report functions
-Message-ID: <201811062143.wA6LhLxW004805@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Tue, 6 Nov 2018 16:43:22 -0500
+Subject: master - cache: factor lvchange_cache
+Message-ID: <201811062143.wA6LhM60004810@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=e548e7c29d18034d153dc2ebe4ff0cc6bb99dc81
-Commit:        e548e7c29d18034d153dc2ebe4ff0cc6bb99dc81
-Parent:        a686391eca557fc35eb90c1ef4cdc57418b6ee19
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=8c9d9a744605e37799a2475932ae7dfd43831d08
+Commit:        8c9d9a744605e37799a2475932ae7dfd43831d08
+Parent:        e548e7c29d18034d153dc2ebe4ff0cc6bb99dc81
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Mon Nov 5 16:33:34 2018 -0600
+AuthorDate:    Mon Nov 5 16:38:08 2018 -0600
 Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Tue Nov 6 11:36:29 2018 -0600
+CommitterDate: Tue Nov 6 11:36:34 2018 -0600
 
-cache: factor report functions
+cache: factor lvchange_cache
 
 to prepare for future addition
 ---
- lib/report/report.c |   65 ++++++++++++++++++++++++++------------------------
- 1 files changed, 34 insertions(+), 31 deletions(-)
+ tools/lvchange.c |   20 ++++++++++++++------
+ 1 files changed, 14 insertions(+), 6 deletions(-)
 
-diff --git a/lib/report/report.c b/lib/report/report.c
-index 369f47c..52baa6c 100644
---- a/lib/report/report.c
-+++ b/lib/report/report.c
-@@ -1424,24 +1424,19 @@ static int _cache_settings_disp(struct dm_report *rh, struct dm_pool *mem,
- 				const void *data, void *private)
- {
- 	const struct lv_segment *seg = (const struct lv_segment *) data;
-+	const struct lv_segment *setting_seg = NULL;
- 	const struct dm_config_node *settings;
- 	struct dm_list *result;
- 	struct _str_list_append_baton baton;
- 	struct dm_list dummy_list; /* dummy list to display "nothing" */
+diff --git a/tools/lvchange.c b/tools/lvchange.c
+index 07a578b..52b3bda 100644
+--- a/tools/lvchange.c
++++ b/tools/lvchange.c
+@@ -636,18 +636,26 @@ static int _lvchange_cache(struct cmd_context *cmd,
+ 	cache_mode_t mode;
+ 	const char *name;
+ 	struct dm_config_tree *settings = NULL;
+-	struct lv_segment *pool_seg = first_seg(lv);
++	struct lv_segment *seg;
++	struct lv_segment *setting_seg = NULL;
+ 	int r = 0, is_clean;
+ 	uint32_t chunk_size = 0; /* FYI: lvchange does NOT support its change */
  
--	if (seg_is_cache(seg))
--		seg = first_seg(seg->pool_lv);
--	else if (!seg_is_cache_pool(seg)) {
--		dm_list_init(&dummy_list);
--		return _field_set_string_list(rh, field, &dummy_list, private, 0, NULL);
--		/* TODO: once we have support for STR_LIST reserved values, replace with:
--		 * return _field_set_value(field,  GET_FIRST_RESERVED_NAME(cache_settings_undef), GET_FIELD_RESERVED_VALUE(cache_settings_undef));
--		 */
--	}
+-	if (lv_is_cache(lv))
+-		pool_seg = first_seg(pool_seg->pool_lv);
++	seg = first_seg(lv);
++
 +	if (seg_is_cache_pool(seg))
 +		setting_seg = seg;
 +
 +	else if (seg_is_cache(seg))
 +		setting_seg = first_seg(seg->pool_lv);
- 
--	if (seg->policy_settings)
--		settings = seg->policy_settings->child;
--	else {
-+	if (!setting_seg || !setting_seg->policy_settings) {
- 		dm_list_init(&dummy_list);
- 		return _field_set_string_list(rh, field, &dummy_list, private, 0, NULL);
- 		/* TODO: once we have support for STR_LIST reserved values, replace with:
-@@ -1449,6 +1444,8 @@ static int _cache_settings_disp(struct dm_report *rh, struct dm_pool *mem,
- 		 */
- 	}
- 
-+	settings = setting_seg->policy_settings->child;
-+
- 	if (!(result = str_list_create(mem)))
- 		return_0;
- 
-@@ -1566,19 +1563,19 @@ static int _cache_policy_disp(struct dm_report *rh, struct dm_pool *mem,
- 			      const void *data, void *private)
- {
- 	const struct lv_segment *seg = (const struct lv_segment *) data;
-+	const struct lv_segment *setting_seg = NULL;
- 
--	if (seg_is_cache(seg))
--		seg = first_seg(seg->pool_lv);
--	else if (!seg_is_cache_pool(seg) || !seg->policy_name)
-+	if (seg_is_cache_pool(seg))
-+		setting_seg = seg;
-+
-+	else if (seg_is_cache(seg))
-+		setting_seg = first_seg(seg->pool_lv);
-+
-+	if (!setting_seg || !setting_seg->policy_name)
- 		return _field_set_value(field, GET_FIRST_RESERVED_NAME(cache_policy_undef),
- 					GET_FIELD_RESERVED_VALUE(cache_policy_undef));
- 
--	if (!seg->policy_name) {
--		log_error(INTERNAL_ERROR "Unexpected NULL policy name.");
--		return 0;
--	}
--
--	return _field_string(rh, field, seg->policy_name);
-+	return _field_string(rh, field, setting_seg->policy_name);
- }
- 
- static int _modules_disp(struct dm_report *rh, struct dm_pool *mem,
-@@ -2747,21 +2744,27 @@ static int _cachemetadataformat_disp(struct dm_report *rh, struct dm_pool *mem,
- 				     const void *data, void *private)
- {
- 	const struct lv_segment *seg = (const struct lv_segment *) data;
-+	const struct lv_segment *setting_seg = NULL;
- 	const uint64_t *fmt;
- 
--	if (seg_is_cache(seg))
--		seg = first_seg(seg->pool_lv);
-+	if (seg_is_cache_pool(seg))
-+		setting_seg = seg;
- 
--	if (seg_is_cache_pool(seg)) {
--		switch (seg->cache_metadata_format) {
--		case CACHE_METADATA_FORMAT_1:
--		case CACHE_METADATA_FORMAT_2:
--			fmt = (seg->cache_metadata_format == CACHE_METADATA_FORMAT_2) ? &_two64 : &_one64;
--			return dm_report_field_uint64(rh, field, fmt);
--		default: /* unselected/undefined for all other cases */;
--		}
-+	else if (seg_is_cache(seg))
-+		setting_seg = first_seg(seg->pool_lv);
-+
 +	else
-+		goto undef;
-+
-+	switch (setting_seg->cache_metadata_format) {
-+	case CACHE_METADATA_FORMAT_1:
-+	case CACHE_METADATA_FORMAT_2:
-+		fmt = (setting_seg->cache_metadata_format == CACHE_METADATA_FORMAT_2) ? &_two64 : &_one64;
-+		return dm_report_field_uint64(rh, field, fmt);
-+	default: /* unselected/undefined for all other cases */;
++		goto_out;
+ 
+ 	if (!get_cache_params(cmd, &chunk_size, &format, &mode, &name, &settings))
+ 		goto_out;
+ 
+ 	if ((mode != CACHE_MODE_UNSELECTED) &&
+-	    (mode != pool_seg->cache_mode) &&
++	    (mode != setting_seg->cache_mode) &&
+ 	    lv_is_cache(lv)) {
+ 		if (!lv_cache_wait_for_clean(lv, &is_clean))
+ 			return_0;
+@@ -658,11 +666,11 @@ static int _lvchange_cache(struct cmd_context *cmd,
+ 		}
  	}
  
-+ undef:
- 	return _field_set_value(field, "", &GET_TYPE_RESERVED_VALUE(num_undef_64));
- }
+-	if (mode && !cache_set_cache_mode(first_seg(lv), mode))
++	if (mode && !cache_set_cache_mode(seg, mode))
+ 		goto_out;
  
+ 	if ((name || settings) &&
+-	    !cache_set_policy(first_seg(lv), name, settings))
++	    !cache_set_policy(seg, name, settings))
+ 		goto_out;
+ 
+ 	/* Request caller to commit and reload metadata */
 
 
