@@ -1,67 +1,54 @@
 From: David Teigland <teigland@sourceware.org>
-Date: Wed, 14 Nov 2018 11:01:19 -0500
-Subject: master - remove unused backgroundfork option
-Message-ID: <201811141601.wAEG1Jdq029212@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Thu, 8 Nov 2018 10:50:13 -0500
+Subject: master - tests: enable writeback in cache-single-options
+Message-ID: <201811081550.wA8FoD1Y024017@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=3ca8ed66a737c3b078e292752461befd157d49b4
-Commit:        3ca8ed66a737c3b078e292752461befd157d49b4
-Parent:        814cff0c20158b89592bac437faa375d7d8ff682
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=e1e33e75e7e1c1907017aa151be7253f63075f34
+Commit:        e1e33e75e7e1c1907017aa151be7253f63075f34
+Parent:        8c5fbd5fac7de820f7b4106a070b993a1565c112
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Wed Nov 14 09:34:49 2018 -0600
+AuthorDate:    Thu Nov 8 09:40:41 2018 -0600
 Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Wed Nov 14 09:34:49 2018 -0600
+CommitterDate: Thu Nov 8 09:40:41 2018 -0600
 
-remove unused backgroundfork option
+tests: enable writeback in cache-single-options
 
 ---
- tools/args.h       |    5 -----
- tools/lvmcmdline.c |    8 --------
- 2 files changed, 0 insertions(+), 13 deletions(-)
+ test/shell/cache-single-options.sh |   14 +++++++-------
+ 1 files changed, 7 insertions(+), 7 deletions(-)
 
-diff --git a/tools/args.h b/tools/args.h
-index 3e737f8..1ceba99 100644
---- a/tools/args.h
-+++ b/tools/args.h
-@@ -932,16 +932,11 @@ arg(activevolumegroups_ARG, 'A', "activevolumegroups", 0, 0, 0,
-     "Only select active VGs. The VG is considered active\n"
-     "if at least one of its LVs is active.\n")
+diff --git a/test/shell/cache-single-options.sh b/test/shell/cache-single-options.sh
+index 4eb4d1c..00c1b1d 100644
+--- a/test/shell/cache-single-options.sh
++++ b/test/shell/cache-single-options.sh
+@@ -164,16 +164,16 @@ mount_umount $lv1
+ #mount_umount $lv1
  
--/* FIXME: remove background option from pvscan, it's not used */
--
- arg(background_ARG, 'b', "background", 0, 0, 0,
-     "If the operation requires polling, this option causes the command to\n"
-     "return before the operation is complete, and polling is done in the\n"
-     "background.\n")
  
--/* Not used */
--arg(backgroundfork_ARG, 'b', "background", 0, 0, 0, NULL)
--
- arg(basevgname_ARG, 'n', "basevgname", string_VAL, 0, 0,
-     "By default the snapshot VG will be renamed to the original name plus a\n"
-     "numeric suffix to avoid duplicate naming (e.g. 'test_vg' would be renamed\n"
-diff --git a/tools/lvmcmdline.c b/tools/lvmcmdline.c
-index f49843d..9c0476e 100644
---- a/tools/lvmcmdline.c
-+++ b/tools/lvmcmdline.c
-@@ -2825,14 +2825,6 @@ int lvm_run_command(struct cmd_context *cmd, int argc, char **argv)
+-#lvconvert -y --type cache --cachepool $lv2 --cachemode writeback $vg/$lv1
++lvconvert -y --type cache --cachepool $lv2 --cachemode writeback $vg/$lv1
  
- 	set_cmd_name(cmd->name);
+-#check lv_field $vg/$lv1 cachemode "writeback"
++check lv_field $vg/$lv1 cachemode "writeback"
  
--	if (arg_is_set(cmd, backgroundfork_ARG)) {
--		if (!become_daemon(cmd, 1)) {
--			/* parent - quit immediately */
--			ret = ECMD_PROCESSED;
--			goto out;
--		}
--	}
--
- 	if (arg_is_set(cmd, config_ARG))
- 		if (!override_config_tree_from_string(cmd, arg_str_value(cmd, config_ARG, ""))) {
- 			ret = EINVALID_CMD_LINE;
+-#mkfs_mount_umount $lv1
++mkfs_mount_umount $lv1
+ 
+-#lvconvert --splitcache $vg/$lv1
+-#check lv_field $vg/$lv1 segtype linear
+-#check lv_field $vg/$lv2 segtype linear
+-#mount_umount $lv1
++lvconvert --splitcache $vg/$lv1
++check lv_field $vg/$lv1 segtype linear
++check lv_field $vg/$lv2 segtype linear
++mount_umount $lv1
+ 
+ 
+ #
 
 
