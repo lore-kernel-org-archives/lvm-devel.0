@@ -1,38 +1,41 @@
-From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Fri, 16 Nov 2018 18:33:20 -0500
-Subject: master - tests: drop unwanted backup
-Message-ID: <201811162333.wAGNXKPh016152@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: David Teigland <teigland@sourceware.org>
+Date: Thu, 8 Nov 2018 11:09:17 -0500
+Subject: master - tests: add lvchange cachemode passthrough in cache-single-options
+Message-ID: <201811081609.wA8G9Hfp027229@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=a23ed35f6c14e2f914796c34fea2404d54b08302
-Commit:        a23ed35f6c14e2f914796c34fea2404d54b08302
-Parent:        97a95f9648ffe2882ad7fadcea3f0908c8947c7d
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Mon Nov 12 17:57:40 2018 +0100
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Sat Nov 17 00:30:50 2018 +0100
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=025332edc2c608e5892af373ebb764ac8ec5d8be
+Commit:        025332edc2c608e5892af373ebb764ac8ec5d8be
+Parent:        8794fb71dbc3db8bebf133e6048bcd6ffdad7568
+Author:        David Teigland <teigland@redhat.com>
+AuthorDate:    Thu Nov 8 10:08:38 2018 -0600
+Committer:     David Teigland <teigland@redhat.com>
+CommitterDate: Thu Nov 8 10:08:38 2018 -0600
 
-tests: drop unwanted backup
+tests: add lvchange cachemode passthrough in cache-single-options
 
 ---
- test/shell/lvcreate-cache-no-tools.sh |    1 -
- 1 files changed, 0 insertions(+), 1 deletions(-)
+ test/shell/cache-single-options.sh |    4 ++++
+ 1 files changed, 4 insertions(+), 0 deletions(-)
 
-diff --git a/test/shell/lvcreate-cache-no-tools.sh b/test/shell/lvcreate-cache-no-tools.sh
-index 253c8a5..bbab0fe 100644
---- a/test/shell/lvcreate-cache-no-tools.sh
-+++ b/test/shell/lvcreate-cache-no-tools.sh
-@@ -76,7 +76,6 @@ lvcreate -aey -l1 -n $lv1 $vg
- lvcreate -H -l2 $vg/$lv1
+diff --git a/test/shell/cache-single-options.sh b/test/shell/cache-single-options.sh
+index 62cfeaf..d9e7e01 100644
+--- a/test/shell/cache-single-options.sh
++++ b/test/shell/cache-single-options.sh
+@@ -236,6 +236,10 @@ lvchange --cachemode writethrough $vg/$lv1
  
- check_change_ "Check is skipped"
--vgcfgbackup -f /dev/shm/back
+ check lv_field $vg/$lv1 cachemode "writethrough"
  
- # prepare fake version of cache_check tool that reports old version
- make_fake_ "0.1.0"
++lvchange --cachemode passthrough $vg/$lv1
++
++check lv_field $vg/$lv1 cachemode "passthrough"
++
+ lvchange -an $vg/$lv1
+ 
+ lvchange --cachepolicy mq --cachesettings 'migration_threshold=100' $vg/$lv1
 
 
