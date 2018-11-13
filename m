@@ -1,83 +1,72 @@
 From: David Teigland <teigland@sourceware.org>
-Date: Fri, 30 Nov 2018 16:50:27 -0500
-Subject: 2018-06-01-stable - lvmetad: fix disabling in previous commit
-Message-ID: <201811302150.wAULoRpS009685@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Tue, 13 Nov 2018 18:28:41 -0500
+Subject: master - man: remove cluster references
+Message-ID: <201811132328.wADNSf1R006676@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=9764ee0b3f21ed717e1b6248ce4c41dd552bb0ec
-Commit:        9764ee0b3f21ed717e1b6248ce4c41dd552bb0ec
-Parent:        322d4ed05e348c6d88f3cb880485e5777298c361
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=970f49dcab64bdef45bce2122ead51dd17e3c48b
+Commit:        970f49dcab64bdef45bce2122ead51dd17e3c48b
+Parent:        517332e78ddf0ea1ed5735925b1047cf5cf4f8f8
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Fri Nov 30 15:49:03 2018 -0600
+AuthorDate:    Tue Nov 13 16:15:41 2018 -0600
 Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Fri Nov 30 15:49:03 2018 -0600
+CommitterDate: Tue Nov 13 16:15:41 2018 -0600
 
-lvmetad: fix disabling in previous commit
+man: remove cluster references
 
-it broke the case where a connection already exists.
 ---
- lib/cache/lvmetad.c |   18 ++++++++++++++----
- 1 files changed, 14 insertions(+), 4 deletions(-)
+ tools/args.h |   14 ++++----------
+ 1 files changed, 4 insertions(+), 10 deletions(-)
 
-diff --git a/lib/cache/lvmetad.c b/lib/cache/lvmetad.c
-index 1b48fd3..f068fc6 100644
---- a/lib/cache/lvmetad.c
-+++ b/lib/cache/lvmetad.c
-@@ -2978,7 +2978,7 @@ void lvmetad_set_disabled(struct cmd_context *cmd, const char *reason)
- {
- 	daemon_handle tmph = { .error = 0 };
- 	daemon_reply reply;
--	int dis = 0;
-+	int tmp_con = 0;
+diff --git a/tools/args.h b/tools/args.h
+index cc65be5..3e737f8 100644
+--- a/tools/args.h
++++ b/tools/args.h
+@@ -498,12 +498,9 @@ arg(readonly_ARG, '\0', "readonly", 0, 0, 0,
+     "Run the command in a special read-only mode which will read on-disk\n"
+     "metadata without needing to take any locks. This can be used to peek\n"
+     "inside metadata used by a virtual machine image while the virtual\n"
+-    "machine is running.\n"
+-    "It can also be used to peek inside the metadata of clustered VGs\n"
+-    "when clustered locking is not configured or running. No attempt\n"
+-    "will be made to communicate with the device-mapper kernel driver, so\n"
+-    "this option is unable to report whether or not LVs are\n"
+-    "actually in use.\n")
++    "machine is running. No attempt will be made to communicate with the\n"
++    "device-mapper kernel driver, so this option is unable to report whether\n"
++    "or not LVs are actually in use.\n")
  
- 	/*
- 	 * If we were using lvmetad at the start of the command, but are not
-@@ -2993,7 +2993,7 @@ void lvmetad_set_disabled(struct cmd_context *cmd, const char *reason)
- 				log_warn("Failed to connect to lvmetad to disable.");
- 				return;
- 			}
--			dis = 1;
-+			tmp_con = 1;
- 		} else {
- 			/* We were never using lvmetad, don't start now. */
- 			return;
-@@ -3002,13 +3002,23 @@ void lvmetad_set_disabled(struct cmd_context *cmd, const char *reason)
+ arg(refresh_ARG, '\0', "refresh", 0, 0, 0,
+     "If the LV is active, reload its metadata.\n"
+@@ -592,7 +589,6 @@ arg(shared_ARG, '\0', "shared", 0, 0, 0,
+     "lvmlockd will select lock type sanlock or dlm depending on which lock\n"
+     "manager is running. This allows multiple hosts to share a VG on shared\n"
+     "devices. lvmlockd and a lock manager must be configured and running.\n"
+-    "(A shared VG using lvmlockd is different from a clustered VG using clvmd.)\n"
+     "See \\fBlvmlockd\\fP(8) for more information about shared VGs.\n"
+     "#vgs\n"
+     "#lvs\n"
+@@ -894,7 +890,6 @@ arg(activate_ARG, 'a', "activate", activation_VAL, 0, 0,
+     "Autoactivation should be used during system boot to make it possible\n"
+     "to select which LVs should be automatically activated by the system.\n"
+     "See \\fBlvmlockd\\fP(8) for more information about activation options \\fBey\\fP and \\fBsy\\fP for shared VGs.\n"
+-    "See \\fBclvmd\\fP(8) for more information about activation options \\fBey\\fP, \\fBsy\\fP, \\fBly\\fP and \\fBln\\fP for clustered VGs.\n"
+     "#lvcreate\n"
+     "Controls the active state of the new LV.\n"
+     "\\fBy\\fP makes the LV active, or available.\n"
+@@ -907,8 +902,7 @@ arg(activate_ARG, 'a', "activate", activation_VAL, 0, 0,
+     "If autoactivation \\fBay\\fP is used, the LV is only activated\n"
+     "if it matches an item in lvm.conf activation/auto_activation_volume_list.\n"
+     "\\fBay\\fP implies --zero n and --wipesignatures n.\n"
+-    "See \\fBlvmlockd\\fP(8) for more information about activation options for shared VGs.\n"
+-    "See \\fBclvmd\\fP(8) for more information about activation options for clustered VGs.\n")
++    "See \\fBlvmlockd\\fP(8) for more information about activation options for shared VGs.\n")
  
- 	log_debug_lvmetad("Sending lvmetad disabled %s", reason);
- 
--	reply = daemon_send_simple(tmph, "set_global_info",
-+	if (tmp_con)
-+		reply = daemon_send_simple(tmph, "set_global_info",
- 				   "token = %s", "skip",
- 				   "global_disable = " FMTd64, (int64_t)1,
- 				   "disable_reason = %s", reason,
- 				   "pid = " FMTd64, (int64_t)getpid(),
- 				   "cmd = %s", get_cmd_name(),
- 				   NULL);
-+	else
-+		reply = daemon_send_simple(_lvmetad, "set_global_info",
-+				   "token = %s", "skip",
-+				   "global_disable = " FMTd64, (int64_t)1,
-+				   "disable_reason = %s", reason,
-+				   "pid = " FMTd64, (int64_t)getpid(),
-+				   "cmd = %s", get_cmd_name(),
-+				   NULL);
-+
- 	if (reply.error)
- 		log_error("Failed to send message to lvmetad %d", reply.error);
- 
-@@ -3017,7 +3027,7 @@ void lvmetad_set_disabled(struct cmd_context *cmd, const char *reason)
- 
- 	daemon_reply_destroy(reply);
- 
--	if (dis)
-+	if (tmp_con)
- 		daemon_close(tmph);
- }
- 
+ arg(all_ARG, 'a', "all", 0, 0, 0,
+     "#vgreduce\n"
 
 
