@@ -1,229 +1,62 @@
 From: David Teigland <teigland@sourceware.org>
-Date: Wed, 14 Nov 2018 11:01:30 -0500
-Subject: master - man: remove scattered lvmetad references
-Message-ID: <201811141601.wAEG1UDe029535@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Wed, 14 Nov 2018 11:01:32 -0500
+Subject: master - man: remove some clvmd references
+Message-ID: <201811141601.wAEG1WnF029545@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=e6be10ffd2d9d5037d3e140157539edbb0a9d396
-Commit:        e6be10ffd2d9d5037d3e140157539edbb0a9d396
-Parent:        3ca8ed66a737c3b078e292752461befd157d49b4
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=16fed9ef0c4ea5ba20063c9fbf36c0c1292f87b3
+Commit:        16fed9ef0c4ea5ba20063c9fbf36c0c1292f87b3
+Parent:        e6be10ffd2d9d5037d3e140157539edbb0a9d396
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Wed Nov 14 09:39:42 2018 -0600
+AuthorDate:    Wed Nov 14 10:00:23 2018 -0600
 Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Wed Nov 14 09:57:57 2018 -0600
+CommitterDate: Wed Nov 14 10:00:23 2018 -0600
 
-man: remove scattered lvmetad references
+man: remove some clvmd references
 
 ---
- man/lvm.8_main                       |    9 +-----
- man/lvm2-activation-generator.8_main |   48 +++++++++++++++-------------------
- man/lvmlockd.8_main                  |    3 --
- man/lvmsystemid.7_main               |   29 +++-----------------
- man/see_also.end                     |    2 -
- 5 files changed, 26 insertions(+), 65 deletions(-)
+ man/cmirrord.8_main |   13 +++++--------
+ man/lvm.8_main      |    1 -
+ 2 files changed, 5 insertions(+), 9 deletions(-)
 
+diff --git a/man/cmirrord.8_main b/man/cmirrord.8_main
+index 026c19b..d49fa52 100644
+--- a/man/cmirrord.8_main
++++ b/man/cmirrord.8_main
+@@ -11,10 +11,8 @@ It is specific to device-mapper based mirrors (and by extension, LVM
+ cluster mirrors).  Cluster mirrors are not possible without this daemon
+ running.
+ 
+-This daemon relies on the cluster infrastructure provided by the
+-Cluster MANager (CMAN), which must be set up and running in order for
+-cmirrord to function.  (The cluster infrastructure is also required for
+-\fBclvmd\fP(8).)
++This daemon relies on the cluster infrastructure provided by the corosync,
++which must be set up and running in order for cmirrord to function.
+ 
+ Output is logged via \fBsyslog\fP(3). The \fBSIGUSR1 signal\fP(7) can be
+ issued to \fBcmirrord\fP to gather current status information for debugging
+@@ -32,8 +30,7 @@ Do not fork and log to the terminal.
+ Print usage.
+ 
+ .SH SEE ALSO
++.BR lvmlockd (8),
++.BR lvm (8),
+ .BR syslog (3),
+-.BR cluster.conf (5),
+-.BR signal (7),
+-.BR clvmd (8),
+-.BR lvm (8)
++.BR signal (7)
 diff --git a/man/lvm.8_main b/man/lvm.8_main
-index 7bbf44a..d4ce3da 100644
+index d4ce3da..b9abf58 100644
 --- a/man/lvm.8_main
 +++ b/man/lvm.8_main
-@@ -192,7 +192,7 @@ Rename a Volume Group.
- Report information about Volume Groups.
- .TP
- .B vgscan
--Scan all disks for Volume Groups and rebuild caches.
-+Scan all disks for Volume Groups.
- .TP
- .B vgsplit
- Split a Volume Group into two, moving any logical
-@@ -440,12 +440,6 @@ The Volume Group name that is assumed for
- any reference to a Logical Volume that doesn't specify a path.
- Not set by default.
- .TP
--.B LVM_LVMETAD_PIDFILE
--Path to the file that stores the lvmetad process ID.
--.TP
--.B LVM_LVMETAD_SOCKET
--Path to the socket used to communicate with lvmetad.
--.TP
- .B LVM_LVMPOLLD_PIDFILE
- Path to the file that stores the lvmpolld process ID.
- .TP
-@@ -547,7 +541,6 @@ Prepends source file name and code line number with libdm debugging.
- .BR lvmdump (8)
- 
- .BR dmeventd (8)
--.BR lvmetad (8)
- .BR lvmpolld (8)
- .BR lvmlockd (8)
- .BR lvmlockctl (8)
-diff --git a/man/lvm2-activation-generator.8_main b/man/lvm2-activation-generator.8_main
-index 0563205..066751d 100644
---- a/man/lvm2-activation-generator.8_main
-+++ b/man/lvm2-activation-generator.8_main
-@@ -1,44 +1,39 @@
- .TH "LVM2-ACTIVATION-GENERATOR" "8" "LVM TOOLS #VERSION#" "Red Hat, Inc" "\""
- .SH "NAME"
--lvm2-activation-generator - generator for systemd units to activate LVM2 volumes on boot
-+lvm2-activation-generator - generator for systemd units to activate LVM volumes on boot
- .SH SYNOPSIS
- .B #SYSTEMD_GENERATOR_DIR#/lvm2-activation-generator
- .sp
- .SH DESCRIPTION
--The lvm2-activation-generator is called by \fBsystemd\fP(1) on boot
--to generate systemd units at runtime to activate LVM2 volumes if
--\fBlvmetad\fP(8) is disabled (global/use_lvmetad=0 \fBlvm.conf\fP(5)
--option is used). Otherwise, if \fBlvmetad\fP(8) is enabled,
--the lvm2-activation-generator exits immediately without generating
--any systemd units and LVM2 fully relies on event-based activation
--to activate the LVM2 volumes instead using the \fBpvscan\fP(8)
--(pvscan --cache -aay) call that is a part of \fBudev\fP(8) rules.
-+
-+The lvm2-activation-generator is called by \fBsystemd\fP(1) on boot to
-+generate systemd units at runtime to activate LVM Logical Volumes (LVs)
-+when global/use_lvmetad=0 is set in \fBlvm.conf\fP(5).  These units use
-+\fBvgchange -ay\fP to activate LVs.
-+
-+If use_lvmetad=1, the lvm2-activation-generator exits immediately without
-+generating any systemd units, and LVM fully relies on event-based
-+activation to activate LVs.  In this case, event-generated \fBpvscan
-+--cache -aay\fP commands activate LVs.
- 
- These systemd units are generated by lvm2-activation-generator:
- .sp
- \fIlvm2-activation-early.service\fP
--used for activation of LVM2 volumes that is ordered before systemd's
--special \fBcryptsetup.target\fP to support LVM2 volumes which are not
--layered on top of encrypted devices.
-+is run before systemd's special \fBcryptsetup.target\fP to activate
-+LVs that are not layered on top of encrypted devices.
- 
- \fIlvm2-activation.service\fP
--used for activation of LVM2 volumes that is ordered after systemd's
--special \fBcryptsetup.target\fP to support LVM2 volumes which are
--layered on top of encrypted devices.
-+is run after systemd's special \fBcryptsetup.target\fP to activate
-+LVs that are layered on top of encrypted devices.
- 
- \fIlvm2-activation-net.service\fP
--used for activation of LVM2 volumes that is ordered after systemd's
--special \fBremote-fs-pre.target\fP to support LVM2 volumes which are
--layered on attached remote devices.
-+is run after systemd's special \fBremote-fs-pre.target\fP to activate
-+LVs that are layered on attached remote devices.
- 
--Note that all the underlying devices (Physical Volumes) need to be present
--when the service is run. If the there are any devices presented in the system
--anytime later, any LVM2 volumes on top of such devices need to be activated
--directly by \fBlvchange\fP(8) or \fBvgchange\fP(8). This limitation does
--not exist when using \fBlvmetad\fP(8) and accompanying event-based activation
--since such LVM volumes are activated automatically as soon as the Volume Group
--is ready (all the Physical Volumes making up the Volume Group are present
--in the system).
-+Note that all the underlying LVM devices (Physical Volumes) need to be
-+present when the service is run. If the there are any devices that appear
-+to the system later, LVs using these devices need to be activated directly
-+by \fBlvchange\fP(8) or \fBvgchange\fP(8).
- 
- The lvm2-activation-generator implements the \fBGenerators Specification\fP
- as referenced in \fBsystemd\fP(1).
-@@ -47,7 +42,6 @@ as referenced in \fBsystemd\fP(1).
- .BR lvm.conf (5)
- .BR vgchange (8)
- .BR lvchange (8)
--.BR lvmetad (8)
- .BR pvscan (8)
- .BR udev (7)
- .BR systemd (1)
-diff --git a/man/lvmlockd.8_main b/man/lvmlockd.8_main
-index 1a52fc5..ebf57da 100644
---- a/man/lvmlockd.8_main
-+++ b/man/lvmlockd.8_main
-@@ -829,9 +829,6 @@ on a remote host.  (The activation option 'l' is not used.)
- lvmlockd works with thin and cache pools and LVs.
- 
- .IP \[bu] 2
--lvmlockd works with lvmetad.
--
--.IP \[bu] 2
- lvmlockd saves the cluster name for a shared VG using dlm.  Only hosts in
- the matching cluster can use the VG.
- 
-diff --git a/man/lvmsystemid.7_main b/man/lvmsystemid.7_main
-index 97c67c2..688d16b 100644
---- a/man/lvmsystemid.7_main
-+++ b/man/lvmsystemid.7_main
-@@ -46,8 +46,7 @@ circumstances (see vgexport and vgimport).  Improper changes can result in
- a host losing access to its VG, or a VG being accidentally damaged by
- access from an unintended host.  Even limited changes to the VG system ID
- may not be perfectly reflected across hosts.  A more coherent view of
--shared storage requires an inter-host locking system to coordinate access
--and update caches.
-+shared storage requires an inter-host locking system to coordinate access.
- 
- Valid system ID characters are the same as valid VG name characters.  If a
- system ID contains invalid characters, those characters are omitted and
-@@ -294,8 +293,7 @@ The system ID of a VG is displayed with the "systemid" reporting option.
- 
- Report/display commands ignore foreign VGs by default.  To report foreign
- VGs, the --foreign option can be used.  This causes the VGs to be read
--from disk.  Because lvmetad caching is not used, this option can cause
--poor performance.
-+from disk.
- 
- .B vgs --foreign -o +systemid
- 
-@@ -306,20 +304,10 @@ standard reporting commands will silently ignore foreign VGs.
- 
- .SS vgexport/vgimport
- 
--vgexport clears the system ID.
--
--Other hosts will continue to see a newly exported VG as foreign because of
--local caching (when lvmetad is used).  Manually updating the local lvmetad
--cache with pvscan --cache will allow a host to recognize the newly
--exported VG.
-+vgexport clears the VG system ID when exporting the VG.
- 
- vgimport sets the VG system ID to the system ID of the host doing the
--import.  vgimport automatically scans storage for newly exported VGs.
--
--After vgimport, the exporting host may continue to see the VG as exported,
--and not owned by the new host.  Manually updating the local cache with
--pvscan --cache will allow a host to recognize the newly imported VG as
--foreign.
-+import.
- 
- 
- .SS vgchange
-@@ -373,15 +361,6 @@ Because of this, they are not protected by a system ID, and any host can
- use them.  Coordination of changes to orphan PVs is beyond the scope of
- system ID.  The same is true of any block device that is not a PV.
- 
--The effects of this are especially evident when LVM uses lvmetad caching.
--For example, if multiple hosts see an orphan PV, and one host creates a VG
--using the orphan, the other hosts will continue to report the PV as an
--orphan.  Nothing would automatically prevent the other hosts from using
--the newly allocated PV and corrupting it.  If the other hosts run a
--command to rescan devices, and update lvmetad, they would then recognize
--that the PV has been used by another host.  A command that rescans devices
--could be pvscan --cache, or vgs --foreign.
--
- .SH SEE ALSO
- .BR vgcreate (8),
- .BR vgchange (8),
-diff --git a/man/see_also.end b/man/see_also.end
-index 5b07719..505c159 100644
---- a/man/see_also.end
-+++ b/man/see_also.end
-@@ -53,11 +53,9 @@
- .BR lvmdump (8)
- 
- .BR dmeventd (8)
--.BR lvmetad (8)
+@@ -544,7 +544,6 @@ Prepends source file name and code line number with libdm debugging.
  .BR lvmpolld (8)
  .BR lvmlockd (8)
  .BR lvmlockctl (8)
