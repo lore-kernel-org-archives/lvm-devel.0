@@ -1,69 +1,67 @@
-From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Thu, 8 Nov 2018 06:23:46 -0500
-Subject: master - tests: keep results configurable
-Message-ID: <201811081123.wA8BNk5S013977@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: David Teigland <teigland@sourceware.org>
+Date: Wed, 14 Nov 2018 11:01:19 -0500
+Subject: master - remove unused backgroundfork option
+Message-ID: <201811141601.wAEG1Jdq029212@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=f86f01a3a15115d0ad808a14a1ca5665451cce1a
-Commit:        f86f01a3a15115d0ad808a14a1ca5665451cce1a
-Parent:        3a557dcfbf42b9124ab17ba3dcd71b417aee9be1
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu Nov 8 10:01:21 2018 +0100
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Thu Nov 8 12:22:18 2018 +0100
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=3ca8ed66a737c3b078e292752461befd157d49b4
+Commit:        3ca8ed66a737c3b078e292752461befd157d49b4
+Parent:        814cff0c20158b89592bac437faa375d7d8ff682
+Author:        David Teigland <teigland@redhat.com>
+AuthorDate:    Wed Nov 14 09:34:49 2018 -0600
+Committer:     David Teigland <teigland@redhat.com>
+CommitterDate: Wed Nov 14 09:34:49 2018 -0600
 
-tests: keep results configurable
+remove unused backgroundfork option
 
 ---
- test/Makefile.in |   10 +++++-----
- 1 files changed, 5 insertions(+), 5 deletions(-)
+ tools/args.h       |    5 -----
+ tools/lvmcmdline.c |    8 --------
+ 2 files changed, 0 insertions(+), 13 deletions(-)
 
-diff --git a/test/Makefile.in b/test/Makefile.in
-index bb736a6..f8571b7 100644
---- a/test/Makefile.in
-+++ b/test/Makefile.in
-@@ -137,33 +137,33 @@ check_local: .tests-stamp
- ifeq ("@BUILD_LVMPOLLD@", "yes")
- check_lvmpolld: .tests-stamp
- 	VERBOSE=$(VERBOSE) ./lib/runner \
--		--testdir . --outdir results \
-+		--testdir . --outdir $(LVM_TEST_RESULTS) \
- 		--flavours ndev-lvmpolld --only $(T) --skip $(S)
+diff --git a/tools/args.h b/tools/args.h
+index 3e737f8..1ceba99 100644
+--- a/tools/args.h
++++ b/tools/args.h
+@@ -932,16 +932,11 @@ arg(activevolumegroups_ARG, 'A', "activevolumegroups", 0, 0, 0,
+     "Only select active VGs. The VG is considered active\n"
+     "if at least one of its LVs is active.\n")
  
- check_all_lvmpolld: .tests-stamp
- 	VERBOSE=$(VERBOSE) ./lib/runner \
--		--testdir . --outdir results \
-+		--testdir . --outdir $(LVM_TEST_RESULTS) \
- 		--flavours ndev-lvmpolld --only $(T) --skip $(S)
- endif
+-/* FIXME: remove background option from pvscan, it's not used */
+-
+ arg(background_ARG, 'b', "background", 0, 0, 0,
+     "If the operation requires polling, this option causes the command to\n"
+     "return before the operation is complete, and polling is done in the\n"
+     "background.\n")
  
- ifeq ("@BUILD_LVMLOCKD@", "yes")
- check_lvmlockd_sanlock: .tests-stamp
- 	VERBOSE=$(VERBOSE) ./lib/runner \
--		--testdir . --outdir results \
-+		--testdir . --outdir $(LVM_TEST_RESULTS) \
- 		--flavours udev-lvmlockd-sanlock --only shell/aa-lvmlockd-sanlock-prepare.sh,$(T),shell/zz-lvmlockd-sanlock-remove.sh --skip $(S)
- endif
+-/* Not used */
+-arg(backgroundfork_ARG, 'b', "background", 0, 0, 0, NULL)
+-
+ arg(basevgname_ARG, 'n', "basevgname", string_VAL, 0, 0,
+     "By default the snapshot VG will be renamed to the original name plus a\n"
+     "numeric suffix to avoid duplicate naming (e.g. 'test_vg' would be renamed\n"
+diff --git a/tools/lvmcmdline.c b/tools/lvmcmdline.c
+index f49843d..9c0476e 100644
+--- a/tools/lvmcmdline.c
++++ b/tools/lvmcmdline.c
+@@ -2825,14 +2825,6 @@ int lvm_run_command(struct cmd_context *cmd, int argc, char **argv)
  
- ifeq ("@BUILD_LVMLOCKD@", "yes")
- check_lvmlockd_dlm: .tests-stamp
- 	VERBOSE=$(VERBOSE) ./lib/runner \
--		--testdir . --outdir results \
-+		--testdir . --outdir $(LVM_TEST_RESULTS) \
- 		--flavours udev-lvmlockd-dlm --only shell/aa-lvmlockd-dlm-prepare.sh,$(T),shell/zz-lvmlockd-dlm-remove.sh --skip $(S)
- endif
+ 	set_cmd_name(cmd->name);
  
- ifeq ("@BUILD_LVMLOCKD@", "yes")
- check_lvmlockd_test: .tests-stamp
- 	VERBOSE=$(VERBOSE) ./lib/runner \
--		--testdir . --outdir results \
-+		--testdir . --outdir $(LVM_TEST_RESULTS) \
- 		--flavours udev-lvmlockd-test --only $(T) --skip $(S)
- endif
- 
+-	if (arg_is_set(cmd, backgroundfork_ARG)) {
+-		if (!become_daemon(cmd, 1)) {
+-			/* parent - quit immediately */
+-			ret = ECMD_PROCESSED;
+-			goto out;
+-		}
+-	}
+-
+ 	if (arg_is_set(cmd, config_ARG))
+ 		if (!override_config_tree_from_string(cmd, arg_str_value(cmd, config_ARG, ""))) {
+ 			ret = EINVALID_CMD_LINE;
 
 
