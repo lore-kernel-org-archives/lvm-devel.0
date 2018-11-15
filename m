@@ -1,68 +1,41 @@
 From: David Teigland <teigland@sourceware.org>
-Date: Wed, 14 Nov 2018 11:01:32 -0500
-Subject: master - man: remove some clvmd references
-Message-ID: <201811141601.wAEG1WnF029545@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Thu, 15 Nov 2018 10:23:15 -0500
+Subject: master - lvm2-monitoring service shouldn't refer to lvmetad
+Message-ID: <201811151523.wAFFNFMn019551@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=16fed9ef0c4ea5ba20063c9fbf36c0c1292f87b3
-Commit:        16fed9ef0c4ea5ba20063c9fbf36c0c1292f87b3
-Parent:        e6be10ffd2d9d5037d3e140157539edbb0a9d396
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=df2fa88e631b13f0f2cfff4aeab80f12bd93ab72
+Commit:        df2fa88e631b13f0f2cfff4aeab80f12bd93ab72
+Parent:        16fed9ef0c4ea5ba20063c9fbf36c0c1292f87b3
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Wed Nov 14 10:00:23 2018 -0600
+AuthorDate:    Thu Nov 15 09:20:47 2018 -0600
 Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Wed Nov 14 10:00:23 2018 -0600
+CommitterDate: Thu Nov 15 09:20:47 2018 -0600
 
-man: remove some clvmd references
+lvm2-monitoring service shouldn't refer to lvmetad
 
 ---
- man/cmirrord.8_main |   13 +++++--------
- man/lvm.8_main      |    1 -
- 2 files changed, 5 insertions(+), 9 deletions(-)
+ scripts/lvm2_monitoring_systemd_red_hat.service.in |    4 ++--
+ 1 files changed, 2 insertions(+), 2 deletions(-)
 
-diff --git a/man/cmirrord.8_main b/man/cmirrord.8_main
-index 026c19b..d49fa52 100644
---- a/man/cmirrord.8_main
-+++ b/man/cmirrord.8_main
-@@ -11,10 +11,8 @@ It is specific to device-mapper based mirrors (and by extension, LVM
- cluster mirrors).  Cluster mirrors are not possible without this daemon
- running.
- 
--This daemon relies on the cluster infrastructure provided by the
--Cluster MANager (CMAN), which must be set up and running in order for
--cmirrord to function.  (The cluster infrastructure is also required for
--\fBclvmd\fP(8).)
-+This daemon relies on the cluster infrastructure provided by the corosync,
-+which must be set up and running in order for cmirrord to function.
- 
- Output is logged via \fBsyslog\fP(3). The \fBSIGUSR1 signal\fP(7) can be
- issued to \fBcmirrord\fP to gather current status information for debugging
-@@ -32,8 +30,7 @@ Do not fork and log to the terminal.
- Print usage.
- 
- .SH SEE ALSO
-+.BR lvmlockd (8),
-+.BR lvm (8),
- .BR syslog (3),
--.BR cluster.conf (5),
--.BR signal (7),
--.BR clvmd (8),
--.BR lvm (8)
-+.BR signal (7)
-diff --git a/man/lvm.8_main b/man/lvm.8_main
-index d4ce3da..b9abf58 100644
---- a/man/lvm.8_main
-+++ b/man/lvm.8_main
-@@ -544,7 +544,6 @@ Prepends source file name and code line number with libdm debugging.
- .BR lvmpolld (8)
- .BR lvmlockd (8)
- .BR lvmlockctl (8)
--.BR clvmd (8)
- .BR cmirrord (8)
- .BR lvmdbusd (8)
- 
+diff --git a/scripts/lvm2_monitoring_systemd_red_hat.service.in b/scripts/lvm2_monitoring_systemd_red_hat.service.in
+index 4144862..7ec4e4e 100644
+--- a/scripts/lvm2_monitoring_systemd_red_hat.service.in
++++ b/scripts/lvm2_monitoring_systemd_red_hat.service.in
+@@ -1,8 +1,8 @@
+ [Unit]
+ Description=Monitoring of LVM2 mirrors, snapshots etc. using dmeventd or progress polling
+ Documentation=man:dmeventd(8) man:lvcreate(8) man:lvchange(8) man:vgchange(8)
+-Requires=dm-event.socket lvm2-lvmetad.socket
+-After=dm-event.socket dm-event.service lvm2-lvmetad.socket lvm2-activation.service lvm2-lvmetad.service
++Requires=dm-event.socket
++After=dm-event.socket dm-event.service lvm2-activation.service
+ Before=local-fs-pre.target
+ DefaultDependencies=no
+ Conflicts=shutdown.target
 
 
