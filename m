@@ -1,39 +1,43 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Fri, 16 Nov 2018 19:02:15 -0500
-Subject: master - tests: still more libs needs
-Message-ID: <201811170002.wAH02Fh9019092@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Fri, 16 Nov 2018 19:12:47 -0500
+Subject: master - tests: correcting header file enclosure
+Message-ID: <201811170012.wAH0ClJU020501@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=ea001426af94d07ba1e787b36a0c325e33c6a3d9
-Commit:        ea001426af94d07ba1e787b36a0c325e33c6a3d9
-Parent:        2d89192935228cce019f8fc190a0060ca13b704e
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=188bedf8de0c60a2269f76d99262c8892c5a2143
+Commit:        188bedf8de0c60a2269f76d99262c8892c5a2143
+Parent:        ea001426af94d07ba1e787b36a0c325e33c6a3d9
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Sat Nov 17 01:00:06 2018 +0100
+AuthorDate:    Sat Nov 17 01:11:13 2018 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Sat Nov 17 01:01:48 2018 +0100
+CommitterDate: Sat Nov 17 01:12:06 2018 +0100
 
-tests: still more libs needs
+tests: correcting header file enclosure
 
+Use "" for internal header file.
 ---
- test/Makefile.in |    2 +-
- 1 files changed, 1 insertions(+), 1 deletions(-)
+ test/lib/dmsecuretest.c |    3 ++-
+ 1 files changed, 2 insertions(+), 1 deletions(-)
 
-diff --git a/test/Makefile.in b/test/Makefile.in
-index ba8eea8..df61f0a 100644
---- a/test/Makefile.in
-+++ b/test/Makefile.in
-@@ -238,7 +238,7 @@ lib/runner: lib/runner.o .lib-dir-stamp
- 	$(CXX) $(LDFLAGS) $(EXTRA_EXEC_LDFLAGS) $(ELDFLAGS) -o $@ $<
+diff --git a/test/lib/dmsecuretest.c b/test/lib/dmsecuretest.c
+index 0428fac..00d1e70 100644
+--- a/test/lib/dmsecuretest.c
++++ b/test/lib/dmsecuretest.c
+@@ -10,9 +10,10 @@
+  *
+  */
  
- lib/dmsecuretest: lib/dmsecuretest.o .lib-dir-stamp $(INTERNAL_LIBS)
--	$(CC) -g $(CFLAGS) $(LDFLAGS) $(EXTRA_EXEC_LDFLAGS) $(ELDFLAGS) -o $@ $< $(INTERNAL_LIBS) $(UDEV_LIBS) -lm
-+	$(CC) -g $(CFLAGS) $(LDFLAGS) $(EXTRA_EXEC_LDFLAGS) $(ELDFLAGS) -o $@ $< $(INTERNAL_LIBS) $(LIBS)
++#include "libdevmapper.h"
++
+ #include <unistd.h>
+ #include <signal.h>
+-#include <libdevmapper.h>
  
- lib/securetest: lib/dmsecuretest.o .lib-dir-stamp
- 	$(CC) -g $(CFLAGS) $(LDFLAGS) $(EXTRA_EXEC_LDFLAGS) $(ELDFLAGS) -o $@ $< -L$(top_builddir)/libdm/ioctl -ldevmapper $(LIBS)
+ /* Comment out this define to get coredump instead of sleeping */
+ #define SLEEP 1
 
 
