@@ -1,48 +1,55 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Mon, 19 Nov 2018 07:18:22 -0500
-Subject: master - tests: skip part of test
-Message-ID: <201811191218.wAJCIMit012474@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Mon, 19 Nov 2018 07:18:24 -0500
+Subject: master - tests: create whole path with mkdir
+Message-ID: <201811191218.wAJCIOSa012484@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=6d2609a2324988027795a757c1b387dd2ec3214b
-Commit:        6d2609a2324988027795a757c1b387dd2ec3214b
-Parent:        0747a6d0de8ccbf1586d392de29f4ab3b0fa7dbc
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=0747a6d0de8ccbf1586d392de29f4ab3b0fa7dbc
+Commit:        0747a6d0de8ccbf1586d392de29f4ab3b0fa7dbc
+Parent:        f7adcb5f6db7e7c1131b5dfb9114235a908292b1
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Sun Nov 18 22:01:27 2018 +0100
+AuthorDate:    Sun Nov 18 21:42:27 2018 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Sun Nov 18 22:03:50 2018 +0100
 
-tests: skip part of test
+tests: create whole path with mkdir
 
-On kernel 4.8 this test piece oopses machine (fc23).
+Create also 'lvm' upper this if such one is missing in /run dir
+and use '-p' with mkdir.
 ---
- test/shell/lvconvert-raid.sh |    7 +++++++
- 1 files changed, 7 insertions(+), 0 deletions(-)
+ test/shell/pvscan-autoactivate.sh |    2 +-
+ test/shell/pvscan-nomda-bg.sh     |    2 +-
+ 2 files changed, 2 insertions(+), 2 deletions(-)
 
-diff --git a/test/shell/lvconvert-raid.sh b/test/shell/lvconvert-raid.sh
-index 3b7af97..6aaaf36 100644
---- a/test/shell/lvconvert-raid.sh
-+++ b/test/shell/lvconvert-raid.sh
-@@ -244,9 +244,16 @@ lvremove -ff $vg
- ###########################################
- aux delay_dev "$dev2" 0 100
- lvcreate --type raid1 -m 2 -aey -l 2 -n $lv1 $vg "$dev1" "$dev2" "$dev3"
-+case "$(uname -r)" in
-+4.8.14*)
-+echo "Skippen test that kills this kernel"
-+;;
-+*)
- lvconvert --yes -m 1 $vg/$lv1 "$dev3"
- lvconvert --yes -m 0 $vg/$lv1 "$dev1"
- aux enable_dev "$dev2"
-+;;
-+esac
- lvremove -ff $vg
+diff --git a/test/shell/pvscan-autoactivate.sh b/test/shell/pvscan-autoactivate.sh
+index c2fc36a..cd360e9 100644
+--- a/test/shell/pvscan-autoactivate.sh
++++ b/test/shell/pvscan-autoactivate.sh
+@@ -32,7 +32,7 @@ vgcreate $vg1 "$dev1" "$dev2"
+ lvcreate -n $lv1 -l 4 -a n $vg1
  
- ###########################################
+ # the first pvscan scans all devs
+-test -d "$ONLINEDIR" || mkdir "$ONLINEDIR"
++test -d "$ONLINEDIR" || mkdir -p "$ONLINEDIR"
+ _clear_online nofoo
+ 
+ pvscan --cache -aay
+diff --git a/test/shell/pvscan-nomda-bg.sh b/test/shell/pvscan-nomda-bg.sh
+index 1b6a176..42bd26f 100644
+--- a/test/shell/pvscan-nomda-bg.sh
++++ b/test/shell/pvscan-nomda-bg.sh
+@@ -28,7 +28,7 @@ RUNDIR="/run"
+ test -d "$RUNDIR" || RUNDIR="/var/run"
+ # create a file in pvs_online to disable the pvscan init
+ # case which scans everything when the first dev appears.
+-mkdir "$RUNDIR/lvm/pvs_online" || true
++mkdir -p "$RUNDIR/lvm/pvs_online" || true
+ touch "$RUNDIR/lvm/pvs_online/foo"
+ 
+ pvscan --cache --background "$dev2" -aay
 
 
