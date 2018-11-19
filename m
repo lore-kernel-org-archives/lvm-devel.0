@@ -1,39 +1,48 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Mon, 19 Nov 2018 07:42:55 -0500
-Subject: master - tests: generate slightly less volumes
-Message-ID: <201811191242.wAJCgtTw016808@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Mon, 19 Nov 2018 12:09:31 -0500
+Subject: master - sanlock: update headers
+Message-ID: <201811191709.wAJH9Vt5030125@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=b2261b5d81732d8d8c3445e9b8c4ce935bcc49d4
-Commit:        b2261b5d81732d8d8c3445e9b8c4ce935bcc49d4
-Parent:        54de0d829b0e07ee48e92d68b428dfed8d6d7bf1
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=b968c73d2171b10f457babb2a5c428ffdc5ed21c
+Commit:        b968c73d2171b10f457babb2a5c428ffdc5ed21c
+Parent:        b2261b5d81732d8d8c3445e9b8c4ce935bcc49d4
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Mon Nov 19 13:39:39 2018 +0100
+AuthorDate:    Mon Nov 19 16:55:11 2018 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Mon Nov 19 13:42:23 2018 +0100
+CommitterDate: Mon Nov 19 16:55:11 2018 +0100
 
-tests: generate slightly less volumes
+sanlock: update headers
 
 ---
- test/shell/metadata-full.sh |    2 +-
- 1 files changed, 1 insertions(+), 1 deletions(-)
+ daemons/lvmlockd/lvmlockd-internal.h |    4 ++--
+ 1 files changed, 2 insertions(+), 2 deletions(-)
 
-diff --git a/test/shell/metadata-full.sh b/test/shell/metadata-full.sh
-index eb617ee..67333d8 100644
---- a/test/shell/metadata-full.sh
-+++ b/test/shell/metadata-full.sh
-@@ -42,7 +42,7 @@ vgcreate $SHARED -s 512K --metadatacopies 8 $vg "${DEVICES[@]}"
- # is written.
+diff --git a/daemons/lvmlockd/lvmlockd-internal.h b/daemons/lvmlockd/lvmlockd-internal.h
+index ead3098..04645fa 100644
+--- a/daemons/lvmlockd/lvmlockd-internal.h
++++ b/daemons/lvmlockd/lvmlockd-internal.h
+@@ -504,7 +504,7 @@ static inline int lm_init_vg_sanlock(char *ls_name, char *vg_name, uint32_t flag
+ 	return -1;
+ }
  
- vgcfgbackup -f data $vg
--TEST_DEVS=930
-+TEST_DEVS=925
- # Generate a lot of LV devices (size of 1 extent)
- awk -v TEST_DEVS=$TEST_DEVS '/^\t\}/ {
-     printf("\t}\n\tlogical_volumes {\n");
+-static inline int lm_init_lv_sanlock(char *ls_name, char *vg_name, char *lv_name, char *vg_args, char *lv_args, uint64_t free_offset)
++static inline int lm_init_lv_sanlock(char *ls_name, char *vg_name, char *lv_name, char *vg_args, char *lv_args, int sector_size, int align_size, uint64_t free_offset)
+ {
+ 	return -1;
+ }
+@@ -592,7 +592,7 @@ static inline int lm_is_running_sanlock(void)
+ 	return 0;
+ }
+ 
+-static inline int lm_find_free_lock_sanlock(struct lockspace *ls, uint64_t *free_offset)
++static inline int lm_find_free_lock_sanlock(struct lockspace *ls, uint64_t *free_offset, int *sector_size, int *align_size)
+ {
+ 	return -1;
+ }
 
 
