@@ -1,47 +1,37 @@
 From: David Teigland <teigland@sourceware.org>
-Date: Thu, 8 Nov 2018 15:12:57 -0500
-Subject: master - tests: specify m1 for raid1 in cache-single-types
-Message-ID: <201811082012.wA8KCvrn031294@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Tue, 20 Nov 2018 10:25:10 -0500
+Subject: master - WHATS_NEW: sync io
+Message-ID: <201811201525.wAKFPAq9002805@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=2f02e8d33ae908b1db523fac1690a4c9246daee2
-Commit:        2f02e8d33ae908b1db523fac1690a4c9246daee2
-Parent:        73132bc25414e8eb0a0c85708478b4dd797ce746
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=9deb1340143f4e036e2531788adc5ad82751cbfd
+Commit:        9deb1340143f4e036e2531788adc5ad82751cbfd
+Parent:        7e721ca04832d36b5ffbb992eaaaeb5e424de271
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Thu Nov 8 14:08:41 2018 -0600
+AuthorDate:    Tue Nov 20 09:20:28 2018 -0600
 Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Thu Nov 8 14:12:42 2018 -0600
+CommitterDate: Tue Nov 20 09:20:28 2018 -0600
 
-tests: specify m1 for raid1 in cache-single-types
+WHATS_NEW: sync io
 
 ---
- test/shell/cache-single-types.sh |    6 ++----
- 1 files changed, 2 insertions(+), 4 deletions(-)
+ WHATS_NEW |    1 +
+ 1 files changed, 1 insertions(+), 0 deletions(-)
 
-diff --git a/test/shell/cache-single-types.sh b/test/shell/cache-single-types.sh
-index 1804e85..e7c58e2 100644
---- a/test/shell/cache-single-types.sh
-+++ b/test/shell/cache-single-types.sh
-@@ -30,14 +30,12 @@ aux prepare_devs 4 64
+diff --git a/WHATS_NEW b/WHATS_NEW
+index e152027..68cdcea 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.03.02 - 
+ ===================================
++  Use sync io if async io_setup fails, or use_aio=0 is set in config.
  
- vgcreate $SHARED $vg "$dev1" "$dev2" "$dev3" "$dev4"
- 
--lvcreate --type raid1 -n $lv1 -l 8 -an $vg "$dev1" "$dev2"
-+lvcreate --type raid1 -m 1 -n $lv1 -l 8 $vg "$dev1" "$dev2"
- 
--lvcreate --type raid1 -n $lv2 -l 4 -an $vg "$dev3" "$dev4"
-+lvcreate --type raid1 -m 1 -n $lv2 -l 4 $vg "$dev3" "$dev4"
- 
- # test1: create fs on LV before cache is attached
- 
--lvchange -ay $vg/$lv1
--
- mkfs.xfs -f -s size=4096 "$DM_DEV_DIR/$vg/$lv1"
- 
- mount "$DM_DEV_DIR/$vg/$lv1" "$mount_dir"
+ Version 2.03.01 - 31st October 2018
+ ===================================
 
 
