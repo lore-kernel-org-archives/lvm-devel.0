@@ -1,37 +1,140 @@
 From: David Teigland <teigland@sourceware.org>
-Date: Tue, 20 Nov 2018 10:25:10 -0500
-Subject: master - WHATS_NEW: sync io
-Message-ID: <201811201525.wAKFPAq9002805@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Tue, 20 Nov 2018 10:25:20 -0500
+Subject: master - bcache: sync io fixes
+Message-ID: <201811201525.wAKFPKnV002824@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=9deb1340143f4e036e2531788adc5ad82751cbfd
-Commit:        9deb1340143f4e036e2531788adc5ad82751cbfd
-Parent:        7e721ca04832d36b5ffbb992eaaaeb5e424de271
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=7e721ca04832d36b5ffbb992eaaaeb5e424de271
+Commit:        7e721ca04832d36b5ffbb992eaaaeb5e424de271
+Parent:        ca66d520326493311a3c7132b1bcee0807862301
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Tue Nov 20 09:20:28 2018 -0600
+AuthorDate:    Fri Nov 16 13:09:29 2018 -0600
 Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Tue Nov 20 09:20:28 2018 -0600
+CommitterDate: Tue Nov 20 09:19:18 2018 -0600
 
-WHATS_NEW: sync io
+bcache: sync io fixes
 
+fix lseek error check
+fix read/write error checks
+handle zero return from read and write
+don't return an error for short io
+fix partial read/write loop
 ---
- WHATS_NEW |    1 +
- 1 files changed, 1 insertions(+), 0 deletions(-)
+ lib/device/bcache.c |   74 +++++++++++++++++++++++++++++++++-----------------
+ 1 files changed, 49 insertions(+), 25 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index e152027..68cdcea 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.03.02 - 
- ===================================
-+  Use sync io if async io_setup fails, or use_aio=0 is set in config.
+diff --git a/lib/device/bcache.c b/lib/device/bcache.c
+index 7e640a4..18ffcf0 100644
+--- a/lib/device/bcache.c
++++ b/lib/device/bcache.c
+@@ -329,7 +329,7 @@ struct io_engine *create_async_io_engine(void)
+ 	e->aio_context = 0;
+ 	r = io_setup(MAX_IO, &e->aio_context);
+ 	if (r < 0) {
+-		log_warn("io_setup failed");
++		log_debug("io_setup failed %d", r);
+ 		free(e);
+ 		return NULL;
+ 	}
+@@ -372,8 +372,11 @@ static void _sync_destroy(struct io_engine *ioe)
+ static bool _sync_issue(struct io_engine *ioe, enum dir d, int fd,
+                         sector_t sb, sector_t se, void *data, void *context)
+ {
+-        int r;
+-        uint64_t len = (se - sb) * 512, where;
++	int rv;
++	off_t off;
++	uint64_t where;
++	uint64_t pos = 0;
++	uint64_t len = (se - sb) * 512;
+ 	struct sync_engine *e = _to_sync(ioe);
+ 	struct sync_io *io = malloc(sizeof(*io));
+ 	if (!io) {
+@@ -382,11 +385,16 @@ static bool _sync_issue(struct io_engine *ioe, enum dir d, int fd,
+ 	}
  
- Version 2.03.01 - 31st October 2018
- ===================================
+ 	where = sb * 512;
+-	r = lseek(fd, where, SEEK_SET);
+-	if (r < 0) {
+-        	log_warn("unable to seek to position %llu", (unsigned long long) where);
++	off = lseek(fd, where, SEEK_SET);
++	if (off == (off_t) -1) {
++		log_warn("Device seek error %d for offset %llu", errno, (unsigned long long)where);
+ 		free(io);
+-        	return false;
++		return false;
++	}
++	if (off != (off_t) where) {
++		log_warn("Device seek failed for offset %llu", (unsigned long long)where);
++		free(io);
++		return false;
+ 	}
+ 
+ 	/*
+@@ -431,28 +439,44 @@ static bool _sync_issue(struct io_engine *ioe, enum dir d, int fd,
+ 		len = nbytes;
+ 	}
+ 
+-	while (len) {
+-        	do {
+-                	if (d == DIR_READ)
+-                                r = read(fd, data, len);
+-                        else
+-                                r = write(fd, data, len);
++	while (pos < len) {
++		if (d == DIR_READ)
++			rv = read(fd, (char *)data + pos, len - pos);
++		else
++			rv = write(fd, (char *)data + pos, len - pos);
++
++		if (rv == -1 && errno == EINTR)
++			continue;
++		if (rv == -1 && errno == EAGAIN)
++			continue;
+ 
+-        	} while ((r < 0) && ((r == EINTR) || (r == EAGAIN)));
++		if (!rv)
++			break;
+ 
+-        	if (r < 0) {
+-                	log_warn("io failed %d", r);
++		if (rv < 0) {
++			if (d == DIR_READ)
++				log_debug("Device read error %d offset %llu len %llu", errno,
++					  (unsigned long long)(where + pos),
++					  (unsigned long long)(len - pos));
++			else
++				log_debug("Device write error %d offset %llu len %llu", errno,
++					  (unsigned long long)(where + pos),
++					  (unsigned long long)(len - pos));
+ 			free(io);
+-                	return false;
+-        	}
+-
+-                len -= r;
++			return false;
++		}
++		pos += rv;
+ 	}
+ 
+-	if (len) {
+-        	log_warn("short io %u bytes remaining", (unsigned) len);
+-		free(io);
++	if (pos < len) {
++		if (d == DIR_READ)
++			log_warn("Device read short %u bytes remaining", (unsigned)(len - pos));
++		else
++			log_warn("Device write short %u bytes remaining", (unsigned)(len - pos));
++		/*
++        	free(io);
+         	return false;
++		*/
+ 	}
+ 
+ 
 
 
