@@ -1,210 +1,137 @@
 From: Marian Csontos <mcsontos@sourceware.org>
-Date: Fri, 23 Nov 2018 03:19:47 -0500
-Subject: v2_02_76 annotated tag has been created
-Message-ID: <201811230819.wAN8JlAJ032121@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Fri, 23 Nov 2018 03:20:00 -0500
+Subject: v2_02_78 annotated tag has been created
+Message-ID: <201811230820.wAN8K0T4032133@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=04c0ec626ec9eff915057829169c5b0c16eb5388
-Commit:        04c0ec626ec9eff915057829169c5b0c16eb5388
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=3c5add066135a98a5da3369404079cc5927b6ccc
+Commit:        3c5add066135a98a5da3369404079cc5927b6ccc
 Parent:        0000000000000000000000000000000000000000
 Author:        Marian Csontos <mcsontos@redhat.com>
-AuthorDate:    2018-11-22 16:48 +0000
+AuthorDate:    2018-11-22 16:47 +0000
 Committer:     Marian Csontos <mcsontos@redhat.com>
-CommitterDate: 2018-11-22 16:48 +0000
+CommitterDate: 2018-11-22 16:47 +0000
 
-annotated tag: v2_02_76 has been created
-	    at 04c0ec626ec9eff915057829169c5b0c16eb5388 (tag)
-       tagging ab3b542a188c9dcf1a170b33f5077bcfd1744098 (commit)
-      replaces v2_02_74
+annotated tag: v2_02_78 has been created
+	    at 3c5add066135a98a5da3369404079cc5927b6ccc (tag)
+       tagging 6424bd9e6d0f8ecb3ef007c5a7e93f7cf8ffc75f (commit)
+      replaces v2_02_76
 
-Release 2.02.76
+Release 2.02.78
 -----BEGIN PGP SIGNATURE-----
 Version: GnuPG v2.0.22 (GNU/Linux)
 
-iQIcBAABAgAGBQJb9t3uAAoJELkRJDHlCQOff8MQAOZ5gCw2dyTDcE85GwgKmDMP
-tAudeZynRCF4Mrr4sF9egFKIPKd2OLE4PJntmW/5eCZo78WsbJJl+McHCojtkBc+
-e2wFTpvgIAyXiKsQbXnAPlmgSn4boZn6Epf1tql6nR7F6GKBJemcDrLz3eIruQDy
-zWnsBkpI2O4ngF0aV//Tx0O6j8b4hVTEH9G/Otk5BVprf35fTE53uORqWR9RgtHu
-/HMx/jt6twlX96GfEEdy9gISpT88ZF6XGWTzFBB6TSQWjogG/1Iaz+9YtqdAH7qW
-qQ2EE/0eMGJxS+1SrFCUrU02GgZZV6op28Wx/yPfnHZfyyM4NeLxnw9dIc79WZxu
-gRuzAIdmyztc+r2+/202To20eoxzaqaskEnijf1h0jveqrtZ+IABhSwkUqoX/qif
-FluBRbEiJHZBuX5lq47pAINJS81zTVTifsptSvVUQ7jF5qABaUpxaWCXQxWWOkEq
-WPamnZG5rY4GHo7k1xBfDk+HghbGX5WWPVQVZV/XyzN8T/xNglz2Y1v/67XP9jKt
-IdD5Gq15fOITIeMI9OXQWLNyNoPuZ6CGkHg51EOJuZrJtbUfOPwgwkF5I+kj83jc
-L8IVYsWXOQtXBlfFb42D12nvRd6K+dQvHQQmPXFoahWXvSMI6RD9LLEFBVHagbD4
-/q6Slqk+TSjOhTAVfHB1
-=MAY1
+iQIcBAABAgAGBQJb9t3HAAoJELkRJDHlCQOfstYP+gJaUqJHCW3Wo7isNYv0GNnx
+KZhWOL+034S73fxKR0YsWA6U5+mphAinufaSVknnUVybDIrMWee4tQZXNZUWikzy
+pTKKVU5J2P/UcynYaKFxehelyTfek3p82VXh+d0q4Itbi8MpJYvnCKykPar+elNG
+CFxHuxoIttJyeeTgODUCqrg2PFfgtkflZCVvnD8yVjE20KWHne2I+tBsMvqLJUbO
+AE3WU0AfbILlj25Z+g2NXZisnwVpNllsjEqEVYwJeZ/Rpg3ZOQSbValMXSPT3vEr
+13n3gEtJ8qUW0vMXj/NzAeO4uXVXXtK47Yofb6ZsRyMlepubagNqddCGd+MnNVVw
+bhh9yVpAe1zkkowy++IbdfNbR/I8PQtcCQzdmzNjsFeTA+mV7ATX93LqDRpjDDS8
+EiI6hNDyV28/9xxoLjJ/JdbMtn35gMshIq7TnV+kBqsPHiud73FB45nbxCF/uoq3
+l9Pf9CWfXOGW960qwlcW+DDv+TZXFeBTZixoptZHxvA94Jr1VuFXcZFVSKesv84T
+XCvK7f2PX4YxWhR2J2aUxoOJrNvSkw1fM2xW+gpl3lvCiu3tcD5kyRSfDak9ZIRC
+JP4I9teJq+Ab2D+oTi1bxADNj8A0+UMYvbWti+hzDCBV2keF55+2yslyJKyGZu2f
+9rpUUZcF/1RyQos7OM3i
+=+0tW
 -----END PGP SIGNATURE-----
 
-Alasdair Kergon (18):
-      Speed up CRC32 calculations by using a larger lookup table.
-      was renamed
-      drop an unnecessary 'stack'
-      Speed up unquoting of quoted double quotes and backslashes.
-      Add dm_zalloc and use it and dm_pool_zalloc throughout.
-      Allow CC to be overridden at build time (for 'scan-build make').
-      Add --setuuid to dmsetup rename.
-      restrict last checkin to devs consisting entirely of error target
-      Don't take write lock in vgchange --refresh, --poll or --monitor.
-      Add global/metadata_read_only to use unrepaired metadata in read-only cmds.
-      Use a more-generic name for the new kernel flag so list_devices can share it.
-      fix header #defines
+Alasdair Kergon (14):
+      post-release
+      forgotten to regenerate last time configure.in was updated
+      Regenerate configure with 'autoreconf' for --enable-ocf. (2.02.76)
+      Extend cling allocation policy to recognise PV tags (cling_by_tags).
+      Support repetition of --addtag and --deltag arguments.
+      Remove tag length restriction and allow / = ! : # & characters.
+      Fix _output_field crash from field_id free with DEBUG_MEM. (Phillip Susi)
       pre-release
       post-release
-      Update VG metadata only once in vgchange when making multiple changes.
-      Fix regex optimiser not to ignore RHS of OR nodes in _find_leftmost_common.
-      lost line
+      Fix default /etc/lvm permissions to be 0755. (2.02.66)
+      Suppress 'No PV label' message when removing several PVs without mdas.
+      Fix memory leak when VG allocation policy in metadata is invalid.
+      Fix debug logging of derived flag LCK_CACHE in clvmd.
       pre-release
 
-Dave Wysochanski (42):
-      Refactor metadata.[ch] into vg.[ch] for vg functions.
-      Refactor metadata.[ch] into pv.[ch] for pv functions.
-      Refactor metadata.[ch] into lv.[ch] for lv functions.
-      Add lib/metadata/pv.[ch] new files.
-      Add lib/metadata/vg.[ch] and lib/metadata/lv.[ch].
-      Add {pv|vg|lv}_attr_dup() functions and refactor 'disp' functions.
-      Simplify logic to create 'attr' strings.
-      Add id_format_and_copy() common function and call from _uuid_disp.
-      Add pv_uuid_dup, vg_uuid_dup, and lv_uuid_dup, and call id_format_and_copy.
-      Add tags_format_and_copy() common function and call from _tags_disp.
-      Add pv_tags_dup, vg_tags_dup, lv_tags_dup functions that call tags_format_and_copy.
-      Add supporting functions vg_name_dup, vg_fmt_dup, vg_system_id_dup.
-      Make generic GET_*_PROPERTY_FN macros and define secondary macro for vg, pv, lv.
-      Add 'get' functions for vg fields.
-      Add pv_mda_size, pv_mda_free, and pv_used functions, call from 'disp' functions.
-      Add pv_name_dup() and pv_fmt_dup() helper functions.
-      Add pv 'get' functions for all pv properties.
-      Add pv_get_property and create generic internal _get_property function.
-      Update WHATS_NEW for commits related to generic property functions
-      Fix copyright dates on new files lib/metadata/{lv|vg|pv}.[ch].
-      Rename 'flags' to 'status' for struct metadata_area.
-      Add some lv 'get' functions that require no refactoring.
-      Refactor and add code for (lv) 'lv_path' get function.
-      Refactor and add code for (lv) 'origin_size' get function.
-      Refactor and add code for (lv) 'move_pv' get function.
-      Refactor and add code for (lv) 'convert_lv' get function.
-      Refactor and add code for (lv) 'lv_kernel_{major|minor}' get functions.
-      Refactor and add code for (lv) 'mirror_log' get function.
-      Refactor and add code for (lv) 'modules' get function.
-      update WHATS_NEW
-      Fix lv_modules_dup segfault.
-      Refactor and add code for (lv) 'lv_name' get function.
-      Refactor and add code for (lv) 'lv_origin' get function.
-      Add lv_read_ahead and lv_kernel_read_ahead 'get' functions.
-      Rename fields in lvm_property_type.
-      Add lv_get_property() internal lvm function.
-      Add 'is_integer' flag into internal lvm_property_type.
-      Add lvm_vg_get_property() generic vg property function.
-      Add lvm_pv_get_property() generic function to obtain value of any pv property.
-      Add lvm_lv_get_property() generic function to obtain value of any lv propert
-      Add interactive tests for lvm_{pv|vg|lv}_get_property().
-      Update WHATS_NEW for lvm2app property functions
+Mike Snitzer (1):
+      Fix "it's" typo to be "its" in lvconvert error message.
 
-Jonathan Earl Brassow (1):
-      Fix for bug 637936: killing both redundant logs causes deadlock
+Peter Rajnoha (1):
+      WHATS_NEW FIXME
 
-Mike Snitzer (4):
-      Convey need for snapshot-merge target in lvconvert error message and man
-      Never scan a device which is using the error target
-      Explicitly have grep print the matching filenames (needed to
-      Fix vgchange to process -a, --refresh, --monitor and --poll like lvchange.
+Petr Rockai (22):
+      Add generic infrastructure to internal library to 'set' a property.
+      Implement lvm_vg_set_property() by calling internal 'set' property function.
+      Add vg_set_property to the interactive lvm2app test program.
+      Make value.string const char *, in properties.h, to fix a warning introduced by
+      Add a new type and function to lvm2app to enumerate lvsegs.
+      Add the macro and specific 'get' functions for lvsegs.
+      Add lvm2app function to query lvseg properties.
+      Add a new type and function to lvm2app to enumerate pvsegs.
+      Add the macro and specific 'get' functions for pvsegs.
+      Add lvm2app function to query pvseg properties.
+      Update interactive tests for lvm2app lvseg and pvseg apis.
+      The _free_vg that is created as a placeholder when reporting segments in pvs
+      This patch adds helpers to allow users to lookup a lv or pv handle by
+      This patch adds helpers to allow users to lookup a lv or pv handle by
+      Add interactive tests for functions to lookup a pv|lv by name|uuid.
+      All 'size' values of lvm2app properties should be in bytes.
+      Disallow certain lvconvert operations that need to both allocate and free
+      Update WHATS_NEW.
+      Avoid the automatic MISSING_PV recovery path in commands with special
+      Fix a failing test (it used a combination of lvconvert parameters that is no
+      Refactor the percent (mirror sync, snapshot usage) handling code to use
+      What's new.
 
-Milan Broz (1):
-      Restrict lvm1 partial mode.
-
-Peter Rajnoha (4):
-      Fix memory leak of vg_read while using live copies of metadata in directories.
-      Allocate buffer for reporting functions dynamically to support long outputs.
-      Use dm_strdup/dm_free instead of strdup/free.
-      Clarify error messages when activation fails due to activation filter use.
-
-Petr Rockai (30):
-      test-utils: Fix a slight bug in the dmeventd-already-running error message.
-      Add an option to skip some tests in make check (regex based, like T=): eg.
-      Make lvconvert respect --yes/--force in the inactive log conversion
-      Implement vgextend --restoremissing (BZ 537913), which makes it possible to
-      Add a test for vgextend --restoremissing.
-      Update WHATS_NEW.
-      Give correct error message when creating a too-small snapshot (BZ 587063)
-      Update WHATS_NEW.
-      Limit repeated accesses to broken devices.
-      Update WHATS_NEW.
-      Tweak the lvm.conf comment about devices/disable_after_error_count.
-      Tweak WHATS_NEW for devices/disable_after_error_count.
-      Add a VERBOSE option to make check (make check VERBOSE=1).
-      Fixes for the devices/disable_after_error_count documentation.
-      Implement automatic snapshot extension with dmeventd, and add two new options
-      Update WHATS_NEW.
-      Avoid an extraneous orphans unlock in vgextend --restoremissing.
-      Fix a deadlock in clvmd.
-      Revert some debug statements that slipped in with last checkin.
-      Implement dmeventd -R, allowing dmeventd to be restarted without losing
-      Add a test for BZ 509182 (vgchange --monitor y breaks with max_lv).
-      Reduce a (huge) timeout in t-mirror-names.
-      Let's rely on the exit code and do not test for empty output.
-      Use a more generous timeout for dmeventd in t-lvconvert-repair-dmeventd.
-      Fix a double close in clvmd.
-      Update WHATS_NEW.
-      Add a missed test for dmeventd -R.
-      Alasdair correctly pointed out that if the two closes are concurrent (I haven't
-      Add code to the dmeventd snapshot plugin to automatically unmount snapshots
-      Update WHATS_NEW.
-
-Zdenek Kabelac (51):
-      Add missing cleanup rule for generated .exported_symbols_generated
-      Maps fix
-      Fix leaked pool report
-      Fix memory leak of config_tree
-      Replace  "can not" with "cannot"
-      Fix a serious bug in the behavior of fasdm tool when breaked.
-      Correctly respect --dry-run option for fsadm
-      Support for passing --yes flag recursively.
-      Fix assignment of default LVM variable
-      Fix detection of mounted filesystem.
-      Fix usage of --yes flag for ReiserFS resize
-      Add support for noninterctive shell execution
-      Update script for fsadm testing
-      Skip fsadm testing until proper installation rules are commited in.
-      Don't use floor() in _bitset_with_random_bits
-      Fix linking order for liblvm2cmd
-      Speedup memory un/locking
-      Update
-      Fix strict-aliasing compile warning in partition table scanning
-      Add coverage test for partition table scanning
-      Fix clang warning for ntohl(*((uint32_t *)buf))
-      Print vg_name and do not to access vg->name
-      Ensure we always have origin defined
-      Reuse result of previous strchr
-      Fix potential NULL pointer dereference
-      Fix missing initilisation to 0
-      Switch to char* arithmetic from void*
-      Use 'const' struct id *pvid for device_from_pvid()
-      rom -> from
-      ok this seems to be never ending story...
-      Use const pointer for return value of dm_basename
-      Fix constness warnings
-      Fix constness warning for _vg_read_by_vgid() uuid usage
-      Fix constness warning
-      Fix constness warning
-      Use const config node
-      Remove bufused for calculation
-      Update C declaration  () -> (void)
-      Use static indentifier for internal functions
-      Instrument compiler about code unreachability
-      Fix NULL pointer dereference for too large MDA error path
-      Hotfix usage of __builtin_unreachable()
-      Macro uninitialized_var gives warnings in static analysis
-      Add missing return for NULL passed buffer
-      Return different status code for fsadm check of mounted filesystem
-      Add DIAGNOSTICS section to fsadm man page.
-      Use new status code from fsadm check
-      Use include make.tmpl
-      Add given user prefix to make target install_initscripts
-      Add OCF support
-      Fix include commit and switch to use DISTCLEAN_TARGETS
+Zdenek Kabelac (46):
+      Scan also 'mount' output for mounted filesystem.
+      Update fsadm regresion
+      fsadm fix for downsize of unmounted fs
+      Add date configurable variable DATE
+      Preserve const for char pointer
+      Move va_end(ap)  so we do not leave with return -1 without calling it.
+      Move va_end() so it is also used before error path  return
+      Add missing  closedir() - fixes resource leak
+      Do not call dm_task_destroy with NULL
+      Move arg_vgnames from local scope
+      Add missing fclose
+      Fix resource leak of dlopened pointer
+      Fix memory leak in error path
+      Add missing destrustion of cmd_context
+      Cleanup remove test for NULL
+      Fix check for empty system_dir
+      Remove printing of LCK_CACHE
+      Reset vg pointer after release
+      Remove dead assignment in _lock_for_cluster
+      Remove dead assignment in lvm2_main
+      Remove unused 'i' in _pv_analyze_mda_raw
+      Remove dead assignment in 'main'
+      Remove dead assignment in dm_tree_node_add_mirror_target_log
+      Use one fprintf call for usage print
+      Fix memory leak in error path
+      Remove dead assignment in _mirror_emit_segment_line
+      Remove dead assignment in _step_matcher
+      Remove dead assignment in wait_for_child
+      Optimize lookup table read
+      Check reallocated buffer for NULL before use
+      Replace snprintf with dm_snprintf
+      Add missing test for failed pool allocation
+      Remove check for lv is NULL
+      Add error path stack traces
+      Add stack trace for error path
+      Test uuid for NULL
+      Remove unneeded test for NULL
+      Fallback to full rescan for missing device
+      Optimize second call to strchr with same parameters
+      Check result of vginfo_from_vgname
+      Add logging for pipe write() and close() error
+      Test lv_name is not NULL
+      Log error from unlink failure
+      Add backtraces for errors
+      Check lv_info() success
+      Check str_list_add() success
 
 
