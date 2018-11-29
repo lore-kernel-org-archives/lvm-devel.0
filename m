@@ -1,73 +1,43 @@
-From: David Teigland <teigland@sourceware.org>
-Date: Thu, 29 Nov 2018 13:36:28 -0500
-Subject: master - scan: md metadata version 0.90 is at the end of disk
-Message-ID: <201811291836.wATIaSVc015670@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: Zdenek Kabelac <zkabelac@sourceware.org>
+Date: Thu, 29 Nov 2018 17:12:15 -0500
+Subject: master - base: use calloc
+Message-ID: <201811292212.wATMCFWx016246@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=cb04b84c79f10e6b3f1b376cf7611d0afed26c39
-Commit:        cb04b84c79f10e6b3f1b376cf7611d0afed26c39
-Parent:        cd0fb0846db0d0bc04469914f6866a04af377548
-Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Thu Nov 29 12:35:54 2018 -0600
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Thu Nov 29 12:35:54 2018 -0600
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=8bb5dd54303df384233a06057d9258385d0363ec
+Commit:        8bb5dd54303df384233a06057d9258385d0363ec
+Parent:        cb04b84c79f10e6b3f1b376cf7611d0afed26c39
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Tue Nov 27 12:12:51 2018 +0100
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Thu Nov 29 23:05:43 2018 +0100
 
-scan: md metadata version 0.90 is at the end of disk
+base: use calloc
 
-commit de28637
-  scan: use full md filter when md 1.0 devices are present
-
-missed the fact that md superblock version 0.90 also puts
-metadata at the end of the device, so the full md filter
-needs to be used when either 0.90 or 1.0 is present.
+Make zalloc a wrapper over calloc
 ---
- lib/device/dev-md.c     |    2 +-
- lib/filters/filter-md.c |    6 +++---
- 2 files changed, 4 insertions(+), 4 deletions(-)
+ base/memory/zalloc.h |    5 +----
+ 1 files changed, 1 insertions(+), 4 deletions(-)
 
-diff --git a/lib/device/dev-md.c b/lib/device/dev-md.c
-index ac99f42..9c626dd 100644
---- a/lib/device/dev-md.c
-+++ b/lib/device/dev-md.c
-@@ -422,7 +422,7 @@ int dev_is_md_with_end_superblock(struct dev_types *dt, struct device *dev)
- 	log_very_verbose("Device %s %s is %s.",
- 			 dev_name(dev), attribute, version_string);
+diff --git a/base/memory/zalloc.h b/base/memory/zalloc.h
+index d2ef827..4f6df54 100644
+--- a/base/memory/zalloc.h
++++ b/base/memory/zalloc.h
+@@ -20,10 +20,7 @@
  
--	if (!strcmp(version_string, "1.0"))
-+	if (!strcmp(version_string, "1.0") || !strcmp(version_string, "0.90"))
- 		return 1;
- 	return 0;
+ static inline void *zalloc(size_t len)
+ {
+-	void *ptr = malloc(len);
+-	if (ptr)
+-		memset(ptr, 0, len);
+-	return ptr;
++	return calloc(1, len);
  }
-diff --git a/lib/filters/filter-md.c b/lib/filters/filter-md.c
-index 2214986..0275923 100644
---- a/lib/filters/filter-md.c
-+++ b/lib/filters/filter-md.c
-@@ -46,7 +46,7 @@
-  * 3. use udev to detect components
-  *
-  * mode 1 will not detect and exclude components of md devices
-- * that use superblock version 1.0 which is at the end of the device.
-+ * that use superblock version 0.9 or 1.0 which is at the end of the device.
-  *
-  * mode 2 will detect these, but mode 2 doubles the i/o done by label
-  * scan, since there's a read at both the start and end of every device.
-@@ -59,11 +59,11 @@
-  *
-  * - the command is pvcreate/vgcreate/vgextend, which format new
-  *   devices, and if the user ran these commands on a component
-- *   device of an md device 1.0, then it would cause problems.
-+ *   device of an md device 0.9 or 1.0, then it would cause problems.
-  *   FIXME: this would only really need to scan the end of the
-  *   devices being formatted, not all devices.
-  *
-- * - it sees an md device on the system using version 1.0.
-+ * - it sees an md device on the system using version 0.9 or 1.0.
-  *   The point of this is just to avoid displaying md components
-  *   from the 'pvs' command.
-  *   FIXME: the cost (double i/o) may not be worth the benefit
+ 
+ //----------------------------------------------------------------
 
 
