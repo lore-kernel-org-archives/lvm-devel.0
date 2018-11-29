@@ -1,20 +1,20 @@
 From: David Teigland <teigland@sourceware.org>
-Date: Thu, 29 Nov 2018 13:35:39 -0500
-Subject: 2018-06-01-stable - scan: md metadata version 0.90 is at the end of disk
-Message-ID: <201811291835.wATIZdhh015315@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Thu, 29 Nov 2018 13:36:28 -0500
+Subject: master - scan: md metadata version 0.90 is at the end of disk
+Message-ID: <201811291836.wATIaSVc015670@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=0e42ebd6d4012d210084a9ccf8d76f853726de3c
-Commit:        0e42ebd6d4012d210084a9ccf8d76f853726de3c
-Parent:        fe1cabfa3469b5a5ac673385785b031d6a702bb4
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=cb04b84c79f10e6b3f1b376cf7611d0afed26c39
+Commit:        cb04b84c79f10e6b3f1b376cf7611d0afed26c39
+Parent:        cd0fb0846db0d0bc04469914f6866a04af377548
 Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Thu Nov 29 11:51:05 2018 -0600
+AuthorDate:    Thu Nov 29 12:35:54 2018 -0600
 Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Thu Nov 29 12:16:37 2018 -0600
+CommitterDate: Thu Nov 29 12:35:54 2018 -0600
 
 scan: md metadata version 0.90 is at the end of disk
 
@@ -30,7 +30,7 @@ needs to be used when either 0.90 or 1.0 is present.
  2 files changed, 4 insertions(+), 4 deletions(-)
 
 diff --git a/lib/device/dev-md.c b/lib/device/dev-md.c
-index 7196dc0..185499b 100644
+index ac99f42..9c626dd 100644
 --- a/lib/device/dev-md.c
 +++ b/lib/device/dev-md.c
 @@ -422,7 +422,7 @@ int dev_is_md_with_end_superblock(struct dev_types *dt, struct device *dev)
@@ -43,10 +43,10 @@ index 7196dc0..185499b 100644
  	return 0;
  }
 diff --git a/lib/filters/filter-md.c b/lib/filters/filter-md.c
-index e03ff50..2011e1d 100644
+index 2214986..0275923 100644
 --- a/lib/filters/filter-md.c
 +++ b/lib/filters/filter-md.c
-@@ -47,7 +47,7 @@ extern int use_full_md_check;
+@@ -46,7 +46,7 @@
   * 3. use udev to detect components
   *
   * mode 1 will not detect and exclude components of md devices
@@ -55,7 +55,7 @@ index e03ff50..2011e1d 100644
   *
   * mode 2 will detect these, but mode 2 doubles the i/o done by label
   * scan, since there's a read at both the start and end of every device.
-@@ -60,11 +60,11 @@ extern int use_full_md_check;
+@@ -59,11 +59,11 @@
   *
   * - the command is pvcreate/vgcreate/vgextend, which format new
   *   devices, and if the user ran these commands on a component
