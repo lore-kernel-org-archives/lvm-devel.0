@@ -1,66 +1,51 @@
-From: Tony Asleson <tasleson@redhat.com>
-Date: Thu, 14 Mar 2013 10:29:39 -0500
-Subject: [PATCH 4/5] lvm2app: Move core lv re-size code (v2)
-In-Reply-To: <5141E954.5040103@redhat.com>
-References: <1363212806-16025-1-git-send-email-tasleson@redhat.com>
-	<1363212806-16025-4-git-send-email-tasleson@redhat.com>
-	<5141DAEB.8080902@redhat.com> <5141E8F9.9020904@redhat.com>
-	<5141E954.5040103@redhat.com>
-Message-ID: <5141ECE3.6030401@redhat.com>
+From: Zdenek Kabelac <zkabelac@sourceware.org>
+Date: Fri, 30 Nov 2018 19:07:39 -0500
+Subject: master - device_mapper: fix incorrect dm_strncpy usage
+Message-ID: <201812010007.wB107drn031146@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On 03/14/2013 10:14 AM, Zdenek Kabelac wrote:
-> Dne 14.3.2013 16:12, Tony Asleson napsal(a):
->> On 03/14/2013 09:12 AM, Zdenek Kabelac wrote:
->>> Dne 13.3.2013 23:13, Tony Asleson napsal(a):
->>>> Moved to allow use from command line and for library use.
->>>>
->>>> Signed-off-by: Tony Asleson <tasleson@redhat.com>
->>>> ---
->>>>    lib/metadata/lv_manip.c          | 734
->>>> +++++++++++++++++++++++++++++++++++++
->>>>    lib/metadata/metadata-exported.h |  46 +++
->>>>    tools/lvresize.c                 | 771
->>>> ---------------------------------------
->>>>    3 files changed, 780 insertions(+), 771 deletions(-)
->>>>
->>>> diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
->>>> index ad8160e..5baa9b3 100644
->>>> --- a/lib/metadata/lv_manip.c
->>>> +++ b/lib/metadata/lv_manip.c
->>>> +    }
->>>> +
->>>> +    *stripesize = 0;
->>>> +    return 0;
->>>> +}
->>>> +
->>>> +int _lvresize(struct cmd_context *cmd, struct volume_group *vg,
->>>> +             struct lvresize_params *lp, struct dm_list *pvh)
->>>> +{
->>>
->>> Non-internal -> remove '_' ->  ???_lvresize
->>>
->>> we should probably introduce some tool prefix to make it recognizable
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=c61c4271a4d9cc990f19614d1d2e7d203d57ebfd
+Commit:        c61c4271a4d9cc990f19614d1d2e7d203d57ebfd
+Parent:        6a4a6a7cd7ef83b6283284637e3b28476fbc7712
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Sat Dec 1 00:41:24 2018 +0100
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Sat Dec 1 01:04:27 2018 +0100
 
-What should I use as a prefix for an internal use, non file local static
-function?
+device_mapper: fix incorrect dm_strncpy usage
 
--Tony
+Patch 668c9d0762fc6736a1e9372785544eda6a939806 introduced regression,
+since the code here would actually always return failing result.
+Replace it with more simple call to strndup().
+---
+ device_mapper/vdo/status.c |    7 +------
+ 1 files changed, 1 insertions(+), 6 deletions(-)
 
->>
->> It is my intention that this function be internal use only.  The command
->> line entry point is lvresize and the liblvm entry point is
->> lvm_lv_resize, both of which call _lvmresize to do the actual operation.
->>   Or perhaps I'm missing something else?
-> 
-> Yep - lvm is using '_' for file-local static functions.
-> So external functions goes without underscore.
-> 
-> Zdenek
-> 
+diff --git a/device_mapper/vdo/status.c b/device_mapper/vdo/status.c
+index 53dfe4d..40e69ba 100644
+--- a/device_mapper/vdo/status.c
++++ b/device_mapper/vdo/status.c
+@@ -203,16 +203,11 @@ bool dm_vdo_status_parse(struct dm_pool *mem, const char *input,
+ 		goto bad;
+ 	}
+ 
+-	if (!(s->device = (!mem) ? malloc((e - b) + 1) : dm_pool_alloc(mem, (e - b) + 1))) {
++	if (!(s->device = (!mem) ? strndup(b, (te - b)) : dm_pool_alloc(mem, (te - b)))) {
+ 		_set_error(result, "out of memory");
+ 		goto bad;
+ 	}
+ 
+-	if (!dm_strncpy(s->device, b, te - b + 1)) {
+-		_set_error(result, "copy device");
+-		goto bad;
+-	}
+-
+ 	b = _eat_space(te, e);
+ 
+ #define XX(p, f, fn) if (!_parse_field(&b, e, p, f, fn, result)) goto bad;
 
 
