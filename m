@@ -1,66 +1,53 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Fri, 30 Nov 2018 19:07:58 -0500
-Subject: master - makefiles: ensure test dir can run unit-test
-Message-ID: <201812010007.wB107wN4031203@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Fri, 30 Nov 2018 19:08:02 -0500
+Subject: master - gcc: avoid shadowing index
+Message-ID: <201812010008.wB1082EI031213@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=250e05a9656bf8888ac6e399791c46369e77d667
-Commit:        250e05a9656bf8888ac6e399791c46369e77d667
-Parent:        a1e5b8832b99d977fda326e914a5d6d834316f42
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=1aac59f82ac021afe8a0a7aa6059e068637db9ba
+Commit:        1aac59f82ac021afe8a0a7aa6059e068637db9ba
+Parent:        250e05a9656bf8888ac6e399791c46369e77d667
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Sat Dec 1 00:44:22 2018 +0100
+AuthorDate:    Fri Nov 30 21:46:14 2018 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Sat Dec 1 01:05:53 2018 +0100
+CommitterDate: Sat Dec 1 01:06:51 2018 +0100
 
-makefiles: ensure test dir can run unit-test
+gcc: avoid shadowing index
 
+Some older headers were declaring 'index' so avoid its usage.
+/usr/include/string.h:489: warning: shadowed declaration is here
 ---
- test/Makefile.in   |    4 ++--
- test/unit/Makefile |    5 +++--
- 2 files changed, 5 insertions(+), 4 deletions(-)
+ base/data-struct/radix-tree-adaptive.c |   10 +++++-----
+ 1 files changed, 5 insertions(+), 5 deletions(-)
 
-diff --git a/test/Makefile.in b/test/Makefile.in
-index e471a11..69e2cfc 100644
---- a/test/Makefile.in
-+++ b/test/Makefile.in
-@@ -169,7 +169,7 @@ endif
+diff --git a/base/data-struct/radix-tree-adaptive.c b/base/data-struct/radix-tree-adaptive.c
+index 25dfbee..5e065b6 100644
+--- a/base/data-struct/radix-tree-adaptive.c
++++ b/base/data-struct/radix-tree-adaptive.c
+@@ -624,15 +624,15 @@ static void _degrade_to_n48(struct node256 *n256, struct value *result)
+ }
  
- run-unit-test unit-test:
- 	@echo "    [MAKE] $<"
--	$(Q) $(MAKE) -C unit $(@)
-+	$(Q) $(MAKE) -C $(top_builddir) $(@)
+ // Removes an entry in an array by sliding the values above it down.
+-static void _erase_elt(void *array, size_t obj_size, unsigned count, unsigned index)
++static void _erase_elt(void *array, size_t obj_size, unsigned count, unsigned idx)
+ {
+-	if (index == (count - 1))
++	if (idx == (count - 1))
+ 		// The simple case
+ 		return;
  
- DATADIR = $(datadir)/lvm2-testsuite
- EXECDIR = $(libexecdir)/lvm2-testsuite
-@@ -314,7 +314,7 @@ lib/dm-version-expected: $(top_srcdir)/VERSION_DM .lib-dir-stamp
- CMDS = lvm $(shell cat $(top_builddir)/tools/.commands 2>/dev/null)
- LIB = $(addprefix lib/, $(LIB_SECURETEST) $(LIB_DMSECURETEST) $(LIB_SHARED) $(LIB_LOCAL) $(LIB_NOT) $(LIB_LINK_NOT) $(LIB_FLAVOURS))
+-	memmove(((uint8_t *) array) + (obj_size * index),
+-                ((uint8_t *) array) + (obj_size * (index + 1)),
+-                obj_size * (count - index - 1));
++	memmove(((uint8_t *) array) + (obj_size * idx),
++                ((uint8_t *) array) + (obj_size * (idx + 1)),
++                obj_size * (count - idx - 1));
  
--.tests-stamp: $(ALL) $(LIB) $(SUBDIRS) lib/version-expected lib/dm-version-expected
-+.tests-stamp: $(ALL) $(LIB) $(SUBDIRS) lib/version-expected lib/dm-version-expected unit-test
- 	@echo "    [TEST-STAMP]"
- 	@if test "$(srcdir)" != . ; then \
- 		echo "Linking tests to builddir."; \
-diff --git a/test/unit/Makefile b/test/unit/Makefile
-index 909cef2..0ba98ee 100644
---- a/test/unit/Makefile
-+++ b/test/unit/Makefile
-@@ -41,9 +41,10 @@ CLEAN_TARGETS += $(UNIT_DEPENDS) $(UNIT_OBJECTS) \
- test/unit/unit-test: $(UNIT_OBJECTS) lib/liblvm-internal.a libdaemon/client/libdaemonclient.a $(INTERNAL_LIBS)
- 	@echo "    [LD] $@"
- 	$(Q) $(CC) $(CFLAGS) $(LDFLAGS) $(EXTRA_EXEC_LDFLAGS) \
--	      -o $@ $+ $(LIBS) $(DMEVENT_LIBS) $(SYSTEMD_LIBS) -lm -ldl -laio
-+	      -o $@ $+ $(DMEVENT_LIBS) $(SYSTEMD_LIBS) $(LIBS) -ldl -laio
- 
--.PHONEY: run-unit-test
-+.PHONEY: run-unit-test unit-test
-+unit-test: test/unit/unit-test
- run-unit-test: test/unit/unit-test
- 	@echo Running unit tests
- 	LD_LIBRARY_PATH=libdm test/unit/unit-test run
+ 	// Zero the now unused last elt (set's v.type to UNSET)
+ 	memset(((uint8_t *) array) + (count - 1) * obj_size, 0, obj_size);
 
 
