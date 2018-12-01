@@ -1,58 +1,46 @@
-From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Thu, 14 Mar 2013 16:39:11 +0100
-Subject: [PATCH 4/5] lvm2app: Move core lv re-size code (v2)
-In-Reply-To: <5141ECE3.6030401@redhat.com>
-References: <1363212806-16025-1-git-send-email-tasleson@redhat.com>
-	<1363212806-16025-4-git-send-email-tasleson@redhat.com>
-	<5141DAEB.8080902@redhat.com> <5141E8F9.9020904@redhat.com>
-	<5141E954.5040103@redhat.com> <5141ECE3.6030401@redhat.com>
-Message-ID: <5141EF1F.7040003@redhat.com>
+From: Zdenek Kabelac <zkabelac@sourceware.org>
+Date: Fri, 30 Nov 2018 19:07:44 -0500
+Subject: master - device_mapper: optimize dm_pool_strndup
+Message-ID: <201812010007.wB107i6P031158@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Dne 14.3.2013 16:29, Tony Asleson napsal(a):
-> On 03/14/2013 10:14 AM, Zdenek Kabelac wrote:
->> Dne 14.3.2013 16:12, Tony Asleson napsal(a):
->>> On 03/14/2013 09:12 AM, Zdenek Kabelac wrote:
->>>> Dne 13.3.2013 23:13, Tony Asleson napsal(a):
->>>>> Moved to allow use from command line and for library use.
->>>>>
->>>>> Signed-off-by: Tony Asleson <tasleson@redhat.com>
->>>>> ---
->>>>>     lib/metadata/lv_manip.c          | 734
->>>>> +++++++++++++++++++++++++++++++++++++
->>>>>     lib/metadata/metadata-exported.h |  46 +++
->>>>>     tools/lvresize.c                 | 771
->>>>> ---------------------------------------
->>>>>     3 files changed, 780 insertions(+), 771 deletions(-)
->>>>>
->>>>> diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
->>>>> index ad8160e..5baa9b3 100644
->>>>> --- a/lib/metadata/lv_manip.c
->>>>> +++ b/lib/metadata/lv_manip.c
->>>>> +    }
->>>>> +
->>>>> +    *stripesize = 0;
->>>>> +    return 0;
->>>>> +}
->>>>> +
->>>>> +int _lvresize(struct cmd_context *cmd, struct volume_group *vg,
->>>>> +             struct lvresize_params *lp, struct dm_list *pvh)
->>>>> +{
->>>>
->>>> Non-internal -> remove '_' ->  ???_lvresize
->>>>
->>>> we should probably introduce some tool prefix to make it recognizable
->
-> What should I use as a prefix for an internal use, non file local static
-> function?
->
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=93dfb5dd3eb1b6f96f227cba961abfaa00d2f300
+Commit:        93dfb5dd3eb1b6f96f227cba961abfaa00d2f300
+Parent:        c61c4271a4d9cc990f19614d1d2e7d203d57ebfd
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Sat Dec 1 00:34:29 2018 +0100
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Sat Dec 1 01:04:27 2018 +0100
 
-I guess - for now  'lv_resize()' will do its jobs.
+device_mapper: optimize dm_pool_strndup
 
-Zdenek
+---
+ device_mapper/mm/pool.c |    6 ++++--
+ 1 files changed, 4 insertions(+), 2 deletions(-)
+
+diff --git a/device_mapper/mm/pool.c b/device_mapper/mm/pool.c
+index 20d7fd9..b6478c5 100644
+--- a/device_mapper/mm/pool.c
++++ b/device_mapper/mm/pool.c
+@@ -59,11 +59,13 @@ char *dm_pool_strdup(struct dm_pool *p, const char *str)
+ 
+ char *dm_pool_strndup(struct dm_pool *p, const char *str, size_t n)
+ {
++	size_t slen = strlen(str);
++	size_t len = (slen < n) ? slen : n;
+ 	char *ret = dm_pool_alloc(p, n + 1);
+ 
+ 	if (ret) {
+-		strncpy(ret, str, n);
+-		ret[n] = '\0';
++		ret[len] = '\0';
++		memcpy(ret, str, len);
+ 	}
+ 
+ 	return ret;
 
 
