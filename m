@@ -1,40 +1,52 @@
-From: David Teigland <teigland@sourceware.org>
-Date: Wed, 5 Dec 2018 13:15:00 -0500
-Subject: master - tests: lvm-on-md udev issues
-Message-ID: <201812051815.wB5IF0KO011683@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: Marian Csontos <mcsontos@sourceware.org>
+Date: Thu, 6 Dec 2018 04:52:50 -0500
+Subject: master - build: Upse PYTHON_CONFIG env.variable when set
+Message-ID: <201812060952.wB69qoV1027895@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=73687b7b75c4f12b6f21ba829898b4d13422db1c
-Commit:        73687b7b75c4f12b6f21ba829898b4d13422db1c
-Parent:        752b1e95f4f12225e6ed9302f078b3545e758549
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Wed Dec 5 12:14:17 2018 -0600
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Wed Dec 5 12:14:17 2018 -0600
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=92b0d014aab12eee3fe1f757a5fb9ecfe9f4b58c
+Commit:        92b0d014aab12eee3fe1f757a5fb9ecfe9f4b58c
+Parent:        73687b7b75c4f12b6f21ba829898b4d13422db1c
+Author:        Marian Csontos <mcsontos@redhat.com>
+AuthorDate:    Fri Nov 2 10:06:51 2018 +0100
+Committer:     Marian Csontos <mcsontos@redhat.com>
+CommitterDate: Thu Dec 6 09:02:47 2018 +0100
 
-tests: lvm-on-md udev issues
+build: Upse PYTHON_CONFIG env.variable when set
 
+This adds up to Commit 6462e8dffc7ed53973ce796cec18fecc0fb89d77.
 ---
- test/shell/lvm-on-md.sh |    5 ++++-
- 1 files changed, 4 insertions(+), 1 deletions(-)
+ configure    |    1 -
+ configure.ac |    1 -
+ 2 files changed, 0 insertions(+), 2 deletions(-)
 
-diff --git a/test/shell/lvm-on-md.sh b/test/shell/lvm-on-md.sh
-index a3e83d9..4f4a0c4 100644
---- a/test/shell/lvm-on-md.sh
-+++ b/test/shell/lvm-on-md.sh
-@@ -85,5 +85,8 @@ cat out
- not grep "prefers device" out
+diff --git a/configure b/configure
+index efd438c..66acdb2 100755
+--- a/configure
++++ b/configure
+@@ -11664,7 +11664,6 @@ fi
+ ################################################################################
  
- vgchange -an $vg
-+aux udev_wait
-+
-+aux cleanup_md_dev
+ if test "$BUILD_LVMDBUSD" = yes; then
+-	unset PYTHON_CONFIG
+ 	unset am_cv_pathless_PYTHON ac_cv_path_PYTHON am_cv_python_platform
+ 	unset am_cv_python_pythondir am_cv_python_version am_cv_python_pyexecdir
+ 	unset ac_cv_path_PYTHON_CONFIG ac_cv_path_ac_pt_PYTHON_CONFIG
+diff --git a/configure.ac b/configure.ac
+index 3578f7b..2b29210 100644
+--- a/configure.ac
++++ b/configure.ac
+@@ -1172,7 +1172,6 @@ AS_IF([test "$NOTIFYDBUS_SUPPORT" = yes && test "BUILD_LVMDBUSD" = yes],
+ dnl -- Enable Python dbus library
  
--vgremove -f $vg
-+# vgremove -f $vg
+ if test "$BUILD_LVMDBUSD" = yes; then
+-	unset PYTHON_CONFIG
+ 	unset am_cv_pathless_PYTHON ac_cv_path_PYTHON am_cv_python_platform
+ 	unset am_cv_python_pythondir am_cv_python_version am_cv_python_pyexecdir
+ 	unset ac_cv_path_PYTHON_CONFIG ac_cv_path_ac_pt_PYTHON_CONFIG
 
 
