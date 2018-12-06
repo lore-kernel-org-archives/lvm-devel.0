@@ -1,52 +1,55 @@
 From: Marian Csontos <mcsontos@sourceware.org>
-Date: Thu, 6 Dec 2018 04:52:50 -0500
-Subject: master - build: Upse PYTHON_CONFIG env.variable when set
-Message-ID: <201812060952.wB69qoV1027895@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Thu, 6 Dec 2018 04:53:02 -0500
+Subject: master - udev: 69-dm-lvm-metad.rules is still needed
+Message-ID: <201812060953.wB69r2rO027908@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=92b0d014aab12eee3fe1f757a5fb9ecfe9f4b58c
-Commit:        92b0d014aab12eee3fe1f757a5fb9ecfe9f4b58c
-Parent:        73687b7b75c4f12b6f21ba829898b4d13422db1c
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=21784e94d6f4308931fa497679f1a4e5e1966578
+Commit:        21784e94d6f4308931fa497679f1a4e5e1966578
+Parent:        92b0d014aab12eee3fe1f757a5fb9ecfe9f4b58c
 Author:        Marian Csontos <mcsontos@redhat.com>
-AuthorDate:    Fri Nov 2 10:06:51 2018 +0100
+AuthorDate:    Thu Dec 6 10:50:42 2018 +0100
 Committer:     Marian Csontos <mcsontos@redhat.com>
-CommitterDate: Thu Dec 6 09:02:47 2018 +0100
+CommitterDate: Thu Dec 6 10:50:42 2018 +0100
 
-build: Upse PYTHON_CONFIG env.variable when set
+udev: 69-dm-lvm-metad.rules is still needed
 
-This adds up to Commit 6462e8dffc7ed53973ce796cec18fecc0fb89d77.
 ---
- configure    |    1 -
- configure.ac |    1 -
- 2 files changed, 0 insertions(+), 2 deletions(-)
+ spec/packages.inc |    1 +
+ udev/Makefile.in  |    5 +----
+ 2 files changed, 2 insertions(+), 4 deletions(-)
 
-diff --git a/configure b/configure
-index efd438c..66acdb2 100755
---- a/configure
-+++ b/configure
-@@ -11664,7 +11664,6 @@ fi
- ################################################################################
+diff --git a/spec/packages.inc b/spec/packages.inc
+index 0be4f2e..81ef539 100644
+--- a/spec/packages.inc
++++ b/spec/packages.inc
+@@ -150,6 +150,7 @@ fi
+ %endif
+ %if %{enable_udev}
+  %{_udevdir}/11-dm-lvm.rules
++ %{_udevdir}/69-dm-lvm-metad.rules
+ %endif
+ %dir %{_sysconfdir}/lvm
+ %ghost %{_sysconfdir}/lvm/cache/.cache
+diff --git a/udev/Makefile.in b/udev/Makefile.in
+index 81c2c7b..e32cba9 100644
+--- a/udev/Makefile.in
++++ b/udev/Makefile.in
+@@ -18,10 +18,7 @@ top_builddir = @top_builddir@
+ include $(top_builddir)/make.tmpl
  
- if test "$BUILD_LVMDBUSD" = yes; then
--	unset PYTHON_CONFIG
- 	unset am_cv_pathless_PYTHON ac_cv_path_PYTHON am_cv_python_platform
- 	unset am_cv_python_pythondir am_cv_python_version am_cv_python_pyexecdir
- 	unset ac_cv_path_PYTHON_CONFIG ac_cv_path_ac_pt_PYTHON_CONFIG
-diff --git a/configure.ac b/configure.ac
-index 3578f7b..2b29210 100644
---- a/configure.ac
-+++ b/configure.ac
-@@ -1172,7 +1172,6 @@ AS_IF([test "$NOTIFYDBUS_SUPPORT" = yes && test "BUILD_LVMDBUSD" = yes],
- dnl -- Enable Python dbus library
+ DM_RULES=10-dm.rules 13-dm-disk.rules 95-dm-notify.rules
+-LVM_RULES=11-dm-lvm.rules
+-ifeq ("@BUILD_LVMETAD@", "yes")
+-LVM_RULES+=69-dm-lvm-metad.rules
+-endif
++LVM_RULES=11-dm-lvm.rules 69-dm-lvm-metad.rules
  
- if test "$BUILD_LVMDBUSD" = yes; then
--	unset PYTHON_CONFIG
- 	unset am_cv_pathless_PYTHON ac_cv_path_PYTHON am_cv_python_platform
- 	unset am_cv_python_pythondir am_cv_python_version am_cv_python_pyexecdir
- 	unset ac_cv_path_PYTHON_CONFIG ac_cv_path_ac_pt_PYTHON_CONFIG
+ DM_DIR=$(shell $(GREP) "\#define DM_DIR" $(top_srcdir)/libdm/misc/dm-ioctl.h | $(AWK) '{print $$3}')
+ 
 
 
