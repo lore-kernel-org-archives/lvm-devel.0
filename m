@@ -1,74 +1,71 @@
-From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Thu, 6 Dec 2018 11:51:42 -0500
-Subject: 2018-06-01-stable - libdm: do not add params for resume and remove
-Message-ID: <201812061651.wB6GpgjK031599@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: Marian Csontos <mcsontos@sourceware.org>
+Date: Fri, 7 Dec 2018 09:15:32 -0500
+Subject: 2018-06-01-stable - pre-release
+Message-ID: <201812071415.wB7EFWug012655@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=d5234e1b7eceeb1eb9ceff9877aea2a39fde1906
-Commit:        d5234e1b7eceeb1eb9ceff9877aea2a39fde1906
-Parent:        a188b1e513ed5ca0f5f3702c823490f5610d4495
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Nov 16 15:54:09 2018 +0100
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Thu Dec 6 17:46:51 2018 +0100
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=f5ea02ffee3269a77e295d2b186ca81481f592d7
+Commit:        f5ea02ffee3269a77e295d2b186ca81481f592d7
+Parent:        262a42025ffef8a0ccb02e13d60abf3707d7c832
+Author:        Marian Csontos <mcsontos@redhat.com>
+AuthorDate:    Thu Dec 6 11:26:26 2018 +0100
+Committer:     Marian Csontos <mcsontos@redhat.com>
+CommitterDate: Fri Dec 7 15:12:34 2018 +0100
 
-libdm: do not add params for resume and remove
+pre-release
 
-DM_DEVICE_CREATE with table is doing several ioctl operations,
-however only some of then takes parameters.
-Since _create_and_load_v4() reused already existing dm task from
-DM_DEVICE_RELOAD it has also kept passing its table parameters
-to DM_DEVICE_RESUME ioctl - but this ioctl is supposed to not take
-any argument and thus there is no wiping of passed data - and
-since kernel returns buffer and shortens dmi->data_size accordingly,
-anything past returned data size remained uncleared in zfree()
-function.
-
-This has problem if the user used dm_task_secure_data (i.e. cryptsetup),
-as in this case binary expact secured data are erased from main memory
-after use, but they may have been left in place.
-
-This patch is also closing the possible hole for error path,
-which also reuse same dm task structure for DM_DEVICE_REMOVE.
 ---
- WHATS_NEW_DM              |    1 +
- libdm/ioctl/libdm-iface.c |    2 ++
- 2 files changed, 3 insertions(+), 0 deletions(-)
+ VERSION      |    2 +-
+ VERSION_DM   |    2 +-
+ WHATS_NEW    |    6 ++++--
+ WHATS_NEW_DM |    5 +++--
+ 4 files changed, 9 insertions(+), 6 deletions(-)
 
+diff --git a/VERSION b/VERSION
+index 46e7b87..3dc7946 100644
+--- a/VERSION
++++ b/VERSION
+@@ -1 +1 @@
+-2.02.183(2)-git (2018-10-30)
++2.02.183(2) (2018-12-07)
+diff --git a/VERSION_DM b/VERSION_DM
+index 9c3ba5f..2cf798e 100644
+--- a/VERSION_DM
++++ b/VERSION_DM
+@@ -1 +1 @@
+-1.02.154-git (2018-10-30)
++1.02.154 (2018-12-07)
+diff --git a/WHATS_NEW b/WHATS_NEW
+index b60612f..1bb2686 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,7 @@
+-Version 2.02.183 - 
+-====================================
++Version 2.02.183 - 07th December 2018
++=====================================
++  Avoid disabling lvmetad when repair does nothing.
++  Fix component detection for md version 0.90.
+   Use sync io if async io_setup fails, or use_aio=0 is set in config.
+   Avoid opening devices to get block size by using existing open fd.
+ 
 diff --git a/WHATS_NEW_DM b/WHATS_NEW_DM
-index ee5bcfa..d219f3d 100644
+index d219f3d..6fc667d 100644
 --- a/WHATS_NEW_DM
 +++ b/WHATS_NEW_DM
-@@ -1,5 +1,6 @@
- Version 1.02.154 - 
- ====================================
-+  Do not add parameters for RESUME with DM_DEVICE_CREATE dm task.
+@@ -1,6 +1,7 @@
+-Version 1.02.154 - 
+-====================================
++Version 1.02.154 - 07th December 2018
++=====================================
+   Do not add parameters for RESUME with DM_DEVICE_CREATE dm task.
++  Fix dmstats report printing no output.
  
  Version 1.02.152 - 30th October 2018
  ====================================
-diff --git a/libdm/ioctl/libdm-iface.c b/libdm/ioctl/libdm-iface.c
-index 769b69c..5068d4c 100644
---- a/libdm/ioctl/libdm-iface.c
-+++ b/libdm/ioctl/libdm-iface.c
-@@ -1466,6 +1466,7 @@ static int _create_and_load_v4(struct dm_task *dmt)
- 	dmt->uuid = NULL;
- 	dm_free(dmt->mangled_uuid);
- 	dmt->mangled_uuid = NULL;
-+	_dm_task_free_targets(dmt);
- 
- 	if (dm_task_run(dmt))
- 		return 1;
-@@ -1476,6 +1477,7 @@ static int _create_and_load_v4(struct dm_task *dmt)
- 	dmt->uuid = NULL;
- 	dm_free(dmt->mangled_uuid);
- 	dmt->mangled_uuid = NULL;
-+	_dm_task_free_targets(dmt);
- 
- 	/*
- 	 * Also udev-synchronize "remove" dm task that is a part of this revert!
 
 
