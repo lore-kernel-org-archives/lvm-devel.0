@@ -1,65 +1,62 @@
-From: Marian Csontos <mcsontos@sourceware.org>
-Date: Fri, 7 Dec 2018 09:19:43 -0500
-Subject: 2018-06-01-stable - post-release
-Message-ID: <201812071419.wB7EJhGq013404@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: David Teigland <teigland@sourceware.org>
+Date: Fri, 7 Dec 2018 14:13:29 -0500
+Subject: master - lvmlockd: fix missing LV lock for lvconvert repair
+Message-ID: <201812071913.wB7JDTsK001639@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=2d077286b9c6b07fcdd62d834274ae9ab896b195
-Commit:        2d077286b9c6b07fcdd62d834274ae9ab896b195
-Parent:        f5ea02ffee3269a77e295d2b186ca81481f592d7
-Author:        Marian Csontos <mcsontos@redhat.com>
-AuthorDate:    Fri Dec 7 15:19:10 2018 +0100
-Committer:     Marian Csontos <mcsontos@redhat.com>
-CommitterDate: Fri Dec 7 15:19:10 2018 +0100
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=a4b8377488f82c496b14ee6d644fc681968acaca
+Commit:        a4b8377488f82c496b14ee6d644fc681968acaca
+Parent:        21784e94d6f4308931fa497679f1a4e5e1966578
+Author:        David Teigland <teigland@redhat.com>
+AuthorDate:    Fri Dec 7 13:11:31 2018 -0600
+Committer:     David Teigland <teigland@redhat.com>
+CommitterDate: Fri Dec 7 13:11:31 2018 -0600
 
-post-release
+lvmlockd: fix missing LV lock for lvconvert repair
 
+Add missing lvmlockd LV lock for lvconvert repair
+on mirror and thin/cache pools.
 ---
- VERSION      |    2 +-
- VERSION_DM   |    2 +-
- WHATS_NEW    |    3 +++
- WHATS_NEW_DM |    3 +++
- 4 files changed, 8 insertions(+), 2 deletions(-)
+ tools/lvconvert.c |   16 ++++++++++++++++
+ 1 files changed, 16 insertions(+), 0 deletions(-)
 
-diff --git a/VERSION b/VERSION
-index 3dc7946..9ae261d 100644
---- a/VERSION
-+++ b/VERSION
-@@ -1 +1 @@
--2.02.183(2) (2018-12-07)
-+2.02.184(2)-git (2018-12-07)
-diff --git a/VERSION_DM b/VERSION_DM
-index 2cf798e..0ccad6e 100644
---- a/VERSION_DM
-+++ b/VERSION_DM
-@@ -1 +1 @@
--1.02.154 (2018-12-07)
-+1.02.156-git (2018-12-07)
-diff --git a/WHATS_NEW b/WHATS_NEW
-index 1bb2686..02f4ebf 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,3 +1,6 @@
-+Version 2.02.184 - 
-+=====================================
+diff --git a/tools/lvconvert.c b/tools/lvconvert.c
+index a29a66b..65a4ed3 100644
+--- a/tools/lvconvert.c
++++ b/tools/lvconvert.c
+@@ -3534,6 +3534,18 @@ static int _lvconvert_repair_pvs_mirror(struct cmd_context *cmd, struct logical_
+ 	int ret;
+ 
+ 	/*
++	 * We want to allow cmirror active on multiple nodes to be repaired,
++	 * but normal mirror to only be repaired if active exclusively here.
++	 * If the LV is active it already has the necessary lock, but if not
++	 * active, then require ex since we cannot know the active state on
++	 * other hosts.
++	 */
++	if (!lv_is_active(lv)) {
++		if (!lockd_lv(cmd, lv, "ex", 0))
++			return_0;
++	}
 +
- Version 2.02.183 - 07th December 2018
- =====================================
-   Avoid disabling lvmetad when repair does nothing.
-diff --git a/WHATS_NEW_DM b/WHATS_NEW_DM
-index 6fc667d..80b45be 100644
---- a/WHATS_NEW_DM
-+++ b/WHATS_NEW_DM
-@@ -1,3 +1,6 @@
-+Version 1.02.156 - 
-+=====================================
++	/*
+ 	 * FIXME: temporary use of lp because _lvconvert_mirrors_repair()
+ 	 * and _aux() still use lp fields everywhere.
+ 	 * Migrate them away from using lp (for the most part just use
+@@ -3663,6 +3675,10 @@ static int _lvconvert_repair_cachepool_thinpool(struct cmd_context *cmd, struct
+ 	int poolmetadataspare = arg_int_value(cmd, poolmetadataspare_ARG, DEFAULT_POOL_METADATA_SPARE);
+ 	struct dm_list *use_pvh;
+ 
++	/* ensure it's not active elsewhere. */
++	if (!lockd_lv(cmd, lv, "ex", 0))
++		return_0;
 +
- Version 1.02.154 - 07th December 2018
- =====================================
-   Do not add parameters for RESUME with DM_DEVICE_CREATE dm task.
+ 	if (cmd->position_argc > 1) {
+ 		/* First pos arg is required LV, remaining are optional PVs. */
+ 		if (!(use_pvh = create_pv_list(cmd->mem, lv->vg, cmd->position_argc - 1, cmd->position_argv + 1, 0)))
 
 
