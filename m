@@ -1,62 +1,68 @@
-From: David Teigland <teigland@sourceware.org>
-Date: Fri, 7 Dec 2018 14:13:29 -0500
-Subject: master - lvmlockd: fix missing LV lock for lvconvert repair
-Message-ID: <201812071913.wB7JDTsK001639@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: Heinz Mauelshagen <heinzm@sourceware.org>
+Date: Fri, 7 Dec 2018 20:53:47 -0500
+Subject: master - lvcreate/lvconvert: prohibit creation of/conversion to mirrored mirror logs
+Message-ID: <201812080153.wB81rlm5026071@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=a4b8377488f82c496b14ee6d644fc681968acaca
-Commit:        a4b8377488f82c496b14ee6d644fc681968acaca
-Parent:        21784e94d6f4308931fa497679f1a4e5e1966578
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Fri Dec 7 13:11:31 2018 -0600
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Fri Dec 7 13:11:31 2018 -0600
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=edb72cb70cb8abd0acb92f07937715be2816d04a
+Commit:        edb72cb70cb8abd0acb92f07937715be2816d04a
+Parent:        a4b8377488f82c496b14ee6d644fc681968acaca
+Author:        Heinz Mauelshagen <heinzm@redhat.com>
+AuthorDate:    Fri Dec 7 19:56:49 2018 +0100
+Committer:     Heinz Mauelshagen <heinzm@redhat.com>
+CommitterDate: Sat Dec 8 02:52:50 2018 +0100
 
-lvmlockd: fix missing LV lock for lvconvert repair
+lvcreate/lvconvert: prohibit creation of/conversion to mirrored mirror logs
 
-Add missing lvmlockd LV lock for lvconvert repair
-on mirror and thin/cache pools.
+In RHEL7 we marked mirrored mirror logs as deprecated and
+added a related message.  This patch prohibits creating new
+'mirror' LVs with that log type or converting existing LVs
+to have one.
+
+Existing LVs with mirrored mirror log can be activated
+and converted to disk/core logs.
+
+Avoid double deprecation message when running lvconvert.
+
+Resolves: rhbz1643562
 ---
- tools/lvconvert.c |   16 ++++++++++++++++
- 1 files changed, 16 insertions(+), 0 deletions(-)
+ lib/metadata/mirror.c |    3 ++-
+ tools/lvconvert.c     |    5 -----
+ 2 files changed, 2 insertions(+), 6 deletions(-)
 
+diff --git a/lib/metadata/mirror.c b/lib/metadata/mirror.c
+index ba3f33d..8b20979 100644
+--- a/lib/metadata/mirror.c
++++ b/lib/metadata/mirror.c
+@@ -1908,7 +1908,8 @@ int add_mirror_log(struct cmd_context *cmd, struct logical_volume *lv,
+ 	}
+ 
+ 	if (log_count > 1) {
+-		log_warn("WARNING: Log type \"mirrored\" is DEPRECATED and will be removed in the future. Use RAID1 LV or disk log instead.");
++		log_err("Log type \"mirrored\" is DEPRECATED. Use RAID1 LV or disk log instead.");
++		return 0;
+ 	}
+ 
+ 	if (!(parallel_areas = build_parallel_areas_from_lv(lv, 0, 0)))
 diff --git a/tools/lvconvert.c b/tools/lvconvert.c
-index a29a66b..65a4ed3 100644
+index 65a4ed3..dbc9fea 100644
 --- a/tools/lvconvert.c
 +++ b/tools/lvconvert.c
-@@ -3534,6 +3534,18 @@ static int _lvconvert_repair_pvs_mirror(struct cmd_context *cmd, struct logical_
- 	int ret;
+@@ -1262,11 +1262,6 @@ static int _lvconvert_mirrors(struct cmd_context *cmd,
+ 	    (old_log_count == new_log_count))
+ 		return 1;
  
- 	/*
-+	 * We want to allow cmirror active on multiple nodes to be repaired,
-+	 * but normal mirror to only be repaired if active exclusively here.
-+	 * If the LV is active it already has the necessary lock, but if not
-+	 * active, then require ex since we cannot know the active state on
-+	 * other hosts.
-+	 */
-+	if (!lv_is_active(lv)) {
-+		if (!lockd_lv(cmd, lv, "ex", 0))
-+			return_0;
-+	}
-+
-+	/*
- 	 * FIXME: temporary use of lp because _lvconvert_mirrors_repair()
- 	 * and _aux() still use lp fields everywhere.
- 	 * Migrate them away from using lp (for the most part just use
-@@ -3663,6 +3675,10 @@ static int _lvconvert_repair_cachepool_thinpool(struct cmd_context *cmd, struct
- 	int poolmetadataspare = arg_int_value(cmd, poolmetadataspare_ARG, DEFAULT_POOL_METADATA_SPARE);
- 	struct dm_list *use_pvh;
- 
-+	/* ensure it's not active elsewhere. */
-+	if (!lockd_lv(cmd, lv, "ex", 0))
-+		return_0;
-+
- 	if (cmd->position_argc > 1) {
- 		/* First pos arg is required LV, remaining are optional PVs. */
- 		if (!(use_pvh = create_pv_list(cmd->mem, lv->vg, cmd->position_argc - 1, cmd->position_argv + 1, 0)))
+-	if ((old_log_count != new_log_count) &&
+-	    (new_log_count == MIRROR_LOG_MIRRORED)) {
+-		log_warn("WARNING: Log type \"mirrored\" is DEPRECATED and will be removed in the future. Use RAID1 LV or disk log instead.");
+-	}
+-
+ 	if (!_lvconvert_mirrors_aux(cmd, lv, lp, NULL,
+ 				    new_mimage_count, new_log_count, lp->pvh))
+ 		return_0;
 
 
