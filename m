@@ -1,68 +1,37 @@
-From: Gang He <ghe@suse.com>
-Date: Sun, 09 Dec 2018 22:29:19 -0700
-Subject: master - scan: md metadata version 0.90 is at the end of disk
-In-Reply-To: <20181203172221.GA6362@redhat.com>
-References: <201811291836.wATIaSVc015670@lists01.pubmisc.prod.ext.phx2.redhat.com>
-	<5C049856020000F9000458D1@prv1-mh.provo.novell.com>
-	<20181203172221.GA6362@redhat.com>
-Message-ID: <5C0DF9AF020000F9000476B0@prv1-mh.provo.novell.com>
+From: Heinz Mauelshagen <heinzm@sourceware.org>
+Date: Mon, 10 Dec 2018 08:49:51 -0500
+Subject: master - WHATS_NEW
+Message-ID: <201812101349.wBADnpCm020204@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Hello David,
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=b2d1facd960e192b38ae4a9866f3bea9646e6cd5
+Commit:        b2d1facd960e192b38ae4a9866f3bea9646e6cd5
+Parent:        edb72cb70cb8abd0acb92f07937715be2816d04a
+Author:        Heinz Mauelshagen <heinzm@redhat.com>
+AuthorDate:    Mon Dec 10 14:48:13 2018 +0100
+Committer:     Heinz Mauelshagen <heinzm@redhat.com>
+CommitterDate: Mon Dec 10 14:49:33 2018 +0100
 
-Some feedback from our user is as below,
+WHATS_NEW
 
-It still does not work out and ends up in the emergency console, although error messages are different now:
-in journal (journalctl -xb):
+---
+ WHATS_NEW |    1 +
+ 1 files changed, 1 insertions(+), 0 deletions(-)
 
-Unit lvm2-pvscan at 259:0.service has finished starting up.
-[...]
-Dec 08 15:27:28 big lvmetad[560]: vg_lookup vgid 6zO4JX-piC2-OaCG-GptZ-MT2F-NH4J-jL6gNj name vghome found incomplete mapping uuid none name none
-[...]
-Dec 08 15:28:57 big systemd[1]: dev-vghome-data.device: Job dev-vghome-data.device/start timed out.
-Dec 08 15:28:57 big systemd[1]: Timed out waiting for device dev-vghome-data.device.
--- Subject: Unit dev-vghome-data.device has failed
-[...]
-
-During boot following can be seen:
-"A start job is running for dev-vghome-data.device (counting secs/1min 30s)"
-
-This one fails and emergency console starts.
-
-What can I provide additionally? 
-Do you think his problem is related to these patches, or it is another problem?
-
-
-Thanks
-Gang
-
->>> On 2018/12/4 at 1:22, in message <20181203172221.GA6362@redhat.com>, David
-Teigland <teigland@redhat.com> wrote:
-> On Sun, Dec 02, 2018 at 07:43:34PM -0700, Gang He wrote:
->> Hello David,
->> 
->> This patch can be used to fix this problem, or not?
->> https://www.redhat.com/archives/linux-lvm/2018-October/msg00049.html 
-> 
-> On the stable branch there are three recent commits to fix/improve
-> md component detection.  I hope these will close any remaining gaps
-> in this area, let me know how these work.
-> 
-> scan: md metadata version 0.90 is at the end of disk
-> https://sourceware.org/git/?p=lvm2.git;a=commit;h=0e42ebd6d4012d210084a9ccf8 
-> d76f853726de3c
-> 
-> pvscan lvmetad: use full md filter when md 1.0 devices are present
-> https://sourceware.org/git/?p=lvm2.git;a=commit;h=a01e1fec0fe7c2fa61577c0e63 
-> 6e907cde7279ea
-> 
-> pvscan lvmetad: use udev info to improve md component detection
-> https://sourceware.org/git/?p=lvm2.git;a=commit;h=a188b1e513ed5ca0f5f3702c82 
-> 3490f5610d4495
-
+diff --git a/WHATS_NEW b/WHATS_NEW
+index 68cdcea..ffc0d6a 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.03.02 - 
+ ===================================
++  Prohibit mirrored 'mirror' log via lvcreate and lvconvert
+   Use sync io if async io_setup fails, or use_aio=0 is set in config.
+ 
+ Version 2.03.01 - 31st October 2018
 
 
