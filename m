@@ -1,44 +1,52 @@
-From: Marian Csontos <mcsontos@sourceware.org>
-Date: Wed, 12 Dec 2018 09:43:24 -0500
-Subject: master - dmeventd: Fix libdevmapper-event linking
-Message-ID: <201812121443.wBCEhOkL008026@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: Zdenek Kabelac <zkabelac@sourceware.org>
+Date: Fri, 14 Dec 2018 09:17:09 -0500
+Subject: master - libdm: use libdm header
+Message-ID: <201812141417.wBEEH9Pw010266@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=46a8d2e898a48b1df86fe07d13df8aa994e32808
-Commit:        46a8d2e898a48b1df86fe07d13df8aa994e32808
-Parent:        627f0e2bd84753a7bfbda517f22c54a929e3a458
-Author:        Marian Csontos <mcsontos@redhat.com>
-AuthorDate:    Wed Dec 12 10:50:36 2018 +0100
-Committer:     Marian Csontos <mcsontos@redhat.com>
-CommitterDate: Wed Dec 12 15:43:03 2018 +0100
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=3c377643339be97940554323909d51b12c933f9e
+Commit:        3c377643339be97940554323909d51b12c933f9e
+Parent:        46a8d2e898a48b1df86fe07d13df8aa994e32808
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Fri Dec 14 13:11:48 2018 +0100
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Fri Dec 14 15:08:34 2018 +0100
 
-dmeventd: Fix libdevmapper-event linking
+libdm: use libdm header
 
+User libdm header file.
 ---
- daemons/dmeventd/Makefile.in |    3 ++-
- 1 files changed, 2 insertions(+), 1 deletions(-)
+ WHATS_NEW_DM            |    1 +
+ libdm/datastruct/list.c |    2 +-
+ 2 files changed, 2 insertions(+), 1 deletions(-)
 
-diff --git a/daemons/dmeventd/Makefile.in b/daemons/dmeventd/Makefile.in
-index 2d856f7..0a03d66 100644
---- a/daemons/dmeventd/Makefile.in
-+++ b/daemons/dmeventd/Makefile.in
-@@ -58,11 +58,12 @@ device-mapper: $(TARGETS)
+diff --git a/WHATS_NEW_DM b/WHATS_NEW_DM
+index aa1734c..3d45bc3 100644
+--- a/WHATS_NEW_DM
++++ b/WHATS_NEW_DM
+@@ -1,5 +1,6 @@
+ Version 1.02.155 - 
+ ====================================
++  Include correct internal header inside libdm list.c.
+   Enhance ioctl flattening and add parameters only when needed.
+   Add DM_DEVICE_ARM_POLL for API completness matching kernel.
+   Do not add parameters for RESUME with DM_DEVICE_CREATE dm task.
+diff --git a/libdm/datastruct/list.c b/libdm/datastruct/list.c
+index d80cb9a..74053c5 100644
+--- a/libdm/datastruct/list.c
++++ b/libdm/datastruct/list.c
+@@ -13,7 +13,7 @@
+  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
+  */
  
- CFLAGS_dmeventd.o += $(EXTRA_EXEC_CFLAGS)
- LIBS += $(PTHREAD_LIBS)
-+LIBS += $(INTERNAL_LIBS)
+-#include "lib/misc/lib.h"
++#include "libdm/misc/dmlib.h"
+ #include <assert.h>
  
- dmeventd: $(LIB_SHARED) dmeventd.o
- 	@echo "    [CC] $@"
- 	$(Q) $(CC) $(CFLAGS) -L. $(LDFLAGS) $(EXTRA_EXEC_LDFLAGS) $(ELDFLAGS) dmeventd.o \
--		-o $@ $(DL_LIBS) $(DMEVENT_LIBS) $(INTERNAL_LIBS) $(LIBS) -lm
-+		-o $@ $(DL_LIBS) $(DMEVENT_LIBS) $(LIBS) -lm
- 
- dmeventd.static: $(LIB_STATIC) dmeventd.o
- 	@echo "    [CC] $@"
+ /*
 
 
