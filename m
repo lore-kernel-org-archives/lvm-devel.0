@@ -1,57 +1,42 @@
-From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Fri, 14 Dec 2018 09:23:53 -0500
-Subject: master - lvmanip: uninitialized members in struct pv_list (#10)
-Message-ID: <201812141423.wBEENr3G011125@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: Tony Asleson <tasleson@sourceware.org>
+Date: Fri, 14 Dec 2018 09:31:01 -0500
+Subject: master - lvmdbusd: Dump blackbox newest first
+Message-ID: <201812141431.wBEEV1iJ011959@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=859feb81e5b61ac2109b1d7850844ccf1ce3e5bf
-Commit:        859feb81e5b61ac2109b1d7850844ccf1ce3e5bf
-Parent:        db6d9e04af7277a5e2883743e0a9a1502d97249f
-Author:        Ming-Hung Tsai <notifications@github.com>
-AuthorDate:    Fri Dec 14 01:51:51 2018 -0800
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Fri Dec 14 15:23:18 2018 +0100
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=f1684bf8e89b87d7f04e0a963def66f76634766d
+Commit:        f1684bf8e89b87d7f04e0a963def66f76634766d
+Parent:        859feb81e5b61ac2109b1d7850844ccf1ce3e5bf
+Author:        Tony Asleson <tasleson@redhat.com>
+AuthorDate:    Tue Dec 11 13:58:23 2018 -0600
+Committer:     Tony Asleson <tasleson@redhat.com>
+CommitterDate: Fri Dec 14 08:28:02 2018 -0600
 
-lvmanip:  uninitialized members in struct pv_list (#10)
+lvmdbusd: Dump blackbox newest first
 
-Scenario: Given an existed LV `lvol0`, I want to create another LV
-on the PVs used by `lvol0`.
-
-I use `build_parallel_areas_from_lv()` to obtain the `pv_list` of each segments.
-However, the returned `pv_list` is not properly initialized, which causes
-segfault in subsequent operations.
+When we get bug reports we may not get the entire log, so lets
+dump the fight recorder from newest to oldest as the one we
+are interested in was likely to be the last command run.
 ---
- WHATS_NEW               |    1 +
- lib/metadata/lv_manip.c |    2 +-
- 2 files changed, 2 insertions(+), 1 deletions(-)
+ daemons/lvmdbusd/cmdhandler.py |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index 6856d66..0b7f834 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.03.02 - 
- ===================================
-+  Fix missing proper initialization of pv_list struct when adding pv.
-   Fix (de)activation of RaidLVs with visible SubLVs
-   Prohibit mirrored 'mirror' log via lvcreate and lvconvert
-   Use sync io if async io_setup fails, or use_aio=0 is set in config.
-diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
-index 2c569d8..27c40d7 100644
---- a/lib/metadata/lv_manip.c
-+++ b/lib/metadata/lv_manip.c
-@@ -5962,7 +5962,7 @@ static int _add_pvs(struct cmd_context *cmd, struct pv_segment *peg,
- 	if (find_pv_in_pv_list(&spvs->pvs, peg->pv))
- 		return 1;
+diff --git a/daemons/lvmdbusd/cmdhandler.py b/daemons/lvmdbusd/cmdhandler.py
+index 4fb1670..a9177c5 100644
+--- a/daemons/lvmdbusd/cmdhandler.py
++++ b/daemons/lvmdbusd/cmdhandler.py
+@@ -67,7 +67,7 @@ class LvmFlightRecorder(object):
+ 		with cmd_lock:
+ 			if len(self.queue):
+ 				log_error("LVM dbus flight recorder START")
+-				for c in self.queue:
++				for c in reversed(self.queue):
+ 					log_error(str(c))
+ 				log_error("LVM dbus flight recorder END")
  
--	if (!(pvl = dm_pool_alloc(cmd->mem, sizeof(*pvl)))) {
-+	if (!(pvl = dm_pool_zalloc(cmd->mem, sizeof(*pvl)))) {
- 		log_error("pv_list allocation failed");
- 		return 0;
- 	}
 
 
