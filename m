@@ -1,52 +1,39 @@
-From: Tony Asleson <tasleson@sourceware.org>
-Date: Fri, 14 Dec 2018 09:31:14 -0500
-Subject: master - lvmdbusd: Update table lookup for state lv_attr
-Message-ID: <201812141431.wBEEVEIG011983@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: Zdenek Kabelac <zkabelac@sourceware.org>
+Date: Mon, 17 Dec 2018 05:07:53 -0500
+Subject: master - lvconvert: ensure proper init of pv_list
+Message-ID: <201812171007.wBHA7rx8024710@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=2e01af0f78fb63c084998f728668553d8cce2b64
-Commit:        2e01af0f78fb63c084998f728668553d8cce2b64
-Parent:        a6cba2d0a08e77a7e5178a2fac605863848a8e2e
-Author:        Tony Asleson <tasleson@redhat.com>
-AuthorDate:    Tue Dec 11 11:24:51 2018 -0600
-Committer:     Tony Asleson <tasleson@redhat.com>
-CommitterDate: Fri Dec 14 08:28:03 2018 -0600
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=f514e379786689a47518bf67d71a388977cc7369
+Commit:        f514e379786689a47518bf67d71a388977cc7369
+Parent:        2e01af0f78fb63c084998f728668553d8cce2b64
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Fri Dec 14 21:53:34 2018 +0100
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Fri Dec 14 22:27:33 2018 +0100
 
-lvmdbusd: Update table lookup for state lv_attr
+lvconvert: ensure proper init of pv_list
 
 ---
- daemons/lvmdbusd/lv.py |   10 ++++++++--
- 1 files changed, 8 insertions(+), 2 deletions(-)
+ tools/lvconvert.c |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
 
-diff --git a/daemons/lvmdbusd/lv.py b/daemons/lvmdbusd/lv.py
-index 1b66af5..c0029b8 100644
---- a/daemons/lvmdbusd/lv.py
-+++ b/daemons/lvmdbusd/lv.py
-@@ -346,13 +346,19 @@ class LvCommon(AutomatedProperties):
+diff --git a/tools/lvconvert.c b/tools/lvconvert.c
+index 8329bc6..c260ee0 100644
+--- a/tools/lvconvert.c
++++ b/tools/lvconvert.c
+@@ -484,7 +484,7 @@ static struct dm_list *_failed_pv_list(struct volume_group *vg)
+ 		if (pvl->pv->pe_alloc_count == 0)
+ 			continue;
  
- 	@property
- 	def State(self):
--		type_map = {'a': 'active', 's': 'suspended', 'I': 'Invalid snapshot',
-+		type_map = {'a': 'active',
-+					's': 'suspended',
-+					'I': 'Invalid snapshot',
- 					'S': 'invalid Suspended snapshot',
- 					'm': 'snapshot merge failed',
- 					'M': 'suspended snapshot (M)erge failed',
- 					'd': 'mapped device present without  tables',
- 					'i': 'mapped device present with inactive table',
--					'X': 'unknown', '-': 'Unspecified'}
-+					'h': 'historical',
-+					'c': 'check needed suspended thin-pool',
-+					'C': 'check needed',
-+					'X': 'unknown',
-+					'-': 'Unspecified'}
- 		return self.attr_struct(4, type_map)
- 
- 	@property
+-		if (!(new_pvl = dm_pool_alloc(vg->vgmem, sizeof(*new_pvl)))) {
++		if (!(new_pvl = dm_pool_zalloc(vg->vgmem, sizeof(*new_pvl)))) {
+ 			log_error("Allocation of failed_pvs list entry failed.");
+ 			return NULL;
+ 		}
 
 
