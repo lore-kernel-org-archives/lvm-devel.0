@@ -1,70 +1,48 @@
-From: Bryn Reeves <bmr@fedoraproject.org>
-Date: Mon,  7 Sep 2015 11:15:20 +0000 (UTC)
-Subject: master - libdm: fix dm_stats leak in dm_stats_create()
-Message-ID: <20150907111520.A8A0660EE5@fedorahosted.org>
+From: Marian Csontos <mcsontos@sourceware.org>
+Date: Tue, 18 Dec 2018 11:42:07 -0500
+Subject: 2018-12-18-stable - lvmlockd: Fix arguments when built without sanlock
+Message-ID: <201812181642.wBIGg75h031086@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=ab1b54c3e3244c481a1f8bf5e7c8b48870846bd8
-Commit:        ab1b54c3e3244c481a1f8bf5e7c8b48870846bd8
-Parent:        0f5933ecc1bf792a404e2cdfa8a2eccf66b5b6e1
-Author:        Bryn M. Reeves <bmr@redhat.com>
-AuthorDate:    Mon Sep 7 12:08:34 2015 +0100
-Committer:     Bryn M. Reeves <bmr@redhat.com>
-CommitterDate: Mon Sep 7 12:08:34 2015 +0100
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=24254ca86671ae49431e67788c039603fe4b79fb
+Commit:        24254ca86671ae49431e67788c039603fe4b79fb
+Parent:        7caf8840ff6b0a056b787d6d6fbb5fea78a66f66
+Author:        Marian Csontos <mcsontos@redhat.com>
+AuthorDate:    Tue Dec 18 16:59:48 2018 +0100
+Committer:     Marian Csontos <mcsontos@redhat.com>
+CommitterDate: Tue Dec 18 17:12:01 2018 +0100
 
-libdm: fix dm_stats leak in dm_stats_create()
+lvmlockd: Fix arguments when built without sanlock
 
-The histogram changes adds a new error path to dm_stats_create().
-Make sure that the dm_stats handle is properly destroyed if we fail
-to create the histogram pool and check for failures setting the
-program_id.
 ---
- libdm/libdm-stats.c |   14 +++++++++++---
- 1 files changed, 11 insertions(+), 3 deletions(-)
+ daemons/lvmlockd/lvmlockd-internal.h |    4 ++--
+ 1 files changed, 2 insertions(+), 2 deletions(-)
 
-diff --git a/libdm/libdm-stats.c b/libdm/libdm-stats.c
-index bb26c46..20e3c9b 100644
---- a/libdm/libdm-stats.c
-+++ b/libdm/libdm-stats.c
-@@ -144,17 +144,24 @@ struct dm_stats *dm_stats_create(const char *program_id)
- 		return_NULL;
+diff --git a/daemons/lvmlockd/lvmlockd-internal.h b/daemons/lvmlockd/lvmlockd-internal.h
+index d8048d8..a2280b8 100644
+--- a/daemons/lvmlockd/lvmlockd-internal.h
++++ b/daemons/lvmlockd/lvmlockd-internal.h
+@@ -502,7 +502,7 @@ static inline int lm_init_vg_sanlock(char *ls_name, char *vg_name, uint32_t flag
+ 	return -1;
+ }
  
- 	/* FIXME: better hint. */
--	if (!(dms->mem = dm_pool_create("stats_pool", 4096)))
--		goto_bad;
-+	if (!(dms->mem = dm_pool_create("stats_pool", 4096))) {
-+		dm_free(dms);
-+		return_NULL;
-+	}
+-static inline int lm_init_lv_sanlock(char *ls_name, char *vg_name, char *lv_name, char *vg_args, char *lv_args, int sector_size, int align_size, uint64_t free_offset)
++static inline int lm_init_lv_sanlock(char *ls_name, char *vg_name, char *lv_name, char *vg_args, char *lv_args, uint64_t free_offset)
+ {
+ 	return -1;
+ }
+@@ -590,7 +590,7 @@ static inline int lm_is_running_sanlock(void)
+ 	return 0;
+ }
  
- 	if (!(dms->hist_mem = dm_pool_create("histogram_pool", hist_hint)))
--		return_0;
-+		goto_bad;
- 
- 	if (!program_id || !strlen(program_id))
- 		dms->program_id = _program_id_from_proc();
- 	else
- 		dms->program_id = dm_strdup(program_id);
- 
-+	if (!dms->program_id) {
-+		dm_pool_destroy(dms->hist_mem);
-+		goto_bad;
-+	}
-+
- 	dms->major = -1;
- 	dms->minor = -1;
- 	dms->name = NULL;
-@@ -171,6 +178,7 @@ struct dm_stats *dm_stats_create(const char *program_id)
- 	return dms;
- 
- bad:
-+	dm_pool_destroy(dms->mem);
- 	dm_free(dms);
- 	return NULL;
+-static inline int lm_find_free_lock_sanlock(struct lockspace *ls, uint64_t *free_offset, int *sector_size, int *align_size)
++static inline int lm_find_free_lock_sanlock(struct lockspace *ls, uint64_t *free_offset)
+ {
+ 	return -1;
  }
 
 
