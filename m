@@ -1,60 +1,42 @@
-From: David Teigland <teigland@fedoraproject.org>
-Date: Thu,  3 Sep 2015 15:23:23 +0000 (UTC)
-Subject: master - lockd: vgrename fixes
-Message-ID: <20150903152323.9046E60F0F@fedorahosted.org>
+From: Marian Csontos <mcsontos@sourceware.org>
+Date: Tue, 18 Dec 2018 03:55:10 -0500
+Subject: master - build: Remove reference to undefined @BUILD_LVMETAD@
+Message-ID: <201812180855.wBI8tAA3020945@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=96dc03b33782cf0e33f5fdf57cd8eb475e4bd7c9
-Commit:        96dc03b33782cf0e33f5fdf57cd8eb475e4bd7c9
-Parent:        d1d00fdeec04b1c856dfbe2d1ad8914e0968acfb
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Thu Sep 3 10:21:44 2015 -0500
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Thu Sep 3 10:21:44 2015 -0500
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=e0c2d374aeeb77258c3bcdf2bb3ec5a0fca95a97
+Commit:        e0c2d374aeeb77258c3bcdf2bb3ec5a0fca95a97
+Parent:        07fc4866f040a382c39577fb739e010734d83e42
+Author:        Marian Csontos <mcsontos@redhat.com>
+AuthorDate:    Tue Dec 18 09:36:48 2018 +0100
+Committer:     Marian Csontos <mcsontos@redhat.com>
+CommitterDate: Tue Dec 18 09:54:45 2018 +0100
 
-lockd: vgrename fixes
+build: Remove reference to undefined @BUILD_LVMETAD@
 
-If busy locks in lvmlockd prevent vgrename, use the
-correct error exit path, and print a user-friendly
-error message.
 ---
- lib/locking/lvmlockd.c |    6 ++++++
- tools/vgrename.c       |    2 +-
- 2 files changed, 7 insertions(+), 1 deletions(-)
+ libdaemon/Makefile.in |    5 +----
+ 1 files changed, 1 insertions(+), 4 deletions(-)
 
-diff --git a/lib/locking/lvmlockd.c b/lib/locking/lvmlockd.c
-index f3e2e2c..983ecc9 100644
---- a/lib/locking/lvmlockd.c
-+++ b/lib/locking/lvmlockd.c
-@@ -2423,6 +2423,12 @@ int lockd_rename_vg_before(struct cmd_context *cmd, struct volume_group *vg)
- 	}
+diff --git a/libdaemon/Makefile.in b/libdaemon/Makefile.in
+index c7fe1d3..4b0a0ad 100644
+--- a/libdaemon/Makefile.in
++++ b/libdaemon/Makefile.in
+@@ -19,10 +19,7 @@ top_builddir = @top_builddir@
  
- 	daemon_reply_destroy(reply);
-+
-+	/* Other hosts have not stopped the lockspace. */
-+	if (result == -EBUSY) {
-+		log_error("Lockspace for \"%s\" not stopped on other hosts", vg->name);
-+		return 0;
-+	}
- 	
- 	if (!ret) {
- 		log_error("lockd_rename_vg_before lvmlockd result %d", result);
-diff --git a/tools/vgrename.c b/tools/vgrename.c
-index 7e77b57..620345b 100644
---- a/tools/vgrename.c
-+++ b/tools/vgrename.c
-@@ -150,7 +150,7 @@ static int vg_rename_path(struct cmd_context *cmd, const char *old_vg_path,
- 		stack;
+ SUBDIRS += client
  
- 	if (!lockd_rename_vg_before(cmd, vg))
--		return_0;
-+		goto error;
- 
- 	/* Change the volume group name */
- 	vg_rename(cmd, vg, vg_name_new);
+-ifeq (@BUILD_LVMETAD@,yes)
+-  SUBDIRS += server
+-server: client
+-else ifeq (@BUILD_LVMPOLLD@,yes)
++ifeq (@BUILD_LVMPOLLD@,yes)
+   SUBDIRS += server
+ server: client
+ endif
 
 
