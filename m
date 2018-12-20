@@ -1,49 +1,85 @@
-From: Marian Csontos <mcsontos@sourceware.org>
-Date: Wed, 19 Dec 2018 10:30:53 -0500
-Subject: master - lvmlockd: Fix arguments when built without sanlock
-Message-ID: <201812191530.wBJFUrOg025494@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: Zdenek Kabelac <zkabelac@sourceware.org>
+Date: Thu, 20 Dec 2018 07:27:15 -0500
+Subject: master - dmeventd: resolve compilation of vdo status parsing
+Message-ID: <201812201227.wBKCRFm0030641@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=b068f21f6a24094936a33269067c18373b48f2cd
-Commit:        b068f21f6a24094936a33269067c18373b48f2cd
-Parent:        93c7bca08f328f50af4ce4a93fd19b0973b9bd1f
-Author:        Marian Csontos <mcsontos@redhat.com>
-AuthorDate:    Tue Dec 18 16:59:48 2018 +0100
-Committer:     Marian Csontos <mcsontos@redhat.com>
-CommitterDate: Tue Dec 18 17:42:22 2018 +0100
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=9785e40b8d52fd87d7c451ed838f450aee41ba8d
+Commit:        9785e40b8d52fd87d7c451ed838f450aee41ba8d
+Parent:        f05104af76e26f0757df1500540e767dd889ae71
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Wed Dec 19 12:54:14 2018 +0100
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Thu Dec 20 13:26:55 2018 +0100
 
-lvmlockd: Fix arguments when built without sanlock
+dmeventd: resolve compilation of vdo status parsing
 
-(cherry picked from commit 24254ca86671ae49431e67788c039603fe4b79fb)
+A bit of chicken & egg problem - dmeventd needs to use old libdm library.
+VDO is only part of new device_mapper internal library.
+
+So include directly source file for parsing status - this fixes usability
+problem of VDO plugin introduced with previous Makefile reshaping
+patchset.
+
+NOTE: source file needs to be keep then compilable in both environments.
+
+Also add missing copyright header.
 ---
- daemons/lvmlockd/lvmlockd-internal.h |    4 ++--
- 1 files changed, 2 insertions(+), 2 deletions(-)
+ daemons/dmeventd/plugins/vdo/dmeventd_vdo.c |    4 +++-
+ device_mapper/vdo/status.c                  |   22 ++++++++++++++++++++--
+ 2 files changed, 23 insertions(+), 3 deletions(-)
 
-diff --git a/daemons/lvmlockd/lvmlockd-internal.h b/daemons/lvmlockd/lvmlockd-internal.h
-index 04645fa..ead3098 100644
---- a/daemons/lvmlockd/lvmlockd-internal.h
-+++ b/daemons/lvmlockd/lvmlockd-internal.h
-@@ -504,7 +504,7 @@ static inline int lm_init_vg_sanlock(char *ls_name, char *vg_name, uint32_t flag
- 	return -1;
- }
+diff --git a/daemons/dmeventd/plugins/vdo/dmeventd_vdo.c b/daemons/dmeventd/plugins/vdo/dmeventd_vdo.c
+index b5e2766..d5156cd 100644
+--- a/daemons/dmeventd/plugins/vdo/dmeventd_vdo.c
++++ b/daemons/dmeventd/plugins/vdo/dmeventd_vdo.c
+@@ -15,7 +15,9 @@
+ #include "lib/misc/lib.h"
+ #include "daemons/dmeventd/plugins/lvm2/dmeventd_lvm.h"
+ #include "daemons/dmeventd/libdevmapper-event.h"
+-#include "device_mapper/vdo/target.h"
++
++/* Use parser from new device_mapper library */
++#include "device_mapper/vdo/status.c"
  
--static inline int lm_init_lv_sanlock(char *ls_name, char *vg_name, char *lv_name, char *vg_args, char *lv_args, int sector_size, int align_size, uint64_t free_offset)
-+static inline int lm_init_lv_sanlock(char *ls_name, char *vg_name, char *lv_name, char *vg_args, char *lv_args, uint64_t free_offset)
- {
- 	return -1;
- }
-@@ -592,7 +592,7 @@ static inline int lm_is_running_sanlock(void)
- 	return 0;
- }
+ #include <sys/wait.h>
+ #include <stdarg.h>
+diff --git a/device_mapper/vdo/status.c b/device_mapper/vdo/status.c
+index 40e69ba..a34029d 100644
+--- a/device_mapper/vdo/status.c
++++ b/device_mapper/vdo/status.c
+@@ -1,8 +1,26 @@
++/*
++ * Copyright (C) 2018 Red Hat, Inc. All rights reserved.
++ *
++ * This file is part of the device-mapper userspace tools.
++ *
++ * This copyrighted material is made available to anyone wishing to use,
++ * modify, copy, or redistribute it subject to the terms and conditions
++ * of the GNU Lesser General Public License v.2.1.
++ *
++ * You should have received a copy of the GNU Lesser General Public License
++ * along with this program; if not, write to the Free Software Foundation,
++ * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
++ */
++
++/* Note: this object is also used by VDO dmeventd plugin for parsing status */
++/* File could be included by VDO plugin and can use original libdm library */
++#ifndef LIB_DMEVENT_H
+ #include "configure.h"
+-#include "target.h"
+-
+ // For DM_ARRAY_SIZE!
+ #include "device_mapper/all.h"
++#endif
++
++#include "device_mapper/vdo/target.h"
+ #include "base/memory/zalloc.h"
  
--static inline int lm_find_free_lock_sanlock(struct lockspace *ls, uint64_t *free_offset, int *sector_size, int *align_size)
-+static inline int lm_find_free_lock_sanlock(struct lockspace *ls, uint64_t *free_offset)
- {
- 	return -1;
- }
+ #include <ctype.h>
 
 
