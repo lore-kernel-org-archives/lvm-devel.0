@@ -1,57 +1,40 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Fri, 21 Dec 2018 15:47:13 -0500
-Subject: master - cov: ensure lock_type is not NULL
-Message-ID: <201812212047.wBLKlD0d021494@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Fri, 21 Dec 2018 15:47:17 -0500
+Subject: master - cov: looks like cut&paste error
+Message-ID: <201812212047.wBLKlHVj021507@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=8db2527c6edec81d3b90d30384e32784ab2ec687
-Commit:        8db2527c6edec81d3b90d30384e32784ab2ec687
-Parent:        e2c017fdace76f0c03f43e3e435ae8a72d6bb15f
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=a355aeb17a4fda7fab76a2c85bdc7ff03159424a
+Commit:        a355aeb17a4fda7fab76a2c85bdc7ff03159424a
+Parent:        8db2527c6edec81d3b90d30384e32784ab2ec687
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Dec 21 20:04:35 2018 +0100
+AuthorDate:    Fri Dec 21 20:22:55 2018 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Fri Dec 21 21:45:08 2018 +0100
 
-cov: ensure lock_type is not NULL
+cov: looks like cut&paste error
 
+Fua and nofua code path should have different compares.
 ---
- tools/vgchange.c |    6 +++---
- 1 files changed, 3 insertions(+), 3 deletions(-)
+ tools/lvconvert.c |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
 
-diff --git a/tools/vgchange.c b/tools/vgchange.c
-index 0f9241c..bbdf2e4 100644
---- a/tools/vgchange.c
-+++ b/tools/vgchange.c
-@@ -818,7 +818,7 @@ static int _vgchange_locktype(struct cmd_context *cmd, struct volume_group *vg)
- 	int lv_lock_count = 0;
- 
- 	/* Special recovery case. */
--	if (lockopt && !strcmp(lock_type, "none") && !strcmp(lockopt, "force")) {
-+	if (lock_type && lockopt && !strcmp(lock_type, "none") && !strcmp(lockopt, "force")) {
- 		vg->status &= ~CLUSTERED;
- 		vg->lock_type = "none";
- 		vg->lock_args = NULL;
-@@ -867,7 +867,7 @@ static int _vgchange_locktype(struct cmd_context *cmd, struct volume_group *vg)
+diff --git a/tools/lvconvert.c b/tools/lvconvert.c
+index baabb00..b63dc34 100644
+--- a/tools/lvconvert.c
++++ b/tools/lvconvert.c
+@@ -5292,7 +5292,7 @@ static int _get_one_writecache_setting(struct cmd_context *cmd, struct writecach
  	}
  
- 	/* clvm to none */
--	if (!strcmp(vg->lock_type, "clvm") && !strcmp(lock_type, "none")) {
-+	if (lock_type && !strcmp(vg->lock_type, "clvm") && !strcmp(lock_type, "none")) {
- 		vg->status &= ~CLUSTERED;
- 		vg->lock_type = "none";
- 		return 1;
-@@ -963,7 +963,7 @@ static int _vgchange_locktype(struct cmd_context *cmd, struct volume_group *vg)
- 	}
- 
- 	/* ... to none */
--	if (!strcmp(lock_type, "none")) {
-+	if (lock_type && !strcmp(lock_type, "none")) {
- 		vg->lock_type = NULL;
- 		vg->system_id = cmd->system_id ? dm_pool_strdup(vg->vgmem, cmd->system_id) : NULL;
- 		return 1;
+ 	if (!strncmp(key, "nofua", strlen("nofua"))) {
+-		if (settings->nofua_set) {
++		if (settings->fua_set) {
+ 			log_error("Setting fua and nofua cannot both be set.");
+ 			return 0;
+ 		}
 
 
