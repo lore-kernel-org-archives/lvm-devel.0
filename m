@@ -1,61 +1,79 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Fri, 21 Dec 2018 15:46:18 -0500
-Subject: master - lvmpolld: improve makefile deps
-Message-ID: <201812212046.wBLKkIFi021012@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Fri, 21 Dec 2018 15:46:22 -0500
+Subject: master - lvmlockd: fix error return code for _init_vg_sanlock
+Message-ID: <201812212046.wBLKkMoA021149@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=98924e4703bd798f4e872fbc7e6c6e32a199e102
-Commit:        98924e4703bd798f4e872fbc7e6c6e32a199e102
-Parent:        18aa541ca270d70899ab7ec6095075b70a21fb09
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=7832d3566868408ebf6d4c5d708e3efab3d48a67
+Commit:        7832d3566868408ebf6d4c5d708e3efab3d48a67
+Parent:        98924e4703bd798f4e872fbc7e6c6e32a199e102
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Dec 21 11:24:00 2018 +0100
+AuthorDate:    Fri Dec 21 12:08:10 2018 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Fri Dec 21 21:42:23 2018 +0100
+CommitterDate: Fri Dec 21 21:42:30 2018 +0100
 
-lvmpolld: improve makefile deps
+lvmlockd: fix error return code for _init_vg_sanlock
 
-Add correct build dependencies on internal libraries.
+In few cases error paths from initialization were returned as
+'success == 1'.
+
+Also assing num_mb with single compare checking valid sector_size.
+
+For dumb compiler make num_mb always defined.
 ---
- WHATS_NEW                    |    1 +
- daemons/lvmpolld/Makefile.in |    9 ++++-----
- 2 files changed, 5 insertions(+), 5 deletions(-)
+ lib/locking/lvmlockd.c |   23 +++++++++--------------
+ 1 files changed, 9 insertions(+), 14 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index 38525e3..1a9c521 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.03.02 - 
- ===================================
-+  Improve Makefile dependency tracking.
-   Move VDO support towards V2 target (6.2) support.
-   Fix missing proper initialization of pv_list struct when adding pv.
-   Fix (de)activation of RaidLVs with visible SubLVs
-diff --git a/daemons/lvmpolld/Makefile.in b/daemons/lvmpolld/Makefile.in
-index cfda0f6..05b12ff 100644
---- a/daemons/lvmpolld/Makefile.in
-+++ b/daemons/lvmpolld/Makefile.in
-@@ -29,13 +29,12 @@ include $(top_builddir)/make.tmpl
+diff --git a/lib/locking/lvmlockd.c b/lib/locking/lvmlockd.c
+index 530378c..9fb7b36 100644
+--- a/lib/locking/lvmlockd.c
++++ b/lib/locking/lvmlockd.c
+@@ -632,7 +632,7 @@ static int _init_vg_sanlock(struct cmd_context *cmd, struct volume_group *vg, in
+ 	struct device *sector_dev;
+ 	uint32_t sector_size = 0;
+ 	unsigned int phys_block_size, block_size;
+-	int num_mb;
++	int num_mb = 0;
+ 	int result;
+ 	int ret;
  
- CFLAGS += $(EXTRA_EXEC_CFLAGS)
- INCLUDES += -I$(top_srcdir)/libdaemon/server
--LDFLAGS += -L$(top_builddir)/libdaemon/server $(EXTRA_EXEC_LDFLAGS) $(ELDFLAGS)
--LIBS += $(DAEMON_LIBS) -ldaemonserver $(PTHREAD_LIBS)
-+LDFLAGS += $(EXTRA_EXEC_LDFLAGS) $(ELDFLAGS)
-+LIBS += $(DAEMON_LIBS) $(PTHREAD_LIBS)
+@@ -655,25 +655,20 @@ static int _init_vg_sanlock(struct cmd_context *cmd, struct volume_group *vg, in
+ 			sector_size = phys_block_size;
+ 			sector_dev = pvl->pv->dev;
+ 		} else if (sector_size != phys_block_size) {
+-			log_warn("Inconsistent sector sizes for %s and %s.",
+-				 dev_name(pvl->pv->dev), dev_name(sector_dev));
+-			return 1;
++			log_error("Inconsistent sector sizes for %s and %s.",
++				  dev_name(pvl->pv->dev), dev_name(sector_dev));
++			return 0;
+ 		}
+ 	}
  
--lvmpolld: $(OBJECTS) $(top_builddir)/libdaemon/client/libdaemonclient.a \
--		    $(top_builddir)/libdaemon/server/libdaemonserver.a
-+lvmpolld: $(OBJECTS) $(top_builddir)/libdaemon/server/libdaemonserver.a $(INTERNAL_LIBS)
- 	@echo "    [CC] $@"
--	$(Q) $(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(OBJECTS) $(INTERNAL_LIBS) $(LIBS)
-+	$(Q) $(CC) $(CFLAGS) $(LDFLAGS) -o $@ $+ $(LIBS)
+-	if ((sector_size != 512) && (sector_size != 4096)) {
+-		log_error("Unknown sector size.");
+-		return 1;
+-	}
+-
+ 	log_debug("Using sector size %u for sanlock LV", sector_size);
  
- install_lvmpolld: lvmpolld
- 	@echo "    [INSTALL] $<"
+ 	/* Base starting size of sanlock LV is 256MB/1GB for 512/4K sectors */
+-	if (sector_size == 512)
+-		num_mb = 256;
+-	else if (sector_size == 4096)
+-		num_mb = 1024;
+-
++	switch (sector_size) {
++	case 512: num_mb = 256; break;
++	case 4096: num_mb = 1024; break;
++	default: log_error("Unknown sector size %u.", sector_size); return 0;
++	}
+ 
+ 	/*
+ 	 * Creating the sanlock LV writes the VG containing the new lvmlock
 
 
