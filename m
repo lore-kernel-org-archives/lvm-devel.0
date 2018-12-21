@@ -1,42 +1,41 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Fri, 21 Dec 2018 15:46:27 -0500
-Subject: master - lvmlockd: drop superfluous defines
-Message-ID: <201812212046.wBLKkRLD021345@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Fri, 21 Dec 2018 15:46:30 -0500
+Subject: master - scripts: avoid voiding write result
+Message-ID: <201812212046.wBLKkUbe021358@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=a3fe6195521a58c93d7158028c7ab62da14d4ddd
-Commit:        a3fe6195521a58c93d7158028c7ab62da14d4ddd
-Parent:        71af650760c2b75b3c267277f47d8ba235421300
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=a4577c427a76c6a337b7812f9da7700c2c8beb89
+Commit:        a4577c427a76c6a337b7812f9da7700c2c8beb89
+Parent:        a3fe6195521a58c93d7158028c7ab62da14d4ddd
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Dec 21 11:16:05 2018 +0100
+AuthorDate:    Fri Dec 21 11:19:25 2018 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Fri Dec 21 21:42:30 2018 +0100
 
-lvmlockd: drop superfluous defines
+scripts: avoid voiding write result
 
-These defines are automatically granted with _GNU_SOURCE
-which is use for whole compilation via configure.h.
+Gcc doesn't want to ignore write() return code.
 ---
- daemons/lvmlockd/lvmlockd-core.c |    3 ---
- 1 files changed, 0 insertions(+), 3 deletions(-)
+ .../lvm2_activation_generator_systemd_red_hat.c    |    3 ++-
+ 1 files changed, 2 insertions(+), 1 deletions(-)
 
-diff --git a/daemons/lvmlockd/lvmlockd-core.c b/daemons/lvmlockd/lvmlockd-core.c
-index 1c58d4d..e643d76 100644
---- a/daemons/lvmlockd/lvmlockd-core.c
-+++ b/daemons/lvmlockd/lvmlockd-core.c
-@@ -8,9 +8,6 @@
-  * of the GNU Lesser General Public License v.2.1.
-  */
+diff --git a/scripts/lvm2_activation_generator_systemd_red_hat.c b/scripts/lvm2_activation_generator_systemd_red_hat.c
+index 0e6c05a..b44c8f0 100644
+--- a/scripts/lvm2_activation_generator_systemd_red_hat.c
++++ b/scripts/lvm2_activation_generator_systemd_red_hat.c
+@@ -69,7 +69,8 @@ static void _error(const char *format, ...)
+ 		return;
  
--#define _XOPEN_SOURCE 500  /* pthread */
--#define _ISOC99_SOURCE
--
- #include "tools/tool.h"
+ 	/* The n+31: +30 for "<n>lvm2-activation-generator: " prefix and +1 for '\0' suffix */
+-	(void) write(_kmsg_fd, message, n + 31);
++	if (write(_kmsg_fd, message, n + 31) < 0)
++		_error("Failed to write activation message %s: %m.\n", message);
+ }
  
- #include "libdaemon/client/daemon-io.h"
+ //----------------------------------------------------------------
 
 
