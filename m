@@ -1,40 +1,68 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Sat, 22 Dec 2018 19:12:51 -0500
-Subject: master - tests: testing mirrorred mirror log
-Message-ID: <201812230012.wBN0CpUe005387@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Sat, 22 Dec 2018 19:12:52 -0500
+Subject: master - tests: fix unit test
+Message-ID: <201812230012.wBN0CqOT005392@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=1dee4b4ffcbc4324316718edbe464bbeb98a17db
-Commit:        1dee4b4ffcbc4324316718edbe464bbeb98a17db
-Parent:        88faf5a53b34cdfe2d4932a6800af8530f8f5396
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=6d8356d2084e0cc41ccc70db80e364bce10f0280
+Commit:        6d8356d2084e0cc41ccc70db80e364bce10f0280
+Parent:        1dee4b4ffcbc4324316718edbe464bbeb98a17db
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Sun Dec 23 01:06:16 2018 +0100
+AuthorDate:    Sun Dec 23 00:54:39 2018 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Sun Dec 23 01:07:05 2018 +0100
+CommitterDate: Sun Dec 23 01:07:27 2018 +0100
 
-tests: testing mirrorred mirror log
+tests: fix unit test
 
-Enable mirrorlog creation for test.
+Use more universal  /usr/bin/env bash
+(as older systems do only have /bin/sh)
+Uncommment disabled event_activation testing.
 ---
- test/shell/lvconvert-mirror-basic.sh |    2 ++
- 1 files changed, 2 insertions(+), 0 deletions(-)
+ test/unit/activation-generator_t.c |   14 +++++++-------
+ 1 files changed, 7 insertions(+), 7 deletions(-)
 
-diff --git a/test/shell/lvconvert-mirror-basic.sh b/test/shell/lvconvert-mirror-basic.sh
-index 8166613..96d30d2 100644
---- a/test/shell/lvconvert-mirror-basic.sh
-+++ b/test/shell/lvconvert-mirror-basic.sh
-@@ -14,6 +14,8 @@
+diff --git a/test/unit/activation-generator_t.c b/test/unit/activation-generator_t.c
+index 6aa115c..8157c0c 100644
+--- a/test/unit/activation-generator_t.c
++++ b/test/unit/activation-generator_t.c
+@@ -137,9 +137,9 @@ static void _test_parse_line(void *fixture)
+ 			if (!r)
+         			test_fail("_parse_line('%s') failed", t->input);
  
- . lib/inittest
+-			//if (cfg.event_activation != t->event_activation)
+-			//	test_fail("_parse_line('%s') -> event_activation='%s'",
+-			//		t->input, _bool(cfg.event_activation));
++			if (cfg.event_activation != t->event_activation)
++				test_fail("_parse_line('%s') -> event_activation='%s'",
++					t->input, _bool(cfg.event_activation));
  
-+aux lvmconf "global/support_mirrored_mirror_log=1"
-+
- log_name_to_count() {
- 	case "$1"  in
- 	mirrored) echo 2 ;;
+                 	if (cfg.sysinit_needed != t->sysinit_needed)
+                         	test_fail("_parse_line('%s') -> sysinit_needed='%s'",
+@@ -180,7 +180,7 @@ static const char *_fake_lvmconfig(const char *output)
+ 	if (!fp)
+         	return NULL;
+ 
+-	fprintf(fp, "#!/usr/bin/sh\n");
++	fprintf(fp, "#!/usr/bin/env bash\n");
+ 	fprintf(fp, "cat <<EOF\n");
+ 	fprintf(fp, "%s", output);
+ 	fprintf(fp, "EOF\n");
+@@ -221,9 +221,9 @@ static void _test_get_config(void *fixture)
+ 			if (!r)
+         			test_fail("_get_config() <- '%s' failed", t->output);
+ 
+-			//if (t->event_activation != cfg.event_activation)
+-			//	test_fail("_get_config() <- '%s', event_activation = %s",
+-			//		  t->output, _bool(cfg.event_activation));
++			if (t->event_activation != cfg.event_activation)
++				test_fail("_get_config() <- '%s', event_activation = %s",
++					  t->output, _bool(cfg.event_activation));
+ 
+                 	if (t->sysinit_needed != cfg.sysinit_needed)
+                         	test_fail("_get_config() <- '%s', sysinit = %s",
 
 
