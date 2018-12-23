@@ -1,41 +1,41 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Fri, 21 Dec 2018 17:27:00 -0500
-Subject: master - stats: initilize regions to NULL
-Message-ID: <201812212227.wBLMR05g004667@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Sat, 22 Dec 2018 19:12:34 -0500
+Subject: master - cov: fix memleak on error path
+Message-ID: <201812230012.wBN0CYkD005353@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=83c6f7e7e6e76199d836bf694266c78e3cbc12f1
-Commit:        83c6f7e7e6e76199d836bf694266c78e3cbc12f1
-Parent:        1fc5d8c4285fd42441a4f57e4c8fc242397b84f3
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=fc479b2b079735afce810d3d352e367216d5a931
+Commit:        fc479b2b079735afce810d3d352e367216d5a931
+Parent:        83c6f7e7e6e76199d836bf694266c78e3cbc12f1
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Dec 21 22:42:36 2018 +0100
+AuthorDate:    Sat Dec 22 23:37:04 2018 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Fri Dec 21 22:42:36 2018 +0100
+CommitterDate: Sat Dec 22 23:55:48 2018 +0100
 
-stats: initilize regions to NULL
+cov: fix memleak on error path
 
-Commit 3750b0cff5ab1c41076afdf8275e3fa20aa756d0 used bad: error
-path in more occasions thus it now needs regions defined as NULL.
+Do not leak lvs pointer on error path.
 ---
- libdm/libdm-stats.c |    2 +-
- 1 files changed, 1 insertions(+), 1 deletions(-)
+ daemons/lvmlockd/lvmlockd-sanlock.c |    3 ++-
+ 1 files changed, 2 insertions(+), 1 deletions(-)
 
-diff --git a/libdm/libdm-stats.c b/libdm/libdm-stats.c
-index 80cb42b..4c7fd46 100644
---- a/libdm/libdm-stats.c
-+++ b/libdm/libdm-stats.c
-@@ -4809,7 +4809,7 @@ uint64_t *dm_stats_update_regions_from_fd(struct dm_stats *dms, int fd,
- {
- 	struct dm_histogram *bounds = NULL;
- 	int nr_bins, precise, regroup;
--	uint64_t *regions, count = 0;
-+	uint64_t *regions = NULL, count = 0;
- 	const char *alias = NULL;
- 
- 	if (!dms->regions || !dm_stats_group_present(dms, group_id)) {
+diff --git a/daemons/lvmlockd/lvmlockd-sanlock.c b/daemons/lvmlockd/lvmlockd-sanlock.c
+index 993f2f5..7cbf92d 100644
+--- a/daemons/lvmlockd/lvmlockd-sanlock.c
++++ b/daemons/lvmlockd/lvmlockd-sanlock.c
+@@ -1453,7 +1453,8 @@ int lm_prepare_lockspace_sanlock(struct lockspace *ls)
+ 		align_size = sanlock_align(&lms->ss.host_id_disk);
+ 		if (align_size <= 0) {
+ 			log_error("S %s prepare_lockspace_san align error %d", lsname, align_size);
+-			return -EINVAL;
++			ret = -EINVAL;
++			goto fail;
+ 		}
+ 		sector_size = (align_size == ONE_MB) ? 512 : 4096;
+ 		log_debug("S %s prepare_lockspace_san found old sector_size %d align_size %d", lsname, sector_size, align_size);
 
 
