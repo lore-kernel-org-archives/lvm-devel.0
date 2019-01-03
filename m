@@ -1,66 +1,87 @@
-From: David Teigland <teigland@sourceware.org>
-Date: Wed, 2 Jan 2019 12:57:18 -0500
-Subject: master - writecache: prompt before using an LV to hold cache
-Message-ID: <201901021757.x02HvI0l007832@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: Marian Csontos <mcsontos@sourceware.org>
+Date: Thu, 3 Jan 2019 04:58:20 -0500
+Subject: 2018-12-18-stable - dmeventd: resolve compilation of vdo status parsing
+Message-ID: <201901030958.x039wKPC024719@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=938b6b8253c7aadb8947c574cc5f480ed2c1b696
-Commit:        938b6b8253c7aadb8947c574cc5f480ed2c1b696
-Parent:        89c61f2018c843a7dabc617ba152b99656ee9849
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Wed Jan 2 11:44:03 2019 -0600
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Wed Jan 2 11:44:03 2019 -0600
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=f3e5ea31649403ba9af032551dc76384a3af1750
+Commit:        f3e5ea31649403ba9af032551dc76384a3af1750
+Parent:        24254ca86671ae49431e67788c039603fe4b79fb
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Wed Dec 19 12:54:14 2018 +0100
+Committer:     Marian Csontos <mcsontos@redhat.com>
+CommitterDate: Thu Jan 3 10:45:45 2019 +0100
 
-writecache: prompt before using an LV to hold cache
+dmeventd: resolve compilation of vdo status parsing
 
+A bit of chicken & egg problem - dmeventd needs to use old libdm library.
+VDO is only part of new device_mapper internal library.
+
+So include directly source file for parsing status - this fixes usability
+problem of VDO plugin introduced with previous Makefile reshaping
+patchset.
+
+NOTE: source file needs to be keep then compilable in both environments.
+
+Also add missing copyright header.
+
+(cherry picked from commit 9785e40b8d52fd87d7c451ed838f450aee41ba8d)
 ---
- test/shell/writecache.sh |    4 ++--
- tools/lvconvert.c        |    6 ++++++
- 2 files changed, 8 insertions(+), 2 deletions(-)
+ daemons/dmeventd/plugins/vdo/dmeventd_vdo.c |    4 +++-
+ device_mapper/vdo/status.c                  |   22 ++++++++++++++++++++--
+ 2 files changed, 23 insertions(+), 3 deletions(-)
 
-diff --git a/test/shell/writecache.sh b/test/shell/writecache.sh
-index ce77cfe..42c864a 100644
---- a/test/shell/writecache.sh
-+++ b/test/shell/writecache.sh
-@@ -48,7 +48,7 @@ cp pattern1 $mount_dir/pattern1
- umount $mount_dir
- lvchange -an $vg/$lv1
- 
--lvconvert --type writecache --cachepool $lv2 $vg/$lv1
-+lvconvert --yes --type writecache --cachepool $lv2 $vg/$lv1
- 
- check lv_field $vg/$lv1 segtype writecache
- 
-@@ -90,7 +90,7 @@ lvchange -an $vg/$lv2
- 
- # test2: create fs on LV after writecache is attached
- 
--lvconvert --type writecache --cachepool $lv2 $vg/$lv1
-+lvconvert --yes --type writecache --cachepool $lv2 $vg/$lv1
- 
- check lv_field $vg/$lv1 segtype writecache
- 
-diff --git a/tools/lvconvert.c b/tools/lvconvert.c
-index 3ba7f5b..2c6384e 100644
---- a/tools/lvconvert.c
-+++ b/tools/lvconvert.c
-@@ -5498,6 +5498,12 @@ static int _lvconvert_writecache_attach_single(struct cmd_context *cmd,
- 		return 0;
- 	}
- 
-+	if (!arg_is_set(cmd, yes_ARG) &&
-+	    yes_no_prompt("Erase all existing data on %s? [y/n]: ", display_lvname(lv_fast)) == 'n') {
-+		log_error("Conversion aborted.");
-+		return 0;
-+	}
+diff --git a/daemons/dmeventd/plugins/vdo/dmeventd_vdo.c b/daemons/dmeventd/plugins/vdo/dmeventd_vdo.c
+index b5e2766..d5156cd 100644
+--- a/daemons/dmeventd/plugins/vdo/dmeventd_vdo.c
++++ b/daemons/dmeventd/plugins/vdo/dmeventd_vdo.c
+@@ -15,7 +15,9 @@
+ #include "lib/misc/lib.h"
+ #include "daemons/dmeventd/plugins/lvm2/dmeventd_lvm.h"
+ #include "daemons/dmeventd/libdevmapper-event.h"
+-#include "device_mapper/vdo/target.h"
 +
- 	/* Ensure the two LVs are not active elsewhere. */
- 	if (!lockd_lv(cmd, lv, "ex", 0))
- 		goto_bad;
++/* Use parser from new device_mapper library */
++#include "device_mapper/vdo/status.c"
+ 
+ #include <sys/wait.h>
+ #include <stdarg.h>
+diff --git a/device_mapper/vdo/status.c b/device_mapper/vdo/status.c
+index 40e69ba..a34029d 100644
+--- a/device_mapper/vdo/status.c
++++ b/device_mapper/vdo/status.c
+@@ -1,8 +1,26 @@
++/*
++ * Copyright (C) 2018 Red Hat, Inc. All rights reserved.
++ *
++ * This file is part of the device-mapper userspace tools.
++ *
++ * This copyrighted material is made available to anyone wishing to use,
++ * modify, copy, or redistribute it subject to the terms and conditions
++ * of the GNU Lesser General Public License v.2.1.
++ *
++ * You should have received a copy of the GNU Lesser General Public License
++ * along with this program; if not, write to the Free Software Foundation,
++ * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
++ */
++
++/* Note: this object is also used by VDO dmeventd plugin for parsing status */
++/* File could be included by VDO plugin and can use original libdm library */
++#ifndef LIB_DMEVENT_H
+ #include "configure.h"
+-#include "target.h"
+-
+ // For DM_ARRAY_SIZE!
+ #include "device_mapper/all.h"
++#endif
++
++#include "device_mapper/vdo/target.h"
+ #include "base/memory/zalloc.h"
+ 
+ #include <ctype.h>
 
 
