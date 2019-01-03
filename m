@@ -1,20 +1,20 @@
 From: Marian Csontos <mcsontos@sourceware.org>
-Date: Thu, 3 Jan 2019 04:58:31 -0500
+Date: Thu, 3 Jan 2019 05:12:08 -0500
 Subject: 2018-12-18-stable - lib: move towards v2 version of VDO format
-Message-ID: <201901030958.x039wVmL024732@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Message-ID: <201901031012.x03AC8Xg028151@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=2103c75e9030a5ac24ea609f02f7209186703199
-Commit:        2103c75e9030a5ac24ea609f02f7209186703199
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=5eb09b06500278a71f424a9428119cf16e7232fb
+Commit:        5eb09b06500278a71f424a9428119cf16e7232fb
 Parent:        f3e5ea31649403ba9af032551dc76384a3af1750
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
 AuthorDate:    Thu Dec 20 13:17:30 2018 +0100
 Committer:     Marian Csontos <mcsontos@redhat.com>
-CommitterDate: Thu Jan 3 10:57:49 2019 +0100
+CommitterDate: Thu Jan 3 11:11:31 2019 +0100
 
 lib: move towards v2 version of VDO format
 
@@ -34,7 +34,7 @@ Conflicts:
  WHATS_NEW                      |    3 +-
  WHATS_NEW_DM                   |    1 +
  device_mapper/all.h            |    1 +
- device_mapper/libdm-deptree.c  |   21 +++++++++++----
+ device_mapper/libdm-deptree.c  |   16 +++++++----
  device_mapper/vdo/target.h     |   15 +++++------
  device_mapper/vdo/vdo_limits.h |    7 +++-
  device_mapper/vdo/vdo_target.c |   20 ++++++++++----
@@ -42,7 +42,7 @@ Conflicts:
  lib/config/defaults.h          |    8 +++---
  lib/metadata/vdo_manip.c       |   16 ++++++------
  lib/vdo/vdo.c                  |   44 ++++++++++++++++----------------
- 11 files changed, 110 insertions(+), 80 deletions(-)
+ 11 files changed, 105 insertions(+), 80 deletions(-)
 
 diff --git a/WHATS_NEW b/WHATS_NEW
 index 45ba30a..4f752fa 100644
@@ -80,23 +80,18 @@ index 2c452ab..b9a7a90 100644
  
  /*
 diff --git a/device_mapper/libdm-deptree.c b/device_mapper/libdm-deptree.c
-index d3a5c27..132e26f 100644
+index d3a5c27..ed96378 100644
 --- a/device_mapper/libdm-deptree.c
 +++ b/device_mapper/libdm-deptree.c
-@@ -207,6 +207,12 @@ struct load_segment {
+@@ -207,6 +207,7 @@ struct load_segment {
  	struct dm_tree_node *vdo_data;  /* VDO */
  	struct dm_vdo_target_params vdo_params; /* VDO */
  	const char *vdo_name;           /* VDO - device name is ALSO passed as table arg */
 +	uint64_t vdo_data_size;		/* VDO - size of data storage device */
-+
-+	struct dm_tree_node *writecache_node;		/* writecache */
-+	int writecache_pmem;				/* writecache, 1 if pmem, 0 if ssd */
-+	uint32_t writecache_block_size;			/* writecache, in bytes */
-+	struct writecache_settings writecache_settings;	/* writecache */
  };
  
  /* Per-device properties */
-@@ -2647,17 +2653,18 @@ static int _vdo_emit_segment_line(struct dm_task *dmt,
+@@ -2647,17 +2648,18 @@ static int _vdo_emit_segment_line(struct dm_task *dmt,
  		return 0;
  	}
  
@@ -121,7 +116,7 @@ index d3a5c27..132e26f 100644
  		    seg->vdo_params.ack_threads,
  		    seg->vdo_params.bio_threads,
  		    seg->vdo_params.bio_rotation,
-@@ -4034,6 +4041,7 @@ int dm_tree_node_add_cache_target_base(struct dm_tree_node *node,
+@@ -4034,6 +4036,7 @@ int dm_tree_node_add_cache_target_base(struct dm_tree_node *node,
  int dm_tree_node_add_vdo_target(struct dm_tree_node *node,
  				uint64_t size,
  				const char *data_uuid,
@@ -129,7 +124,7 @@ index d3a5c27..132e26f 100644
  				const struct dm_vdo_target_params *vtp)
  {
  	struct load_segment *seg;
-@@ -4054,6 +4062,7 @@ int dm_tree_node_add_vdo_target(struct dm_tree_node *node,
+@@ -4054,6 +4057,7 @@ int dm_tree_node_add_vdo_target(struct dm_tree_node *node,
  
  	seg->vdo_params = *vtp;
  	seg->vdo_name = node->name;
