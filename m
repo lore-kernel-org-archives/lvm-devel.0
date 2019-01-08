@@ -1,88 +1,61 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Tue, 8 Jan 2019 07:16:12 -0500
-Subject: master - scripts: lvm2-activation-generator fix lvmconfig call
-Message-ID: <201901081216.x08CGCk2031553@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Tue, 8 Jan 2019 07:16:41 -0500
+Subject: master - mirror: regenerate config
+Message-ID: <201901081216.x08CGfKF031881@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=6298eaeca50e32cdff3adefdb57b09c3250547a2
-Commit:        6298eaeca50e32cdff3adefdb57b09c3250547a2
-Parent:        bc40391b7de93334c815565240848d5297f7a6c8
-Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Fri Jan 4 11:11:13 2019 +0100
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=c0c202e60600b2d7460ce0e7825f2ec89956c68f
+Commit:        c0c202e60600b2d7460ce0e7825f2ec89956c68f
+Parent:        54a569be4068d7e08ad7d6d2f6e0ee64dad0797e
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Tue Jan 8 13:05:06 2019 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Tue Jan 8 13:11:46 2019 +0100
+CommitterDate: Tue Jan 8 13:13:57 2019 +0100
 
-scripts: lvm2-activation-generator fix lvmconfig call
+mirror: regenerate config
 
-Fix a scenario where global/event_activation setting is not found. In
-this case we need to take default value just like lvm tools do when
-executed. So use "lvmconfig --type full".
-
-Also, if we fail to execute lvmconfig for whatever reason, fallback to
-generating the activation units as failsafe action.
-
-Reported by: Bastian Blank <waldi debian org>
+Drop extra line in source file - since this line is auto-generated
+and would appear twice in resuling .in file with 'make generate'.
 ---
- WHATS_NEW                                          |    1 +
- scripts/generator-internals.c                      |    3 ++-
- .../lvm2_activation_generator_systemd_red_hat.c    |   15 ++++++++++-----
- 3 files changed, 13 insertions(+), 6 deletions(-)
+ conf/example.conf.in         |    5 ++---
+ lib/config/config_settings.h |    1 -
+ 2 files changed, 2 insertions(+), 4 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index 3fe1f3e..6fdde83 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.03.02 - 
- ===================================
-+  Fix generator quering lvmconfig unpresent config option.
-   Fix memleak on bcache error path code.
-   Fix missing unlock on lvm2 dmeventd plugin error path initialization.
-   Improve Makefile dependency tracking.
-diff --git a/scripts/generator-internals.c b/scripts/generator-internals.c
-index 0929b78..8392065 100644
---- a/scripts/generator-internals.c
-+++ b/scripts/generator-internals.c
-@@ -186,7 +186,8 @@ static bool _parse_line(const char *line, struct config *cfg)
- static bool _get_config(struct config *cfg, const char *lvmconfig_path)
- {
- 	static const char *_argv[] = {
--		"lvmconfig", LVM_CONF_EVENT_ACTIVATION, LVM_CONF_USE_LVMPOLLD, NULL
-+		"lvmconfig", "--type", "full",
-+		LVM_CONF_EVENT_ACTIVATION, LVM_CONF_USE_LVMPOLLD, NULL
- 	};
+diff --git a/conf/example.conf.in b/conf/example.conf.in
+index 39584b3..dfe8006 100644
+--- a/conf/example.conf.in
++++ b/conf/example.conf.in
+@@ -911,13 +911,12 @@ global {
  
- 	bool r = true;
-diff --git a/scripts/lvm2_activation_generator_systemd_red_hat.c b/scripts/lvm2_activation_generator_systemd_red_hat.c
-index a3a3e88..f906f08 100644
---- a/scripts/lvm2_activation_generator_systemd_red_hat.c
-+++ b/scripts/lvm2_activation_generator_systemd_red_hat.c
-@@ -194,12 +194,17 @@ static bool _run(int argc, const char **argv)
- 	if (!_parse_command_line(&gen, argc, argv))
- 		return false;
+ 	# Configuration option global/support_mirrored_mirror_log.
+ 	# Enable mirrored 'mirror' log type for testing.
+-	#
++	# 
+ 	# This type is deprecated to create or convert to but can
+ 	# be enabled to test that activation of existing mirrored
+ 	# logs and conversion to disk/core works.
+-	#
++	# 
+ 	# Not supported for regular operation!
+-	#
+ 	support_mirrored_mirror_log = 0
  
--	if (!_get_config(&gen.cfg, LVMCONFIG_PATH))
--		return false;
-+	if (_get_config(&gen.cfg, LVMCONFIG_PATH)) {
-+		if (gen.cfg.event_activation)
-+			// If event_activation=1, pvscan --cache -aay does activation.
-+			return true;
-+	}
+ 	# Configuration option global/raid10_segtype_default.
+diff --git a/lib/config/config_settings.h b/lib/config/config_settings.h
+index 248d204..f1d2826 100644
+--- a/lib/config/config_settings.h
++++ b/lib/config/config_settings.h
+@@ -969,7 +969,6 @@ cfg(global_mirror_segtype_default_CFG, "mirror_segtype_default", global_CFG_SECT
+ 	"#\n")
  
--	if (gen.cfg.event_activation)
--		// If event_activation=1, pvscan --cache -aay does activation.
--		return true;
-+	/*
-+	 *  Create the activation units if:
-+	 *    - _get_config succeeded and event_activation=0
-+	 *    - _get_config failed, then this is a failsafe fallback
-+	 */
- 
- 	/* mark lvm2-activation.*.service as world-accessible */
- 	old_mask = umask(0022);
+ cfg(global_support_mirrored_mirror_log_CFG, "support_mirrored_mirror_log", global_CFG_SECTION, 0, CFG_TYPE_BOOL, 0, vsn(2, 3, 2), NULL, 0, NULL,
+-	"Configuration option global/support_mirrored_mirror_log.\n"
+ 	"Enable mirrored 'mirror' log type for testing.\n"
+ 	"#\n"
+ 	"This type is deprecated to create or convert to but can\n"
 
 
