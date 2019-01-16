@@ -1,49 +1,40 @@
 From: David Teigland <teigland@sourceware.org>
-Date: Wed, 16 Jan 2019 12:46:29 -0500
-Subject: master - move init_use_aio
-Message-ID: <201901161746.x0GHkTiw016424@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Wed, 16 Jan 2019 14:25:14 -0500
+Subject: master - lvmlockd: fix make lockstart wait
+Message-ID: <201901161925.x0GJPEqA031654@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=ebaaff3590b60933f6f1e2bfd010a86fc373f7eb
-Commit:        ebaaff3590b60933f6f1e2bfd010a86fc373f7eb
-Parent:        e158835a05963c8cb4166100c9d01e7ff3991c82
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=facd5209311d0f205229c6943fa3b2ef42fc981f
+Commit:        facd5209311d0f205229c6943fa3b2ef42fc981f
+Parent:        ebaaff3590b60933f6f1e2bfd010a86fc373f7eb
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Tue Jan 15 15:19:04 2019 -0600
+AuthorDate:    Wed Jan 16 13:24:29 2019 -0600
 Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Wed Jan 16 11:45:53 2019 -0600
+CommitterDate: Wed Jan 16 13:24:29 2019 -0600
 
-move init_use_aio
+lvmlockd: fix make lockstart wait
 
-it doesn't make sense to call from init_logging
+when building without lvmlockd
 ---
- lib/commands/toolcontext.c |    4 ++--
- 1 files changed, 2 insertions(+), 2 deletions(-)
+ lib/locking/lvmlockd.h |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
 
-diff --git a/lib/commands/toolcontext.c b/lib/commands/toolcontext.c
-index bd216aa..62e21f7 100644
---- a/lib/commands/toolcontext.c
-+++ b/lib/commands/toolcontext.c
-@@ -328,8 +328,6 @@ static void _init_logging(struct cmd_context *cmd)
- 	    find_config_tree_bool(cmd, global_test_CFG, NULL);
- 	init_test(cmd->default_settings.test);
+diff --git a/lib/locking/lvmlockd.h b/lib/locking/lvmlockd.h
+index 1fbf765..e5ae331 100644
+--- a/lib/locking/lvmlockd.h
++++ b/lib/locking/lvmlockd.h
+@@ -148,7 +148,7 @@ static inline int lockd_rename_vg_final(struct cmd_context *cmd, struct volume_g
+ 	return 1;
+ }
  
--	init_use_aio(find_config_tree_bool(cmd, global_use_aio_CFG, NULL));
--
- 	/* Settings for logging to file */
- 	if (find_config_tree_bool(cmd, log_overwrite_CFG, NULL))
- 		append = 0;
-@@ -1661,6 +1659,8 @@ struct cmd_context *create_toolcontext(unsigned is_clvmd,
- 						find_config_tree_array(cmd, devices_types_CFG, NULL))))
- 		goto_out;
- 
-+	init_use_aio(find_config_tree_bool(cmd, global_use_aio_CFG, NULL));
-+
- 	if (!_init_dev_cache(cmd))
- 		goto_out;
- 
+-static inline int lockd_start_vg(struct cmd_context *cmd, struct volume_group *vg, int start_init)
++static inline int lockd_start_vg(struct cmd_context *cmd, struct volume_group *vg, int start_init, int *exists)
+ {
+ 	return 0;
+ }
 
 
