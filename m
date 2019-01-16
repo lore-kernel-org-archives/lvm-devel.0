@@ -1,39 +1,59 @@
 From: Tony Asleson <tasleson@sourceware.org>
-Date: Wed, 16 Jan 2019 17:32:56 -0500
-Subject: master - lvmdbusd: Spelling correction
-Message-ID: <201901162232.x0GMWuiF027533@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Wed, 16 Jan 2019 17:33:02 -0500
+Subject: master - lvmdbusd: Use UUID instead of name for VG rename
+Message-ID: <201901162233.x0GMX2IS027546@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=1ed4b3f23baf13e224d0c24735304f872c0930e8
-Commit:        1ed4b3f23baf13e224d0c24735304f872c0930e8
-Parent:        4c1fd827748a0b5a1a2c3e54c5fdc0478b45515f
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=0d142f65141d591430ced6a7a7fcccb4d2198d28
+Commit:        0d142f65141d591430ced6a7a7fcccb4d2198d28
+Parent:        f43b7bb46159d00a4eba56df92ad5e572fa2038c
 Author:        Tony Asleson <tasleson@redhat.com>
-AuthorDate:    Mon Jan 14 09:11:06 2019 -0600
+AuthorDate:    Wed Jan 16 15:43:39 2019 -0600
 Committer:     Tony Asleson <tasleson@redhat.com>
 CommitterDate: Wed Jan 16 16:29:05 2019 -0600
 
-lvmdbusd: Spelling correction
+lvmdbusd:  Use UUID instead of name for VG rename
 
+Use the UUID to specify the VG to rename instead of the name as this
+approach works when we have duplicate VG names.
 ---
- daemons/lvmdbusd/vg.py |    2 +-
- 1 files changed, 1 insertions(+), 1 deletions(-)
+ daemons/lvmdbusd/cmdhandler.py |    4 ++--
+ daemons/lvmdbusd/vg.py         |    2 +-
+ 2 files changed, 3 insertions(+), 3 deletions(-)
 
+diff --git a/daemons/lvmdbusd/cmdhandler.py b/daemons/lvmdbusd/cmdhandler.py
+index fde7f5e..df854eb 100644
+--- a/daemons/lvmdbusd/cmdhandler.py
++++ b/daemons/lvmdbusd/cmdhandler.py
+@@ -263,10 +263,10 @@ def lv_tag(lv_name, add, rm, tag_options):
+ 	return _tag('lvchange', lv_name, add, rm, tag_options)
+ 
+ 
+-def vg_rename(vg, new_name, rename_options):
++def vg_rename(vg_uuid, new_name, rename_options):
+ 	cmd = ['vgrename']
+ 	cmd.extend(options_to_cli_args(rename_options))
+-	cmd.extend([vg, new_name])
++	cmd.extend([vg_uuid, new_name])
+ 	return call(cmd)
+ 
+ 
 diff --git a/daemons/lvmdbusd/vg.py b/daemons/lvmdbusd/vg.py
-index c00084d..b9a23c2 100644
+index 64ad0f0..7011ff8 100644
 --- a/daemons/lvmdbusd/vg.py
 +++ b/daemons/lvmdbusd/vg.py
-@@ -216,7 +216,7 @@ class Vg(AutomatedProperties):
- 	# TODO: This should be broken into a number of different methods
- 	# instead of having one method that takes a hash for parameters.  Some of
- 	# the changes that vgchange does works on entire system, not just a
--	# specfic vg, thus that should be in the Manager interface.
-+	# specific vg, thus that should be in the Manager interface.
- 	@dbus.service.method(
- 		dbus_interface=VG_INTERFACE,
- 		in_signature='ia{sv}',
+@@ -177,7 +177,7 @@ class Vg(AutomatedProperties):
+ 		# Make sure we have a dbus object representing it
+ 		Vg.validate_dbus_object(uuid, vg_name)
+ 		rc, out, err = cmdhandler.vg_rename(
+-			vg_name, new_name, rename_options)
++			uuid, new_name, rename_options)
+ 		Vg.handle_execute(rc, out, err)
+ 		return '/'
+ 
 
 
