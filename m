@@ -1,169 +1,123 @@
 From: Tony Asleson <tasleson@sourceware.org>
-Date: Wed, 16 Jan 2019 17:33:03 -0500
-Subject: master - lvmdbusd: Handle duplicate VG names
-Message-ID: <201901162233.x0GMX3Gx027551@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Wed, 16 Jan 2019 17:33:04 -0500
+Subject: master - lvmdbusd: Correct object manager lookups
+Message-ID: <201901162233.x0GMX4cC027561@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=f43b7bb46159d00a4eba56df92ad5e572fa2038c
-Commit:        f43b7bb46159d00a4eba56df92ad5e572fa2038c
-Parent:        b4c33829908015acc6ce0690ee5d33c1eb87e98e
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=b4c33829908015acc6ce0690ee5d33c1eb87e98e
+Commit:        b4c33829908015acc6ce0690ee5d33c1eb87e98e
+Parent:        1ed4b3f23baf13e224d0c24735304f872c0930e8
 Author:        Tony Asleson <tasleson@redhat.com>
-AuthorDate:    Wed Jan 16 15:41:27 2019 -0600
+AuthorDate:    Wed Jan 16 15:27:55 2019 -0600
 Committer:     Tony Asleson <tasleson@redhat.com>
 CommitterDate: Wed Jan 16 16:29:05 2019 -0600
 
-lvmdbusd: Handle duplicate VG names
+lvmdbusd: Correct object manager lookups
 
-Lvm can at times have duplicate names.  When this happens the daemon will
-internally use vg_name:vg_uuid as the name for lookups, but display just
-the vg_name externally.  If an API user uses the Manager.LookUpByLvmId and
-queries the vg name they will only get returned one result as the API
-can only accommodate returning 1.  The one returned is the first instance
-found when sorting the volume groups by UUID.
+When we have two logical volumes which switch their names at the
+same time we are left with incorrect lookups.  Anytime we find
+an entry by doing a lookup by UUID or by name we will ensure
+that the lookups are indeed correct.
 
-Resolves: https://bugzilla.redhat.com/show_bug.cgi?id=1583510
+Resolves: https://bugzilla.redhat.com/show_bug.cgi?id=1642176
 ---
- daemons/lvmdbusd/lvmdb.py.in |   30 ++++++++++++++++++++++++++----
- daemons/lvmdbusd/vg.py       |   21 ++++++++++++++++-----
- 2 files changed, 42 insertions(+), 9 deletions(-)
+ daemons/lvmdbusd/objectmanager.py |   50 +++++++++++-------------------------
+ 1 files changed, 15 insertions(+), 35 deletions(-)
 
-diff --git a/daemons/lvmdbusd/lvmdb.py.in b/daemons/lvmdbusd/lvmdb.py.in
-index 13ee391..0155d90 100644
---- a/daemons/lvmdbusd/lvmdb.py.in
-+++ b/daemons/lvmdbusd/lvmdb.py.in
-@@ -141,13 +141,22 @@ class DataStore(object):
+diff --git a/daemons/lvmdbusd/objectmanager.py b/daemons/lvmdbusd/objectmanager.py
+index 563b9ec..e40e9a1 100644
+--- a/daemons/lvmdbusd/objectmanager.py
++++ b/daemons/lvmdbusd/objectmanager.py
+@@ -189,8 +189,8 @@ class ObjectManager(AutomatedProperties):
+ 			path = dbus_object.dbus_object_path()
+ 			interfaces = dbus_object.interface()
  
- 	@staticmethod
- 	def _parse_vgs(_vgs):
--		vgs = sorted(_vgs, key=lambda vk: vk['vg_name'])
-+		vgs = sorted(_vgs, key=lambda vk: vk['vg_uuid'])
+-			# print 'UN-Registering object path %s for %s' % \
+-			#      (path, dbus_object.lvm_id)
++			# print('UN-Registering object path %s for %s' %
++			#		(path, dbus_object.lvm_id))
  
- 		c_vgs = OrderedDict()
- 		c_lookup = {}
+ 			self._lookup_remove(path)
  
- 		for i in vgs:
--			c_lookup[i['vg_name']] = i['vg_uuid']
-+			vg_name = i['vg_name']
-+
-+			# Lvm allows duplicate vg names.  When this occurs, each subsequent
-+			# matching VG name will be called vg_name:vg_uuid.  Note: ':' is an
-+			# invalid character for lvm VG names
-+			if vg_name in c_lookup:
-+				vg_name = "%s:%s" % (vg_name, i['vg_uuid'])
-+				i['vg_name'] = vg_name
-+
-+			c_lookup[vg_name] = i['vg_uuid']
- 			DataStore._insert_record(c_vgs, i['vg_uuid'], i, [])
+@@ -240,39 +240,19 @@ class ObjectManager(AutomatedProperties):
+ 				return lookup_rc
+ 			return '/'
  
- 		return c_vgs, c_lookup
-@@ -162,13 +171,22 @@ class DataStore(object):
- 				tmp_vg.extend(r['vg'])
+-	def _uuid_verify(self, path, uuid, lvm_id):
++	def _id_verify(self, path, uuid, lvm_id):
+ 		"""
+-		Ensure uuid is present for a successful lvm_id lookup
++		Ensure our lookups are correct
+ 		NOTE: Internal call, assumes under object manager lock
+ 		:param path: 		Path to object we looked up
+-		:param uuid: 		lvm uuid to verify
+-		:param lvm_id:		lvm_id used to find object
++		:param uuid: 		uuid lookup
++		:param lvm_id:		lvm_id lookup
+ 		:return: None
+ 		"""
+-		# This gets called when we found an object based on lvm_id, ensure
+-		# uuid is correct too, as they can change. There is no durable
+-		# non-changeable name in lvm
++		# There is no durable non-changeable name in lvm
+ 		if lvm_id != uuid:
+-			if uuid and uuid not in self._id_to_object_path:
+-				obj = self.get_object_by_path(path)
+-				self._lookup_add(obj, path, lvm_id, uuid)
+-
+-	def _lvm_id_verify(self, path, uuid, lvm_id):
+-		"""
+-		Ensure lvm_id is present for a successful uuid lookup
+-		NOTE: Internal call, assumes under object manager lock
+-		:param path: 		Path to object we looked up
+-		:param uuid: 		uuid used to find object
+-		:param lvm_id:		lvm_id to verify
+-		:return: None
+-		"""
+-		# This gets called when we found an object based on uuid, ensure
+-		# lvm_id is correct too, as they can change.  There is no durable
+-		# non-changeable name in lvm
+-		if lvm_id != uuid:
+-			if lvm_id and lvm_id not in self._id_to_object_path:
+-				obj = self.get_object_by_path(path)
+-				self._lookup_add(obj, path, lvm_id, uuid)
++			obj = self.get_object_by_path(path)
++			self._lookup_add(obj, path, lvm_id, uuid)
  
- 		# Sort for consistent output, however this is optional
--		vgs = sorted(tmp_vg, key=lambda vk: vk['vg_name'])
-+		vgs = sorted(tmp_vg, key=lambda vk: vk['vg_uuid'])
+ 	def _id_lookup(self, the_id):
+ 		path = None
+@@ -339,22 +319,22 @@ class ObjectManager(AutomatedProperties):
+ 				# Lets check for the uuid first
+ 				path = self._id_lookup(uuid)
+ 				if path:
+-					# Verify the lvm_id is sane
+-					self._lvm_id_verify(path, uuid, lvm_id)
++					# Ensure table lookups are correct
++					self._id_verify(path, uuid, lvm_id)
+ 				else:
+ 					# Unable to find by UUID, lets lookup by lvm_id
+ 					path = self._id_lookup(lvm_id)
+ 					if path:
+-						# Verify the uuid is sane
+-						self._uuid_verify(path, uuid, lvm_id)
++						# Ensure table lookups are correct
++						self._id_verify(path, uuid, lvm_id)
+ 					else:
+ 						# We have exhausted all lookups, let's create if we can
+ 						if path_create:
+ 							path = path_create()
+ 							self._lookup_add(None, path, lvm_id, uuid)
  
- 		c_vgs = OrderedDict()
- 		c_lookup = {}
+-			# print('get_object_path_by_lvm_id(%s, %s, %s, %s: return %s' %
+-			# 	   (uuid, lvm_id, str(path_create), str(gen_new), path))
++			# print('get_object_path_by_lvm_id(%s, %s, %s): return %s' %
++			#	(uuid, lvm_id, str(path_create), path))
  
- 		for i in vgs:
--			c_lookup[i['vg_name']] = i['vg_uuid']
-+			vg_name = i['vg_name']
-+
-+			# Lvm allows duplicate vg names.  When this occurs, each subsequent
-+			# matching VG name will be called vg_name:vg_uuid.  Note: ':' is an
-+			# invalid character for lvm VG names
-+			if vg_name in c_lookup:
-+				vg_name = "%s:%s" % (vg_name, i['vg_uuid'])
-+				i['vg_name'] = vg_name
-+
-+			c_lookup[vg_name] = i['vg_uuid']
- 			c_vgs[i['vg_uuid']] = i
- 
- 		return c_vgs, c_lookup
-@@ -521,6 +539,10 @@ if __name__ == "__main__":
- 	for v in ds.vgs.values():
- 		pp.pprint(v)
- 
-+	print("VG name to UUID")
-+	for k, v in ds.vg_name_to_uuid.items():
-+		print("%s: %s" % (k, v))
-+
- 	print("LVS")
- 	for v in ds.lvs.values():
- 		pp.pprint(v)
-diff --git a/daemons/lvmdbusd/vg.py b/daemons/lvmdbusd/vg.py
-index b9a23c2..64ad0f0 100644
---- a/daemons/lvmdbusd/vg.py
-+++ b/daemons/lvmdbusd/vg.py
-@@ -52,18 +52,23 @@ def load_vgs(vg_specific=None, object_path=None, refresh=False,
- 
- # noinspection PyPep8Naming,PyUnresolvedReferences,PyUnusedLocal
- class VgState(State):
-+
- 	@property
--	def lvm_id(self):
-+	def internal_name(self):
- 		return self.Name
- 
-+	@property
-+	def lvm_id(self):
-+		return self.internal_name
-+
- 	def identifiers(self):
--		return (self.Uuid, self.Name)
-+		return (self.Uuid, self.internal_name)
- 
- 	def _lv_paths_build(self):
- 		rc = []
- 		for lv in cfg.db.lvs_in_vg(self.Uuid):
- 			(lv_name, meta, lv_uuid) = lv
--			full_name = "%s/%s" % (self.Name, lv_name)
-+			full_name = "%s/%s" % (self.internal_name, lv_name)
- 
- 			gen = utils.lv_object_path_method(lv_name, meta)
- 
-@@ -92,7 +97,7 @@ class VgState(State):
- 	def create_dbus_object(self, path):
- 		if not path:
- 			path = cfg.om.get_object_path_by_uuid_lvm_id(
--				self.Uuid, self.Name, vg_obj_path_generate)
-+				self.Uuid, self.internal_name, vg_obj_path_generate)
- 		return Vg(path, self)
- 
- 	# noinspection PyMethodMayBeStatic
-@@ -102,7 +107,6 @@ class VgState(State):
- 
- # noinspection PyPep8Naming
- @utils.dbus_property(VG_INTERFACE, 'Uuid', 's')
-- at utils.dbus_property(VG_INTERFACE, 'Name', 's')
- @utils.dbus_property(VG_INTERFACE, 'Fmt', 's')
- @utils.dbus_property(VG_INTERFACE, 'SizeBytes', 't', 0)
- @utils.dbus_property(VG_INTERFACE, 'FreeBytes', 't', 0)
-@@ -135,6 +139,7 @@ class Vg(AutomatedProperties):
- 	_AllocNormal_meta = ('b', VG_INTERFACE)
- 	_AllocAnywhere_meta = ('b', VG_INTERFACE)
- 	_Clustered_meta = ('b', VG_INTERFACE)
-+	_Name_meta = ('s', VG_INTERFACE)
- 
- 	# noinspection PyUnusedLocal,PyPep8Naming
- 	def __init__(self, object_path, object_state):
-@@ -730,6 +735,12 @@ class Vg(AutomatedProperties):
- 		cfg.worker_q.put(r)
- 
- 	@property
-+	def Name(self):
-+		if ':' in self.state.Name:
-+			return self.state.Name.split(':')[0]
-+		return self.state.Name
-+
-+	@property
- 	def Tags(self):
- 		return utils.parse_tags(self.state.tags)
+ 			return path
  
 
 
