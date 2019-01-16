@@ -1,130 +1,182 @@
 From: David Teigland <teigland@sourceware.org>
-Date: Tue, 15 Jan 2019 13:25:04 -0500
-Subject: master - hints: fix hint flock when using lvm shell
-Message-ID: <201901151825.x0FIP4Gn026841@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Wed, 16 Jan 2019 11:54:20 -0500
+Subject: master - lvmlockd: make lockstart wait for existing start
+Message-ID: <201901161654.x0GGsKGG006991@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=7b5abc3fb19c7569ad86107cfbf30f39ca261fed
-Commit:        7b5abc3fb19c7569ad86107cfbf30f39ca261fed
-Parent:        3cf7668e347af547e6d986ffbfa7fe0d5b425a7f
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=e158835a05963c8cb4166100c9d01e7ff3991c82
+Commit:        e158835a05963c8cb4166100c9d01e7ff3991c82
+Parent:        7b5abc3fb19c7569ad86107cfbf30f39ca261fed
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Tue Jan 15 12:23:16 2019 -0600
+AuthorDate:    Wed Jan 16 10:41:43 2019 -0600
 Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Tue Jan 15 12:23:16 2019 -0600
+CommitterDate: Wed Jan 16 10:49:04 2019 -0600
 
-hints: fix hint flock when using lvm shell
+lvmlockd: make lockstart wait for existing start
 
-also cmd->use_hints needs to be set for each shell command
+If there are two independent scripts doing:
+  vgchange --lockstart vg
+  lvchange -ay vg/lv
+
+The first vgchange to do the lockstart will wait for
+the lockstart to complete before returning.
+The second vgchange to do the lockstart will see that
+the start is already in progress (from the first) and
+will do nothing.  This means the second does not wait
+for any lockstart to complete, and moves on to the
+lvchange which may find the lockspace still starting
+and fail.
+
+To fix this, make the vgchange lockstart command
+wait for any lockstart's in progress to complete.
 ---
- lib/commands/toolcontext.c |    3 +++
- lib/label/hints.c          |   14 +++++++++-----
- lib/label/hints.h          |    2 ++
- tools/lvmcmdline.c         |    3 +++
- 4 files changed, 17 insertions(+), 5 deletions(-)
+ daemons/lvmlockd/lvmlockd-core.c |    9 ++++++---
+ lib/locking/lvmlockd.c           |   12 +++++++++---
+ lib/locking/lvmlockd.h           |    2 +-
+ tools/vgchange.c                 |    5 ++++-
+ tools/vgcreate.c                 |    2 +-
+ 5 files changed, 21 insertions(+), 9 deletions(-)
 
-diff --git a/lib/commands/toolcontext.c b/lib/commands/toolcontext.c
-index 39ab3df..bd216aa 100644
---- a/lib/commands/toolcontext.c
-+++ b/lib/commands/toolcontext.c
-@@ -22,6 +22,7 @@
- #include "lib/activate/activate.h"
- #include "lib/filters/filter.h"
- #include "lib/label/label.h"
-+#include "lib/label/hints.h"
- #include "lib/misc/lvm-file.h"
- #include "lib/format_text/format-text.h"
- #include "lib/display/display.h"
-@@ -1781,6 +1782,7 @@ int refresh_toolcontext(struct cmd_context *cmd)
- 	 */
+diff --git a/daemons/lvmlockd/lvmlockd-core.c b/daemons/lvmlockd/lvmlockd-core.c
+index 1ec3efd..60ae537 100644
+--- a/daemons/lvmlockd/lvmlockd-core.c
++++ b/daemons/lvmlockd/lvmlockd-core.c
+@@ -2743,6 +2743,9 @@ static int add_lockspace_thread(const char *ls_name,
+ 		if (ls2->thread_stop) {
+ 			log_debug("add_lockspace_thread %s exists and stopping", ls->name);
+ 			rv = -EAGAIN;
++		} else if (!ls2->create_fail && !ls2->create_done) {
++			log_debug("add_lockspace_thread %s exists and starting", ls->name);
++			rv = -ESTARTING;
+ 		} else {
+ 			log_debug("add_lockspace_thread %s exists", ls->name);
+ 			rv = -EEXIST;
+@@ -2984,7 +2987,7 @@ static int count_lockspace_starting(uint32_t client_id)
  
- 	activation_release();
-+	hints_exit();
- 	lvmcache_destroy(cmd, 0, 0);
- 	label_scan_destroy(cmd);
- 	label_exit();
-@@ -1900,6 +1902,7 @@ void destroy_toolcontext(struct cmd_context *cmd)
+ 	pthread_mutex_lock(&lockspaces_mutex);
+ 	list_for_each_entry(ls, &lockspaces, list) {
+-		if (ls->start_client_id != client_id)
++		if (client_id && (ls->start_client_id != client_id))
+ 			continue;
  
- 	archive_exit(cmd);
- 	backup_exit(cmd);
-+	hints_exit();
- 	lvmcache_destroy(cmd, 0, 0);
- 	label_scan_destroy(cmd);
- 	label_exit();
-diff --git a/lib/label/hints.c b/lib/label/hints.c
-index bdd70a9..a9c40c2 100644
---- a/lib/label/hints.c
-+++ b/lib/label/hints.c
-@@ -344,6 +344,13 @@ static void _unlock_hints(void)
- 	_hints_fd = -1;
- }
+ 		if (!ls->create_done && !ls->create_fail) {
+@@ -3389,7 +3392,7 @@ static void *worker_thread_main(void *arg_in)
+ 			add_client_result(act);
  
-+void hints_exit(void)
-+{
-+	if (_hints_fd == -1)
-+		return;
-+	return _unlock_hints();
-+}
-+
- static struct hint *_find_hint_name(struct dm_list *hints, const char *name)
+ 		} else if (act->op == LD_OP_START_WAIT) {
+-			act->result = count_lockspace_starting(act->client_id);
++			act->result = count_lockspace_starting(0);
+ 			if (!act->result)
+ 				add_client_result(act);
+ 			else
+@@ -3423,7 +3426,7 @@ static void *worker_thread_main(void *arg_in)
+ 		list_for_each_entry_safe(act, safe, &delayed_list, list) {
+ 			if (act->op == LD_OP_START_WAIT) {
+ 				log_debug("work delayed start_wait for client %u", act->client_id);
+-				act->result = count_lockspace_starting(act->client_id);
++				act->result = count_lockspace_starting(0);
+ 				if (!act->result) {
+ 					list_del(&act->list);
+ 					add_client_result(act);
+diff --git a/lib/locking/lvmlockd.c b/lib/locking/lvmlockd.c
+index 9fb7b36..9b2d050 100644
+--- a/lib/locking/lvmlockd.c
++++ b/lib/locking/lvmlockd.c
+@@ -1072,7 +1072,7 @@ void lockd_free_vg_final(struct cmd_context *cmd, struct volume_group *vg)
+  * that the VG lockspace being started is new.
+  */
+ 
+-int lockd_start_vg(struct cmd_context *cmd, struct volume_group *vg, int start_init)
++int lockd_start_vg(struct cmd_context *cmd, struct volume_group *vg, int start_init, int *exists)
  {
- 	struct hint *hint;
-@@ -989,6 +996,8 @@ void clear_hint_file(struct cmd_context *cmd)
- 	if (!cmd->enable_hints)
- 		return;
+ 	char uuid[64] __attribute__((aligned(8)));
+ 	daemon_reply reply;
+@@ -1147,6 +1147,12 @@ int lockd_start_vg(struct cmd_context *cmd, struct volume_group *vg, int start_i
+ 		log_debug("VG %s start error: already started", vg->name);
+ 		ret = 1;
+ 		break;
++	case -ESTARTING:
++		log_debug("VG %s start error: already starting", vg->name);
++		if (exists)
++			*exists = 1;
++		ret = 1;
++		break;
+ 	case -EARGS:
+ 		log_error("VG %s start failed: invalid parameters for %s", vg->name, vg->lock_type);
+ 		break;
+@@ -2668,7 +2674,7 @@ int lockd_rename_vg_final(struct cmd_context *cmd, struct volume_group *vg, int
+ 		 * Depending on the problem that caused the rename to
+ 		 * fail, it may make sense to not restart the VG here.
+ 		 */
+-		if (!lockd_start_vg(cmd, vg, 0))
++		if (!lockd_start_vg(cmd, vg, 0, NULL))
+ 			log_error("Failed to restart VG %s lockspace.", vg->name);
+ 		return 1;
+ 	}
+@@ -2708,7 +2714,7 @@ int lockd_rename_vg_final(struct cmd_context *cmd, struct volume_group *vg, int
+ 		}
+ 	}
  
-+	log_debug("clear_hint_file");
-+
- 	/*
- 	 * This function runs even when cmd->use_hints is 0,
- 	 * which means this command does not use hints, but
-@@ -999,11 +1008,6 @@ void clear_hint_file(struct cmd_context *cmd)
- 	if (!_touch_nohints())
- 		stack;
+-	if (!lockd_start_vg(cmd, vg, 1))
++	if (!lockd_start_vg(cmd, vg, 1, NULL))
+ 		log_error("Failed to start VG %s lockspace.", vg->name);
  
--	/*
--	 * We are relying on the command exit to release this flock,
--	 * we should probably add an explicit unlock_hints call.
--	 */
--
- 	if (!_lock_hints(LOCK_EX, 0))
- 		stack;
+ 	return 1;
+diff --git a/lib/locking/lvmlockd.h b/lib/locking/lvmlockd.h
+index 0a6ea96..1fbf765 100644
+--- a/lib/locking/lvmlockd.h
++++ b/lib/locking/lvmlockd.h
+@@ -63,7 +63,7 @@ int lockd_rename_vg_final(struct cmd_context *cmd, struct volume_group *vg, int
  
-diff --git a/lib/label/hints.h b/lib/label/hints.h
-index d80016e..a17214c 100644
---- a/lib/label/hints.h
-+++ b/lib/label/hints.h
-@@ -33,5 +33,7 @@ int get_hints(struct cmd_context *cmd, struct dm_list *hints, int *newhints,
+ /* start and stop the lockspace for a vg */
  
- int validate_hints(struct cmd_context *cmd, struct dm_list *hints);
+-int lockd_start_vg(struct cmd_context *cmd, struct volume_group *vg, int start_init);
++int lockd_start_vg(struct cmd_context *cmd, struct volume_group *vg, int start_init, int *exists);
+ int lockd_stop_vg(struct cmd_context *cmd, struct volume_group *vg);
+ int lockd_start_wait(struct cmd_context *cmd);
  
-+void hints_exit(void);
-+
- #endif
+diff --git a/tools/vgchange.c b/tools/vgchange.c
+index bbdf2e4..f831fd9 100644
+--- a/tools/vgchange.c
++++ b/tools/vgchange.c
+@@ -560,6 +560,7 @@ static int _vgchange_lock_start(struct cmd_context *cmd, struct volume_group *vg
+ {
+ 	const char *start_opt = arg_str_value(cmd, lockopt_ARG, NULL);
+ 	int auto_opt = 0;
++	int exists = 0;
+ 	int r;
  
-diff --git a/tools/lvmcmdline.c b/tools/lvmcmdline.c
-index 55a068f..49a6038 100644
---- a/tools/lvmcmdline.c
-+++ b/tools/lvmcmdline.c
-@@ -2331,6 +2331,8 @@ static int _get_current_settings(struct cmd_context *cmd)
- 	/* Only certain commands need to be optimized by using hints. */
- 	if (cmd->cname->flags & ALLOW_HINTS)
- 		cmd->use_hints = 1;
-+	else
-+		cmd->use_hints = 0;
+ 	if (!vg_is_shared(vg))
+@@ -586,10 +587,12 @@ static int _vgchange_lock_start(struct cmd_context *cmd, struct volume_group *vg
+ 	}
  
- 	if ((hint_mode = find_config_tree_str(cmd, devices_hints_CFG, NULL))) {
- 		if (!strcmp(hint_mode, "none"))
-@@ -2986,6 +2988,7 @@ int lvm_run_command(struct cmd_context *cmd, int argc, char **argv)
+ do_start:
+-	r = lockd_start_vg(cmd, vg, 0);
++	r = lockd_start_vg(cmd, vg, 0, &exists);
  
-       out:
+ 	if (r)
+ 		vp->lock_start_count++;
++	else if (exists)
++		vp->lock_start_count++;
+ 	if (!strcmp(vg->lock_type, "sanlock"))
+ 		vp->lock_start_sanlock = 1;
  
-+	hints_exit();
- 	lvmcache_destroy(cmd, 1, 1);
- 	label_scan_destroy(cmd);
+diff --git a/tools/vgcreate.c b/tools/vgcreate.c
+index c146ab7..f9bf10e 100644
+--- a/tools/vgcreate.c
++++ b/tools/vgcreate.c
+@@ -204,7 +204,7 @@ int vgcreate(struct cmd_context *cmd, int argc, char **argv)
+ 	if (vg_is_shared(vg)) {
+ 		const char *start_opt = arg_str_value(cmd, lockopt_ARG, NULL);
  
+-		if (!lockd_start_vg(cmd, vg, 1)) {
++		if (!lockd_start_vg(cmd, vg, 1, NULL)) {
+ 			log_error("Failed to start locking");
+ 			goto out;
+ 		}
 
 
