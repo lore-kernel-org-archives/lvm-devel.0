@@ -1,86 +1,118 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Mon, 21 Jan 2019 06:56:12 -0500
-Subject: master - vdo: enable dmeventd resize
-Message-ID: <201901211156.x0LBuCHD024612@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Mon, 21 Jan 2019 06:56:17 -0500
+Subject: master - vdo: minor API cleanup
+Message-ID: <201901211156.x0LBuH17024931@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=f3c52a515b7b40a76d7dfc64b712020f032cde1d
-Commit:        f3c52a515b7b40a76d7dfc64b712020f032cde1d
-Parent:        3d367f3348da072360c9dd251d981e627c8444ff
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=e689bfb5d5a9983205efbccf1e554fde52a0376a
+Commit:        e689bfb5d5a9983205efbccf1e554fde52a0376a
+Parent:        fc02343eff39b80e3b41b74475d9f2d6797062ac
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Sun Jan 20 16:08:11 2019 +0100
+AuthorDate:    Mon Jan 21 00:48:05 2019 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Mon Jan 21 12:53:16 2019 +0100
 
-vdo: enable dmeventd resize
+vdo: minor API cleanup
 
+Since the parse_vdo_pool_status() become vdo_manip API part,
+and there will be no 'dm' matching status parser,
+the API can be simplified and closely match thin API here.
 ---
- daemons/dmeventd/plugins/vdo/dmeventd_vdo.c |    3 +--
- lib/metadata/lv_manip.c                     |   20 +++++++++++++++++++-
- 2 files changed, 20 insertions(+), 3 deletions(-)
+ lib/activate/activate.c    |   10 ++--------
+ lib/activate/dev_manager.c |   14 +++++---------
+ lib/activate/dev_manager.h |    5 ++---
+ 3 files changed, 9 insertions(+), 20 deletions(-)
 
-diff --git a/daemons/dmeventd/plugins/vdo/dmeventd_vdo.c b/daemons/dmeventd/plugins/vdo/dmeventd_vdo.c
-index d5156cd..9d267eb 100644
---- a/daemons/dmeventd/plugins/vdo/dmeventd_vdo.c
-+++ b/daemons/dmeventd/plugins/vdo/dmeventd_vdo.c
-@@ -255,8 +255,7 @@ void process_event(struct dm_task *dmt,
- 	} else
- 		state->max_fails = 1; /* Reset on success */
+diff --git a/lib/activate/activate.c b/lib/activate/activate.c
+index 072e84e..ddc175c 100644
+--- a/lib/activate/activate.c
++++ b/lib/activate/activate.c
+@@ -1359,8 +1359,6 @@ int lv_vdo_pool_status(const struct logical_volume *lv, int flush,
+ {
+ 	int r = 0;
+ 	struct dev_manager *dm;
+-	struct lv_status_vdo *status;
+-	char *params;
  
--	/* FIXME: ATM nothing can be done, drop 0, once it becomes useful */
--	if (0 && needs_policy)
-+	if (needs_policy)
- 		_use_policy(dmt, state);
- out:
- 	if (vdop.status)
-diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
-index 7e542fe..8c9a933 100644
---- a/lib/metadata/lv_manip.c
-+++ b/lib/metadata/lv_manip.c
-@@ -4795,6 +4795,18 @@ static int _lvresize_adjust_policy(const struct logical_volume *lv,
- 				 "minimum supported 50%%.", policy_threshold);
- 			policy_threshold = 50;
- 		}
-+	} else if (lv_is_vdo_pool(lv)) {
-+		policy_threshold =
-+			find_config_tree_int(cmd, activation_vdo_pool_autoextend_threshold_CFG,
-+					     lv_config_profile(lv));
-+		policy_amount =
-+			find_config_tree_int(cmd, activation_vdo_pool_autoextend_percent_CFG,
-+					     lv_config_profile(lv));
-+		if (policy_threshold < 50) {
-+			log_warn("WARNING: VDO pool autoextend threshold %d%% is set below "
-+				 "minimum supported 50%%.", policy_threshold);
-+			policy_threshold = 50;
-+		}
- 	} else {
- 		policy_threshold =
- 			find_config_tree_int(cmd, activation_snapshot_autoextend_threshold_CFG, NULL);
-@@ -4833,6 +4845,9 @@ static int _lvresize_adjust_policy(const struct logical_volume *lv,
- 
- 		if (!lv_thin_pool_percent(lv, 0, &percent))
- 			return_0;
-+	} else if (lv_is_vdo_pool(lv)) {
-+		if (!lv_vdo_pool_percent(lv, &percent))
-+			return_0;
- 	} else {
- 		if (!lv_snapshot_percent(lv, &percent))
- 			return_0;
-@@ -4916,7 +4931,10 @@ static int _lvresize_check(struct logical_volume *lv,
- 		}
- 	}
- 
--	if (lp->use_policies && !lv_is_cow(lv) && !lv_is_thin_pool(lv)) {
-+	if (lp->use_policies &&
-+	    !lv_is_cow(lv) &&
-+	    !lv_is_thin_pool(lv) &&
-+	    !lv_is_vdo_pool(lv)) {
- 		log_error("Policy-based resize is supported only for snapshot and thin pool volumes.");
+ 	if (!lv_info(lv->vg->cmd, lv, 0, NULL, 0, 0))
  		return 0;
+@@ -1371,14 +1369,10 @@ int lv_vdo_pool_status(const struct logical_volume *lv, int flush,
+ 	if (!(dm = dev_manager_create(lv->vg->cmd, lv->vg->name, !lv_is_pvmove(lv))))
+ 		return_0;
+ 
+-	if (!dev_manager_vdo_pool_status(dm, lv, flush, &params, &status))
++	if (!dev_manager_vdo_pool_status(dm, lv, vdo_status, flush))
+ 		goto_out;
+ 
+-	if (!parse_vdo_pool_status(status->mem, lv, params, status))
+-		goto_out;
+-
+-	/* User is responsible to dm_pool_destroy memory pool! */
+-	*vdo_status = status;
++	/* User has to call dm_pool_destroy(vdo_status->mem) */
+ 	r = 1;
+ out:
+ 	if (!r)
+diff --git a/lib/activate/dev_manager.c b/lib/activate/dev_manager.c
+index f0c5254..dc570c7 100644
+--- a/lib/activate/dev_manager.c
++++ b/lib/activate/dev_manager.c
+@@ -1792,9 +1792,8 @@ out:
+ 
+ int dev_manager_vdo_pool_status(struct dev_manager *dm,
+ 				const struct logical_volume *lv,
+-				int flush,
+-				char **vdo_params,
+-				struct lv_status_vdo **vdo_status)
++				struct lv_status_vdo **vdo_status,
++				int flush)
+ {
+ 	struct lv_status_vdo *status;
+ 	const char *dlid;
+@@ -1805,7 +1804,6 @@ int dev_manager_vdo_pool_status(struct dev_manager *dm,
+ 	char *params = NULL;
+ 	int r = 0;
+ 
+-	*vdo_params = NULL;
+ 	*vdo_status = NULL;
+ 
+ 	if (!(status = dm_pool_zalloc(dm->mem, sizeof(struct lv_status_vdo)))) {
+@@ -1834,13 +1832,11 @@ int dev_manager_vdo_pool_status(struct dev_manager *dm,
+ 		goto out;
  	}
+ 
+-	if (!(*vdo_params = dm_pool_strdup(dm->mem, params))) {
+-		log_error("Cannot duplicate VDO status params.");
+-		goto out;
+-	}
++	if (!parse_vdo_pool_status(dm->mem, lv, params, status))
++		goto_out;
+ 
+ 	status->mem = dm->mem;
+-	*vdo_status =  status;
++	*vdo_status = status;
+ 
+ 	r = 1;
+ out:
+diff --git a/lib/activate/dev_manager.h b/lib/activate/dev_manager.h
+index ca8c0d3..6456991 100644
+--- a/lib/activate/dev_manager.h
++++ b/lib/activate/dev_manager.h
+@@ -84,9 +84,8 @@ int dev_manager_thin_device_id(struct dev_manager *dm,
+ 			       uint32_t *device_id);
+ int dev_manager_vdo_pool_status(struct dev_manager *dm,
+ 				const struct logical_volume *lv,
+-				int flush,
+-				char **vdo_params,
+-				struct lv_status_vdo **vdo_status);
++				struct lv_status_vdo **vdo_status,
++				int flush);
+ int dev_manager_suspend(struct dev_manager *dm, const struct logical_volume *lv,
+ 			struct lv_activate_opts *laopts, int lockfs, int flush_required);
+ int dev_manager_activate(struct dev_manager *dm, const struct logical_volume *lv,
 
 
