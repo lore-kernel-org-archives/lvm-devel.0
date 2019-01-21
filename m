@@ -1,65 +1,296 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Mon, 21 Jan 2019 06:55:01 -0500
-Subject: master - man: missed --zero option for thin-pool creation
-Message-ID: <201901211155.x0LBt1cW024403@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Mon, 21 Jan 2019 06:55:09 -0500
+Subject: master - man: initial man page for VDO support
+Message-ID: <201901211155.x0LBt9eX024424@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=e8ea3c9a61b9d3bea50c7e5957660caf45a89dd9
-Commit:        e8ea3c9a61b9d3bea50c7e5957660caf45a89dd9
-Parent:        28f3125aaa1d7843d2ce01d25b172478b0836bba
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=21742c3f3d00e8df274e4d56995e6346b849acf8
+Commit:        21742c3f3d00e8df274e4d56995e6346b849acf8
+Parent:        e8ea3c9a61b9d3bea50c7e5957660caf45a89dd9
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Jan 18 22:38:34 2019 +0100
+AuthorDate:    Fri Jan 18 16:59:13 2019 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Mon Jan 21 12:38:47 2019 +0100
+CommitterDate: Mon Jan 21 12:39:23 2019 +0100
 
-man: missed --zero option for thin-pool creation
+man: initial man page for VDO support
 
-During man page rewrite this info got lost and remained
-only for lvconvert. So restore it back for lvcreate.
+Basic lvm2 command support for VDO.
 ---
- WHATS_NEW             |    1 +
- man/lvcreate.8_pregen |    1 +
- tools/args.h          |    1 +
- 3 files changed, 3 insertions(+), 0 deletions(-)
+ man/Makefile.in   |    3 +-
+ man/lvmvdo.7_main |  241 +++++++++++++++++++++++++++++++++++++++++++++++++++++
+ 2 files changed, 243 insertions(+), 1 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index 5bb5797..74def38 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.03.02 - 
- ===================================
-+  Restore missing man info lvcreate --zero for thin-pools.
-   Drop misleadning comment for metadata minimum_io_size for VDO segment.
-   Add device hints to reduce scanning.
-   Introduce LVM_SUPPRESS_SYSLOG to suppress syslog usage by generator.
-diff --git a/man/lvcreate.8_pregen b/man/lvcreate.8_pregen
-index 2a5e05d..ff68447 100644
---- a/man/lvcreate.8_pregen
-+++ b/man/lvcreate.8_pregen
-@@ -2715,6 +2715,7 @@ answer yes. Use with extreme caution.
- Controls zeroing of the first 4KiB of data in the new LV.
- Default is \fBy\fP.
- Snapshot COW volumes are always zeroed.
-+For thin pools, this controls zeroing of provisioned blocks.
- LV is not zeroed if the read only flag is set.
- Warning: trying to mount an unzeroed LV can cause the system to hang.
- .ad b
-diff --git a/tools/args.h b/tools/args.h
-index 522cccf..898e756 100644
---- a/tools/args.h
-+++ b/tools/args.h
-@@ -1464,6 +1464,7 @@ arg(zero_ARG, 'Z', "zero", bool_VAL, 0, 0,
-     "Controls zeroing of the first 4KiB of data in the new LV.\n"
-     "Default is \\fBy\\fP.\n"
-     "Snapshot COW volumes are always zeroed.\n"
-+    "For thin pools, this controls zeroing of provisioned blocks.\n"
-     "LV is not zeroed if the read only flag is set.\n"
-     "Warning: trying to mount an unzeroed LV can cause the system to hang.\n"
-     "#pvcreate\n"
+diff --git a/man/Makefile.in b/man/Makefile.in
+index e73f834..114e92b 100644
+--- a/man/Makefile.in
++++ b/man/Makefile.in
+@@ -33,6 +33,7 @@ LVMCACHEMAN = lvmcache.7
+ LVMTHINMAN = lvmthin.7
+ LVMDBUSDMAN = lvmdbusd.8
+ LVMRAIDMAN = lvmraid.7
++LVMVDOMAN = lvmvdo.7
+ 
+ MAN5=lvm.conf.5
+ MAN7=lvmsystemid.7 lvmreport.7 
+@@ -96,7 +97,7 @@ else
+   endif
+ endif
+ 
+-MAN7+=$(LVMCACHEMAN) $(LVMTHINMAN) $(LVMRAIDMAN)
++MAN7+=$(LVMCACHEMAN) $(LVMTHINMAN) $(LVMRAIDMAN) $(LVMVDOMAN)
+ MAN5DIR=$(mandir)/man5
+ MAN7DIR=$(mandir)/man7
+ MAN8DIR=$(mandir)/man8
+diff --git a/man/lvmvdo.7_main b/man/lvmvdo.7_main
+new file mode 100644
+index 0000000..e789f7f
+--- /dev/null
++++ b/man/lvmvdo.7_main
+@@ -0,0 +1,241 @@
++.TH "LVMVDO" "7" "LVM TOOLS #VERSION#" "Red Hat, Inc" "\""
++
++.SH NAME
++lvmvdo \(em EXPERIMENTAL LVM Virtual Data Optimizer support
++
++.SH DESCRIPTION
++
++
++VDO (which includes kvdo and vdo) is software that provides inline
++block-level deduplication, compression, and thin provisioning capabilities
++for primary storage.
++
++Deduplication is a technique for reducing the consumption of storage
++resources by eliminating multiple copies of duplicate blocks. Compression
++takes the individual unique blocks and shrinks them with coding
++algorithms; these reduced blocks are then efficiently packed together into
++physical blocks. Thin provisioning manages the mapping from LBAs presented
++by VDO to where the data has actually been stored, and also eliminates any
++blocks of all zeroes.
++
++With deduplication, instead of writing the same data more than once each
++duplicate block is detected and recorded as a reference to the original
++block. VDO maintains a mapping from logical block addresses (used by the
++storage layer above VDO) to physical block addresses (used by the storage
++layer under VDO). After deduplication, multiple logical block addresses
++may be mapped to the same physical block address; these are called shared
++blocks and are reference-counted by the software.
++
++With VDO's compression, multiple blocks (or shared blocks) are compressed
++with the fast LZ4 algorithm, and binned together where possible so that
++multiple compressed blocks fit within a 4 KB block on the underlying
++storage. Mapping from LBA is to a physical block address and index within
++it for the desired compressed data. All compressed blocks are individually
++reference counted for correctness.
++
++Block sharing and block compression are invisible to applications using
++the storage, which read and write blocks as they would if VDO were not
++present. When a shared block is overwritten, a new physical block is
++allocated for storing the new block data to ensure that other logical
++block addresses that are mapped to the shared physical block are not
++modified.
++
++For usage of VDO with \fBlvm\fP(8) standard VDO userspace tools
++\fBvdoformat\fP(8) and currently non-standard kernel VDO module
++"\fIkvdo\fP" needs to be installed on the system.
++
++The "\fIkvdo\fP" module implements fine-grained storage virtualization,
++thin provisioning, block sharing, and compression;
++the "\fIuds\fP" module provides memory-efficient duplicate
++identification. The userspace tools include \fBvdostats\fP(8)
++for extracting statistics from those volumes.
++
++
++.SH VDO Terms
++
++.TP
++VDODataLV
++.br
++VDO data LV
++.br
++large hidden LV with suffix _vdata created in a VG.
++.br
++used by VDO target to store all data and metadata blocks.
++
++.TP
++VDOPoolLV
++.br
++VDO pool LV
++.br
++maintains virtual for LV(s) stored in attached VDO data LV
++and it has same size.
++.br
++contains VDOLV(s) (currently supports only a single VDOLV).
++
++.TP
++VDOLV
++.br
++VDO LV
++.br
++created from VDOPoolLV
++.br
++appears blank after creation
++
++.SH VDO Usage
++
++The primary methods for using VDO with lvm2:
++
++.SS 1. Create VDOPoolLV with VDOLV
++
++Create an VDOPoolLV that will holds VDO data togehther with
++virtual size VDOLV, that user can use. When the virtual size
++is not specified, then such LV is created with maximum size that
++always fits into data volume even if there cannot happen any
++deduplication and compression
++(i.e. it can hold uncompressible content of /dev/urandom).
++When the name of VDOPoolLV is not specified, it tales name from
++sequence of vpool0, vpool1 ...
++
++Note: As the performance of TRIM/Discard operation is slow for large
++volumes of VDO type, please try to avoid sending discard requests unless
++necessary as it may take considerable amount of time to finish discard
++operation.
++
++.nf
++.B lvcreate --type vdo -n VDOLV -L DataSize -V LargeVirtualSize VG/VDOPoolLV
++.B lvcreate --vdo -L DataSize VG
++.fi
++
++.I Example
++.br
++.nf
++# lvcreate --type vdo -n vdo0 -L 10G -V 100G vg/vdopool0
++# mkfs.ext4 -E nodiscard /dev/vg/vdo0
++.fi
++
++.SS 2. Create VDOPoolLV and convert existing LV into VDODataLV
++
++Convert an already created/existing LV into a volume that can hold
++VDO data and metadata (a volume reference by VDOPoolLV).
++User will be prompted to confirm such conversion as it is \fBIRREVERSIBLY
++DESTROYING\fP content of such volume, as it's being immediatelly
++formated by \fBvdoformat\fP(8) as VDO pool data volume. User can
++specify virtual size of associated VDOLV with this VDOPoolLV.
++When the virtual size is not specified, it will set to the maximum size
++that can keep 100% uncompressible data there.
++
++.nf
++.B lvconvert --type vdo-pool -n VDOLV -V VirtualSize VG/VDOPoolLV
++.B lvconvert --vdopool VG/VDOPoolLV
++.fi
++
++.I Example
++.br
++.nf
++# lvconvert --type vdo-pool -n vdo0 -V10G vg/existinglv
++.fi
++
++.SS 3. Change default setting used for creating VDOPoolLV
++
++VDO allows to set large variety of option. Lots of these setting
++can be specified by lvm.conf or profile settings. User can prepare
++number of different profiles and just specify profile file name.
++Check output of \fBlvmconfig --type full\fP for detailed description
++of all individual vdo settings.
++
++.I Example
++.br
++.nf
++# cat <<EOF > vdo.profile
++allocation {
++	vdo_use_compression=1
++	vdo_use_deduplication=1
++	vdo_use_metadata_hints=1
++	vdo_minimum_io_size=4096
++	vdo_block_map_cache_size_mb=128
++	vdo_block_map_period=16380
++	vdo_check_point_frequency=0
++	vdo_use_sparse_index=0
++	vdo_index_memory_size_mb=256
++	vdo_slab_size_mb=2048
++	vdo_ack_threads=1
++	vdo_bio_threads=1
++	vdo_bio_rotation=64
++	vdo_cpu_threads=2
++	vdo_hash_zone_threads=1
++	vdo_logical_threads=1
++	vdo_physical_threads=1
++	vdo_write_policy="auto"
++	vdo_max_discard=1
++}
++EOF
++
++# lvcreate --vdo -L10G --metadataprofile vdo.profile vg/vdopool0
++# lvcreate --vdo -L10G --config 'allocation/vdo_cpu_threads=4' vg/vdopool1
++.fi
++
++.SS 4. Change compression and deduplication of VDOPoolLV
++
++Disable or enable compression and deduplication for VDO pool LV
++(the volume that maintains all VDO LV(s) associated with it).
++
++.B lvchange --compression [y|n] --deduplication [y|n] VG/VDOPoolLV
++
++.I Example
++.br
++.nf
++# lvchange --compression n  vg/vdpool0
++# lvchange --deduplication y vg/vdpool1
++.fi
++
++.SS 4. Checking usage of VDOPoolLV
++
++To quickly check how much data of VDOPoolLV are already consumed
++use \fBlvs\fP(8). Field Data% will report how much data occupies
++content of virtual data for VDOLV and how much space is already
++consumed with all the data and metadata blocks in VDOPoolLV.
++For a detailed description use \fBvdostats\fP(8) command.
++
++Note: vdostats currently understands only /dev/mapper device names.
++
++.I Example
++.br
++.nf
++# lvcreate --type vdo -L10G -V20G -n vdo0 vg/vdopool0
++# mkfs.ext4 -E nodiscard /dev/vg/vdo0
++# lvs -a vg
++
++  LV               VG Attr       LSize  Pool     Origin Data%
++  vdo0             vg vwi-a-v--- 20.00g vdopool0        0.01
++  vdopool0         vg dwi-ao---- 10.00g                 30.16
++  [vdopool0_vdata] vg Dwi-ao---- 10.00g
++
++# vdostats --all /dev/mapper/vg-vdopool0
++/dev/mapper/vg-vdopool0 :
++  version                             : 30
++  release version                     : 133524
++  data blocks used                    : 79
++  ...
++
++.fi
++
++.SH VDO Topics
++
++.br
++
++\&
++
++.SH SEE ALSO
++.BR lvm (8),
++.BR lvm.conf (5),
++.BR lvmconfig (8),
++.BR lvcreate (8),
++.BR lvconvert (8),
++.BR lvchange (8),
++.BR lvextend (8),
++.BR lvremove (8),
++.BR lvs (8),
++.BR vdo (8),
++.BR vdoformat (8)
++.BR vdostats (8)
++
 
 
