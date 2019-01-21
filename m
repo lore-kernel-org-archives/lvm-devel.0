@@ -1,59 +1,73 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Mon, 21 Jan 2019 06:55:46 -0500
-Subject: master - cleanup: better naming
-Message-ID: <201901211155.x0LBtkJT024532@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Mon, 21 Jan 2019 06:55:49 -0500
+Subject: master - vdo: man documenting resize
+Message-ID: <201901211155.x0LBtndp024548@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=a16d914d34fff420c663ba34ac8dabfc4403de51
-Commit:        a16d914d34fff420c663ba34ac8dabfc4403de51
-Parent:        08cabe9b83bcce59a5aabc100aad2cb61a7bac0c
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=01cbdc4e673989c4d432e6bea8cde1f8f9e8cda5
+Commit:        01cbdc4e673989c4d432e6bea8cde1f8f9e8cda5
+Parent:        a16d914d34fff420c663ba34ac8dabfc4403de51
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu Jan 10 18:01:06 2019 +0100
+AuthorDate:    Fri Jan 18 20:28:35 2019 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Mon Jan 21 12:53:16 2019 +0100
 
-cleanup: better naming
+vdo: man documenting resize
 
 ---
- lib/metadata/lv_manip.c |   14 +++++++-------
- 1 files changed, 7 insertions(+), 7 deletions(-)
+ man/lvmvdo.7_main |   36 ++++++++++++++++++++++++++++++++++++
+ 1 files changed, 36 insertions(+), 0 deletions(-)
 
-diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
-index d32bd24..7e542fe 100644
---- a/lib/metadata/lv_manip.c
-+++ b/lib/metadata/lv_manip.c
-@@ -1852,21 +1852,21 @@ static void _init_alloc_parms(struct alloc_handle *ah,
- /* Handles also stacking */
- static int _setup_lv_size(struct logical_volume *lv, uint32_t extents)
- {
--	struct lv_segment *thin_pool_seg;
-+	struct lv_segment *pool_seg;
+diff --git a/man/lvmvdo.7_main b/man/lvmvdo.7_main
+index e789f7f..11ca3ac 100644
+--- a/man/lvmvdo.7_main
++++ b/man/lvmvdo.7_main
+@@ -219,6 +219,42 @@ Note: vdostats currently understands only /dev/mapper device names.
  
- 	lv->le_count = extents;
- 	lv->size = (uint64_t) extents * lv->vg->extent_size;
+ .fi
  
- 	if (lv_is_thin_pool_data(lv) ||
- 	    lv_is_vdo_pool_data(lv)) {
--		if (!(thin_pool_seg = get_only_segment_using_this_lv(lv)))
-+		if (!(pool_seg = get_only_segment_using_this_lv(lv)))
- 			return_0;
++.SS 4. Extending VDOPoolLV size
++
++Adding more space to hold VDO data and metadata can be made via
++extension of VDODataLV.
++
++Note: Size of VDOPoolLV cannot be reduced.
++
++.B lvextend -L+AddingSize VG/VDOPoolLV
++
++.I Example
++.br
++.nf
++# lvextend -L+50G vg/vdopool0
++# lvresize -L300G vg/vdopool1
++.fi
++
++.SS 4. Extending or reducing VDOLV size
++
++VDO LV can be extended or reduced as standard LV.
++
++Note: Reduction needs to process TRIM for reduced disk area
++to unmap used data blocks from VDOPoolLV and it may take
++a long time.
++
++.B lvextend -L+AddingSize VG/VDOLV
++.B lvreduce -L-ReducingSize VG/VDOLV
++
++.I Example
++.br
++.nf
++# lvextend -L+50G vg/vdo0
++# lvreduce -L-50G vg/vdo1
++# lvresize -L200G vg/vdo2
++.fi
++
++
+ .SH VDO Topics
  
--		/* Update thin pool segment from the layered LV */
--		thin_pool_seg->lv->le_count =
--			thin_pool_seg->len =
--			thin_pool_seg->area_len = lv->le_count;
--		thin_pool_seg->lv->size = lv->size;
-+		/* Update pool segment from the layered LV */
-+		pool_seg->lv->le_count =
-+			pool_seg->len =
-+			pool_seg->area_len = lv->le_count;
-+		pool_seg->lv->size = lv->size;
- 	}
- 
- 	return 1;
+ .br
 
 
