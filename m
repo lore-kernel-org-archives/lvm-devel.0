@@ -1,108 +1,66 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Mon, 21 Jan 2019 06:56:03 -0500
-Subject: master - tests: initial test for vdo resize
-Message-ID: <201901211156.x0LBu3lU024587@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Mon, 21 Jan 2019 06:56:07 -0500
+Subject: master - vdo: add simple wrapper for getting pool percentage
+Message-ID: <201901211156.x0LBu7B9024600@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=cbadf3d3704f1153b2919392ab8259b9a798a221
-Commit:        cbadf3d3704f1153b2919392ab8259b9a798a221
-Parent:        246b0c444bfcea68fe6c6d7174e753ee08dd7d8f
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=3d367f3348da072360c9dd251d981e627c8444ff
+Commit:        3d367f3348da072360c9dd251d981e627c8444ff
+Parent:        cbadf3d3704f1153b2919392ab8259b9a798a221
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Sun Jan 20 12:38:59 2019 +0100
+AuthorDate:    Mon Jan 21 00:24:30 2019 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Mon Jan 21 12:53:16 2019 +0100
 
-tests: initial test for vdo resize
+vdo: add simple wrapper for getting pool percentage
 
+Just like with i.e. thins provide simple function for
+getting percentage of VDO Pool usage (uses existing
+status function).
 ---
- test/shell/lvextend-vdo.sh |   34 ++++++++++++++++++++++++++++++++++
- test/shell/lvresize-vdo.sh |   35 +++++++++++++++++++++++++++++++++++
- 2 files changed, 69 insertions(+), 0 deletions(-)
+ lib/activate/activate.c |   13 +++++++++++++
+ lib/activate/activate.h |    1 +
+ 2 files changed, 14 insertions(+), 0 deletions(-)
 
-diff --git a/test/shell/lvextend-vdo.sh b/test/shell/lvextend-vdo.sh
-new file mode 100644
-index 0000000..5a68bb1
---- /dev/null
-+++ b/test/shell/lvextend-vdo.sh
-@@ -0,0 +1,34 @@
-+#!/usr/bin/env bash
+diff --git a/lib/activate/activate.c b/lib/activate/activate.c
+index 678dec9..072e84e 100644
+--- a/lib/activate/activate.c
++++ b/lib/activate/activate.c
+@@ -1387,6 +1387,19 @@ out:
+ 	return r;
+ }
+ 
++int lv_vdo_pool_percent(const struct logical_volume *lv, dm_percent_t *percent)
++{
++	struct lv_status_vdo *vdo_status;
 +
-+# Copyright (C) 2019 Red Hat, Inc. All rights reserved.
-+#
-+# This copyrighted material is made available to anyone wishing to use,
-+# modify, copy, or redistribute it subject to the terms and conditions
-+# of the GNU General Public License v.2.
-+#
-+# You should have received a copy of the GNU General Public License
-+# along with this program; if not, write to the Free Software Foundation,
-+# Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
++	if (!lv_vdo_pool_status(lv, 0, &vdo_status))
++		return_0;
 +
++	*percent = vdo_status->usage;
++	dm_pool_destroy(vdo_status->mem);
 +
-+SKIP_WITH_LVMPOLLD=1
++	return 1;
++}
 +
-+. lib/inittest
-+
-+aux have_vdo 6 2 0 || skip
-+
-+aux lvmconf 'allocation/vdo_slab_size_mb = 128'
-+
-+aux prepare_vg 1 7000
-+lvcreate --vdo -V3G -L4G -n $lv1 $vg/$lv2
-+
-+# Resize data volume
-+lvextend -L+1G $vg/$lv2
-+check lv_field $vg/$lv2 size "5.00g"
-+check lv_field $vg/${lv2}_vdata size "5.00g"
-+
-+# Resize virtual volume on top of VDO
-+lvextend -L+1G $vg/$lv1
-+check lv_field $vg/$lv1 size "4.00g"
-+
-+vgremove -ff $vg
-diff --git a/test/shell/lvresize-vdo.sh b/test/shell/lvresize-vdo.sh
-new file mode 100644
-index 0000000..6fe0e9c
---- /dev/null
-+++ b/test/shell/lvresize-vdo.sh
-@@ -0,0 +1,35 @@
-+#!/usr/bin/env bash
-+
-+# Copyright (C) 2019 Red Hat, Inc. All rights reserved.
-+#
-+# This copyrighted material is made available to anyone wishing to use,
-+# modify, copy, or redistribute it subject to the terms and conditions
-+# of the GNU General Public License v.2.
-+#
-+# You should have received a copy of the GNU General Public License
-+# along with this program; if not, write to the Free Software Foundation,
-+# Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
-+
-+# Test resize of VDO volumes
-+
-+SKIP_WITH_LVMPOLLD=1
-+
-+. lib/inittest
-+
-+aux have_vdo 6 2 0 || skip
-+
-+aux lvmconf 'allocation/vdo_slab_size_mb = 128'
-+
-+aux prepare_vg 1 7000
-+lvcreate --vdo -V3G -L4G -n $lv1 $vg/$lv2
-+
-+# Resize data volume
-+lvresize -L6G $vg/$lv2
-+check lv_field $vg/$lv2 size "6.00g"
-+check lv_field $vg/${lv2}_vdata size "6.00g"
-+
-+# Resize virtual volume on top of VDO
-+lvresize -L6G $vg/$lv1
-+check lv_field $vg/$lv1 size "6.00g"
-+
-+vgremove -ff $vg
+ static int _lv_active(struct cmd_context *cmd, const struct logical_volume *lv)
+ {
+ 	struct lvinfo info;
+diff --git a/lib/activate/activate.h b/lib/activate/activate.h
+index aa5410c..dc13f17 100644
+--- a/lib/activate/activate.h
++++ b/lib/activate/activate.h
+@@ -198,6 +198,7 @@ int lv_thin_pool_transaction_id(const struct logical_volume *lv,
+ int lv_thin_device_id(const struct logical_volume *lv, uint32_t *device_id);
+ int lv_vdo_pool_status(const struct logical_volume *lv, int flush,
+ 		       struct lv_status_vdo **status);
++int lv_vdo_pool_percent(const struct logical_volume *lv, dm_percent_t *percent);
+ 
+ /*
+  * Return number of LVs in the VG that are active.
 
 
