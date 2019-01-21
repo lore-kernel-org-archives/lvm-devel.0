@@ -1,123 +1,60 @@
-From: Tony Asleson <tasleson@sourceware.org>
-Date: Wed, 16 Jan 2019 17:33:04 -0500
-Subject: master - lvmdbusd: Correct object manager lookups
-Message-ID: <201901162233.x0GMX4cC027561@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: Zdenek Kabelac <zkabelac@sourceware.org>
+Date: Mon, 21 Jan 2019 06:54:51 -0500
+Subject: master - vdo: fix archived metadata comment
+Message-ID: <201901211154.x0LBspKN024387@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=b4c33829908015acc6ce0690ee5d33c1eb87e98e
-Commit:        b4c33829908015acc6ce0690ee5d33c1eb87e98e
-Parent:        1ed4b3f23baf13e224d0c24735304f872c0930e8
-Author:        Tony Asleson <tasleson@redhat.com>
-AuthorDate:    Wed Jan 16 15:27:55 2019 -0600
-Committer:     Tony Asleson <tasleson@redhat.com>
-CommitterDate: Wed Jan 16 16:29:05 2019 -0600
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=f87dd7b12745815c391257afc0b9631c708c2b6c
+Commit:        f87dd7b12745815c391257afc0b9631c708c2b6c
+Parent:        0d142f65141d591430ced6a7a7fcccb4d2198d28
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Mon Jan 14 16:21:02 2019 +0100
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Mon Jan 21 12:37:52 2019 +0100
 
-lvmdbusd: Correct object manager lookups
+vdo: fix archived metadata comment
 
-When we have two logical volumes which switch their names at the
-same time we are left with incorrect lookups.  Anytime we find
-an entry by doing a lookup by UUID or by name we will ensure
-that the lookups are indeed correct.
+lvm uses 'minimum_io_size' name to exactly match  VDO naming here,
+however in all common cases  _size  is using 'sector/512b' unit.
+But in this case the value is in bytes and can have only 2 values:
+either 512 or 4096.
 
-Resolves: https://bugzilla.redhat.com/show_bug.cgi?id=1642176
+It's probably not worth to rename it internaly, so we can just
+drop comment - instead of using 1 or 8.
+
+Thought let's think about it....
 ---
- daemons/lvmdbusd/objectmanager.py |   50 +++++++++++-------------------------
- 1 files changed, 15 insertions(+), 35 deletions(-)
+ WHATS_NEW     |    1 +
+ lib/vdo/vdo.c |    2 +-
+ 2 files changed, 2 insertions(+), 1 deletions(-)
 
-diff --git a/daemons/lvmdbusd/objectmanager.py b/daemons/lvmdbusd/objectmanager.py
-index 563b9ec..e40e9a1 100644
---- a/daemons/lvmdbusd/objectmanager.py
-+++ b/daemons/lvmdbusd/objectmanager.py
-@@ -189,8 +189,8 @@ class ObjectManager(AutomatedProperties):
- 			path = dbus_object.dbus_object_path()
- 			interfaces = dbus_object.interface()
+diff --git a/WHATS_NEW b/WHATS_NEW
+index 1187fb4..5bb5797 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.03.02 - 
+ ===================================
++  Drop misleadning comment for metadata minimum_io_size for VDO segment.
+   Add device hints to reduce scanning.
+   Introduce LVM_SUPPRESS_SYSLOG to suppress syslog usage by generator.
+   Fix generator quering lvmconfig unpresent config option.
+diff --git a/lib/vdo/vdo.c b/lib/vdo/vdo.c
+index c34eb93..ed051fc 100644
+--- a/lib/vdo/vdo.c
++++ b/lib/vdo/vdo.c
+@@ -308,7 +308,7 @@ static int _vdo_pool_text_export(const struct lv_segment *seg, struct formatter
+ 	if (vtp->use_metadata_hints)
+ 		outf(f, "use_metadata_hints = 1");
  
--			# print 'UN-Registering object path %s for %s' % \
--			#      (path, dbus_object.lvm_id)
-+			# print('UN-Registering object path %s for %s' %
-+			#		(path, dbus_object.lvm_id))
+-	outsize(f, vtp->minimum_io_size, "minimum_io_size = %u", vtp->minimum_io_size);
++	outf(f, "minimum_io_size = %u", vtp->minimum_io_size);
  
- 			self._lookup_remove(path)
- 
-@@ -240,39 +240,19 @@ class ObjectManager(AutomatedProperties):
- 				return lookup_rc
- 			return '/'
- 
--	def _uuid_verify(self, path, uuid, lvm_id):
-+	def _id_verify(self, path, uuid, lvm_id):
- 		"""
--		Ensure uuid is present for a successful lvm_id lookup
-+		Ensure our lookups are correct
- 		NOTE: Internal call, assumes under object manager lock
- 		:param path: 		Path to object we looked up
--		:param uuid: 		lvm uuid to verify
--		:param lvm_id:		lvm_id used to find object
-+		:param uuid: 		uuid lookup
-+		:param lvm_id:		lvm_id lookup
- 		:return: None
- 		"""
--		# This gets called when we found an object based on lvm_id, ensure
--		# uuid is correct too, as they can change. There is no durable
--		# non-changeable name in lvm
-+		# There is no durable non-changeable name in lvm
- 		if lvm_id != uuid:
--			if uuid and uuid not in self._id_to_object_path:
--				obj = self.get_object_by_path(path)
--				self._lookup_add(obj, path, lvm_id, uuid)
--
--	def _lvm_id_verify(self, path, uuid, lvm_id):
--		"""
--		Ensure lvm_id is present for a successful uuid lookup
--		NOTE: Internal call, assumes under object manager lock
--		:param path: 		Path to object we looked up
--		:param uuid: 		uuid used to find object
--		:param lvm_id:		lvm_id to verify
--		:return: None
--		"""
--		# This gets called when we found an object based on uuid, ensure
--		# lvm_id is correct too, as they can change.  There is no durable
--		# non-changeable name in lvm
--		if lvm_id != uuid:
--			if lvm_id and lvm_id not in self._id_to_object_path:
--				obj = self.get_object_by_path(path)
--				self._lookup_add(obj, path, lvm_id, uuid)
-+			obj = self.get_object_by_path(path)
-+			self._lookup_add(obj, path, lvm_id, uuid)
- 
- 	def _id_lookup(self, the_id):
- 		path = None
-@@ -339,22 +319,22 @@ class ObjectManager(AutomatedProperties):
- 				# Lets check for the uuid first
- 				path = self._id_lookup(uuid)
- 				if path:
--					# Verify the lvm_id is sane
--					self._lvm_id_verify(path, uuid, lvm_id)
-+					# Ensure table lookups are correct
-+					self._id_verify(path, uuid, lvm_id)
- 				else:
- 					# Unable to find by UUID, lets lookup by lvm_id
- 					path = self._id_lookup(lvm_id)
- 					if path:
--						# Verify the uuid is sane
--						self._uuid_verify(path, uuid, lvm_id)
-+						# Ensure table lookups are correct
-+						self._id_verify(path, uuid, lvm_id)
- 					else:
- 						# We have exhausted all lookups, let's create if we can
- 						if path_create:
- 							path = path_create()
- 							self._lookup_add(None, path, lvm_id, uuid)
- 
--			# print('get_object_path_by_lvm_id(%s, %s, %s, %s: return %s' %
--			# 	   (uuid, lvm_id, str(path_create), str(gen_new), path))
-+			# print('get_object_path_by_lvm_id(%s, %s, %s): return %s' %
-+			#	(uuid, lvm_id, str(path_create), path))
- 
- 			return path
- 
+ 	outsize(f, vtp->block_map_cache_size_mb * UINT64_C(2 * 1024),
+ 		"block_map_cache_size_mb = %u", vtp->block_map_cache_size_mb);
 
 
