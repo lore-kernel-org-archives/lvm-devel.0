@@ -1,60 +1,76 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Mon, 21 Jan 2019 06:54:51 -0500
-Subject: master - vdo: fix archived metadata comment
-Message-ID: <201901211154.x0LBspKN024387@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Mon, 21 Jan 2019 06:55:00 -0500
+Subject: master - vdo: update vdo profile
+Message-ID: <201901211155.x0LBt0nM024398@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=f87dd7b12745815c391257afc0b9631c708c2b6c
-Commit:        f87dd7b12745815c391257afc0b9631c708c2b6c
-Parent:        0d142f65141d591430ced6a7a7fcccb4d2198d28
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=28f3125aaa1d7843d2ce01d25b172478b0836bba
+Commit:        28f3125aaa1d7843d2ce01d25b172478b0836bba
+Parent:        f87dd7b12745815c391257afc0b9631c708c2b6c
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Mon Jan 14 16:21:02 2019 +0100
+AuthorDate:    Fri Jan 18 16:59:43 2019 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Mon Jan 21 12:37:52 2019 +0100
+CommitterDate: Mon Jan 21 12:38:00 2019 +0100
 
-vdo: fix archived metadata comment
+vdo: update vdo profile
 
-lvm uses 'minimum_io_size' name to exactly match  VDO naming here,
-however in all common cases  _size  is using 'sector/512b' unit.
-But in this case the value is in bytes and can have only 2 values:
-either 512 or 4096.
-
-It's probably not worth to rename it internaly, so we can just
-drop comment - instead of using 1 or 8.
-
-Thought let's think about it....
 ---
- WHATS_NEW     |    1 +
- lib/vdo/vdo.c |    2 +-
- 2 files changed, 2 insertions(+), 1 deletions(-)
+ conf/vdo-small.profile |   41 ++++++++++++++++++++---------------------
+ 1 files changed, 20 insertions(+), 21 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index 1187fb4..5bb5797 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.03.02 - 
- ===================================
-+  Drop misleadning comment for metadata minimum_io_size for VDO segment.
-   Add device hints to reduce scanning.
-   Introduce LVM_SUPPRESS_SYSLOG to suppress syslog usage by generator.
-   Fix generator quering lvmconfig unpresent config option.
-diff --git a/lib/vdo/vdo.c b/lib/vdo/vdo.c
-index c34eb93..ed051fc 100644
---- a/lib/vdo/vdo.c
-+++ b/lib/vdo/vdo.c
-@@ -308,7 +308,7 @@ static int _vdo_pool_text_export(const struct lv_segment *seg, struct formatter
- 	if (vtp->use_metadata_hints)
- 		outf(f, "use_metadata_hints = 1");
+diff --git a/conf/vdo-small.profile b/conf/vdo-small.profile
+index 0bd47b5..2044fc2 100644
+--- a/conf/vdo-small.profile
++++ b/conf/vdo-small.profile
+@@ -1,25 +1,24 @@
+ # Demo configuration for 'VDO' using less memory.
+-#
++# ~lvmconfig --type full | grep vdo
  
--	outsize(f, vtp->minimum_io_size, "minimum_io_size = %u", vtp->minimum_io_size);
-+	outf(f, "minimum_io_size = %u", vtp->minimum_io_size);
- 
- 	outsize(f, vtp->block_map_cache_size_mb * UINT64_C(2 * 1024),
- 		"block_map_cache_size_mb = %u", vtp->block_map_cache_size_mb);
+ allocation {
+-	vdo_use_compression = 1
+-	vdo_use_deduplication = 1
+-	vdo_emulate_512_sectors = 0
+-	vdo_block_map_cache_size_mb = 128
+-	vdo_block_map_period = 16380
+-	vdo_check_point_frequency = 0
+-	vdo_use_sparse_index = 0
+-	vdo_index_memory_size_mb = 256
+-	vdo_use_read_cache = 0
+-	vdo_read_cache_size_mb = 0
+-	vdo_slab_size_mb = 2048
+-
+-	vdo_ack_threads = 1
+-	vdo_bio_threads = 1
+-	vdo_bio_rotation = 64
+-	vdo_cpu_threads = 2
+-	vdo_hash_zone_threads = 1
+-	vdo_logical_threads = 1
+-	vdo_physical_threads = 1
+-	vdo_write_policy = "auto"
++	vdo_use_compression=1
++	vdo_use_deduplication=1
++	vdo_use_metadata_hints=1
++	vdo_minimum_io_size=4096
++	vdo_block_map_cache_size_mb=128
++	vdo_block_map_period=16380
++	vdo_check_point_frequency=0
++	vdo_use_sparse_index=0
++	vdo_index_memory_size_mb=256
++	vdo_slab_size_mb=2048
++	vdo_ack_threads=1
++	vdo_bio_threads=1
++	vdo_bio_rotation=64
++	vdo_cpu_threads=2
++	vdo_hash_zone_threads=1
++	vdo_logical_threads=1
++	vdo_physical_threads=1
++	vdo_write_policy="auto"
++	vdo_max_discard=1
+ }
 
 
