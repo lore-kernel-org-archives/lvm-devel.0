@@ -1,40 +1,40 @@
-From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Tue, 22 Jan 2019 08:36:32 -0500
-Subject: master - rpm: package lvmvdo man page
-Message-ID: <201901221336.x0MDaWhM032603@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: David Teigland <teigland@sourceware.org>
+Date: Mon, 28 Jan 2019 12:24:37 -0500
+Subject: master - vgscan: drop 'take a while' message
+Message-ID: <201901281724.x0SHObgh030166@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=2a45ef030060a28fa152f6245828a97df04c195c
-Commit:        2a45ef030060a28fa152f6245828a97df04c195c
-Parent:        2264399b0df9a5f81449fcabca891557a2df4026
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Jan 22 14:33:03 2019 +0100
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Tue Jan 22 14:35:47 2019 +0100
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=30ad845f3d140f6778775ae5fe901b5d7e4988bc
+Commit:        30ad845f3d140f6778775ae5fe901b5d7e4988bc
+Parent:        2a45ef030060a28fa152f6245828a97df04c195c
+Author:        David Teigland <teigland@redhat.com>
+AuthorDate:    Mon Jan 28 11:22:42 2019 -0600
+Committer:     David Teigland <teigland@redhat.com>
+CommitterDate: Mon Jan 28 11:22:42 2019 -0600
 
-rpm: package lvmvdo man page
+vgscan: drop 'take a while' message
 
+every command does this
 ---
- spec/packages.inc |    3 +++
- 1 files changed, 3 insertions(+), 0 deletions(-)
+ tools/vgscan.c |    2 --
+ 1 files changed, 0 insertions(+), 2 deletions(-)
 
-diff --git a/spec/packages.inc b/spec/packages.inc
-index 81ef539..196cbf6 100644
---- a/spec/packages.inc
-+++ b/spec/packages.inc
-@@ -148,6 +148,9 @@ fi
-   %{_mandir}/man8/lvmpolld.8.gz
-   %{_mandir}/man8/lvm-lvpoll.8.gz
- %endif
-+%if %{have_with vdo}
-+  %{_mandir}/man7/lvmvdo.7.gz
-+%endif
- %if %{enable_udev}
-  %{_udevdir}/11-dm-lvm.rules
-  %{_udevdir}/69-dm-lvm-metad.rules
+diff --git a/tools/vgscan.c b/tools/vgscan.c
+index 470e3d8..6138855 100644
+--- a/tools/vgscan.c
++++ b/tools/vgscan.c
+@@ -57,8 +57,6 @@ int vgscan(struct cmd_context *cmd, int argc, char **argv)
+ 		return ECMD_PROCESSED;
+ 	}
+ 
+-	log_print_unless_silent("Reading all physical volumes.  This may take a while...");
+-
+ 	maxret = process_each_vg(cmd, argc, argv, NULL, NULL, 0, 0, NULL, &_vgscan_single);
+ 
+ 	if (arg_is_set(cmd, mknodes_ARG)) {
 
 
