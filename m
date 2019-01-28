@@ -1,69 +1,47 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Mon, 28 Jan 2019 16:40:41 -0500
-Subject: master - thin: select chunk size as power of 2
-Message-ID: <201901282140.x0SLefwh002419@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Mon, 28 Jan 2019 16:40:46 -0500
+Subject: master - tests: rounding for pools changed to power of 2
+Message-ID: <201901282140.x0SLekVJ002429@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=78dd9d820da44c6b9907b481231745590e94613d
-Commit:        78dd9d820da44c6b9907b481231745590e94613d
-Parent:        58ad831c72b024233d91980f2269d0a26101ff99
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=ab1fd0cb37b75311e1ec4e13bbaea4a214b43285
+Commit:        ab1fd0cb37b75311e1ec4e13bbaea4a214b43285
+Parent:        78dd9d820da44c6b9907b481231745590e94613d
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Mon Jan 28 19:50:41 2019 +0100
+AuthorDate:    Mon Jan 28 22:05:17 2019 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Mon Jan 28 22:17:25 2019 +0100
+CommitterDate: Mon Jan 28 22:17:27 2019 +0100
 
-thin: select chunk size as power of 2
+tests: rounding for pools changed to power of 2
 
-Whenever thin-pool chunk size is unspecified and left for lvm calculation
-try to select the size as nearest highest power-of-2 instead of
-just being a multiple of 64KiB.
+Even with 64K chunk support, lvm2 will target power-of-2 chunks.
 ---
- WHATS_NEW                 |    1 +
- lib/metadata/thin_manip.c |   17 +++--------------
- 2 files changed, 4 insertions(+), 14 deletions(-)
+ test/shell/lvcreate-thin-big.sh |    8 +++-----
+ 1 files changed, 3 insertions(+), 5 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index 90739c9..29ade99 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.03.02 - 
- ===================================
-+  Thin-pool selects power-of-2 chunk size by default.
-   Cache selects power-of-2 chunk size by default.
-   Support reszing for VDOPoolLV and VDOLV.
-   Improve -lXXX%VG modifier which improves cache segment estimation.
-diff --git a/lib/metadata/thin_manip.c b/lib/metadata/thin_manip.c
-index 6b2b1e7..e1b3179 100644
---- a/lib/metadata/thin_manip.c
-+++ b/lib/metadata/thin_manip.c
-@@ -580,20 +580,9 @@ static uint32_t _estimate_chunk_size(uint32_t data_extents, uint32_t extent_size
- {
- 	uint32_t chunk_size = _estimate_size(data_extents, extent_size, metadata_size);
+diff --git a/test/shell/lvcreate-thin-big.sh b/test/shell/lvcreate-thin-big.sh
+index 0625a59..595b8a9 100644
+--- a/test/shell/lvcreate-thin-big.sh
++++ b/test/shell/lvcreate-thin-big.sh
+@@ -75,12 +75,10 @@ check lv_field $vg/pool1_tmeta size "2.50m"
+ check lv_field $vg/pool2_tmeta size "3.75m"
+ lvremove -ff $vg
  
--	if (attr & THIN_FEATURE_BLOCK_SIZE) {
--		/* Round up to 64KB */
--		chunk_size += DM_THIN_MIN_DATA_BLOCK_SIZE - 1;
--		chunk_size &= ~(uint32_t)(DM_THIN_MIN_DATA_BLOCK_SIZE - 1);
--	} else {
--		/* Round up to nearest power of 2 */
--		chunk_size--;
--		chunk_size |= chunk_size >> 1;
--		chunk_size |= chunk_size >> 2;
--		chunk_size |= chunk_size >> 4;
--		chunk_size |= chunk_size >> 8;
--		chunk_size |= chunk_size >> 16;
--		chunk_size++;
--	}
-+	/* Always round up to nearest power of 2 of 32-bit,
-+	 * even when pool supports multiple of 64KiB */
-+	chunk_size = 1 << (32 - clz(chunk_size - 1));
- 
- 	if (chunk_size < DM_THIN_MIN_DATA_BLOCK_SIZE)
- 		chunk_size = DM_THIN_MIN_DATA_BLOCK_SIZE;
+-# Block size of multiple 64KB needs >= 1.4
+-if aux have_thin 1 4 0 ; then
+-# Test chunk size is rounded to 64KB boundary
++# Test chunk size is rounded to power-of-2
+ lvcreate -L10G --poolmetadatasize 4M -T $vg/pool
+-check lv_field $vg/pool chunk_size "192.00k"
+-fi
++check lv_field $vg/pool chunk_size "256.00k"
++
+ # Old thinpool target required rounding to power of 2
+ aux lvmconf "global/thin_disabled_features = [ \"block_size\" ]"
+ lvcreate -L10G --poolmetadatasize 4M -T $vg/pool_old
 
 
