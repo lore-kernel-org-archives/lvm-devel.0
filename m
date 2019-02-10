@@ -1,58 +1,43 @@
-From: David Teigland <teigland@sourceware.org>
-Date: Tue, 5 Feb 2019 11:23:44 -0500
-Subject: master - apply obtain_device_list_from_udev to all libudev usage
-Message-ID: <201902051623.x15GNiN9018062@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: Daniel Moessner <dmoessne@redhat.com>
+Date: Sun, 10 Feb 2019 11:30:25 +0100
+Subject: Is a service restart needed when vg profile is changed ?
+Message-ID: <ae8959fb-6a91-9953-7264-e83c9fc36153@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=3ebce8dbd2d9afc031e0737f8feed796ec7a8df9
-Commit:        3ebce8dbd2d9afc031e0737f8feed796ec7a8df9
-Parent:        d19e3727951853093828b072e254e447f7d61c60
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Tue Feb 5 10:15:40 2019 -0600
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Tue Feb 5 10:15:40 2019 -0600
+Hi,
 
-apply obtain_device_list_from_udev to all libudev usage
+I am a bit uncertain if changes in a lvm profile need a restart of lvm 
+service.
+I do have a profile ` /etc/lvm/profile/myvg--my-pool-extend.profile` 
+whth the following content:
+~~~
+activation {
+ ??? thin_pool_autoextend_threshold=75
+ ??? thin_pool_autoextend_percent=30
 
-udev_dev_is_md_component and udev_dev_is_mpath_component
-are not used for obtaining the device list, but they still
-use libudev for device info.  When there are problems with
-udev, these functions can get stuck. So, use the existing
-obtain_device_list_from_udev config setting to also control
-whether these "is component" functions are used, which gives
-us a way to avoid using libudev entirely when it's causing
-problems.
----
- lib/device/dev-type.c |    6 ++++++
- 1 files changed, 6 insertions(+), 0 deletions(-)
+}
+~~~
 
-diff --git a/lib/device/dev-type.c b/lib/device/dev-type.c
-index 9278b51..e9106a9 100644
---- a/lib/device/dev-type.c
-+++ b/lib/device/dev-type.c
-@@ -1138,6 +1138,9 @@ int udev_dev_is_mpath_component(struct device *dev)
- 	const char *value;
- 	int ret = 0;
- 
-+	if (!obtain_device_list_from_udev())
-+		return 0;
-+
- 	if (!(udev_device = _udev_get_dev(dev)))
- 		return 0;
- 
-@@ -1167,6 +1170,9 @@ int udev_dev_is_md_component(struct device *dev)
- 	const char *value;
- 	int ret = 0;
- 
-+	if (!obtain_device_list_from_udev())
-+		return 0;
-+
- 	if (!(udev_device = _udev_get_dev(dev)))
- 		return 0;
- 
+and wonder if I change these values, if they are automatically applied 
+or a service needs restarted.
+
+lvm.conf(5) states:
+~~~
+lvm.conf is loaded during the initialisation phase of lvm(8). This file 
+can in turn lead to other files being loaded -
+settings read in later override earlier settings.? File timestamps are 
+checked between commands and if any
+have changed, all the files are reloaded.
+~~~
+
+so does this apply to profile files as well and is the timestamp change 
+also be caught up by dmeventd ?
+
+Thanks,
+daniel
 
 
