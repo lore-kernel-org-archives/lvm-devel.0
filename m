@@ -1,41 +1,47 @@
-From: Petr Rockai <mornfall@fedoraproject.org>
-Date: Tue,  4 Jun 2013 19:23:35 +0000 (UTC)
-Subject: dev-mornfall-activate - config: remove typo in handling devices/write_cache_state config
-Message-ID: <20130604192335.B3B0060EDA@fedorahosted.org>
+From: Marcos Paulo de Souza <marcos.souza.org@gmail.com>
+Date: Wed, 13 Feb 2019 08:57:41 -0200
+Subject: 2018-12-7-stable - pvscan.service.in: Move StartLimitInterval to Service section
+Message-ID: <20190213105741.110585-1-marcos.souza.org@gmail.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=e7ccad2ef0e813f6ca42ab5090e76aa5bee05912
-Commit:        e7ccad2ef0e813f6ca42ab5090e76aa5bee05912
-Parent:        91c9771fc3c97b0ff1169cf81f29918d3e3a501d
-Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Thu Apr 11 16:32:10 2013 +0200
-Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Thu Apr 11 16:32:10 2013 +0200
+From: Marcos Paulo de Souza <mpdesouza@suse.de>
 
-config: remove typo in handling devices/write_cache_state config
+Without this patch, pvscan service file contains StartLimitInterval at
+the Unit section, which trigger an error:
 
-...which caused the cmd->dump_filter to be always set irrespective
-of the actual devices/write_cache_state setting.
+systemd[1]: [/etc/systemd/system/lvm2-pvscan at .service:5] Unknown lvalue 'StartLimitInterval' in section 'Unit'
+
+Moving StartLimitInterval to Service section fixes the issue.
+
+Signed-off-by: Marcos Paulo de Souza <mpdesouza@suse.de>
 ---
- lib/commands/toolcontext.c |    2 +-
- 1 files changed, 1 insertions(+), 1 deletions(-)
+ This patch applies in version v2_02_183.
 
-diff --git a/lib/commands/toolcontext.c b/lib/commands/toolcontext.c
-index 5dff340..c42a0bf 100644
---- a/lib/commands/toolcontext.c
-+++ b/lib/commands/toolcontext.c
-@@ -932,7 +932,7 @@ static int _init_filters(struct cmd_context *cmd, unsigned load_persistent_cache
- 	}
- 
- 	/* Should we ever dump persistent filter state? */
--	if (find_config_tree_bool(cmd, devices_write_cache_state_CFG));
-+	if (find_config_tree_bool(cmd, devices_write_cache_state_CFG))
- 		cmd->dump_filter = 1;
- 
- 	if (!*cmd->system_dir)
+ scripts/lvm2_pvscan_systemd_red_hat at .service.in | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/scripts/lvm2_pvscan_systemd_red_hat at .service.in b/scripts/lvm2_pvscan_systemd_red_hat at .service.in
+index 839bfd177..f0bbd462d 100644
+--- a/scripts/lvm2_pvscan_systemd_red_hat at .service.in
++++ b/scripts/lvm2_pvscan_systemd_red_hat at .service.in
+@@ -2,7 +2,6 @@
+ Description=LVM2 PV scan on device %i
+ Documentation=man:pvscan(8)
+ DefaultDependencies=no
+-StartLimitInterval=0
+ BindsTo=dev-block-%i.device
+ Requires=lvm2-lvmetad.socket
+ After=lvm2-lvmetad.socket lvm2-lvmetad.service
+@@ -14,3 +13,4 @@ Type=oneshot
+ RemainAfterExit=yes
+ ExecStart=@SBINDIR@/lvm pvscan --cache --activate ay %i
+ ExecStop=@SBINDIR@/lvm pvscan --cache %i
++StartLimitInterval=0
+-- 
+2.16.4
 
 
