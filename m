@@ -1,39 +1,121 @@
 From: David Teigland <teigland@sourceware.org>
-Date: Tue, 26 Feb 2019 16:55:11 -0500
-Subject: master - config: make hints setting commented
-Message-ID: <201902262155.x1QLtBAg012726@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Wed, 13 Feb 2019 16:26:41 -0500
+Subject: master - hints: fix recreating hints from pvscan
+Message-ID: <201902132126.x1DLQfZd031202@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=c8fc18e8bfbf6e81fc26c7cde780711db748f112
-Commit:        c8fc18e8bfbf6e81fc26c7cde780711db748f112
-Parent:        90149c303e3c0d2d09b14d218924d0bc6c91469d
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=0aa51a2f6129bf05d9897894a7abae627f05ce45
+Commit:        0aa51a2f6129bf05d9897894a7abae627f05ce45
+Parent:        3ebce8dbd2d9afc031e0737f8feed796ec7a8df9
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Tue Feb 26 15:54:30 2019 -0600
+AuthorDate:    Wed Feb 13 15:23:43 2019 -0600
 Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Tue Feb 26 15:54:30 2019 -0600
+CommitterDate: Wed Feb 13 15:23:43 2019 -0600
 
-config: make hints setting commented
+hints: fix recreating hints from pvscan
 
+When aay was included in the pvscan --cache command,
+the activation part was complaining about the unusual
+state of the hint file since it had been recreated
+just prior.
 ---
- lib/config/config_settings.h |    2 +-
- 1 files changed, 1 insertions(+), 1 deletions(-)
+ lib/label/hints.c |   30 +++++++++++++++++++++++++++++-
+ lib/label/hints.h |    2 ++
+ tools/pvscan.c    |   11 +++++++----
+ 3 files changed, 38 insertions(+), 5 deletions(-)
 
-diff --git a/lib/config/config_settings.h b/lib/config/config_settings.h
-index c8e629f..fc66117 100644
---- a/lib/config/config_settings.h
-+++ b/lib/config/config_settings.h
-@@ -255,7 +255,7 @@ cfg(devices_external_device_info_source_CFG, "external_device_info_source", devi
- 	"    compiled with udev support.\n"
- 	"#\n")
+diff --git a/lib/label/hints.c b/lib/label/hints.c
+index 4fe44b0..a2e7646 100644
+--- a/lib/label/hints.c
++++ b/lib/label/hints.c
+@@ -1026,6 +1026,34 @@ void clear_hint_file(struct cmd_context *cmd)
+ }
  
--cfg(devices_hints_CFG, "hints", devices_CFG_SECTION, 0, CFG_TYPE_STRING, DEFAULT_HINTS, vsn(2, 3, 2), NULL, 0, NULL,
-+cfg(devices_hints_CFG, "hints", devices_CFG_SECTION, CFG_DEFAULT_COMMENTED, CFG_TYPE_STRING, DEFAULT_HINTS, vsn(2, 3, 2), NULL, 0, NULL,
- 	"Use a local file to remember which devices have PVs on them.\n"
- 	"Some commands will use this as an optimization to reduce device\n"
- 	"scanning, and will only scan the listed PVs. Removing the hint file\n"
+ /*
++ * This is only used at the start of pvscan --cache [-aay] to
++ * set up for recreating the hint file.
++ */
++void pvscan_recreate_hints_begin(struct cmd_context *cmd)
++{
++	/* No commands are using hints. */
++	if (!cmd->enable_hints)
++		return;
++
++	log_debug("pvscan_recreate_hints_begin");
++
++	if (!_touch_hints())
++		return;
++
++	/* limit potential delay blocking on hints lock next */
++	if (!_touch_nohints())
++		stack;
++
++	if (!_lock_hints(LOCK_EX, 0))
++		stack;
++
++	_unlink_nohints();
++
++	if (!_clear_hints(cmd))
++		stack;
++}
++
++/*
+  * This is used when pvscan --cache sees a new PV, which
+  * means we should refresh hints.  It could catch some case
+  * which the other methods of detecting stale hints may miss.
+@@ -1136,7 +1164,7 @@ int get_hints(struct cmd_context *cmd, struct dm_list *hints, int *newhints,
+ 	 * so this has to be checked before the cmd->use_hints check.
+ 	 */
+ 	if (cmd->pvscan_recreate_hints) {
+-		/* clear_hint_file already locked hints ex */
++		/* pvscan_recreate_hints_begin already locked hints ex */
+ 		/* create new hints after scan */
+ 		log_debug("get_hints: pvscan recreate");
+ 		*newhints = NEWHINTS_FILE;
+diff --git a/lib/label/hints.h b/lib/label/hints.h
+index 469e8c4..0134f1e 100644
+--- a/lib/label/hints.h
++++ b/lib/label/hints.h
+@@ -37,5 +37,7 @@ int validate_hints(struct cmd_context *cmd, struct dm_list *hints);
+ 
+ void hints_exit(void);
+ 
++void pvscan_recreate_hints_begin(struct cmd_context *cmd);
++
+ #endif
+ 
+diff --git a/tools/pvscan.c b/tools/pvscan.c
+index 098c502..55b6f5f 100644
+--- a/tools/pvscan.c
++++ b/tools/pvscan.c
+@@ -660,17 +660,20 @@ int pvscan_cache_cmd(struct cmd_context *cmd, int argc, char **argv)
+ 	if (!argc && !devno_args) {
+ 		/*
+ 		 * pvscan --cache removes existing hints and recreates new ones.
+-		 * We begin by clearing hints at the start of the command like
+-		 * vgcreate would do.  The pvscan_recreate_hints flag is used
+-		 * to enable the special case hint recreation in label_scan.
++		 * We begin by clearing hints at the start of the command.
++		 * The pvscan_recreate_hints flag is used to enable the
++		 * special case hint recreation in label_scan.
+ 		 */
+ 		cmd->pvscan_recreate_hints = 1;
+-		clear_hint_file(cmd);
++		pvscan_recreate_hints_begin(cmd);
+ 
+ 		log_verbose("pvscan all devices.");
+ 		_online_pvid_files_remove();
+ 		_online_pvscan_all_devs(cmd, NULL, NULL);
+ 		all_vgs = 1;
++
++		cmd->pvscan_recreate_hints = 0;
++		cmd->use_hints = 0;
+ 		goto activate;
+ 	}
+ 
 
 
