@@ -1,83 +1,164 @@
-From: Petr Rockai <mornfall@fedoraproject.org>
-Date: Tue,  4 Jun 2013 19:23:58 +0000 (UTC)
-Subject: dev-mornfall-activate - libdaemon: Print a diagnostic when we fail to lock the pidfile.
-Message-ID: <20130604192358.9D81D60E4F@fedorahosted.org>
+From: David Teigland <teigland@sourceware.org>
+Date: Wed, 20 Feb 2019 17:47:14 -0500
+Subject: stable-2.02 - tests: set scan_lvs=1 in tests that stack PVs on LVs
+Message-ID: <201902202247.x1KMlERK005106@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=dce8d06af7e5a14a1507bea0e64e6cc27556cbc7
-Commit:        dce8d06af7e5a14a1507bea0e64e6cc27556cbc7
-Parent:        9495a3d807b890f7a639e5761b2b37ba495b5d9b
-Author:        Petr Rockai <prockai@redhat.com>
-AuthorDate:    Mon Apr 15 09:43:30 2013 +0200
-Committer:     Petr Rockai <prockai@redhat.com>
-CommitterDate: Mon Apr 15 16:07:07 2013 +0200
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=7f56908c2beb6161256af4ccdbeaf86309a9b6cf
+Commit:        7f56908c2beb6161256af4ccdbeaf86309a9b6cf
+Parent:        427e8ba3e3186e291ff26f014003d149da6ec2a8
+Author:        David Teigland <teigland@redhat.com>
+AuthorDate:    Wed Feb 20 13:31:30 2019 -0600
+Committer:     David Teigland <teigland@redhat.com>
+CommitterDate: Wed Feb 20 14:32:01 2019 -0600
 
-libdaemon: Print a diagnostic when we fail to lock the pidfile.
+tests: set scan_lvs=1 in tests that stack PVs on LVs
 
 ---
- libdaemon/server/daemon-server.c |   18 +++++++++++++-----
- 1 files changed, 13 insertions(+), 5 deletions(-)
+ test/shell/discards-thin.sh           |    2 ++
+ test/shell/lvconvert-thin.sh          |    2 ++
+ test/shell/lvcreate-large-raid10.sh   |    1 +
+ test/shell/lvcreate-large.sh          |    2 ++
+ test/shell/pvcreate-restore.sh        |    2 ++
+ test/shell/pvremove-thin.sh           |    2 ++
+ test/shell/snapshot-remove-dmsetup.sh |    2 ++
+ test/shell/snapshot-usage-exa.sh      |    2 ++
+ test/shell/snapshot-usage.sh          |    2 ++
+ test/shell/vgsplit-stacked.sh         |    2 ++
+ 10 files changed, 19 insertions(+), 0 deletions(-)
 
-diff --git a/libdaemon/server/daemon-server.c b/libdaemon/server/daemon-server.c
-index 735a0ea..1db7ca7 100644
---- a/libdaemon/server/daemon-server.c
-+++ b/libdaemon/server/daemon-server.c
-@@ -52,6 +52,8 @@ static void _exit_handler(int sig __attribute__((unused)))
- 	_shutdown_requested = 1;
- }
+diff --git a/test/shell/discards-thin.sh b/test/shell/discards-thin.sh
+index f27d4c3..3564a87 100644
+--- a/test/shell/discards-thin.sh
++++ b/test/shell/discards-thin.sh
+@@ -25,6 +25,8 @@ export LVM_TEST_THIN_REPAIR_CMD=${LVM_TEST_THIN_REPAIR_CMD-/bin/false}
+ #
+ aux have_thin 1 1 0 || skip
  
-+#define EXIT_ALREADYRUNNING 13
++aux lvmconf 'devices/scan_lvs = 1'
 +
- #ifdef linux
+ aux prepare_vg 2 64
+ get_devs
  
- #include <stddef.h>
-@@ -261,7 +263,7 @@ static void remove_lockfile(const char *file)
- 		perror("unlink failed");
- }
+diff --git a/test/shell/lvconvert-thin.sh b/test/shell/lvconvert-thin.sh
+index 1f8d2ed..731c45b 100644
+--- a/test/shell/lvconvert-thin.sh
++++ b/test/shell/lvconvert-thin.sh
+@@ -17,6 +17,8 @@ export LVM_TEST_THIN_REPAIR_CMD=${LVM_TEST_THIN_REPAIR_CMD-/bin/false}
  
--static void _daemonise(void)
-+static void _daemonise(daemon_state s)
- {
- 	int child_status;
- 	int fd;
-@@ -296,8 +298,14 @@ static void _daemonise(void)
- 		if (_shutdown_requested) /* Child has signaled it is ok - we can exit now */
- 			exit(0);
+ . lib/inittest
  
--		/* Problem with child.  Determine what it is by exit code */
--		fprintf(stderr, "Child exited with code %d\n", WEXITSTATUS(child_status));
-+		switch (WEXITSTATUS(child_status)) {
-+		case EXIT_ALREADYRUNNING:
-+			fprintf(stderr, "Failed to acquire lock on %s. Already running?\n", s.pidfile);
-+			break;
-+		default:
-+			/* Problem with child.  Determine what it is by exit code */
-+			fprintf(stderr, "Child exited with code %d\n", WEXITSTATUS(child_status));
-+		}
- 		exit(WEXITSTATUS(child_status));
- 	}
++aux lvmconf 'devices/scan_lvs = 1'
++
+ prepare_lvs() {
+ 	lvremove -f $vg
+ 	lvcreate -L10M -n $lv1 $vg
+diff --git a/test/shell/lvcreate-large-raid10.sh b/test/shell/lvcreate-large-raid10.sh
+index a46be37..1ad09aa 100644
+--- a/test/shell/lvcreate-large-raid10.sh
++++ b/test/shell/lvcreate-large-raid10.sh
+@@ -20,6 +20,7 @@ SKIP_WITH_LVMPOLLD=1
+ # FIXME  update test to make something useful on <16T
+ aux can_use_16T || skip
+ aux have_raid 1 3 0 || skip
++aux lvmconf 'devices/scan_lvs = 1'
  
-@@ -464,7 +472,7 @@ void daemon_start(daemon_state s)
- #endif
+ aux prepare_vg 5
  
- 	if (!s.foreground)
--		_daemonise();
-+		_daemonise(s);
+diff --git a/test/shell/lvcreate-large.sh b/test/shell/lvcreate-large.sh
+index 473b0ed..b1cb0b0 100644
+--- a/test/shell/lvcreate-large.sh
++++ b/test/shell/lvcreate-large.sh
+@@ -17,6 +17,8 @@ SKIP_WITH_LVMPOLLD=1
  
- 	s.log = &_log;
- 	s.log->name = s.name;
-@@ -481,7 +489,7 @@ void daemon_start(daemon_state s)
- 		 * after this point.
- 		 */
- 		if (dm_create_lockfile(s.pidfile) == 0)
--			exit(1);
-+			exit(EXIT_ALREADYRUNNING);
+ . lib/inittest
  
- 		(void) dm_prepare_selinux_context(NULL, 0);
- 	}
++aux lvmconf 'devices/scan_lvs = 1'
++
+ # FIXME  update test to make something useful on <16T
+ aux can_use_16T || skip
+ 
+diff --git a/test/shell/pvcreate-restore.sh b/test/shell/pvcreate-restore.sh
+index d0b46eb..789f45c 100644
+--- a/test/shell/pvcreate-restore.sh
++++ b/test/shell/pvcreate-restore.sh
+@@ -15,6 +15,8 @@ SKIP_WITH_LVMPOLLD=1
+ 
+ . lib/inittest
+ 
++aux lvmconf 'devices/scan_lvs = 1'
++
+ aux prepare_vg 4
+ 
+ lvcreate --type snapshot -s -L10 -n $lv1 $vg --virtualsize 2T
+diff --git a/test/shell/pvremove-thin.sh b/test/shell/pvremove-thin.sh
+index 9859b6c..84a2a55 100644
+--- a/test/shell/pvremove-thin.sh
++++ b/test/shell/pvremove-thin.sh
+@@ -18,6 +18,8 @@ SKIP_WITH_LVMPOLLD=1
+ 
+ . lib/inittest
+ 
++aux lvmconf 'devices/scan_lvs = 1'
++
+ aux prepare_vg
+ 
+ aux have_thin 1 8 0 || skip
+diff --git a/test/shell/snapshot-remove-dmsetup.sh b/test/shell/snapshot-remove-dmsetup.sh
+index a7925d5..a234e5a 100644
+--- a/test/shell/snapshot-remove-dmsetup.sh
++++ b/test/shell/snapshot-remove-dmsetup.sh
+@@ -19,6 +19,8 @@ SKIP_WITH_LVMPOLLD=1
+ 
+ . lib/inittest
+ 
++aux lvmconf 'devices/scan_lvs = 1'
++
+ which mkfs.ext2 || skip
+ 
+ aux prepare_vg 5
+diff --git a/test/shell/snapshot-usage-exa.sh b/test/shell/snapshot-usage-exa.sh
+index 5d666bf..f537f0d 100644
+--- a/test/shell/snapshot-usage-exa.sh
++++ b/test/shell/snapshot-usage-exa.sh
+@@ -18,6 +18,8 @@ SKIP_WITH_LVMPOLLD=1
+ 
+ . lib/inittest
+ 
++aux lvmconf 'devices/scan_lvs = 1'
++
+ aux can_use_16T || skip
+ 
+ aux prepare_pvs 1
+diff --git a/test/shell/snapshot-usage.sh b/test/shell/snapshot-usage.sh
+index bcfa16a..5cfdae6 100644
+--- a/test/shell/snapshot-usage.sh
++++ b/test/shell/snapshot-usage.sh
+@@ -17,6 +17,8 @@ SKIP_WITH_LVMPOLLD=1
+ 
+ . lib/inittest
+ 
++aux lvmconf 'devices/scan_lvs = 1'
++
+ MKFS=mkfs.ext2
+ which $MKFS || skip
+ 
+diff --git a/test/shell/vgsplit-stacked.sh b/test/shell/vgsplit-stacked.sh
+index 331ee8e..09af3f7 100644
+--- a/test/shell/vgsplit-stacked.sh
++++ b/test/shell/vgsplit-stacked.sh
+@@ -15,6 +15,8 @@ SKIP_WITH_LVMPOLLD=1
+ 
+ . lib/inittest
+ 
++aux lvmconf 'devices/scan_lvs = 1'
++
+ aux extend_filter_LVMTEST
+ aux prepare_pvs 3
+ 
 
 
