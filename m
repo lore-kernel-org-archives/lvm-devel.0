@@ -1,151 +1,294 @@
-From: Petr Rockai <mornfall@fedoraproject.org>
-Date: Tue,  4 Jun 2013 19:24:19 +0000 (UTC)
-Subject: dev-mornfall-activate - dmeventd: convert union to struct members
-Message-ID: <20130604192419.C058E6119A@fedorahosted.org>
+From: David Teigland <teigland@sourceware.org>
+Date: Thu, 21 Feb 2019 16:31:50 -0500
+Subject: master - pvscan: fix autoactivation from concurrent pvscans
+Message-ID: <201902212131.x1LLVosA001227@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=5ea466673af377328a7ed50d6fb24e66a478b44b
-Commit:        5ea466673af377328a7ed50d6fb24e66a478b44b
-Parent:        45f396f2a075054f4e047abdef5eafffca72a281
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Apr 19 20:44:20 2013 +0200
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Sun Apr 21 23:01:35 2013 +0200
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=f0089472e7fd679acbc004daf4b35e9a86fc11a9
+Commit:        f0089472e7fd679acbc004daf4b35e9a86fc11a9
+Parent:        71a302effe82f1cc89f0b26b358493cfaaed7de7
+Author:        David Teigland <teigland@redhat.com>
+AuthorDate:    Wed Feb 13 13:35:24 2019 -0600
+Committer:     David Teigland <teigland@redhat.com>
+CommitterDate: Wed Feb 20 16:33:59 2019 -0600
 
-dmeventd: convert union to struct members
+pvscan: fix autoactivation from concurrent pvscans
 
-Sharing char* with field has a problem in error path,
-when we allocate event, but fail to allocate timeout string.
-Instead of creating complicated error paths to resolve
-it individually stop using unions, and let the resource
-to be released in a simple _free_message().
+Use a file lock to ensure that only one pvscan will do
+initialization of pvs_online, otherwise multiple concurrent
+pvscans may all see an empty pvs_online directory and
+do initialization.
+
+The pvscan that is doing initialization should also only
+attempt to activate complete VGs.
 ---
- WHATS_NEW_DM                |    1 +
- daemons/dmeventd/dmeventd.c |   54 ++++++++++++++++---------------------------
- 2 files changed, 21 insertions(+), 34 deletions(-)
+ tools/pvscan.c |  144 ++++++++++++++++++++++++++++++++++++++++++++++---------
+ 1 files changed, 120 insertions(+), 24 deletions(-)
 
-diff --git a/WHATS_NEW_DM b/WHATS_NEW_DM
-index eff6bd6..6e45a4c 100644
---- a/WHATS_NEW_DM
-+++ b/WHATS_NEW_DM
-@@ -1,5 +1,6 @@
- Version 1.02.78 - 
- ===================================
-+  Update dmevent structure message_data to simplify/fix error path handling.
-   Validate passed params to dm_get_status_raid/thin/thin_pool(). 
-   Fix 'dmsetup splitname -o' to not fail if used without '-c' switch (1.02.68).
-   Add dm_config_write_{node_out/one_node_out} for enhanced config output.
-diff --git a/daemons/dmeventd/dmeventd.c b/daemons/dmeventd/dmeventd.c
-index 06c0c92..35a2b25 100644
---- a/daemons/dmeventd/dmeventd.c
-+++ b/daemons/dmeventd/dmeventd.c
-@@ -167,14 +167,10 @@ struct message_data {
- 	char *id;
- 	char *dso_name;		/* Name of DSO. */
- 	char *device_uuid;	/* Mapped device path. */
--	union {
--		char *str;	/* Events string as fetched from message. */
--		enum dm_event_mask field;	/* Events bitfield. */
--	} events;
--	union {
--		char *str;
--		uint32_t secs;
--	} timeout;
-+	char *events_str;	/* Events string as fetched from message. */
-+	enum dm_event_mask events_field;	/* Events bitfield. */
-+	char *timeout_str;
-+	uint32_t timeout_secs;
- 	struct dm_event_daemon_message *msg;	/* Pointer to message buffer. */
+diff --git a/tools/pvscan.c b/tools/pvscan.c
+index 55b6f5f..5928f7e 100644
+--- a/tools/pvscan.c
++++ b/tools/pvscan.c
+@@ -20,6 +20,7 @@
+ #include "lib/label/hints.h"
+ 
+ #include <dirent.h>
++#include <sys/file.h>
+ 
+ struct pvscan_params {
+ 	int new_pvs_found;
+@@ -33,10 +34,61 @@ struct pvscan_params {
  };
  
-@@ -235,8 +231,8 @@ static struct thread_status *_alloc_thread_status(struct message_data *data,
- 	ret->device.name = NULL;
- 	ret->device.major = ret->device.minor = 0;
- 	ret->dso_data = dso_data;
--	ret->events = data->events.field;
--	ret->timeout = data->timeout.secs;
-+	ret->events = data->events_field;
-+	ret->timeout = data->timeout_secs;
- 	dm_list_init(&ret->timeout_list);
+ struct pvscan_aa_params {
+-	int refresh_all;
+ 	unsigned int activate_errors;
+ };
  
- 	return ret;
-@@ -325,9 +321,9 @@ static void _free_message(struct message_data *message_data)
- {
- 	dm_free(message_data->id);
- 	dm_free(message_data->dso_name);
--
- 	dm_free(message_data->device_uuid);
--
-+	dm_free(message_data->events_str);
-+	dm_free(message_data->timeout_str);
++static const char *_online_file = DEFAULT_RUN_DIR "/pvs_online_lock";
++static int _online_fd = -1;
++
++static int _lock_online(int mode, int nonblock)
++{
++	int fd;
++	int op = mode;
++	int ret;
++
++	if (nonblock)
++		op |= LOCK_NB;
++
++	if (_online_fd != -1) {
++		log_warn("lock_online existing fd %d", _online_fd);
++		return 0;
++	}
++
++	fd = open(_online_file, O_RDWR | S_IRUSR | S_IWUSR);
++	if (fd < 0) {
++		log_debug("lock_online open errno %d", errno);
++		return 0;
++	}
++
++	ret = flock(fd, op);
++	if (!ret) {
++		_online_fd = fd;
++		return 1;
++	}
++
++	if (close(fd))
++		stack;
++	return 0;
++}
++
++static void _unlock_online(void)
++{
++	int ret;
++
++	if (_online_fd == -1) {
++		log_warn("unlock_online no existing fd");
++		return;
++	}
++
++	ret = flock(_online_fd, LOCK_UN);
++	if (ret)
++		log_warn("unlock_online flock errno %d", errno);
++
++	if (close(_online_fd))
++		stack;
++	_online_fd = -1;
++}
++
+ static int _pvscan_display_pv(struct cmd_context *cmd,
+ 				  struct physical_volume *pv,
+ 				  struct pvscan_params *params)
+@@ -344,6 +396,20 @@ static void _online_pvid_dir_setup(void)
+ 		log_debug("Failed to create %s", _pvs_online_dir);
  }
  
- /* Parse a register message from the client. */
-@@ -347,25 +343,15 @@ static int _parse_message(struct message_data *message_data)
- 	if (_fetch_string(&message_data->id, &p, ' ') &&
- 	    _fetch_string(&message_data->dso_name, &p, ' ') &&
- 	    _fetch_string(&message_data->device_uuid, &p, ' ') &&
--	    _fetch_string(&message_data->events.str, &p, ' ') &&
--	    _fetch_string(&message_data->timeout.str, &p, ' ')) {
--		if (message_data->events.str) {
--			enum dm_event_mask i = atoi(message_data->events.str);
++static void _online_file_setup(void)
++{
++	FILE *fp;
++	struct stat st;
++
++	if (!stat(_online_file, &st))
++		return;
++
++	if (!(fp = fopen(_online_file, "w")))
++		return;
++	if (fclose(fp))
++		stack;
++}
++
+ static int _online_pvid_files_missing(void)
+ {
+ 	DIR *dir;
+@@ -587,12 +653,12 @@ static int _pvscan_aa_single(struct cmd_context *cmd, const char *vg_name,
+ }
+ 
+ static int _pvscan_aa(struct cmd_context *cmd, struct pvscan_aa_params *pp,
+-		      int all_vgs, struct dm_list *vgnames)
++		      struct dm_list *vgnames)
+ {
+ 	struct processing_handle *handle = NULL;
+ 	int ret;
+ 
+-	if (!all_vgs && dm_list_empty(vgnames)) {
++	if (dm_list_empty(vgnames)) {
+ 		log_debug("No VGs to autoactivate.");
+ 		return ECMD_PROCESSED;
+ 	}
+@@ -604,11 +670,6 @@ static int _pvscan_aa(struct cmd_context *cmd, struct pvscan_aa_params *pp,
+ 
+ 	handle->custom_handle = pp;
+ 
+-	if (all_vgs) {
+-		cmd->cname->flags |= ALL_VGS_IS_DEFAULT;
+-		pp->refresh_all = 1;
+-	}
 -
--			/*
--			 * Free string representaion of events.
--			 * Not needed an more.
--			 */
--			dm_free(message_data->events.str);
--			message_data->events.field = i;
--		}
--		if (message_data->timeout.str) {
--			uint32_t secs = atoi(message_data->timeout.str);
--			dm_free(message_data->timeout.str);
--			message_data->timeout.secs = secs ? secs :
--			    DM_EVENT_DEFAULT_TIMEOUT;
--		}
+ 	ret = process_each_vg(cmd, 0, NULL, NULL, vgnames, READ_FOR_UPDATE, 0, handle, _pvscan_aa_single);
+ 
+ 	destroy_processing_handle(cmd, handle);
+@@ -620,7 +681,8 @@ int pvscan_cache_cmd(struct cmd_context *cmd, int argc, char **argv)
+ {
+ 	struct pvscan_aa_params pp = { 0 };
+ 	struct dm_list single_devs;
+-	struct dm_list found_vgnames;
++	struct dm_list vgnames;
++	struct dm_list *complete_vgnames = NULL;
+ 	struct device *dev;
+ 	struct device_list *devl;
+ 	const char *pv_name;
+@@ -631,13 +693,15 @@ int pvscan_cache_cmd(struct cmd_context *cmd, int argc, char **argv)
+ 	struct arg_value_group_list *current_group;
+ 	dev_t devno;
+ 	int do_activate = arg_is_set(cmd, activate_ARG);
+-	int all_vgs = 0;
+ 	int add_errors = 0;
+ 	int add_single_count = 0;
+ 	int ret = ECMD_PROCESSED;
+ 
+ 	dm_list_init(&single_devs);
+-	dm_list_init(&found_vgnames);
++	dm_list_init(&vgnames);
++
++	if (do_activate)
++		complete_vgnames = &vgnames;
+ 
+ 	if (arg_is_set(cmd, major_ARG) + arg_is_set(cmd, minor_ARG))
+ 		devno_args = 1;
+@@ -648,6 +712,7 @@ int pvscan_cache_cmd(struct cmd_context *cmd, int argc, char **argv)
+ 	}
+ 
+ 	_online_pvid_dir_setup();
++	_online_file_setup();
+ 	
+ 	if (!lock_vol(cmd, VG_GLOBAL, LCK_VG_READ, NULL)) {
+ 		log_error("Unable to obtain global lock.");
+@@ -667,22 +732,53 @@ int pvscan_cache_cmd(struct cmd_context *cmd, int argc, char **argv)
+ 		cmd->pvscan_recreate_hints = 1;
+ 		pvscan_recreate_hints_begin(cmd);
+ 
+-		log_verbose("pvscan all devices.");
++		_lock_online(LOCK_EX, 0);
++		log_verbose("pvscan all devices for requested refresh.");
+ 		_online_pvid_files_remove();
+-		_online_pvscan_all_devs(cmd, NULL, NULL);
+-		all_vgs = 1;
 -
-+	    _fetch_string(&message_data->events_str, &p, ' ') &&
-+	    _fetch_string(&message_data->timeout_str, &p, ' ')) {
-+		if (message_data->events_str)
-+			message_data->events_field =
-+				atoi(message_data->events_str);
-+		if (message_data->timeout_str)
-+			message_data->timeout_secs =
-+				atoi(message_data->timeout_str)
-+				? : DM_EVENT_DEFAULT_TIMEOUT;
- 		ret = 1;
+-		cmd->pvscan_recreate_hints = 0;
+-		cmd->use_hints = 0;
++		/* identify complete vgs, and only activate those vgs */
++		_online_pvscan_all_devs(cmd, complete_vgnames, NULL);
++		_unlock_online();
+ 		goto activate;
  	}
  
-@@ -1025,7 +1011,7 @@ static int _register_for_event(struct message_data *message_data)
++	/*
++	 * Initialization case:
++	 * lock_online ex
++	 * if empty
++	 * pvscan all
++	 * create pvid files
++	 * identify complete vgs
++	 * unlock_online
++	 * activate complete vgs
++	 *
++	 * Non-initialization case:
++	 * lock_online ex
++	 * if not empty
++	 * unlock_unlock
++	 * pvscan devs
++	 * create pvid files
++	 * identify complete vgs
++	 * activate complete vgs
++	 *
++	 * In the non-init case, a VG with two PVs, where both PVs appear at once,
++	 * two parallel pvscans for each PV create the pvid files for each PV in
++	 * parallel, then both pvscans see the vg has completed, and both pvscans
++	 * activate the VG in parallel.  The activations should be serialized by
++	 * the VG lock.
++	 */
++
++	_lock_online(LOCK_EX, 0);
++
+ 	if (_online_pvid_files_missing()) {
+ 		log_verbose("pvscan all devices to initialize available PVs.");
+ 		_online_pvid_files_remove();
+-		_online_pvscan_all_devs(cmd, NULL, NULL);
+-		all_vgs = 1;
++		/* identify complete vgs, and only activate those vgs */
++		_online_pvscan_all_devs(cmd, complete_vgnames, NULL);
++		_unlock_online();
+ 		goto activate;
++	} else {
++		log_verbose("pvscan only specific devices.");
++		_unlock_online();
  	}
  
- 	/* Or event # into events bitfield. */
--	thread->events |= message_data->events.field;
-+	thread->events |= message_data->events_field;
- 
-     outth:
- 	_unlock_mutex();
-@@ -1070,7 +1056,7 @@ static int _unregister_for_event(struct message_data *message_data)
- 		return 0;
+ 	if (argc || devno_args) {
+@@ -761,7 +857,7 @@ int pvscan_cache_cmd(struct cmd_context *cmd, int argc, char **argv)
+ 			 * Devices that exist and pass the lvmetad filter
+ 			 * are online.
+ 			 */
+-			if (!_online_pvscan_one(cmd, dev, NULL, &found_vgnames, 0, &pvid_without_metadata))
++			if (!_online_pvscan_one(cmd, dev, NULL, complete_vgnames, 0, &pvid_without_metadata))
+ 				add_errors++;
+ 		}
+ 	}
+@@ -814,7 +910,7 @@ int pvscan_cache_cmd(struct cmd_context *cmd, int argc, char **argv)
+ 			 * Devices that exist and pass the lvmetad filter
+ 			 * are online.
+ 			 */
+-			if (!_online_pvscan_one(cmd, devl->dev, NULL, &found_vgnames, 0, &pvid_without_metadata))
++			if (!_online_pvscan_one(cmd, devl->dev, NULL, complete_vgnames, 0, &pvid_without_metadata))
+ 				add_errors++;
+ 		}
+ 	}
+@@ -839,10 +935,10 @@ activate:
+ 	 * scan all devs and pick out the complete VG holding this
+ 	 * device so we can then autoactivate that VG.
+ 	 */
+-	if (!dm_list_empty(&single_devs) && dm_list_empty(&found_vgnames) &&
++	if (!dm_list_empty(&single_devs) && complete_vgnames && dm_list_empty(complete_vgnames) &&
+ 	    pvid_without_metadata && do_activate) {
+ 		log_verbose("pvscan all devices for PV without metadata: %s.", pvid_without_metadata);
+-		_online_pvscan_all_devs(cmd, &found_vgnames, &single_devs);
++		_online_pvscan_all_devs(cmd, complete_vgnames, &single_devs);
  	}
  
--	thread->events &= ~message_data->events.field;
-+	thread->events &= ~message_data->events_field;
+ 	/*
+@@ -851,7 +947,7 @@ activate:
+ 	 * list, and we can attempt to autoactivate LVs in the VG.
+ 	 */
+ 	if (do_activate)
+-		ret = _pvscan_aa(cmd, &pp, all_vgs, &found_vgnames);
++		ret = _pvscan_aa(cmd, &pp, complete_vgnames);
  
- 	if (!(thread->events & DM_EVENT_TIMEOUT))
- 		_unregister_for_timeout(thread);
-@@ -1208,7 +1194,7 @@ static int _set_timeout(struct message_data *message_data)
- 
- 	_lock_mutex();
- 	if ((thread = _lookup_thread_status(message_data)))
--		thread->timeout = message_data->timeout.secs;
-+		thread->timeout = message_data->timeout_secs;
- 	_unlock_mutex();
- 
- 	return thread ? 0 : -ENODEV;
+ out:
+ 	if (add_errors || pp.activate_errors)
 
 
