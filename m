@@ -1,111 +1,180 @@
-From: Takahiro Yasui <tyasui@redhat.com>
-Date: Fri, 25 Sep 2009 18:15:54 -0400
-Subject: [PATCH] update dmeventd plugins to use proper lvm2_log_fn_t
-In-Reply-To: <20090917020623.GA7271@redhat.com>
-References: <20090917020623.GA7271@redhat.com>
-Message-ID: <4ABD411A.9070701@redhat.com>
+From: David Teigland <teigland@sourceware.org>
+Date: Mon, 4 Mar 2019 13:23:28 -0500
+Subject: master - config: add new setting io_memory_size
+Message-ID: <201903041823.x24INSR5014595@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Hi Mike,
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=dd8d0837950ae72939b13c3a1eb4cff902bbccdd
+Commit:        dd8d0837950ae72939b13c3a1eb4cff902bbccdd
+Parent:        3ed9256985bd9fadcbbb8f419b8d44bf22e93ef2
+Author:        David Teigland <teigland@redhat.com>
+AuthorDate:    Fri Mar 1 13:55:59 2019 -0600
+Committer:     David Teigland <teigland@redhat.com>
+CommitterDate: Mon Mar 4 11:36:21 2019 -0600
 
-I built the latest lvm2 but the following error messages were
-displayed.
+config: add new setting io_memory_size
 
-dmeventd_mirror.c: In function 'register_device':
-dmeventd_mirror.c:256: warning: passing argument 1 of 'lvm2_log_fn' from incompatible pointer type
-...
-dmeventd_snapshot.c: In function 'register_device':
-dmeventd_snapshot.c:170: warning: passing argument 1 of 'lvm2_log_fn' from incompatible pointer type
-
-The prototype definition in lvm2cmd.h also needs to be updated.
-
-Thanks,
-Taka
-
--- 
-Takahiro Yasui
-Hitachi Computer Products (America), Inc.
-
-
-Signed-off-by: Takahiro Yasui <tyasui@redhat.com>
+which defines the amount of memory that lvm will allocate
+for bcache.  Increasing this setting is required if it is
+smaller than a single copy of VG metadata.
 ---
- tools/lvm2cmd.h |    2 +-
- 1 file changed, 1 insertion(+), 1 deletion(-)
+ lib/commands/toolcontext.c   |    2 ++
+ lib/config/config_settings.h |    8 ++++++++
+ lib/config/defaults.h        |    2 ++
+ lib/label/label.c            |   40 ++++++++++++++++++++--------------------
+ lib/misc/lvm-globals.c       |   10 ++++++++++
+ lib/misc/lvm-globals.h       |    2 ++
+ 6 files changed, 44 insertions(+), 20 deletions(-)
 
-Index: LVM2.02.53-20090925/tools/lvm2cmd.h
-===================================================================
---- LVM2.02.53-20090925.orig/tools/lvm2cmd.h
-+++ LVM2.02.53-20090925/tools/lvm2cmd.h
-@@ -18,7 +18,7 @@
-
- #ifndef _LVM_LOG_H
- typedef void (*lvm2_log_fn_t) (int level, const char *file, int line,
--                              const char *message);
-+                              int dm_errno, const char *message);
- #endif
-
- #define LVM2_LOG_SUPPRESS      0
-
-
-Mike Snitzer wrote:
-> The dmeventd plugins provide their own _temporary_log_fn.  But they were
-> not updated when lvm2_log_fn_t was last updated, see:
-> http://sources.redhat.com/git/?p=lvm2.git;a=commit;h=0ed40c04c
-> 
-> I verified this patch fixes a SEGV seen in the dmeventd snapshot plugin:
-> 
-> # lvs
->   LV          VG   Attr   LSize   Origin Snap%  Move Log Copy%  Convert
->   testlv      test owi-a- 300.00M
->   testlv_snap test swi-ao  52.00M testlv  92.68
-> # vgchange --monitor y test
->   2 logical volume(s) in volume group "test" monitored
-> 
-> and messages file shows:
-> 
-> Sep 16 21:15:05 really-raw dmeventd[12522]: dmeventd ready for processing.
-> Sep 16 21:15:11 really-raw lvm[12522]: Monitoring snapshot test-testlv_snap
-> Sep 16 21:15:15 really-raw lvm[12522]: Snapshot test-testlv_snap is now 92% full.
-> 
-> Signed-off-by: Mike Snitzer <snitzer@redhat.com>
-> 
-> ---
-> diff --git a/daemons/dmeventd/plugins/mirror/dmeventd_mirror.c b/daemons/dmeventd/plugins/mirror/dmeventd_mirror.c
-> index 8869e80..503ec0d 100644
-> --- a/daemons/dmeventd/plugins/mirror/dmeventd_mirror.c
-> +++ b/daemons/dmeventd/plugins/mirror/dmeventd_mirror.c
-> @@ -126,8 +126,10 @@ out_parse:
->  	return ME_IGNORE;
->  }
->  
-> -static void _temporary_log_fn(int level, const char *file __attribute((unused)),
-> +static void _temporary_log_fn(int level,
-> +			      const char *file __attribute((unused)),
->  			      int line __attribute((unused)),
-> +			      int dm_errno __attribute((unused)),
->  			      const char *format)
->  {
->  	if (!strncmp(format, "WARNING: ", 9) && (level < 5))
-> diff --git a/daemons/dmeventd/plugins/snapshot/dmeventd_snapshot.c b/daemons/dmeventd/plugins/snapshot/dmeventd_snapshot.c
-> index 3e250af..96c4688 100644
-> --- a/daemons/dmeventd/plugins/snapshot/dmeventd_snapshot.c
-> +++ b/daemons/dmeventd/plugins/snapshot/dmeventd_snapshot.c
-> @@ -57,6 +57,7 @@ static pthread_mutex_t _event_mutex = PTHREAD_MUTEX_INITIALIZER;
->  static void _temporary_log_fn(int level,
->  			      const char *file __attribute((unused)),
->  			      int line __attribute((unused)),
-> +			      int dm_errno __attribute((unused)),
->  			      const char *format)
->  {
->  	if (!strncmp(format, "WARNING: ", 9) && (level < 5))
-> 
-> --
-> lvm-devel mailing list
-> lvm-devel at redhat.com
-> https://www.redhat.com/mailman/listinfo/lvm-devel
+diff --git a/lib/commands/toolcontext.c b/lib/commands/toolcontext.c
+index 0b88dca..15e3499 100644
+--- a/lib/commands/toolcontext.c
++++ b/lib/commands/toolcontext.c
+@@ -715,6 +715,8 @@ static int _process_config(struct cmd_context *cmd)
+ 	if (!_init_system_id(cmd))
+ 		return_0;
+ 
++	init_io_memory_size(find_config_tree_int(cmd, global_io_memory_size_CFG, NULL));
++
+ 	return 1;
+ }
+ 
+diff --git a/lib/config/config_settings.h b/lib/config/config_settings.h
+index fc66117..a2df3ce 100644
+--- a/lib/config/config_settings.h
++++ b/lib/config/config_settings.h
+@@ -1224,6 +1224,14 @@ cfg(global_notify_dbus_CFG, "notify_dbus", global_CFG_SECTION, 0, CFG_TYPE_BOOL,
+ 	"When enabled, an LVM command that changes PVs, changes VG metadata,\n"
+ 	"or changes the activation state of an LV will send a notification.\n")
+ 
++cfg(global_io_memory_size_CFG, "io_memory_size", global_CFG_SECTION, CFG_DEFAULT_COMMENTED, CFG_TYPE_INT, DEFAULT_IO_MEMORY_SIZE_KB, vsn(2, 3, 2), NULL, 0, NULL,
++	"The amount of memory in KiB that LVM allocates to perform disk io.\n"
++	"LVM performance may benefit from more io memory when there are many\n"
++	"disks or VG metadata is large. Increasing this size may be necessary\n"
++	"when a single copy of VG metadata is larger than the current setting.\n"
++	"This value should usually not be decreased from the default; setting\n"
++	"it too low can result in lvm failing to read VGs.\n")
++
+ cfg(activation_udev_sync_CFG, "udev_sync", activation_CFG_SECTION, 0, CFG_TYPE_BOOL, DEFAULT_UDEV_SYNC, vsn(2, 2, 51), NULL, 0, NULL,
+ 	"Use udev notifications to synchronize udev and LVM.\n"
+ 	"The --nodevsync option overrides this setting.\n"
+diff --git a/lib/config/defaults.h b/lib/config/defaults.h
+index affb4c9..ee6ca3a 100644
+--- a/lib/config/defaults.h
++++ b/lib/config/defaults.h
+@@ -314,4 +314,6 @@
+ 
+ #define DEFAULT_HINTS "all"
+ 
++#define DEFAULT_IO_MEMORY_SIZE_KB 4096
++
+ #endif				/* _LVM_DEFAULTS_H */
+diff --git a/lib/label/label.c b/lib/label/label.c
+index 7d5073e..a877b38 100644
+--- a/lib/label/label.c
++++ b/lib/label/label.c
+@@ -775,33 +775,33 @@ out:
+ }
+ 
+ /*
+- * How many blocks to set up in bcache?  Is 1024 a good max?
++ * num_devs is the number of devices the caller is going to scan.
++ * When 0 the caller doesn't know, and we use the default cache size.
++ * When non-zero, allocate at least num_devs bcache blocks.
++ * num_devs doesn't really tell us how many bcache blocks we'll use
++ * because it includes lvm devs and non-lvm devs, and each lvm dev
++ * will often use a number of bcache blocks.
+  *
+- * Currently, we tell bcache to set up N blocks where N
+- * is the number of devices that are going to be scanned.
+- * Reasons why this number may not be be a good choice:
+- *
+- * - there may be a lot of non-lvm devices, which
+- *   would make this number larger than necessary
+- *
+- * - each lvm device may use more than one cache
+- *   block if the metadata is large enough or it
+- *   uses more than one metadata area, which
+- *   would make this number smaller than it
+- *   should be for the best performance.
+- *
+- * This is even more tricky to estimate when lvmetad
+- * is used, because it's hard to predict how many
+- * devs might need to be scanned when using lvmetad.
+- * This currently just sets up bcache with MIN blocks.
++ * We don't know ahead of time if we will find some VG metadata 
++ * that is larger than the total size of the bcache, which would
++ * prevent us from reading/writing the VG since we do not dynamically
++ * increase the bcache size when we find it's too small.  In these
++ * cases the user would need to set io_memory_size to be larger
++ * than the max VG metadata size (lvm does not impose any limit on
++ * the metadata size.)
+  */
+ 
+-#define MIN_BCACHE_BLOCKS 32
++#define MIN_BCACHE_BLOCKS 32    /* 4MB, currently matches DEFAULT_IO_MEMORY_SIZE_KB */
+ #define MAX_BCACHE_BLOCKS 1024
+ 
+-static int _setup_bcache(int cache_blocks)
++static int _setup_bcache(int num_devs)
+ {
+ 	struct io_engine *ioe = NULL;
++	int iomem_kb = io_memory_size();
++	int block_size_kb = (BCACHE_BLOCK_SIZE_IN_SECTORS * 512) / 1024;
++	int cache_blocks;
++
++	cache_blocks = iomem_kb / block_size_kb;
+ 
+ 	if (cache_blocks < MIN_BCACHE_BLOCKS)
+ 		cache_blocks = MIN_BCACHE_BLOCKS;
+diff --git a/lib/misc/lvm-globals.c b/lib/misc/lvm-globals.c
+index 1ddd2fb..6d3bf02 100644
+--- a/lib/misc/lvm-globals.c
++++ b/lib/misc/lvm-globals.c
+@@ -53,6 +53,7 @@ static int _activation_checks = 0;
+ static char _sysfs_dir_path[PATH_MAX] = "";
+ static uint64_t _pv_min_size = (DEFAULT_PV_MIN_SIZE_KB * 1024L >> SECTOR_SHIFT);
+ static const char *_unknown_device_name = DEFAULT_UNKNOWN_DEVICE_NAME;
++static int _io_memory_size_kb = DEFAULT_IO_MEMORY_SIZE_KB;
+ 
+ void init_verbose(int level)
+ {
+@@ -393,3 +394,12 @@ void init_unknown_device_name(const char *name)
+ 	_unknown_device_name = name;
+ }
+ 
++int io_memory_size(void)
++{
++	return _io_memory_size_kb;
++}
++
++void init_io_memory_size(int val)
++{
++	_io_memory_size_kb = val;
++}
+diff --git a/lib/misc/lvm-globals.h b/lib/misc/lvm-globals.h
+index c69b99a..944b822 100644
+--- a/lib/misc/lvm-globals.h
++++ b/lib/misc/lvm-globals.h
+@@ -51,6 +51,7 @@ void init_pv_min_size(uint64_t sectors);
+ void init_activation_checks(int checks);
+ void init_retry_deactivation(int retry);
+ void init_unknown_device_name(const char *name);
++void init_io_memory_size(int val);
+ 
+ void set_cmd_name(const char *cmd_name);
+ const char *get_cmd_name(void);
+@@ -83,6 +84,7 @@ uint64_t pv_min_size(void);
+ int activation_checks(void);
+ int retry_deactivation(void);
+ const char *unknown_device_name(void);
++int io_memory_size(void);
+ 
+ #define DMEVENTD_MONITOR_IGNORE -1
+ int dmeventd_monitor_mode(void);
 
 
