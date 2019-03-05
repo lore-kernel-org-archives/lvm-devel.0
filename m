@@ -1,65 +1,43 @@
 From: Marian Csontos <mcsontos@sourceware.org>
-Date: Tue, 5 Mar 2019 08:53:48 -0500
-Subject: stable-2.02 - stats: fix error path when region is NULL
-Message-ID: <201903051353.x25DrmH6006802@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Tue, 5 Mar 2019 08:53:55 -0500
+Subject: stable-2.02 - stats: initilize regions to NULL
+Message-ID: <201903051353.x25Drt4B006817@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=8fc64c5ee67c90ac33df657ec514216ce2a804b9
-Commit:        8fc64c5ee67c90ac33df657ec514216ce2a804b9
-Parent:        8d44cd3e47a05db4983bcb8e8e1c08cfe80708ab
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=167aa349268008b47e333ce9e5423e06bb29d95f
+Commit:        167aa349268008b47e333ce9e5423e06bb29d95f
+Parent:        8fc64c5ee67c90ac33df657ec514216ce2a804b9
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Dec 21 20:12:40 2018 +0100
+AuthorDate:    Fri Dec 21 22:42:36 2018 +0100
 Committer:     Marian Csontos <mcsontos@redhat.com>
-CommitterDate: Tue Mar 5 12:57:40 2019 +0100
+CommitterDate: Tue Mar 5 12:57:50 2019 +0100
 
-stats: fix error path when region is NULL
+stats: initilize regions to NULL
 
-We should not call _stats_cleanup_region_ids() when regions
-are NULL.
-Also add backtracing for  goto.
+Commit 3750b0cff5ab1c41076afdf8275e3fa20aa756d0 used bad: error
+path in more occasions thus it now needs regions defined as NULL.
 
-(cherry picked from commit 3750b0cff5ab1c41076afdf8275e3fa20aa756d0)
+(cherry picked from commit 83c6f7e7e6e76199d836bf694266c78e3cbc12f1)
 ---
- libdm/libdm-stats.c |   10 +++++-----
- 1 files changed, 5 insertions(+), 5 deletions(-)
+ libdm/libdm-stats.c |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
 
 diff --git a/libdm/libdm-stats.c b/libdm/libdm-stats.c
-index 3078596..deb20c9 100644
+index deb20c9..df4322a 100644
 --- a/libdm/libdm-stats.c
 +++ b/libdm/libdm-stats.c
-@@ -4869,24 +4869,24 @@ uint64_t *dm_stats_update_regions_from_fd(struct dm_stats *dms, int fd,
- 					  group_id, &count, &regroup);
+@@ -4809,7 +4809,7 @@ uint64_t *dm_stats_update_regions_from_fd(struct dm_stats *dms, int fd,
+ {
+ 	struct dm_histogram *bounds = NULL;
+ 	int nr_bins, precise, regroup;
+-	uint64_t *regions, count = 0;
++	uint64_t *regions = NULL, count = 0;
+ 	const char *alias = NULL;
  
- 	if (!regions)
--		goto bad;
-+		goto_out;
- 
- 	if (!dm_stats_list(dms, NULL))
--		goto bad;
-+		goto_bad;
- 
- 	/* regroup if there are regions to group */
- 	if (regroup && (*regions != DM_STATS_REGION_NOT_PRESENT))
- 		if (!_stats_group_file_regions(dms, regions, count, alias))
--			goto bad;
-+			goto_bad;
- 
- 	dm_free(bounds);
- 	dm_free((char *) alias);
- 	return regions;
- bad:
- 	_stats_cleanup_region_ids(dms, regions, count);
--	dm_free(bounds);
--	dm_free(regions);
- out:
-+	dm_free(regions);
-+	dm_free(bounds);
- 	dm_free((char *) alias);
- 	return NULL;
- }
+ 	if (!dms->regions || !dm_stats_group_present(dms, group_id)) {
 
 
