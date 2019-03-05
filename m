@@ -1,38 +1,52 @@
-From: David Teigland <teigland@sourceware.org>
-Date: Mon, 4 Mar 2019 13:23:36 -0500
-Subject: master - WHATS_NEW: io_memory_size
-Message-ID: <201903041823.x24INaoL014624@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: Marian Csontos <mcsontos@sourceware.org>
+Date: Tue, 5 Mar 2019 08:53:03 -0500
+Subject: stable-2.02 - cov: dm stats missed terminating null
+Message-ID: <201903051353.x25Dr31j006633@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=07483cc165e210a23627b4b6d5c89f9008c9e950
-Commit:        07483cc165e210a23627b4b6d5c89f9008c9e950
-Parent:        7edbf8a441fab4518959523e3e726bcd66b2c6a8
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Mon Mar 4 12:22:49 2019 -0600
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Mon Mar 4 12:22:49 2019 -0600
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=ece117ee102684dc5380d30b73e4b992689eb85f
+Commit:        ece117ee102684dc5380d30b73e4b992689eb85f
+Parent:        590a1ebcf78b8aae2a1e5ebaba1ac24a54435690
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Mon Oct 15 14:45:16 2018 +0200
+Committer:     Marian Csontos <mcsontos@redhat.com>
+CommitterDate: Tue Mar 5 12:10:36 2019 +0100
 
-WHATS_NEW: io_memory_size
+cov: dm stats missed terminating null
 
+Coverity noticed allocating insufficient memory
+for the terminating null of the string.
+
+(cherry picked from commit 20971f7034cbd329f873e08869bfb7acf3f1ac0e)
 ---
- WHATS_NEW |    2 ++
- 1 files changed, 2 insertions(+), 0 deletions(-)
+ libdm/libdm-stats.c |    4 ++--
+ 1 files changed, 2 insertions(+), 2 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index b1b19d1..61d347a 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,7 @@
- Version 2.03.02 - 
- ===================================
-+  Change default io_memory_size from 4 to 8 MiB.
-+  Add config setting io_memory_size to set bcache size.
-   Fix pvscan autoactivation for concurrent pvscans.
-   Change scan_lvs default to 0 so LVs are not scanned for PVs.
-   Thin-pool selects power-of-2 chunk size by default.
+diff --git a/libdm/libdm-stats.c b/libdm/libdm-stats.c
+index 6b4e3d8..479861e 100644
+--- a/libdm/libdm-stats.c
++++ b/libdm/libdm-stats.c
+@@ -1009,7 +1009,7 @@ static int _stats_parse_list(struct dm_stats *dms, const char *resp)
+ 	 * dm_task_get_message_response() returns a 'const char *' but
+ 	 * since fmemopen also permits "w" it expects a 'char *'.
+ 	 */
+-	if (!(list_rows = fmemopen((char *)resp, strlen(resp), "r")))
++	if (!(list_rows = fmemopen((char *)resp, strlen(resp) + 1, "r")))
+ 		return_0;
+ 
+ 	/* begin region table */
+@@ -1240,7 +1240,7 @@ static int _stats_parse_region(struct dm_stats *dms, const char *resp,
+ 	 * dm_task_get_message_response() returns a 'const char *' but
+ 	 * since fmemopen also permits "w" it expects a 'char *'.
+ 	 */
+-	stats_rows = fmemopen((char *)resp, strlen(resp), "r");
++	stats_rows = fmemopen((char *)resp, strlen(resp) + 1, "r");
+ 	if (!stats_rows)
+ 		goto_bad;
+ 
 
 
