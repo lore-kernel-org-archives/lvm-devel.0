@@ -1,52 +1,52 @@
 From: Marian Csontos <mcsontos@sourceware.org>
-Date: Tue, 5 Mar 2019 08:53:18 -0500
-Subject: stable-2.02 - revert "cov: dm stats missed terminating null"
-Message-ID: <201903051353.x25DrIiU006685@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Tue, 5 Mar 2019 08:53:19 -0500
+Subject: stable-2.02 - cov: split check for type assignment
+Message-ID: <201903051353.x25DrJNM006700@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=b39c26ddc335e308c10777ea423f341cb9e783b8
-Commit:        b39c26ddc335e308c10777ea423f341cb9e783b8
-Parent:        d1ae1455b48fb09c4530b3b823bf02df50450b18
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=c9e5e6800c3225c9eb6cd54f143624c20eda44be
+Commit:        c9e5e6800c3225c9eb6cd54f143624c20eda44be
+Parent:        f0f68791f31c8cf0ca2c4f0bbee86dd37a69494f
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Oct 16 19:13:34 2018 +0200
+AuthorDate:    Thu Nov 1 15:33:34 2018 +0100
 Committer:     Marian Csontos <mcsontos@redhat.com>
-CommitterDate: Tue Mar 5 12:15:16 2019 +0100
+CommitterDate: Tue Mar 5 12:16:07 2019 +0100
 
-revert "cov: dm stats missed terminating null"
+cov: split check for type assignment
 
-This reverts commit 20971f7034cbd329f873e08869bfb7acf3f1ac0e
-as the parsing of 'dmstatus' started to fail on present \0 char.
+Check that type is always defined, if not make it explicit internal
+error (although logged as debug - so catched only with proper lvm.conf
+setting).
+This ensures later type being NULL can't be dereferenced with coredump.
 
-(cherry picked from commit 6179cab877442aac884a0bfcd5c5541396980cdf)
+(cherry picked from commit 79879bd201d4156312bb03fc0b7228ce34a3bf38)
 ---
- libdm/libdm-stats.c |    4 ++--
- 1 files changed, 2 insertions(+), 2 deletions(-)
+ libdm/libdm-report.c |    9 +++++----
+ 1 files changed, 5 insertions(+), 4 deletions(-)
 
-diff --git a/libdm/libdm-stats.c b/libdm/libdm-stats.c
-index 479861e..6b4e3d8 100644
---- a/libdm/libdm-stats.c
-+++ b/libdm/libdm-stats.c
-@@ -1009,7 +1009,7 @@ static int _stats_parse_list(struct dm_stats *dms, const char *resp)
- 	 * dm_task_get_message_response() returns a 'const char *' but
- 	 * since fmemopen also permits "w" it expects a 'char *'.
- 	 */
--	if (!(list_rows = fmemopen((char *)resp, strlen(resp) + 1, "r")))
-+	if (!(list_rows = fmemopen((char *)resp, strlen(resp), "r")))
- 		return_0;
+diff --git a/libdm/libdm-report.c b/libdm/libdm-report.c
+index 0401f9c..b58e3fe 100644
+--- a/libdm/libdm-report.c
++++ b/libdm/libdm-report.c
+@@ -748,10 +748,11 @@ static void _display_fields_more(struct dm_report *rh,
+ 			id_len = strlen(type->prefix) + 3;
  
- 	/* begin region table */
-@@ -1240,7 +1240,7 @@ static int _stats_parse_region(struct dm_stats *dms, const char *resp,
- 	 * dm_task_get_message_response() returns a 'const char *' but
- 	 * since fmemopen also permits "w" it expects a 'char *'.
- 	 */
--	stats_rows = fmemopen((char *)resp, strlen(resp) + 1, "r");
-+	stats_rows = fmemopen((char *)resp, strlen(resp), "r");
- 	if (!stats_rows)
- 		goto_bad;
- 
+ 	for (f = 0; fields[f].report_fn; f++) {
+-		if ((type = _find_type(rh, fields[f].type)) && type->desc)
+-			desc = type->desc;
+-		else
+-			desc = " ";
++		if (!(type = _find_type(rh, fields[f].type))) {
++			log_debug(INTERNAL_ERROR "Field type undefined.");
++			continue;
++		}
++		desc = (type->desc) ? : " ";
+ 		if (desc != last_desc) {
+ 			if (*last_desc)
+ 				log_warn(" ");
 
 
