@@ -1,56 +1,56 @@
-From: agk@sourceware.org <agk@sourceware.org>
-Date: 26 Sep 2009 00:42:48 -0000
-Subject: LVM2 VERSION VERSION_DM WHATS_NEW WHATS_NEW_DM
-Message-ID: <20090926004248.5817.qmail@sourceware.org>
+From: David Teigland <teigland@sourceware.org>
+Date: Tue, 5 Mar 2019 11:00:52 -0500
+Subject: master - pvscan: ignore online for unused PV
+Message-ID: <201903051600.x25G0qTP029372@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	agk at sourceware.org	2009-09-26 00:42:47
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=a0c848d4e4a9b53fa1f9cc7a8330fea6b23c07a8
+Commit:        a0c848d4e4a9b53fa1f9cc7a8330fea6b23c07a8
+Parent:        07483cc165e210a23627b4b6d5c89f9008c9e950
+Author:        David Teigland <teigland@redhat.com>
+AuthorDate:    Mon Mar 4 14:25:53 2019 -0600
+Committer:     David Teigland <teigland@redhat.com>
+CommitterDate: Mon Mar 4 14:25:53 2019 -0600
 
-Modified files:
-	.              : VERSION VERSION_DM WHATS_NEW WHATS_NEW_DM 
+pvscan: ignore online for unused PV
 
-Log message:
-	post-release
+If an unused PV comes online, ignore it from
+pvscan --cache.
+---
+ tools/pvscan.c |   10 ++++++++++
+ 1 files changed, 10 insertions(+), 0 deletions(-)
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/VERSION.diff?cvsroot=lvm2&r1=1.210&r2=1.211
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/VERSION_DM.diff?cvsroot=lvm2&r1=1.22&r2=1.23
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1272&r2=1.1273
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW_DM.diff?cvsroot=lvm2&r1=1.303&r2=1.304
-
---- LVM2/VERSION	2009/09/25 18:32:22	1.210
-+++ LVM2/VERSION	2009/09/26 00:42:47	1.211
-@@ -1 +1 @@
--2.02.53(1)-cvs (2009-09-25)
-+2.02.54(1)-cvs (2009-09-26)
---- LVM2/VERSION_DM	2009/09/25 18:32:22	1.22
-+++ LVM2/VERSION_DM	2009/09/26 00:42:47	1.23
-@@ -1 +1 @@
--1.02.38-cvs (2009-09-25)
-+1.02.39-cvs (2009-09-26)
---- LVM2/WHATS_NEW	2009/09/25 18:32:22	1.1272
-+++ LVM2/WHATS_NEW	2009/09/26 00:42:47	1.1273
-@@ -1,3 +1,6 @@
-+Version 2.02.54 -
-+=====================================
+diff --git a/tools/pvscan.c b/tools/pvscan.c
+index 389aafa..c484531 100644
+--- a/tools/pvscan.c
++++ b/tools/pvscan.c
+@@ -644,6 +644,8 @@ static int _online_pvscan_one(struct cmd_context *cmd, struct device *dev,
+ 	const struct format_type *fmt;
+ 	/* Create a dummy instance. */
+ 	struct format_instance_ctx fic = { .type = 0 };
++	uint32_t ext_version;
++	uint32_t ext_flags;
+ 	int ret = 0;
+ 
+ 	log_debug("pvscan metadata from dev %s", dev_name(dev));
+@@ -667,6 +669,14 @@ static int _online_pvscan_one(struct cmd_context *cmd, struct device *dev,
+ 		return 1;
+ 	}
+ 
++	ext_version = lvmcache_ext_version(info);
++	ext_flags = lvmcache_ext_flags(info);
 +
- Version 2.02.53 - 25th September 2009
- =====================================
-   Create any directories in /dev with DM_DEV_DIR_UMASK (022).
---- LVM2/WHATS_NEW_DM	2009/09/25 18:32:22	1.303
-+++ LVM2/WHATS_NEW_DM	2009/09/26 00:42:47	1.304
-@@ -1,3 +1,6 @@
-+Version 1.02.39 - 
-+=====================================
++	if ((ext_version >= 2) && !(ext_flags & PV_EXT_USED)) {
++		log_print("pvscan[%d] PV %s not used.", getpid(), dev_name(dev));
++		return 1;
++	}
 +
- Version 1.02.38 - 25th September 2009
- =====================================
-   Export DM_DEV_DIR_UMASK, the default umask for /dev directories created.
+ 	fmt = lvmcache_fmt(info);
+ 
+ 	baton.cmd = cmd;
 
 
