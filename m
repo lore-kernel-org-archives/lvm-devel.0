@@ -1,20 +1,20 @@
 From: David Teigland <teigland@sourceware.org>
-Date: Wed, 6 Mar 2019 14:37:43 -0500
-Subject: master - config: improve scan_lvs description
-Message-ID: <201903061937.x26JbhaW029946@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Wed, 6 Mar 2019 14:39:08 -0500
+Subject: stable-2.02 - config: improve scan_lvs description
+Message-ID: <201903061939.x26Jd81v029978@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=9b2b0fef9c6c475a2023b9e5ca9525d850aed1cc
-Commit:        9b2b0fef9c6c475a2023b9e5ca9525d850aed1cc
-Parent:        98b7a3a42dd3adc13b87233846ae2e8e1f6b4bb0
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=ece0b131e51154253e14a938e6c24f4983e77bec
+Commit:        ece0b131e51154253e14a938e6c24f4983e77bec
+Parent:        519f4453a51508e43d36607cc7d1693c79275151
 Author:        David Teigland <teigland@redhat.com>
 AuthorDate:    Wed Mar 6 13:33:07 2019 -0600
 Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Wed Mar 6 13:33:07 2019 -0600
+CommitterDate: Wed Mar 6 13:38:33 2019 -0600
 
 config: improve scan_lvs description
 
@@ -23,10 +23,10 @@ config: improve scan_lvs description
  1 files changed, 11 insertions(+), 1 deletions(-)
 
 diff --git a/lib/config/config_settings.h b/lib/config/config_settings.h
-index a2df3ce..efa86e7 100644
+index 75321da..0e81252 100644
 --- a/lib/config/config_settings.h
 +++ b/lib/config/config_settings.h
-@@ -352,7 +352,17 @@ cfg(devices_sysfs_scan_CFG, "sysfs_scan", devices_CFG_SECTION, 0, CFG_TYPE_BOOL,
+@@ -346,7 +346,17 @@ cfg(devices_sysfs_scan_CFG, "sysfs_scan", devices_CFG_SECTION, 0, CFG_TYPE_BOOL,
  	"present on the system. sysfs must be part of the kernel and mounted.)\n")
  
  cfg(devices_scan_lvs_CFG, "scan_lvs", devices_CFG_SECTION, 0, CFG_TYPE_BOOL, DEFAULT_SCAN_LVS, vsn(2, 2, 182), NULL, 0, NULL,
