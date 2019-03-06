@@ -1,104 +1,49 @@
 From: David Teigland <teigland@sourceware.org>
-Date: Wed, 6 Mar 2019 13:18:49 -0500
-Subject: master - tests: check that pvscan --cache ignores certain PVs
-Message-ID: <201903061818.x26IInLe015272@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Wed, 6 Mar 2019 14:37:43 -0500
+Subject: master - config: improve scan_lvs description
+Message-ID: <201903061937.x26JbhaW029946@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=98b7a3a42dd3adc13b87233846ae2e8e1f6b4bb0
-Commit:        98b7a3a42dd3adc13b87233846ae2e8e1f6b4bb0
-Parent:        4e20ebd6a1b993b1f04aa13f55b9c5d8ca2ff287
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=9b2b0fef9c6c475a2023b9e5ca9525d850aed1cc
+Commit:        9b2b0fef9c6c475a2023b9e5ca9525d850aed1cc
+Parent:        98b7a3a42dd3adc13b87233846ae2e8e1f6b4bb0
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Wed Mar 6 12:17:47 2019 -0600
+AuthorDate:    Wed Mar 6 13:33:07 2019 -0600
 Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Wed Mar 6 12:17:47 2019 -0600
+CommitterDate: Wed Mar 6 13:33:07 2019 -0600
 
-tests: check that pvscan --cache ignores certain PVs
+config: improve scan_lvs description
 
 ---
- test/shell/lvmlockd-lv-types.sh   |   14 ++++++++++++++
- test/shell/pvscan-autoactivate.sh |   37 ++++++++++++++++++++++++++++++++++++-
- 2 files changed, 50 insertions(+), 1 deletions(-)
+ lib/config/config_settings.h |   12 +++++++++++-
+ 1 files changed, 11 insertions(+), 1 deletions(-)
 
-diff --git a/test/shell/lvmlockd-lv-types.sh b/test/shell/lvmlockd-lv-types.sh
-index b82f21b..44ff532 100644
---- a/test/shell/lvmlockd-lv-types.sh
-+++ b/test/shell/lvmlockd-lv-types.sh
-@@ -39,6 +39,20 @@ aux prepare_devs 5
- vgcreate --shared $vg "$dev1" "$dev2" "$dev3" "$dev4" "$dev5"
+diff --git a/lib/config/config_settings.h b/lib/config/config_settings.h
+index a2df3ce..efa86e7 100644
+--- a/lib/config/config_settings.h
++++ b/lib/config/config_settings.h
+@@ -352,7 +352,17 @@ cfg(devices_sysfs_scan_CFG, "sysfs_scan", devices_CFG_SECTION, 0, CFG_TYPE_BOOL,
+ 	"present on the system. sysfs must be part of the kernel and mounted.)\n")
  
- #
-+# pvscan autoactivation ignore shared PVs
-+#
-+RUNDIR="/run"
-+test -d "$RUNDIR" || RUNDIR="/var/run"
-+
-+PVID1=`pvs $dev1 --noheading -o uuid | tr -d - | awk '{print $1}'`
-+pvscan --cache -aay "$dev1"
-+not ls "$RUNDIR/lvm/pvs_online/$PVID1"
-+pvscan --cache -aay
-+not ls "$RUNDIR/lvm/pvs_online/$PVID1"
-+not ls "$RUNDIR/lvm/vgs_online/$vg"
-+
-+
-+#
- # thin pool, thin lv, thin snap
- #
+ cfg(devices_scan_lvs_CFG, "scan_lvs", devices_CFG_SECTION, 0, CFG_TYPE_BOOL, DEFAULT_SCAN_LVS, vsn(2, 2, 182), NULL, 0, NULL,
+-	"Scan LVM LVs for layered PVs.\n")
++	"Scan LVM LVs for layered PVs, allowing LVs to be used as PVs.\n"
++	"When 1, LVM will detect PVs layered on LVs, and caution must be\n"
++	"taken to avoid a host accessing a layered VG that may not belong\n"
++	"to it, e.g. from a guest image. This generally requires excluding\n"
++	"the LVs with device filters. Also, when this setting is enabled,\n"
++	"every LVM command will scan every active LV on the system (unless\n"
++	"filtered), which can cause performance problems on systems with\n"
++	"many active LVs. When this setting is 0, LVM will not detect or\n"
++	"use PVs that exist on LVs, and will not allow a PV to be created on\n"
++	"an LV. The LVs are ignored using a built in device filter that\n"
++	"identifies and excludes LVs.\n")
  
-diff --git a/test/shell/pvscan-autoactivate.sh b/test/shell/pvscan-autoactivate.sh
-index 419fb9b..20a0eeb 100644
---- a/test/shell/pvscan-autoactivate.sh
-+++ b/test/shell/pvscan-autoactivate.sh
-@@ -27,7 +27,7 @@ _clear_online_files() {
- 
- . lib/inittest
- 
--aux prepare_pvs 2
-+aux prepare_pvs 3
- 
- vgcreate $vg1 "$dev1" "$dev2"
- lvcreate -n $lv1 -l 4 -a n $vg1
-@@ -153,3 +153,38 @@ check lv_field $vg1/$lv1 lv_active ""
- pvscan --cache -aay "$dev2"
- check lv_field $vg1/$lv1 lv_active "active"
- lvchange -an $vg1
-+
-+
-+# pvscan cache ignores pv that's not used
-+
-+pvcreate "$dev3"
-+
-+PVID3=`pvs $dev3 --noheading -o uuid | tr -d - | awk '{print $1}'`
-+echo $PVID3
-+
-+not ls "$RUNDIR/lvm/pvs_online/$PVID3"
-+
-+pvscan --cache -aay "$dev3"
-+
-+ls "$RUNDIR/lvm/pvs_online"
-+not ls "$RUNDIR/lvm/pvs_online/$PVID3"
-+
-+
-+# pvscan cache ignores pv in a foreign vg
-+
-+aux lvmconf "global/system_id_source = uname"
-+
-+vgcreate $vg2 "$dev3"
-+lvcreate -an -n $lv1 -l1 $vg2
-+pvscan --cache -aay "$dev3"
-+ls "$RUNDIR/lvm/pvs_online/$PVID3"
-+check lv_field $vg2/$lv1 lv_active "active"
-+lvchange -an $vg2
-+rm "$RUNDIR/lvm/pvs_online/$PVID3"
-+
-+vgchange -y --systemid "asdf" "$vg2"
-+
-+pvscan --cache -aay "$dev3"
-+not ls "$RUNDIR/lvm/pvs_online/$PVID3"
-+check lv_field $vg2/$lv1 lv_active "" --foreign
-+
+ cfg(devices_multipath_component_detection_CFG, "multipath_component_detection", devices_CFG_SECTION, 0, CFG_TYPE_BOOL, DEFAULT_MULTIPATH_COMPONENT_DETECTION, vsn(2, 2, 89), NULL, 0, NULL,
+ 	"Ignore devices that are components of DM multipath devices.\n")
 
 
