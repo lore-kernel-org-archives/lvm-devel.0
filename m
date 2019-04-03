@@ -1,62 +1,74 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Wed, 3 Apr 2019 07:29:50 -0400
-Subject: master - thin: introduce estimate_thin_pool_metadata_size
-Message-ID: <201904031129.x33BTo3f027541@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Wed, 3 Apr 2019 07:29:56 -0400
+Subject: master - thin: resize metadata with data
+Message-ID: <201904031129.x33BTuaI027557@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=7c3de2fd935aee428af8d75e774f5dd23a74c409
-Commit:        7c3de2fd935aee428af8d75e774f5dd23a74c409
-Parent:        bca0a4df9a5c6287bee682b40f4feae6f450729d
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=e27d0271557d4b93e87a70854b3c7f1cc6008155
+Commit:        e27d0271557d4b93e87a70854b3c7f1cc6008155
+Parent:        7c3de2fd935aee428af8d75e774f5dd23a74c409
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed Apr 3 12:56:48 2019 +0200
+AuthorDate:    Wed Apr 3 13:01:06 2019 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Wed Apr 3 13:27:17 2019 +0200
+CommitterDate: Wed Apr 3 13:28:22 2019 +0200
 
-thin: introduce estimate_thin_pool_metadata_size
+thin: resize metadata with data
 
-Add function for estimation of thin-pool metadata size for given size of
-data. Function is using already existing internal API so it can
-be reused for resize of thin-pool data.
+When data are growing, adapt also size of metadata.
+As we get way too many reports from users doing huge growths of
+data portion while keep metadata small and avoiding using monitoring.
+
+So to enhance the user-experience in case user requests grown of
+thin-pool (without passing PV list for growth) - lvm2 will automaticaly
+grown also the metadata part of thin-pool (if possible).
 ---
- lib/metadata/metadata.h   |    1 +
- lib/metadata/thin_manip.c |   12 ++++++++++++
- 2 files changed, 13 insertions(+), 0 deletions(-)
+ WHATS_NEW               |    1 +
+ lib/metadata/lv_manip.c |   18 ++++++++++++++++++
+ 2 files changed, 19 insertions(+), 0 deletions(-)
 
-diff --git a/lib/metadata/metadata.h b/lib/metadata/metadata.h
-index f578325..8e9c18a 100644
---- a/lib/metadata/metadata.h
-+++ b/lib/metadata/metadata.h
-@@ -490,6 +490,7 @@ int pool_below_threshold(const struct lv_segment *pool_seg);
- int pool_check_overprovisioning(const struct logical_volume *lv);
- int create_pool(struct logical_volume *pool_lv, const struct segment_type *segtype,
- 		struct alloc_handle *ah, uint32_t stripes, uint32_t stripe_size);
-+uint64_t estimate_thin_pool_metadata_size(uint32_t data_extents, uint32_t extent_size, uint32_t chunk_size);
+diff --git a/WHATS_NEW b/WHATS_NEW
+index 0f1fe1b..00c96b5 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.03.02 - 
+ ===================================
++  Automatically grow thin metadata, when thin data gets too big.
+   Add synchronization with udev before removing cached devices.
+   Add support for caching VDO LVs and VDOPOOL LVs.
+   Add support for vgsplit with cached devices.
+diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
+index cc391b6..a13ba31 100644
+--- a/lib/metadata/lv_manip.c
++++ b/lib/metadata/lv_manip.c
+@@ -5664,6 +5664,24 @@ int lv_resize(struct logical_volume *lv,
+ 	if (!_lvresize_prepare(&lv, lp, pvh))
+ 		return_0;
  
- /*
-  * Begin skeleton for external LVM library
-diff --git a/lib/metadata/thin_manip.c b/lib/metadata/thin_manip.c
-index 79fadc2..b9c01ee 100644
---- a/lib/metadata/thin_manip.c
-+++ b/lib/metadata/thin_manip.c
-@@ -908,3 +908,15 @@ int validate_thin_pool_chunk_size(struct cmd_context *cmd, uint32_t chunk_size)
- 
- 	return r;
- }
++	if (lp->resize != LV_REDUCE && !aux_lv && !lp->poolmetadata_size &&
++	    &lv->vg->pvs == pvh && lv_is_thin_pool_data(lv)) {
++		/* When thin-pool data part is extended, automatically extend also metadata part
++		 * to have the metadata chunks for adressing all data blocks
++		 * Do this only when PV list is not defined and --poolmetadatasize is unspecified */
++		aux_lp = *lp;
++		seg = get_only_segment_using_this_lv(lv);
++		aux_lp.size = estimate_thin_pool_metadata_size(lp->extents, lv->vg->extent_size, seg->chunk_size);
++		if (aux_lp.size > seg->metadata_lv->size) {
++			log_verbose("Also going to resize thin-pool metadata to match bigger data.");
++			aux_lv = _lvresize_setup_aux(seg->metadata_lv, &aux_lp);
++			aux_lp.sign = SIGN_NONE;
++			if (!_lvresize_prepare(&aux_lv, &aux_lp, pvh))
++				return_0;
++		} else
++			aux_lp.size = 0;
++	}
 +
-+uint64_t estimate_thin_pool_metadata_size(uint32_t data_extents, uint32_t extent_size, uint32_t chunk_size)
-+{
-+	uint64_t sz = _estimate_metadata_size(data_extents, extent_size, chunk_size);
-+
-+	if (sz > (2 * DEFAULT_THIN_POOL_MAX_METADATA_SIZE))
-+		sz = 2 * DEFAULT_THIN_POOL_MAX_METADATA_SIZE;
-+	else if (sz < (2 * DEFAULT_THIN_POOL_MIN_METADATA_SIZE))
-+		sz = 2 * DEFAULT_THIN_POOL_MIN_METADATA_SIZE;
-+
-+	return sz;
-+}
+ 	if (((lp->resize == LV_REDUCE) ||
+ 	     (aux_lv && aux_lp.resize == LV_REDUCE)) &&
+ 	    (pvh != &vg->pvs))
 
 
