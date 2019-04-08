@@ -1,50 +1,147 @@
-From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Wed, 23 Sep 2020 12:59:34 +0000 (GMT)
-Subject: master - lvconvert: suppport vdo raid conversion also through vpool
-Message-ID: <20200923125934.73879398E477@sourceware.org>
+From: David Teigland <teigland@sourceware.org>
+Date: Mon, 8 Apr 2019 11:39:44 -0400
+Subject: master - tests: update pvscan-autoactivate for init change
+Message-ID: <201904081539.x38Fdin6023029@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=90c50c1b537dd89b62dad3047e27420d411293f5
-Commit:        90c50c1b537dd89b62dad3047e27420d411293f5
-Parent:        50a37948b5b2245a8f5d7d78aa88fa0679dfe0e5
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed Sep 23 14:44:44 2020 +0200
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Wed Sep 23 14:47:30 2020 +0200
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=48e9f116ae5bc0d8444936ffc263542c80d6fa17
+Commit:        48e9f116ae5bc0d8444936ffc263542c80d6fa17
+Parent:        f58a70c168f8ac225b0e4e40c2f0e1d1c98357fa
+Author:        David Teigland <teigland@redhat.com>
+AuthorDate:    Fri Apr 5 13:20:09 2019 -0500
+Committer:     David Teigland <teigland@redhat.com>
+CommitterDate: Fri Apr 5 14:04:42 2019 -0500
 
-lvconvert: suppport vdo raid conversion also through vpool
+tests: update pvscan-autoactivate for init change
 
-User could directly use 'vdopool' LV name for conversion into raid.
-(lvconvert --type raid1 vg/vdopool)
 ---
- tools/lvconvert.c | 4 ++++
- 1 file changed, 4 insertions(+)
+ test/shell/pvscan-autoactivate.sh |   56 +++++-------------------------------
+ 1 files changed, 8 insertions(+), 48 deletions(-)
 
-diff --git a/tools/lvconvert.c b/tools/lvconvert.c
-index 780a81567..60c0fca21 100644
---- a/tools/lvconvert.c
-+++ b/tools/lvconvert.c
-@@ -1790,6 +1790,9 @@ static int _lvconvert_raid_types(struct cmd_context *cmd, struct logical_volume
- 	if (lv_is_cache(lv))
- 		lv = seg_lv(first_seg(lv), 0);
+diff --git a/test/shell/pvscan-autoactivate.sh b/test/shell/pvscan-autoactivate.sh
+index e48aeac..6f00b43 100644
+--- a/test/shell/pvscan-autoactivate.sh
++++ b/test/shell/pvscan-autoactivate.sh
+@@ -32,53 +32,29 @@ aux prepare_pvs 3
+ vgcreate $vg1 "$dev1" "$dev2"
+ lvcreate -n $lv1 -l 4 -a n $vg1
  
-+	if (lv_is_vdo_pool(lv))
-+		return _lvconvert_raid_types(cmd, seg_lv(first_seg(lv), 0), lp);
-+
- 	if (lv_is_mirror(lv)) {
- 		ret = _convert_mirror(cmd, lv, lp);
- 		goto out;
-@@ -5064,6 +5067,7 @@ static int _lvconvert_raid_types_check(struct cmd_context *cmd, struct logical_v
- 		    !lv_is_cache_pool_data(lv) &&
- 		    !lv_is_thin_pool_metadata(lv) &&
- 		    !lv_is_thin_pool_data(lv) &&
-+		    !lv_is_vdo_pool_data(lv) &&
- 		    !lv_is_used_cache_pool(lv) &&
- 		    !lv_is_mirrored(lv) &&
- 		    !lv_is_raid(lv))
+-# the first pvscan scans all devs
+ test -d "$PVS_ONLINE_DIR" || mkdir -p "$PVS_ONLINE_DIR"
+ test -d "$VGS_ONLINE_DIR" || mkdir -p "$VGS_ONLINE_DIR"
+ _clear_online_files
+ 
++# check pvscan with no args scans and activates all
+ pvscan --cache -aay
+ check lv_field $vg1/$lv1 lv_active "active"
+ lvchange -an $vg1
+ 
+-# the first pvscan scans all devs even when
+-# only one device is specified
+-
+ _clear_online_files
+ 
+-pvscan --cache -aay "$dev1"
+-check lv_field $vg1/$lv1 lv_active "active"
+-lvchange -an $vg1
+-
+-# touch foo to disable first-pvscan case,
+-# then check pvscan with no args scans all
+-_clear_online_files
+-touch "$RUNDIR/lvm/pvs_online/foo"
+-
+-pvscan --cache -aay
+-check lv_field $vg1/$lv1 lv_active "active"
+-lvchange -an $vg1
+-
+-# touch foo to disable first-pvscan case,
+-# then check that vg is activated only after
+-# both devs appear separately
+-
+-_clear_online_files
+-touch "$RUNDIR/lvm/pvs_online/foo"
+-
++# first dev leaves vg incomplete and inactive,
++# and second dev completes vg and activates
+ pvscan --cache -aay "$dev1"
+ check lv_field $vg1/$lv1 lv_active ""
+ pvscan --cache -aay "$dev2"
+ check lv_field $vg1/$lv1 lv_active "active"
+ lvchange -an $vg1
+ 
+-# touch foo to disable first-pvscan case,
+-# then check that vg is activated when both
+-# devs appear together
+-
+ _clear_online_files
+-touch "$RUNDIR/lvm/pvs_online/foo"
+ 
++# check that vg is activated when both devs
++# are scanned together
+ pvscan --cache -aay "$dev1" "$dev2"
+ check lv_field $vg1/$lv1 lv_active "active"
+ lvchange -an $vg1
+@@ -94,46 +70,31 @@ pvcreate --metadatacopies 1 "$dev2"
+ vgcreate $vg1 "$dev1" "$dev2"
+ lvcreate -n $lv1 -l 4 -a n $vg1
+ 
+-# touch foo to disable first-pvscan case,
+-# test case where dev with metadata appears first
+ 
+ _clear_online_files
+-touch "$RUNDIR/lvm/pvs_online/foo"
+ 
++# test case where dev with metadata is scanned first
+ pvscan --cache -aay "$dev2"
+ check lv_field $vg1/$lv1 lv_active ""
+ pvscan --cache -aay "$dev1"
+ check lv_field $vg1/$lv1 lv_active "active"
+ lvchange -an $vg1
+ 
+-# touch foo to disable first-pvscan case,
+-# test case where dev without metadata
+-# appears first which triggers scanning all
++# test case where dev without metadata is scanned first
++# which triggers scanning all, which finds both
+ 
+ _clear_online_files
+-touch "$RUNDIR/lvm/pvs_online/foo"
+-
+ pvscan --cache -aay "$dev1"
+ check lv_field $vg1/$lv1 lv_active "active"
+ pvscan --cache -aay "$dev2"
+ check lv_field $vg1/$lv1 lv_active "active"
+ lvchange -an $vg1
+ 
+-# dev without metadata is scanned, but
+-# first-pvscan case scans all devs
+-
+-_clear_online_files
+-
+-pvscan --cache -aay "$dev1"
+-check lv_field $vg1/$lv1 lv_active "active"
+-lvchange -an $vg1
+-
+ # use the --cache option to record a dev
+ # is online without the -aay option to
+ # activate until after they are online
+ 
+ _clear_online_files
+-touch "$RUNDIR/lvm/pvs_online/foo"
+ 
+ pvscan --cache "$dev1"
+ check lv_field $vg1/$lv1 lv_active ""
+@@ -146,7 +107,6 @@ lvchange -an $vg1
+ # like previous
+ 
+ _clear_online_files
+-touch "$RUNDIR/lvm/pvs_online/foo"
+ 
+ pvscan --cache "$dev1"
+ check lv_field $vg1/$lv1 lv_active ""
 
 
