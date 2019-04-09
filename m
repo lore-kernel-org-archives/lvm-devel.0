@@ -1,177 +1,38 @@
-From: Peter Rajnoha <prajnoha@sourceware.org>
-Date: Tue, 9 Apr 2019 06:42:17 -0400
-Subject: stable-2.02 - systemd: add missing Before=shutdown.target to LVM2 services to fix shutdown ordering
-Message-ID: <201904091042.x39AgHQ7005733@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Tue, 9 Apr 2019 16:53:51 +0200
+Subject: lvm snapshot creation ends with the error message
+In-Reply-To: <5CAC7071020000F90005E796@prv1-mh.provo.novell.com>
+References: <5CAC7071020000F90005E796@prv1-mh.provo.novell.com>
+Message-ID: <6fdd4655-4d3a-f12f-aa57-b97b752e437c@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=0a726a7e268b31856615491809af73bda5d4d6f9
-Commit:        0a726a7e268b31856615491809af73bda5d4d6f9
-Parent:        b79f1e176f013167ca9798efb55eaf048d64e042
-Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Tue Apr 9 12:40:55 2019 +0200
-Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Tue Apr 9 12:40:55 2019 +0200
+Dne 09. 04. 19 v 12:14 Gang He napsal(a):
+> Hello Guys,
+> 
+> Our user complained a confused error message when create a LV snapshot successfully.
+> e.g.
+> lvcreate --snapshot "/dev/$vgroup/$volume" --name "$snapvol" -l '80%FREE'
+> returns the following:
+> Taking snapshot mongo_db-snap
+>    device-mapper: remove ioctl on (254:2) failed: Device or resource busy  <<== here, why we need to print this error message? since we can retry a few time before failure
+>    Logical volume "mongo_db-snap" created.
+> 
+> The related code is in libdm-iface.c file under libdm/ioctl.
 
-systemd: add missing Before=shutdown.target to LVM2 services to fix shutdown ordering
+Hi
 
-We already used Conflicts=shutdown target to stop LVM2 services on shutdown.
-But we still missed the ordering - the shutdown.target should be reached
-only after all the services are really stopped.
+The error should NOT happen - if you can observe this report - somewhere is 
+something going out-of-sync.
 
-Reported here: https://github.com/lvmteam/lvm2/issues/17
----
- WHATS_NEW                                          |    1 +
- .../blk_availability_systemd_red_hat.service.in    |    1 +
- .../lvm2_activation_generator_systemd_red_hat.c    |    2 ++
- ...2_cluster_activation_systemd_red_hat.service.in |    1 +
- scripts/lvm2_clvmd_systemd_red_hat.service.in      |    2 +-
- scripts/lvm2_cmirrord_systemd_red_hat.service.in   |    2 +-
- scripts/lvm2_lvmetad_systemd_red_hat.service.in    |    1 +
- scripts/lvm2_lvmetad_systemd_red_hat.socket.in     |    2 --
- scripts/lvm2_lvmpolld_systemd_red_hat.service.in   |    1 +
- scripts/lvm2_lvmpolld_systemd_red_hat.socket.in    |    2 --
- scripts/lvm2_monitoring_systemd_red_hat.service.in |    2 +-
- 11 files changed, 10 insertions(+), 7 deletions(-)
+So please - post the version and  -vvvv log of this case.
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index 1d9032d..814873e 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.02.185 - 
- ==================================
-+  Add missing Before=shutdown.target to LVM2 services to fix shutdown ordering.
- 
- Version 2.02.184 - 22nd March 2019
- ==================================
-diff --git a/scripts/blk_availability_systemd_red_hat.service.in b/scripts/blk_availability_systemd_red_hat.service.in
-index 9462072..05fe2ee 100644
---- a/scripts/blk_availability_systemd_red_hat.service.in
-+++ b/scripts/blk_availability_systemd_red_hat.service.in
-@@ -1,5 +1,6 @@
- [Unit]
- Description=Availability of block devices
-+Before=shutdown.target
- After=lvm2-activation.service lvm2-lvmetad.service iscsi-shutdown.service iscsi.service iscsid.service fcoe.service rbdmap.service
- DefaultDependencies=no
- Conflicts=shutdown.target
-diff --git a/scripts/lvm2_activation_generator_systemd_red_hat.c b/scripts/lvm2_activation_generator_systemd_red_hat.c
-index 487582f..f85a28f 100644
---- a/scripts/lvm2_activation_generator_systemd_red_hat.c
-+++ b/scripts/lvm2_activation_generator_systemd_red_hat.c
-@@ -127,6 +127,8 @@ static int generate_unit(const char *dir, int unit, int sysinit_needed)
- 	      "SourcePath=/etc/lvm/lvm.conf\n"
- 	      "DefaultDependencies=no\n", f);
- 
-+	fputs("Conflicts=shutdown.target\n", f);
-+
- 	if (unit == UNIT_NET) {
- 		fprintf(f, "After=%s iscsi.service fcoe.service rbdmap.service\n"
- 			"Before=remote-fs-pre.target shutdown.target\n\n"
-diff --git a/scripts/lvm2_cluster_activation_systemd_red_hat.service.in b/scripts/lvm2_cluster_activation_systemd_red_hat.service.in
-index bf4aa1e..6a966b3 100644
---- a/scripts/lvm2_cluster_activation_systemd_red_hat.service.in
-+++ b/scripts/lvm2_cluster_activation_systemd_red_hat.service.in
-@@ -1,6 +1,7 @@
- [Unit]
- Description=Clustered LVM volumes activation service
- Requires=lvm2-clvmd.service
-+Before=shutdown.target
- After=lvm2-clvmd.service lvm2-cmirrord.service
- OnFailure=lvm2-clvmd.service
- DefaultDependencies=no
-diff --git a/scripts/lvm2_clvmd_systemd_red_hat.service.in b/scripts/lvm2_clvmd_systemd_red_hat.service.in
-index ced2774..2af365f 100644
---- a/scripts/lvm2_clvmd_systemd_red_hat.service.in
-+++ b/scripts/lvm2_clvmd_systemd_red_hat.service.in
-@@ -2,7 +2,7 @@
- Description=Clustered LVM daemon
- Documentation=man:clvmd(8)
- After=dlm.service corosync.service
--Before=remote-fs-pre.target
-+Before=remote-fs-pre.target shutdown.target
- Requires=network.target dlm.service corosync.service
- RefuseManualStart=true
- RefuseManualStop=true
-diff --git a/scripts/lvm2_cmirrord_systemd_red_hat.service.in b/scripts/lvm2_cmirrord_systemd_red_hat.service.in
-index e482b9a..fc73aea 100644
---- a/scripts/lvm2_cmirrord_systemd_red_hat.service.in
-+++ b/scripts/lvm2_cmirrord_systemd_red_hat.service.in
-@@ -3,7 +3,7 @@ Description=Clustered LVM mirror log daemon
- Documentation=man:cmirrord(8)
- Requires=corosync.service
- After=corosync.service
--Before=remote-fs-pre.target
-+Before=remote-fs-pre.target shutdown.target
- DefaultDependencies=no
- Conflicts=shutdown.target
- 
-diff --git a/scripts/lvm2_lvmetad_systemd_red_hat.service.in b/scripts/lvm2_lvmetad_systemd_red_hat.service.in
-index 92e6d69..960f32d 100644
---- a/scripts/lvm2_lvmetad_systemd_red_hat.service.in
-+++ b/scripts/lvm2_lvmetad_systemd_red_hat.service.in
-@@ -2,6 +2,7 @@
- Description=LVM2 metadata daemon
- Documentation=man:lvmetad(8)
- Requires=lvm2-lvmetad.socket
-+Before=shutdown.target
- After=lvm2-lvmetad.socket
- DefaultDependencies=no
- Conflicts=shutdown.target
-diff --git a/scripts/lvm2_lvmetad_systemd_red_hat.socket.in b/scripts/lvm2_lvmetad_systemd_red_hat.socket.in
-index 2663c72..3201537 100644
---- a/scripts/lvm2_lvmetad_systemd_red_hat.socket.in
-+++ b/scripts/lvm2_lvmetad_systemd_red_hat.socket.in
-@@ -1,8 +1,6 @@
- [Unit]
- Description=LVM2 metadata daemon socket
- Documentation=man:lvmetad(8)
--DefaultDependencies=no
--Conflicts=shutdown.target
- 
- [Socket]
- ListenStream=@DEFAULT_RUN_DIR@/lvmetad.socket
-diff --git a/scripts/lvm2_lvmpolld_systemd_red_hat.service.in b/scripts/lvm2_lvmpolld_systemd_red_hat.service.in
-index 4ad4e61..a06cbe9 100644
---- a/scripts/lvm2_lvmpolld_systemd_red_hat.service.in
-+++ b/scripts/lvm2_lvmpolld_systemd_red_hat.service.in
-@@ -2,6 +2,7 @@
- Description=LVM2 poll daemon
- Documentation=man:lvmpolld(8)
- Requires=lvm2-lvmpolld.socket
-+Before=shutdown.target
- After=lvm2-lvmpolld.socket
- DefaultDependencies=no
- Conflicts=shutdown.target
-diff --git a/scripts/lvm2_lvmpolld_systemd_red_hat.socket.in b/scripts/lvm2_lvmpolld_systemd_red_hat.socket.in
-index 0537d7f..743669e 100644
---- a/scripts/lvm2_lvmpolld_systemd_red_hat.socket.in
-+++ b/scripts/lvm2_lvmpolld_systemd_red_hat.socket.in
-@@ -1,8 +1,6 @@
- [Unit]
- Description=LVM2 poll daemon socket
- Documentation=man:lvmpolld(8)
--DefaultDependencies=no
--Conflicts=shutdown.target
- 
- [Socket]
- ListenStream=@DEFAULT_RUN_DIR@/lvmpolld.socket
-diff --git a/scripts/lvm2_monitoring_systemd_red_hat.service.in b/scripts/lvm2_monitoring_systemd_red_hat.service.in
-index ebc069e..4bf87a0 100644
---- a/scripts/lvm2_monitoring_systemd_red_hat.service.in
-+++ b/scripts/lvm2_monitoring_systemd_red_hat.service.in
-@@ -3,7 +3,7 @@ Description=Monitoring of LVM2 mirrors, snapshots etc. using dmeventd or progres
- Documentation=man:dmeventd(8) man:lvcreate(8) man:lvchange(8) man:vgchange(8)
- Requires=dm-event.socket lvm2-lvmetad.socket
- After=dm-event.socket dm-event.service lvm2-lvmetad.socket lvm2-activation.service lvm2-lvmetad.service
--Before=local-fs-pre.target
-+Before=local-fs-pre.target shutdown.target
- DefaultDependencies=no
- Conflicts=shutdown.target
- 
+It does look like somewhere is missing synchronization wait.
+
+
+Zdenek
 
 
