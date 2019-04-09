@@ -1,42 +1,56 @@
-From: David Teigland <teigland@sourceware.org>
-Date: Mon, 8 Apr 2019 11:57:09 -0400
-Subject: master - WHATS_NEW: add several recent changes
-Message-ID: <201904081557.x38Fv9ng025928@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: Gang He <ghe@suse.com>
+Date: Tue, 09 Apr 2019 04:14:09 -0600
+Subject: lvm snapshot creation ends with the error message
+Message-ID: <5CAC7071020000F90005E796@prv1-mh.provo.novell.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=344a9e9afd9f9038f53887e55e721033d1dc3b65
-Commit:        344a9e9afd9f9038f53887e55e721033d1dc3b65
-Parent:        7836e7aa1c17216ed368fda89cfc805a07efda81
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Mon Apr 8 10:56:43 2019 -0500
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Mon Apr 8 10:56:43 2019 -0500
+Hello Guys,
 
-WHATS_NEW: add several recent changes
+Our user complained a confused error message when create a LV snapshot successfully.
+e.g. 
+lvcreate --snapshot "/dev/$vgroup/$volume" --name "$snapvol" -l '80%FREE' 
+returns the following:
+Taking snapshot mongo_db-snap
+  device-mapper: remove ioctl on (254:2) failed: Device or resource busy  <<== here, why we need to print this error message? since we can retry a few time before failure
+  Logical volume "mongo_db-snap" created.
 
----
- WHATS_NEW |    6 ++++++
- 1 files changed, 6 insertions(+), 0 deletions(-)
+The related code is in libdm-iface.c file under libdm/ioctl.
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index 81c3d71..728019e 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,11 @@
- Version 2.03.02 - 
- ===================================
-+  Skip autoactivation for a PV when PV size does not match device size.
-+  Remove first-pvscan-initialization which should no longer be needed.
-+  Add remote refresh through lvmlockd/dlm for shared LVs after lvextend.
-+  Ignore foreign and shared PVs for pvscan online files.
-+  Add config setting to control fields in debug file and verbose output.
-+  Add command[pid] and timestamp to debug file and verbose output.
-   Fix missing growth of _pmsmare volume when extending _tmeta volume.
-   Automatically grow thin metadata, when thin data gets too big.
-   Add synchronization with udev before removing cached devices.
+1873                 else {
+1874                         if (_log_suppress || dmt->ioctl_errno == EINTR)
+1875                                 log_verbose("device-mapper: %s ioctl on %s %s%s%.0d%s%.0d%s%s "
+1876                                             "failed: %s",
+1877                                             _cmd_data_v4[dmt->type].name,
+1878                                             dmi->name, dmi->uuid,
+1879                                             dmt->major > 0 ? "(" : "",
+1880                                             dmt->major > 0 ? dmt->major : 0,
+1881                                             dmt->major > 0 ? ":" : "",
+1882                                             dmt->minor > 0 ? dmt->minor : 0,
+1883                                             dmt->major > 0 && dmt->minor == 0 ? "0" : "",
+1884                                             dmt->major > 0 ? ")" : "",
+1885                                             strerror(dmt->ioctl_errno));
+1886                         else
+1887                                 log_error("device-mapper: %s ioctl on %s %s%s%.0d%s%.0d%s%s "
+1888                                           "failed: %s",
+1889                                           _cmd_data_v4[dmt->type].name,
+1890                                           dmi->name, dmi->uuid,
+1891                                           dmt->major > 0 ? "(" : "",
+1892                                           dmt->major > 0 ? dmt->major : 0,
+1893                                           dmt->major > 0 ? ":" : "",
+1894                                           dmt->minor > 0 ? dmt->minor : 0,
+1895                                           dmt->major > 0 && dmt->minor == 0 ? "0" : "",
+1896                                           dmt->major > 0 ? ")" : "",
+1897                                           strerror(dmt->ioctl_errno));
+1898
+
+
+Thanks
+Gang
+
+
 
 
