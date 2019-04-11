@@ -1,41 +1,65 @@
-From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Wed, 10 Apr 2019 07:31:31 -0400
-Subject: stable-2.02 - gcc: cleanup const warning
-Message-ID: <201904101131.x3ABVVRO014128@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: Eric Ren <renzhengeek@gmail.com>
+Date: Thu, 11 Apr 2019 08:27:44 +0800
+Subject: Aborting. LV mythinpool_tmeta is now incomplete
+Message-ID: <CAKM4AewbcVR1x0cK8hWLCRxb1BzDd-F+WeK6ObUmB35N1HTqOA@mail.gmail.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=6064b9f1b283c63cc3710555a04d2df0c6357cb0
-Commit:        6064b9f1b283c63cc3710555a04d2df0c6357cb0
-Parent:        6d4f36c2c7f782af31eca7eca63310791a4f8e93
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed Apr 10 12:56:23 2019 +0200
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Wed Apr 10 13:30:34 2019 +0200
+Hello list,
 
-gcc: cleanup const warning
+Recently, we're exercising our container environment which uses lvm to
+manage thin LVs, meanwhile we found a very strange error to activate the
+thin LV:
 
----
- lib/filters/filter-persistent.c |    4 ++--
- 1 files changed, 2 insertions(+), 2 deletions(-)
+?Aborting.  LV mythinpool_tmeta is now incomplete and '--activationmode
+partial' was not specified.\n: exit status 5: unknown"
 
-diff --git a/lib/filters/filter-persistent.c b/lib/filters/filter-persistent.c
-index 1d24af8..0586942 100644
---- a/lib/filters/filter-persistent.c
-+++ b/lib/filters/filter-persistent.c
-@@ -50,8 +50,8 @@ struct pfilter {
-  * by default.  The old code for it should be removed.
-  */
- 
--static char* _good_device = "good";
--static char* _bad_device = "bad";
-+static const char* _good_device = "good";
-+static const char* _bad_device = "bad";
- 
- /*
-  * The hash table holds one of these two states
+centos 7.6
+# lvm version
+  LVM version:     2.02.180(2)-RHEL7 (2018-07-20)
+  Library version: 1.02.149-RHEL7 (2018-07-20)
+  Driver version:  4.35.0
 
+It has appeared several times, but can not be reproduced easily by simple
+steps, and it only errors at that moment, after it happens everything seems
+OK but only that activation failed.
 
+Looking at the code a bit. At first, I suspect the PV may disappear for
+some reason, but the VG sits on only one PV, the setup is simple, the
+environment is only for testing purposes, it seems unlikely the PV has
+problem at that moment and I don't see any problem message with the disk.
+
+```
+
+2513         /* FIXME Avoid repeating identical stat in
+dm_tree_node_add_target_area */
+2514         for (s = start_area; s < areas; s++) {
+2515                 if ((seg_type(seg, s) == AREA_PV &&
+2516                      (!seg_pvseg(seg, s) || !seg_pv(seg, s) ||
+!seg_dev(seg, s) ||
+2517                        !(name = dev_name(seg_dev(seg, s))) || !*name ||
+2518                        stat(name, &info) < 0 || !S_ISBLK(info.st_mode))) ||
+2519                     (seg_type(seg, s) == AREA_LV && !seg_lv(seg, s))) {
+2520                         if (!seg->lv->vg->cmd->partial_activation) {
+2521                                 if
+(!seg->lv->vg->cmd->degraded_activation ||
+2522                                     !lv_is_raid_type(seg->lv)) {
+2523                                         log_error("Aborting.  LV
+%s is now incomplete "
+2524                                                   "and
+'--activationmode partial' was not specified.",
+2525                                                   display_lvname(seg->lv));
+2526                                         return 0;
+
+```
+So, does anyone see the same problem? Or any hints to hunt the root cause?
+Any suggestion would be welcome!
+
+Regards,
+Eric
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20190411/eca16ee3/attachment.htm>
