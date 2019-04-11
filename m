@@ -1,56 +1,35 @@
 From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Thu, 11 Apr 2019 13:21:12 +0200
-Subject: Aborting. LV mythinpool_tmeta is now incomplete
-In-Reply-To: <CAKM4Aex11MbzzGrWE=aYF+KM+_o3cOrs6N2n_T5+tSpuu7J=5Q@mail.gmail.com>
-References: <CAKM4AewbcVR1x0cK8hWLCRxb1BzDd-F+WeK6ObUmB35N1HTqOA@mail.gmail.com>
-	<CAKM4Aex11MbzzGrWE=aYF+KM+_o3cOrs6N2n_T5+tSpuu7J=5Q@mail.gmail.com>
-Message-ID: <9c0fe4b3-24cb-837c-f8fa-c5b89c5665a4@redhat.com>
+Date: Thu, 11 Apr 2019 13:23:03 +0200
+Subject: lvm snapshot creation ends with the error message
+In-Reply-To: <5CAEFF6D020000F90005EF6C@prv1-mh.provo.novell.com>
+References: <5CAC7071020000F90005E796@prv1-mh.provo.novell.com>
+	<6fdd4655-4d3a-f12f-aa57-b97b752e437c@redhat.com>
+	<5CAEFF6D020000F90005EF6C@prv1-mh.provo.novell.com>
+Message-ID: <436c0cec-21c1-593e-8095-c4fe1d5cff71@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Dne 11. 04. 19 v 12:01 Eric Ren napsal(a):
-> Hi,
+Dne 11. 04. 19 v 10:48 Gang He napsal(a):
+> Hi Zdenek,
 > 
-> Another error message is:
-> 
-> "Failed to suspend thin snapshot origin?..."
-> 
-> which is in?_lv_create_an_lv():
-> 
-> ```
-> 7829? ? ? ? ?} else if (lv_is_thin_volume(lv)) {
-> 7830? ? ? ? ? ? ? ? ?/* For snapshot, suspend active thin origin first */
-...
-
-> is active */
-> 7843? ? ? ? ? ? ? ? ? ? ? ? ?if (!update_pool_lv(pool_lv, 0)) {
-> 7844? ? ? ? ? ? ? ? ? ? ? ? ? ? ? ? ?stack;
-> 7845? ? ? ? ? ? ? ? ? ? ? ? ? ? ? ? ?goto revert_new_lv;
-> 7846? ? ? ? ? ? ? ? ? ? ? ? ?}
-> ```
-> 
-> I don't understand why we need to?suspend_lv_origin() and?resume_lv_origin() 
-> in line?
-> 
-> And, what reasons might cause this errors?
+> The LVM2 version is as below,
+>    rpm -V lvm2-2.02.120-78.16.1.x86_64
+> The other information is attached, see lvm.txt.
+> My question is, how do we disable this intermediate error message printing?
 
 
 Hi
 
-When you take any snapshot (thin or thick) the origin LV is suspend with 
-fsfreeze operation - so the snapshot is takes with filesystem in 'consistent' 
-state.
+Why is anyone using lvm2 version 2.02.120 ?
 
-Otherwise without this - you may end-up with fs junk in your device - as the 
-metadata of the filesystem might have stated in page-cache - and no fsck 
-utility would be able to figure out what should be correct state of 'fs' 
-without losing various amount of data in this operation.
-
+Are you able to reproduce the error with more recent version of lvm2.
+(As there has been quite a long list of bug fixed).
 
 Regards
+
 
 Zdenek
 
