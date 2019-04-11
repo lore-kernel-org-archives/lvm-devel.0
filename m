@@ -1,65 +1,58 @@
-From: Eric Ren <renzhengeek@gmail.com>
-Date: Thu, 11 Apr 2019 08:27:44 +0800
-Subject: Aborting. LV mythinpool_tmeta is now incomplete
-Message-ID: <CAKM4AewbcVR1x0cK8hWLCRxb1BzDd-F+WeK6ObUmB35N1HTqOA@mail.gmail.com>
+From: Gang He <ghe@suse.com>
+Date: Thu, 11 Apr 2019 02:48:45 -0600
+Subject: lvm snapshot creation ends with the error message
+In-Reply-To: <6fdd4655-4d3a-f12f-aa57-b97b752e437c@redhat.com>
+References: <5CAC7071020000F90005E796@prv1-mh.provo.novell.com>
+	<6fdd4655-4d3a-f12f-aa57-b97b752e437c@redhat.com>
+Message-ID: <5CAEFF6D020000F90005EF6C@prv1-mh.provo.novell.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Hello list,
+Hi Zdenek,
 
-Recently, we're exercising our container environment which uses lvm to
-manage thin LVs, meanwhile we found a very strange error to activate the
-thin LV:
+The LVM2 version is as below,
+  rpm -V lvm2-2.02.120-78.16.1.x86_64
+The other information is attached, see lvm.txt.
+My question is, how do we disable this intermediate error message printing? 
 
-?Aborting.  LV mythinpool_tmeta is now incomplete and '--activationmode
-partial' was not specified.\n: exit status 5: unknown"
+Thanks
+Gang
 
-centos 7.6
-# lvm version
-  LVM version:     2.02.180(2)-RHEL7 (2018-07-20)
-  Library version: 1.02.149-RHEL7 (2018-07-20)
-  Driver version:  4.35.0
+>>> On 2019/4/9 at 22:53, in message
+<6fdd4655-4d3a-f12f-aa57-b97b752e437c@redhat.com>, Zdenek Kabelac
+<zkabelac@redhat.com> wrote:
+> Dne 09. 04. 19 v 12:14 Gang He napsal(a):
+>> Hello Guys,
+>> 
+>> Our user complained a confused error message when create a LV snapshot 
+> successfully.
+>> e.g.
+>> lvcreate --snapshot "/dev/$vgroup/$volume" --name "$snapvol" -l '80%FREE'
+>> returns the following:
+>> Taking snapshot mongo_db-snap
+>>    device-mapper: remove ioctl on (254:2) failed: Device or resource busy  <<== 
+> here, why we need to print this error message? since we can retry a few time 
+> before failure
+>>    Logical volume "mongo_db-snap" created.
+>> 
+>> The related code is in libdm-iface.c file under libdm/ioctl.
+> 
+> Hi
+> 
+> The error should NOT happen - if you can observe this report - somewhere is 
+> something going out-of-sync.
+> 
+> So please - post the version and  -vvvv log of this case.
+> 
+> It does look like somewhere is missing synchronization wait.
+> 
+> 
+> Zdenek
 
-It has appeared several times, but can not be reproduced easily by simple
-steps, and it only errors at that moment, after it happens everything seems
-OK but only that activation failed.
-
-Looking at the code a bit. At first, I suspect the PV may disappear for
-some reason, but the VG sits on only one PV, the setup is simple, the
-environment is only for testing purposes, it seems unlikely the PV has
-problem at that moment and I don't see any problem message with the disk.
-
-```
-
-2513         /* FIXME Avoid repeating identical stat in
-dm_tree_node_add_target_area */
-2514         for (s = start_area; s < areas; s++) {
-2515                 if ((seg_type(seg, s) == AREA_PV &&
-2516                      (!seg_pvseg(seg, s) || !seg_pv(seg, s) ||
-!seg_dev(seg, s) ||
-2517                        !(name = dev_name(seg_dev(seg, s))) || !*name ||
-2518                        stat(name, &info) < 0 || !S_ISBLK(info.st_mode))) ||
-2519                     (seg_type(seg, s) == AREA_LV && !seg_lv(seg, s))) {
-2520                         if (!seg->lv->vg->cmd->partial_activation) {
-2521                                 if
-(!seg->lv->vg->cmd->degraded_activation ||
-2522                                     !lv_is_raid_type(seg->lv)) {
-2523                                         log_error("Aborting.  LV
-%s is now incomplete "
-2524                                                   "and
-'--activationmode partial' was not specified.",
-2525                                                   display_lvname(seg->lv));
-2526                                         return 0;
-
-```
-So, does anyone see the same problem? Or any hints to hunt the root cause?
-Any suggestion would be welcome!
-
-Regards,
-Eric
 -------------- next part --------------
-An HTML attachment was scrubbed...
-URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20190411/eca16ee3/attachment.htm>
+An embedded and charset-unspecified text was scrubbed...
+Name: lvm.txt
+URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20190411/08c795a4/attachment.txt>
