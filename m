@@ -1,70 +1,51 @@
-From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Thu, 11 Apr 2019 15:13:47 +0200
-Subject: Aborting. LV mythinpool_tmeta is now incomplete
-In-Reply-To: <CAKM4AeyMsmqmF7NHu9-u0-86LnzrHR4Z5xNt0bmfpLJyoDE0Sw@mail.gmail.com>
-References: <CAKM4AewbcVR1x0cK8hWLCRxb1BzDd-F+WeK6ObUmB35N1HTqOA@mail.gmail.com>
-	<47346a29-e6c7-6e22-4360-2d07e2ec7be3@redhat.com>
-	<CAKM4Aexm31mYW8WDeiZ4shCoysCcGjic8zV0XiVqEVZvKz-ecQ@mail.gmail.com>
-	<7839ff52-18e5-6a95-9a2a-12ea73457700@redhat.com>
-	<CAKM4AezLrUrXZKA=vKMaRHcij3K6UBZpy-RcVXeUB9Wwfszh7Q@mail.gmail.com>
-	<62151b2e-c21a-177e-f66b-e2e08857be17@redhat.com>
-	<CAKM4AeyMsmqmF7NHu9-u0-86LnzrHR4Z5xNt0bmfpLJyoDE0Sw@mail.gmail.com>
-Message-ID: <6514b2be-67d7-3dfe-38b9-95e3bb39f55a@redhat.com>
+From: David Teigland <teigland@sourceware.org>
+Date: Thu, 11 Apr 2019 11:33:52 -0400
+Subject: master - hints: fix case of error getting device size
+Message-ID: <201904111533.x3BFXqrn017705@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Dne 11. 04. 19 v 15:09 Eric Ren napsal(a):
-> Hi,
-> 
->> So do you get  'partial' error on thin-pool activation on your physical server ?
-> 
-> Yes, the VG of the thin pool only has one simple physical disk, at
-> beginning, I also suspected the disk may disconnect at that moment.
-> But, I start to think maybe it is caused by some reason hidden in the
-> interaction between lvm and dm driver in kernel.
-> 
-> It can not be reproduced easily, but happens randomly for several
-> times. The behavior model of lvm abstracted from the upper service is
-> like:
-> there are many (64) control flow in parallel, in each  one it loops to
-> randomly create/activate/delete thin LVs.
-> 
-> The error happened two place:
-> 1. activate the thin LV:  _lv_activate -> _tree_action ->
-> dev_manager_activate ->  _add_new_lv_to_dtree -> add_areas_line  ->
-> striped_add_target_line on **metadata LV**,
-> I don't what .add_target_line() does for?
-> 
-> 2. fail to suspend the origin LV when created.
-> 
-> I'm trying to reproduce it in a simple way, will report once succeed :-)
-> 
->
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=0cc80ccfd5215073f0f0b0aa3c2913076ae01751
+Commit:        0cc80ccfd5215073f0f0b0aa3c2913076ae01751
+Parent:        25f231cf06c3938838a64f5b88834d831f45c1c2
+Author:        David Teigland <teigland@redhat.com>
+AuthorDate:    Thu Apr 11 10:32:28 2019 -0500
+Committer:     David Teigland <teigland@redhat.com>
+CommitterDate: Thu Apr 11 10:32:28 2019 -0500
 
-Hi
+hints: fix case of error getting device size
 
+When checking hints, if there's an error getting
+the device size, that should be equivalent to
+seeing zero size.
+---
+ lib/label/hints.c |    4 +++-
+ 1 files changed, 3 insertions(+), 1 deletions(-)
 
-Well if your setup 'sits' on the multipath - and there are 'moments' where
-non of the paths are available and it happens rightly during the activation,
-then lvm2 can consider device is missing.
-
-It could be there is missing 'feature' where certain device types may need 
-some 'threshold' of retries??? to consider it being gone - I don't know...
-
-Depends how common such use case is.
-
-Also you should collect kernel logs from the moment you observe such behavior,
-maybe multipath is not setup properly ?
-
-Anyway - proper reproducer with full -vvvv log would be really the most 
-explanatory and needed to move on here.
-
-Regards
-
-Zdenek
-
+diff --git a/lib/label/hints.c b/lib/label/hints.c
+index a2e7646..eb0e725 100644
+--- a/lib/label/hints.c
++++ b/lib/label/hints.c
+@@ -414,7 +414,7 @@ static int _dev_in_hint_hash(struct cmd_context *cmd, struct device *dev)
+ 	if (!cmd->scan_lvs && dm_is_dm_major(MAJOR(dev->dev)) && dev_is_lv(dev))
+ 		return 0;
+ 
+-	if (dev_get_size(dev, &devsize) && !devsize)
++	if (!dev_get_size(dev, &devsize) || !devsize)
+ 		return 0;
+ 
+ 	return 1;
+@@ -604,6 +604,8 @@ static int _read_hint_file(struct cmd_context *cmd, struct dm_list *hints, int *
+ 	if (!(fp = fopen(_hints_file, "r")))
+ 		return 0;
+ 
++	log_debug("Reading hint file");
++
+ 	for (i = 0; i < HINT_LINE_WORDS; i++)
+ 		split[i] = NULL;
+ 
 
 
