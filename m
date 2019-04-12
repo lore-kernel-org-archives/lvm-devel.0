@@ -1,43 +1,53 @@
-From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Fri, 25 Sep 2020 21:07:02 +0000 (GMT)
-Subject: master - thin: no delete message for device_id 0
-Message-ID: <20200925210702.A39B9385782E@sourceware.org>
+From: Eric Ren <renzhengeek@gmail.com>
+Date: Fri, 12 Apr 2019 23:03:46 +0800
+Subject: lvcreate hangs forever and udev work timeout
+In-Reply-To: <CAKM4Aezz1N14MuLcQdJkzvrLFf4f2h-H+UjgL2jVRrBhxVOPow@mail.gmail.com>
+References: <CAKM4AeyUFr1PQB8jSVR2iaa9tTozwij0cCOfFWdTaX+txru0mg@mail.gmail.com>
+	<00ae05c4-5ad8-1137-076d-57a24f093fd3@redhat.com>
+	<CAKM4Aexiy-iXuNs6Nn-JudytKQRizovjg_3TVL0_xn_7+e3wXg@mail.gmail.com>
+	<CAKM4Aezz1N14MuLcQdJkzvrLFf4f2h-H+UjgL2jVRrBhxVOPow@mail.gmail.com>
+Message-ID: <CAKM4AewQpxTmRZ=GNqCaEb0yL=5ukVUNrhWJ-bFnXeaFoiJh4Q@mail.gmail.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=e2eb1dc501aca4b11997b31978c9ce62916a7c98
-Commit:        e2eb1dc501aca4b11997b31978c9ce62916a7c98
-Parent:        fc9e7328113fb3c1563909cce3abde329684c637
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Sep 25 22:42:53 2020 +0200
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Fri Sep 25 22:54:07 2020 +0200
+Hi,
 
-thin: no delete message for device_id 0
+> Although the /dev/dm-26 is visible, but the device seems not ready in kernel.
 
-Since we always use device_id > 0, we could use
-device_id == 0 to actually mark thinLV as an
-LV we want to remove without delete message.
----
- lib/metadata/pool_manip.c | 3 ++-
- 1 file changed, 2 insertions(+), 1 deletion(-)
+Sorry, it's not:
 
-diff --git a/lib/metadata/pool_manip.c b/lib/metadata/pool_manip.c
-index 23b5b63ba..a9dc6116d 100644
---- a/lib/metadata/pool_manip.c
-+++ b/lib/metadata/pool_manip.c
-@@ -310,7 +310,8 @@ int detach_pool_lv(struct lv_segment *seg)
- 	if (!detach_thin_external_origin(seg))
- 		return_0;
- 
--	if (!attach_pool_message(first_seg(seg->pool_lv),
-+	if (seg->device_id && /* Only thins with device_id > 0 can be deleted */
-+	    !attach_pool_message(first_seg(seg->pool_lv),
- 				 DM_THIN_MESSAGE_DELETE,
- 				 NULL, seg->device_id, no_update))
- 		return_0;
+[root at iZuf6dbyd7ede51sykedamZ ~]# dmsetup info /dev/dm-26
+Device dm-26 not found
+Command failed.
+
+[root at iZuf6dbyd7ede51sykedamZ ~]# dmsetup info /dev/dm-25
+Name:              vg0-21
+State:             ACTIVE
+Read Ahead:        256
+Tables present:    LIVE
+Open count:        0
+Event number:      0
+Major, minor:      252, 25
+Number of targets: 1
+UUID: LVM-PIFRRbKrhSqE5j6Q8jfk1qJJ1TNFPUI2SzDoe3z1azKH6HAOPsleizy3LozEMJus
+
+[root at iZuf6dbyd7ede51sykedamZ ~]# dmsetup status | grep vg0-22
+vg0-22: 0 20971520 thin 274432 20971519
+
+[root at iZuf6dbyd7ede51sykedamZ ~]# dmsetup info vg0-22
+Name:              vg0-22
+State:             ACTIVE
+Read Ahead:        256
+Tables present:    LIVE
+Open count:        0
+Event number:      0
+Major, minor:      252, 26
+Number of targets: 1
+UUID: LVM-PIFRRbKrhSqE5j6Q8jfk1qJJ1TNFPUI2YMnwPdLNF3JggAzXGwaFujcPePyOAeqd
+
+Regard.
 
 
