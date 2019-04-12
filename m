@@ -1,92 +1,68 @@
 From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Fri, 12 Apr 2019 15:40:56 +0200
-Subject: lvcreate hangs forever and udev work timeout
-In-Reply-To: <CAKM4AeyUFr1PQB8jSVR2iaa9tTozwij0cCOfFWdTaX+txru0mg@mail.gmail.com>
-References: <CAKM4AeyUFr1PQB8jSVR2iaa9tTozwij0cCOfFWdTaX+txru0mg@mail.gmail.com>
-Message-ID: <00ae05c4-5ad8-1137-076d-57a24f093fd3@redhat.com>
+Date: Fri, 12 Apr 2019 15:44:18 +0200
+Subject: Aborting. LV mythinpool_tmeta is now incomplete
+In-Reply-To: <CAKM4AexgHS64pm8CE4PhToUCL_12j0KzAPV-XJ5HNGxvVn5rSA@mail.gmail.com>
+References: <CAKM4AewbcVR1x0cK8hWLCRxb1BzDd-F+WeK6ObUmB35N1HTqOA@mail.gmail.com>
+	<47346a29-e6c7-6e22-4360-2d07e2ec7be3@redhat.com>
+	<CAKM4Aexm31mYW8WDeiZ4shCoysCcGjic8zV0XiVqEVZvKz-ecQ@mail.gmail.com>
+	<7839ff52-18e5-6a95-9a2a-12ea73457700@redhat.com>
+	<CAKM4AezLrUrXZKA=vKMaRHcij3K6UBZpy-RcVXeUB9Wwfszh7Q@mail.gmail.com>
+	<62151b2e-c21a-177e-f66b-e2e08857be17@redhat.com>
+	<CAKM4AeyMsmqmF7NHu9-u0-86LnzrHR4Z5xNt0bmfpLJyoDE0Sw@mail.gmail.com>
+	<6514b2be-67d7-3dfe-38b9-95e3bb39f55a@redhat.com>
+	<CAKM4Aez9H=GuRLK0EDJTwpb7j34tCu1aY4dS5_L4saDGERestg@mail.gmail.com>
+	<CAKM4Aew6OawXaes+whH-0W-aAedR_JMF-ObYtVtowOSUdQQJ_Q@mail.gmail.com>
+	<7b17539c-749c-154f-d777-1d80d562a7f6@redhat.com>
+	<CAKM4AexgHS64pm8CE4PhToUCL_12j0KzAPV-XJ5HNGxvVn5rSA@mail.gmail.com>
+Message-ID: <e1c1f1c2-2717-25cd-e063-50df9df04c4f@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Dne 12. 04. 19 v 10:58 Eric Ren napsal(a):
-> Hi,
+Dne 12. 04. 19 v 12:42 Eric Ren napsal(a):
+> Hi!
 > 
-> As subject, it seems a interaction problem between lvm and systemd-udev:
+>> Looking at provided log file - the system seems to be using some weird udev
+>> rule - which results in generating  strange /dev/__  symlinks.
 > 
-> ```
-> #lvm version
->    LVM version:     2.02.130(2)-RHEL7 (2015-10-14)
->    Library version: 1.02.107-RHEL7 (2015-10-14)
->    Driver version:  4.35.0
-> ```
+> Yes! I also see these weird device names, but I don't have a good
+> explanation for it, so that I'm stupid to think deep into it.
+> Thanks!!!
 > 
-> lvm call trace when hangs:
-> ```
+>> There are already visible some other devices like i.e.:
+>>
+>> /dev/disk/by-id/virtio-instance-store0___O-part1 pointing to  /dev/vda1
 > 
-> (gdb) bt
-> #0  0x00007f7030b876a7 in semop () from /lib64/libc.so.6
-> #1  0x00007f70312b708c in _udev_wait (cookie=223161260) at libdm-common.c:2522
-> #2  dm_udev_wait (cookie=223161260) at libdm-common.c:2540
-> #3  0x000055e23866a60d in fs_unlock () at activate/fs.c:491
-> #4  0x000055e238677855 in _file_lock_resource (cmd=<optimized out>,
-> resource=<optimized out>, flags=256, lv=<optimized out>) at
-> locking/file_locking.c:64
-> #5  0x000055e23860a6c8 in _lock_vol (cmd=cmd at entry=0x55e239595000,
-> resource=<optimized out>, resource at entry=0x7ffe634b06b0 "#sync_names",
-> flags=flags at entry=256, lv_op=lv_op at entry=LV_NOOP,
->      lv=lv at entry=0x0) at locking/locking.c:275
-> #6  0x000055e23860b013 in lock_vol (cmd=cmd at entry=0x55e239595000,
-> vol=<optimized out>, vol at entry=0x55e2386aae91 "#sync_names",
-> flags=flags at entry=256, lv=lv at entry=0x0) at locking/locking.c:355
-> #7  0x000055e23860bcf0 in sync_dev_names
-> (cmd=cmd at entry=0x55e239595000) at locking/locking.c:536
-> #8  0x000055e2385b4c4b in lvcreate (cmd=0x55e239595000,
-> argc=<optimized out>, argv=<optimized out>) at lvcreate.c:1534
-> #9  0x000055e2385bd388 in lvm_run_command
-> (cmd=cmd at entry=0x55e239595000, argc=1, argc at entry=8,
-> argv=0x7ffe634b0df0, argv at entry=0x7ffe634b0db8) at lvmcmdline.c:1655
-> #10 0x000055e2385bddf0 in lvm2_main (argc=8, argv=0x7ffe634b0db8) at
-> lvmcmdline.c:2121
-> ```
+> So, the broken device path/symbol is only related to udev, lvm just
+> get the device list from udev DB right?
 > 
-> systemd udev logs:
-> ```
-> Apr 12 10:54:41 localhost.localdomain systemd-udevd[1363]: worker
-> [128147] /devices/virtual/block/dm-4 timeout; kill it
-> Apr 12 10:54:41 localhost.localdomain systemd-udevd[1363]: seq 2342985
-> '/devices/virtual/block/dm-4' killed
-> ```
-> 
-> Is this a known issue? Please ask if any information needed :-)
-> 
+> Do you think such issue can make LVM think the disk is missing?
 
 Hi
 
-When udev kills its worker due to timeout - so udev rules was not finished 
-within predefined timeout (which unfortunately changes according to mind 
-change of udev developer - so it ranges from 90seconds to 300seconds depending 
-on date of release) - you need to look out for reason why the timeout happens -
+There is very low number of lvm developer and very high number of generated 
+different error states from udev ;)
 
-- is it because disk read was dead ?
+So far we have not though about this one - so we will need to think whether
+we can figure out something for these sorts of errors...
 
-- is it because it's overloaded system ?
+IMHO it looks like  /dev/__  symlink in your case occasionally points to 
+different device - and this is confusing lvm2
+(and resent version even more as they is way more open/close sequences beyond 
+the point I'd like to see...)
 
-- is it because of slow read operation (i.e. some raid arrays are known to 
-wake-up slowly)
+>> Also you should collect udev rules and post them here so we can check
+>> which rule could be suspected.
+> 
+> Thanks! From this, I've learned how import device filter setup is!
 
-- was udev rule accessing something it shouldn't even read ?
+Filters can fix a loooot of trouble we are otherwise having hard times to 
+figure out the right sequence....
 
-Once you know this - you can decide what's the best solution - you can 
-extended default timeout to larger value  (i.e. 300 used to be usually good 
-for this case)  you can fix/replace your failing drive.
-
-lvm2 can be unblocked with 'dmsetup udevcomplete_all'  I guess until udev API 
-will propagate its runtime timeout we can't do much more ATM...
-
-You can enable full udev debugging to obtain the reasoning which rule was 
-executed and got frozen.
+So whenever you can - set your filter as tight as possible - this will speedup 
+execution of any lvm2 command and reduce risk of accessing  unwanted devices...
 
 Regards
 
