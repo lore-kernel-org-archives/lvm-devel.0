@@ -1,66 +1,47 @@
-From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Fri, 12 Apr 2019 17:17:24 +0200
-Subject: lvcreate hangs forever and udev work timeout
-In-Reply-To: <CAKM4AewQpxTmRZ=GNqCaEb0yL=5ukVUNrhWJ-bFnXeaFoiJh4Q@mail.gmail.com>
-References: <CAKM4AeyUFr1PQB8jSVR2iaa9tTozwij0cCOfFWdTaX+txru0mg@mail.gmail.com>
-	<00ae05c4-5ad8-1137-076d-57a24f093fd3@redhat.com>
-	<CAKM4Aexiy-iXuNs6Nn-JudytKQRizovjg_3TVL0_xn_7+e3wXg@mail.gmail.com>
-	<CAKM4Aezz1N14MuLcQdJkzvrLFf4f2h-H+UjgL2jVRrBhxVOPow@mail.gmail.com>
-	<CAKM4AewQpxTmRZ=GNqCaEb0yL=5ukVUNrhWJ-bFnXeaFoiJh4Q@mail.gmail.com>
-Message-ID: <a719d149-c9af-98e3-8983-5418584b11b0@redhat.com>
+From: Heinz Mauelshagen <heinzm@sourceware.org>
+Date: Fri, 12 Apr 2019 15:38:38 -0400
+Subject: stable-2.02 - lvconvert: can't create cachepool with RAID1 metadata SubLV
+Message-ID: <201904121938.x3CJccXH012052@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Dne 12. 04. 19 v 17:03 Eric Ren napsal(a):
-> Hi,
-> 
->> Although the /dev/dm-26 is visible, but the device seems not ready in kernel.
-> 
-> Sorry, it's not:
-> 
-> [root at iZuf6dbyd7ede51sykedamZ ~]# dmsetup info /dev/dm-26
-> Device dm-26 not found
-> Command failed.
-> 
-> [root at iZuf6dbyd7ede51sykedamZ ~]# dmsetup info /dev/dm-25
-> Name:              vg0-21
-> State:             ACTIVE
-> Read Ahead:        256
-> Tables present:    LIVE
-> Open count:        0
-> Event number:      0
-> Major, minor:      252, 25
-> Number of targets: 1
-> UUID: LVM-PIFRRbKrhSqE5j6Q8jfk1qJJ1TNFPUI2SzDoe3z1azKH6HAOPsleizy3LozEMJus
-> 
-> [root at iZuf6dbyd7ede51sykedamZ ~]# dmsetup status | grep vg0-22
-> vg0-22: 0 20971520 thin 274432 20971519
-> 
-> [root at iZuf6dbyd7ede51sykedamZ ~]# dmsetup info vg0-22
-> Name:              vg0-22
-> State:             ACTIVE
-> Read Ahead:        256
-> Tables present:    LIVE
-> Open count:        0
-> Event number:      0
-> Major, minor:      252, 26
-> Number of targets: 1
-> UUID: LVM-PIFRRbKrhSqE5j6Q8jfk1qJJ1TNFPUI2YMnwPdLNF3JggAzXGwaFujcPePyOAeqd
-> 
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=699bf8609049058875d84f129d508d4ccbed3900
+Commit:        699bf8609049058875d84f129d508d4ccbed3900
+Parent:        03d6cfdd99fb1c2fd85721ab6faebbb1b6658873
+Author:        Heinz Mauelshagen <heinzm@redhat.com>
+AuthorDate:    Fri Apr 12 21:27:30 2019 +0200
+Committer:     Heinz Mauelshagen <heinzm@redhat.com>
+CommitterDate: Fri Apr 12 21:38:04 2019 +0200
 
-Hi
+lvconvert: can't create cachepool with RAID1 metadata SubLV
 
-Hmm would it be possible that associated thin pool would be in some erroneous 
-condition - i.e. out-of-space - or processing some resize ?
-This likely could result into some significant processing delay ?
+Trying to convert an exiting RAID1 LV to cache metadata SubLV
+fails because of missing exclusive activation during wiping.
 
-Since you are using very ancient lvm2  (2.02.130) we have heavily improved 
-logic for such pools over the time...
+Solve by activating the RAID1 metadata SubLV exclusively.
 
+Resolves: rhbz1698866
+---
+ tools/lvconvert.c |    4 ++--
+ 1 files changed, 2 insertions(+), 2 deletions(-)
 
-Zdenek
+diff --git a/tools/lvconvert.c b/tools/lvconvert.c
+index 2b3c3ea..bc666c0 100644
+--- a/tools/lvconvert.c
++++ b/tools/lvconvert.c
+@@ -3167,8 +3167,8 @@ static int _lvconvert_to_pool(struct cmd_context *cmd,
+ 
+ 		if (zero_metadata) {
+ 			metadata_lv->status |= LV_ACTIVATION_SKIP;
+-			if (!activate_lv(cmd, metadata_lv)) {
+-				log_error("Aborting. Failed to activate metadata lv.");
++			if (!activate_lv_excl_local(cmd, metadata_lv)) {
++				log_error("Aborting. Failed to locally activate metadata lv.");
+ 				goto bad;
+ 			}
+ 			metadata_lv->status &= ~LV_ACTIVATION_SKIP;
 
 
