@@ -1,14 +1,10 @@
 From: Eric Ren <renzhengeek@gmail.com>
-Date: Sat, 13 Apr 2019 10:08:10 +0800
+Date: Sun, 14 Apr 2019 15:30:19 +0800
 Subject: lvcreate hangs forever and udev work timeout
-In-Reply-To: <a719d149-c9af-98e3-8983-5418584b11b0@redhat.com>
+In-Reply-To: <00ae05c4-5ad8-1137-076d-57a24f093fd3@redhat.com>
 References: <CAKM4AeyUFr1PQB8jSVR2iaa9tTozwij0cCOfFWdTaX+txru0mg@mail.gmail.com>
 	<00ae05c4-5ad8-1137-076d-57a24f093fd3@redhat.com>
-	<CAKM4Aexiy-iXuNs6Nn-JudytKQRizovjg_3TVL0_xn_7+e3wXg@mail.gmail.com>
-	<CAKM4Aezz1N14MuLcQdJkzvrLFf4f2h-H+UjgL2jVRrBhxVOPow@mail.gmail.com>
-	<CAKM4AewQpxTmRZ=GNqCaEb0yL=5ukVUNrhWJ-bFnXeaFoiJh4Q@mail.gmail.com>
-	<a719d149-c9af-98e3-8983-5418584b11b0@redhat.com>
-Message-ID: <CAKM4AezfHJ1V+UvDKX_9=VPPdHK9btGGK9AFJXihwY3D2s99fw@mail.gmail.com>
+Message-ID: <CAKM4Aew4cNU0_8mBYCXjxPOzDMUt8eGtJP5mjq3g3vUUPw6-rA@mail.gmail.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -17,22 +13,26 @@ Content-Transfer-Encoding: 7bit
 
 Hi,
 
-> Hmm would it be possible that associated thin pool would be in some erroneous
-> condition - i.e. out-of-space - or processing some resize ?
+The reason is found out, as you've predicted.
 
-The testing model is:
+> is it because of slow read operation (i.e. some raid arrays are known to
+> wake-up slowly)
 
-create/mount/"do IO" (on) thin LV; and then umount/delete thin LV.
+The udev worker is blocked until timeout before killed, cause the
+"blkid" in /usr/lib/udev/rules.d/13-dm-disk.rules is too slow because
+of high IO load on the thin pool.
 
-doing this work flow in parallel.
+After remove this rule:
 
-> This likely could result into some significant processing delay ?
->
-> Since you are using very ancient lvm2  (2.02.130) we have heavily improved
-> logic for such pools over the time...
+IMPORT{builtin}="blkid"
 
-Hah, I think I've mentioned this issue can be reproduced on centos 7.6
-(2.02.180).
+for testing, the problem cannot be reproduced any more.
+
+But, we tried to increate udevd timeout to 5 min, the problem still
+happens; with 10 min timeout, can workaround this problem.
+
+>From my understanding, the blkid will only read the fs superblock, why
+it takes so long for a small IO to finish, even under high IO load?
 
 Regards,
 Eric
