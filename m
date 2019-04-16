@@ -1,46 +1,153 @@
-From: Marian Csontos <mcsontos@sourceware.org>
-Date: Tue, 16 Apr 2019 02:27:58 -0400
-Subject: stable-2.02 - Wiping require exclusive actvation
-Message-ID: <201904160627.x3G6RwWW000439@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: Zdenek Kabelac <zkabelac@sourceware.org>
+Date: Tue, 16 Apr 2019 06:58:18 -0400
+Subject: stable-2.02 - cache: support vgsplit
+Message-ID: <201904161058.x3GAwIGI016906@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=f5d1f4f086f75148e25f7fda28bf2166e0c5a162
-Commit:        f5d1f4f086f75148e25f7fda28bf2166e0c5a162
-Parent:        699bf8609049058875d84f129d508d4ccbed3900
-Author:        Marian Csontos <mcsontos@redhat.com>
-AuthorDate:    Mon Apr 15 20:39:23 2019 +0200
-Committer:     Marian Csontos <mcsontos@redhat.com>
-CommitterDate: Tue Apr 16 08:26:34 2019 +0200
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=fa025cdd9a7453c86e34bf550235a00537d059de
+Commit:        fa025cdd9a7453c86e34bf550235a00537d059de
+Parent:        f5d1f4f086f75148e25f7fda28bf2166e0c5a162
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Fri Feb 1 21:29:22 2019 +0100
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Tue Apr 16 12:57:18 2019 +0200
 
-Wiping require exclusive actvation
+cache: support vgsplit
 
-The master branch uses activate_lv only, but on the stable branch
-activate_lv_excl_local was used. This patch restores the constraints.
-
-Fix regression from bad cherry pick: 9b04851fc574ce9cffd30a51d2b750955239f316
+Enable vgsplit to work with VG containing cached LVs.
 ---
- lib/metadata/lv_manip.c |    4 ++--
- 1 files changed, 2 insertions(+), 2 deletions(-)
+ WHATS_NEW       |    1 +
+ tools/vgsplit.c |   81 +++++++++++++++++++++++--------------------------------
+ 2 files changed, 35 insertions(+), 47 deletions(-)
 
-diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
-index d039686..e72a1c9 100644
---- a/lib/metadata/lv_manip.c
-+++ b/lib/metadata/lv_manip.c
-@@ -7240,9 +7240,9 @@ int activate_and_wipe_lvlist(struct dm_list *lv_list, int commit)
- 	was_active = alloca(sz);
+diff --git a/WHATS_NEW b/WHATS_NEW
+index b15ffa3..6457d4c 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.185 - 
+ ==================================
++  Add support for vgsplit with cached devices.
+   Fix signal delivery checking race in libdaemon (lvmetad).
+   Add missing Before=shutdown.target to LVM2 services to fix shutdown ordering.
  
- 	dm_list_iterate_items(lvl, lv_list)
--		if (!(was_active[i++] = lv_is_active(lvl->lv))) {
-+		if (!(was_active[i++] = lv_is_active_locally(lvl->lv))) {
- 			lvl->lv->status |= LV_TEMPORARY;
--			if (!activate_lv(vg->cmd, lvl->lv)) {
-+			if (!activate_lv_excl_local(vg->cmd, lvl->lv)) {
- 				log_error("Failed to activate localy %s for wiping.",
- 					  display_lvname(lvl->lv));
- 				r = 0;
+diff --git a/tools/vgsplit.c b/tools/vgsplit.c
+index 2d39111..e7ad4c0 100644
+--- a/tools/vgsplit.c
++++ b/tools/vgsplit.c
+@@ -1,6 +1,6 @@
+ /*
+  * Copyright (C) 2001-2004 Sistina Software, Inc. All rights reserved.
+- * Copyright (C) 2004-2009,2016 Red Hat, Inc. All rights reserved.
++ * Copyright (C) 2004-2019 Red Hat, Inc. All rights reserved.
+  *
+  * This file is part of LVM2.
+  *
+@@ -384,68 +384,55 @@ static int _move_cache(struct volume_group *vg_from,
+ 
+ 	dm_list_iterate_safe(lvh, lvht, &vg_from->lvs) {
+ 		lv = dm_list_item(lvh, struct lv_list)->lv;
+-		data = meta = orig = NULL;
+ 		seg = first_seg(lv);
+ 
+ 		if (!lv_is_cache(lv) && !lv_is_cache_pool(lv))
+ 			continue;
+ 
+-		/*
+-		 * FIXME: The code seems to move cache LVs fine, but it
+-		 *        hasn't been well tested and it causes problems
+-		 *        when just splitting PVs that don't contain
+-		 *        cache LVs.
+-		 * Waiting for next release before fixing and enabling.
+-		 */
+-		log_error("Unable to split VG while it contains cache LVs");
+-		return 0;
+-
+-		/* NOTREACHED */
+-
+ 		if (lv_is_cache(lv)) {
+ 			orig = seg_lv(seg, 0);
+-			data = seg_lv(first_seg(seg->pool_lv), 0);
+-			meta = first_seg(seg->pool_lv)->metadata_lv;
+-			/* Ensure all components are coming along */
+-			is_moving = _lv_is_in_vg(vg_to, orig);
+-		} else {
+-			if (!dm_list_empty(&seg->lv->segs_using_this_lv) &&
+-			    !(cache_seg = get_only_segment_using_this_lv(seg->lv)))
+-				return_0;
+-			orig = seg_lv(cache_seg, 0);
+-			data = seg_lv(seg, 0);
+-			meta = seg->metadata_lv;
+-
+-			if (_lv_is_in_vg(vg_to, data) ||
+-			    _lv_is_in_vg(vg_to, meta))
+-				is_moving = 1;
++			seg = first_seg(seg->pool_lv);
++		} else { /* lv_is_cache_pool */
++			orig = NULL;
++			if (!dm_list_empty(&seg->lv->segs_using_this_lv)) {
++				if (!(cache_seg = get_only_segment_using_this_lv(seg->lv)))
++					return_0;
++				orig = seg_lv(cache_seg, 0);
++			}
+ 		}
+ 
+-		if (!lv_is_on_pvs(data, &vg_to->pvs))
+-			continue;
++		data = seg_lv(seg, 0);
++		meta = seg->metadata_lv;
+ 
+-		if (!lv_is_on_pvs(meta, &vg_to->pvs))
++		if ((orig && !lv_is_on_pvs(orig, &vg_to->pvs)) &&
++		    !lv_is_on_pvs(data, &vg_to->pvs) &&
++		    !lv_is_on_pvs(meta, &vg_to->pvs))
+ 			continue;
+ 
+-		if (orig && (_lv_is_in_vg(vg_to, orig) != is_moving)) {
+-			log_error("Can't split %s and its origin (%s)"
+-				  " into separate VGs", lv->name, orig->name);
+-			return 0;
+-		}
++		/* Ensure all components are coming along */
++		if (orig) {
++			is_moving = _lv_is_in_vg(vg_to, orig);
+ 
+-		if (data && (_lv_is_in_vg(vg_to, data) != is_moving)) {
+-			log_error("Can't split %s and its cache pool"
+-				  " data LV (%s) into separate VGs",
+-				  lv->name, data->name);
+-			return 0;
+-		}
++			if (_lv_is_in_vg(vg_to, data) != is_moving) {
++				log_error("Cannot split cache origin %s and its cache pool data %s "
++					  "into separate VGs.",
++					  display_lvname(orig), display_lvname(data));
++				return 0;
++			}
+ 
+-		if (meta && (_lv_is_in_vg(vg_to, meta) != is_moving)) {
+-			log_error("Can't split %s and its cache pool"
+-				  " metadata LV (%s) into separate VGs",
+-				  lv->name, meta->name);
++			if (_lv_is_in_vg(vg_to, meta) != is_moving) {
++				log_error("Cannot split cache origin %s and its cache pool metadata %s "
++					  "into separate VGs.",
++					  display_lvname(orig), display_lvname(meta));
++				return 0;
++			}
++		} else if (_lv_is_in_vg(vg_to, data) != _lv_is_in_vg(vg_to, meta)) {
++			log_error("Cannot split cache pool data %s and its metadata %s "
++				  "into separate VGs.",
++				  display_lvname(data), display_lvname(meta));
+ 			return 0;
+ 		}
++
+ 		if (!_move_one_lv(vg_from, vg_to, lvh, &lvht))
+ 			return_0;
+ 	}
 
 
