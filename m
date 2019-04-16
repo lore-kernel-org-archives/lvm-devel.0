@@ -1,103 +1,71 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Tue, 16 Apr 2019 06:58:21 -0400
-Subject: stable-2.02 - tests: check vgsplit works with cache
-Message-ID: <201904161058.x3GAwLIg016916@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Tue, 16 Apr 2019 06:59:04 -0400
+Subject: master - configure: check for pselect
+Message-ID: <201904161059.x3GAx4H5016955@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=3ead62e24b6b616c4bde093db37dc770a38669ae
-Commit:        3ead62e24b6b616c4bde093db37dc770a38669ae
-Parent:        fa025cdd9a7453c86e34bf550235a00537d059de
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=116bd314cb8bb169336b2a14ff5ced78d9de9047
+Commit:        116bd314cb8bb169336b2a14ff5ced78d9de9047
+Parent:        aa75b31db54782fb24b6b7e3c681a61b3579117c
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Feb 1 23:45:12 2019 +0100
+AuthorDate:    Wed Apr 10 13:22:43 2019 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Tue Apr 16 12:57:18 2019 +0200
+CommitterDate: Tue Apr 16 12:14:31 2019 +0200
 
-tests: check vgsplit works with cache
+configure: check for pselect
 
 ---
- test/shell/vgsplit-cache.sh |   71 +++++++++++++++++++++++++++++++++++++++++++
- 1 files changed, 71 insertions(+), 0 deletions(-)
+ configure              |    2 +-
+ configure.ac           |    2 +-
+ include/configure.h.in |    6 ++++++
+ 3 files changed, 8 insertions(+), 2 deletions(-)
 
-diff --git a/test/shell/vgsplit-cache.sh b/test/shell/vgsplit-cache.sh
-new file mode 100644
-index 0000000..3bbcc2d
---- /dev/null
-+++ b/test/shell/vgsplit-cache.sh
-@@ -0,0 +1,71 @@
-+#!/usr/bin/env bash
+diff --git a/configure b/configure
+index 53f5023..cced7bd 100755
+--- a/configure
++++ b/configure
+@@ -6634,7 +6634,7 @@ $as_echo "#define _REENTRANT 1" >>confdefs.h
+ 
+ ################################################################################
+ for ac_func in ftruncate gethostname getpagesize gettimeofday localtime_r \
+-  memchr memset mkdir mkfifo munmap nl_langinfo realpath rmdir setenv \
++  memchr memset mkdir mkfifo munmap nl_langinfo pselect realpath rmdir setenv \
+   setlocale strcasecmp strchr strcspn strdup strerror strncasecmp strndup \
+   strrchr strspn strstr strtol strtoul uname
+ do :
+diff --git a/configure.ac b/configure.ac
+index 98a39f6..1e45c0e 100644
+--- a/configure.ac
++++ b/configure.ac
+@@ -153,7 +153,7 @@ AC_DEFINE([_REENTRANT], 1, [Define to use re-entrant thread safe versions])
+ ################################################################################
+ dnl -- Check for functions
+ AC_CHECK_FUNCS([ftruncate gethostname getpagesize gettimeofday localtime_r \
+-  memchr memset mkdir mkfifo munmap nl_langinfo realpath rmdir setenv \
++  memchr memset mkdir mkfifo munmap nl_langinfo pselect realpath rmdir setenv \
+   setlocale strcasecmp strchr strcspn strdup strerror strncasecmp strndup \
+   strrchr strspn strstr strtol strtoul uname], , [AC_MSG_ERROR(bailing out)])
+ AC_FUNC_ALLOCA
+diff --git a/include/configure.h.in b/include/configure.h.in
+index dde55fe..ce4c326 100644
+--- a/include/configure.h.in
++++ b/include/configure.h.in
+@@ -292,6 +292,12 @@
+ /* Define to 1 if you have the <paths.h> header file. */
+ #undef HAVE_PATHS_H
+ 
++/* Define to 1 if you have the `pselect' function. */
++#undef HAVE_PSELECT
 +
-+# Copyright (C) 2019 Red Hat, Inc. All rights reserved.
-+#
-+# This copyrighted material is made available to anyone wishing to use,
-+# modify, copy, or redistribute it subject to the terms and conditions
-+# of the GNU General Public License v.2.
-+#
-+# You should have received a copy of the GNU General Public License
-+# along with this program; if not, write to the Free Software Foundation,
-+# Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
++/* Define to 1 if you have the <pthread.h> header file. */
++#undef HAVE_PTHREAD_H
 +
-+# Test vgsplit command options with cached volumes
-+
-+SKIP_WITH_LVMLOCKD=1
-+SKIP_WITH_LVMPOLLD=1
-+
-+. lib/inittest
-+
-+aux have_cache 1 3 0 || skip
-+
-+aux prepare_vg 7
-+
-+lvcreate -L5 -n $lv2 $vg "$dev2"
-+lvcreate -L5 -n $lv3 $vg "$dev3"
-+lvconvert -y --type cache-pool --poolmetadata $vg/$lv2 $vg/$lv3
-+
-+# Cannot split data and metadata from cache-pool
-+fail vgsplit $vg $vg1 "$dev2" 2>&1 | tee err
-+grep "Cannot split cache pool data" err
-+
-+fail vgsplit $vg $vg1 "$dev3" 2>&1 | tee err
-+grep "Cannot split cache pool data" err
-+
-+# Cache $lv1
-+lvcreate -L1 -n $lv1 $vg "$dev1"
-+lvconvert -y --cache --cachepool $vg/$lv3  $vg/$lv1
-+
-+
-+
-+# Cannot move active cache
-+fail vgsplit $vg $vg1 "$dev1" "$dev2" "$dev3" 2>&1 | tee err
-+grep "must be inactive" err
-+
-+vgchange -an $vg
-+
-+
-+# Try spliting component into separe VG
-+fail vgsplit $vg $vg1 "$dev1" 2>&1 | tee err
-+grep "Cannot split cache origin" err
-+
-+fail vgsplit $vg $vg1 "$dev2" 2>&1 | tee err
-+grep "Cannot split cache origin" err
-+
-+fail vgsplit $vg $vg1 "$dev3" 2>&1 | tee err
-+grep "Cannot split cache origin" err
-+
-+fail vgsplit $vg $vg1 "$dev1" "$dev2" 2>&1 | tee err
-+grep "Cannot split cache origin" err
-+
-+fail vgsplit $vg $vg1 "$dev2" "$dev3" 2>&1 | tee err
-+
-+# Finaly something that should pass
-+vgsplit $vg $vg1 "$dev1" "$dev2" "$dev3"
-+
-+vgs $vg $vg1
-+
-+test 4 -eq "$(get vg_field $vg pv_count)"
-+test 3 -eq "$(get vg_field $vg1 pv_count)"
-+
-+vgremove -ff $vg $vg1
+ /* Define to 1 if the system has the type `ptrdiff_t'. */
+ #undef HAVE_PTRDIFF_T
+ 
 
 
