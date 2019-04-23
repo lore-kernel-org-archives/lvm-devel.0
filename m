@@ -1,39 +1,45 @@
-From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Wed, 17 Apr 2019 05:36:09 -0400
-Subject: master - cleanup: missed string specifier
-Message-ID: <201904170936.x3H9a9UT006392@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: David Teigland <teigland@sourceware.org>
+Date: Tue, 23 Apr 2019 10:44:45 -0400
+Subject: stable-2.02 - devices: drop open error message
+Message-ID: <201904231444.x3NEij6u018823@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=8fbaa6d9a5dd738a566906a23f5bbe901d80a9d2
-Commit:        8fbaa6d9a5dd738a566906a23f5bbe901d80a9d2
-Parent:        44cfa558437634c15ec6da38507e73b4c86837c1
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed Apr 17 11:29:35 2019 +0200
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Wed Apr 17 11:35:44 2019 +0200
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=559cf0cd1e226baf63a98c39572264fbf5c3f6b4
+Commit:        559cf0cd1e226baf63a98c39572264fbf5c3f6b4
+Parent:        228e331e270451e16126659655905a583a03a0d3
+Author:        David Teigland <teigland@redhat.com>
+AuthorDate:    Tue Apr 23 09:39:42 2019 -0500
+Committer:     David Teigland <teigland@redhat.com>
+CommitterDate: Tue Apr 23 09:42:25 2019 -0500
 
-cleanup: missed string specifier
+devices: drop open error message
 
+This open error is being printed in more common,
+non-error circumstances than expected.  After a
+number of complaints make it only a debug message.
 ---
- libdaemon/server/daemon-server.c |    2 +-
- 1 files changed, 1 insertions(+), 1 deletions(-)
+ lib/device/dev-io.c |    5 +----
+ 1 files changed, 1 insertions(+), 4 deletions(-)
 
-diff --git a/libdaemon/server/daemon-server.c b/libdaemon/server/daemon-server.c
-index e4ff8a1..9dd0017 100644
---- a/libdaemon/server/daemon-server.c
-+++ b/libdaemon/server/daemon-server.c
-@@ -656,7 +656,7 @@ void daemon_start(daemon_state s)
- 		sigprocmask(SIG_SETMASK, &new_set, NULL);
- 		if (_shutdown_requested && !s.threads->next) {
- 			sigprocmask(SIG_SETMASK, &old_set, NULL);
--			INFO(&s, "shutdown requested", s.name);
-+			INFO(&s, "%s shutdown requested", s.name);
- 			break;
+diff --git a/lib/device/dev-io.c b/lib/device/dev-io.c
+index 2a83a96..6996a44 100644
+--- a/lib/device/dev-io.c
++++ b/lib/device/dev-io.c
+@@ -572,10 +572,7 @@ int dev_open_flags(struct device *dev, int flags, int direct, int quiet)
+ 			}
  		}
- 		ret = pselect(s.socket_fd + 1, &in, NULL, NULL, _get_timeout(s), &old_set);
+ #endif
+-		if (quiet)
+-			log_sys_debug("open", name);
+-		else
+-			log_sys_error("open", name);
++		log_sys_debug("open", name);
+ 
+ 		dev->flags |= DEV_OPEN_FAILURE;
+ 		return 0;
 
 
