@@ -1,45 +1,79 @@
-From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Fri, 25 Sep 2020 21:07:04 +0000 (GMT)
-Subject: master - thin: improve error message
-Message-ID: <20200925210704.E77DA385782E@sourceware.org>
+From: David Teigland <teigland@sourceware.org>
+Date: Fri, 26 Apr 2019 15:51:56 -0400
+Subject: master - wipe_lv: initially open LV in writable mode
+Message-ID: <201904261951.x3QJpuux013744@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=8b22e3808772601725c0e253f4aa5bed24905271
-Commit:        8b22e3808772601725c0e253f4aa5bed24905271
-Parent:        ef59c83f2df61b0f0263b0e32dac66eb0cb75488
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Sep 25 22:42:22 2020 +0200
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Fri Sep 25 22:59:35 2020 +0200
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=ccd13860708a1538b46c1b82b45d0ab44a26d89e
+Commit:        ccd13860708a1538b46c1b82b45d0ab44a26d89e
+Parent:        8fbaa6d9a5dd738a566906a23f5bbe901d80a9d2
+Author:        David Teigland <teigland@redhat.com>
+AuthorDate:    Fri Apr 26 14:49:27 2019 -0500
+Committer:     David Teigland <teigland@redhat.com>
+CommitterDate: Fri Apr 26 14:49:27 2019 -0500
 
-thin: improve error message
+wipe_lv: initially open LV in writable mode
 
-Add more info, explaing why the suspend of thin snapshot origin was omitted.
+wipe_lv knows it's going to write the device, so it
+can open rw from the start.  It was opening readonly,
+and then dev_write needed to reopen it readwrite.
 ---
- lib/thin/thin.c | 7 +++++--
- 1 file changed, 5 insertions(+), 2 deletions(-)
+ lib/label/label.c       |   12 ++++++++++++
+ lib/label/label.h       |    1 +
+ lib/metadata/lv_manip.c |    2 +-
+ 3 files changed, 14 insertions(+), 1 deletions(-)
 
-diff --git a/lib/thin/thin.c b/lib/thin/thin.c
-index d759b76e4..9c4bfb39c 100644
---- a/lib/thin/thin.c
-+++ b/lib/thin/thin.c
-@@ -361,8 +361,11 @@ static int _thin_pool_add_target_line(struct dev_manager *dm,
- 				if (!lv_thin_pool_transaction_id(seg->lv, &transaction_id))
- 					return_0; /* Thin pool should exist and work */
- 				if ((transaction_id + 1) != seg->transaction_id) {
--					log_error("Can't create snapshot %s as origin %s is not suspended.",
--						  lmsg->u.lv->name, origin->name);
-+					log_error("Omitting suspend of thin snapshot origin %s with expected "
-+						  "transaction_id " FMTu64 ", but active pool has " FMTu64 ".",
-+						  display_lvname(origin),
-+						  !seg->transaction_id ? 0 : seg->transaction_id - 1,
-+						  transaction_id);
- 					return 0;
- 				}
- 			}
+diff --git a/lib/label/label.c b/lib/label/label.c
+index fc74272..3b9d9fd 100644
+--- a/lib/label/label.c
++++ b/lib/label/label.c
+@@ -1272,6 +1272,18 @@ int label_scan_open_excl(struct device *dev)
+ 	return label_scan_open(dev);
+ }
+ 
++int label_scan_open_rw(struct device *dev)
++{
++	if (_in_bcache(dev) && !(dev->flags & DEV_BCACHE_WRITE)) {
++		/* FIXME: avoid tossing out bcache blocks just to replace fd. */
++		log_debug("Close and reopen rw %s", dev_name(dev));
++		bcache_invalidate_fd(scan_bcache, dev->bcache_fd);
++		_scan_dev_close(dev);
++	}
++	dev->flags |= DEV_BCACHE_WRITE;
++	return label_scan_open(dev);
++}
++
+ bool dev_read_bytes(struct device *dev, uint64_t start, size_t len, void *data)
+ {
+ 	if (!scan_bcache) {
+diff --git a/lib/label/label.h b/lib/label/label.h
+index 5939655..8f1f0e2 100644
+--- a/lib/label/label.h
++++ b/lib/label/label.h
+@@ -115,6 +115,7 @@ void label_scan_confirm(struct device *dev);
+ int label_scan_setup_bcache(void);
+ int label_scan_open(struct device *dev);
+ int label_scan_open_excl(struct device *dev);
++int label_scan_open_rw(struct device *dev);
+ 
+ /*
+  * Wrappers around bcache equivalents.
+diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
+index 76d18b0..6aee947 100644
+--- a/lib/metadata/lv_manip.c
++++ b/lib/metadata/lv_manip.c
+@@ -7365,7 +7365,7 @@ int wipe_lv(struct logical_volume *lv, struct wipe_params wp)
+ 		return 0;
+ 	}
+ 
+-	if (!label_scan_open(dev)) {
++	if (!label_scan_open_rw(dev)) {
+ 		log_error("Failed to open %s/%s for wiping and zeroing.", lv->vg->name, lv->name);
+ 		goto out;
+ 	}
 
 
