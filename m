@@ -1,62 +1,62 @@
 From: David Teigland <teigland@sourceware.org>
-Date: Tue, 30 Apr 2019 15:39:08 -0400
-Subject: master - vgcreate: remove the lvmcache locking workaround
-Message-ID: <201904301939.x3UJd8c9015823@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Tue, 30 Apr 2019 16:00:21 -0400
+Subject: master - lvmcache: remove unused flag
+Message-ID: <201904302000.x3UK0L9v020181@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=d7054cd28ae6bb2fad216f8756ab030de3e8e65e
-Commit:        d7054cd28ae6bb2fad216f8756ab030de3e8e65e
-Parent:        366c1ac15b853fe3efc95472c569efc575f1237f
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=90b94ead12d739a3221e179bdcf1c482978f0f0f
+Commit:        90b94ead12d739a3221e179bdcf1c482978f0f0f
+Parent:        d7054cd28ae6bb2fad216f8756ab030de3e8e65e
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Tue Apr 30 14:26:16 2019 -0500
+AuthorDate:    Tue Apr 30 14:59:27 2019 -0500
 Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Tue Apr 30 14:26:16 2019 -0500
+CommitterDate: Tue Apr 30 14:59:27 2019 -0500
 
-vgcreate: remove the lvmcache locking workaround
+lvmcache: remove unused flag
 
-Recent cleanups and simplifications to lvmcache and locking
-mean that the odd locking to workaround other issues is now
-unnecessary.
+The new label scan design is never called recursively,
+so we don't need a flag to check for that.
 ---
- tools/vgcreate.c |   15 ---------------
- 1 files changed, 0 insertions(+), 15 deletions(-)
+ lib/cache/lvmcache.c |    9 ---------
+ 1 files changed, 0 insertions(+), 9 deletions(-)
 
-diff --git a/tools/vgcreate.c b/tools/vgcreate.c
-index d62925f..626cf15 100644
---- a/tools/vgcreate.c
-+++ b/tools/vgcreate.c
-@@ -91,15 +91,6 @@ int vgcreate(struct cmd_context *cmd, int argc, char **argv)
- 		return ECMD_FAILED;
- 	}
+diff --git a/lib/cache/lvmcache.c b/lib/cache/lvmcache.c
+index f0b1d56..7d0c60d 100644
+--- a/lib/cache/lvmcache.c
++++ b/lib/cache/lvmcache.c
+@@ -66,7 +66,6 @@ static struct dm_hash_table *_vgname_hash = NULL;
+ static DM_LIST_INIT(_vginfos);
+ static DM_LIST_INIT(_found_duplicate_devs);
+ static DM_LIST_INIT(_unused_duplicate_devs);
+-static int _scanning_in_progress = 0;
+ static int _vgs_locked = 0;
+ static int _found_duplicate_pvs = 0;	/* If we never see a duplicate PV we can skip checking for them later. */
+ static int _found_duplicate_vgnames = 0;
+@@ -855,12 +854,6 @@ int lvmcache_label_scan(struct cmd_context *cmd)
  
--	/*
--	 * FIXME: we have to unlock/relock the new VG name around the pvcreate
--	 * step because pvcreate needs to destroy lvmcache, which doesn't allow
--	 * any locks to be held.  There shouldn't be any reason to require this
--	 * VG lock to be released, so the lvmcache destroy rule about locks
--	 * seems to be unwarranted here.
--	 */
--	unlock_vg(cmd, NULL, vp_new.vg_name);
+ 	log_debug_cache("Finding VG info");
+ 
+-	/* Avoid recursion when a PVID can't be found! */
+-	if (_scanning_in_progress)
+-		return 0;
 -
- 	if (!(handle = init_processing_handle(cmd, NULL))) {
- 		log_error("Failed to initialize processing handle.");
- 		return ECMD_FAILED;
-@@ -110,12 +101,6 @@ int vgcreate(struct cmd_context *cmd, int argc, char **argv)
- 		return_ECMD_FAILED;
- 	}
- 
--	/* Relock the new VG name, see comment above. */
--	if (!lock_vol(cmd, vp_new.vg_name, LCK_VG_WRITE, NULL)) {
--		destroy_processing_handle(cmd, handle);
--		return_ECMD_FAILED;
--	}
+-	_scanning_in_progress = 1;
 -
- 	if (!(vg = vg_create(cmd, vp_new.vg_name)))
- 		goto_bad;
+ 	/* FIXME: can this happen? */
+ 	if (!cmd->filter) {
+ 		log_error("label scan is missing filter");
+@@ -941,8 +934,6 @@ int lvmcache_label_scan(struct cmd_context *cmd)
+ 	r = 1;
  
+       out:
+-	_scanning_in_progress = 0;
+-
+ 	dm_list_iterate_items(vginfo, &_vginfos) {
+ 		if (is_orphan_vg(vginfo->vgname))
+ 			continue;
 
 
