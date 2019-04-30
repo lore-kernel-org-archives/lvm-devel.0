@@ -1,52 +1,62 @@
-From: David Teigland <teigland@sourceware.org>
-Date: Mon, 29 Apr 2019 16:48:04 -0400
-Subject: master - pvscan: remove fixme comment that is fixed
-Message-ID: <201904292048.x3TKm4SD026189@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: Zdenek Kabelac <zkabelac@sourceware.org>
+Date: Tue, 30 Apr 2019 07:30:37 -0400
+Subject: stable-2.02 - thin: introduce estimate_thin_pool_metadata_size
+Message-ID: <201904301130.x3UBUbtv020419@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=6d0f09f4783061054152ae0013d7ebfad949c343
-Commit:        6d0f09f4783061054152ae0013d7ebfad949c343
-Parent:        c3e385c1087321986ae1bc9346f2b00f5790e75c
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Mon Apr 29 15:42:20 2019 -0500
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Mon Apr 29 15:44:57 2019 -0500
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=bcf1aa99e66b7a99f9cddbecffad1b3d65b59a50
+Commit:        bcf1aa99e66b7a99f9cddbecffad1b3d65b59a50
+Parent:        b41b112a4bf5f674acd45f12ff4efe7fa0d1d8be
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Wed Apr 3 12:56:48 2019 +0200
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Tue Apr 30 12:02:49 2019 +0200
 
-pvscan: remove fixme comment that is fixed
+thin: introduce estimate_thin_pool_metadata_size
 
-Remove the fixme comment describing the case that was
-fixed by aa75b31db54782fb24b6b7e3c681a61b3579117c
-  "pvscan: handle case of scanning PV without metadata last"
+Add function for estimation of thin-pool metadata size for given size of
+data. Function is using already existing internal API so it can
+be reused for resize of thin-pool data.
 ---
- tools/pvscan.c |   12 ------------
- 1 files changed, 0 insertions(+), 12 deletions(-)
+ lib/metadata/metadata.h   |    1 +
+ lib/metadata/thin_manip.c |   12 ++++++++++++
+ 2 files changed, 13 insertions(+), 0 deletions(-)
 
-diff --git a/tools/pvscan.c b/tools/pvscan.c
-index 61d9cc8..d3b2b8e 100644
---- a/tools/pvscan.c
-+++ b/tools/pvscan.c
-@@ -1062,18 +1062,6 @@ int pvscan_cache_cmd(struct cmd_context *cmd, int argc, char **argv)
- 		cmd->pvscan_recreate_hints = 1;
- 		pvscan_recreate_hints_begin(cmd);
+diff --git a/lib/metadata/metadata.h b/lib/metadata/metadata.h
+index 1e3dd1b..f8083e5 100644
+--- a/lib/metadata/metadata.h
++++ b/lib/metadata/metadata.h
+@@ -498,6 +498,7 @@ int pool_below_threshold(const struct lv_segment *pool_seg);
+ int pool_check_overprovisioning(const struct logical_volume *lv);
+ int create_pool(struct logical_volume *pool_lv, const struct segment_type *segtype,
+ 		struct alloc_handle *ah, uint32_t stripes, uint32_t stripe_size);
++uint64_t estimate_thin_pool_metadata_size(uint32_t data_extents, uint32_t extent_size, uint32_t chunk_size);
  
--		/*
--		 * FIXME: if _online_pvscan_all_devs scans a PV without
--		 * metadata as the final PV to complete the VG, then
--		 * that VG is not added to the complete_vgnames list.
--		 * To fix this, we could also keep an incomplete_vg list,
--		 * and each incomplete_vg entry would list the PVIDs it
--		 * still needed.  If a PV without metadata is scanned,
--		 * its PVID would be removed from the incomplete_vg entry,
--		 * and if the entry had no remaining PVs needed, the vgname
--		 * would be added to complete_vgnames.
--		 */
--
- 		log_verbose("pvscan all devices for requested refresh.");
- 		_online_files_remove(_pvs_online_dir);
- 		_online_files_remove(_vgs_online_dir);
+ /*
+  * Begin skeleton for external LVM library
+diff --git a/lib/metadata/thin_manip.c b/lib/metadata/thin_manip.c
+index d2d1384..313ef1b 100644
+--- a/lib/metadata/thin_manip.c
++++ b/lib/metadata/thin_manip.c
+@@ -916,3 +916,15 @@ int validate_thin_pool_chunk_size(struct cmd_context *cmd, uint32_t chunk_size)
+ 
+ 	return r;
+ }
++
++uint64_t estimate_thin_pool_metadata_size(uint32_t data_extents, uint32_t extent_size, uint32_t chunk_size)
++{
++	uint64_t sz = _estimate_metadata_size(data_extents, extent_size, chunk_size);
++
++	if (sz > (2 * DEFAULT_THIN_POOL_MAX_METADATA_SIZE))
++		sz = 2 * DEFAULT_THIN_POOL_MAX_METADATA_SIZE;
++	else if (sz < (2 * DEFAULT_THIN_POOL_MIN_METADATA_SIZE))
++		sz = 2 * DEFAULT_THIN_POOL_MIN_METADATA_SIZE;
++
++	return sz;
++}
 
 
