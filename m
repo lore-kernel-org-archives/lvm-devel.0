@@ -1,160 +1,90 @@
 From: David Teigland <teigland@sourceware.org>
-Date: Thu, 2 May 2019 14:27:10 -0400
-Subject: master - lvmlockd: fix snprintf warnings
-Message-ID: <201905021827.x42IRAUg007837@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Thu, 2 May 2019 14:33:46 -0400
+Subject: master - scan: remove comments about lvmetad
+Message-ID: <201905021833.x42IXkaL008686@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=81735b46d9c7ab8f2dd27835d2a43cc5ad705c86
-Commit:        81735b46d9c7ab8f2dd27835d2a43cc5ad705c86
-Parent:        0046c4e7a7f647096dc49df29f66bdaba4e11c00
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=99de816a1bb6414e4611030c8d83766b1ff3cd65
+Commit:        99de816a1bb6414e4611030c8d83766b1ff3cd65
+Parent:        81735b46d9c7ab8f2dd27835d2a43cc5ad705c86
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Thu May 2 12:41:00 2019 -0500
+AuthorDate:    Thu May 2 13:32:30 2019 -0500
 Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Thu May 2 12:59:55 2019 -0500
+CommitterDate: Thu May 2 13:32:30 2019 -0500
 
-lvmlockd: fix snprintf warnings
+scan: remove comments about lvmetad
 
 ---
- daemons/lvmlockd/lvmlockd-core.c    |    8 +++++---
- daemons/lvmlockd/lvmlockd-dlm.c     |   10 +++++++---
- daemons/lvmlockd/lvmlockd-sanlock.c |   18 ++++++++++++------
- 3 files changed, 24 insertions(+), 12 deletions(-)
+ lib/label/label.c |   18 ++++--------------
+ 1 files changed, 4 insertions(+), 14 deletions(-)
 
-diff --git a/daemons/lvmlockd/lvmlockd-core.c b/daemons/lvmlockd/lvmlockd-core.c
-index ab413fb..5609ccc 100644
---- a/daemons/lvmlockd/lvmlockd-core.c
-+++ b/daemons/lvmlockd/lvmlockd-core.c
-@@ -2230,7 +2230,7 @@ static void *lockspace_thread_main(void *arg_in)
- 	struct action *act_op_free = NULL;
- 	struct list_head tmp_act;
- 	struct list_head act_close;
--	char tmp_name[MAX_NAME+1];
-+	char tmp_name[MAX_NAME+5];
- 	int free_vg = 0;
- 	int drop_vg = 0;
- 	int error = 0;
-@@ -2624,8 +2624,10 @@ out_act:
- 	 * blank or fill it with garbage, but instead set it to REM:<name>
- 	 * to make it easier to follow progress of freeing is via log_debug.
- 	 */
--	dm_strncpy(tmp_name, ls->name, sizeof(tmp_name));
--	snprintf(ls->name, sizeof(ls->name), "REM:%s", tmp_name);
-+	memset(tmp_name, 0, sizeof(tmp_name));
-+	memcpy(tmp_name, "REM:", 4);
-+	strncpy(tmp_name+4, ls->name, sizeof(tmp_name)-4);
-+	memcpy(ls->name, tmp_name, sizeof(ls->name));
- 	pthread_mutex_unlock(&lockspaces_mutex);
+diff --git a/lib/label/label.c b/lib/label/label.c
+index 31b290b..b999f87 100644
+--- a/lib/label/label.c
++++ b/lib/label/label.c
+@@ -1024,8 +1024,6 @@ int label_scan_devs(struct cmd_context *cmd, struct dev_filter *f, struct dm_lis
+ {
+ 	struct device_list *devl;
  
- 	/* worker_thread will join this thread, and free the ls */
-diff --git a/daemons/lvmlockd/lvmlockd-dlm.c b/daemons/lvmlockd/lvmlockd-dlm.c
-index bfc1d23..75e6dee 100644
---- a/daemons/lvmlockd/lvmlockd-dlm.c
-+++ b/daemons/lvmlockd/lvmlockd-dlm.c
-@@ -128,16 +128,18 @@ static int read_cluster_name(char *clustername)
- 	return 0;
+-	/* FIXME: get rid of this, it's only needed for lvmetad in which
+-	   case we should be setting up bcache in one place. */
+ 	if (!scan_bcache) {
+ 		if (!_setup_bcache(0))
+ 			return 0;
+@@ -1227,14 +1225,6 @@ out:
+ 	return ret;
  }
  
-+#define MAX_VERSION 16
-+
- int lm_init_vg_dlm(char *ls_name, char *vg_name, uint32_t flags, char *vg_args)
+-/*
+- * This is only needed when commands are using lvmetad, in which case they
+- * don't do an initial label_scan, but may later need to rescan certain devs
+- * from disk and call this function.  FIXME: is there some better number to
+- * choose here?  How should we predict the number of devices that might need
+- * scanning when using lvmetad?
+- */
+-
+ int label_scan_setup_bcache(void)
  {
- 	char clustername[MAX_ARGS+1];
--	char lock_args_version[MAX_ARGS+1];
-+	char lock_args_version[MAX_VERSION+1];
- 	int rv;
- 
- 	memset(clustername, 0, sizeof(clustername));
- 	memset(lock_args_version, 0, sizeof(lock_args_version));
- 
--	snprintf(lock_args_version, MAX_ARGS, "%u.%u.%u",
-+	snprintf(lock_args_version, MAX_VERSION, "%u.%u.%u",
- 		 VG_LOCK_ARGS_MAJOR, VG_LOCK_ARGS_MINOR, VG_LOCK_ARGS_PATCH);
- 
- 	rv = read_cluster_name(clustername);
-@@ -149,7 +151,9 @@ int lm_init_vg_dlm(char *ls_name, char *vg_name, uint32_t flags, char *vg_args)
- 		return -EARGS;
+ 	if (!scan_bcache) {
+@@ -1293,7 +1283,7 @@ bool dev_read_bytes(struct device *dev, uint64_t start, size_t len, void *data)
  	}
  
--	snprintf(vg_args, MAX_ARGS, "%s:%s", lock_args_version, clustername);
-+	rv = snprintf(vg_args, MAX_ARGS, "%s:%s", lock_args_version, clustername);
-+	if (rv >= MAX_ARGS)
-+		log_debug("init_vg_dlm vg_args may be too long %d %s", rv, vg_args);
- 	rv = 0;
- 
- 	log_debug("init_vg_dlm done %s vg_args %s", ls_name, vg_args);
-diff --git a/daemons/lvmlockd/lvmlockd-sanlock.c b/daemons/lvmlockd/lvmlockd-sanlock.c
-index f960daf..4bc6402 100644
---- a/daemons/lvmlockd/lvmlockd-sanlock.c
-+++ b/daemons/lvmlockd/lvmlockd-sanlock.c
-@@ -500,13 +500,15 @@ static int get_sizes_lockspace(char *path, int *sector_size, int *align_size)
-  * version and lv name, and returns the real lock_args in vg_args.
-  */
- 
-+#define MAX_VERSION 16
-+
- int lm_init_vg_sanlock(char *ls_name, char *vg_name, uint32_t flags, char *vg_args)
- {
- 	struct sanlk_lockspace ss;
- 	struct sanlk_resourced rd;
- 	struct sanlk_disk disk;
- 	char lock_lv_name[MAX_ARGS+1];
--	char lock_args_version[MAX_ARGS+1];
-+	char lock_args_version[MAX_VERSION+1];
- 	const char *gl_name = NULL;
- 	uint32_t daemon_version;
- 	uint32_t daemon_proto;
-@@ -526,7 +528,7 @@ int lm_init_vg_sanlock(char *ls_name, char *vg_name, uint32_t flags, char *vg_ar
- 		return -EARGS;
+ 	if (dev->bcache_fd <= 0) {
+-		/* This is not often needed, perhaps only with lvmetad. */
++		/* This is not often needed. */
+ 		if (!label_scan_open(dev)) {
+ 			log_error("Error opening device %s for reading@%llu length %u.",
+ 				  dev_name(dev), (unsigned long long)start, (uint32_t)len);
+@@ -1333,7 +1323,7 @@ bool dev_write_bytes(struct device *dev, uint64_t start, size_t len, void *data)
  	}
  
--	snprintf(lock_args_version, MAX_ARGS, "%u.%u.%u",
-+	snprintf(lock_args_version, MAX_VERSION, "%u.%u.%u",
- 		 VG_LOCK_ARGS_MAJOR, VG_LOCK_ARGS_MINOR, VG_LOCK_ARGS_PATCH);
- 
- 	/* see comment above about input vg_args being only lock_lv_name */
-@@ -543,7 +545,9 @@ int lm_init_vg_sanlock(char *ls_name, char *vg_name, uint32_t flags, char *vg_ar
- 	if (daemon_test) {
- 		if (!gl_lsname_sanlock[0])
- 			strncpy(gl_lsname_sanlock, ls_name, MAX_NAME);
--		snprintf(vg_args, MAX_ARGS, "%s:%s", lock_args_version, lock_lv_name);
-+		rv = snprintf(vg_args, MAX_ARGS, "%s:%s", lock_args_version, lock_lv_name);
-+		if (rv >= MAX_ARGS)
-+			log_debug("init_vg_san vg_args may be too long %d %s", rv, vg_args);
- 		return 0;
+ 	if (dev->bcache_fd <= 0) {
+-		/* This is not often needed, perhaps only with lvmetad. */
++		/* This is not often needed. */
+ 		dev->flags |= DEV_BCACHE_WRITE;
+ 		if (!label_scan_open(dev)) {
+ 			log_error("Error opening device %s for writing at %llu length %u.",
+@@ -1379,7 +1369,7 @@ bool dev_write_zeros(struct device *dev, uint64_t start, size_t len)
  	}
  
-@@ -635,7 +639,9 @@ int lm_init_vg_sanlock(char *ls_name, char *vg_name, uint32_t flags, char *vg_ar
- 	if (!strcmp(gl_name, R_NAME_GL))
- 		strncpy(gl_lsname_sanlock, ls_name, MAX_NAME);
-  
--	snprintf(vg_args, MAX_ARGS, "%s:%s", lock_args_version, lock_lv_name);
-+	rv = snprintf(vg_args, MAX_ARGS, "%s:%s", lock_args_version, lock_lv_name);
-+	if (rv >= MAX_ARGS)
-+		log_debug("init_vg_san vg_args may be too long %d %s", rv, vg_args);
- 
- 	log_debug("S %s init_vg_san done vg_args %s", ls_name, vg_args);
- 
-@@ -692,7 +698,7 @@ int lm_init_lv_sanlock(char *ls_name, char *vg_name, char *lv_name,
- {
- 	struct sanlk_resourced rd;
- 	char lock_lv_name[MAX_ARGS+1];
--	char lock_args_version[MAX_ARGS+1];
-+	char lock_args_version[MAX_VERSION+1];
- 	uint64_t offset;
- 	int rv;
- 
-@@ -707,7 +713,7 @@ int lm_init_lv_sanlock(char *ls_name, char *vg_name, char *lv_name,
- 		return rv;
+ 	if (dev->bcache_fd <= 0) {
+-		/* This is not often needed, perhaps only with lvmetad. */
++		/* This is not often needed. */
+ 		dev->flags |= DEV_BCACHE_WRITE;
+ 		if (!label_scan_open(dev)) {
+ 			log_error("Error opening device %s for writing at %llu length %u.",
+@@ -1428,7 +1418,7 @@ bool dev_set_bytes(struct device *dev, uint64_t start, size_t len, uint8_t val)
  	}
  
--	snprintf(lock_args_version, MAX_ARGS, "%u.%u.%u",
-+	snprintf(lock_args_version, MAX_VERSION, "%u.%u.%u",
- 		 LV_LOCK_ARGS_MAJOR, LV_LOCK_ARGS_MINOR, LV_LOCK_ARGS_PATCH);
- 
- 	if (daemon_test) {
+ 	if (dev->bcache_fd <= 0) {
+-		/* This is not often needed, perhaps only with lvmetad. */
++		/* This is not often needed. */
+ 		dev->flags |= DEV_BCACHE_WRITE;
+ 		if (!label_scan_open(dev)) {
+ 			log_error("Error opening device %s for writing at %llu length %u.",
 
 
