@@ -1,118 +1,160 @@
 From: David Teigland <teigland@sourceware.org>
-Date: Thu, 2 May 2019 14:27:07 -0400
-Subject: master - use memcpy for constant ondisk strings
-Message-ID: <201905021827.x42IR7at007543@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Thu, 2 May 2019 14:27:10 -0400
+Subject: master - lvmlockd: fix snprintf warnings
+Message-ID: <201905021827.x42IRAUg007837@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=0046c4e7a7f647096dc49df29f66bdaba4e11c00
-Commit:        0046c4e7a7f647096dc49df29f66bdaba4e11c00
-Parent:        adfb9bf20cd7483785bd3156f5f616b0906cd895
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=81735b46d9c7ab8f2dd27835d2a43cc5ad705c86
+Commit:        81735b46d9c7ab8f2dd27835d2a43cc5ad705c86
+Parent:        0046c4e7a7f647096dc49df29f66bdaba4e11c00
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Wed May 1 16:50:48 2019 -0500
+AuthorDate:    Thu May 2 12:41:00 2019 -0500
 Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Thu May 2 12:59:50 2019 -0500
+CommitterDate: Thu May 2 12:59:55 2019 -0500
 
-use memcpy for constant ondisk strings
+lvmlockd: fix snprintf warnings
 
-Use memcpy/memcmp for on disk strings which are not
-null terminated: FMTT_MAGIC, LVM2_LABEL and LABEL_ID.
-Quiets compile warnings.
 ---
- lib/format_text/format-text.c |    4 ++--
- lib/format_text/text_label.c  |    8 ++++----
- lib/label/label.c             |    6 +++---
- 3 files changed, 9 insertions(+), 9 deletions(-)
+ daemons/lvmlockd/lvmlockd-core.c    |    8 +++++---
+ daemons/lvmlockd/lvmlockd-dlm.c     |   10 +++++++---
+ daemons/lvmlockd/lvmlockd-sanlock.c |   18 ++++++++++++------
+ 3 files changed, 24 insertions(+), 12 deletions(-)
 
-diff --git a/lib/format_text/format-text.c b/lib/format_text/format-text.c
-index d976177..3828d5f 100644
---- a/lib/format_text/format-text.c
-+++ b/lib/format_text/format-text.c
-@@ -333,7 +333,7 @@ static int _raw_read_mda_header(struct mda_header *mdah, struct device_area *dev
- 
- 	_xlate_mdah(mdah);
- 
--	if (strncmp((char *)mdah->magic, FMTT_MAGIC, sizeof(mdah->magic))) {
-+	if (memcmp(mdah->magic, FMTT_MAGIC, sizeof(mdah->magic))) {
- 		log_error("Wrong magic number in metadata area header on %s at %llu",
- 			  dev_name(dev_area->dev), (unsigned long long)dev_area->start);
- 		return 0;
-@@ -378,7 +378,7 @@ static int _raw_write_mda_header(const struct format_type *fmt,
- 				 struct device *dev, int primary_mda,
- 				 uint64_t start_byte, struct mda_header *mdah)
- {
--	strncpy((char *)mdah->magic, FMTT_MAGIC, sizeof(mdah->magic));
-+	memcpy(mdah->magic, FMTT_MAGIC, sizeof(mdah->magic));
- 	mdah->version = FMTT_VERSION;
- 	mdah->start = start_byte;
- 
-diff --git a/lib/format_text/text_label.c b/lib/format_text/text_label.c
-index 1157b98..ef2f6c7 100644
---- a/lib/format_text/text_label.c
-+++ b/lib/format_text/text_label.c
-@@ -30,7 +30,7 @@ static int _text_can_handle(struct labeller *l __attribute__((unused)),
- {
- 	struct label_header *lh = (struct label_header *) buf;
- 
--	if (!strncmp((char *)lh->type, LVM2_LABEL, sizeof(lh->type)))
-+	if (!memcmp(lh->type, LVM2_LABEL, sizeof(lh->type)))
- 		return 1;
- 
- 	return 0;
-@@ -95,9 +95,9 @@ static int _text_write(struct label *label, void *buf)
- 	 * PV header base
+diff --git a/daemons/lvmlockd/lvmlockd-core.c b/daemons/lvmlockd/lvmlockd-core.c
+index ab413fb..5609ccc 100644
+--- a/daemons/lvmlockd/lvmlockd-core.c
++++ b/daemons/lvmlockd/lvmlockd-core.c
+@@ -2230,7 +2230,7 @@ static void *lockspace_thread_main(void *arg_in)
+ 	struct action *act_op_free = NULL;
+ 	struct list_head tmp_act;
+ 	struct list_head act_close;
+-	char tmp_name[MAX_NAME+1];
++	char tmp_name[MAX_NAME+5];
+ 	int free_vg = 0;
+ 	int drop_vg = 0;
+ 	int error = 0;
+@@ -2624,8 +2624,10 @@ out_act:
+ 	 * blank or fill it with garbage, but instead set it to REM:<name>
+ 	 * to make it easier to follow progress of freeing is via log_debug.
  	 */
- 	/* FIXME Move to where label is created */
--	strncpy(label->type, LVM2_LABEL, sizeof(label->type));
-+	memcpy(label->type, LVM2_LABEL, sizeof(label->type));
+-	dm_strncpy(tmp_name, ls->name, sizeof(tmp_name));
+-	snprintf(ls->name, sizeof(ls->name), "REM:%s", tmp_name);
++	memset(tmp_name, 0, sizeof(tmp_name));
++	memcpy(tmp_name, "REM:", 4);
++	strncpy(tmp_name+4, ls->name, sizeof(tmp_name)-4);
++	memcpy(ls->name, tmp_name, sizeof(ls->name));
+ 	pthread_mutex_unlock(&lockspaces_mutex);
  
--	strncpy((char *)lh->type, label->type, sizeof(label->type));
-+	memcpy(lh->type, LVM2_LABEL, sizeof(lh->type));
- 
- 	pvhdr = (struct pv_header *) ((char *) buf + xlate32(lh->offset_xl));
- 	info = (struct lvmcache_info *) label->info;
-@@ -314,7 +314,7 @@ void del_mdas(struct dm_list *mdas)
- static int _text_initialise_label(struct labeller *l __attribute__((unused)),
- 				  struct label *label)
- {
--	strncpy(label->type, LVM2_LABEL, sizeof(label->type));
-+	memcpy(label->type, LVM2_LABEL, sizeof(label->type));
- 
- 	return 1;
+ 	/* worker_thread will join this thread, and free the ls */
+diff --git a/daemons/lvmlockd/lvmlockd-dlm.c b/daemons/lvmlockd/lvmlockd-dlm.c
+index bfc1d23..75e6dee 100644
+--- a/daemons/lvmlockd/lvmlockd-dlm.c
++++ b/daemons/lvmlockd/lvmlockd-dlm.c
+@@ -128,16 +128,18 @@ static int read_cluster_name(char *clustername)
+ 	return 0;
  }
-diff --git a/lib/label/label.c b/lib/label/label.c
-index 3b9d9fd..31b290b 100644
---- a/lib/label/label.c
-+++ b/lib/label/label.c
-@@ -139,7 +139,7 @@ int label_remove(struct device *dev)
  
- 		wipe = 0;
++#define MAX_VERSION 16
++
+ int lm_init_vg_dlm(char *ls_name, char *vg_name, uint32_t flags, char *vg_args)
+ {
+ 	char clustername[MAX_ARGS+1];
+-	char lock_args_version[MAX_ARGS+1];
++	char lock_args_version[MAX_VERSION+1];
+ 	int rv;
  
--		if (!strncmp((char *)lh->id, LABEL_ID, sizeof(lh->id))) {
-+		if (!memcmp(lh->id, LABEL_ID, sizeof(lh->id))) {
- 			if (xlate64(lh->sector_xl) == sector)
- 				wipe = 1;
- 		} else {
-@@ -192,7 +192,7 @@ int label_write(struct device *dev, struct label *label)
+ 	memset(clustername, 0, sizeof(clustername));
+ 	memset(lock_args_version, 0, sizeof(lock_args_version));
  
- 	memset(buf, 0, LABEL_SIZE);
+-	snprintf(lock_args_version, MAX_ARGS, "%u.%u.%u",
++	snprintf(lock_args_version, MAX_VERSION, "%u.%u.%u",
+ 		 VG_LOCK_ARGS_MAJOR, VG_LOCK_ARGS_MINOR, VG_LOCK_ARGS_PATCH);
  
--	strncpy((char *)lh->id, LABEL_ID, sizeof(lh->id));
-+	memcpy(lh->id, LABEL_ID, sizeof(lh->id));
- 	lh->sector_xl = xlate64(label->sector);
- 	lh->offset_xl = xlate32(sizeof(*lh));
+ 	rv = read_cluster_name(clustername);
+@@ -149,7 +151,9 @@ int lm_init_vg_dlm(char *ls_name, char *vg_name, uint32_t flags, char *vg_args)
+ 		return -EARGS;
+ 	}
  
-@@ -293,7 +293,7 @@ static struct labeller *_find_lvm_header(struct device *dev,
+-	snprintf(vg_args, MAX_ARGS, "%s:%s", lock_args_version, clustername);
++	rv = snprintf(vg_args, MAX_ARGS, "%s:%s", lock_args_version, clustername);
++	if (rv >= MAX_ARGS)
++		log_debug("init_vg_dlm vg_args may be too long %d %s", rv, vg_args);
+ 	rv = 0;
  
- 		lh = (struct label_header *) (scan_buf + (sector << SECTOR_SHIFT));
+ 	log_debug("init_vg_dlm done %s vg_args %s", ls_name, vg_args);
+diff --git a/daemons/lvmlockd/lvmlockd-sanlock.c b/daemons/lvmlockd/lvmlockd-sanlock.c
+index f960daf..4bc6402 100644
+--- a/daemons/lvmlockd/lvmlockd-sanlock.c
++++ b/daemons/lvmlockd/lvmlockd-sanlock.c
+@@ -500,13 +500,15 @@ static int get_sizes_lockspace(char *path, int *sector_size, int *align_size)
+  * version and lv name, and returns the real lock_args in vg_args.
+  */
  
--		if (!strncmp((char *)lh->id, LABEL_ID, sizeof(lh->id))) {
-+		if (!memcmp(lh->id, LABEL_ID, sizeof(lh->id))) {
- 			if (found) {
- 				log_error("Ignoring additional label on %s at sector %llu",
- 					  dev_name(dev), (unsigned long long)(block_sector + sector));
++#define MAX_VERSION 16
++
+ int lm_init_vg_sanlock(char *ls_name, char *vg_name, uint32_t flags, char *vg_args)
+ {
+ 	struct sanlk_lockspace ss;
+ 	struct sanlk_resourced rd;
+ 	struct sanlk_disk disk;
+ 	char lock_lv_name[MAX_ARGS+1];
+-	char lock_args_version[MAX_ARGS+1];
++	char lock_args_version[MAX_VERSION+1];
+ 	const char *gl_name = NULL;
+ 	uint32_t daemon_version;
+ 	uint32_t daemon_proto;
+@@ -526,7 +528,7 @@ int lm_init_vg_sanlock(char *ls_name, char *vg_name, uint32_t flags, char *vg_ar
+ 		return -EARGS;
+ 	}
+ 
+-	snprintf(lock_args_version, MAX_ARGS, "%u.%u.%u",
++	snprintf(lock_args_version, MAX_VERSION, "%u.%u.%u",
+ 		 VG_LOCK_ARGS_MAJOR, VG_LOCK_ARGS_MINOR, VG_LOCK_ARGS_PATCH);
+ 
+ 	/* see comment above about input vg_args being only lock_lv_name */
+@@ -543,7 +545,9 @@ int lm_init_vg_sanlock(char *ls_name, char *vg_name, uint32_t flags, char *vg_ar
+ 	if (daemon_test) {
+ 		if (!gl_lsname_sanlock[0])
+ 			strncpy(gl_lsname_sanlock, ls_name, MAX_NAME);
+-		snprintf(vg_args, MAX_ARGS, "%s:%s", lock_args_version, lock_lv_name);
++		rv = snprintf(vg_args, MAX_ARGS, "%s:%s", lock_args_version, lock_lv_name);
++		if (rv >= MAX_ARGS)
++			log_debug("init_vg_san vg_args may be too long %d %s", rv, vg_args);
+ 		return 0;
+ 	}
+ 
+@@ -635,7 +639,9 @@ int lm_init_vg_sanlock(char *ls_name, char *vg_name, uint32_t flags, char *vg_ar
+ 	if (!strcmp(gl_name, R_NAME_GL))
+ 		strncpy(gl_lsname_sanlock, ls_name, MAX_NAME);
+  
+-	snprintf(vg_args, MAX_ARGS, "%s:%s", lock_args_version, lock_lv_name);
++	rv = snprintf(vg_args, MAX_ARGS, "%s:%s", lock_args_version, lock_lv_name);
++	if (rv >= MAX_ARGS)
++		log_debug("init_vg_san vg_args may be too long %d %s", rv, vg_args);
+ 
+ 	log_debug("S %s init_vg_san done vg_args %s", ls_name, vg_args);
+ 
+@@ -692,7 +698,7 @@ int lm_init_lv_sanlock(char *ls_name, char *vg_name, char *lv_name,
+ {
+ 	struct sanlk_resourced rd;
+ 	char lock_lv_name[MAX_ARGS+1];
+-	char lock_args_version[MAX_ARGS+1];
++	char lock_args_version[MAX_VERSION+1];
+ 	uint64_t offset;
+ 	int rv;
+ 
+@@ -707,7 +713,7 @@ int lm_init_lv_sanlock(char *ls_name, char *vg_name, char *lv_name,
+ 		return rv;
+ 	}
+ 
+-	snprintf(lock_args_version, MAX_ARGS, "%u.%u.%u",
++	snprintf(lock_args_version, MAX_VERSION, "%u.%u.%u",
+ 		 LV_LOCK_ARGS_MAJOR, LV_LOCK_ARGS_MINOR, LV_LOCK_ARGS_PATCH);
+ 
+ 	if (daemon_test) {
 
 
