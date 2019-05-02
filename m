@@ -1,93 +1,39 @@
-From: tasleson <tasleson@fedoraproject.org>
-Date: Fri,  4 Mar 2016 16:24:52 +0000 (UTC)
-Subject: master - dbustest.sh: Get dbus test to work on buildbot
-Message-ID: <20160304162452.BDEDE60D59@fedorahosted.org>
+From: David Teigland <teigland@sourceware.org>
+Date: Thu, 2 May 2019 14:27:05 -0400
+Subject: master - remove unused string writecache
+Message-ID: <201905021827.x42IR5mY007533@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=f94fe2c91fc995e2d57f7689f01d8d15d72858cc
-Commit:        f94fe2c91fc995e2d57f7689f01d8d15d72858cc
-Parent:        9720898c8ee3a4035858508b38179a143d948f4f
-Author:        Marian Csontos <mcsontos@redhat.com>
-AuthorDate:    Tue Feb 23 09:13:01 2016 +0100
-Committer:     Tony Asleson <tasleson@redhat.com>
-CommitterDate: Fri Mar 4 10:11:03 2016 -0600
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=adfb9bf20cd7483785bd3156f5f616b0906cd895
+Commit:        adfb9bf20cd7483785bd3156f5f616b0906cd895
+Parent:        90b94ead12d739a3221e179bdcf1c482978f0f0f
+Author:        David Teigland <teigland@redhat.com>
+AuthorDate:    Wed May 1 16:50:14 2019 -0500
+Committer:     David Teigland <teigland@redhat.com>
+CommitterDate: Wed May 1 16:50:14 2019 -0500
 
-dbustest.sh: Get dbus test to work on buildbot
+remove unused string writecache
 
-- stdout/stderr for test output
-- debug.log* for daemon output
-- use install instead of cp for DBus config
-- use system bus
-- DBus reloads on new file. Better having it created with correct
-  permissions.
-
-Notes:
-- Squashed commits from mcsontos development branch
-- Still disabled at this time
-
-Signed-off-by: Tony Asleson <tasleson@redhat.com>
 ---
- test/api/dbustest.sh |   30 ++++++++++++++----------------
- 1 files changed, 14 insertions(+), 16 deletions(-)
+ lib/writecache/writecache.c |    2 --
+ 1 files changed, 0 insertions(+), 2 deletions(-)
 
-diff --git a/test/api/dbustest.sh b/test/api/dbustest.sh
-index b4e3964..ba3173e 100644
---- a/test/api/dbustest.sh
-+++ b/test/api/dbustest.sh
-@@ -21,18 +21,17 @@ skip
+diff --git a/lib/writecache/writecache.c b/lib/writecache/writecache.c
+index e9d337b..53619c3 100644
+--- a/lib/writecache/writecache.c
++++ b/lib/writecache/writecache.c
+@@ -26,8 +26,6 @@
+ #include "lib/metadata/lv_alloc.h"
+ #include "lib/config/defaults.h"
  
- aux prepare_pvs 6
- 
--# This allows us to run without installing
--# com.redhat.lvmdbus1.conf to /etc/dbus-1/system.d/
--# but in normal operation it needs to be on system bus
--export LVMDBUSD_USE_SESSION="True"
-+# Copy the needed file to run on the system bus if it doesn't
-+# already exist
-+if [ ! -f /etc/dbus-1/system.d/com.redhat.lvmdbus1.conf ]; then
-+	install -m 644 $abs_top_builddir/scripts/com.redhat.lvmdbus1.conf /etc/dbus-1/system.d/.
-+fi
- 
- # Setup the python path so we can run
- export PYTHONPATH=$abs_top_builddir/daemons
- 
--# Where should we be logging the output of the daemon when not running as
--# a systemd service
- # Start the dbus service
--$abs_top_builddir/daemons/lvmdbusd/lvmdbusd --debug --udev > /tmp/lvmdbusd.log 2>&1 &
-+$abs_top_builddir/daemons/lvmdbusd/lvmdbusd --debug --udev > debug.log_lvmdbusd 2>&1 &
- 
- # Give the service some time to start before we try to run the
- # unit test
-@@ -45,17 +44,16 @@ if [ "CHK${LVM_DBUS_PID}" == "CHK" ];then
- fi
- 
- # Run all the unit tests
--# Are we already logging stdout & stderror?
--$abs_top_builddir/test/dbus/lvmdbustest.py -v > /tmp/lvmdbustest.log 2>&1
-+$abs_top_builddir/test/dbus/lvmdbustest.py -v || fail=$?
- 
- # We can run individual unit tests by doing this
- # $abs_top_builddir/test/dbus/lvmdbustest.py -v TestDbusService.test_snapshot_merge
- 
--# I'm guessing there is a better way to handle this with the built in test env.
--if [ $? -eq 0 ]; then
--	rm -f /tmp/lvmdbusd.log
--	rm -f /tmp/lvmdbustest.log
--fi
+-static const char _writecache_module[] = "writecache";
 -
- echo "Stopping service"
--kill $LVM_DBUS_PID
-+kill $LVM_DBUS_PID || {
-+	sleep 1
-+        kill -9 $LVM_DBUS_PID
-+}
-+wait
-+
-+exit ${fail:-"0"}
+ #define SEG_LOG_ERROR(t, p...) \
+         log_error(t " segment %s of logical volume %s.", ## p,	\
+                   dm_config_parent_name(sn), seg->lv->name), 0;
 
 
