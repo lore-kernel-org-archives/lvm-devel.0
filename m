@@ -1,67 +1,62 @@
-From: Nir Soffer <nirsof@gmail.com>
-Date: Wed, 29 May 2019 15:10:00 +0300
-Subject: [PATCH] tool: Allow suppressing backup warnings
-Message-ID: <20190529121000.25206-1-nsoffer@redhat.com>
+From: Marian Csontos <mcsontos@sourceware.org>
+Date: Fri, 31 May 2019 03:14:21 -0400
+Subject: master - test: Restore testing of D-Bus API
+Message-ID: <201905310714.x4V7ELG6025441@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-We have a mechanism to show only single warning about disabled backup:
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=a9907bef9980dfe953a812e52760c174472ad0a6
+Commit:        a9907bef9980dfe953a812e52760c174472ad0a6
+Parent:        eebb5e9fffd4602b0455ed9729b4b3d4d341bc1c
+Author:        Marian Csontos <mcsontos@redhat.com>
+AuthorDate:    Thu May 30 18:02:55 2019 +0200
+Committer:     Marian Csontos <mcsontos@redhat.com>
+CommitterDate: Fri May 31 08:58:30 2019 +0200
 
-    WARNING: This metadata update is NOT backed up
+test: Restore testing of D-Bus API
 
-In oVirt we disable local backup since it does not play well with oVirt
-clustered LVM solution, and this warning is not helpful. We can filter
-the message in oVirt logs, but I think the right place to fix this is in
-LVM.
-
-Add LVM_SUPPRESS_BACKUP_WARNINGS environment variable. If set, suppress
-also the first warning about disable backup.
 ---
- lib/format_text/archiver.c | 3 +++
- man/lvm.8_main             | 4 ++++
- 2 files changed, 7 insertions(+)
+ test/Makefile.in |    9 +++++----
+ 1 files changed, 5 insertions(+), 4 deletions(-)
 
-diff --git a/lib/format_text/archiver.c b/lib/format_text/archiver.c
-index 052c2bd2b..0ea8d5e48 100644
---- a/lib/format_text/archiver.c
-+++ b/lib/format_text/archiver.c
-@@ -196,10 +196,13 @@ int backup_init(struct cmd_context *cmd, const char *dir,
- 		log_error("Couldn't copy backup directory name.");
- 		return 0;
- 	}
- 	backup_enable(cmd, enabled);
+diff --git a/test/Makefile.in b/test/Makefile.in
+index 69e2cfc..fcb612d 100644
+--- a/test/Makefile.in
++++ b/test/Makefile.in
+@@ -49,9 +49,9 @@ include $(top_builddir)/make.tmpl
+ T ?= .
+ S ?= @ # never match anything by default
+ VERBOSE ?= 0
+-ALL := $(shell find -L $(srcdir) \( -path \*/shell/\*.sh -or -path \*/unit/\*.sh \) | $(SORT))
++ALL := $(shell find -L $(srcdir) \( -path \*/shell/\*.sh -or -path \*/api/\*.sh -or -path \*/unit/\*.sh \) | $(SORT))
+ comma = ,
+-RUN := $(shell find -L $(srcdir) -regextype posix-egrep \( -path \*/shell/\*.sh -or -path \*/unit/\*.sh \) -and -regex "$(srcdir)/.*($(subst $(comma),|,$(T))).*" -and -not -regex "$(srcdir)/.*($(subst $(comma),|,$(S))).*" | $(SORT))
++RUN := $(shell find -L $(srcdir) -regextype posix-egrep \( -path \*/shell/\*.sh -or -path \*/api/\*.sh -or -path \*/unit/\*.sh \) -and -regex "$(srcdir)/.*($(subst $(comma),|,$(T))).*" -and -not -regex "$(srcdir)/.*($(subst $(comma),|,$(S))).*" | $(SORT))
+ RUN_BASE = $(subst $(srcdir)/,,$(RUN))
  
-+    if (getenv("LVM_SUPPRESS_BACKUP_WARNINGS"))
-+        cmd->backup_params->suppress = 1;
-+
- 	return 1;
- }
+ ifeq ("@BUILD_LVMPOLLD@", "yes")
+@@ -200,8 +200,9 @@ LIB_SHARED = check aux inittest utils get lvm-wrapper
  
- void backup_exit(struct cmd_context *cmd)
- {
-diff --git a/man/lvm.8_main b/man/lvm.8_main
-index 3e67b1bdf..43ce5150c 100644
---- a/man/lvm.8_main
-+++ b/man/lvm.8_main
-@@ -470,10 +470,14 @@ together allow automated test scripts to discard uninteresting log data.
- .TP
- .B LVM_SUPPRESS_LOCKING_FAILURE_MESSAGES
- Used to suppress warning messages when the configured locking is known
- to be unavailable.
- .TP
-+.B LVM_SUPPRESS_BACKUP_WARNINGS
-+Used to suppress warning messages when automatic metadata backup is
-+disabled.
-+.TP
- .B DM_ABORT_ON_INTERNAL_ERRORS
- Abort processing if the code detects a non-fatal internal error.
- .TP
- .B DM_DISABLE_UDEV
- Avoid interaction with udev.  LVM will manage the relevant nodes in /dev
--- 
-2.17.2
+ install: .tests-stamp lib/paths-installed
+ 	@echo $(srcdir)
+-	$(Q) $(INSTALL_DIR) $(DATADIR)/{shell,unit,lib,dbus} $(EXECDIR)
++	$(Q) $(INSTALL_DIR) $(DATADIR)/{shell,api,unit,lib,dbus} $(EXECDIR)
+ 	$(Q) $(INSTALL_DATA) shell/*.sh $(DATADIR)/shell
++	$(INSTALL_DATA) api/*.sh $(DATADIR)/api
+ 	$(Q) $(INSTALL_DATA) unit/*.sh $(DATADIR)/unit
+ 	-$(Q) $(INSTALL_PROGRAM) unit/unit-test $(DATADIR)/unit
+ 	-$(Q) $(INSTALL_PROGRAM) dbus/*.py $(DATADIR)/dbus/
+@@ -291,7 +292,7 @@ lib/paths-installed: lib/paths-common
+ 	$(Q) $(RM) $@-t
+ 	$(Q) cat lib/paths-common > $@-t
+ 	$(Q) echo 'installed_testsuite=1' >> $@-t
+-	$(Q) echo 'export PATH=@libexecdir@/lvm2-testsuite:@datadir@/lvm2-testsuite/lib:$$PATH' >> $@-t
++	$(Q) echo 'export PATH=@libexecdir@/lvm2-testsuite:@datadir@/lvm2-testsuite/lib:@datadir@/lvm2-testsuite/api:$$PATH' >> $@-t
+ 	$(Q) mv $@-t $@
+ 
+ lib/paths: lib/paths-common
 
 
