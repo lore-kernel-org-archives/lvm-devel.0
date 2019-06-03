@@ -1,65 +1,50 @@
-From: David Teigland <teigland@sourceware.org>
-Date: Mon, 25 Jul 2022 18:56:16 +0000 (GMT)
-Subject: main - apply multipath_component_detection=0 to duplicate PV handling
-Message-ID: <20220725185616.D878D3858413@sourceware.org>
+From: Marian Csontos <mcsontos@sourceware.org>
+Date: Mon, 3 Jun 2019 11:06:05 -0400
+Subject: master - test: Increase latency in pvmove-resume-multiseg
+Message-ID: <201906031506.x53F65QX004613@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=99ce09ae778c2cc4aa2611e425bba5287b8b9513
-Commit:        99ce09ae778c2cc4aa2611e425bba5287b8b9513
-Parent:        c0f8e6675c62332263acdc7c3c2f61eca20bd60f
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Mon Jul 25 13:50:43 2022 -0500
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Mon Jul 25 13:50:43 2022 -0500
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=669a834981c0bc808d42dbe5097d7beeead982ad
+Commit:        669a834981c0bc808d42dbe5097d7beeead982ad
+Parent:        a9907bef9980dfe953a812e52760c174472ad0a6
+Author:        Marian Csontos <mcsontos@redhat.com>
+AuthorDate:    Mon Jun 3 16:57:49 2019 +0200
+Committer:     Marian Csontos <mcsontos@redhat.com>
+CommitterDate: Mon Jun 3 16:57:49 2019 +0200
 
-apply multipath_component_detection=0 to duplicate PV handling
+test: Increase latency in pvmove-resume-multiseg
 
-multipath_component_detection=0 has always applied to the filter-based
-component detection.  Also apply this setting to the duplicate-PV
-handling which also eliminates multipath components (based on duplicate
-PVs having the same wwid.)
+The test was failing consistently on some VMs (F25), and inconsistently
+on Rawhide.
+
+With increased latency these failures are no longer reproducible.
+
+Reproducer:
+
+    make check_lvmpolld T=pvmove-resume-multiseg.sh
 ---
- lib/cache/lvmcache.c                  |  3 +++
- test/shell/duplicate-pvs-multipath.sh | 10 +++++++---
- 2 files changed, 10 insertions(+), 3 deletions(-)
+ test/shell/pvmove-resume-multiseg.sh |    4 ++--
+ 1 files changed, 2 insertions(+), 2 deletions(-)
 
-diff --git a/lib/cache/lvmcache.c b/lib/cache/lvmcache.c
-index a1c4a61c8..00916885c 100644
---- a/lib/cache/lvmcache.c
-+++ b/lib/cache/lvmcache.c
-@@ -652,6 +652,9 @@ static int _all_multipath_components(struct cmd_context *cmd, struct lvmcache_in
+diff --git a/test/shell/pvmove-resume-multiseg.sh b/test/shell/pvmove-resume-multiseg.sh
+index 89c2f74..a8e409f 100644
+--- a/test/shell/pvmove-resume-multiseg.sh
++++ b/test/shell/pvmove-resume-multiseg.sh
+@@ -33,9 +33,9 @@ test_pvmove_resume() {
+ 	# next LV on same VG and differetnt PV (we want to test 2 pvmoves per VG)
+ 	lvcreate -an -Zn -l30 -n $lv2 $vg "$dev3"
  
- 	*dev_mpath = NULL;
+-	aux delay_dev "$dev4" 0 250 "$(get first_extent_sector "$dev4"):"
++	aux delay_dev "$dev4" 0 500 "$(get first_extent_sector "$dev4"):"
+ 	test -e HAVE_DM_DELAY || { lvremove -f $vg; return 0; }
+-	aux delay_dev "$dev5" 0 250 "$(get first_extent_sector "$dev5"):"
++	aux delay_dev "$dev5" 0 500 "$(get first_extent_sector "$dev5"):"
  
-+	if (!find_config_tree_bool(cmd, devices_multipath_component_detection_CFG, NULL))
-+		return 0;
-+
- 	/* This function only makes sense with more than one dev. */
- 	if ((info && dm_list_empty(altdevs)) || (!info && (dm_list_size(altdevs) == 1))) {
- 		log_debug("Skip multipath component checks with single device for PVID %s", pvid);
-diff --git a/test/shell/duplicate-pvs-multipath.sh b/test/shell/duplicate-pvs-multipath.sh
-index 59c15b0d4..bc98d2d5a 100644
---- a/test/shell/duplicate-pvs-multipath.sh
-+++ b/test/shell/duplicate-pvs-multipath.sh
-@@ -24,9 +24,13 @@ modprobe --dry-run scsi_debug || skip
- multipath -l || skip
- multipath -l | grep scsi_debug && skip
- 
--# Turn off multipath_component_detection so that the duplicate
--# resolution of mpath components is used.
--aux lvmconf 'devices/multipath_component_detection = 0'
-+# FIXME: setting multipath_component_detection=0 now also disables
-+# the wwid-based mpath component detection, so this test will need
-+# to find another way to disable only the filter-mpath code (using
-+# sysfs and multipath/wwids) while keeping the code enabled that
-+# eliminates duplicates based on their matching wwids which this
-+# tries to test.
-+
- # Prevent wwids from being used for filtering.
- aux lvmconf 'devices/multipath_wwids_file = "/dev/null"'
- # Need to use /dev/mapper/mpath
+ 	pvmove -i5 "$dev1" "$dev4" &
+ 	PVMOVE=$!
+
 
