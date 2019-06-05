@@ -1,40 +1,78 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Wed, 5 Jun 2019 09:49:29 -0400
-Subject: master - tests: automatically set scan_lvs when using extend_filter
-Message-ID: <201906051349.x55DnTx3026267@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Wed, 5 Jun 2019 09:49:48 -0400
+Subject: master - tests: check no_discard_passdown
+Message-ID: <201906051349.x55DnmJG026282@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=ddd68fbeadb42d5cc0fdae49e133524bab049f49
-Commit:        ddd68fbeadb42d5cc0fdae49e133524bab049f49
-Parent:        e3c4ab0cc788b0190ab58446189c2d6b07a27b98
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=4d9f41b11945df83b37b55439a44372b894a78f5
+Commit:        4d9f41b11945df83b37b55439a44372b894a78f5
+Parent:        ddd68fbeadb42d5cc0fdae49e133524bab049f49
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed Jun 5 15:45:30 2019 +0200
+AuthorDate:    Wed Jun 5 15:46:43 2019 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Wed Jun 5 15:48:44 2019 +0200
 
-tests: automatically set scan_lvs when using extend_filter
+tests: check no_discard_passdown
 
-When using 'aux extend_filter' we always want to use LV as PV.
+Check reporting works
 ---
- test/lib/aux.sh |    2 +-
- 1 files changed, 1 insertions(+), 1 deletions(-)
+ test/shell/cache-no-discard.sh |   45 ++++++++++++++++++++++++++++++++++++++++
+ 1 files changed, 45 insertions(+), 0 deletions(-)
 
-diff --git a/test/lib/aux.sh b/test/lib/aux.sh
-index 1e8f0de..b178ab7 100644
---- a/test/lib/aux.sh
-+++ b/test/lib/aux.sh
-@@ -1090,7 +1090,7 @@ extend_filter() {
- 	for rx in "$@"; do
- 		filter=$(echo "$filter" | sed -e "s:\\[:[ \"$rx\", :")
- 	done
--	lvmconf "$filter"
-+	lvmconf "$filter" "devices/scan_lvs = 1"
- }
- 
- extend_filter_LVMTEST() {
+diff --git a/test/shell/cache-no-discard.sh b/test/shell/cache-no-discard.sh
+new file mode 100644
+index 0000000..3ab0594
+--- /dev/null
++++ b/test/shell/cache-no-discard.sh
+@@ -0,0 +1,45 @@
++#!/usr/bin/env bash
++
++# Copyright (C) 2019 Red Hat, Inc. All rights reserved.
++#
++# This copyrighted material is made available to anyone wishing to use,
++# modify, copy, or redistribute it subject to the terms and conditions
++# of the GNU General Public License v.2.
++#
++# You should have received a copy of the GNU General Public License
++# along with this program; if not, write to the Free Software Foundation,
++# Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
++
++# Check reporting of no_discard_passdown
++
++SKIP_WITH_LVMPOLLD=1
++
++# Until new version of cache_check tools - no integrity validation
++LVM_TEST_CACHE_CHECK_CMD=""
++
++. lib/inittest
++
++aux kernel_at_least 5 1 || skip
++
++aux have_cache 2 0
++
++aux prepare_vg 1
++
++# Create thinLV without discard
++lvcreate --discards=ignore -T -V20 -L20 -n $lv $vg/pool
++
++aux extend_filter_LVMTEST
++
++# Use discard-less LV as PV for $vg1
++pvcreate "$DM_DEV_DIR/$vg/$lv"
++vgcreate -s 128K $vg1 "$DM_DEV_DIR/$vg/$lv"
++
++# Create simple cache LV
++lvcreate -L2 -n $lv1 $vg1
++lvcreate -H -L2 $vg1/$lv1
++
++#lvs -ao+kernel_discards $vg1
++check lv_field $vg1/$lv1 kernel_discards "nopassdown"
++
++vgremove -f $vg1
++vgremove -f $vg
 
 
