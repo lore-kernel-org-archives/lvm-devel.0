@@ -1,281 +1,283 @@
 From: David Teigland <teigland@sourceware.org>
-Date: Fri, 7 Jun 2019 17:08:34 -0400
-Subject: master - move wipe_outdated_pvs to vg_write
-Message-ID: <201906072108.x57L8Y09005293@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Fri, 7 Jun 2019 17:08:37 -0400
+Subject: master - move pv header repairs to vg_write
+Message-ID: <201906072108.x57L8bNh005308@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=ab61a6d85da4e4f1d540e40ebac77999bf3c9a57
-Commit:        ab61a6d85da4e4f1d540e40ebac77999bf3c9a57
-Parent:        45b164f62cae25da3ac4b9f0d4f87ecaee1575fa
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=de3d3b11f493a89ebee2eab7efae70d33face954
+Commit:        de3d3b11f493a89ebee2eab7efae70d33face954
+Parent:        89914a541f081e1c234a455c17d82269cd90364b
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Wed Feb 6 12:32:26 2019 -0600
+AuthorDate:    Wed Feb 6 13:18:45 2019 -0600
 Committer:     David Teigland <teigland@redhat.com>
 CommitterDate: Fri Jun 7 15:54:04 2019 -0500
 
-move wipe_outdated_pvs to vg_write
+move pv header repairs to vg_write
 
-and implement it based on a device, not based
-on a pv struct (which is not available when the
-device is not a part of the vg.)
-
-currently only the vgremove command wipes outdated
-pvs until more advanced recovery is added in a
-subsequent commit
+Correct PV header in-use or version fields
+from vg_write instead of vg_read.
 ---
- lib/commands/toolcontext.h    |    1 +
- lib/format_text/format-text.c |   33 +++++++++++
- lib/format_text/format-text.h |    3 +
- lib/metadata/metadata.c       |  123 +++++++++++++++++++++++------------------
- tools/vgremove.c              |    2 +
- 5 files changed, 109 insertions(+), 53 deletions(-)
+ lib/format_text/format-text.c |   14 +++-
+ lib/metadata/metadata.c       |  168 +++++-----------------------------------
+ 2 files changed, 34 insertions(+), 148 deletions(-)
 
-diff --git a/lib/commands/toolcontext.h b/lib/commands/toolcontext.h
-index 7d373ab..6e4530c 100644
---- a/lib/commands/toolcontext.h
-+++ b/lib/commands/toolcontext.h
-@@ -179,6 +179,7 @@ struct cmd_context {
- 	unsigned use_hints:1;			/* if hints are enabled this cmd can use them */
- 	unsigned pvscan_recreate_hints:1;	/* enable special case hint handling for pvscan --cache */
- 	unsigned scan_lvs:1;
-+	unsigned wipe_outdated_pvs:1;
- 
- 	/*
- 	 * Devices and filtering.
 diff --git a/lib/format_text/format-text.c b/lib/format_text/format-text.c
-index 9d58c53..6e224f0 100644
+index 6e224f0..4f0a004 100644
 --- a/lib/format_text/format-text.c
 +++ b/lib/format_text/format-text.c
-@@ -2463,3 +2463,36 @@ bad:
+@@ -1600,12 +1600,16 @@ static int _text_pv_needs_rewrite(const struct format_type *fmt, struct physical
+ {
+ 	struct lvmcache_info *info;
+ 	uint32_t ext_vsn;
++	uint32_t ext_flags;
  
- 	return NULL;
+ 	*needs_rewrite = 0;
+ 
+ 	if (!pv->is_labelled)
+ 		return 1;
+ 
++	if (!pv->dev)
++		return 1;
++
+ 	if (!(info = lvmcache_info_from_pvid((const char *)&pv->id, pv->dev, 0))) {
+ 		log_error("Failed to find cached info for PV %s.", pv_dev_name(pv));
+ 		return 0;
+@@ -1613,8 +1617,16 @@ static int _text_pv_needs_rewrite(const struct format_type *fmt, struct physical
+ 
+ 	ext_vsn = lvmcache_ext_version(info);
+ 
+-	if (ext_vsn < PV_HEADER_EXTENSION_VSN)
++	if (ext_vsn < PV_HEADER_EXTENSION_VSN) {
++		log_debug("PV %s header needs rewrite for new ext version", dev_name(pv->dev));
++		*needs_rewrite = 1;
++	}
++
++	ext_flags = lvmcache_ext_flags(info);
++	if (!(ext_flags & PV_EXT_USED)) {
++		log_debug("PV %s header needs rewrite to set ext used", dev_name(pv->dev));
+ 		*needs_rewrite = 1;
++	}
+ 
+ 	return 1;
  }
-+
-+int text_wipe_outdated_pv_mda(struct cmd_context *cmd, struct device *dev,
-+			      struct metadata_area *mda)
-+{
-+	struct mda_context *mdac = mda->metadata_locn;
-+	uint64_t start_byte = mdac->area.start;
-+	struct mda_header *mdab;
-+	struct raw_locn *rlocn_slot0;
-+	struct raw_locn *rlocn_slot1;
-+	uint32_t bad_fields = 0;
-+
-+	if (!(mdab = raw_read_mda_header(cmd->fmt, &mdac->area, mda_is_primary(mda), 0, &bad_fields))) {
-+		log_error("Failed to read outdated pv mda header on %s", dev_name(dev));
-+		return 0;
-+	}
-+
-+	rlocn_slot0 = &mdab->raw_locns[0];
-+	rlocn_slot1 = &mdab->raw_locns[1];
-+
-+	rlocn_slot0->offset = 0;
-+	rlocn_slot0->size = 0;
-+	rlocn_slot0->checksum = 0;
-+	rlocn_slot1->offset = 0;
-+	rlocn_slot1->size = 0;
-+	rlocn_slot1->checksum = 0;
-+         
-+	if (!_raw_write_mda_header(cmd->fmt, dev, mda_is_primary(mda), start_byte, mdab)) {
-+		log_error("Failed to write outdated pv mda header on %s", dev_name(dev));
-+		return 0;
-+	}
-+
-+	return 1;
-+}
-diff --git a/lib/format_text/format-text.h b/lib/format_text/format-text.h
-index c42d5c0..2345d52 100644
---- a/lib/format_text/format-text.h
-+++ b/lib/format_text/format-text.h
-@@ -77,4 +77,7 @@ struct data_area_list {
- 	struct disk_locn disk_locn;
- };
- 
-+int text_wipe_outdated_pv_mda(struct cmd_context *cmd, struct device *dev,
-+                              struct metadata_area *mda);
-+
- #endif
 diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
-index bd6ec4d..a13be57 100644
+index a13be57..804d0cf 100644
 --- a/lib/metadata/metadata.c
 +++ b/lib/metadata/metadata.c
-@@ -28,11 +28,14 @@
- #include "lib/display/display.h"
- #include "lib/locking/locking.h"
- #include "lib/format_text/archiver.h"
-+#include "lib/format_text/format-text.h"
-+#include "lib/format_text/layout.h"
-+#include "lib/format_text/import-export.h"
- #include "lib/config/defaults.h"
- #include "lib/locking/lvmlockd.h"
--#include "time.h"
- #include "lib/notify/lvmnotify.h"
- 
-+#include <time.h>
- #include <math.h>
- 
- static struct physical_volume *_pv_read(struct cmd_context *cmd,
-@@ -2922,6 +2925,69 @@ static int _handle_historical_lvs(struct volume_group *vg)
- 	return 1;
+@@ -2810,57 +2810,6 @@ static int _pv_in_pv_list(struct physical_volume *pv, struct dm_list *head)
+ 	return 0;
  }
  
-+static void _wipe_outdated_pvs(struct cmd_context *cmd, struct volume_group *vg)
-+{
-+	struct dm_list devs;
-+	struct dm_list *mdas = NULL;
-+	struct device_list *devl;
-+	struct device *dev;
-+	struct metadata_area *mda;
-+	struct label *label;
-+	struct lvmcache_info *info;
-+	uint32_t ext_flags;
-+
-+	dm_list_init(&devs);
-+
-+	/*
-+	 * When vg_read selected a good copy of the metadata, it used it to
-+	 * update the lvmcache representation of the VG (lvmcache_update_vg).
-+	 * At that point outdated PVs were recognized and moved into the
-+	 * vginfo->outdated_infos list.  Here we clear the PVs on that list.
-+	 */
-+
-+	lvmcache_get_outdated_devs(cmd, vg->name, (const char *)&vg->id, &devs);
-+
-+	dm_list_iterate_items(devl, &devs) {
-+		dev = devl->dev;
-+
-+		lvmcache_get_outdated_mdas(cmd, vg->name, (const char *)&vg->id, dev, &mdas);
-+
-+		if (mdas) {
-+			dm_list_iterate_items(mda, mdas) {
-+				log_warn("WARNING: wiping mda on outdated PV %s", dev_name(dev));
-+
-+				if (!text_wipe_outdated_pv_mda(cmd, dev, mda))
-+					log_warn("WARNING: failed to wipe mda on outdated PV %s", dev_name(dev));
-+			}
-+		}
-+
-+		if (!(label = lvmcache_get_dev_label(dev))) {
-+			log_error("_wipe_outdated_pvs no label for %s", dev_name(dev));
-+			continue;
-+		}
-+
-+		info = label->info;
-+		ext_flags = lvmcache_ext_flags(info);
-+		ext_flags &= ~PV_EXT_USED;
-+		lvmcache_set_ext_version(info, PV_HEADER_EXTENSION_VSN);
-+		lvmcache_set_ext_flags(info, ext_flags);
-+
-+		log_warn("WARNING: wiping header on outdated PV %s", dev_name(dev));
-+
-+		if (!label_write(dev, label))
-+			log_warn("WARNING: failed to wipe header on outdated PV %s", dev_name(dev));
-+
-+		lvmcache_del(info);
-+	}
-+
-+	/*
-+	 * A vgremove will involve many vg_write() calls (one for each lv
-+	 * removed) but we only need to wipe pvs once, so clear the outdated
-+	 * list so it won't be wiped again.
-+	 */
-+	lvmcache_del_outdated_devs(cmd, vg->name, (const char *)&vg->id);
-+}
-+
- /*
-  * After vg_write() returns success,
-  * caller MUST call either vg_commit() or vg_revert()
-@@ -2986,6 +3052,9 @@ int vg_write(struct volume_group *vg)
- 		return 0;
- 	}
- 
-+	if (vg->cmd->wipe_outdated_pvs)
-+		_wipe_outdated_pvs(vg->cmd, vg);
-+
- 	if (critical_section())
- 		log_error(INTERNAL_ERROR
- 			  "Writing metadata in critical section.");
-@@ -3538,52 +3607,6 @@ static int _repair_inconsistent_vg(struct volume_group *vg, uint32_t lockd_state
- 	return 1;
- }
- 
--static int _wipe_outdated_pvs(struct cmd_context *cmd, struct volume_group *vg, struct dm_list *to_check, uint32_t lockd_state)
+-/*
+- * Check if any of the PVs in VG still contain old PV headers
+- * and if yes, schedule them for PV header update.
+- */
+-static int _vg_update_old_pv_ext_if_needed(struct volume_group *vg)
 -{
--	struct pv_list *pvl, *pvl2;
--	char uuid[64] __attribute__((aligned(8)));
+-	struct pv_list *pvl, *new_pvl;
+-	int pv_needs_rewrite;
 -
--	if (lvmcache_found_duplicate_pvs()) {
--		log_debug_metadata("Skip wiping outdated PVs with duplicates.");
--		return 0;
--	}
+-	if (!(vg->fid->fmt->features & FMT_PV_FLAGS))
+-		return 1;
 -
--	/*
--	 * Cannot write foreign VGs, the owner will repair it.
--	 * Also, if another host is updating its VG, we may read
--	 * the PVs while some are written but not others, making
--	 * some PVs look outdated to us just because we're reading
--	 * the VG while it's only partially written out.
--	 */
--	if (_is_foreign_vg(vg)) {
--		log_debug_metadata("Skip wiping outdated PVs for foreign VG.");
--		return 0;
--	}
+-	dm_list_iterate_items(pvl, &vg->pvs) {
+-		if (is_missing_pv(pvl->pv) ||
+-		    !pvl->pv->fmt->ops->pv_needs_rewrite)
+-			continue;
 -
--	if (vg_is_shared(vg) && !(lockd_state & LDST_EX)) {
--		log_verbose("Skip wiping outdated PVs for shared VG without exclusive lock.");
--		return 0;
--	}
+-		if (_pv_in_pv_list(pvl->pv, &vg->pv_write_list))
+-			continue;
 -
--	dm_list_iterate_items(pvl, to_check) {
--		dm_list_iterate_items(pvl2, &vg->pvs) {
--			if (pvl->pv->dev == pvl2->pv->dev)
--				goto next_pv;
+-		if (!pvl->pv->fmt->ops->pv_needs_rewrite(pvl->pv->fmt, pvl->pv,
+-							 &pv_needs_rewrite))
+-			return_0;
+-
+-		if (pv_needs_rewrite) {
+-			/*
+-			 * Schedule PV for writing only once!
+-			 */
+-			if (_pv_in_pv_list(pvl->pv, &vg->pv_write_list))
+-				continue;
+-
+-			if (!(new_pvl = dm_pool_zalloc(vg->vgmem, sizeof(*new_pvl)))) {
+-				log_error("pv_to_write allocation for '%s' failed", pv_dev_name(pvl->pv));
+-				return 0;
+-			}
+-			new_pvl->pv = pvl->pv;
+-			dm_list_add(&vg->pv_write_list, &new_pvl->list);
+-			log_debug("PV %s has old extension header, updating to newest version.",
+-				  pv_dev_name(pvl->pv));
 -		}
--
--
--		if (!id_write_format(&pvl->pv->id, uuid, sizeof(uuid)))
--			return_0;
--		log_warn("WARNING: Removing PV %s (%s) that no longer belongs to VG %s",
--			 pv_dev_name(pvl->pv), uuid, vg->name);
--		if (!pv_write_orphan(cmd, pvl->pv))
--			return_0;
--next_pv:
--		;
 -	}
+-
+-	if (!dm_list_empty(&vg->pv_write_list) &&
+-	    (!vg_write(vg) || !vg_commit(vg))) {
+-		log_error("Failed to update old PV extension headers in VG %s.", vg->name);
+-		return 0;
+-	}
+-
 -	return 1;
 -}
 -
- static int _check_or_repair_pv_ext(struct cmd_context *cmd,
- 				   struct volume_group *vg,
- 				   uint32_t lockd_state,
-@@ -4217,12 +4240,6 @@ static struct volume_group *_vg_read(struct cmd_context *cmd,
- 			release_vg(correct_vg);
- 			return NULL;
- 		}
+ static int _check_historical_lv_is_valid(struct historical_logical_volume *hlv)
+ {
+ 	struct glv_list *glvl;
+@@ -2995,7 +2944,7 @@ static void _wipe_outdated_pvs(struct cmd_context *cmd, struct volume_group *vg)
+ int vg_write(struct volume_group *vg)
+ {
+ 	struct dm_list *mdah;
+-	struct pv_list *pvl, *pvl_safe;
++	struct pv_list *pvl, *pvl_safe, *new_pvl;
+ 	struct metadata_area *mda;
+ 	struct lv_list *lvl;
+ 	int revert = 0, wrote = 0;
+@@ -3063,6 +3012,26 @@ int vg_write(struct volume_group *vg)
+ 	memlock_unlock(vg->cmd);
+ 	vg->seqno++;
+ 
++	dm_list_iterate_items(pvl, &vg->pvs) {
++		int update_pv_header = 0;
++
++		if (_pv_in_pv_list(pvl->pv, &vg->pv_write_list))
++			continue;
++
++		if (!pvl->pv->fmt->ops->pv_needs_rewrite(pvl->pv->fmt, pvl->pv, &update_pv_header))
++			continue;
++
++		if (!update_pv_header)
++			continue;
++
++		if (!(new_pvl = dm_pool_zalloc(vg->vgmem, sizeof(*new_pvl))))
++			continue;
++
++		new_pvl->pv = pvl->pv;
++		dm_list_add(&vg->pv_write_list, &new_pvl->list);
++		log_warn("WARNING: updating PV header on %s for VG %s.", pv_dev_name(pvl->pv), vg->name);
++	}
++
+ 	dm_list_iterate_items_safe(pvl, pvl_safe, &vg->pv_write_list) {
+ 		if (!pv_write(vg->cmd, pvl->pv, 1))
+ 			return_0;
+@@ -3607,88 +3576,6 @@ static int _repair_inconsistent_vg(struct volume_group *vg, uint32_t lockd_state
+ 	return 1;
+ }
+ 
+-static int _check_or_repair_pv_ext(struct cmd_context *cmd,
+-				   struct volume_group *vg,
+-				   uint32_t lockd_state,
+-				   int repair, int *inconsistent_pvs)
+-{
+-	char uuid[64] __attribute__((aligned(8)));
+-	struct lvmcache_info *info;
+-	uint32_t ext_version, ext_flags;
+-	struct pv_list *pvl;
+-	unsigned pvs_fixed = 0;
+-	int r = 0;
 -
--		if (!_wipe_outdated_pvs(cmd, correct_vg, &all_pvs, lockd_state)) {
--			_free_pv_list(&all_pvs);
+-	*inconsistent_pvs = 0;
+-
+-	dm_list_iterate_items(pvl, &vg->pvs) {
+-		/* Missing PV - nothing to do. */
+-		if (is_missing_pv(pvl->pv))
+-			continue;
+-
+-		if (!pvl->pv->dev) {
+-			/* is_missing_pv doesn't catch NULL dev */
+-			memset(&uuid, 0, sizeof(uuid));
+-			if (!id_write_format(&pvl->pv->id, uuid, sizeof(uuid)))
+-				goto_out;
+-			log_warn("WARNING: Not repairing PV %s with missing device.", uuid);
+-			continue;
+-		}
+-
+-		if (!(info = lvmcache_info_from_pvid(pvl->pv->dev->pvid, pvl->pv->dev, 0))) {
+-			log_error("Failed to find cached info for PV %s.", pv_dev_name(pvl->pv));
+-			goto out;
+-		}
+-
+-		ext_version = lvmcache_ext_version(info);
+-		if (ext_version < 2)
+-			continue;
+-
+-		ext_flags = lvmcache_ext_flags(info);
+-		if (!(ext_flags & PV_EXT_USED)) {
+-			if (!repair) {
+-				*inconsistent_pvs = 1;
+-				/* we're not repairing now, so no need to
+-				 * check further PVs - inconsistent_pvs is already
+-				 * set and that will trigger the repair next time */
+-				return 1;
+-			}
+-
+-			if (_is_foreign_vg(vg)) {
+-				log_verbose("Skip repair of PV %s that is in foreign "
+-					    "VG %s but not marked as used.",
+-					    pv_dev_name(pvl->pv), vg->name);
+-				*inconsistent_pvs = 1;
+-			} else if (vg_is_shared(vg) && !(lockd_state & LDST_EX)) {
+-				log_warn("Skip repair of PV %s that is in shared "
+-					    "VG %s but not marked as used.",
+-					    pv_dev_name(pvl->pv), vg->name);
+-				*inconsistent_pvs = 1;
+-			} else {
+-				log_warn("WARNING: Repairing Physical Volume %s that is "
+-					 "in Volume Group %s but not marked as used.",
+-					  pv_dev_name(pvl->pv), vg->name);
+-
+-				/* pv write will set correct ext_flags */
+-				if (!pv_write(cmd, pvl->pv, 1)) {
+-					*inconsistent_pvs = 1;
+-					log_error("Failed to repair physical volume \"%s\".",
+-						  pv_dev_name(pvl->pv));
+-					goto out;
+-				}
+-				pvs_fixed++;
+-			}
+-		}
+-	}
+-
+-	r = 1;
+-out:
+-	if ((pvs_fixed > 0) && !_repair_inconsistent_vg(vg, lockd_state))
+-		return_0;
+-
+-	return r;
+-}
+-
+ /* Caller sets consistent to 1 if it's safe for vg_read_internal to correct
+  * inconsistent metadata on disk (i.e. the VG write lock is held).
+  * This guarantees only consistent metadata is returned.
+@@ -3724,7 +3611,6 @@ static struct volume_group *_vg_read(struct cmd_context *cmd,
+ 	int inconsistent_mdas = 0;
+ 	int inconsistent_mda_count = 0;
+ 	int strip_historical_lvs = enable_repair;
+-	int update_old_pv_ext = enable_repair;
+ 	unsigned use_precommitted = precommitted;
+ 	struct dm_list *pvids;
+ 	struct pv_list *pvl;
+@@ -4258,19 +4144,7 @@ static struct volume_group *_vg_read(struct cmd_context *cmd,
+ 		return NULL;
+ 	}
+ 
+-	/* We have the VG now finally, check if PV ext info is in sync with VG metadata. */
+-	if (!_check_or_repair_pv_ext(cmd, correct_vg, lockd_state, skipped_rescan ? 0 : enable_repair,
+-				     &inconsistent_pvs)) {
+-		release_vg(correct_vg);
+-		return_NULL;
+-	}
+-
+ 	if (correct_vg && enable_repair && !skipped_rescan) {
+-		if (update_old_pv_ext && !_vg_update_old_pv_ext_if_needed(correct_vg)) {
 -			release_vg(correct_vg);
 -			return_NULL;
 -		}
- 	}
- 
- 	_free_pv_list(&all_pvs);
-diff --git a/tools/vgremove.c b/tools/vgremove.c
-index 1aae87d..23640f6 100644
---- a/tools/vgremove.c
-+++ b/tools/vgremove.c
-@@ -99,6 +99,8 @@ int vgremove(struct cmd_context *cmd, int argc, char **argv)
- 
- 	clear_hint_file(cmd);
- 
-+	cmd->wipe_outdated_pvs = 1;
-+
- 	cmd->handles_missing_pvs = 1;
- 	ret = process_each_vg(cmd, argc, argv, NULL, NULL,
- 			      READ_FOR_UPDATE, 0,
+-
+ 		if (strip_historical_lvs && !vg_strip_outdated_historical_lvs(correct_vg)) {
+ 			release_vg(correct_vg);
+ 			return_NULL;
 
 
