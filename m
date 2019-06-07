@@ -1,34 +1,33 @@
 From: David Teigland <teigland@sourceware.org>
-Date: Fri, 7 Jun 2019 17:09:18 -0400
-Subject: master - tests: add missing-pv missing-pv-unused
-Message-ID: <201906072109.x57L9IBG005387@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Fri, 7 Jun 2019 17:09:21 -0400
+Subject: master - tests: add metadata-old.sh
+Message-ID: <201906072109.x57L9LNT005397@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=d3636ff8322f17bac66ac6fe79e2c0710d645260
-Commit:        d3636ff8322f17bac66ac6fe79e2c0710d645260
-Parent:        a3a676e0e790b5e76aa57a4d2bb1dadedcf6bb5a
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=9156640b6083690a7341d6073c491272f1187282
+Commit:        9156640b6083690a7341d6073c491272f1187282
+Parent:        d3636ff8322f17bac66ac6fe79e2c0710d645260
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Fri Apr 12 10:55:19 2019 -0500
+AuthorDate:    Fri May 24 15:18:18 2019 -0500
 Committer:     David Teigland <teigland@redhat.com>
 CommitterDate: Fri Jun 7 15:54:04 2019 -0500
 
-tests: add missing-pv missing-pv-unused
+tests: add metadata-old.sh
 
 ---
- test/shell/missing-pv-unused.sh |   86 ++++++++++++++++++++++
- test/shell/missing-pv.sh        |  152 +++++++++++++++++++++++++++++++++++++++
- 2 files changed, 238 insertions(+), 0 deletions(-)
+ test/shell/metadata-old.sh |  177 ++++++++++++++++++++++++++++++++++++++++++++
+ 1 files changed, 177 insertions(+), 0 deletions(-)
 
-diff --git a/test/shell/missing-pv-unused.sh b/test/shell/missing-pv-unused.sh
+diff --git a/test/shell/metadata-old.sh b/test/shell/metadata-old.sh
 new file mode 100644
-index 0000000..2265a5b
+index 0000000..53133bc
 --- /dev/null
-+++ b/test/shell/missing-pv-unused.sh
-@@ -0,0 +1,86 @@
++++ b/test/shell/metadata-old.sh
+@@ -0,0 +1,177 @@
 +#!/usr/bin/env bash
 +
 +# Copyright (C) 2008-2013,2018 Red Hat, Inc. All rights reserved.
@@ -46,232 +45,165 @@ index 0000000..2265a5b
 +aux prepare_devs 3
 +get_devs
 +
-+vgcreate $SHARED $vg "$dev1" "$dev2" "$dev3"
-+
-+lvcreate -n $lv1 -L8M $vg "$dev2"
-+lvcreate -n $lv2 -L8M $vg "$dev3"
-+lvcreate -n $lv3 -L8M $vg "$dev2"
-+lvcreate -n $lv4 -L8M $vg "$dev3"
-+
-+vgchange -an $vg
-+
-+pvs
-+vgs
-+lvs -a -o+devices
-+
-+# Fail device that is not used by any LVs.
-+aux disable_dev "$dev1"
-+
-+pvs
-+vgs
-+lvs -a -o+devices
-+
-+# Cannot do normal activation of LVs not using failed PV.
-+lvchange -ay $vg/$lv1
-+lvchange -ay $vg/$lv2
-+
-+vgchange -an $vg
-+
-+# Check that MISSING flag is not set in ondisk metadata.
-+pvck --dump metadata "$dev2" > meta
-+not grep MISSING meta
-+rm meta
-+
-+pvs
-+vgs
-+lvs -a -o+devices
-+
-+# lvremove is one of the few commands that is allowed to run
-+# when PVs are missing.  The vg_write from this command sets
-+# the MISSING flag on the PV in the ondisk metadata.
-+# (this could be changed, the MISSING flag wouldn't need
-+# to be set in the first place since the PV isn't used.)
-+lvremove $vg/$lv1
-+
-+# Check that MISSING flag is set in ondisk metadata.
-+pvck --dump metadata "$dev2" > meta
-+grep MISSING meta
-+rm meta
-+
-+# with MISSING flag in metadata, restrictions apply
-+not lvcreate -l1 $vg
-+
-+aux enable_dev "$dev1"
-+
-+# No LVs are using the PV with MISSING flag, so no restrictions
-+# are applied, and the vg_write here clears the MISSING flag on disk.
-+lvcreate -l1 $vg
-+
-+# Check that MISSING flag is not set in ondisk metadata.
-+pvck --dump metadata "$dev2" > meta
-+not grep MISSING meta
-+rm meta
-+
-+
-+pvs
-+vgs
-+lvs -a -o+devices
-+
-+vgchange -an $vg
-+vgremove -ff $vg
-+
-diff --git a/test/shell/missing-pv.sh b/test/shell/missing-pv.sh
-new file mode 100644
-index 0000000..74cc43b
---- /dev/null
-+++ b/test/shell/missing-pv.sh
-@@ -0,0 +1,152 @@
-+#!/usr/bin/env bash
-+
-+# Copyright (C) 2008-2013,2018 Red Hat, Inc. All rights reserved.
 +#
-+# This copyrighted material is made available to anyone wishing to use,
-+# modify, copy, or redistribute it subject to the terms and conditions
-+# of the GNU General Public License v.2.
++# Test "old metadata" repair which occurs when the VG is written
++# and one of the PVs in the VG does not get written to, and then
++# the PV reappears with the old metadata.  This can happen if
++# a command is killed or crashes after writing new metadata to
++# only some of the PVs in the VG, or if a PV is temporarily
++# inaccessible while a VG is written.
 +#
-+# You should have received a copy of the GNU General Public License
-+# along with this program; if not, write to the Free Software Foundation,
-+# Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
-+
-+. lib/inittest
-+
-+aux prepare_devs 3
-+get_devs
 +
 +vgcreate $SHARED $vg "$dev1" "$dev2" "$dev3"
 +
-+lvcreate -n $lv1 -L8M --type mirror -m 1 $vg
-+lvcreate -n $lv2 -L8M --type mirror -m 1 $vg
++#
++# Test that vgck --updatemetadata will update old metadata.
++#
 +
-+vgchange -an $vg
++lvcreate -n $lv1 -l1 -an $vg "$dev1"
++lvcreate -n $lv2 -l1 -an $vg "$dev1"
 +
-+pvs
-+vgs
-+lvs -a -o+devices
-+
-+# Fail one leg of each mirror LV.
-+aux disable_dev "$dev1"
++aux disable_dev "$dev2"
 +
 +pvs
-+vgs
-+lvs -a -o+devices
++pvs "$dev1"
++not pvs "$dev2"
++pvs "$dev3"
++lvs $vg/$lv1
++lvs $vg/$lv2
 +
-+# Cannot do normal activate of either LV with a failed leg.
-+not lvchange -ay $vg/$lv1
-+not lvchange -ay $vg/$lv2
++lvremove $vg/$lv2
 +
-+# Can activate with partial option.
-+lvchange -ay --activationmode partial $vg/$lv1
-+lvchange -ay --activationmode partial $vg/$lv2
++aux enable_dev "$dev2"
 +
-+pvs
-+vgs
-+lvs -a -o+devices
++pvs 2>&1 | tee out
++grep "ignoring metadata seqno" out
++pvs "$dev1"
++pvs "$dev2"
++pvs "$dev3"
 +
-+# Repair lv1 so it no longer uses failed dev.
-+lvconvert --repair --yes $vg/$lv1
++lvs $vg/$lv1
++not lvs $vg/$lv2
 +
-+# Check that MISSING flag is set in ondisk metadata,
-+# it should have been written by the lvconvert since the
-+# missing PV is still used by lv2.
-+pvck --dump metadata "$dev2" > meta
-+grep MISSING meta
-+rm meta
-+
-+pvs
-+vgs
-+lvs -a -o+devices
-+
-+# Verify normal activation is possible of lv1 since it's
-+# not using any failed devs, and partial activation is
-+# required for lv2 since it's still using the failed dev.
-+vgchange -an $vg
-+lvchange -ay $vg/$lv1
-+not lvchange -ay $vg/$lv2
-+vgchange -an $vg
-+
-+aux enable_dev "$dev1"
-+
-+pvs
-+vgs
-+lvs -a -o+devices
-+
-+# TODO: check that lv2 has partial flag, lv1 does not
-+# (there's no partial reporting option, only attr p.)
-+
-+# Check that MISSING flag is still set in ondisk
-+# metadata since the previously missing dev is still
-+# used by lv2.
-+pvck --dump metadata "$dev2" > meta
-+grep MISSING meta
-+rm meta
-+
-+
-+# The missing pv restrictions still apply even after
-+# the dev has reappeared since it has the MISSING flag.
-+not lvchange -ay $vg/$lv2
-+not lvcreate -l1 $vg
-+
-+# Update old metadata on the previously missing PV.
-+# This should not clear the MISSING flag because the
-+# previously missing PV is still used by lv2.
-+# This would be done by any command that writes
-+# metadata, e.g. lvcreate, but since we are in a
-+# state with a missing pv, most commands that write
-+# metadata are restricted, so use a command that
-+# explicitly writes/fixes metadata.
++# fixes the old metadata on dev1
 +vgck --updatemetadata $vg
 +
-+pvs
-+vgs
-+lvs -a -o+devices
++pvs 2>&1 | tee out
++not grep "ignoring metadata seqno" out
++pvs "$dev1"
++pvs "$dev2"
++pvs "$dev3"
 +
-+# Check that MISSING flag is still set in ondisk
-+# metadata since the previously missing dev is still
-+# used by lv2.
-+pvck --dump metadata "$dev2" > meta
-+grep MISSING meta
-+rm meta
++lvs $vg/$lv1
++not lvs $vg/$lv2
 +
++#
++# Test that any writing command will also update the
++# old metadata.
++#
 +
-+# The missing pv restrictions still apply since it
-+# has the MISSING flag.
-+not lvchange -ay $vg/$lv2
-+not lvcreate -l1 $vg
++lvcreate -n $lv2 -l1 -an $vg "$dev1"
 +
-+lvchange -ay --activationmode partial  $vg/$lv2
-+
-+# After repair, no more LVs will be using the previously
-+# missing PV.
-+lvconvert --repair --yes $vg/$lv2
++aux disable_dev "$dev2"
 +
 +pvs
-+vgs
-+lvs -a -o+devices
++pvs "$dev1"
++not pvs "$dev2"
++pvs "$dev3"
++lvs $vg/$lv1
++lvs $vg/$lv2
 +
-+vgchange -an $vg
++lvremove $vg/$lv2
 +
-+# The next write of the metadata will clear the MISSING
-+# flag in ondisk metadata because the previously missing
-+# PV is no longer used by any LVs.
++aux enable_dev "$dev2"
 +
-+# Run a command to write ondisk metadata, which should clear
-+# the MISSING flag, could also use vgck --updatemetadata vg.
-+lvcreate -l1 $vg
++pvs 2>&1 | tee out
++grep "ignoring metadata seqno" out
++pvs "$dev1"
++pvs "$dev2"
++pvs "$dev3"
 +
-+# Check that the MISSING flag is no longer set
-+# in the ondisk metadata.
-+pvck --dump metadata "$dev2" > meta
-+not grep MISSING meta
-+rm meta
++lvs $vg/$lv1
++not lvs $vg/$lv2
 +
++# fixes the old metadata on dev1
++lvcreate -n $lv3 -l1 -an $vg
 +
-+pvs
-+vgs
-+lvs -a -o+devices
++pvs 2>&1 | tee out
++not grep "ignoring metadata seqno" out
++pvs "$dev1"
++pvs "$dev2"
++pvs "$dev3"
++
++lvs $vg/$lv1
++not lvs $vg/$lv2
++
++vgremove -ff $vg
++
++#
++# First two PVs with one mda, where both have old metadata.
++# Third PV with two mdas, where the first mda has old
++# metadata, and the second mda has current metadata.
++#
++
++dd if=/dev/zero of="$dev1" || true
++dd if=/dev/zero of="$dev2" || true
++dd if=/dev/zero of="$dev3" || true
++
++pvcreate "$dev1"
++pvcreate "$dev2"
++pvcreate --pvmetadatacopies 2 "$dev3"
++
++vgcreate $SHARED $vg "$dev1" "$dev2" "$dev3"
++
++lvcreate -n $lv1 -l1 -an $vg "$dev3"
++lvcreate -n $lv2 -l1 -an $vg "$dev3"
++
++# Save the metadata at this point...
++dd if="$dev1" of=meta1 bs=4k count=4
++dd if="$dev2" of=meta2 bs=4k count=4
++dd if="$dev3" of=meta3 bs=4k count=4
++
++# and now change metadata so the saved copies are old
++lvcreate -n $lv3 -l1 -an $vg "$dev3"
++
++# Copy the saved metadata back to the three
++# devs first mda, leaving the second mda on
++# dev3 as the only latest copy of the metadata.
++
++dd if=meta1 of="$dev1"
++dd if=meta2 of="$dev2"
++dd if=meta3 of="$dev3"
++
++pvs 2>&1 | tee out
++grep "ignoring metadata seqno" out
++pvs "$dev1"
++pvs "$dev2"
++pvs "$dev3"
++
++# We still see the three LVs since we are using
++# the latest copy of metadata from dev3:mda2
++
++lvs $vg/$lv1
++lvs $vg/$lv2
++lvs $vg/$lv3
++
++# This command which writes the VG should update
++# all of the old copies.
++lvcreate -n $lv4 -l1 -an $vg
++
++pvs 2>&1 | tee out
++not grep "ignoring metadata seqno" out
++pvs "$dev1"
++pvs "$dev2"
++pvs "$dev3"
++
++lvs $vg/$lv1
++lvs $vg/$lv2
++lvs $vg/$lv3
++lvs $vg/$lv4
 +
 +vgchange -an $vg
 +vgremove -ff $vg
-+
 
 
