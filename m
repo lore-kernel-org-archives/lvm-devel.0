@@ -1,283 +1,242 @@
 From: David Teigland <teigland@sourceware.org>
-Date: Fri, 7 Jun 2019 17:08:37 -0400
-Subject: master - move pv header repairs to vg_write
-Message-ID: <201906072108.x57L8bNh005308@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Fri, 7 Jun 2019 17:08:06 -0400
+Subject: master - add flags to keep track of bad metadata
+Message-ID: <201906072108.x57L86eV005216@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=de3d3b11f493a89ebee2eab7efae70d33face954
-Commit:        de3d3b11f493a89ebee2eab7efae70d33face954
-Parent:        89914a541f081e1c234a455c17d82269cd90364b
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=aeafdc1f45a5963290a5bc3ea1661018b072d817
+Commit:        aeafdc1f45a5963290a5bc3ea1661018b072d817
+Parent:        db98a6e3629aaf6bf42d0e840273b4328f930c89
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Wed Feb 6 13:18:45 2019 -0600
+AuthorDate:    Tue Feb 5 12:08:00 2019 -0600
 Committer:     David Teigland <teigland@redhat.com>
 CommitterDate: Fri Jun 7 15:54:04 2019 -0500
 
-move pv header repairs to vg_write
+add flags to keep track of bad metadata
 
-Correct PV header in-use or version fields
-from vg_write instead of vg_read.
+When reading metadata headers and text, use a new set
+of flags to identify specific errors that are seen.
+These will be used for more advanced repair in a
+subsequent commit.
 ---
- lib/format_text/format-text.c |   14 +++-
- lib/metadata/metadata.c       |  168 +++++-----------------------------------
- 2 files changed, 34 insertions(+), 148 deletions(-)
+ lib/format_text/format-text.c |   44 +++++++++++++++++++++++++++--------------
+ lib/format_text/layout.h      |    4 ++-
+ lib/format_text/text_label.c  |    3 +-
+ lib/metadata/metadata.h       |   14 +++++++++++++
+ 4 files changed, 48 insertions(+), 17 deletions(-)
 
 diff --git a/lib/format_text/format-text.c b/lib/format_text/format-text.c
-index 6e224f0..4f0a004 100644
+index 2831a53..f5e08fa 100644
 --- a/lib/format_text/format-text.c
 +++ b/lib/format_text/format-text.c
-@@ -1600,12 +1600,16 @@ static int _text_pv_needs_rewrite(const struct format_type *fmt, struct physical
+@@ -161,7 +161,8 @@ static void _xlate_mdah(struct mda_header *mdah)
+ 	}
+ }
+ 
+-static int _raw_read_mda_header(struct mda_header *mdah, struct device_area *dev_area, int primary_mda)
++static int _raw_read_mda_header(struct mda_header *mdah, struct device_area *dev_area,
++				int primary_mda, uint32_t ignore_bad_fields, uint32_t *bad_fields)
  {
- 	struct lvmcache_info *info;
- 	uint32_t ext_vsn;
-+	uint32_t ext_flags;
- 
- 	*needs_rewrite = 0;
- 
- 	if (!pv->is_labelled)
- 		return 1;
- 
-+	if (!pv->dev)
-+		return 1;
-+
- 	if (!(info = lvmcache_info_from_pvid((const char *)&pv->id, pv->dev, 0))) {
- 		log_error("Failed to find cached info for PV %s.", pv_dev_name(pv));
+ 	log_debug_metadata("Reading mda header sector from %s at %llu",
+ 			   dev_name(dev_area->dev), (unsigned long long)dev_area->start);
+@@ -169,53 +170,62 @@ static int _raw_read_mda_header(struct mda_header *mdah, struct device_area *dev
+ 	if (!dev_read_bytes(dev_area->dev, dev_area->start, MDA_HEADER_SIZE, mdah)) {
+ 		log_error("Failed to read metadata area header on %s at %llu",
+ 			  dev_name(dev_area->dev), (unsigned long long)dev_area->start);
++		*bad_fields |= BAD_MDA_READ;
  		return 0;
-@@ -1613,8 +1617,16 @@ static int _text_pv_needs_rewrite(const struct format_type *fmt, struct physical
+ 	}
  
- 	ext_vsn = lvmcache_ext_version(info);
- 
--	if (ext_vsn < PV_HEADER_EXTENSION_VSN)
-+	if (ext_vsn < PV_HEADER_EXTENSION_VSN) {
-+		log_debug("PV %s header needs rewrite for new ext version", dev_name(pv->dev));
-+		*needs_rewrite = 1;
-+	}
-+
-+	ext_flags = lvmcache_ext_flags(info);
-+	if (!(ext_flags & PV_EXT_USED)) {
-+		log_debug("PV %s header needs rewrite to set ext used", dev_name(pv->dev));
- 		*needs_rewrite = 1;
-+	}
- 
- 	return 1;
- }
-diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
-index a13be57..804d0cf 100644
---- a/lib/metadata/metadata.c
-+++ b/lib/metadata/metadata.c
-@@ -2810,57 +2810,6 @@ static int _pv_in_pv_list(struct physical_volume *pv, struct dm_list *head)
- 	return 0;
- }
- 
--/*
-- * Check if any of the PVs in VG still contain old PV headers
-- * and if yes, schedule them for PV header update.
-- */
--static int _vg_update_old_pv_ext_if_needed(struct volume_group *vg)
--{
--	struct pv_list *pvl, *new_pvl;
--	int pv_needs_rewrite;
--
--	if (!(vg->fid->fmt->features & FMT_PV_FLAGS))
--		return 1;
--
--	dm_list_iterate_items(pvl, &vg->pvs) {
--		if (is_missing_pv(pvl->pv) ||
--		    !pvl->pv->fmt->ops->pv_needs_rewrite)
--			continue;
--
--		if (_pv_in_pv_list(pvl->pv, &vg->pv_write_list))
--			continue;
--
--		if (!pvl->pv->fmt->ops->pv_needs_rewrite(pvl->pv->fmt, pvl->pv,
--							 &pv_needs_rewrite))
--			return_0;
--
--		if (pv_needs_rewrite) {
--			/*
--			 * Schedule PV for writing only once!
--			 */
--			if (_pv_in_pv_list(pvl->pv, &vg->pv_write_list))
--				continue;
--
--			if (!(new_pvl = dm_pool_zalloc(vg->vgmem, sizeof(*new_pvl)))) {
--				log_error("pv_to_write allocation for '%s' failed", pv_dev_name(pvl->pv));
--				return 0;
--			}
--			new_pvl->pv = pvl->pv;
--			dm_list_add(&vg->pv_write_list, &new_pvl->list);
--			log_debug("PV %s has old extension header, updating to newest version.",
--				  pv_dev_name(pvl->pv));
--		}
--	}
--
--	if (!dm_list_empty(&vg->pv_write_list) &&
--	    (!vg_write(vg) || !vg_commit(vg))) {
--		log_error("Failed to update old PV extension headers in VG %s.", vg->name);
+ 	if (mdah->checksum_xl != xlate32(calc_crc(INITIAL_CRC, (uint8_t *)mdah->magic,
+ 						  MDA_HEADER_SIZE -
+ 						  sizeof(mdah->checksum_xl)))) {
+-		log_error("Incorrect checksum in metadata area header on %s at %llu",
++		log_warn("WARNING: wrong checksum %x in mda header on %s at %llu",
++			  mdah->checksum_xl,
+ 			  dev_name(dev_area->dev), (unsigned long long)dev_area->start);
 -		return 0;
--	}
--
--	return 1;
--}
--
- static int _check_historical_lv_is_valid(struct historical_logical_volume *hlv)
- {
- 	struct glv_list *glvl;
-@@ -2995,7 +2944,7 @@ static void _wipe_outdated_pvs(struct cmd_context *cmd, struct volume_group *vg)
- int vg_write(struct volume_group *vg)
- {
- 	struct dm_list *mdah;
--	struct pv_list *pvl, *pvl_safe;
-+	struct pv_list *pvl, *pvl_safe, *new_pvl;
- 	struct metadata_area *mda;
- 	struct lv_list *lvl;
- 	int revert = 0, wrote = 0;
-@@ -3063,6 +3012,26 @@ int vg_write(struct volume_group *vg)
- 	memlock_unlock(vg->cmd);
- 	vg->seqno++;
++		*bad_fields |= BAD_MDA_CHECKSUM;
+ 	}
  
-+	dm_list_iterate_items(pvl, &vg->pvs) {
-+		int update_pv_header = 0;
+ 	_xlate_mdah(mdah);
+ 
+ 	if (memcmp(mdah->magic, FMTT_MAGIC, sizeof(mdah->magic))) {
+-		log_error("Wrong magic number in metadata area header on %s at %llu",
++		log_warn("WARNING: wrong magic number in mda header on %s at %llu",
+ 			  dev_name(dev_area->dev), (unsigned long long)dev_area->start);
+-		return 0;
++		*bad_fields |= BAD_MDA_MAGIC;
+ 	}
+ 
+ 	if (mdah->version != FMTT_VERSION) {
+-		log_error("Incompatible version %u metadata area header on %s at %llu",
++		log_warn("WARNING: wrong version %u in mda header on %s at %llu",
+ 			  mdah->version,
+ 			  dev_name(dev_area->dev), (unsigned long long)dev_area->start);
+-		return 0;
++		*bad_fields |= BAD_MDA_VERSION;
+ 	}
+ 
+ 	if (mdah->start != dev_area->start) {
+-		log_error("Incorrect start sector %llu in metadata area header on %s at %llu",
++		log_warn("WARNING: wrong start sector %llu in mda header on %s at %llu",
+ 			  (unsigned long long)mdah->start,
+ 			  dev_name(dev_area->dev), (unsigned long long)dev_area->start);
+-		return 0;
++		*bad_fields |= BAD_MDA_START;
+ 	}
+ 
++	*bad_fields &= ~ignore_bad_fields;
 +
-+		if (_pv_in_pv_list(pvl->pv, &vg->pv_write_list))
-+			continue;
++	if (*bad_fields)
++		return 0;
 +
-+		if (!pvl->pv->fmt->ops->pv_needs_rewrite(pvl->pv->fmt, pvl->pv, &update_pv_header))
-+			continue;
-+
-+		if (!update_pv_header)
-+			continue;
-+
-+		if (!(new_pvl = dm_pool_zalloc(vg->vgmem, sizeof(*new_pvl))))
-+			continue;
-+
-+		new_pvl->pv = pvl->pv;
-+		dm_list_add(&vg->pv_write_list, &new_pvl->list);
-+		log_warn("WARNING: updating PV header on %s for VG %s.", pv_dev_name(pvl->pv), vg->name);
-+	}
-+
- 	dm_list_iterate_items_safe(pvl, pvl_safe, &vg->pv_write_list) {
- 		if (!pv_write(vg->cmd, pvl->pv, 1))
- 			return_0;
-@@ -3607,88 +3576,6 @@ static int _repair_inconsistent_vg(struct volume_group *vg, uint32_t lockd_state
  	return 1;
  }
  
--static int _check_or_repair_pv_ext(struct cmd_context *cmd,
--				   struct volume_group *vg,
--				   uint32_t lockd_state,
--				   int repair, int *inconsistent_pvs)
--{
--	char uuid[64] __attribute__((aligned(8)));
--	struct lvmcache_info *info;
--	uint32_t ext_version, ext_flags;
--	struct pv_list *pvl;
--	unsigned pvs_fixed = 0;
--	int r = 0;
--
--	*inconsistent_pvs = 0;
--
--	dm_list_iterate_items(pvl, &vg->pvs) {
--		/* Missing PV - nothing to do. */
--		if (is_missing_pv(pvl->pv))
--			continue;
--
--		if (!pvl->pv->dev) {
--			/* is_missing_pv doesn't catch NULL dev */
--			memset(&uuid, 0, sizeof(uuid));
--			if (!id_write_format(&pvl->pv->id, uuid, sizeof(uuid)))
--				goto_out;
--			log_warn("WARNING: Not repairing PV %s with missing device.", uuid);
--			continue;
--		}
--
--		if (!(info = lvmcache_info_from_pvid(pvl->pv->dev->pvid, pvl->pv->dev, 0))) {
--			log_error("Failed to find cached info for PV %s.", pv_dev_name(pvl->pv));
--			goto out;
--		}
--
--		ext_version = lvmcache_ext_version(info);
--		if (ext_version < 2)
--			continue;
--
--		ext_flags = lvmcache_ext_flags(info);
--		if (!(ext_flags & PV_EXT_USED)) {
--			if (!repair) {
--				*inconsistent_pvs = 1;
--				/* we're not repairing now, so no need to
--				 * check further PVs - inconsistent_pvs is already
--				 * set and that will trigger the repair next time */
--				return 1;
--			}
--
--			if (_is_foreign_vg(vg)) {
--				log_verbose("Skip repair of PV %s that is in foreign "
--					    "VG %s but not marked as used.",
--					    pv_dev_name(pvl->pv), vg->name);
--				*inconsistent_pvs = 1;
--			} else if (vg_is_shared(vg) && !(lockd_state & LDST_EX)) {
--				log_warn("Skip repair of PV %s that is in shared "
--					    "VG %s but not marked as used.",
--					    pv_dev_name(pvl->pv), vg->name);
--				*inconsistent_pvs = 1;
--			} else {
--				log_warn("WARNING: Repairing Physical Volume %s that is "
--					 "in Volume Group %s but not marked as used.",
--					  pv_dev_name(pvl->pv), vg->name);
--
--				/* pv write will set correct ext_flags */
--				if (!pv_write(cmd, pvl->pv, 1)) {
--					*inconsistent_pvs = 1;
--					log_error("Failed to repair physical volume \"%s\".",
--						  pv_dev_name(pvl->pv));
--					goto out;
--				}
--				pvs_fixed++;
--			}
--		}
--	}
--
--	r = 1;
--out:
--	if ((pvs_fixed > 0) && !_repair_inconsistent_vg(vg, lockd_state))
--		return_0;
--
--	return r;
--}
--
- /* Caller sets consistent to 1 if it's safe for vg_read_internal to correct
-  * inconsistent metadata on disk (i.e. the VG write lock is held).
-  * This guarantees only consistent metadata is returned.
-@@ -3724,7 +3611,6 @@ static struct volume_group *_vg_read(struct cmd_context *cmd,
- 	int inconsistent_mdas = 0;
- 	int inconsistent_mda_count = 0;
- 	int strip_historical_lvs = enable_repair;
--	int update_old_pv_ext = enable_repair;
- 	unsigned use_precommitted = precommitted;
- 	struct dm_list *pvids;
- 	struct pv_list *pvl;
-@@ -4258,19 +4144,7 @@ static struct volume_group *_vg_read(struct cmd_context *cmd,
+ struct mda_header *raw_read_mda_header(const struct format_type *fmt,
+-				       struct device_area *dev_area, int primary_mda)
++				       struct device_area *dev_area,
++				       int primary_mda, uint32_t ignore_bad_fields, uint32_t *bad_fields)
+ {
+ 	struct mda_header *mdah;
+ 
+ 	if (!(mdah = dm_pool_alloc(fmt->cmd->mem, MDA_HEADER_SIZE))) {
+ 		log_error("struct mda_header allocation failed");
++		*bad_fields |= BAD_MDA_INTERNAL;
  		return NULL;
  	}
  
--	/* We have the VG now finally, check if PV ext info is in sync with VG metadata. */
--	if (!_check_or_repair_pv_ext(cmd, correct_vg, lockd_state, skipped_rescan ? 0 : enable_repair,
--				     &inconsistent_pvs)) {
--		release_vg(correct_vg);
--		return_NULL;
--	}
--
- 	if (correct_vg && enable_repair && !skipped_rescan) {
--		if (update_old_pv_ext && !_vg_update_old_pv_ext_if_needed(correct_vg)) {
--			release_vg(correct_vg);
--			return_NULL;
--		}
--
- 		if (strip_historical_lvs && !vg_strip_outdated_historical_lvs(correct_vg)) {
- 			release_vg(correct_vg);
- 			return_NULL;
+-	if (!_raw_read_mda_header(mdah, dev_area, primary_mda)) {
++	if (!_raw_read_mda_header(mdah, dev_area, primary_mda, ignore_bad_fields, bad_fields)) {
+ 		dm_pool_free(fmt->cmd->mem, mdah);
+ 		return NULL;
+ 	}
+@@ -413,8 +423,9 @@ static struct volume_group *_vg_read_raw_area(struct format_instance *fid,
+ 	time_t when;
+ 	char *desc;
+ 	uint32_t wrap = 0;
++	uint32_t bad_fields = 0;
+ 
+-	if (!(mdah = raw_read_mda_header(fid->fmt, area, primary_mda))) {
++	if (!(mdah = raw_read_mda_header(fid->fmt, area, primary_mda, 0, &bad_fields))) {
+ 		log_error("Failed to read vg %s from %s", vgname, dev_name(area->dev));
+ 		goto out;
+ 	}
+@@ -535,6 +546,7 @@ static int _vg_write_raw(struct format_instance *fid, struct volume_group *vg,
+ 	uint64_t old_start = 0, old_last = 0, old_size = 0, old_wrap = 0;
+ 	uint64_t new_start = 0, new_last = 0, new_size = 0, new_wrap = 0;
+ 	uint64_t max_size;
++	uint32_t bad_fields = 0;
+ 	char *new_buf = NULL;
+ 	int overlap;
+ 	int found = 0;
+@@ -550,7 +562,7 @@ static int _vg_write_raw(struct format_instance *fid, struct volume_group *vg,
+ 	if (!found)
+ 		return 1;
+ 
+-	if (!(mdah = raw_read_mda_header(fid->fmt, &mdac->area, mda_is_primary(mda))))
++	if (!(mdah = raw_read_mda_header(fid->fmt, &mdac->area, mda_is_primary(mda), mda->ignore_bad_fields, &bad_fields)))
+ 		goto_out;
+ 
+ 	/*
+@@ -821,6 +833,7 @@ static int _vg_commit_raw_rlocn(struct format_instance *fid,
+ 	struct raw_locn *rlocn_slot1;
+ 	struct raw_locn *rlocn_new;
+ 	struct pv_list *pvl;
++	uint32_t bad_fields = 0;
+ 	int r = 0;
+ 	int found = 0;
+ 
+@@ -841,7 +854,7 @@ static int _vg_commit_raw_rlocn(struct format_instance *fid,
+ 	 * mdah buffer, but the mdah buffer is not modified and mdac->rlocn is
+ 	 * modified.
+ 	 */
+-	if (!(mdab = raw_read_mda_header(fid->fmt, &mdac->area, mda_is_primary(mda))))
++	if (!(mdab = raw_read_mda_header(fid->fmt, &mdac->area, mda_is_primary(mda), mda->ignore_bad_fields, &bad_fields)))
+ 		goto_out;
+ 
+ 	/*
+@@ -1033,6 +1046,7 @@ static int _vg_remove_raw(struct format_instance *fid, struct volume_group *vg,
+ 	struct mda_header *mdah;
+ 	struct raw_locn *rlocn_slot0;
+ 	struct raw_locn *rlocn_slot1;
++	uint32_t bad_fields = 0;
+ 	int r = 0;
+ 
+ 	if (!(mdah = dm_pool_alloc(fid->fmt->cmd->mem, MDA_HEADER_SIZE))) {
+@@ -1046,7 +1060,7 @@ static int _vg_remove_raw(struct format_instance *fid, struct volume_group *vg,
+ 	 * Just to print the warning?
+ 	 */
+ 
+-	if (!_raw_read_mda_header(mdah, &mdac->area, mda_is_primary(mda)))
++	if (!_raw_read_mda_header(mdah, &mdac->area, mda_is_primary(mda), 0, &bad_fields))
+ 		log_warn("WARNING: Removing metadata location on %s with bad mda header.",
+ 			  dev_name(mdac->area.dev));
+ 
+diff --git a/lib/format_text/layout.h b/lib/format_text/layout.h
+index e1462f1..7320d9c 100644
+--- a/lib/format_text/layout.h
++++ b/lib/format_text/layout.h
+@@ -81,7 +81,9 @@ struct mda_header {
+ } __attribute__ ((packed));
+ 
+ struct mda_header *raw_read_mda_header(const struct format_type *fmt,
+-				       struct device_area *dev_area, int primary_mda);
++				       struct device_area *dev_area, int primary_mda,
++				       uint32_t ignore_bad_fields,
++				       uint32_t *bad_fields);
+ 
+ struct mda_lists {
+ 	struct metadata_area_ops *file_ops;
+diff --git a/lib/format_text/text_label.c b/lib/format_text/text_label.c
+index ef2f6c7..6eca3c1 100644
+--- a/lib/format_text/text_label.c
++++ b/lib/format_text/text_label.c
+@@ -331,8 +331,9 @@ static int _read_mda_header_and_metadata(struct metadata_area *mda, void *baton)
+ 	struct mda_context *mdac = (struct mda_context *) mda->metadata_locn;
+ 	struct mda_header *mdah;
+ 	struct lvmcache_vgsummary vgsummary = { 0 };
++	uint32_t bad_fields = 0;
+ 
+-	if (!(mdah = raw_read_mda_header(fmt, &mdac->area, mda_is_primary(mda)))) {
++	if (!(mdah = raw_read_mda_header(fmt, &mdac->area, mda_is_primary(mda), 0, &bad_fields))) {
+ 		log_error("Failed to read mda header from %s", dev_name(mdac->area.dev));
+ 		goto fail;
+ 	}
+diff --git a/lib/metadata/metadata.h b/lib/metadata/metadata.h
+index a140c29..d904aa6 100644
+--- a/lib/metadata/metadata.h
++++ b/lib/metadata/metadata.h
+@@ -168,11 +168,25 @@ struct metadata_area_ops {
+ #define MDA_CONTENT_REASON(primary_mda) ((primary_mda) ? DEV_IO_MDA_CONTENT : DEV_IO_MDA_EXTRA_CONTENT)
+ #define MDA_HEADER_REASON(primary_mda)  ((primary_mda) ? DEV_IO_MDA_HEADER : DEV_IO_MDA_EXTRA_HEADER)
+ 
++/*
++ * Flags describing errors found while reading.
++ */
++#define BAD_MDA_INTERNAL	0x00000001 /* internal lvm error */
++#define BAD_MDA_READ		0x00000002 /* read io failed */
++#define BAD_MDA_HEADER		0x00000004 /* general problem with header */
++#define BAD_MDA_TEXT		0x00000008 /* general problem with text */
++#define BAD_MDA_CHECKSUM	0x00000010
++#define BAD_MDA_MAGIC		0x00000020
++#define BAD_MDA_VERSION		0x00000040
++#define BAD_MDA_START		0x00000080
++
+ struct metadata_area {
+ 	struct dm_list list;
+ 	struct metadata_area_ops *ops;
+ 	void *metadata_locn;
+ 	uint32_t status;
++	uint32_t bad_fields; /* BAD_MDA_ flags are set to indicate errors found when reading */
++	uint32_t ignore_bad_fields; /* BAD_MDA_ flags are set to indicate errors to ignore */
+ };
+ struct metadata_area *mda_copy(struct dm_pool *mem,
+ 			       struct metadata_area *mda);
 
 
