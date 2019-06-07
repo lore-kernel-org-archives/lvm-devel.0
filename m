@@ -1,61 +1,74 @@
 From: David Teigland <teigland@sourceware.org>
-Date: Fri, 7 Jun 2019 17:08:51 -0400
-Subject: master - vgcfgbackup add error messages
-Message-ID: <201906072108.x57L8pBZ005339@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Fri, 7 Jun 2019 17:08:53 -0400
+Subject: master - add a warning message when updating old metadata
+Message-ID: <201906072108.x57L8rJE005353@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=5dd32680b0cbe468c07b3187bbb8922323b848f8
-Commit:        5dd32680b0cbe468c07b3187bbb8922323b848f8
-Parent:        47effdc025384cef5b3235a9c4b90e7fd74d68a4
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=015b906069a989552c09f61d7230b000d0a1f0f0
+Commit:        015b906069a989552c09f61d7230b000d0a1f0f0
+Parent:        5dd32680b0cbe468c07b3187bbb8922323b848f8
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Wed Feb 6 13:46:35 2019 -0600
+AuthorDate:    Wed Feb 6 13:51:54 2019 -0600
 Committer:     David Teigland <teigland@redhat.com>
 CommitterDate: Fri Jun 7 15:54:04 2019 -0500
 
-vgcfgbackup add error messages
+add a warning message when updating old metadata
 
+in an mda that had previously not been updated
 ---
- tools/vgcfgbackup.c |   17 +++++++++++++++++
- 1 files changed, 17 insertions(+), 0 deletions(-)
+ lib/metadata/metadata.c |   21 +++++++++++++++++++++
+ 1 files changed, 21 insertions(+), 0 deletions(-)
 
-diff --git a/tools/vgcfgbackup.c b/tools/vgcfgbackup.c
-index 7d061d5..5a0fb13 100644
---- a/tools/vgcfgbackup.c
-+++ b/tools/vgcfgbackup.c
-@@ -73,6 +73,15 @@ static int _vg_backup_single(struct cmd_context *cmd, const char *vg_name,
- 			return ECMD_FAILED;
+diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
+index 5eabfa6..2d3ff1c 100644
+--- a/lib/metadata/metadata.c
++++ b/lib/metadata/metadata.c
+@@ -2947,6 +2947,7 @@ int vg_write(struct volume_group *vg)
+ 	struct pv_list *pvl, *pvl_safe, *new_pvl;
+ 	struct metadata_area *mda;
+ 	struct lv_list *lvl;
++	struct device *mda_dev;
+ 	int revert = 0, wrote = 0;
+ 
+ 	if (vg_is_shared(vg)) {
+@@ -3040,14 +3041,34 @@ int vg_write(struct volume_group *vg)
+ 
+ 	/* Write to each copy of the metadata area */
+ 	dm_list_iterate_items(mda, &vg->fid->metadata_areas_in_use) {
++		mda_dev = mda_get_device(mda);
++
+ 		if (mda->status & MDA_FAILED)
+ 			continue;
++
++		/*
++		 * When the scan and vg_read find old metadata in an mda, they
++		 * leave the info struct in lvmcache, and leave the mda in
++		 * info->mdas.  That means we use the mda here to write new
++		 * metadata into.  This means that a command writing a VG will
++		 * automatically update old metadata to the latest.
++		 *
++		 * This can also happen if the metadata was ignored on this
++		 * dev, and then it's later changed to not ignored, and
++		 * we see the old metadata.
++		 */
++		if (lvmcache_has_old_metadata(vg->cmd, vg->name, (const char *)&vg->id, mda_dev)) {
++			log_warn("WARNING: updating old metadata to %u on %s for VG %s.",
++				 vg->seqno, dev_name(mda_dev), vg->name);
++		}
++
+ 		if (!mda->ops->vg_write) {
+ 			log_error("Format does not support writing volume"
+ 				  "group metadata areas");
+ 			revert = 1;
+ 			break;
  		}
- 
-+		if (vg_missing_pv_count(vg)) {
-+			log_error("No backup taken: specify filename with -f to backup with missing PVs.");
-+			return ECMD_FAILED;
-+		}
-+		if (vg_has_unknown_segments(vg)) {
-+			log_error("No backup taken: specify filename with -f to backup with unknown segments.");
-+			return ECMD_FAILED;
-+		}
 +
- 		/* just use the normal backup code */
- 		backup_enable(cmd, 1);	/* force a backup */
- 		if (!backup(vg))
-@@ -97,6 +106,14 @@ int vgcfgbackup(struct cmd_context *cmd, int argc, char **argv)
- 
- 	handle->custom_handle = &last_filename;
- 
-+	/*
-+	 * Just set so that we can do the check ourselves above and
-+	 * report a helpful error message in place of the error message
-+	 * that would be generated from vg_read.
-+	 */
-+	cmd->handles_missing_pvs = 1;
-+	cmd->handles_unknown_segments = 1;
-+
- 	init_pvmove(1);
- 
- 	ret = process_each_vg(cmd, argc, argv, NULL, NULL, READ_ALLOW_INCONSISTENT, 0,
+ 		if (!mda->ops->vg_write(vg->fid, vg, mda)) {
+ 			if (vg->cmd->handles_missing_pvs) {
+ 				log_warn("WARNING: Failed to write an MDA of VG %s.", vg->name);
 
 
