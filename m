@@ -1,119 +1,93 @@
-From: David Teigland <teigland@sourceware.org>
-Date: Fri, 7 Jun 2019 11:16:02 -0400
-Subject: stable-2.02 - lvmcache: remove unused_duplicate_devs list from cmd
-Message-ID: <201906071516.x57FG2ff027290@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: Marian Csontos <mcsontos@sourceware.org>
+Date: Fri, 7 Jun 2019 11:30:16 -0400
+Subject: master - pre-release
+Message-ID: <201906071530.x57FUGgc029628@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=c31e6b0acad339ec3cdc0c8d7e0e01f8d816ed10
-Commit:        c31e6b0acad339ec3cdc0c8d7e0e01f8d816ed10
-Parent:        cb7766bc1411c3350e79241122a974dac7fcc902
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Thu Jun 6 14:12:19 2019 -0500
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Thu Jun 6 14:12:19 2019 -0500
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=cb6277aa8a1f6d0dedf2082995b1673da1eb46f9
+Commit:        cb6277aa8a1f6d0dedf2082995b1673da1eb46f9
+Parent:        c315112a3b7d01e56cbd2ecb3d05f55d44a50e12
+Author:        Marian Csontos <mcsontos@redhat.com>
+AuthorDate:    Fri Jun 7 16:32:02 2019 +0200
+Committer:     Marian Csontos <mcsontos@redhat.com>
+CommitterDate: Fri Jun 7 17:24:51 2019 +0200
 
-lvmcache: remove unused_duplicate_devs list from cmd
+pre-release
 
-Save the previous duplicate PVs in a global list instead
-of a list on the cmd struct.  dmeventd reuses the cmd struct
-for multiple commands, and the list entries between commands
-were being freed (apparently), causing a segfault in dmeventd
-when it tried to use items in cmd->unused_duplicate_devs
-that had been saved there by the previous command.
 ---
- lib/cache/lvmcache.c       |   16 +++++++++-------
- lib/commands/toolcontext.c |    2 --
- lib/commands/toolcontext.h |    1 -
- 3 files changed, 9 insertions(+), 10 deletions(-)
+ VERSION      |    2 +-
+ VERSION_DM   |    2 +-
+ WHATS_NEW    |   12 ++++++++----
+ WHATS_NEW_DM |    6 +++++-
+ 4 files changed, 15 insertions(+), 7 deletions(-)
 
-diff --git a/lib/cache/lvmcache.c b/lib/cache/lvmcache.c
-index ad40d4c..0ce5df0 100644
---- a/lib/cache/lvmcache.c
-+++ b/lib/cache/lvmcache.c
-@@ -100,6 +100,7 @@ static struct dm_hash_table *_saved_vg_hash = NULL;
- static DM_LIST_INIT(_vginfos);
- static DM_LIST_INIT(_found_duplicate_devs);
- static DM_LIST_INIT(_unused_duplicate_devs);
-+static DM_LIST_INIT(_prev_unused_duplicate_devs);
- static int _scanning_in_progress = 0;
- static int _has_scanned = 0;
- static int _vgs_locked = 0;
-@@ -118,6 +119,7 @@ int lvmcache_init(struct cmd_context *cmd)
- 	dm_list_init(&_vginfos);
- 	dm_list_init(&_found_duplicate_devs);
- 	dm_list_init(&_unused_duplicate_devs);
-+	dm_list_init(&_prev_unused_duplicate_devs);
+diff --git a/VERSION b/VERSION
+index 83eb504..d2f613b 100644
+--- a/VERSION
++++ b/VERSION
+@@ -1 +1 @@
+-2.03.02(2)-git (2018-10-31)
++2.03.03(2) (2019-06-07)
+diff --git a/VERSION_DM b/VERSION_DM
+index 4866208..78eb98d 100644
+--- a/VERSION_DM
++++ b/VERSION_DM
+@@ -1 +1 @@
+-1.02.155-git (2018-10-31)
++1.02.159 (2019-06-07)
+diff --git a/WHATS_NEW b/WHATS_NEW
+index b5deceb..1062c27 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,5 @@
+-Version 2.03.02 - 
+-===================================
++Version 2.03.03 - 07th June 2019
++================================
+   Report no_discard_passdown for cache LVs with lvs -o+kernel_discards.
+   Add pvck --dump option to extract metadata.
+   Fix signal delivery checking race in libdaemon (lvmetad).
+@@ -35,10 +35,14 @@ Version 2.03.02 -
+   Fix missing unlock on lvm2 dmeventd plugin error path initialization.
+   Improve Makefile dependency tracking.
+   Move VDO support towards V2 target (6.2) support.
++
++Version 2.03.02 - 18th December 2018
++====================================
+   Fix missing proper initialization of pv_list struct when adding pv.
+-  Fix (de)activation of RaidLVs with visible SubLVs
+-  Prohibit mirrored 'mirror' log via lvcreate and lvconvert
++  Fix (de)activation of RaidLVs with visible SubLVs.
++  Prohibit mirrored 'mirror' log via lvcreate and lvconvert.
+   Use sync io if async io_setup fails, or use_aio=0 is set in config.
++  Fix more issues reported by coverity scan.
  
- 	if (!(_vgname_hash = dm_hash_create(128)))
- 		return 0;
-@@ -1152,14 +1154,14 @@ next:
+ Version 2.03.01 - 31st October 2018
+ ===================================
+diff --git a/WHATS_NEW_DM b/WHATS_NEW_DM
+index 8a2146d..8edd76c 100644
+--- a/WHATS_NEW_DM
++++ b/WHATS_NEW_DM
+@@ -1,11 +1,15 @@
+-Version 1.02.155 - 
++Version 1.02.159 - 07th June 2019
+ ====================================
+   Parsing of cache status understand no_discard_passdown.
+   Ensure migration_threshold for cache is at least 8 chunks.
++
++Version 1.02.155 - 18th December 2018
++=====================================
+   Include correct internal header inside libdm list.c.
+   Enhance ioctl flattening and add parameters only when needed.
+   Add DM_DEVICE_ARM_POLL for API completness matching kernel.
+   Do not add parameters for RESUME with DM_DEVICE_CREATE dm task.
++  Fix dmstats report printing no output.
  
- 		if (!prev_unchosen1 && !prev_unchosen2) {
- 			/*
--			 * The cmd list saves the unchosen preference across
-+			 * The prev list saves the unchosen preference across
- 			 * lvmcache_destroy.  Sometimes a single command will
- 			 * fill lvmcache, destroy it, and refill it, and we
- 			 * want the same duplicate preference to be preserved
- 			 * in each instance of lvmcache for a single command.
- 			 */
--			prev_unchosen1 = _dev_in_device_list(dev1, &cmd->unused_duplicate_devs);
--			prev_unchosen2 = _dev_in_device_list(dev2, &cmd->unused_duplicate_devs);
-+			prev_unchosen1 = _dev_in_device_list(dev1, &_prev_unused_duplicate_devs);
-+			prev_unchosen2 = _dev_in_device_list(dev2, &_prev_unused_duplicate_devs);
- 		}
- 
- 		dev1_major = MAJOR(dev1->dev);
-@@ -2575,8 +2577,8 @@ void lvmcache_destroy(struct cmd_context *cmd, int retain_orphans, int reset)
- 	dm_list_init(&_vginfos);
- 
- 	/*
--	 * Copy the current _unused_duplicate_devs into a cmd list before
--	 * destroying _unused_duplicate_devs.
-+	 * Move the current _unused_duplicate_devs to _prev_unused_duplicate_devs
-+	 * before destroying _unused_duplicate_devs.
- 	 *
- 	 * One command can init/populate/destroy lvmcache multiple times.  Each
- 	 * time it will encounter duplicates and choose the preferrred devs.
-@@ -2584,8 +2586,8 @@ void lvmcache_destroy(struct cmd_context *cmd, int retain_orphans, int reset)
- 	 * the unpreferred devs here so that _choose_preferred_devs can use
- 	 * this to make the same choice each time.
- 	 */
--	dm_list_init(&cmd->unused_duplicate_devs);
--	lvmcache_get_unused_duplicate_devs(cmd, &cmd->unused_duplicate_devs);
-+	_destroy_duplicate_device_list(&_prev_unused_duplicate_devs);
-+	dm_list_splice(&_prev_unused_duplicate_devs, &_unused_duplicate_devs);
- 	_destroy_duplicate_device_list(&_unused_duplicate_devs);
- 	_destroy_duplicate_device_list(&_found_duplicate_devs); /* should be empty anyway */
- 	_found_duplicate_pvs = 0;
-diff --git a/lib/commands/toolcontext.c b/lib/commands/toolcontext.c
-index 25e8b87..38e382f 100644
---- a/lib/commands/toolcontext.c
-+++ b/lib/commands/toolcontext.c
-@@ -1983,8 +1983,6 @@ struct cmd_context *create_toolcontext(unsigned is_clvmd,
- 	if (!init_lvmcache_orphans(cmd))
- 		goto_out;
- 
--	dm_list_init(&cmd->unused_duplicate_devs);
--
- 	if (!_init_segtypes(cmd))
- 		goto_out;
- 
-diff --git a/lib/commands/toolcontext.h b/lib/commands/toolcontext.h
-index 485dca9..6e262e8 100644
---- a/lib/commands/toolcontext.h
-+++ b/lib/commands/toolcontext.h
-@@ -231,7 +231,6 @@ struct cmd_context {
- 	const char *report_list_item_separator;
- 	const char *time_format;
- 	unsigned rand_seed;
--	struct dm_list unused_duplicate_devs; /* save preferences between lvmcache instances */
- };
- 
- /*
+ Version 1.02.153 - 31st October 2018
+ ====================================
 
 
