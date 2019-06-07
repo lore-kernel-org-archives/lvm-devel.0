@@ -1,33 +1,33 @@
 From: David Teigland <teigland@sourceware.org>
-Date: Fri, 7 Jun 2019 17:09:22 -0400
-Subject: master - tests: add outdated-pv.sh
-Message-ID: <201906072109.x57L9M8c005408@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Fri, 7 Jun 2019 17:09:23 -0400
+Subject: master - tests: add metadata-bad-text.sh
+Message-ID: <201906072109.x57L9Nxo005413@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=4fa1638301672c94c22b7ceacc586316af897f29
-Commit:        4fa1638301672c94c22b7ceacc586316af897f29
-Parent:        9156640b6083690a7341d6073c491272f1187282
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=878741502a28c3e91d8fdff76ebcc83a68b04f91
+Commit:        878741502a28c3e91d8fdff76ebcc83a68b04f91
+Parent:        4fa1638301672c94c22b7ceacc586316af897f29
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Fri May 24 15:26:47 2019 -0500
+AuthorDate:    Fri May 24 15:58:05 2019 -0500
 Committer:     David Teigland <teigland@redhat.com>
 CommitterDate: Fri Jun 7 15:54:04 2019 -0500
 
-tests: add outdated-pv.sh
+tests: add metadata-bad-text.sh
 
 ---
- test/shell/outdated-pv.sh |   66 +++++++++++++++++++++++++++++++++++++++++++++
- 1 files changed, 66 insertions(+), 0 deletions(-)
+ test/shell/metadata-bad-text.sh |  236 +++++++++++++++++++++++++++++++++++++++
+ 1 files changed, 236 insertions(+), 0 deletions(-)
 
-diff --git a/test/shell/outdated-pv.sh b/test/shell/outdated-pv.sh
+diff --git a/test/shell/metadata-bad-text.sh b/test/shell/metadata-bad-text.sh
 new file mode 100644
-index 0000000..5c9b1b2
+index 0000000..4c59bc9
 --- /dev/null
-+++ b/test/shell/outdated-pv.sh
-@@ -0,0 +1,66 @@
++++ b/test/shell/metadata-bad-text.sh
+@@ -0,0 +1,236 @@
 +#!/usr/bin/env bash
 +
 +# Copyright (C) 2008-2013,2018 Red Hat, Inc. All rights reserved.
@@ -45,53 +45,223 @@ index 0000000..5c9b1b2
 +aux prepare_devs 3
 +get_devs
 +
-+#
-+# Test handling of "outdated PV" which occurs when a PV goes missing
-+# from a VG, and while it's missing the PV is removed from the VG.
-+# Then the PV reappears with the old VG metadata that shows it is a
-+# member.  That outdated metadata needs to be cleared.
-+#
++dd if=/dev/zero of="$dev1" || true
++dd if=/dev/zero of="$dev2" || true
++dd if=/dev/zero of="$dev3" || true
 +
 +vgcreate $SHARED $vg "$dev1" "$dev2" "$dev3"
++
++pvs
++
++dd if="$dev1" of=meta1 bs=4k count=2
++
++sed 's/flags =/flagx =/' meta1 > meta1.bad
++
++dd if=meta1.bad of="$dev1"
++
++pvs 2>&1 | tee out
++grep "bad metadata text" out
++
++pvs "$dev1"
++pvs "$dev2"
++pvs "$dev3"
++
++# bad metadata in one mda doesn't prevent using
++# the VG since other mdas are fine and usable
++lvcreate -l1 $vg
++
++
++vgck --updatemetadata $vg
++
++pvs 2>&1 | tee out
++not grep "bad metadata text" out
++
++pvs "$dev1"
++pvs "$dev2"
++pvs "$dev3"
++
++vgchange -an $vg
++vgremove -ff $vg
++
++
++#
++# Same test as above, but corrupt metadata text
++# on two of the three PVs, leaving one good
++# copy of the metadata.
++#
++
++dd if=/dev/zero of="$dev1" || true
++dd if=/dev/zero of="$dev2" || true
++dd if=/dev/zero of="$dev3" || true
++
++vgcreate $SHARED $vg "$dev1" "$dev2" "$dev3"
++
++pvs
++
++dd if="$dev1" of=meta1 bs=4k count=2
++dd if="$dev2" of=meta2 bs=4k count=2
++
++sed 's/READ/RRRR/' meta1 > meta1.bad
++sed 's/seqno =/sss =/' meta2 > meta2.bad
++
++dd if=meta1.bad of="$dev1"
++dd if=meta2.bad of="$dev2"
++
++pvs 2>&1 | tee out
++grep "bad metadata text" out > out2
++grep "$dev1" out2
++grep "$dev2" out2
++
++pvs "$dev1"
++pvs "$dev2"
++pvs "$dev3"
++
++# bad metadata in one mda doesn't prevent using
++# the VG since other mdas are fine
++lvcreate -l1 $vg
++
++
++vgck --updatemetadata $vg
++
++pvs 2>&1 | tee out
++not grep "bad metadata text" out
++
++pvs "$dev1"
++pvs "$dev2"
++pvs "$dev3"
++
++vgchange -an $vg
++vgremove -ff $vg
++
++#
++# Three PVs where two have one mda, and the third
++# has two mdas.  The first mda is corrupted on all
++# thee PVs, but the second mda on the third PV
++# makes the VG usable.
++#
++
++dd if=/dev/zero of="$dev1" || true
++dd if=/dev/zero of="$dev2" || true
++dd if=/dev/zero of="$dev3" || true
++
++pvcreate "$dev1"
++pvcreate "$dev2"
++pvcreate --pvmetadatacopies 2 "$dev3"
++
++vgcreate $SHARED $vg "$dev1" "$dev2" "$dev3"
++
++pvs
++
++dd if="$dev1" of=meta1 bs=4k count=2
++dd if="$dev2" of=meta2 bs=4k count=2
++dd if="$dev3" of=meta3 bs=4k count=2
++
++sed 's/READ/RRRR/' meta1 > meta1.bad
++sed 's/seqno =/sss =/' meta2 > meta2.bad
++sed 's/id =/id/' meta3 > meta3.bad
++
++dd if=meta1.bad of="$dev1"
++dd if=meta2.bad of="$dev2"
++dd if=meta3.bad of="$dev3"
++
++pvs 2>&1 | tee out
++grep "bad metadata text" out > out2
++grep "$dev1" out2
++grep "$dev2" out2
++grep "$dev3" out2
++
++pvs "$dev1"
++pvs "$dev2"
++pvs "$dev3"
++
++# bad metadata in some mdas doesn't prevent using
++# the VG if there's a good mda found
++lvcreate -l1 $vg
++
++
++vgck --updatemetadata $vg
++
++pvs 2>&1 | tee out
++not grep "bad metadata text" out
++
++pvs "$dev1"
++pvs "$dev2"
++pvs "$dev3"
++
++vgchange -an $vg
++vgremove -ff $vg
++
++#
++# Test that vgck --updatemetadata will update old metadata
++# and repair bad metadata text at the same time from different
++# devices.
++#
++
++dd if=/dev/zero of="$dev1" || true
++dd if=/dev/zero of="$dev2" || true
++dd if=/dev/zero of="$dev3" || true
++
++pvcreate "$dev1"
++pvcreate "$dev2"
++pvcreate --pvmetadatacopies 2 "$dev3"
++
++vgcreate $SHARED $vg "$dev1" "$dev2" "$dev3"
++
++# Put bad metadata onto dev1
++dd if="$dev1" of=meta1 bs=4k count=2
++sed 's/READ/RRRR/' meta1 > meta1.bad
++dd if=meta1.bad of="$dev1"
++
++pvs 2>&1 | tee out
++grep "bad metadata text" out > out2
++grep "$dev1" out2
++
++# We can still use the VG with other available
++# mdas, skipping the bad mda.
 +
 +lvcreate -n $lv1 -l1 -an $vg "$dev1"
 +lvcreate -n $lv2 -l1 -an $vg "$dev1"
 +
++# Put old metadata onto dev2 by updating
++# the VG while dev2 is disabled.
 +aux disable_dev "$dev2"
 +
-+vgreduce --removemissing $vg
-+
 +pvs
++pvs "$dev1"
++not pvs "$dev2"
++pvs "$dev3"
++lvs $vg/$lv1
++lvs $vg/$lv2
++
++lvremove $vg/$lv2
 +
 +aux enable_dev "$dev2"
 +
++# Both old and bad metadata are reported.
 +pvs 2>&1 | tee out
-+grep "outdated" out
++grep "ignoring metadata seqno" out
++grep "bad metadata text" out
++pvs "$dev1"
++pvs "$dev2"
++pvs "$dev3"
 +
-+not pvs "$dev2"
++lvs $vg/$lv1
++not lvs $vg/$lv2
 +
-+# The VG can still be used with the outdated PV around
-+lvcreate -n $lv3 -l1 $vg
-+lvchange -ay $vg
-+lvs $vg
-+lvchange -an $vg
-+
-+# Clears the outdated PV
++# fixes the bad metadata on dev1, and
++# fixes the old metadata on dev2.
 +vgck --updatemetadata $vg
 +
 +pvs 2>&1 | tee out
-+not grep "outdated" out
++not grep "ignoring metadata seqno" out
++not grep "bad metadata text" out
++pvs "$dev1"
++pvs "$dev2"
++pvs "$dev3"
 +
-+# The PV is no longer in the VG
-+pvs "$dev2" | tee out
-+not grep "$vg" out
++lvs $vg/$lv1
 +
-+# The cleared PV can be added back to the VG
-+vgextend $vg "$dev2"
-+
-+pvs "$dev2" | tee out
-+grep "$vg" out
-+
++vgchange -an $vg
 +vgremove -ff $vg
 +
 
