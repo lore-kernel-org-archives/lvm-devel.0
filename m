@@ -1,160 +1,129 @@
 From: David Teigland <teigland@sourceware.org>
-Date: Fri, 7 Jun 2019 17:08:09 -0400
-Subject: master - ability to keep track of outdated pvs in lvmcache
-Message-ID: <201906072108.x57L89vs005244@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Mon, 10 Jun 2019 11:40:06 -0400
+Subject: master - lvmcache: remove unused function
+Message-ID: <201906101540.x5AFe6Z5019921@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=0b18c25d934564015402de33e15a267045ed1b8c
-Commit:        0b18c25d934564015402de33e15a267045ed1b8c
-Parent:        650524b9559bb56339b281af52db9f4df91038ae
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=49b884656725a39a33a5e27dd6377443e7e177e4
+Commit:        49b884656725a39a33a5e27dd6377443e7e177e4
+Parent:        550536474f2b2ad3ac58f1f91aa2325022df53b9
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Tue Feb 5 12:55:51 2019 -0600
+AuthorDate:    Fri Jun 7 14:39:32 2019 -0500
 Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Fri Jun 7 15:54:04 2019 -0500
+CommitterDate: Mon Jun 10 10:38:32 2019 -0500
 
-ability to keep track of outdated pvs in lvmcache
+lvmcache: remove unused function
 
-Outdated PVs hold metadata for VG from which they
-have been removed.  Add the ability to keep track
-of these in lvmcache.
-This will be used for more advanced repair in a
-subsequent commit.
+Drop lvmcache_fmt_from_vgname(), the way it was called made
+it identical to the existing lvmcache_vginfo_from_vgname().
 ---
- lib/cache/lvmcache.c |   80 ++++++++++++++++++++++++++++++++++++++++++++++++++
- lib/cache/lvmcache.h |   15 +++++++++
- 2 files changed, 95 insertions(+), 0 deletions(-)
+ lib/cache/lvmcache.c |   54 --------------------------------------------------
+ lib/cache/lvmcache.h |    1 -
+ tools/vgcreate.c     |    4 +-
+ 3 files changed, 2 insertions(+), 57 deletions(-)
 
 diff --git a/lib/cache/lvmcache.c b/lib/cache/lvmcache.c
-index a36e145..a860660 100644
+index 857a953..e45764a 100644
 --- a/lib/cache/lvmcache.c
 +++ b/lib/cache/lvmcache.c
-@@ -48,6 +48,7 @@ struct lvmcache_info {
- struct lvmcache_vginfo {
- 	struct dm_list list;	/* Join these vginfos together */
- 	struct dm_list infos;	/* List head for lvmcache_infos */
-+	struct dm_list outdated_infos; /* vg_read moves info from infos to outdated_infos */
- 	const struct format_type *fmt;
- 	char *vgname;		/* "" == orphan */
- 	uint32_t status;
-@@ -1389,6 +1390,7 @@ static int _lvmcache_update_vgname(struct lvmcache_info *info,
- 			return 0;
- 		}
- 		dm_list_init(&vginfo->infos);
-+		dm_list_init(&vginfo->outdated_infos);
- 
- 		/*
- 		 * A different VG (different uuid) can exist with the same name.
-@@ -2392,3 +2394,81 @@ struct metadata_area *lvmcache_get_mda(struct cmd_context *cmd,
- 	return NULL;
+@@ -278,60 +278,6 @@ struct lvmcache_vginfo *lvmcache_vginfo_from_vgname(const char *vgname, const ch
+ 	return vginfo;
  }
  
-+void lvmcache_get_outdated_devs(struct cmd_context *cmd,
-+				const char *vgname, const char *vgid,
-+				struct dm_list *devs)
-+{
-+	struct lvmcache_vginfo *vginfo;
-+	struct lvmcache_info *info;
-+	struct device_list *devl;
-+
-+	if (!(vginfo = lvmcache_vginfo_from_vgname(vgname, vgid))) {
-+		log_error(INTERNAL_ERROR "lvmcache_get_outdated_devs no vginfo %s", vgname);
-+		return;
-+	}
-+
-+	dm_list_iterate_items(info, &vginfo->outdated_infos) {
-+		if (!(devl = zalloc(sizeof(*devl))))
-+			return;
-+		devl->dev = info->dev;
-+		dm_list_add(devs, &devl->list);
-+	}
-+}
-+
-+void lvmcache_del_outdated_devs(struct cmd_context *cmd,
-+				const char *vgname, const char *vgid)
-+{
-+	struct lvmcache_vginfo *vginfo;
-+	struct lvmcache_info *info, *info2;
-+
-+	if (!(vginfo = lvmcache_vginfo_from_vgname(vgname, vgid))) {
-+		log_error(INTERNAL_ERROR "lvmcache_get_outdated_devs no vginfo");
-+		return;
-+	}
-+
-+	dm_list_iterate_items_safe(info, info2, &vginfo->outdated_infos)
-+		lvmcache_del(info);
-+}
-+
-+void lvmcache_get_outdated_mdas(struct cmd_context *cmd,
-+				const char *vgname, const char *vgid,
-+				struct device *dev,
-+				struct dm_list **mdas)
-+{
-+	struct lvmcache_vginfo *vginfo;
-+	struct lvmcache_info *info;
-+
-+	*mdas = NULL;
-+
-+	if (!(vginfo = lvmcache_vginfo_from_vgname(vgname, vgid))) {
-+		log_error(INTERNAL_ERROR "lvmcache_get_outdated_mdas no vginfo");
-+		return;
-+	}
-+
-+	dm_list_iterate_items(info, &vginfo->outdated_infos) {
-+		if (info->dev != dev)
-+			continue;
-+		*mdas = &info->mdas;
-+		return;
-+	}
-+}
-+
-+bool lvmcache_is_outdated_dev(struct cmd_context *cmd,
-+			     const char *vgname, const char *vgid,
-+			     struct device *dev)
-+{
-+	struct lvmcache_vginfo *vginfo;
-+	struct lvmcache_info *info;
-+
-+	if (!(vginfo = lvmcache_vginfo_from_vgname(vgname, vgid))) {
-+		log_error(INTERNAL_ERROR "lvmcache_get_outdated_mdas no vginfo");
-+		return false;
-+	}
-+
-+	dm_list_iterate_items(info, &vginfo->outdated_infos) {
-+		if (info->dev == dev)
-+			return true;
-+	}
-+
-+	return false;
-+}
+-const struct format_type *lvmcache_fmt_from_vgname(struct cmd_context *cmd,
+-						   const char *vgname, const char *vgid,
+-						   unsigned revalidate_labels)
+-{
+-	struct lvmcache_vginfo *vginfo;
+-	struct lvmcache_info *info;
+-	struct dm_list *devh, *tmp;
+-	struct dm_list devs;
+-	struct device_list *devl;
+-	char vgid_found[ID_LEN + 1] __attribute__((aligned(8)));
+-
+-	if (!(vginfo = lvmcache_vginfo_from_vgname(vgname, vgid))) {
+-		stack;
+-		return NULL;
+-	}
+-
+-	/*
+-	 * If this function is called repeatedly, only the first one needs to revalidate.
+-	 */
+-	if (!revalidate_labels)
+-		goto out;
+-
+-	/*
+-	 * This function is normally called before reading metadata so
+- 	 * we check cached labels here. Unfortunately vginfo is volatile.
+- 	 */
+-	dm_list_init(&devs);
+-	dm_list_iterate_items(info, &vginfo->infos) {
+-		if (!(devl = malloc(sizeof(*devl)))) {
+-			log_error("device_list element allocation failed");
+-			return NULL;
+-		}
+-		devl->dev = info->dev;
+-		dm_list_add(&devs, &devl->list);
+-	}
+-
+-	memcpy(vgid_found, vginfo->vgid, sizeof(vgid_found));
+-
+-	dm_list_iterate_safe(devh, tmp, &devs) {
+-		devl = dm_list_item(devh, struct device_list);
+-		label_read(devl->dev);
+-		dm_list_del(&devl->list);
+-		free(devl);
+-	}
+-
+-	/* If vginfo changed, caller needs to rescan */
+-	if (!(vginfo = lvmcache_vginfo_from_vgname(vgname, vgid_found)) ||
+-	    strncmp(vginfo->vgid, vgid_found, ID_LEN))
+-		return NULL;
+-
+-out:
+-	return vginfo->fmt;
+-}
+-
+ struct lvmcache_vginfo *lvmcache_vginfo_from_vgid(const char *vgid)
+ {
+ 	struct lvmcache_vginfo *vginfo;
 diff --git a/lib/cache/lvmcache.h b/lib/cache/lvmcache.h
-index dd6730e..0f83c80 100644
+index 379cc9d..22c2c1f 100644
 --- a/lib/cache/lvmcache.h
 +++ b/lib/cache/lvmcache.h
-@@ -222,6 +222,21 @@ int dev_in_device_list(struct device *dev, struct dm_list *head);
+@@ -91,7 +91,6 @@ void lvmcache_lock_vgname(const char *vgname, int read_only);
+ void lvmcache_unlock_vgname(const char *vgname);
  
- bool lvmcache_has_bad_metadata(struct device *dev);
+ /* Queries */
+-const struct format_type *lvmcache_fmt_from_vgname(struct cmd_context *cmd, const char *vgname, const char *vgid, unsigned revalidate_labels);
+ int lvmcache_lookup_mda(struct lvmcache_vgsummary *vgsummary);
  
-+void lvmcache_get_outdated_devs(struct cmd_context *cmd,
-+                                const char *vgname, const char *vgid,
-+                                struct dm_list *devs);
-+void lvmcache_get_outdated_mdas(struct cmd_context *cmd,
-+                                const char *vgname, const char *vgid,
-+                                struct device *dev,
-+                                struct dm_list **mdas);
-+
-+bool lvmcache_is_outdated_dev(struct cmd_context *cmd,
-+                              const char *vgname, const char *vgid,
-+                              struct device *dev);
-+
-+void lvmcache_del_outdated_devs(struct cmd_context *cmd,
-+                                const char *vgname, const char *vgid);
-+
- void lvmcache_save_bad_mda(struct lvmcache_info *info, struct metadata_area *mda);
+ struct lvmcache_vginfo *lvmcache_vginfo_from_vgname(const char *vgname,
+diff --git a/tools/vgcreate.c b/tools/vgcreate.c
+index 6640b8e..d594ec1 100644
+--- a/tools/vgcreate.c
++++ b/tools/vgcreate.c
+@@ -71,7 +71,7 @@ int vgcreate(struct cmd_context *cmd, int argc, char **argv)
+ 	 * then do the initial label scan which reads all devices and
+ 	 * populates lvmcache with any VG name it finds.  If the VG name
+ 	 * we want to use exists, then the label scan will find it,
+-	 * and the fmt_from_vgname call (used to check if the name exists)
++	 * and the vginfo_from_vgname call (used to check if the name exists)
+ 	 * will return non-NULL.
+ 	 */
  
- void lvmcache_get_bad_mdas(struct cmd_context *cmd,
+@@ -82,7 +82,7 @@ int vgcreate(struct cmd_context *cmd, int argc, char **argv)
+ 
+ 	lvmcache_label_scan(cmd);
+ 
+-	if (lvmcache_fmt_from_vgname(cmd, vp_new.vg_name, NULL, 0)) {
++	if (lvmcache_vginfo_from_vgname(vp_new.vg_name, NULL)) {
+ 		unlock_vg(cmd, NULL, vp_new.vg_name);
+ 		log_error("A volume group called %s already exists.", vp_new.vg_name);
+ 		return ECMD_FAILED;
 
 
