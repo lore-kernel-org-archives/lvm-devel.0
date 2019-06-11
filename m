@@ -1,172 +1,174 @@
 From: David Teigland <teigland@sourceware.org>
-Date: Tue, 11 Jun 2019 12:43:38 -0400
-Subject: master - remove unused trustcache option
-Message-ID: <201906111643.x5BGhcUi022261@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Tue, 11 Jun 2019 16:06:42 -0400
+Subject: master - lvmcache: remove wrapper around lvmcache_get_vgnameids
+Message-ID: <201906112006.x5BK6gVG022069@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=0f350ba890f02eb73d6cdebe29420a709e2b5ae6
-Commit:        0f350ba890f02eb73d6cdebe29420a709e2b5ae6
-Parent:        c9203a6106c7f9d66d7872e5709f5e02d246c0e3
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=4bb7d3da0e7472804361f639c6da5e2798b4e0d2
+Commit:        4bb7d3da0e7472804361f639c6da5e2798b4e0d2
+Parent:        0f350ba890f02eb73d6cdebe29420a709e2b5ae6
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Tue Jun 11 11:42:49 2019 -0500
+AuthorDate:    Tue Jun 11 14:09:13 2019 -0500
 Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Tue Jun 11 11:42:49 2019 -0500
+CommitterDate: Tue Jun 11 14:10:14 2019 -0500
 
-remove unused trustcache option
+lvmcache: remove wrapper around lvmcache_get_vgnameids
 
+This was left over from when there was an lvmetad
+version of the function.
 ---
- lib/misc/lvm-globals.c |   11 -----------
- lib/misc/lvm-globals.h |    2 --
- tools/args.h           |    3 +--
- tools/command-lines.in |   10 +++++-----
- tools/lvmcmdline.c     |   11 -----------
- 5 files changed, 6 insertions(+), 31 deletions(-)
+ lib/cache/lvmcache.c             |   18 ++++++++++++++++--
+ lib/cache/lvmcache.h             |    6 ++++--
+ lib/metadata/metadata-exported.h |    3 ---
+ lib/metadata/metadata.c          |   22 ----------------------
+ tools/toollib.c                  |    6 +++---
+ tools/vgimportclone.c            |    2 +-
+ 6 files changed, 24 insertions(+), 33 deletions(-)
 
-diff --git a/lib/misc/lvm-globals.c b/lib/misc/lvm-globals.c
-index 6d3bf02..eb99cf5 100644
---- a/lib/misc/lvm-globals.c
-+++ b/lib/misc/lvm-globals.c
-@@ -31,7 +31,6 @@ static int _fwraid_filtering = 0;
- static int _pvmove = 0;
- static int _obtain_device_list_from_udev = DEFAULT_OBTAIN_DEVICE_LIST_FROM_UDEV;
- static enum dev_ext_e _external_device_info_source = DEV_EXT_NONE;
--static int _trust_cache = 0; /* Don't scan when incomplete VGs encountered */
- static int _debug_level = 0;
- static int _debug_classes_logged = 0;
- static int _security_level = SECURITY_LEVEL;
-@@ -107,11 +106,6 @@ void init_external_device_info_source(enum dev_ext_e src)
- 	_external_device_info_source = src;
+diff --git a/lib/cache/lvmcache.c b/lib/cache/lvmcache.c
+index e45764a..1d92e01 100644
+--- a/lib/cache/lvmcache.c
++++ b/lib/cache/lvmcache.c
+@@ -947,12 +947,26 @@ int lvmcache_label_scan(struct cmd_context *cmd)
+ 	return r;
  }
  
--void init_trust_cache(int trustcache)
--{
--	_trust_cache = trustcache;
--}
--
- void init_security_level(int level)
+-int lvmcache_get_vgnameids(struct cmd_context *cmd, int include_internal,
+-			   struct dm_list *vgnameids)
++int lvmcache_get_vgnameids(struct cmd_context *cmd,
++			   struct dm_list *vgnameids,
++			   const char *only_this_vgname,
++			   int include_internal)
  {
- 	_security_level = level;
-@@ -285,11 +279,6 @@ enum dev_ext_e external_device_info_source(void)
- 	return _external_device_info_source;
+ 	struct vgnameid_list *vgnl;
+ 	struct lvmcache_vginfo *vginfo;
+ 
++	if (only_this_vgname) {
++		if (!(vgnl = dm_pool_alloc(cmd->mem, sizeof(*vgnl)))) {
++			log_error("vgnameid_list allocation failed.");
++			return 0;
++		}
++
++		vgnl->vg_name = dm_pool_strdup(cmd->mem, only_this_vgname);
++		vgnl->vgid = NULL;
++		dm_list_add(vgnameids, &vgnl->list);
++		return 1;
++	}
++
+ 	dm_list_iterate_items(vginfo, &_vginfos) {
+ 		if (!include_internal && is_orphan_vg(vginfo->vgname))
+ 			continue;
+diff --git a/lib/cache/lvmcache.h b/lib/cache/lvmcache.h
+index 22c2c1f..5b78d7a 100644
+--- a/lib/cache/lvmcache.h
++++ b/lib/cache/lvmcache.h
+@@ -103,8 +103,10 @@ struct device *lvmcache_device_from_pvid(struct cmd_context *cmd, const struct i
+ const char *lvmcache_vgname_from_info(struct lvmcache_info *info);
+ const struct format_type *lvmcache_fmt_from_info(struct lvmcache_info *info);
+ 
+-int lvmcache_get_vgnameids(struct cmd_context *cmd, int include_internal,
+-                          struct dm_list *vgnameids);
++int lvmcache_get_vgnameids(struct cmd_context *cmd,
++                           struct dm_list *vgnameids,
++                           const char *only_this_vgname,
++                           int include_internal);
+ 
+ void lvmcache_drop_metadata(const char *vgname, int drop_precommitted);
+ void lvmcache_commit_metadata(const char *vgname);
+diff --git a/lib/metadata/metadata-exported.h b/lib/metadata/metadata-exported.h
+index 10593a0..9029d3f 100644
+--- a/lib/metadata/metadata-exported.h
++++ b/lib/metadata/metadata-exported.h
+@@ -696,9 +696,6 @@ int unlink_lv_from_vg(struct logical_volume *lv);
+ void lv_set_visible(struct logical_volume *lv);
+ void lv_set_hidden(struct logical_volume *lv);
+ 
+-int get_vgnameids(struct cmd_context *cmd, struct dm_list *vgnameids,
+-		  const char *only_this_vgname, int include_internal);
+-
+ int pv_write(struct cmd_context *cmd, struct physical_volume *pv, int allow_non_orphan);
+ int move_pv(struct volume_group *vg_from, struct volume_group *vg_to,
+ 	    const char *pv_name);
+diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
+index aceac5a..039a7d6 100644
+--- a/lib/metadata/metadata.c
++++ b/lib/metadata/metadata.c
+@@ -3566,28 +3566,6 @@ void set_pv_devices(struct format_instance *fid, struct volume_group *vg)
+ 		_set_pv_device(fid, vg, pvl->pv);
  }
  
--int trust_cache(void)
+-int get_vgnameids(struct cmd_context *cmd, struct dm_list *vgnameids,
+-		  const char *only_this_vgname, int include_internal)
 -{
--	return _trust_cache;
--}
+-	struct vgnameid_list *vgnl;
 -
- int background_polling(void)
- {
- 	return _background_polling;
-diff --git a/lib/misc/lvm-globals.h b/lib/misc/lvm-globals.h
-index 944b822..921ae7e 100644
---- a/lib/misc/lvm-globals.h
-+++ b/lib/misc/lvm-globals.h
-@@ -32,7 +32,6 @@ void init_fwraid_filtering(int level);
- void init_pvmove(int level);
- void init_external_device_info_source(enum dev_ext_e src);
- void init_obtain_device_list_from_udev(int device_list_from_udev);
--void init_trust_cache(int trustcache);
- void init_debug(int level);
- void init_debug_classes_logged(int classes);
- void init_cmd_name(int status);
-@@ -65,7 +64,6 @@ int fwraid_filtering(void);
- int pvmove_mode(void);
- int obtain_device_list_from_udev(void);
- enum dev_ext_e external_device_info_source(void);
--int trust_cache(void);
- int verbose_level(void);
- int silent_mode(void);
- int debug_level(void);
-diff --git a/tools/args.h b/tools/args.h
-index e972c7d..bd07aa3 100644
---- a/tools/args.h
-+++ b/tools/args.h
-@@ -713,9 +713,8 @@ arg(trackchanges_ARG, '\0', "trackchanges", 0, 0, 0,
-     "merging the split image (see --mergemirrors) or permanently splitting\n"
-     "the image (see --splitmirrors with --name.\n")
- 
--/* TODO: hide this? */
- arg(trustcache_ARG, '\0', "trustcache", 0, 0, 0,
--    "Avoids certain device scanning during command processing. Do not use.\n")
-+    "No longer used.\n")
- 
- arg(type_ARG, '\0', "type", segtype_VAL, 0, 0,
-     "The LV type, also known as \"segment type\" or \"segtype\".\n"
-diff --git a/tools/command-lines.in b/tools/command-lines.in
-index c9d4fd6..73a1e64 100644
---- a/tools/command-lines.in
-+++ b/tools/command-lines.in
-@@ -198,7 +198,7 @@ OO_REPORT: --aligned, --all, --binary, --configreport ConfigReport, --foreign,
- --nameprefixes, --noheadings, --nosuffix,
- --options String, --readonly, --reportformat ReportFmt, --rows,
- --select String, --separator String, --shared, --sort String,
----trustcache, --unbuffered, --units Units, --unquoted
-+--unbuffered, --units Units, --unquoted
- 
- #
- # options for config, dumpconfig, lvmconfig
-@@ -1384,7 +1384,7 @@ DESC: Resize a pool metadata SubLV by a specified size.
- lvs
- OO: --history, --segments, OO_REPORT
- OP: VG|LV|Tag ...
--IO: --partial, --ignoreskippedcluster
-+IO: --partial, --ignoreskippedcluster, --trustcache
- ID: lvs_general
- 
- ---
-@@ -1486,7 +1486,7 @@ ID: pvremove_general
- pvs
- OO: --segments, OO_REPORT
- OP: PV|Tag ...
--IO: --partial, --ignoreskippedcluster
-+IO: --partial, --ignoreskippedcluster, --trustcache
- ID: pvs_general
- 
- ---
-@@ -1752,7 +1752,7 @@ DESC: Rename a VG by specifying the VG UUID.
- vgs
- OO: OO_REPORT
- OP: VG|Tag ...
--IO: --partial, --ignoreskippedcluster
-+IO: --partial, --ignoreskippedcluster, --trustcache
- ID: vgs_general
- 
- ---
-@@ -1807,7 +1807,7 @@ ID: devtypes_general
- fullreport
- OO: OO_REPORT
- OP: VG ...
--IO: --partial, --ignoreskippedcluster
-+IO: --partial, --ignoreskippedcluster, --trustcache
- ID: fullreport_general
- 
- lastlog
-diff --git a/tools/lvmcmdline.c b/tools/lvmcmdline.c
-index 922c52d..3fec702 100644
---- a/tools/lvmcmdline.c
-+++ b/tools/lvmcmdline.c
-@@ -2396,17 +2396,6 @@ static int _get_current_settings(struct cmd_context *cmd)
- 	if (arg_is_set(cmd, binary_ARG))
- 		cmd->report_binary_values_as_numeric = 1;
- 
--	if (arg_is_set(cmd, trustcache_ARG)) {
--		if (arg_is_set(cmd, all_ARG)) {
--			log_error("--trustcache is incompatible with --all");
--			return EINVALID_CMD_LINE;
+-	if (only_this_vgname) {
+-		if (!(vgnl = dm_pool_alloc(cmd->mem, sizeof(*vgnl)))) {
+-			log_error("vgnameid_list allocation failed.");
+-			return 0;
 -		}
--		init_trust_cache(1);
--		log_warn("WARNING: Cache file of PVs will be trusted.  "
--			  "New devices holding PVs may get ignored.");
--	} else
--		init_trust_cache(0);
 -
- 	if (arg_is_set(cmd, noudevsync_ARG))
- 		cmd->current_settings.udev_sync = 0;
+-		vgnl->vg_name = dm_pool_strdup(cmd->mem, only_this_vgname);
+-		vgnl->vgid = NULL;
+-		dm_list_add(vgnameids, &vgnl->list);
+-		return 1;
+-	}
+-
+-	lvmcache_get_vgnameids(cmd, include_internal, vgnameids);
+-
+-	return 1;
+-}
+-
+ int pv_write(struct cmd_context *cmd,
+ 	     struct physical_volume *pv, int allow_non_orphan)
+ {
+diff --git a/tools/toollib.c b/tools/toollib.c
+index a3b5fea..506ad2d 100644
+--- a/tools/toollib.c
++++ b/tools/toollib.c
+@@ -2262,7 +2262,7 @@ int process_each_vg(struct cmd_context *cmd,
+ 	 */
+ 	log_very_verbose("Obtaining the complete list of VGs to process");
  
+-	if (!get_vgnameids(cmd, &vgnameids_on_system, NULL, include_internal)) {
++	if (!lvmcache_get_vgnameids(cmd, &vgnameids_on_system, NULL, include_internal)) {
+ 		ret_max = ECMD_FAILED;
+ 		goto_out;
+ 	}
+@@ -3807,7 +3807,7 @@ int process_each_lv(struct cmd_context *cmd,
+ 	 */
+ 	log_very_verbose("Obtaining the complete list of VGs before processing their LVs");
+ 
+-	if (!get_vgnameids(cmd, &vgnameids_on_system, NULL, 0)) {
++	if (!lvmcache_get_vgnameids(cmd, &vgnameids_on_system, NULL, 0)) {
+ 		ret_max = ECMD_FAILED;
+ 		goto_out;
+ 	}
+@@ -4479,7 +4479,7 @@ int process_each_pv(struct cmd_context *cmd,
+ 	if (!(read_flags & PROCESS_SKIP_SCAN))
+ 		lvmcache_label_scan(cmd);
+ 
+-	if (!get_vgnameids(cmd, &all_vgnameids, only_this_vgname, 1)) {
++	if (!lvmcache_get_vgnameids(cmd, &all_vgnameids, only_this_vgname, 1)) {
+ 		ret_max = ret;
+ 		goto_out;
+ 	}
+diff --git a/tools/vgimportclone.c b/tools/vgimportclone.c
+index f7b1c0b..a3af841 100644
+--- a/tools/vgimportclone.c
++++ b/tools/vgimportclone.c
+@@ -296,7 +296,7 @@ int vgimportclone(struct cmd_context *cmd, int argc, char **argv)
+ 		vgname_count = 1;
+ 	}
+ 
+-	if (!get_vgnameids(cmd, &vgnameids_on_system, NULL, 0))
++	if (!lvmcache_get_vgnameids(cmd, &vgnameids_on_system, NULL, 0))
+ 		goto_out;
+ 
+ retry_name:
 
 
