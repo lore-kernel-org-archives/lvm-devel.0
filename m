@@ -1,78 +1,42 @@
-From: Nir Soffer <nsoffer@redhat.com>
-Date: Mon, 10 Jun 2019 23:16:13 +0300
-Subject: [PATCH] tool: Allow suppressing backup warnings
-In-Reply-To: <20190529121000.25206-1-nsoffer@redhat.com>
-References: <20190529121000.25206-1-nsoffer@redhat.com>
-Message-ID: <CAMRbyytdRwTve-9mrmFbY_VyWiXSyDXWwu8fJFssAqehMFNvPQ@mail.gmail.com>
+From: Zdenek Kabelac <zkabelac@sourceware.org>
+Date: Tue, 11 Jun 2019 10:44:33 -0400
+Subject: master - tests: correct checked target name
+Message-ID: <201906111444.x5BEiXm3031816@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-ping
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=c9203a6106c7f9d66d7872e5709f5e02d246c0e3
+Commit:        c9203a6106c7f9d66d7872e5709f5e02d246c0e3
+Parent:        e225bf59ffdad0de1bb976ffdb65d77979cb5381
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Tue Jun 11 16:40:44 2019 +0200
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Tue Jun 11 16:43:14 2019 +0200
 
-On Wed, May 29, 2019 at 3:10 PM Nir Soffer <nirsof@gmail.com> wrote:
+tests: correct checked target name
 
-> We have a mechanism to show only single warning about disabled backup:
->
->     WARNING: This metadata update is NOT backed up
->
-> In oVirt we disable local backup since it does not play well with oVirt
-> clustered LVM solution, and this warning is not helpful. We can filter
-> the message in oVirt logs, but I think the right place to fix this is in
-> LVM.
->
-> Add LVM_SUPPRESS_BACKUP_WARNINGS environment variable. If set, suppress
-> also the first warning about disable backup.
-> ---
->  lib/format_text/archiver.c | 3 +++
->  man/lvm.8_main             | 4 ++++
->  2 files changed, 7 insertions(+)
->
-> diff --git a/lib/format_text/archiver.c b/lib/format_text/archiver.c
-> index 052c2bd2b..0ea8d5e48 100644
-> --- a/lib/format_text/archiver.c
-> +++ b/lib/format_text/archiver.c
-> @@ -196,10 +196,13 @@ int backup_init(struct cmd_context *cmd, const char
-> *dir,
->                 log_error("Couldn't copy backup directory name.");
->                 return 0;
->         }
->         backup_enable(cmd, enabled);
->
-> +    if (getenv("LVM_SUPPRESS_BACKUP_WARNINGS"))
-> +        cmd->backup_params->suppress = 1;
-> +
->         return 1;
->  }
->
->  void backup_exit(struct cmd_context *cmd)
->  {
-> diff --git a/man/lvm.8_main b/man/lvm.8_main
-> index 3e67b1bdf..43ce5150c 100644
-> --- a/man/lvm.8_main
-> +++ b/man/lvm.8_main
-> @@ -470,10 +470,14 @@ together allow automated test scripts to discard
-> uninteresting log data.
->  .TP
->  .B LVM_SUPPRESS_LOCKING_FAILURE_MESSAGES
->  Used to suppress warning messages when the configured locking is known
->  to be unavailable.
->  .TP
-> +.B LVM_SUPPRESS_BACKUP_WARNINGS
-> +Used to suppress warning messages when automatic metadata backup is
-> +disabled.
-> +.TP
->  .B DM_ABORT_ON_INTERNAL_ERRORS
->  Abort processing if the code detects a non-fatal internal error.
->  .TP
->  .B DM_DISABLE_UDEV
->  Avoid interaction with udev.  LVM will manage the relevant nodes in /dev
-> --
-> 2.17.2
->
->
--------------- next part --------------
-An HTML attachment was scrubbed...
-URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20190610/9e01260e/attachment.htm>
+So when the target name happened to be a suffix of another one,
+the grep was filtering incorrect line
+(i.e. dm-cache && dm-writecache) - so do a line head matching.
+---
+ test/lib/aux.sh |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
+
+diff --git a/test/lib/aux.sh b/test/lib/aux.sh
+index b178ab7..040c8f2 100644
+--- a/test/lib/aux.sh
++++ b/test/lib/aux.sh
+@@ -1421,7 +1421,7 @@ target_at_least() {
+ 	fi
+ 
+ 	local version
+-	version=$(dmsetup targets 2>/dev/null | grep "${1##dm-} " 2>/dev/null)
++	version=$(dmsetup targets 2>/dev/null | grep "^${1##dm-} " 2>/dev/null)
+ 	version=${version##* v}
+ 
+ 	version_at_least "$version" "${@:2}" || {
+
+
