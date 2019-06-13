@@ -1,46 +1,43 @@
 From: David Teigland <teigland@sourceware.org>
-Date: Thu, 13 Jun 2019 12:37:42 -0400
-Subject: master - tests: aux have_writecache
-Message-ID: <201906131637.x5DGbgJQ009069@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Thu, 13 Jun 2019 18:44:51 -0400
+Subject: master - WHATS_NEW for recent changes
+Message-ID: <201906132244.x5DMipLi008677@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=208a09745db480d77120d0cd83743732fc216918
-Commit:        208a09745db480d77120d0cd83743732fc216918
-Parent:        7eaa3adedf4977352f93d8558dd0f1a0eb2c9921
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=a4dbbefaff74b6507c82dc1b938b0312c2dda576
+Commit:        a4dbbefaff74b6507c82dc1b938b0312c2dda576
+Parent:        208a09745db480d77120d0cd83743732fc216918
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Thu Jun 13 11:36:18 2019 -0500
+AuthorDate:    Thu Jun 13 17:44:14 2019 -0500
 Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Thu Jun 13 11:36:18 2019 -0500
+CommitterDate: Thu Jun 13 17:44:14 2019 -0500
 
-tests: aux have_writecache
+WHATS_NEW for recent changes
 
-function was never defined, causing writecache.sh to be skipped
 ---
- test/lib/aux.sh |    8 ++++++++
- 1 files changed, 8 insertions(+), 0 deletions(-)
+ WHATS_NEW |    7 +++++++
+ 1 files changed, 7 insertions(+), 0 deletions(-)
 
-diff --git a/test/lib/aux.sh b/test/lib/aux.sh
-index 040c8f2..09ef9ed 100644
---- a/test/lib/aux.sh
-+++ b/test/lib/aux.sh
-@@ -1478,6 +1478,14 @@ have_vdo() {
- 	target_at_least dm-vdo "$@"
- }
+diff --git a/WHATS_NEW b/WHATS_NEW
+index 81cfdd3..60e5128 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,12 @@
+ Version 2.03.05 - 
+ ================================
++  Fix command definition for pvchange -a.
++  Add vgck --updatemetadata command that will repair metadata problems.
++  Improve VG reading to work if one good copy of metadata is found.
++  Report/display/scan commands that read VGs will no longer write/repair.
++  Move metadata repairs from VG reading to VG writing.
++  Add config setting md_component_checks to control MD component checks.
++  Add end of device MD component checks when dev has no udev info.
  
-+have_writecache() {
-+	lvm segtypes 2>/dev/null | grep -q writecache$ || {
-+		echo "writecache is not built-in." >&2
-+		return 1
-+	}
-+	target_at_least dm-writecache "$@"
-+}
-+
- have_raid() {
- 	target_at_least dm-raid "$@"
- 
+ Version 2.03.04 - 10th June 2019
+ ================================
 
 
