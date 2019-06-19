@@ -1,73 +1,53 @@
-From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Wed, 19 Jun 2019 07:42:08 -0400
-Subject: stable-2.02 - tests: check mirror with clvmd and dmeventd
-Message-ID: <201906191142.x5JBg8tt017641@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: David Teigland <teigland@sourceware.org>
+Date: Wed, 19 Jun 2019 11:44:10 -0400
+Subject: stable-2.02 - Revert "lvconvert: disable linear to mirror of active LV in cluster VG"
+Message-ID: <201906191544.x5JFiA2N004703@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=1727df7c98b749be90a5790d3d9858a012f687f6
-Commit:        1727df7c98b749be90a5790d3d9858a012f687f6
-Parent:        29ae8b8ca5935536d9ce55959022918e0343562f
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed Jun 19 13:38:57 2019 +0200
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Wed Jun 19 13:38:57 2019 +0200
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=f3a87a2c2e339328ea4d7448f43d5317806a6b24
+Commit:        f3a87a2c2e339328ea4d7448f43d5317806a6b24
+Parent:        1727df7c98b749be90a5790d3d9858a012f687f6
+Author:        David Teigland <teigland@redhat.com>
+AuthorDate:    Wed Jun 19 10:40:37 2019 -0500
+Committer:     David Teigland <teigland@redhat.com>
+CommitterDate: Wed Jun 19 10:40:37 2019 -0500
 
-tests: check mirror with clvmd and dmeventd
+Revert "lvconvert: disable linear to mirror of active LV in cluster VG"
 
+This reverts commit 8623e336513c6ac6fcb24aa7e2ef10b8a3a36c59.
+
+The problem this was avoiding now seems to be fixed by
+commit d6bce036155ae973c869bdce3ca5f824f933f599
+  mirror: fix monitoring change
 ---
- test/shell/lvconvert-mirror-dmeventd.sh |   41 +++++++++++++++++++++++++++++++
- 1 files changed, 41 insertions(+), 0 deletions(-)
+ tools/lvconvert.c |   11 -----------
+ 1 files changed, 0 insertions(+), 11 deletions(-)
 
-diff --git a/test/shell/lvconvert-mirror-dmeventd.sh b/test/shell/lvconvert-mirror-dmeventd.sh
-new file mode 100644
-index 0000000..3bebd64
---- /dev/null
-+++ b/test/shell/lvconvert-mirror-dmeventd.sh
-@@ -0,0 +1,41 @@
-+#!/usr/bin/env bash
-+
-+# Copyright (C) 2018 Red Hat, Inc. All rights reserved.
-+#
-+# This copyrighted material is made available to anyone wishing to use,
-+# modify, copy, or redistribute it subject to the terms and conditions
-+# of the GNU General Public License v.2.
-+#
-+# You should have received a copy of the GNU General Public License
-+# along with this program; if not, write to the Free Software Foundation,
-+# Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
-+
-+# Check clustered usage with dmeventd
-+
-+. lib/inittest
-+
-+aux prepare_dmeventd
-+
-+aux prepare_pvs 3 100
-+get_devs
-+
-+vgcreate $SHARED -s 64k "$vg" "${DEVICES[@]}"
-+
-+# Use zero devices for big mirror legs
-+aux zero_dev "$dev2" $(get first_extent_sector "$dev2"):
-+aux zero_dev "$dev3" $(get first_extent_sector "$dev3"):
-+
-+lvcreate -aey -L90 --type mirror --corelog --regionsize 16k -m1 -n $lv1 $vg "$dev1" "$dev2"
-+
-+lvconvert -m+1 -b $vg/$lv1 "$dev3"
-+
-+# We want here ongoing conversion
-+
-+lvs -a -o+seg_pe_ranges $vg
-+
-+# Now it should be able to drop 2nd. leg
-+lvconvert -m-1 $vg/$lv1 "$dev2"
-+
-+lvs -a $vg
-+
-+vgremove -f $vg
+diff --git a/tools/lvconvert.c b/tools/lvconvert.c
+index fcbbd26..bc666c0 100644
+--- a/tools/lvconvert.c
++++ b/tools/lvconvert.c
+@@ -864,17 +864,6 @@ static int _lvconvert_mirrors_aux(struct cmd_context *cmd,
+ 		/* FIXME Share code with lvcreate */
+ 
+ 		/*
+-		 * Avoid bug 1711427 in which an exclusively active linear LV in a
+-		 * clustered VG, when upconverted to a mirror, will mistakenly use
+-		 * a userspace/cmirror log in _add_log() beause laopts.exclusive is
+-		 * not set.
+-		 */
+-		if (vg_is_clustered(lv->vg) && lv_is_active(lv)) {
+-			log_error("Cannot convert active LV to mirror in clustered VG.");
+-			return 0;
+-		}
+-
+-		/*
+ 		 * FIXME should we give not only pvh, but also all PVs
+ 		 * currently taken by the mirror? Would make more sense from
+ 		 * user perspective.
 
 
