@@ -1,52 +1,77 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Wed, 19 Jun 2019 07:41:58 -0400
-Subject: stable-2.02 - mirror: fix monitoring change
-Message-ID: <201906191141.x5JBfwdN017322@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Wed, 19 Jun 2019 07:42:05 -0400
+Subject: stable-2.02 - tests: fix ra checking
+Message-ID: <201906191142.x5JBg5b3017336@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=d6bce036155ae973c869bdce3ca5f824f933f599
-Commit:        d6bce036155ae973c869bdce3ca5f824f933f599
-Parent:        8623e336513c6ac6fcb24aa7e2ef10b8a3a36c59
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=29ae8b8ca5935536d9ce55959022918e0343562f
+Commit:        29ae8b8ca5935536d9ce55959022918e0343562f
+Parent:        e80ca65d305cd896b98f1023e22c2ec9b4d4e5b5
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed Jun 19 12:42:01 2019 +0200
+AuthorDate:    Tue Jun 18 13:20:27 2019 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Wed Jun 19 13:33:53 2019 +0200
+CommitterDate: Wed Jun 19 13:37:11 2019 +0200
 
-mirror: fix monitoring change
+tests: fix ra checking
 
-Commit a8921be641afe865c177e11b8859f4b937f76995 was supposedly a fix
-for unwanted table reload - however before final commit, the tiny
-change has been made that was believed to be an enhancment
-of original prepared patch. Unfortunatelly the function
-locking_is_clustered is not meant to be an equivalent test
-of original function.  Drop this change and using
-original patch.
+Since with some installed package like 'tuned' the value of 'RA' on
+PV origin device can be different, adapting tests to count with this.
 ---
- lib/activate/activate.c |    4 ++--
- 1 files changed, 2 insertions(+), 2 deletions(-)
+ test/shell/lvcreate-usage.sh |   14 ++++++++++----
+ test/shell/read-ahead.sh     |    6 +++++-
+ 2 files changed, 15 insertions(+), 5 deletions(-)
 
-diff --git a/lib/activate/activate.c b/lib/activate/activate.c
-index dc9bc9e..b3b8a25 100644
---- a/lib/activate/activate.c
-+++ b/lib/activate/activate.c
-@@ -2048,12 +2048,12 @@ int monitor_dev_for_events(struct cmd_context *cmd, const struct logical_volume
- 		} else
- 			continue;
+diff --git a/test/shell/lvcreate-usage.sh b/test/shell/lvcreate-usage.sh
+index 6d42401..ca8694e 100644
+--- a/test/shell/lvcreate-usage.sh
++++ b/test/shell/lvcreate-usage.sh
+@@ -175,15 +175,21 @@ check lv_field $vg/$lv2 lv_kernel_read_ahead "0"
+ lvcreate -L 8 -n $lv3 --readahead 8k $vg
+ check lv_field $vg/$lv3 lv_read_ahead "8.00k"
+ check lv_field $vg/$lv3 lv_kernel_read_ahead "8.00k"
+-lvcreate -L 8 -n $lv4 --readahead auto $vg
++lvcreate -L 8 -n $lv4 --readahead auto $vg "$dev1"
+ check lv_field $vg/$lv4 lv_read_ahead "auto"
+-check lv_field $vg/$lv4 lv_kernel_read_ahead "128.00k"
++# figure RA value of a PV origin device
++DEVICE=$(dmsetup deps -o blkdevname "$dev1" | sed -e "s,.*:\ (\(.*\)),/dev/\1,")
++RASZ=$(( $(blockdev --getra "$DEVICE" ) / 2 ))
++SZ="$RASZ.00k"
++test "$RASZ" -ge 128 || SZ="128.00k"
++check lv_field $vg/$lv4 lv_kernel_read_ahead "$SZ" --units k
+ lvcreate -L 8 -n $lv5 -i2 --stripesize 16k --readahead auto $vg
+ check lv_field $vg/$lv5 lv_read_ahead "auto"
+-check lv_field $vg/$lv5 lv_kernel_read_ahead "128.00k"
++check lv_field $vg/$lv5 lv_kernel_read_ahead "$SZ" --units k
+ lvcreate -L 8 -n $lv6 -i2 --stripesize 128k --readahead auto $vg
+ check lv_field $vg/$lv6 lv_read_ahead "auto"
+-check lv_field $vg/$lv6 lv_kernel_read_ahead "512.00k"
++test "$RASZ" -ge 512 || SZ="512.00k"
++check lv_field $vg/$lv6 lv_kernel_read_ahead "$SZ" --units k
+ lvremove -ff $vg
  
--		if (!locking_is_clustered() && !vg_write_lock_held() && lv_is_mirror(lv)) {
-+		if (!cmd->is_clvmd && !vg_write_lock_held() && lv_is_mirror(lv)) {
- 			/*
- 			 * Commands vgchange and lvchange do use read-only lock when changing
- 			 * monitoring (--monitor y|n). All other use cases hold 'write-lock'
- 			 * so they skip this dm mirror table refreshing step.
--			 * Shortcut can't be applied with clustered locking.
-+			 * Shortcut is also not applied with clvmd.
- 			 */
- 			if (!_lv_activate_lv(lv, &mirr_laopts)) {
- 				stack;
+ #
+diff --git a/test/shell/read-ahead.sh b/test/shell/read-ahead.sh
+index 60e5912..53cc572 100644
+--- a/test/shell/read-ahead.sh
++++ b/test/shell/read-ahead.sh
+@@ -35,8 +35,12 @@ lvremove -ff $vg
+ #COMM "read ahead is properly inherited from underlying PV"
+ blockdev --setra 768 "$dev1"
+ vgscan
++DEVICE=$(dmsetup deps -o blkdevname "$dev1" | sed -e "s,.*:\ (\(.*\)),/dev/\1,")
++RASZ=$(blockdev --getra "$DEVICE")
++SZ=$RASZ
++test "$RASZ" -ge 768 || SZ=768
+ lvcreate -n $lv -L4m $vg "$dev1"
+-test "$(blockdev --getra "$DM_DEV_DIR/$vg/$lv")" -eq 768
++test "$(blockdev --getra "$DM_DEV_DIR/$vg/$lv")" -eq "$SZ"
+ lvremove -ff $vg
+ 
+ # Check default, active/inactive values for read_ahead / kernel_read_ahead
 
 
