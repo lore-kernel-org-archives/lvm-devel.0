@@ -1,53 +1,49 @@
-From: David Teigland <teigland@sourceware.org>
-Date: Wed, 19 Jun 2019 11:44:10 -0400
-Subject: stable-2.02 - Revert "lvconvert: disable linear to mirror of active LV in cluster VG"
-Message-ID: <201906191544.x5JFiA2N004703@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: Zdenek Kabelac <zkabelac@sourceware.org>
+Date: Wed, 19 Jun 2019 18:06:20 -0400
+Subject: stable-2.02 - aux: fix selecting lvmconf values
+Message-ID: <201906192206.x5JM6KTf013884@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=f3a87a2c2e339328ea4d7448f43d5317806a6b24
-Commit:        f3a87a2c2e339328ea4d7448f43d5317806a6b24
-Parent:        1727df7c98b749be90a5790d3d9858a012f687f6
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Wed Jun 19 10:40:37 2019 -0500
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Wed Jun 19 10:40:37 2019 -0500
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=a311684c4ab0ec2cf3a3d11412295da52df63c88
+Commit:        a311684c4ab0ec2cf3a3d11412295da52df63c88
+Parent:        f3a87a2c2e339328ea4d7448f43d5317806a6b24
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Wed Jun 19 23:55:44 2019 +0200
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Thu Jun 20 00:05:46 2019 +0200
 
-Revert "lvconvert: disable linear to mirror of active LV in cluster VG"
+aux: fix selecting lvmconf values
 
-This reverts commit 8623e336513c6ac6fcb24aa7e2ef10b8a3a36c59.
+For older bashes (i.e. rhel5) code can't use internal bash arrays
+and uses old-school greps and sorts to create configuration file.
+But the split of value was mismatching names with same prefix
+so  i.e.
 
-The problem this was avoiding now seems to be fixed by
-commit d6bce036155ae973c869bdce3ca5f824f933f599
-  mirror: fix monitoring change
+devices/scan
+devices/scan_lvs
+
+was matching always the later one - fix this by expecting
+whitespace or '=' after the name.
 ---
- tools/lvconvert.c |   11 -----------
- 1 files changed, 0 insertions(+), 11 deletions(-)
+ test/lib/aux.sh |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
 
-diff --git a/tools/lvconvert.c b/tools/lvconvert.c
-index fcbbd26..bc666c0 100644
---- a/tools/lvconvert.c
-+++ b/tools/lvconvert.c
-@@ -864,17 +864,6 @@ static int _lvconvert_mirrors_aux(struct cmd_context *cmd,
- 		/* FIXME Share code with lvcreate */
- 
- 		/*
--		 * Avoid bug 1711427 in which an exclusively active linear LV in a
--		 * clustered VG, when upconverted to a mirror, will mistakenly use
--		 * a userspace/cmirror log in _add_log() beause laopts.exclusive is
--		 * not set.
--		 */
--		if (vg_is_clustered(lv->vg) && lv_is_active(lv)) {
--			log_error("Cannot convert active LV to mirror in clustered VG.");
--			return 0;
--		}
--
--		/*
- 		 * FIXME should we give not only pvh, but also all PVs
- 		 * currently taken by the mirror? Would make more sense from
- 		 * user perspective.
+diff --git a/test/lib/aux.sh b/test/lib/aux.sh
+index 86ed554..1db6fbf 100644
+--- a/test/lib/aux.sh
++++ b/test/lib/aux.sh
+@@ -1296,7 +1296,7 @@ EOF
+ 			echo "$s {"
+ 			local k
+ 			for k in $(grep ^"$s"/ "$config_values" | cut -f1 -d= | sed -e 's, *$,,' | sort | uniq); do
+-				grep "^$k" "$config_values" | tail -n 1 | sed -e "s,^$s/,	 ," || true
++				grep "^$k[ =]" "$config_values" | tail -n 1 | sed -e "s,^$s/,	 ," || true
+ 			done
+ 			echo "}"
+ 			echo
 
 
