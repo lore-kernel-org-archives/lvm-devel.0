@@ -1,40 +1,40 @@
-From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Fri, 15 Aug 2014 13:55:04 +0000 (UTC)
-Subject: master - cleanup: gcc warn fix
-Message-ID: <20140815135504.8C019603FB@fedorahosted.org>
+From: Zdenek Kabelac <zkabelac@sourceware.org>
+Date: Tue, 25 Jun 2019 11:44:47 -0400
+Subject: stable-2.02 - cov: unlock lvm2 mutex on error path
+Message-ID: <201906251544.x5PFilCb012383@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=c894c3c87f7de3b1491455186fa49404685b2b10
-Commit:        c894c3c87f7de3b1491455186fa49404685b2b10
-Parent:        8af23092310aeb02282f5082fba447586a1da0d3
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=3b42cdad0c27d79766c7e9aae50d13cd93a2ffbf
+Commit:        3b42cdad0c27d79766c7e9aae50d13cd93a2ffbf
+Parent:        49813abc003180a38f9cd1e6c75f68311d005a50
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Aug 15 15:51:03 2014 +0200
+AuthorDate:    Tue Jun 25 15:26:30 2019 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Fri Aug 15 15:53:17 2014 +0200
+CommitterDate: Tue Jun 25 17:31:39 2019 +0200
 
-cleanup: gcc warn fix
+cov: unlock lvm2 mutex on error path
 
-Since gcc fail to see the origin has been already set under condition
-above, just set origin again.
+Add missing unlock call on theretical error path where
+we would be missing our configured command.
 ---
- tools/lvchange.c |    1 +
+ daemons/dmeventd/plugins/lvm2/dmeventd_lvm.c |    1 +
  1 files changed, 1 insertions(+), 0 deletions(-)
 
-diff --git a/tools/lvchange.c b/tools/lvchange.c
-index 91c8087..db03176 100644
---- a/tools/lvchange.c
-+++ b/tools/lvchange.c
-@@ -1000,6 +1000,7 @@ static int _lvchange_single(struct cmd_context *cmd, struct logical_volume *lv,
- 	}
- 
- 	if (lv_is_cow(lv) && arg_count(cmd, activate_ARG)) {
-+		origin = origin_from_cow(lv);
- 		if (origin->origin_count < 2)
- 			snaps_msg[0] = '\0';
- 		else if (dm_snprintf(snaps_msg, sizeof(snaps_msg),
+diff --git a/daemons/dmeventd/plugins/lvm2/dmeventd_lvm.c b/daemons/dmeventd/plugins/lvm2/dmeventd_lvm.c
+index 5be11f1..be58aac 100644
+--- a/daemons/dmeventd/plugins/lvm2/dmeventd_lvm.c
++++ b/daemons/dmeventd/plugins/lvm2/dmeventd_lvm.c
+@@ -159,6 +159,7 @@ int dmeventd_lvm2_command(struct dm_pool *mem, char *buffer, size_t size,
+ 			dmeventd_lvm2_lock();
+ 			if (!dmeventd_lvm2_run(cmd) ||
+ 			    !(env = getenv(cmd))) {
++				dmeventd_lvm2_unlock();
+ 				log_error("Unable to find configured command.");
+ 				return 0;
+ 			}
 
 
