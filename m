@@ -1,86 +1,60 @@
-From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Fri, 15 Aug 2014 11:28:58 +0000 (UTC)
-Subject: master - cache+thin: add lv_is_{cache, thin}_origin fn to identify origin LVs
-Message-ID: <20140815112858.0A73B60E81@fedorahosted.org>
+From: Zdenek Kabelac <zkabelac@sourceware.org>
+Date: Tue, 25 Jun 2019 11:44:43 -0400
+Subject: stable-2.02 - tests: for cluster always use exlusive mirrors
+Message-ID: <201906251544.x5PFihpa012299@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=8eba33510f95572316a743d6b68d5c7c31743672
-Commit:        8eba33510f95572316a743d6b68d5c7c31743672
-Parent:        ec0d2f7aa4da4e433e26bc252626eae6febbe4d6
-Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Fri Aug 15 13:08:30 2014 +0200
-Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Fri Aug 15 13:28:43 2014 +0200
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=49813abc003180a38f9cd1e6c75f68311d005a50
+Commit:        49813abc003180a38f9cd1e6c75f68311d005a50
+Parent:        788d89c4127f69c813813e6a192fe44d8c1abc7a
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Fri Jun 21 14:51:17 2019 +0200
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Fri Jun 21 14:51:17 2019 +0200
 
-cache+thin: add lv_is_{cache,thin}_origin fn to identify origin LVs
+tests: for cluster always use exlusive mirrors
 
+So to check the reason of failure is not influenced by missing cmirrord.
 ---
- lib/metadata/cache_manip.c       |   13 +++++++++++++
- lib/metadata/metadata-exported.h |    2 ++
- lib/metadata/thin_manip.c        |   16 ++++++++++++++++
- 3 files changed, 31 insertions(+), 0 deletions(-)
+ test/shell/lvcreate-usage.sh |   10 +++++-----
+ 1 files changed, 5 insertions(+), 5 deletions(-)
 
-diff --git a/lib/metadata/cache_manip.c b/lib/metadata/cache_manip.c
-index 184df79..f617f4e 100644
---- a/lib/metadata/cache_manip.c
-+++ b/lib/metadata/cache_manip.c
-@@ -314,3 +314,16 @@ int get_cache_mode(const char *str, uint32_t *flags)
+diff --git a/test/shell/lvcreate-usage.sh b/test/shell/lvcreate-usage.sh
+index ca8694e..4669539 100644
+--- a/test/shell/lvcreate-usage.sh
++++ b/test/shell/lvcreate-usage.sh
+@@ -91,12 +91,12 @@ lvremove -ff $vg/$lv3
+ lvchange -an $vg/$lv1
+ lvcreate -l1 -s -n $lv3 $vg/$lv1
+ fail lvcreate -l1 -n $lv4 $vg
+-fail lvcreate -l1 --type mirror -m1 -n $lv4 $vg
++fail lvcreate -aey -l1 --type mirror -m1 -n $lv4 $vg
  
- 	return 1;
- }
-+
-+int lv_is_cache_origin(const struct logical_volume *lv)
-+{
-+	struct lv_segment *seg;
-+
-+	/* Make sure there's exactly one segment in segs_using_this_lv! */
-+	if (dm_list_empty(&lv->segs_using_this_lv) ||
-+	    (dm_list_size(&lv->segs_using_this_lv) > 1))
-+		return 0;
-+
-+	seg = get_only_segment_using_this_lv(lv);
-+	return seg && lv_is_cache(seg->lv) && (seg_lv(seg, 0) == lv);
-+}
-diff --git a/lib/metadata/metadata-exported.h b/lib/metadata/metadata-exported.h
-index fa96a1a..497e59c 100644
---- a/lib/metadata/metadata-exported.h
-+++ b/lib/metadata/metadata-exported.h
-@@ -921,6 +921,8 @@ int lv_is_striped(const struct logical_volume *lv);
- */
- int lv_is_origin(const struct logical_volume *lv);
- int lv_is_virtual_origin(const struct logical_volume *lv);
-+int lv_is_thin_origin(const struct logical_volume *lv);
-+int lv_is_cache_origin(const struct logical_volume *lv);
- int lv_is_cow(const struct logical_volume *lv);
- int lv_is_merging_origin(const struct logical_volume *origin);
- int lv_is_merging_cow(const struct logical_volume *snapshot);
-diff --git a/lib/metadata/thin_manip.c b/lib/metadata/thin_manip.c
-index 07246f7..7d86187 100644
---- a/lib/metadata/thin_manip.c
-+++ b/lib/metadata/thin_manip.c
-@@ -499,3 +499,19 @@ const char *get_pool_discards_name(thin_discards_t discards)
+ lvremove -ff $vg/$lv3
+ lvcreate -aey -l1 --type mirror -m1 -n $lv3 $vg
+ not lvcreate -l1 -n $lv4 $vg
+-not lvcreate -l1 --type mirror -m1 -n $lv4 $vg
++not lvcreate -aey -l1 --type mirror -m1 -n $lv4 $vg
  
- 	return "unknown";
- }
-+
-+int lv_is_thin_origin(const struct logical_volume *lv)
-+{
-+	struct seg_list *segl;
-+
-+	if (!lv_is_thin_volume(lv) ||
-+	    dm_list_empty(&lv->segs_using_this_lv))
-+		return 0;
-+
-+	dm_list_iterate_items(segl, &lv->segs_using_this_lv) {
-+		if (segl->seg->origin == lv)
-+			return 1;
-+	}
-+
-+	return 0;
-+}
+ lvconvert -m0 $vg/$lv3
+ lvconvert -m2 --type mirror -i 1 $vg/$lv3
+@@ -128,10 +128,10 @@ lvremove -f $vg
+ # - nonzero (bz186013)
+ # - a power of 2 and a multiple of page size
+ # - <= size of LV
+-invalid lvcreate --type mirror -m 1 -L 32m -n $lv -R 0 $vg 2>err
++invalid lvcreate -aey --type mirror -m 1 -L 32m -n $lv -R 0 $vg 2>err
+ grep "may not be zero" err
+-invalid lvcreate --type mirror -m 1 -L 32m -n $lv -R 11k $vg
+-invalid lvcreate --type mirror -m 1 -L 32m -n $lv -R 1k $vg
++invalid lvcreate -aey --type mirror -m 1 -L 32m -n $lv -R 11k $vg
++invalid lvcreate -aey --type mirror -m 1 -L 32m -n $lv -R 1k $vg
+ lvcreate -aey -L 32m -n $lv --regionsize 128m  --type mirror -m 1 $vg
+ check lv_field $vg/$lv regionsize "32.00m"
+ lvremove -f $vg
 
 
