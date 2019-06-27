@@ -1,49 +1,53 @@
-From: David Teigland <teigland@sourceware.org>
-Date: Wed, 26 Jun 2019 17:06:44 -0400
-Subject: stable-2.02 - pvremove/vgextend: fix using device aliases with lvmetad
-Message-ID: <201906262106.x5QL6iQR011476@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: Marian Csontos <mcsontos@sourceware.org>
+Date: Thu, 27 Jun 2019 05:14:54 -0400
+Subject: master - test: Fix unbound variable
+Message-ID: <201906270914.x5R9Ese3012638@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=b13ebfa4c289a5bc6eb4f8ba26126db8e6d78296
-Commit:        b13ebfa4c289a5bc6eb4f8ba26126db8e6d78296
-Parent:        b62c0787debeb3a66a2e3658d1edb8a61a6f247b
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Wed Jun 26 16:03:42 2019 -0500
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Wed Jun 26 16:06:23 2019 -0500
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=09f29570f2dac1a84f5ee24107df6461194b269a
+Commit:        09f29570f2dac1a84f5ee24107df6461194b269a
+Parent:        9ba45d824adc91b5767fd7a26c3ba83f7b23b250
+Author:        Marian Csontos <mcsontos@redhat.com>
+AuthorDate:    Thu Jun 27 10:41:21 2019 +0200
+Committer:     Marian Csontos <mcsontos@redhat.com>
+CommitterDate: Thu Jun 27 10:41:21 2019 +0200
 
-pvremove/vgextend: fix using device aliases with lvmetad
+test: Fix unbound variable
 
-These commands were looking for the requested device alias
-before dev_cache_scan had created the list of devs on the
-system, so they would fail and report the dev wasn't found.
+Test `aux kernel_at_least 5 1` fails even for newer kernel
+with `$3: unbound variable` when using `set -u`.
 ---
- tools/toollib.c |    9 +++++++++
- 1 files changed, 9 insertions(+), 0 deletions(-)
+ test/lib/aux.sh |    6 +++---
+ 1 files changed, 3 insertions(+), 3 deletions(-)
 
-diff --git a/tools/toollib.c b/tools/toollib.c
-index 3221e5f..1b01ccc 100644
---- a/tools/toollib.c
-+++ b/tools/toollib.c
-@@ -5544,6 +5544,15 @@ int pvcreate_each_device(struct cmd_context *cmd,
- 	lvmcache_label_scan(cmd);
+diff --git a/test/lib/aux.sh b/test/lib/aux.sh
+index 09ef9ed..0cc26a4 100644
+--- a/test/lib/aux.sh
++++ b/test/lib/aux.sh
+@@ -1387,17 +1387,17 @@ version_at_least() {
+ 	IFS=".-" read -r major minor revision <<< "$1"
+ 	shift
  
- 	/*
-+	 * When using lvmetad, we want to do a dev cache scan here (if not done
-+	 * already) so that the dev_cache_get just below will be able to find
-+	 * device aliases.  When not using lvmetad, the label_scan just above
-+	 * has done dev_cache_scan, and this will not be run.
-+	 */
-+	if (!dev_cache_has_scanned())
-+		dev_cache_scan();
-+
-+	/*
- 	 * Translate arg names into struct device's.
- 	 */
- 	dm_list_iterate_items(pd, &pp->arg_devices)
+-	test -z "$1" && return 0
++	test -z "${1:-}" && return 0
+ 	test -n "$major" || return 1
+ 	test "$major" -gt "$1" && return 0
+ 	test "$major" -eq "$1" || return 1
+ 
+-	test -z "$2" && return 0
++	test -n "$2" || return 0
+ 	test -n "$minor" || return 1
+ 	test "$minor" -gt "$2" && return 0
+ 	test "$minor" -eq "$2" || return 1
+ 
+-	test -z "$3" && return 0
++	test -n "$3" || return 0
+ 	test "$revision" -ge "$3" 2>/dev/null || return 1
+ }
+ #
 
 
