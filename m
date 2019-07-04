@@ -1,20 +1,20 @@
 From: Peter Rajnoha <prajnoha@sourceware.org>
-Date: Thu, 4 Jul 2019 07:06:18 -0400
-Subject: master - udev: do not overwrite ID_MODEL in 69-dm-lvm-metad.rules
-Message-ID: <201907041106.x64B6I4W005665@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Thu, 4 Jul 2019 07:07:19 -0400
+Subject: stable-2.02 - udev: do not overwrite ID_MODEL in 69-dm-lvm-metad.rules
+Message-ID: <201907041107.x64B7JaO007864@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=fef8e506891bd159475de83f248fdac660675163
-Commit:        fef8e506891bd159475de83f248fdac660675163
-Parent:        f938545687accd8f451b1bde806484301e0ae086
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=1650c104384b81acd5b2e30f507624f98309f2ff
+Commit:        1650c104384b81acd5b2e30f507624f98309f2ff
+Parent:        b13ebfa4c289a5bc6eb4f8ba26126db8e6d78296
 Author:        Peter Rajnoha <prajnoha@redhat.com>
 AuthorDate:    Thu Jul 4 12:57:55 2019 +0200
 Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Thu Jul 4 12:57:55 2019 +0200
+CommitterDate: Thu Jul 4 13:06:44 2019 +0200
 
 udev: do not overwrite ID_MODEL in 69-dm-lvm-metad.rules
 
