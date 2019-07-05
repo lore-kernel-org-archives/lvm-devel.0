@@ -1,60 +1,169 @@
-From: Peter Rajnoha <prajnoha@sourceware.org>
-Date: Thu, 4 Jul 2019 07:07:19 -0400
-Subject: stable-2.02 - udev: do not overwrite ID_MODEL in 69-dm-lvm-metad.rules
-Message-ID: <201907041107.x64B7JaO007864@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: Zdenek Kabelac <zkabelac@sourceware.org>
+Date: Fri, 5 Jul 2019 19:26:11 -0400
+Subject: stable-2.02 - libdm: implement search for device names for older kernels
+Message-ID: <201907052326.x65NQBDH009676@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=1650c104384b81acd5b2e30f507624f98309f2ff
-Commit:        1650c104384b81acd5b2e30f507624f98309f2ff
-Parent:        b13ebfa4c289a5bc6eb4f8ba26126db8e6d78296
-Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Thu Jul 4 12:57:55 2019 +0200
-Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Thu Jul 4 13:06:44 2019 +0200
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=ea036ecfd3980b88589e513e9b61efc215bce774
+Commit:        ea036ecfd3980b88589e513e9b61efc215bce774
+Parent:        1650c104384b81acd5b2e30f507624f98309f2ff
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Sat Jul 6 01:21:39 2019 +0200
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Sat Jul 6 01:24:28 2019 +0200
 
-udev: do not overwrite ID_MODEL in 69-dm-lvm-metad.rules
+libdm: implement search for device names for older kernels
 
-We've been assigning this in 69-dm-lvm-metad.rules:
+Kernels <2.6.27 don't have /sys/dev dir - add code for looking
+out device name via longre seach in /sys/block
 
-  ENV{ID_MODEL}="LVM PV $env{ID_FS_UUID_ENC} on /dev/$name"
-
-This was for the description to appear for each systemd device
-unit representing this device, for example:
-
-  $systemctl -a | grep "LVM PV"
-  dev-block-252:2.device                                                                                         loaded    active   plugged   LVM PV JhxC7B-YTgk-3jIU-5GVo-c4gV-W8t3-UUz06p on /dev/vda2 2
-  dev-disk-by\x2did-lvm\x2dpv\x2duuid\x2dJhxC7B\x2dYTgk\x2d3jIU\x2d5GVo\x2dc4gV\x2dW8t3\x2dUUz06p.device         loaded    active   plugged   LVM PV JhxC7B-YTgk-3jIU-5GVo-c4gV-W8t3-UUz06p on /dev/vda2 2
-  ...
-
-However, there could be an actual ID_MODEL that people are interested in
-more than the fact that this is an LVM PV and so we shouldn't overwrite
-the value.
-
-Also, we already have a symlink /dev/disk/by-id/lvm-pv-uuid-<PV_UUID>
-created which is then reflected as device unit (all device's symlinks
-have systemd device unit representation) so we can still reach this
-information in systemd unit listings even without setting the ID_MODEL.
-
-Reported here: https://github.com/lvmteam/lvm2/issues/21
+This makes commands like 'dmsetup dep -o blkdevname' working.
 ---
- udev/69-dm-lvm-metad.rules.in |    1 -
- 1 files changed, 0 insertions(+), 1 deletions(-)
+ libdm/libdm-common.c |  120 +++++++++++++++++++++++++++++++++++++++++++++++++-
+ 1 files changed, 119 insertions(+), 1 deletions(-)
 
-diff --git a/udev/69-dm-lvm-metad.rules.in b/udev/69-dm-lvm-metad.rules.in
-index 2ff8ddc..d510064 100644
---- a/udev/69-dm-lvm-metad.rules.in
-+++ b/udev/69-dm-lvm-metad.rules.in
-@@ -110,7 +110,6 @@ LABEL="systemd_background"
- #  other |    X     |      X      |       X        |                   |   X
- ACTION!="remove", ENV{LVM_PV_GONE}=="1", RUN+="(BINDIR)/systemd-run (LVM_EXEC)/lvm pvscan --cache $major:$minor", GOTO="lvm_end"
- ENV{SYSTEMD_ALIAS}="/dev/block/$major:$minor"
--ENV{ID_MODEL}="LVM PV $env{ID_FS_UUID_ENC} on /dev/$name"
- ENV{SYSTEMD_WANTS}+="lvm2-pvscan@$major:$minor.service"
- GOTO="lvm_end"
+diff --git a/libdm/libdm-common.c b/libdm/libdm-common.c
+index e7934d1..c300223 100644
+--- a/libdm/libdm-common.c
++++ b/libdm/libdm-common.c
+@@ -1872,6 +1872,122 @@ bad:
+ 	return r;
+ }
  
++
++static int _sysfs_get_dev_major_minor(const char *path, uint32_t major, uint32_t minor)
++{
++	FILE *fp;
++	uint32_t ma, mi;
++	int r;
++
++	if (!(fp = fopen(path, "r")))
++		return 0;
++
++	r = (fscanf(fp, "%" PRIu32 ":%" PRIu32 , &ma, &mi) == 2) &&
++		(ma == major) && (mi == minor);
++	// log_debug("Checking %s  %u:%u  -> %d", path, ma, mi, r);
++
++	if (fclose(fp))
++		log_sys_error("fclose", path);
++
++	return r;
++}
++
++
++static int _sysfs_find_kernel_name(uint32_t major, uint32_t minor, char *buf, size_t buf_size)
++{
++	const char *name, *name_dev;
++	char path[PATH_MAX];
++	struct dirent *dirent, *dirent_dev;
++	DIR *d, *d_dev;
++	struct stat st;
++	int r = 0, sz;
++
++	if (!*_sysfs_dir ||
++	    dm_snprintf(path, sizeof(path), "%s/block/", _sysfs_dir) < 0) {
++		log_error("Failed to build sysfs_path.");
++		return 0;
++	}
++
++	if (!(d = opendir(path))) {
++		log_sys_error("opendir", path);
++		return 0;
++	}
++
++	while (!r && (dirent = readdir(d))) {
++		name = dirent->d_name;
++
++		if (!strcmp(name, ".") || !strcmp(name, ".."))
++			continue;
++
++		if ((sz = dm_snprintf(path, sizeof(path), "%sblock/%s/dev",
++				      _sysfs_dir, name)) == -1) {
++			log_warn("Couldn't create path for %s.", name);
++			continue;
++		}
++
++		if (_sysfs_get_dev_major_minor(path, major, minor)) {
++			r = dm_strncpy(buf, name, buf_size);
++			break; /* found */
++		}
++
++		path[sz - 4] = 0; /* strip /dev from end of path string */
++		if (stat(path, &st))
++			continue;
++
++		if (S_ISDIR(st.st_mode)) {
++
++			/* let's assume there is no tree-complex device in past systems */
++			if (!(d_dev = opendir(path))) {
++				log_sys_debug("opendir", path);
++				continue;
++			}
++
++			while ((dirent_dev = readdir(d_dev))) {
++				name_dev = dirent_dev->d_name;
++
++				/* skip known ignorable paths */
++				if (!strcmp(name_dev, ".") || !strcmp(name_dev, "..") ||
++				    !strcmp(name_dev, "bdi") ||
++				    !strcmp(name_dev, "dev") ||
++				    !strcmp(name_dev, "device") ||
++				    !strcmp(name_dev, "holders") ||
++				    !strcmp(name_dev, "integrity") ||
++				    !strcmp(name_dev, "loop") ||
++				    !strcmp(name_dev, "queueu") ||
++				    !strcmp(name_dev, "md") ||
++				    !strcmp(name_dev, "mq") ||
++				    !strcmp(name_dev, "power") ||
++				    !strcmp(name_dev, "removable") ||
++				    !strcmp(name_dev, "slave") ||
++				    !strcmp(name_dev, "slaves") ||
++				    !strcmp(name_dev, "subsystem") ||
++				    !strcmp(name_dev, "trace") ||
++				    !strcmp(name_dev, "uevent"))
++					continue;
++
++				if (dm_snprintf(path, sizeof(path), "%sblock/%s/%s/dev",
++						_sysfs_dir, name, name_dev) == -1) {
++					log_warn("Couldn't create path for %s/%s.", name, name_dev);
++					continue;
++				}
++
++				if (_sysfs_get_dev_major_minor(path, major, minor)) {
++					r = dm_strncpy(buf, name_dev, buf_size);
++					break; /* found */
++				}
++			}
++
++			if (closedir(d_dev))
++				log_sys_debug("closedir", name);
++		}
++	}
++
++	if (closedir(d))
++		log_sys_debug("closedir", path);
++
++	return r;
++}
++
+ static int _sysfs_get_kernel_name(uint32_t major, uint32_t minor, char *buf, size_t buf_size)
+ {
+ 	char *name, *sysfs_path, *temp_buf = NULL;
+@@ -1894,8 +2010,10 @@ static int _sysfs_get_kernel_name(uint32_t major, uint32_t minor, char *buf, siz
+ 	if ((size = readlink(sysfs_path, temp_buf, PATH_MAX - 1)) < 0) {
+ 		if (errno != ENOENT)
+ 			log_sys_error("readlink", sysfs_path);
+-		else
++		else {
+ 			log_sys_debug("readlink", sysfs_path);
++			return _sysfs_find_kernel_name(major, minor, buf, buf_size);
++		}
+ 		goto bad;
+ 	}
+ 	temp_buf[size] = '\0';
 
 
