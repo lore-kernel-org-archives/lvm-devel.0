@@ -1,20 +1,20 @@
 From: Heinz Mauelshagen <heinzm@sourceware.org>
-Date: Mon, 8 Jul 2019 13:16:00 -0400
-Subject: stable-2.02 - lvconvert: allow --stripes/--stripesize in 'mirror' conversions
-Message-ID: <201907081716.x68HG0SB031288@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Mon, 8 Jul 2019 13:33:51 -0400
+Subject: master - lvconvert: allow --stripes/--stripesize in 'mirror' conversions
+Message-ID: <201907081733.x68HXplD004848@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=e3c8cebd87f9bd7591529f3d65783cc6f1fd3f92
-Commit:        e3c8cebd87f9bd7591529f3d65783cc6f1fd3f92
-Parent:        2f846697fcb16b2e0954a051577bd47c8cf6721c
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=1b63a219f4f9d7f2f6c5086375b96c3bd892a1a0
+Commit:        1b63a219f4f9d7f2f6c5086375b96c3bd892a1a0
+Parent:        fef8e506891bd159475de83f248fdac660675163
 Author:        Heinz Mauelshagen <heinzm@redhat.com>
 AuthorDate:    Mon Jul 8 19:07:18 2019 +0200
 Committer:     Heinz Mauelshagen <heinzm@redhat.com>
-CommitterDate: Mon Jul 8 19:14:11 2019 +0200
+CommitterDate: Mon Jul 8 19:32:17 2019 +0200
 
 lvconvert: allow --stripes/--stripesize in 'mirror' conversions
 
@@ -31,10 +31,10 @@ Resolves: rhbz1720705
  1 files changed, 1 insertions(+), 3 deletions(-)
 
 diff --git a/tools/command-lines.in b/tools/command-lines.in
-index a8c06ba..b4a9896 100644
+index 73a1e64..f914650 100644
 --- a/tools/command-lines.in
 +++ b/tools/command-lines.in
-@@ -334,13 +334,11 @@ DESC: Convert LV to striped.
+@@ -343,13 +343,11 @@ DESC: Convert LV to striped.
  RULE: all not lv_is_locked lv_is_pvmove
  
  lvconvert --type mirror LV
