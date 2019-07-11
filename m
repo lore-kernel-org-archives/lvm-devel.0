@@ -1,93 +1,181 @@
 From: David Teigland <teigland@sourceware.org>
-Date: Thu, 11 Jul 2019 12:42:42 -0400
-Subject: master - pvscan: fix PV online when device has a different size
-Message-ID: <201907111642.x6BGggqV028670@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Thu, 11 Jul 2019 12:42:54 -0400
+Subject: master - enable full md component detection at the right time
+Message-ID: <201907111642.x6BGgs0C028710@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=b16abb3816408a296343a75658d4be0ef688390b
-Commit:        b16abb3816408a296343a75658d4be0ef688390b
-Parent:        f17353e3e604ad2d80bcd77ea0a6a93472e6b5bd
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=4567c6a2b2f4f2662ef909887640681c8bba0e02
+Commit:        4567c6a2b2f4f2662ef909887640681c8bba0e02
+Parent:        b16abb3816408a296343a75658d4be0ef688390b
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Tue Jul 9 13:45:09 2019 -0500
+AuthorDate:    Tue Jul 9 14:48:31 2019 -0500
 Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Tue Jul 9 13:45:09 2019 -0500
+CommitterDate: Wed Jul 10 13:30:50 2019 -0500
 
-pvscan: fix PV online when device has a different size
+enable full md component detection at the right time
 
-Fix commit 7836e7aa1c17216ed368fda89cfc805a07efda81
-"pvscan: ignore device with incorrect size"
+An active md device with an end superblock causes lvm to
+enable full md component detection.  This was being done
+within the filter loop instead of before, so the full
+filtering of some devs could be missed.
 
-which caused pvscan to not consider a PV online (for purposes
-of event based activation) if the PV and device sizes differed.
-
-This helped to avoid mistaking MD components for PVs, and is
-replaced by triggering an md component check when PV and device
-sizes differ (which happens in set_pv_device).
+Also incorporate the recently added config setting that
+controls the md component detection.
 ---
- tools/pvscan.c |   40 ++++++++++------------------------------
- 1 files changed, 10 insertions(+), 30 deletions(-)
+ lib/device/dev-cache.c |   19 +++++++++++++++++++
+ lib/device/dev-cache.h |    3 +++
+ lib/device/dev-md.c    |    6 +++---
+ lib/label/label.c      |   27 ++++++++++++++-------------
+ tools/pvscan.c         |    7 +++++++
+ 5 files changed, 46 insertions(+), 16 deletions(-)
 
-diff --git a/tools/pvscan.c b/tools/pvscan.c
-index 12711cb..facc70c 100644
---- a/tools/pvscan.c
-+++ b/tools/pvscan.c
-@@ -621,6 +621,16 @@ static int _online_pvscan_one(struct cmd_context *cmd, struct device *dev,
- 		set_pv_devices(baton.fid, baton.vg);
- 	}
+diff --git a/lib/device/dev-cache.c b/lib/device/dev-cache.c
+index 1492181..980dd3c 100644
+--- a/lib/device/dev-cache.c
++++ b/lib/device/dev-cache.c
+@@ -15,6 +15,7 @@
  
-+	/* This check repeated because set_pv_devices can do new md check. */
-+	if (dev->flags & DEV_IS_MD_COMPONENT) {
-+		log_print("pvscan[%d] PV %s ignore MD component, ignore metadata.", getpid(), dev_name(dev));
-+		if (baton.vg)
-+			release_vg(baton.vg);
-+		else
-+			fmt->ops->destroy_instance(baton.fid);
-+		return 1;
+ #include "base/memory/zalloc.h"
+ #include "lib/misc/lib.h"
++#include "lib/device/dev-type.h"
+ #include "lib/datastruct/btree.h"
+ #include "lib/config/config.h"
+ #include "lib/commands/toolcontext.h"
+@@ -1634,3 +1635,21 @@ const char *dev_name(const struct device *dev)
+ 	return (dev && dev->aliases.n) ? dm_list_item(dev->aliases.n, struct dm_str_list)->str :
+ 	    unknown_device_name();
+ }
++
++bool dev_cache_has_md_with_end_superblock(struct dev_types *dt)
++{
++	struct btree_iter *iter = btree_first(_cache.devices);
++	struct device *dev;
++
++	while (iter) {
++		dev = btree_get_data(iter);
++
++		if (dev_is_md_with_end_superblock(dt, dev))
++			return true;
++
++		iter = btree_next(iter);
 +	}
 +
- 	if (baton.vg && vg_is_shared(baton.vg)) {
- 		log_print("pvscan[%d] PV %s ignore shared VG.", getpid(), dev_name(dev));
- 		release_vg(baton.vg);
-@@ -638,36 +648,6 @@ static int _online_pvscan_one(struct cmd_context *cmd, struct device *dev,
- 		return 1;
++	return false;
++}
++
+diff --git a/lib/device/dev-cache.h b/lib/device/dev-cache.h
+index 8a1c277..46c86c2 100644
+--- a/lib/device/dev-cache.h
++++ b/lib/device/dev-cache.h
+@@ -17,6 +17,7 @@
+ #define _LVM_DEV_CACHE_H
+ 
+ #include "lib/device/device.h"
++#include "lib/device/dev-type.h"
+ #include "lib/misc/lvm-wrappers.h"
+ 
+ struct cmd_context;
+@@ -71,4 +72,6 @@ void dev_reset_error_count(struct cmd_context *cmd);
+ 
+ void dev_cache_failed_path(struct device *dev, const char *path);
+ 
++bool dev_cache_has_md_with_end_superblock(struct dev_types *dt);
++
+ #endif
+diff --git a/lib/device/dev-md.c b/lib/device/dev-md.c
+index 08143b7..9d0a363 100644
+--- a/lib/device/dev-md.c
++++ b/lib/device/dev-md.c
+@@ -302,12 +302,12 @@ static int _md_sysfs_attribute_scanf(struct dev_types *dt,
+ 		return ret;
+ 
+ 	if (!(fp = fopen(path, "r"))) {
+-		log_sys_error("fopen", path);
++		log_debug("_md_sysfs_attribute_scanf fopen failed %s", path);
+ 		return ret;
  	}
  
--	/*
--	 * Do not consider a device online (for purposes of autoactivation)
--	 * if its size does not match the PV size recorded in the metadata.
--	 * It may mean that it's not the correct dev for the PV, e.g. it
--	 * could be an md component device that's not been filtered.
--	 */
--	if (baton.vg && cmd->check_pv_dev_sizes) {
--		struct pv_list *pvl;
--		uint64_t dev_size = 0;
--		uint64_t meta_pv_size = 0;
--
--		dm_list_iterate_items(pvl, &baton.vg->pvs) {
--			if (pvl->pv->dev != dev)
--				continue;
--
--			if (!dev_get_size(dev, &dev_size))
--				stack;
--			meta_pv_size = pv_size(pvl->pv);
--			break;
--		}
--
--		if (dev_size != meta_pv_size) {
--			log_print("pvscan[%d] PV %s ignore for size %llu not matching device %llu.",
--				  getpid(), dev_name(dev),
--				  (unsigned long long)meta_pv_size, (unsigned long long)dev_size);
--			release_vg(baton.vg);
--			return 1;
--		}
--	}
--
- 	ret = _online_pv_found(cmd, dev, dev_args, baton.vg, found_vgnames);
+ 	if (!fgets(buffer, sizeof(buffer), fp)) {
+-		log_sys_error("fgets", path);
++		log_debug("_md_sysfs_attribute_scanf fgets failed %s", path);
+ 		goto out;
+ 	}
+ 
+@@ -449,7 +449,7 @@ int dev_is_md_with_end_superblock(struct dev_types *dt, struct device *dev)
+ 
+ 	if (_md_sysfs_attribute_scanf(dt, dev, attribute,
+ 				      "%s", &version_string) != 1)
+-		return -1;
++		return 0;
+ 
+ 	log_very_verbose("Device %s %s is %s.",
+ 			 dev_name(dev), attribute, version_string);
+diff --git a/lib/label/label.c b/lib/label/label.c
+index 8b841f6..fb7ad1d 100644
+--- a/lib/label/label.c
++++ b/lib/label/label.c
+@@ -894,6 +894,20 @@ int label_scan(struct cmd_context *cmd)
+ 	dev_cache_scan();
  
  	/*
++	 * If we know that there will be md components with an end
++	 * superblock, then enable the full md filter before label
++	 * scan begins.  FIXME: we could skip the full md check on
++	 * devs that are not identified as PVs, but then we'd need
++	 * to do something other than using the standard md filter.
++	 */
++	if (cmd->md_component_detection && !cmd->use_full_md_check &&
++	    !strcmp(cmd->md_component_checks, "auto") &&
++	    dev_cache_has_md_with_end_superblock(cmd->dev_types)) {
++		log_debug("Enable full md component check.");
++		cmd->use_full_md_check = 1;
++	}
++
++	/*
+ 	 * Set up the iterator that is needed to step through each device in
+ 	 * dev cache.
+ 	 */
+@@ -931,19 +945,6 @@ int label_scan(struct cmd_context *cmd)
+ 			bcache_invalidate_fd(scan_bcache, dev->bcache_fd);
+ 			_scan_dev_close(dev);
+ 		}
+-
+-		/*
+-		 * When md devices exist that use the old superblock at the
+-		 * end of the device, then in order to detect and filter out
+-		 * the component devices of those md devs, we enable the full
+-		 * md filter which scans both the start and the end of every
+-		 * device.  This doubles the amount of scanning i/o, which we
+-		 * want to avoid.  FIXME: this forces start+end scanning of
+-		 * every device, but it would be more efficient to limit the
+-		 * end scan only to PVs.
+-		 */
+-		if (dev_is_md_with_end_superblock(cmd->dev_types, dev))
+-			cmd->use_full_md_check = 1;
+ 	};
+ 	dev_iter_destroy(iter);
+ 
+diff --git a/tools/pvscan.c b/tools/pvscan.c
+index facc70c..2a88eaa 100644
+--- a/tools/pvscan.c
++++ b/tools/pvscan.c
+@@ -938,6 +938,13 @@ int pvscan_cache_cmd(struct cmd_context *cmd, int argc, char **argv)
+ 	/* Creates a list of dev names from /dev, sysfs, etc; does not read any. */
+ 	dev_cache_scan();
+ 
++	if (cmd->md_component_detection && !cmd->use_full_md_check &&
++	    !strcmp(cmd->md_component_checks, "auto") &&
++	    dev_cache_has_md_with_end_superblock(cmd->dev_types)) {
++		log_debug("Enable full md component check.");
++		cmd->use_full_md_check = 1;
++	}
++
+ 	/*
+ 	 * For each device command arg (from either position or --major/--minor),
+ 	 * decide if that device is being added to the system (a dev node exists
 
 
