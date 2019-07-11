@@ -1,181 +1,380 @@
 From: David Teigland <teigland@sourceware.org>
-Date: Thu, 11 Jul 2019 12:42:54 -0400
-Subject: master - enable full md component detection at the right time
-Message-ID: <201907111642.x6BGgs0C028710@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Thu, 11 Jul 2019 12:43:04 -0400
+Subject: master - tests: extend lvm-on-md
+Message-ID: <201907111643.x6BGh4Dx028723@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=4567c6a2b2f4f2662ef909887640681c8bba0e02
-Commit:        4567c6a2b2f4f2662ef909887640681c8bba0e02
-Parent:        b16abb3816408a296343a75658d4be0ef688390b
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=4eb0e65693a6e3d7f4fe406aff5fdc75c3ef9b87
+Commit:        4eb0e65693a6e3d7f4fe406aff5fdc75c3ef9b87
+Parent:        4567c6a2b2f4f2662ef909887640681c8bba0e02
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Tue Jul 9 14:48:31 2019 -0500
+AuthorDate:    Wed Jul 10 14:13:01 2019 -0500
 Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Wed Jul 10 13:30:50 2019 -0500
+CommitterDate: Thu Jul 11 11:20:06 2019 -0500
 
-enable full md component detection at the right time
+tests: extend lvm-on-md
 
-An active md device with an end superblock causes lvm to
-enable full md component detection.  This was being done
-within the filter loop instead of before, so the full
-filtering of some devs could be missed.
-
-Also incorporate the recently added config setting that
-controls the md component detection.
 ---
- lib/device/dev-cache.c |   19 +++++++++++++++++++
- lib/device/dev-cache.h |    3 +++
- lib/device/dev-md.c    |    6 +++---
- lib/label/label.c      |   27 ++++++++++++++-------------
- tools/pvscan.c         |    7 +++++++
- 5 files changed, 46 insertions(+), 16 deletions(-)
+ test/shell/lvm-on-md.sh |  257 +++++++++++++++++++++++++++++++++++++++++++----
+ 1 files changed, 237 insertions(+), 20 deletions(-)
 
-diff --git a/lib/device/dev-cache.c b/lib/device/dev-cache.c
-index 1492181..980dd3c 100644
---- a/lib/device/dev-cache.c
-+++ b/lib/device/dev-cache.c
-@@ -15,6 +15,7 @@
+diff --git a/test/shell/lvm-on-md.sh b/test/shell/lvm-on-md.sh
+index 22cbee8..c848083 100644
+--- a/test/shell/lvm-on-md.sh
++++ b/test/shell/lvm-on-md.sh
+@@ -42,7 +42,7 @@ aux lvmconf 'devices/obtain_device_list_from_udev = 0'
  
- #include "base/memory/zalloc.h"
- #include "lib/misc/lib.h"
-+#include "lib/device/dev-type.h"
- #include "lib/datastruct/btree.h"
- #include "lib/config/config.h"
- #include "lib/commands/toolcontext.h"
-@@ -1634,3 +1635,21 @@ const char *dev_name(const struct device *dev)
- 	return (dev && dev->aliases.n) ? dm_list_item(dev->aliases.n, struct dm_str_list)->str :
- 	    unknown_device_name();
- }
+ aux extend_filter_LVMTEST "a|/dev/md|"
+ 
+-aux prepare_devs 2
++aux prepare_devs 3
+ 
+ # create 2 disk MD raid1 array
+ # by default using metadata format 1.0 with data at the end of device
+@@ -55,6 +55,9 @@ pvdev=$(< MD_DEV_PV)
+ 
+ vgcreate $vg "$mddev"
+ 
++PVIDMD=`pvs $mddev --noheading -o uuid | tr -d - | awk '{print $1}'`
++echo $PVIDMD
 +
-+bool dev_cache_has_md_with_end_superblock(struct dev_types *dt)
-+{
-+	struct btree_iter *iter = btree_first(_cache.devices);
-+	struct device *dev;
+ lvcreate -n $lv1 -l 2 $vg
+ lvcreate -n $lv2 -l 2 -an $vg
+ 
+@@ -87,7 +90,8 @@ pvs > out
+ not grep "$dev1" out
+ not grep "$dev2" out
+ 
+-pvs -vvvv
++pvs 2>&1|tee out
++not grep "Not using device" out
+ 
+ # should not activate from the md legs
+ not vgchange -ay $vg
+@@ -105,42 +109,62 @@ _clear_online_files
+ pvscan --cache -aay "$dev1"
+ pvscan --cache -aay "$dev2"
+ 
++not ls "$RUNDIR/lvm/pvs_online/$PVIDMD"
++not ls "$RUNDIR/lvm/vgs_online/$vg"
 +
-+	while (iter) {
-+		dev = btree_get_data(iter);
-+
-+		if (dev_is_md_with_end_superblock(dt, dev))
-+			return true;
-+
-+		iter = btree_next(iter);
-+	}
-+
-+	return false;
-+}
-+
-diff --git a/lib/device/dev-cache.h b/lib/device/dev-cache.h
-index 8a1c277..46c86c2 100644
---- a/lib/device/dev-cache.h
-+++ b/lib/device/dev-cache.h
-@@ -17,6 +17,7 @@
- #define _LVM_DEV_CACHE_H
+ # should not show an active lv
+ rm out
+ lvs -o active $vg |tee out || true
+ not grep "active" out
  
- #include "lib/device/device.h"
-+#include "lib/device/dev-type.h"
- #include "lib/misc/lvm-wrappers.h"
+-# start the md dev
+ mdadm --assemble "$mddev" "$dev1" "$dev2"
+ aux udev_wait
  
- struct cmd_context;
-@@ -71,4 +72,6 @@ void dev_reset_error_count(struct cmd_context *cmd);
- 
- void dev_cache_failed_path(struct device *dev, const char *path);
- 
-+bool dev_cache_has_md_with_end_superblock(struct dev_types *dt);
-+
- #endif
-diff --git a/lib/device/dev-md.c b/lib/device/dev-md.c
-index 08143b7..9d0a363 100644
---- a/lib/device/dev-md.c
-+++ b/lib/device/dev-md.c
-@@ -302,12 +302,12 @@ static int _md_sysfs_attribute_scanf(struct dev_types *dt,
- 		return ret;
- 
- 	if (!(fp = fopen(path, "r"))) {
--		log_sys_error("fopen", path);
-+		log_debug("_md_sysfs_attribute_scanf fopen failed %s", path);
- 		return ret;
- 	}
- 
- 	if (!fgets(buffer, sizeof(buffer), fp)) {
--		log_sys_error("fgets", path);
-+		log_debug("_md_sysfs_attribute_scanf fgets failed %s", path);
- 		goto out;
- 	}
- 
-@@ -449,7 +449,7 @@ int dev_is_md_with_end_superblock(struct dev_types *dt, struct device *dev)
- 
- 	if (_md_sysfs_attribute_scanf(dt, dev, attribute,
- 				      "%s", &version_string) != 1)
--		return -1;
-+		return 0;
- 
- 	log_very_verbose("Device %s %s is %s.",
- 			 dev_name(dev), attribute, version_string);
-diff --git a/lib/label/label.c b/lib/label/label.c
-index 8b841f6..fb7ad1d 100644
---- a/lib/label/label.c
-+++ b/lib/label/label.c
-@@ -894,6 +894,20 @@ int label_scan(struct cmd_context *cmd)
- 	dev_cache_scan();
- 
- 	/*
-+	 * If we know that there will be md components with an end
-+	 * superblock, then enable the full md filter before label
-+	 * scan begins.  FIXME: we could skip the full md check on
-+	 * devs that are not identified as PVs, but then we'd need
-+	 * to do something other than using the standard md filter.
-+	 */
-+	if (cmd->md_component_detection && !cmd->use_full_md_check &&
-+	    !strcmp(cmd->md_component_checks, "auto") &&
-+	    dev_cache_has_md_with_end_superblock(cmd->dev_types)) {
-+		log_debug("Enable full md component check.");
-+		cmd->use_full_md_check = 1;
-+	}
-+
-+	/*
- 	 * Set up the iterator that is needed to step through each device in
- 	 * dev cache.
- 	 */
-@@ -931,19 +945,6 @@ int label_scan(struct cmd_context *cmd)
- 			bcache_invalidate_fd(scan_bcache, dev->bcache_fd);
- 			_scan_dev_close(dev);
- 		}
+-# Now that the md dev is online, pvs can see it
+-# and check for components even if
+-# md_component_checks is "start" (which disables
+-# most default end-of-device scans)
+-aux lvmconf 'devices/md_component_checks = "start"'
 -
--		/*
--		 * When md devices exist that use the old superblock at the
--		 * end of the device, then in order to detect and filter out
--		 * the component devices of those md devs, we enable the full
--		 * md filter which scans both the start and the end of every
--		 * device.  This doubles the amount of scanning i/o, which we
--		 * want to avoid.  FIXME: this forces start+end scanning of
--		 * every device, but it would be more efficient to limit the
--		 * end scan only to PVs.
--		 */
--		if (dev_is_md_with_end_superblock(cmd->dev_types, dev))
--			cmd->use_full_md_check = 1;
- 	};
- 	dev_iter_destroy(iter);
+ not pvs "$dev1"
+ not pvs "$dev2"
+ pvs > out
+ not grep "$dev1" out
+ not grep "$dev2" out
  
-diff --git a/tools/pvscan.c b/tools/pvscan.c
-index facc70c..2a88eaa 100644
---- a/tools/pvscan.c
-+++ b/tools/pvscan.c
-@@ -938,6 +938,13 @@ int pvscan_cache_cmd(struct cmd_context *cmd, int argc, char **argv)
- 	/* Creates a list of dev names from /dev, sysfs, etc; does not read any. */
- 	dev_cache_scan();
- 
-+	if (cmd->md_component_detection && !cmd->use_full_md_check &&
-+	    !strcmp(cmd->md_component_checks, "auto") &&
-+	    dev_cache_has_md_with_end_superblock(cmd->dev_types)) {
-+		log_debug("Enable full md component check.");
-+		cmd->use_full_md_check = 1;
-+	}
++lvs $vg
++vgchange -an $vg
 +
- 	/*
- 	 * For each device command arg (from either position or --major/--minor),
- 	 * decide if that device is being added to the system (a dev node exists
++# should not activate from the md legs
++_clear_online_files
++pvscan --cache -aay "$dev1"
++pvscan --cache -aay "$dev2"
++
++not ls "$RUNDIR/lvm/pvs_online/$PVIDMD"
++not ls "$RUNDIR/lvm/vgs_online/$vg"
++
++# should not show an active lv
++rm out
++lvs -o active $vg |tee out || true
++not grep "active" out
+ 
+ vgchange -ay $vg
+ 
+ check lv_field $vg/$lv1 lv_active "active"
+ 
+ vgchange -an $vg
++
++_clear_online_files
++pvscan --cache -aay "$mddev"
++
++ls "$RUNDIR/lvm/pvs_online/$PVIDMD"
++ls "$RUNDIR/lvm/vgs_online/$vg"
++
++lvs -o active $vg |tee out || true
++grep "active" out
++
++vgchange -an $vg
++
+ aux udev_wait
+ 
+ vgremove -f $vg
+ 
+ aux cleanup_md_dev
+ 
+-# Put this setting back to the default
+-aux lvmconf 'devices/md_component_checks = "auto"'
+-
+ # create 2 disk MD raid0 array
+ # by default using metadata format 1.0 with data at the end of device
+ # When a raid0 md array is stopped, the components will not look like
+@@ -154,7 +178,8 @@ pvdev=$(< MD_DEV_PV)
+ 
+ vgcreate $vg "$mddev"
+ 
+-lvs $vg
++PVIDMD=`pvs $mddev --noheading -o uuid | tr -d - | awk '{print $1}'`
++echo $PVIDMD
+ 
+ lvcreate -n $lv1 -l 2 $vg
+ lvcreate -n $lv2 -l 2 -an $vg
+@@ -188,7 +213,8 @@ pvs > out
+ not grep "$dev1" out
+ not grep "$dev2" out
+ 
+-pvs -vvvv
++pvs 2>&1|tee out
++not grep "Not using device" out
+ 
+ # should not activate from the md legs
+ not vgchange -ay $vg
+@@ -206,6 +232,9 @@ _clear_online_files
+ pvscan --cache -aay "$dev1"
+ pvscan --cache -aay "$dev2"
+ 
++not ls "$RUNDIR/lvm/pvs_online/$PVIDMD"
++not ls "$RUNDIR/lvm/vgs_online/$vg"
++
+ # should not show an active lv
+ rm out
+ lvs -o active $vg |tee out || true
+@@ -215,23 +244,211 @@ not grep "active" out
+ mdadm --assemble "$mddev" "$dev1" "$dev2"
+ aux udev_wait
+ 
+-# Now that the md dev is online, pvs can see it
+-# and check for components even if
+-# md_component_checks is "start" (which disables
+-# most default end-of-device scans)
+-aux lvmconf 'devices/md_component_checks = "start"'
++not pvs "$dev1"
++not pvs "$dev2"
++pvs > out
++not grep "$dev1" out
++not grep "$dev2" out
++
++lvs $vg
++vgchange -an $vg
++
++# should not activate from the md legs
++_clear_online_files
++pvscan --cache -aay "$dev1"
++pvscan --cache -aay "$dev2"
++
++not ls "$RUNDIR/lvm/pvs_online/$PVIDMD"
++not ls "$RUNDIR/lvm/vgs_online/$vg"
++
++# should not show an active lv
++rm out
++lvs -o active $vg |tee out || true
++not grep "active" out
++
++vgchange -ay $vg
++
++check lv_field $vg/$lv1 lv_active "active"
++
++vgchange -an $vg
++
++_clear_online_files
++pvscan --cache -aay "$mddev"
++
++ls "$RUNDIR/lvm/pvs_online/$PVIDMD"
++ls "$RUNDIR/lvm/vgs_online/$vg"
++
++lvs -o active $vg |tee out || true
++grep "active" out
++
++vgchange -an $vg
++
++aux udev_wait
++
++vgremove -f $vg
++
++aux cleanup_md_dev
++
++# Repeat tests using the default config settings
++
++aux lvmconf 'devices/hints = "all"'
++aux lvmconf 'devices/obtain_device_list_from_udev = 1'
++
++# create 2 disk MD raid0 array
++# by default using metadata format 1.0 with data at the end of device
++# When a raid0 md array is stopped, the components will not look like
++# duplicate PVs as they do with raid1.
++aux prepare_md_dev 0 64 2 "$dev1" "$dev2"
++
++cat /proc/mdstat
++
++mddev=$(< MD_DEV)
++pvdev=$(< MD_DEV_PV)
++
++# Create an unused PV so that there is@least one PV in the hints
++# when the MD dev is stopped.  If there are no PVs, the hints are
++# empty, and the code falls back to scanning all, and we do not end
++# up testing the code with hints actively used.
++pvcreate "$dev3"
++
++vgcreate $vg "$mddev"
++
++PVIDMD=`pvs $mddev --noheading -o uuid | tr -d - | awk '{print $1}'`
++echo $PVIDMD
++
++lvcreate -n $lv1 -l 2 $vg
++lvcreate -n $lv2 -l 2 -an $vg
++
++lvchange -ay $vg/$lv2
++check lv_field $vg/$lv1 lv_active "active"
++
++# lvm does not show md components as PVs
++pvs "$mddev"
++not pvs "$dev1"
++not pvs "$dev2"
++pvs > out
++not grep "$dev1" out
++not grep "$dev2" out
++
++grep "$mddev" /run/lvm/hints
++grep "$dev3" /run/lvm/hints
++not grep "$dev1" /run/lvm/hints
++not grep "$dev2" /run/lvm/hints
++
++sleep 1
++
++vgchange -an $vg
++sleep 1
++
++# When the md device is started, lvm will see that and know to
++# scan for md components, so stop the md device to remove this
++# advantage so we will test the fallback detection.
++mdadm --stop "$mddev"
++aux udev_wait
++
++# A WARNING indicating duplicate PVs is printed by 'pvs' in this
++# case.  It's printed during the scan, but after the scan, the
++# md component detection is run on the devs and they are dropped
++# when we see they are md components. So, we ignore the warning
++# containing the word duplicate, and look for the "Not using device"
++# message, which shouldn't appear, as it would indicate that
++# we didn't drop the md components.
++# FIXME: we should avoid printing the premature warning indicating
++# duplicate PVs which are eventually recognized as md components
++# and dropped.
++pvs 2>&1|tee out1
++grep -v WARNING out1 > out2
++not grep "Not using device" out2
++not grep "$mddev" out2
++not grep "$dev1" out2
++not grep "$dev2" out2
++grep "$dev3" out2
++cat /run/lvm/hints
++
++pvs 2>&1|tee out1
++grep -v WARNING out1 > out2
++not grep "Not using device" out2
++not grep "$mddev" out2
++not grep "$dev1" out2
++not grep "$dev2" out2
++grep "$dev3" out2
++cat /run/lvm/hints
+ 
++# The md components should still be detected and excluded.
+ not pvs "$dev1"
+ not pvs "$dev2"
+ pvs > out
+ not grep "$dev1" out
+ not grep "$dev2" out
++grep "$dev3" out
+ 
+-vgchange -ay $vg 2>&1 |tee out
++# should not activate from the md legs
++not vgchange -ay $vg
++
++# should not show an active lv
++rm out
++lvs -o active $vg |tee out || true
++not grep "active" out
++
++# should not allow updating vg
++not lvcreate -l1 $vg
++
++# should not activate from the md legs
++_clear_online_files
++pvscan --cache -aay "$dev1"
++pvscan --cache -aay "$dev2"
++
++not ls "$RUNDIR/lvm/pvs_online/$PVIDMD"
++not ls "$RUNDIR/lvm/vgs_online/$vg"
++
++# should not show an active lv
++rm out
++lvs -o active $vg |tee out || true
++not grep "active" out
++
++# start the md dev
++mdadm --assemble "$mddev" "$dev1" "$dev2"
++aux udev_wait
++
++not pvs "$dev1"
++not pvs "$dev2"
++pvs > out
++not grep "$dev1" out
++not grep "$dev2" out
++
++lvs $vg
++vgchange -an $vg
++
++# should not activate from the md legs
++_clear_online_files
++pvscan --cache -aay "$dev1"
++pvscan --cache -aay "$dev2"
++
++not ls "$RUNDIR/lvm/pvs_online/$PVIDMD"
++not ls "$RUNDIR/lvm/vgs_online/$vg"
++
++# should not show an active lv
++rm out
++lvs -o active $vg |tee out || true
++not grep "active" out
++
++vgchange -ay $vg
+ 
+ check lv_field $vg/$lv1 lv_active "active"
+ 
+ vgchange -an $vg
++
++_clear_online_files
++pvscan --cache -aay "$mddev"
++
++ls "$RUNDIR/lvm/pvs_online/$PVIDMD"
++ls "$RUNDIR/lvm/vgs_online/$vg"
++
++lvs -o active $vg |tee out || true
++grep "active" out
++
++vgchange -an $vg
++
+ aux udev_wait
+ 
+ vgremove -f $vg
 
 
