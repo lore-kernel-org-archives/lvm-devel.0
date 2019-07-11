@@ -1,89 +1,78 @@
 From: David Teigland <teigland@sourceware.org>
-Date: Thu, 11 Jul 2019 12:42:17 -0400
-Subject: master - scan: remove unused arg to setup_bcache
-Message-ID: <201907111642.x6BGgHh7028642@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Thu, 11 Jul 2019 12:42:29 -0400
+Subject: master - md component detection for differing PV and device sizes
+Message-ID: <201907111642.x6BGgTV5028657@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=d2b88f271512c56737e27bbdfbd0e0b6891b4cd0
-Commit:        d2b88f271512c56737e27bbdfbd0e0b6891b4cd0
-Parent:        1b63a219f4f9d7f2f6c5086375b96c3bd892a1a0
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=f17353e3e604ad2d80bcd77ea0a6a93472e6b5bd
+Commit:        f17353e3e604ad2d80bcd77ea0a6a93472e6b5bd
+Parent:        d2b88f271512c56737e27bbdfbd0e0b6891b4cd0
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Tue Jul 9 13:16:26 2019 -0500
+AuthorDate:    Tue Jul 9 13:32:41 2019 -0500
 Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Tue Jul 9 13:16:26 2019 -0500
+CommitterDate: Tue Jul 9 13:40:41 2019 -0500
 
-scan: remove unused arg to setup_bcache
+md component detection for differing PV and device sizes
 
+This check was mistakenly removed when shifting code in commit
+"separate code for setting devices from metadata parsing".
+
+Put it back with some new conditions.
 ---
- lib/label/label.c |   17 +++++------------
- 1 files changed, 5 insertions(+), 12 deletions(-)
+ lib/metadata/metadata.c |   26 ++++++++++++++++++++++++--
+ 1 files changed, 24 insertions(+), 2 deletions(-)
 
-diff --git a/lib/label/label.c b/lib/label/label.c
-index 185e51b..8b841f6 100644
---- a/lib/label/label.c
-+++ b/lib/label/label.c
-@@ -798,13 +798,6 @@ out:
- }
- 
- /*
-- * num_devs is the number of devices the caller is going to scan.
-- * When 0 the caller doesn't know, and we use the default cache size.
-- * When non-zero, allocate at least num_devs bcache blocks.
-- * num_devs doesn't really tell us how many bcache blocks we'll use
-- * because it includes lvm devs and non-lvm devs, and each lvm dev
-- * will often use a number of bcache blocks.
-- *
-  * We don't know ahead of time if we will find some VG metadata 
-  * that is larger than the total size of the bcache, which would
-  * prevent us from reading/writing the VG since we do not dynamically
-@@ -817,7 +810,7 @@ out:
- #define MIN_BCACHE_BLOCKS 32    /* 4MB */
- #define MAX_BCACHE_BLOCKS 1024
- 
--static int _setup_bcache(int num_devs)
-+static int _setup_bcache(void)
+diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
+index 121cf4f..f19df3d 100644
+--- a/lib/metadata/metadata.c
++++ b/lib/metadata/metadata.c
+@@ -3504,19 +3504,41 @@ static void _set_pv_device(struct format_instance *fid,
+ 			   struct physical_volume *pv)
  {
- 	struct io_engine *ioe = NULL;
- 	int iomem_kb = io_memory_size();
-@@ -955,7 +948,7 @@ int label_scan(struct cmd_context *cmd)
- 	dev_iter_destroy(iter);
+ 	char buffer[64] __attribute__((aligned(8)));
++	struct cmd_context *cmd = fid->fmt->cmd;
++	struct device *dev;
+ 	uint64_t size;
  
- 	if (!scan_bcache) {
--		if (!_setup_bcache(dm_list_size(&all_devs)))
-+		if (!_setup_bcache())
- 			return 0;
+-	if (!(pv->dev = lvmcache_device_from_pvid(fid->fmt->cmd, &pv->id, &pv->label_sector))) {
++	if (!(dev = lvmcache_device_from_pvid(cmd, &pv->id, &pv->label_sector))) {
+ 		if (!id_write_format(&pv->id, buffer, sizeof(buffer)))
+ 			buffer[0] = '\0';
+ 
+-		if (fid->fmt->cmd && !fid->fmt->cmd->pvscan_cache_single)
++		if (cmd && !cmd->pvscan_cache_single)
+ 			log_warn("WARNING: Couldn't find device with uuid %s.", buffer);
+ 		else
+ 			log_debug_metadata("Couldn't find device with uuid %s.", buffer);
  	}
  
-@@ -1105,7 +1098,7 @@ int label_scan_devs(struct cmd_context *cmd, struct dev_filter *f, struct dm_lis
- 	struct device_list *devl;
- 
- 	if (!scan_bcache) {
--		if (!_setup_bcache(0))
-+		if (!_setup_bcache())
- 			return 0;
- 	}
- 
-@@ -1132,7 +1125,7 @@ int label_scan_devs_rw(struct cmd_context *cmd, struct dev_filter *f, struct dm_
- 	struct device_list *devl;
- 
- 	if (!scan_bcache) {
--		if (!_setup_bcache(0))
-+		if (!_setup_bcache())
- 			return 0;
- 	}
- 
-@@ -1278,7 +1271,7 @@ int label_read(struct device *dev)
- int label_scan_setup_bcache(void)
- {
- 	if (!scan_bcache) {
--		if (!_setup_bcache(0))
-+		if (!_setup_bcache())
- 			return 0;
- 	}
- 
+ 	/*
++	 * If the device and PV are not the size, it's a clue that we might
++	 * be reading an MD component (but not necessarily). Skip this check:
++	 * . if md component detection is disabled
++	 * . if we are already doing full a md check in label scan
++	 * . if md_component_checks is auto, not none (full means use_full_md_check is set)
++	 */
++	if (dev && (pv->size != dev->size) && cmd &&
++	    cmd->md_component_detection &&
++	    !cmd->use_full_md_check &&
++	    !strcmp(cmd->md_component_checks, "auto")) {
++		if (dev_is_md_component(dev, NULL, 1)) {
++			log_warn("WARNING: device %s is an md component, not setting device for PV.",
++				 dev_name(dev));
++			dev = NULL;
++		}
++	}
++
++	pv->dev = dev;
++
++	/*
+ 	 * A previous command wrote the VG while this dev was missing, so
+ 	 * the MISSING flag was included in the PV.
+ 	 */
 
 
