@@ -1,53 +1,129 @@
-From: Marian Csontos <mcsontos@sourceware.org>
-Date: Wed, 24 Jul 2019 10:30:52 -0400
-Subject: master - tests: Fix unbound variable
-Message-ID: <201907241430.x6OEUqJl002423@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: Lidong Zhong <lidong.zhong@suse.com>
+Date: Thu, 25 Jul 2019 03:21:20 +0000
+Subject: [PATCH] libdm: _dm_task_set_name_from_path: always use major/minor
+In-Reply-To: <20190722025921.5554-1-lidong.zhong@suse.com>
+References: <20190722025921.5554-1-lidong.zhong@suse.com>
+Message-ID: <5d41cba9-2984-e680-fa58-c5221b712f3d@suse.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=dd19fa9ff36ce8a17452f83e6264bbf6c34f83ae
-Commit:        dd19fa9ff36ce8a17452f83e6264bbf6c34f83ae
-Parent:        aa58f9bd9b28e8b734a6d723234f9ed1de28265b
-Author:        Marian Csontos <mcsontos@redhat.com>
-AuthorDate:    Tue Jul 23 15:36:13 2019 +0200
-Committer:     Marian Csontos <mcsontos@redhat.com>
-CommitterDate: Wed Jul 24 16:30:15 2019 +0200
+Hi guys,
 
-tests: Fix unbound variable
+Martin asked me to send this patch for him since he is on vacation. And
+this patch did fix a real problem. Could you help to review this patch
+please?
 
-Test `aux kernel_at_least 5 1` fails even for newer kernel
-with `$3: unbound variable` when using `set -u`.
----
- test/lib/aux.sh |    6 +++---
- 1 files changed, 3 insertions(+), 3 deletions(-)
+Thanks,
+Lidong
 
-diff --git a/test/lib/aux.sh b/test/lib/aux.sh
-index 0cc26a4..e3f624c 100644
---- a/test/lib/aux.sh
-+++ b/test/lib/aux.sh
-@@ -1387,17 +1387,17 @@ version_at_least() {
- 	IFS=".-" read -r major minor revision <<< "$1"
- 	shift
- 
--	test -z "${1:-}" && return 0
-+	test -n "${1:-}" || return 0
- 	test -n "$major" || return 1
- 	test "$major" -gt "$1" && return 0
- 	test "$major" -eq "$1" || return 1
- 
--	test -n "$2" || return 0
-+	test -n "${2:-}" || return 0
- 	test -n "$minor" || return 1
- 	test "$minor" -gt "$2" && return 0
- 	test "$minor" -eq "$2" || return 1
- 
--	test -n "$3" || return 0
-+	test -n "${3:-}" || return 0
- 	test "$revision" -ge "$3" 2>/dev/null || return 1
- }
- #
+On 7/22/19 10:59 AM, Lidong Zhong wrote:
+> From: Martin Wilck <mwilck@suse.com>
+> 
+> libdm assumes that names of symlinks under /dev/mapper uniquely correspond
+> to device-mapper names. If this is not the case (e.g. if additional symlinks
+> under /dev/mapper have been created by custom udev rules), this algorithm
+> may fail, as the names of the extra symlinks don't match the dm name of the
+> device. The error message is then a rather misleading "Device does not
+> exist" (the device _does_ actually exist, it just has a different dm
+> name). Because the algorithm takes the first match in /dev/mapper, depending
+> on sort order, this first match may be the "wrong" one of multiple symlinks,
+> and thus this error can occur for an innocent "dmsetup info /dev/dm-1"
+> command.
+> 
+> The current algorithm checks the major/minor number anyway. Therefore, the
+> assumption about symlink names under /dev/mapper can be easily dropped by
+> always using the major/minor number rather than the name for device lookup.
+> In theory, this approach might even be used if there were no symlinks under
+> /dev/mapper at all matching a given device, but this patch refrains from doing
+> so for compatibility reasons.
+> 
+> This patch changes the user-visible behavior only where multiple symlinks are
+> present. Under normal conditions (unique names under /dev/mapper), it yields
+> the same results as before even for pathological invocations such as "dmsetup
+> info -j 254 -m 7 /dev/dm-6".
+> 
+> Signed-off-by: Martin Wilck <mwilck@suse.com>
+> ---
+>  libdm/libdm-common.c | 27 +++++++++++++--------------
+>  1 file changed, 13 insertions(+), 14 deletions(-)
+> 
+> diff --git a/libdm/libdm-common.c b/libdm/libdm-common.c
+> index 40b366b..cbc454a 100644
+> --- a/libdm/libdm-common.c
+> +++ b/libdm/libdm-common.c
+> @@ -343,7 +343,7 @@ struct dm_task *dm_task_create(int type)
+>  /*
+>   * Find the name associated with a given device number by scanning _dm_dir.
+>   */
+> -static int _find_dm_name_of_device(dev_t st_rdev, char *buf, size_t buf_len)
+> +static int _find_dm_name_of_device(dev_t st_rdev)
+>  {
+>  	const char *name;
+>  	char path[PATH_MAX];
+> @@ -373,7 +373,6 @@ static int _find_dm_name_of_device(dev_t st_rdev, char *buf, size_t buf_len)
+>  			continue;
+>  
+>  		if (st.st_rdev == st_rdev) {
+> -			strncpy(buf, name, buf_len);
+>  			r = 1;
+>  			break;
+>  		}
+> @@ -605,7 +604,7 @@ static int _dm_task_set_name_from_path(struct dm_task *dmt, const char *path,
+>  {
+>  	char buf[PATH_MAX];
+>  	struct stat st1, st2;
+> -	const char *final_name = NULL;
+> +	int found = 0;
+>  	size_t len;
+>  
+>  	if (dmt->type == DM_DEVICE_CREATE) {
+> @@ -625,7 +624,7 @@ static int _dm_task_set_name_from_path(struct dm_task *dmt, const char *path,
+>  		}
+>  
+>  		if (!stat(buf, &st2) && (st1.st_rdev == st2.st_rdev))
+> -			final_name = name;
+> +			found = 1;
+>  	} else {
+>  		/* Not found. */
+>  		/* If there is exactly one '/' try a prefix of /dev */
+> @@ -642,24 +641,24 @@ static int _dm_task_set_name_from_path(struct dm_task *dmt, const char *path,
+>  			log_error("Device %s not found", path);
+>  			return 0;
+>  		}
+> -		/* Found */
+> +		found = 1;
+>  	}
+>  
+>  	/*
+>  	 * If we don't have the dm name yet, Call _find_dm_name_of_device() to
+>  	 * scan _dm_dir for a match.
+>  	 */
+> -	if (!final_name) {
+> -		if (_find_dm_name_of_device(st1.st_rdev, buf, sizeof(buf)))
+> -			final_name = buf;
+> -		else {
+> -			log_error("Device %s not found", name);
+> -			return 0;
+> -		}
+> +	if (!found)
+> +		found = _find_dm_name_of_device(st1.st_rdev);
+> +
+> +	if (!found) {
+> +		log_error("Device %s not found", name);
+> +		return 0;
+>  	}
+>  
+> -	/* This is an already existing path - do not mangle! */
+> -	return _dm_task_set_name(dmt, final_name, DM_STRING_MANGLING_NONE);
+> +	/* Don't allow fallback here - input major  / minor should fit */
+> +	return dm_task_set_major_minor(dmt, MAJOR(st1.st_rdev),
+> +				       MINOR(st1.st_rdev), 0);
+>  }
+>  
+>  int dm_task_set_name(struct dm_task *dmt, const char *name)
+> 
 
 
