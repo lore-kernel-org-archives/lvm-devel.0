@@ -1,129 +1,119 @@
-From: Lidong Zhong <lidong.zhong@suse.com>
-Date: Thu, 25 Jul 2019 03:21:20 +0000
-Subject: [PATCH] libdm: _dm_task_set_name_from_path: always use major/minor
-In-Reply-To: <20190722025921.5554-1-lidong.zhong@suse.com>
-References: <20190722025921.5554-1-lidong.zhong@suse.com>
-Message-ID: <5d41cba9-2984-e680-fa58-c5221b712f3d@suse.com>
+From: Julian Andres Klode <julian.klode@canonical.com>
+Date: Thu, 25 Jul 2019 15:56:43 -0300
+Subject: [PATCH] Detect systemd at run-time in 69-dm-lvm-metad.rules
+Message-ID: <20190725185643.32110-1-julian.klode@canonical.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Hi guys,
+systems might have systemd as their normal init systems, but
+might not be using it in their initramfs; or like Debian, support
+different init systems.
 
-Martin asked me to send this patch for him since he is on vacation. And
-this patch did fix a real problem. Could you help to review this patch
-please?
+Detect whether we are running on systemd by checking for /run/systemd/system
+and then change the behavior accordingly.
 
-Thanks,
-Lidong
+This effectively breaks compatibility with systemd versions prior to
+205, as 205 was the minimum version for the feature.
 
-On 7/22/19 10:59 AM, Lidong Zhong wrote:
-> From: Martin Wilck <mwilck@suse.com>
-> 
-> libdm assumes that names of symlinks under /dev/mapper uniquely correspond
-> to device-mapper names. If this is not the case (e.g. if additional symlinks
-> under /dev/mapper have been created by custom udev rules), this algorithm
-> may fail, as the names of the extra symlinks don't match the dm name of the
-> device. The error message is then a rather misleading "Device does not
-> exist" (the device _does_ actually exist, it just has a different dm
-> name). Because the algorithm takes the first match in /dev/mapper, depending
-> on sort order, this first match may be the "wrong" one of multiple symlinks,
-> and thus this error can occur for an innocent "dmsetup info /dev/dm-1"
-> command.
-> 
-> The current algorithm checks the major/minor number anyway. Therefore, the
-> assumption about symlink names under /dev/mapper can be easily dropped by
-> always using the major/minor number rather than the name for device lookup.
-> In theory, this approach might even be used if there were no symlinks under
-> /dev/mapper at all matching a given device, but this patch refrains from doing
-> so for compatibility reasons.
-> 
-> This patch changes the user-visible behavior only where multiple symlinks are
-> present. Under normal conditions (unique names under /dev/mapper), it yields
-> the same results as before even for pathological invocations such as "dmsetup
-> info -j 254 -m 7 /dev/dm-6".
-> 
-> Signed-off-by: Martin Wilck <mwilck@suse.com>
-> ---
->  libdm/libdm-common.c | 27 +++++++++++++--------------
->  1 file changed, 13 insertions(+), 14 deletions(-)
-> 
-> diff --git a/libdm/libdm-common.c b/libdm/libdm-common.c
-> index 40b366b..cbc454a 100644
-> --- a/libdm/libdm-common.c
-> +++ b/libdm/libdm-common.c
-> @@ -343,7 +343,7 @@ struct dm_task *dm_task_create(int type)
->  /*
->   * Find the name associated with a given device number by scanning _dm_dir.
->   */
-> -static int _find_dm_name_of_device(dev_t st_rdev, char *buf, size_t buf_len)
-> +static int _find_dm_name_of_device(dev_t st_rdev)
->  {
->  	const char *name;
->  	char path[PATH_MAX];
-> @@ -373,7 +373,6 @@ static int _find_dm_name_of_device(dev_t st_rdev, char *buf, size_t buf_len)
->  			continue;
->  
->  		if (st.st_rdev == st_rdev) {
-> -			strncpy(buf, name, buf_len);
->  			r = 1;
->  			break;
->  		}
-> @@ -605,7 +604,7 @@ static int _dm_task_set_name_from_path(struct dm_task *dmt, const char *path,
->  {
->  	char buf[PATH_MAX];
->  	struct stat st1, st2;
-> -	const char *final_name = NULL;
-> +	int found = 0;
->  	size_t len;
->  
->  	if (dmt->type == DM_DEVICE_CREATE) {
-> @@ -625,7 +624,7 @@ static int _dm_task_set_name_from_path(struct dm_task *dmt, const char *path,
->  		}
->  
->  		if (!stat(buf, &st2) && (st1.st_rdev == st2.st_rdev))
-> -			final_name = name;
-> +			found = 1;
->  	} else {
->  		/* Not found. */
->  		/* If there is exactly one '/' try a prefix of /dev */
-> @@ -642,24 +641,24 @@ static int _dm_task_set_name_from_path(struct dm_task *dmt, const char *path,
->  			log_error("Device %s not found", path);
->  			return 0;
->  		}
-> -		/* Found */
-> +		found = 1;
->  	}
->  
->  	/*
->  	 * If we don't have the dm name yet, Call _find_dm_name_of_device() to
->  	 * scan _dm_dir for a match.
->  	 */
-> -	if (!final_name) {
-> -		if (_find_dm_name_of_device(st1.st_rdev, buf, sizeof(buf)))
-> -			final_name = buf;
-> -		else {
-> -			log_error("Device %s not found", name);
-> -			return 0;
-> -		}
-> +	if (!found)
-> +		found = _find_dm_name_of_device(st1.st_rdev);
-> +
-> +	if (!found) {
-> +		log_error("Device %s not found", name);
-> +		return 0;
->  	}
->  
-> -	/* This is an already existing path - do not mangle! */
-> -	return _dm_task_set_name(dmt, final_name, DM_STRING_MANGLING_NONE);
-> +	/* Don't allow fallback here - input major  / minor should fit */
-> +	return dm_task_set_major_minor(dmt, MAJOR(st1.st_rdev),
-> +				       MINOR(st1.st_rdev), 0);
->  }
->  
->  int dm_task_set_name(struct dm_task *dmt, const char *name)
-> 
+Bug-Debian: https://bugs.debian.org/933011
+---
+ configure.ac                  | 24 ------------------------
+ udev/69-dm-lvm-metad.rules.in |  6 ++++--
+ udev/Makefile.in              | 10 +---------
+ 3 files changed, 5 insertions(+), 35 deletions(-)
+
+diff --git a/configure.ac b/configure.ac
+index 1e45c0edc..5beffd8e6 100644
+--- a/configure.ac
++++ b/configure.ac
+@@ -1055,29 +1055,6 @@ AC_MSG_RESULT($BLKID_WIPING)
+ AC_DEFINE_UNQUOTED(DEFAULT_USE_BLKID_WIPING, [$DEFAULT_USE_BLKID_WIPING],
+ 		   [Use blkid wiping by default.])
+ 
+-################################################################################
+-dnl -- Enable udev-systemd protocol to instantiate a service for background jobs
+-dnl -- Requires systemd version 205 at least (including support for systemd-run)
+-AC_ARG_ENABLE(udev-systemd-background-jobs,
+-	      AC_HELP_STRING([--disable-udev-systemd-background-jobs],
+-			     [disable udev-systemd protocol to instantiate a service for background job]),
+-	      UDEV_SYSTEMD_BACKGROUND_JOBS=$enableval,
+-	      UDEV_SYSTEMD_BACKGROUND_JOBS=maybe)
+-
+-if test "$UDEV_SYSTEMD_BACKGROUND_JOBS" != no; then
+-	pkg_config_init
+-	PKG_CHECK_MODULES(SYSTEMD, systemd >= 205,
+-			  [UDEV_SYSTEMD_BACKGROUND_JOBS=yes],
+-			  [if test "$UDEV_SYSTEMD_BACKGROUND_JOBS" = maybe; then
+-				UDEV_SYSTEMD_BACKGROUND_JOBS=no
+-			   else
+-				AC_MSG_ERROR([bailing out... systemd >= 205 is required])
+-			   fi])
+-fi
+-
+-AC_MSG_CHECKING(whether to use udev-systemd protocol for jobs in background)
+-AC_MSG_RESULT($UDEV_SYSTEMD_BACKGROUND_JOBS)
+-
+ ################################################################################
+ dnl -- Enable udev synchronisation
+ AC_MSG_CHECKING(whether to enable synchronisation with udev processing)
+@@ -1772,7 +1749,6 @@ AC_SUBST(CACHE_RESTORE_CMD)
+ AC_SUBST(UDEV_PC)
+ AC_SUBST(UDEV_RULES)
+ AC_SUBST(UDEV_SYNC)
+-AC_SUBST(UDEV_SYSTEMD_BACKGROUND_JOBS)
+ AC_SUBST(UDEV_RULE_EXEC_DETECTION)
+ AC_SUBST(UDEV_HAS_BUILTIN_BLKID)
+ AC_SUBST(USE_TRACKING)
+diff --git a/udev/69-dm-lvm-metad.rules.in b/udev/69-dm-lvm-metad.rules.in
+index d51006496..a797bbcd6 100644
+--- a/udev/69-dm-lvm-metad.rules.in
++++ b/udev/69-dm-lvm-metad.rules.in
+@@ -73,7 +73,8 @@ GOTO="lvm_end"
+ # For "systemd_background" mode, systemd takes care of this by activating
+ # the lvm2-pvscan at .service only once.
+ LABEL="next"
+-ACTION!="(PVSCAN_ACTION)", GOTO="lvm_end"
++TEST!="/run/systemd/system", ACTION!="add", GOTO="lvm_end"
++TEST=="/run/systemd/system", ACTION!="add|change", GOTO="lvm_end"
+ 
+ LABEL="lvm_scan"
+ 
+@@ -83,7 +84,8 @@ ENV{SYSTEMD_READY}="1"
+ # --(enable|disable)-udev-systemd-background-jobs to "configure".
+ # On modern distributions with recent systemd, it's "systemd_background";
+ # on others, "direct_pvscan".
+-GOTO="(PVSCAN_RULE)"
++TEST!="/run/systemd/system", GOTO="direct_pvscan"
++TEST=="/run/systemd/system", GOTO="systemd_background"
+ 
+ LABEL="systemd_background"
+ 
+diff --git a/udev/Makefile.in b/udev/Makefile.in
+index e32cba921..57a96fefb 100644
+--- a/udev/Makefile.in
++++ b/udev/Makefile.in
+@@ -43,16 +43,8 @@ else
+ BLKID_RULE=IMPORT{program}=\"${SBIN}\/blkid -o udev -p \$$tempnode\"
+ endif
+ 
+-ifeq ("@UDEV_SYSTEMD_BACKGROUND_JOBS@", "yes")
+-PVSCAN_RULE=systemd_background
+-PVSCAN_ACTION=add|change
+-else
+-PVSCAN_RULE=direct_pvscan
+-PVSCAN_ACTION=add
+-endif
+-
+ %.rules: $(srcdir)/%.rules.in
+-	$(Q) $(SED) -e "s+(DM_DIR)+$(DM_DIR)+;s+(BINDIR)+$(BINDIR)+;s+(BLKID_RULE)+$(BLKID_RULE)+;s+(PVSCAN_RULE)+$(PVSCAN_RULE)+;s+(PVSCAN_ACTION)+$(PVSCAN_ACTION)+;s+(DM_EXEC_RULE)+$(DM_EXEC_RULE)+;s+(DM_EXEC)+$(DM_EXEC)+;s+(LVM_EXEC_RULE)+$(LVM_EXEC_RULE)+;s+(LVM_EXEC)+$(LVM_EXEC)+;" $< >$@
++	$(Q) $(SED) -e "s+(DM_DIR)+$(DM_DIR)+;s+(BINDIR)+$(BINDIR)+;s+(BLKID_RULE)+$(BLKID_RULE)+;s+(DM_EXEC_RULE)+$(DM_EXEC_RULE)+;s+(DM_EXEC)+$(DM_EXEC)+;s+(LVM_EXEC_RULE)+$(LVM_EXEC_RULE)+;s+(LVM_EXEC)+$(LVM_EXEC)+;" $< >$@
+ 
+ %_install: %.rules
+ 	@echo "    [INSTALL] $<"
+-- 
+2.20.1
 
 
