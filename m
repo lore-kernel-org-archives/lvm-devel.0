@@ -1,80 +1,38 @@
 From: Lakshmi Narasimhan Sundararajan <lns@portworx.com>
-Date: Tue, 30 Jul 2019 14:53:18 +0530
-Subject: lvmcache in writeback mode gets stuck flushing dirtyblocks
-In-Reply-To: <54fa6178-88c8-0236-8595-2c19a6e4b73f@redhat.com>
-References: <5d3fce60.1c69fb81.f521b.46a8@mx.google.com>
-	<54fa6178-88c8-0236-8595-2c19a6e4b73f@redhat.com>
-Message-ID: <5d400c85.1c69fb81.b383c.5221@mx.google.com>
+Date: Tue, 30 Jul 2019 18:55:55 +0530
+Subject: Reg unusual deployment within containers
+Message-ID: <5d404562.1c69fb81.4641c.47b2@mx.google.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Hi Zdenek,
-Thank you for the acknowledging the issue.
+Hi Team,
+Thanks for being so prompt last time, I wanted to see whether I could be lucky again ?
 
-I may not be at a liberty to choose the environment always, as most of the major distributions come bundled with 2.02.133
-I have two followup questions.
-1/ Is there a way to tell that a particular version has very critical bug (like the one I reported)? Nothing short of hitting it seem the way to confirm currently.
-2/ which is the nearest stable release that addresses this particular issue?
-3/ Does latest lvm stable work well in old distributions, Linux kernels too? Whats the compatibility matrix here? 
+My deployment of lvm2 is in an uncontrolled environment, so the host can be running any version.
+My software stack runs within a container, as an infrastructure. So to be always stable, it has to have very little dependency or moving components outside.
 
-Regards
-LN
+Sharing the lvm bits from host to container will also not work because on host most of the build needs dynamic lib support.
+This may not be available from within container. 
 
-From: Zdenek Kabelac
-Sent: Tuesday, July 30, 2019 1:51 PM
-To: LVM2 development; Lakshmi Narasimhan Sundararajan
-Subject: Re: [lvm-devel] lvmcache in writeback mode gets stuck flushing dirtyblocks
 
-Dne 30. 07. 19 v 6:58 Lakshmi Narasimhan Sundararajan napsal(a):
-> Hi Team,
-> 
-> A very good day to all.
-> 
-> 
-> I am using lvmcache in writeback mode. When there are dirty blocks still in 
-> the lv, and if needs to be destroyed or flushed, then
-> 
-> It seems to me that there are some conditions under which the dirty data flush 
-> gets stuck forever.
-> 
-> As an example:
-> 
-> root at pdc4-sm35:~# lvremove -f pwx0/pool
-> 
->  ? 367 blocks must still be flushed.
-> 
->  ? 367 blocks must still be flushed.
-> 
->  ? 367 blocks must still be flushed.
+The first up easy question: 
+1/ can lvm2 be built as a static binary with no external dependency? Any pointers to this ?
 
-> I am running these version:
-> 
-> root at pdc4-sm35:~# lvm version
-> 
->  ? LVM version:???? 2.02.133(2) (2015-10-30)
-> 
-> I filed one here myself, https://github.com/lvmteam/lvm2/issues/22, trying? to 
-> understand from you experts where we are on this?
-> 
-> I would sincerely appreciate your help in understanding the state of this 
-> issue in more detail.
+2/  The software stack bundles lvm2 package within the infrastructure container as well. 
+Now, this results in two versions of lvm2 packages one within the container and the other on the host. To take this further up, to completely isolate version dependencies as well, system-udevd and lvmetad daemons are also running within the container.
+This combination has been working, but I understand is definitely very strange and never thought out even during development.
+So I wish to understand the impact of the above bundling, with possibly two copies of daemons and cache and udev running within/and outside the container.
 
-Hi
+Please do let me know if this bundle approach is a feasible approach to take to production? What possible issues that may come up that cannot be handled correctly, if any.  I am coming more from design validation, because you are the experts with how its designed internally. Looking forward to hearing your opinions.
 
-Yep you are using very old version of lvm2 - there is already year 2019 - and 
-in the initial releases of lvm2 with writeback cache support (as you happen to 
-still use these days) there was a problem that uncaching was not switching to 
-writethrough mode (and this was not the only one)
-
-Please consider to use way newer lvm2 & kernel.
 
 Regards
-
-Zdenek
+LNS
+Sent from Mail for Windows 10
 
 -------------- next part --------------
 An HTML attachment was scrubbed...
-URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20190730/5a5c1a2e/attachment.htm>
+URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20190730/4d687a74/attachment.htm>
