@@ -1,90 +1,45 @@
-From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Wed, 31 Jul 2019 12:54:29 +0200
-Subject: Reg unusual deployment within containers
-In-Reply-To: <5d404562.1c69fb81.4641c.47b2@mx.google.com>
-References: <5d404562.1c69fb81.4641c.47b2@mx.google.com>
-Message-ID: <dad69ab9-0788-26da-bef7-44afb00e59c3@redhat.com>
+From: David Teigland <teigland@sourceware.org>
+Date: Wed, 31 Jul 2019 14:26:32 -0400
+Subject: stable-2.02 - vgchange: don't fail monitor command if vg is exported
+Message-ID: <201907311826.x6VIQWfE009659@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Dne 30. 07. 19 v 15:25 Lakshmi Narasimhan Sundararajan napsal(a):
-> Hi Team,
-> 
-> Thanks for being so prompt last time, I wanted to see whether I could be lucky 
-> again ?
-> 
-> My deployment of lvm2 is in an uncontrolled environment, so the host can be 
-> running any version.
-> 
-> My software stack runs within a container, as an infrastructure. So to be 
-> always stable, it has to have very little dependency or moving components outside.
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=5ddd1ead2dcaf9594a025a15986b8bac573c81b2
+Commit:        5ddd1ead2dcaf9594a025a15986b8bac573c81b2
+Parent:        b387d026bd065b99f894a5c7b67d1f0441b583f3
+Author:        David Teigland <teigland@redhat.com>
+AuthorDate:    Thu Jun 20 15:59:36 2019 -0500
+Committer:     David Teigland <teigland@redhat.com>
+CommitterDate: Wed Jul 31 13:18:58 2019 -0500
 
-It's worth to note (before you start to ask) that lvm2  does NOT support usage
-within containers.
+vgchange: don't fail monitor command if vg is exported
 
-When you do such solution - you need to resolve lots of tricky issues and 
-adapt usage to your local limited constrains.
+When monitoring, skip exported VGs without causing a command
+failure.
 
-But there is no 'generic' support for running lvm2 command within i.e. docker 
-image.
+The lvm2-monitor service runs 'vgchange --monitor y', so
+any exported VG on the system would cause the service to
+fail.
+---
+ tools/vgchange.c |    2 ++
+ 1 files changed, 2 insertions(+), 0 deletions(-)
 
-> 
-> The first up easy question:
-> 1/ can lvm2 be built as a static binary with no external dependency? Any 
-> pointers to this ?
-
-Nope - there is no static binary support for a long time.
-
-The key issue is - lot of things these days depends on udev (&systemd behind).
-
-So any static build of lvm2 with built-in udev/systemd libraries is not going 
-to works since the last thing systemd cares about is 'future' compatibility.
-We try to do that in lvm2 - which is much smaller project and it's very hard.
-
-So you can't expect 'static' builds to appear in this dynamic environment -
-it would be big challenging task on it's own....
-
-
-> 2/? The software stack bundles lvm2 package within the infrastructure 
-> container as well.
-
-Well - we do NOT support this. All these builds do their own hacking.
-It's all done without any support from lvm2 side.
-
-> So I wish to understand the impact of the above bundling, with possibly two 
-> copies of daemons and cache and udev running within/and outside the container.
-
-We wish to understand this as well :)
-
-It simply can't work - and we tell this to any container developer who asks...
-
-
-> Please do let me know if this bundle approach is a feasible approach to take 
-> to production? What possible issues that may come up that cannot be handled 
-> correctly, if any. ?I am coming more from design validation, because you are 
-> the experts with how its designed internally. Looking forward to hearing your 
-> opinions.
-
-Properly configured lvm2 is bound to installed system - which present 
-installed kernel version, udev, systemd and other surrounding apps.
-
-We don't understand how anyone is imagining, he can use 'random' i.e. Docker 
-image with random instance of lvm2 within image, no udev processing and lots 
-of other things missing and expects all will work...
-
-So you need to ask these question authors of those project ;) since we really 
-would like to know these answers ourself ;)
-
-So far we can only advice using of lvm2 within VM  (i.e. qemu)...
-
-IMHO lot of developers these days believe that container is just 'faster VM',
-and they have no idea how wrong they are...
-
-Regards
-
-Zdenek
+diff --git a/tools/vgchange.c b/tools/vgchange.c
+index 24c2253..e15fca7 100644
+--- a/tools/vgchange.c
++++ b/tools/vgchange.c
+@@ -712,6 +712,8 @@ static int _vgchange_single(struct cmd_context *cmd, const char *vg_name,
+ 	};
+ 
+ 	if (vg_is_exported(vg)) {
++		if (cmd->command->command_enum == vgchange_monitor_CMD)
++			return ECMD_PROCESSED;
+ 		log_error("Volume group \"%s\" is exported", vg_name);
+ 		return ECMD_FAILED;
+ 	}
 
 
