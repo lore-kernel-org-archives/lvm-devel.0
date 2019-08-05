@@ -1,90 +1,103 @@
 From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Fri, 2 Aug 2019 15:50:56 +0200
+Date: Mon, 5 Aug 2019 10:23:06 +0200
 Subject: lvmcache lv destroy with no flush
-In-Reply-To: <5d443e89.1c69fb81.d73bc.00df@mx.google.com>
+In-Reply-To: <5d444783.1c69fb81.96e35.3a01@mx.google.com>
 References: <5d426f7f.1c69fb81.24900.f111@mx.google.com>
 	<99f6e920-d920-4ec4-813a-48c5f22ae7f6@redhat.com>
 	<5d443e89.1c69fb81.d73bc.00df@mx.google.com>
-Message-ID: <93895828-a482-7729-bf7e-132afd4bf767@redhat.com>
+	<93895828-a482-7729-bf7e-132afd4bf767@redhat.com>
+	<5d444783.1c69fb81.96e35.3a01@mx.google.com>
+Message-ID: <abe351bf-e73a-f7c2-9e52-fc8b542321fb@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Dne 02. 08. 19 v 15:45 Lakshmi Narasimhan Sundararajan napsal(a):
-> Hi Zdenek,
+Dne 02. 08. 19 v 16:24 Lakshmi Narasimhan Sundararajan napsal(a):
+>   * 1.) remove devices from DM table
+>   * dmsetup remove_all
+>   * (or just some selected device - whatever fits...)
+>   *
+>   * 2.) remove disk singatures of VG
+>   * wipefs -a /dev/sdc
+>   * wipefs -a /dev/nvme0n1
+>   * (or pvremove -ff /dev/sdc /dev/nvme0n1)
+>   *
+>   * 3.) recreate empty VG from scratch
+>   * vgcreate pxtest /dev/sdc /dev/nvme0n1
 > 
-> Thank you for your email.
+> myhome$ sudo dmsetup status --target cache
 > 
->   * If you know you are going to destroy whole VG - you can simply make sure,
->   * there is no running? LV - and just recreate? PV/VG from scratch - certainly
->   * faster them removing i.e.? thousand of LVs individually one-by-one which
->   * is what will happen with lvremove/vgremove command ATM.
+> pxtest-pool: 0 20963328 cache 8 40/2048 2048 4096/10220 28 58 0 0 0 0 4096 1 
+> writethrough 2 migration_threshold 2048 cleaner 0 rw -
 > 
-> I tried to follow you for accelerated removal? did I interpret you correctly? 
-> I though hit the cache sync stuck issue. Please clarify what needs to change 
-> below. I see still cache flush happens while removing the vg.
-> 
-> myhome$ sudo vgcreate pxtest /dev/sdc /dev/nvme0n1
-> 
->  ? Volume group "pxtest" successfully created
-> 
-> myhome$
-> 
-> myhome$ sudo lvcreate -n cache --type cache-pool -l 100%pvs pxtest /dev/nvme0n1
-> 
->  ? Logical volume "cache" created.
-> 
-> myhome$ sudo lvcreate -n pool --type cache --cachepool pxtest/cache -l 100%pvs 
-> pxtest /dev/sdc
-> 
->  ? Logical volume "pool" created.
-> 
-> Myhome$
-> 
-> myhome$ sudo lvs pxtest
-> 
->  ? LV?? VG???? Attr?????? LSize? Pool??? Origin?????? Data%? Meta%? Move Log 
-> Cpy%Sync Convert
-> 
->  ? pool pxtest Cwi---C--- 10.00g [cache] [pool_corig]
-> 
-> myhome$
-> 
-> myhome$ sudo vgchange -an pxtest
-> 
+> myhome$ sudo dmsetup remove pxtest-pool
+
+
+Unfortunatelly you must remove ALL related device.
+
+
 >  ? 0 logical volume(s) in volume group "pxtest" now active
 > 
-> myhome$ sudo vgremove -ff pxtest
+> myhome$ sudo pvremove -ff /dev/sdc /dev/nvme0n1
 > 
->  ? 4096 blocks must still be flushed.
+> Really WIPE LABELS from physical volume "/dev/sdc" of volume group "pxtest" 
+> [y/n]? y
 > 
->  ? 4096 blocks must still be flushed.
+>  ? WARNING: Wiping physical volume label from /dev/sdc of volume group "pxtest"
 > 
->  ? 4096 blocks must still be flushed.
+>  ? Can't open /dev/sdc exclusively - not removing. Mounted filesystem?
+
+As you can see - you still have some device holding sdc open.
+
+As said origin - all used of  your SDC & NVME device must be removed - so 
+devices are 'free'.
+
+You can't be killing VG while DM device are still running in memory.
+
 > 
->  ? 4096 blocks must still be flushed.
+> Really WIPE LABELS from physical volume "/dev/nvme0n1" of volume group 
+> "pxtest" [y/n]? y
 > 
-> ^C
+>  ? WARNING: Wiping physical volume label from /dev/nvme0n1 of volume group 
+> "pxtest"
 > 
+>  ? Can't open /dev/nvme0n1 exclusively - not removing. Mounted filesystem?
+> 
+> myhome$
+> 
+> myhome$ sudo wipefs -a /dev/sdc /dev/nvme0n1
+> 
+> wipefs: error: /dev/sdc: probing initialization failed: Device or resource busy
+> 
+> myhome$
+> 
+> Doesn?t seem to work, there are still exclusive references on the drive held 
+> by lvm!
 
-1.) remove devices from DM table
-dmsetup remove_all
-(or just some selected device - whatever fits...)
 
-2.) remove disk singatures of VG
-wipefs -a /dev/sdc
-wipefs -a /dev/nvme0n1
-(or pvremove -ff /dev/sdc /dev/nvme0n1)
+Note - lvm2 never helds ANY reference - lvm2 is pure tool for manipulation 
+with DM devices - aka you can do those DM devices yourself without any lvm2 in 
+place - it's just way more work.
 
-3.) recreate empty VG from scratch
-vgcreate pxtest /dev/sdc /dev/nvme0n1
+So back to question who keeps devices open - you can easily get this info from 
+command like these:
 
 
-Although I'm not quite sure this is what you really want :) - it's more or 
-less idea for quicker testing - not something for presering data.
+dmsetup table
 
+dmsetup ls --tree
+
+lsbls
+...
+
+
+Before you start any device wiping for VG metadata - there must be no runing 
+device holding those device open - and as you are basically bypassing lvm2 
+when you run 'drastic' commands like 'dmsetup' or 'wipefs' yourself - you 
+can't blame lvm2 for not being cooperative for such 'violence' usage :)
+As has been originally said - advice was serious HACK in the lvm2 workflow....
 
 Regards
 
