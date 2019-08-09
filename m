@@ -1,101 +1,77 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Fri, 9 Aug 2019 06:58:46 -0400
-Subject: master - tests: replaces grep -q usage
-Message-ID: <201908091058.x79Awklg031601@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Fri, 9 Aug 2019 06:58:50 -0400
+Subject: master - tests: fix ra checking
+Message-ID: <201908091058.x79AwotS031617@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=3596210e02452f3785f0639115f6744f8f7e2dfc
-Commit:        3596210e02452f3785f0639115f6744f8f7e2dfc
-Parent:        08396b4bce45fb8311979250623f04ec0ddb628c
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=d3903d94e910b7ca673ef090c6fe9f79b04b7dd5
+Commit:        d3903d94e910b7ca673ef090c6fe9f79b04b7dd5
+Parent:        3596210e02452f3785f0639115f6744f8f7e2dfc
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Mon Jun 17 22:47:35 2019 +0200
+AuthorDate:    Tue Jun 18 13:20:27 2019 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Fri Aug 9 12:57:21 2019 +0200
 
-tests: replaces grep -q usage
+tests: fix ra checking
 
-Since we use 'set -euE -o pipefail' for shell execution,
-any failure of any command in the 'piped' shell can result
-in failure of whole executed chain - resulting in typically
-unsually test skip, that was left unnoticed.
-
-Since checked command have usually short output, the simplest
-fix seems to be to let grep parse whole output instead
-of quiting after first match.
+Since with some installed package like 'tuned' the value of 'RA' on
+PV origin device can be different, adapting tests to count with this.
 ---
- test/lib/aux.sh |   14 +++++++-------
- 1 files changed, 7 insertions(+), 7 deletions(-)
+ test/shell/lvcreate-usage.sh |   14 ++++++++++----
+ test/shell/read-ahead.sh     |    6 +++++-
+ 2 files changed, 15 insertions(+), 5 deletions(-)
 
-diff --git a/test/lib/aux.sh b/test/lib/aux.sh
-index e3f624c..81e8f91 100644
---- a/test/lib/aux.sh
-+++ b/test/lib/aux.sh
-@@ -26,7 +26,7 @@ expect_failure() {
- check_daemon_in_builddir() {
- 	# skip if we don't have our own deamon...
- 	if test -z "${installed_testsuite+varset}"; then
--		(which "$1" 2>/dev/null | grep -q "$abs_builddir") || skip "$1 is not in executed path."
-+		(which "$1" 2>/dev/null | grep "$abs_builddir" >/dev/null ) || skip "$1 is not in executed path."
- 	fi
- 	rm -f debug.log strace.log
- }
-@@ -167,7 +167,7 @@ prepare_clvmd() {
+diff --git a/test/shell/lvcreate-usage.sh b/test/shell/lvcreate-usage.sh
+index 6d42401..ca8694e 100644
+--- a/test/shell/lvcreate-usage.sh
++++ b/test/shell/lvcreate-usage.sh
+@@ -175,15 +175,21 @@ check lv_field $vg/$lv2 lv_kernel_read_ahead "0"
+ lvcreate -L 8 -n $lv3 --readahead 8k $vg
+ check lv_field $vg/$lv3 lv_read_ahead "8.00k"
+ check lv_field $vg/$lv3 lv_kernel_read_ahead "8.00k"
+-lvcreate -L 8 -n $lv4 --readahead auto $vg
++lvcreate -L 8 -n $lv4 --readahead auto $vg "$dev1"
+ check lv_field $vg/$lv4 lv_read_ahead "auto"
+-check lv_field $vg/$lv4 lv_kernel_read_ahead "128.00k"
++# figure RA value of a PV origin device
++DEVICE=$(dmsetup deps -o blkdevname "$dev1" | sed -e "s,.*:\ (\(.*\)),/dev/\1,")
++RASZ=$(( $(blockdev --getra "$DEVICE" ) / 2 ))
++SZ="$RASZ.00k"
++test "$RASZ" -ge 128 || SZ="128.00k"
++check lv_field $vg/$lv4 lv_kernel_read_ahead "$SZ" --units k
+ lvcreate -L 8 -n $lv5 -i2 --stripesize 16k --readahead auto $vg
+ check lv_field $vg/$lv5 lv_read_ahead "auto"
+-check lv_field $vg/$lv5 lv_kernel_read_ahead "128.00k"
++check lv_field $vg/$lv5 lv_kernel_read_ahead "$SZ" --units k
+ lvcreate -L 8 -n $lv6 -i2 --stripesize 128k --readahead auto $vg
+ check lv_field $vg/$lv6 lv_read_ahead "auto"
+-check lv_field $vg/$lv6 lv_kernel_read_ahead "512.00k"
++test "$RASZ" -ge 512 || SZ="512.00k"
++check lv_field $vg/$lv6 lv_kernel_read_ahead "$SZ" --units k
+ lvremove -ff $vg
  
- 	test -e "$DM_DEV_DIR/control" || dmsetup table >/dev/null # create control node
- 	# skip if singlenode is not compiled in
--	(clvmd --help 2>&1 | grep "Available cluster managers" | grep -q "singlenode") || \
-+	(clvmd --help 2>&1 | grep "Available cluster managers" | grep "singlenode" >/dev/null) || \
- 		skip "Compiled clvmd does not support singlenode for testing."
+ #
+diff --git a/test/shell/read-ahead.sh b/test/shell/read-ahead.sh
+index 60e5912..53cc572 100644
+--- a/test/shell/read-ahead.sh
++++ b/test/shell/read-ahead.sh
+@@ -35,8 +35,12 @@ lvremove -ff $vg
+ #COMM "read ahead is properly inherited from underlying PV"
+ blockdev --setra 768 "$dev1"
+ vgscan
++DEVICE=$(dmsetup deps -o blkdevname "$dev1" | sed -e "s,.*:\ (\(.*\)),/dev/\1,")
++RASZ=$(blockdev --getra "$DEVICE")
++SZ=$RASZ
++test "$RASZ" -ge 768 || SZ=768
+ lvcreate -n $lv -L4m $vg "$dev1"
+-test "$(blockdev --getra "$DM_DEV_DIR/$vg/$lv")" -eq 768
++test "$(blockdev --getra "$DM_DEV_DIR/$vg/$lv")" -eq "$SZ"
+ lvremove -ff $vg
  
- #	lvmconf "activation/monitoring = 1"
-@@ -531,7 +531,7 @@ teardown() {
- 	dm_table | not grep -E -q "$vg|$vg1|$vg2|$vg3|$vg4" || {
- 		# Avoid activation of dmeventd if there is no pid
- 		cfg=$(test -s LOCAL_DMEVENTD || echo "--config activation{monitoring=0}")
--		if dm_info suspended,name | grep -q "^Suspended:.*$PREFIX" ; then
-+		if dm_info suspended,name | grep "^Suspended:.*$PREFIX" >/dev/null ; then
- 			echo "## skipping vgremove, suspended devices detected."
- 		else
- 			vgremove -ff "$cfg"  \
-@@ -662,7 +662,7 @@ prepare_scsi_debug_dev() {
- 
- 	# Skip test if scsi_debug module is unavailable or is already in use
- 	modprobe --dry-run scsi_debug || skip
--	lsmod | not grep -q scsi_debug || skip
-+	lsmod | not grep scsi_debug >/dev/null || skip
- 
- 	# Create the scsi_debug device and determine the new scsi device's name
- 	# NOTE: it will _never_ make sense to pass num_tgts param;
-@@ -1447,7 +1447,7 @@ driver_at_least() {
- }
- 
- have_thin() {
--	lvm segtypes 2>/dev/null | grep -q thin$ || {
-+	lvm segtypes 2>/dev/null | grep thin$ >/dev/null || {
- 		echo "Thin is not built-in." >&2
- 		return 1
- 	}
-@@ -1471,7 +1471,7 @@ have_thin() {
- }
- 
- have_vdo() {
--	lvm segtypes 2>/dev/null | grep -q vdo$ || {
-+	lvm segtypes 2>/dev/null | grep vdo$ >/dev/null || {
- 		echo "VDO is not built-in." >&2
- 		return 1
- 	}
-@@ -1507,7 +1507,7 @@ have_raid4 () {
- }
- 
- have_cache() {
--	lvm segtypes 2>/dev/null | grep -q cache$ || {
-+	lvm segtypes 2>/dev/null | grep cache$ >/dev/null || {
- 		echo "Cache is not built-in." >&2
- 		return 1
- 	}
+ # Check default, active/inactive values for read_ahead / kernel_read_ahead
 
 
