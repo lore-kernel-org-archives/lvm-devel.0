@@ -1,77 +1,45 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Fri, 9 Aug 2019 06:58:50 -0400
-Subject: master - tests: fix ra checking
-Message-ID: <201908091058.x79AwotS031617@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Fri, 9 Aug 2019 06:58:53 -0400
+Subject: master - tests: add settle wait before issue remove
+Message-ID: <201908091058.x79Awrlq031628@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=d3903d94e910b7ca673ef090c6fe9f79b04b7dd5
-Commit:        d3903d94e910b7ca673ef090c6fe9f79b04b7dd5
-Parent:        3596210e02452f3785f0639115f6744f8f7e2dfc
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=1e553159d5147c601ae4b524198461309016b496
+Commit:        1e553159d5147c601ae4b524198461309016b496
+Parent:        d3903d94e910b7ca673ef090c6fe9f79b04b7dd5
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Jun 18 13:20:27 2019 +0200
+AuthorDate:    Thu Jul 4 16:58:27 2019 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Fri Aug 9 12:57:21 2019 +0200
 
-tests: fix ra checking
+tests: add settle wait before issue remove
 
-Since with some installed package like 'tuned' the value of 'RA' on
-PV origin device can be different, adapting tests to count with this.
+Some older BB with older cryptsetup tool do not 'retry' on remove
+and when  remove is issued right after 'fsck'  - it might be
+rejected with:
+
+Device @PREFIX at -tcrypt2 is busy.
+
+Try to use udevadm settle.
 ---
- test/shell/lvcreate-usage.sh |   14 ++++++++++----
- test/shell/read-ahead.sh     |    6 +++++-
- 2 files changed, 15 insertions(+), 5 deletions(-)
+ test/shell/fsadm-crypt.sh |    1 +
+ 1 files changed, 1 insertions(+), 0 deletions(-)
 
-diff --git a/test/shell/lvcreate-usage.sh b/test/shell/lvcreate-usage.sh
-index 6d42401..ca8694e 100644
---- a/test/shell/lvcreate-usage.sh
-+++ b/test/shell/lvcreate-usage.sh
-@@ -175,15 +175,21 @@ check lv_field $vg/$lv2 lv_kernel_read_ahead "0"
- lvcreate -L 8 -n $lv3 --readahead 8k $vg
- check lv_field $vg/$lv3 lv_read_ahead "8.00k"
- check lv_field $vg/$lv3 lv_kernel_read_ahead "8.00k"
--lvcreate -L 8 -n $lv4 --readahead auto $vg
-+lvcreate -L 8 -n $lv4 --readahead auto $vg "$dev1"
- check lv_field $vg/$lv4 lv_read_ahead "auto"
--check lv_field $vg/$lv4 lv_kernel_read_ahead "128.00k"
-+# figure RA value of a PV origin device
-+DEVICE=$(dmsetup deps -o blkdevname "$dev1" | sed -e "s,.*:\ (\(.*\)),/dev/\1,")
-+RASZ=$(( $(blockdev --getra "$DEVICE" ) / 2 ))
-+SZ="$RASZ.00k"
-+test "$RASZ" -ge 128 || SZ="128.00k"
-+check lv_field $vg/$lv4 lv_kernel_read_ahead "$SZ" --units k
- lvcreate -L 8 -n $lv5 -i2 --stripesize 16k --readahead auto $vg
- check lv_field $vg/$lv5 lv_read_ahead "auto"
--check lv_field $vg/$lv5 lv_kernel_read_ahead "128.00k"
-+check lv_field $vg/$lv5 lv_kernel_read_ahead "$SZ" --units k
- lvcreate -L 8 -n $lv6 -i2 --stripesize 128k --readahead auto $vg
- check lv_field $vg/$lv6 lv_read_ahead "auto"
--check lv_field $vg/$lv6 lv_kernel_read_ahead "512.00k"
-+test "$RASZ" -ge 512 || SZ="512.00k"
-+check lv_field $vg/$lv6 lv_kernel_read_ahead "$SZ" --units k
- lvremove -ff $vg
+diff --git a/test/shell/fsadm-crypt.sh b/test/shell/fsadm-crypt.sh
+index 9377e89..4b8fc4e 100644
+--- a/test/shell/fsadm-crypt.sh
++++ b/test/shell/fsadm-crypt.sh
+@@ -83,6 +83,7 @@ export LVM_BINARY
+ test ! -d "$mount_dir" && mkdir "$mount_dir"
  
- #
-diff --git a/test/shell/read-ahead.sh b/test/shell/read-ahead.sh
-index 60e5912..53cc572 100644
---- a/test/shell/read-ahead.sh
-+++ b/test/shell/read-ahead.sh
-@@ -35,8 +35,12 @@ lvremove -ff $vg
- #COMM "read ahead is properly inherited from underlying PV"
- blockdev --setra 768 "$dev1"
- vgscan
-+DEVICE=$(dmsetup deps -o blkdevname "$dev1" | sed -e "s,.*:\ (\(.*\)),/dev/\1,")
-+RASZ=$(blockdev --getra "$DEVICE")
-+SZ=$RASZ
-+test "$RASZ" -ge 768 || SZ=768
- lvcreate -n $lv -L4m $vg "$dev1"
--test "$(blockdev --getra "$DM_DEV_DIR/$vg/$lv")" -eq 768
-+test "$(blockdev --getra "$DM_DEV_DIR/$vg/$lv")" -eq "$SZ"
- lvremove -ff $vg
- 
- # Check default, active/inactive values for read_ahead / kernel_read_ahead
+ crypt_close() {
++	aux udev_wait
+ 	cryptsetup remove "$1"
+ 	if [ "$?" -eq 0 -a -n "$DROP_SYMLINK" ]; then
+ 		rm -f "$DM_DEV_DIR/mapper/$1"
 
 
