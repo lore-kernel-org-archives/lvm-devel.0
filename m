@@ -1,182 +1,101 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Fri, 9 Aug 2019 06:58:45 -0400
-Subject: master - make: generate
-Message-ID: <201908091058.x79AwjF1031596@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Fri, 9 Aug 2019 06:58:46 -0400
+Subject: master - tests: replaces grep -q usage
+Message-ID: <201908091058.x79Awklg031601@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=08396b4bce45fb8311979250623f04ec0ddb628c
-Commit:        08396b4bce45fb8311979250623f04ec0ddb628c
-Parent:        728435e7d680c95fd21fe496d707d1c77adf7d85
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=3596210e02452f3785f0639115f6744f8f7e2dfc
+Commit:        3596210e02452f3785f0639115f6744f8f7e2dfc
+Parent:        08396b4bce45fb8311979250623f04ec0ddb628c
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Aug 9 12:56:28 2019 +0200
+AuthorDate:    Mon Jun 17 22:47:35 2019 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Fri Aug 9 12:57:07 2019 +0200
+CommitterDate: Fri Aug 9 12:57:21 2019 +0200
 
-make: generate
+tests: replaces grep -q usage
 
-Run make generate.
+Since we use 'set -euE -o pipefail' for shell execution,
+any failure of any command in the 'piped' shell can result
+in failure of whole executed chain - resulting in typically
+unsually test skip, that was left unnoticed.
+
+Since checked command have usually short output, the simplest
+fix seems to be to let grep parse whole output instead
+of quiting after first match.
 ---
- conf/example.conf.in   |   18 +++++++-----
- man/lvconvert.8_pregen |   70 ++++++++++++++++++++++++++----------------------
- 2 files changed, 48 insertions(+), 40 deletions(-)
+ test/lib/aux.sh |   14 +++++++-------
+ 1 files changed, 7 insertions(+), 7 deletions(-)
 
-diff --git a/conf/example.conf.in b/conf/example.conf.in
-index 154f621..91ce5be 100644
---- a/conf/example.conf.in
-+++ b/conf/example.conf.in
-@@ -142,7 +142,7 @@ devices {
- 	# 
- 	# Example
- 	# Accept every block device:
--	# filter = [ "a|.*/|" ]
-+	# filter = [ "a|.*|" ]
- 	# Reject the cdrom drive:
- 	# filter = [ "r|/dev/cdrom|" ]
- 	# Work with just loopback devices, e.g. for testing:
-@@ -150,10 +150,10 @@ devices {
- 	# Accept all loop devices and ide drives except hdc:
- 	# filter = [ "a|loop|", "r|/dev/hdc|", "a|/dev/ide|", "r|.*|" ]
- 	# Use anchors to be very specific:
--	# filter = [ "a|^/dev/hda8$|", "r|.*/|" ]
-+	# filter = [ "a|^/dev/hda8$|", "r|.*|" ]
- 	# 
- 	# This configuration option has an automatic default value.
--	# filter = [ "a|.*/|" ]
-+	# filter = [ "a|.*|" ]
+diff --git a/test/lib/aux.sh b/test/lib/aux.sh
+index e3f624c..81e8f91 100644
+--- a/test/lib/aux.sh
++++ b/test/lib/aux.sh
+@@ -26,7 +26,7 @@ expect_failure() {
+ check_daemon_in_builddir() {
+ 	# skip if we don't have our own deamon...
+ 	if test -z "${installed_testsuite+varset}"; then
+-		(which "$1" 2>/dev/null | grep -q "$abs_builddir") || skip "$1 is not in executed path."
++		(which "$1" 2>/dev/null | grep "$abs_builddir" >/dev/null ) || skip "$1 is not in executed path."
+ 	fi
+ 	rm -f debug.log strace.log
+ }
+@@ -167,7 +167,7 @@ prepare_clvmd() {
  
- 	# Configuration option devices/global_filter.
- 	# Limit the block devices that are used by LVM system components.
-@@ -163,7 +163,7 @@ devices {
- 	# The syntax is the same as devices/filter. Devices rejected by
- 	# global_filter are not opened by LVM.
- 	# This configuration option has an automatic default value.
--	# global_filter = [ "a|.*/|" ]
-+	# global_filter = [ "a|.*|" ]
+ 	test -e "$DM_DEV_DIR/control" || dmsetup table >/dev/null # create control node
+ 	# skip if singlenode is not compiled in
+-	(clvmd --help 2>&1 | grep "Available cluster managers" | grep -q "singlenode") || \
++	(clvmd --help 2>&1 | grep "Available cluster managers" | grep "singlenode" >/dev/null) || \
+ 		skip "Compiled clvmd does not support singlenode for testing."
  
- 	# Configuration option devices/types.
- 	# List of additional acceptable block device types.
-@@ -347,6 +347,12 @@ devices {
- 	# Enabling this setting allows the VG to be used as usual even with
- 	# uncertain devices.
- 	allow_changes_with_duplicate_pvs = 0
-+
-+	# Configuration option devices/allow_mixed_block_sizes.
-+	# Allow PVs in the same VG with different logical block sizes.
-+	# When allowed, the user is responsible to ensure that an LV is
-+	# using PVs with matching block sizes when necessary.
-+	allow_mixed_block_sizes = 0
+ #	lvmconf "activation/monitoring = 1"
+@@ -531,7 +531,7 @@ teardown() {
+ 	dm_table | not grep -E -q "$vg|$vg1|$vg2|$vg3|$vg4" || {
+ 		# Avoid activation of dmeventd if there is no pid
+ 		cfg=$(test -s LOCAL_DMEVENTD || echo "--config activation{monitoring=0}")
+-		if dm_info suspended,name | grep -q "^Suspended:.*$PREFIX" ; then
++		if dm_info suspended,name | grep "^Suspended:.*$PREFIX" >/dev/null ; then
+ 			echo "## skipping vgremove, suspended devices detected."
+ 		else
+ 			vgremove -ff "$cfg"  \
+@@ -662,7 +662,7 @@ prepare_scsi_debug_dev() {
+ 
+ 	# Skip test if scsi_debug module is unavailable or is already in use
+ 	modprobe --dry-run scsi_debug || skip
+-	lsmod | not grep -q scsi_debug || skip
++	lsmod | not grep scsi_debug >/dev/null || skip
+ 
+ 	# Create the scsi_debug device and determine the new scsi device's name
+ 	# NOTE: it will _never_ make sense to pass num_tgts param;
+@@ -1447,7 +1447,7 @@ driver_at_least() {
  }
  
- # Configuration section allocation.
-@@ -899,9 +905,6 @@ global {
- 	# the error messages.
- 	activation = 1
+ have_thin() {
+-	lvm segtypes 2>/dev/null | grep -q thin$ || {
++	lvm segtypes 2>/dev/null | grep thin$ >/dev/null || {
+ 		echo "Thin is not built-in." >&2
+ 		return 1
+ 	}
+@@ -1471,7 +1471,7 @@ have_thin() {
+ }
  
--	# Configuration option global/segment_libraries.
--	# This configuration option does not have a default value defined.
--
- 	# Configuration option global/proc.
- 	# Location of proc filesystem.
- 	# This configuration option is advanced.
-@@ -1751,7 +1754,6 @@ activation {
- 	# additional space for VG metadata. The --metadatasize option overrides
- 	# this setting.
- 	# This configuration option does not have a default value defined.
--	# This configuration option has an automatic default value.
+ have_vdo() {
+-	lvm segtypes 2>/dev/null | grep -q vdo$ || {
++	lvm segtypes 2>/dev/null | grep vdo$ >/dev/null || {
+ 		echo "VDO is not built-in." >&2
+ 		return 1
+ 	}
+@@ -1507,7 +1507,7 @@ have_raid4 () {
+ }
  
- 	# Configuration option metadata/pvmetadataignore.
- 	# Ignore metadata areas on a new PV.
-diff --git a/man/lvconvert.8_pregen b/man/lvconvert.8_pregen
-index 7252f6f..846ea2d 100644
---- a/man/lvconvert.8_pregen
-+++ b/man/lvconvert.8_pregen
-@@ -378,6 +378,44 @@ Convert LV to striped.
- .RE
- -
- 
-+Convert LV to type mirror (also see type raid1),
-+.br
-+.P
-+\fBlvconvert\fP \fB--type\fP \fBmirror\fP \fILV\fP
-+.br
-+.RS 4
-+.ad l
-+[ \fB-m\fP|\fB--mirrors\fP [\fB+\fP|\fB-\fP]\fINumber\fP ]
-+.ad b
-+.br
-+.ad l
-+[ \fB-I\fP|\fB--stripesize\fP \fISize\fP[k|UNIT] ]
-+.ad b
-+.br
-+.ad l
-+[ \fB-R\fP|\fB--regionsize\fP \fISize\fP[m|UNIT] ]
-+.ad b
-+.br
-+.ad l
-+[ \fB-i\fP|\fB--interval\fP \fINumber\fP ]
-+.ad b
-+.br
-+.ad l
-+[    \fB--stripes\fP \fINumber\fP ]
-+.ad b
-+.br
-+.ad l
-+[    \fB--mirrorlog\fP \fBcore\fP|\fBdisk\fP ]
-+.ad b
-+.br
-+[ COMMON_OPTIONS ]
-+.RE
-+.br
-+.RS 4
-+[ \fIPV\fP ... ]
-+.RE
-+-
-+
- Convert LV to raid or change raid layout 
- .br
- (a specific raid level must be used, e.g. raid1).
-@@ -1636,38 +1674,6 @@ For example, LVM_VG_NAME can generally be substituted for a required VG paramete
- .SH ADVANCED USAGE
- Alternate command forms, advanced command usage, and listing of all valid syntax for completeness.
- .P
--Convert LV to type mirror (also see type raid1), 
--.br
--(also see lvconvert --mirrors).
--.br
--.P
--\fBlvconvert\fP \fB--type\fP \fBmirror\fP \fILV\fP
--.br
--.RS 4
--.ad l
--[ \fB-m\fP|\fB--mirrors\fP [\fB+\fP|\fB-\fP]\fINumber\fP ]
--.ad b
--.br
--.ad l
--[ \fB-R\fP|\fB--regionsize\fP \fISize\fP[m|UNIT] ]
--.ad b
--.br
--.ad l
--[ \fB-i\fP|\fB--interval\fP \fINumber\fP ]
--.ad b
--.br
--.ad l
--[    \fB--mirrorlog\fP \fBcore\fP|\fBdisk\fP ]
--.ad b
--.br
--[ COMMON_OPTIONS ]
--.RE
--.br
--.RS 4
--[ \fIPV\fP ... ]
--.RE
---
--
- Change the region size of an LV.
- .br
- .P
+ have_cache() {
+-	lvm segtypes 2>/dev/null | grep -q cache$ || {
++	lvm segtypes 2>/dev/null | grep cache$ >/dev/null || {
+ 		echo "Cache is not built-in." >&2
+ 		return 1
+ 	}
 
 
