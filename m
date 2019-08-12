@@ -1,216 +1,156 @@
-From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Fri, 9 Aug 2019 06:59:07 -0400
-Subject: master - tests: simplify some var settings
-Message-ID: <201908091059.x79Ax7wI031671@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: Lakshmi Narasimhan Sundararajan <lns@portworx.com>
+Date: Mon, 12 Aug 2019 10:11:28 +0530
+Subject: lvmcache in writeback mode gets stuckflushingdirtyblocks
+In-Reply-To: <5d4ac08e.1c69fb81.48e83.253c@mx.google.com>
+References: <5d3fce60.1c69fb81.f521b.46a8@mx.google.com>
+	<CAMNNMLH8jxxRYNyZn6s=Qqhgt7kA5CereTUw8GSNeUrJ5V9iDw@mail.gmail.com>
+	<5d41650e.1c69fb81.cd7bd.5ade@mx.google.com>
+	<CAMNNMLFnGpkFkbDMsO3k_GJKoHLcmk-chn3O6dtBCgyxjrXkwA@mail.gmail.com>
+	<CAMNNMLHRjNR71m06pz=uU1OaDeBVh0j+EScBkhSeuDom-Zvurw@mail.gmail.com>
+	<5d4ac08e.1c69fb81.48e83.253c@mx.google.com>
+Message-ID: <5d50edf8.1c69fb81.48dba.3630@mx.google.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=e653f43732fd61f8dc272b157f323663abce3daa
-Commit:        e653f43732fd61f8dc272b157f323663abce3daa
-Parent:        05c7e09e7100292cbdf713256ceec76b53ddd57d
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu Jun 20 00:03:18 2019 +0200
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Fri Aug 9 12:57:21 2019 +0200
+Gentle reminder? I would sincerely appreciate clarification for the below.
 
-tests: simplify some var settings
+Regards
+LN
+Sent from Mail for Windows 10
 
-scan_lvs now automatically comes with extend_filter_LVMTEST
----
- test/lib/aux.sh                       |    2 +-
- test/shell/discards-thin.sh           |    2 --
- test/shell/lvconvert-thin.sh          |    2 --
- test/shell/lvcreate-large-raid10.sh   |    1 -
- test/shell/lvcreate-large.sh          |    2 --
- test/shell/pvcreate-operation-md.sh   |    3 +--
- test/shell/pvcreate-restore.sh        |    2 --
- test/shell/pvremove-thin.sh           |    2 --
- test/shell/scan-lvs.sh                |    4 +---
- test/shell/snapshot-remove-dmsetup.sh |    2 --
- test/shell/snapshot-usage-exa.sh      |    2 --
- test/shell/snapshot-usage.sh          |    2 --
- test/shell/vgsplit-stacked.sh         |    2 --
- 13 files changed, 3 insertions(+), 25 deletions(-)
+From: Lakshmi Narasimhan Sundararajan
+Sent: Wednesday, August 7, 2019 5:44 PM
+To: LVM2 development
+Subject: RE: [lvm-devel] lvmcache in writeback mode gets stuckflushingdirtyblocks
 
-diff --git a/test/lib/aux.sh b/test/lib/aux.sh
-index 81e8f91..32d5a0b 100644
---- a/test/lib/aux.sh
-+++ b/test/lib/aux.sh
-@@ -1164,7 +1164,7 @@ devices/default_data_alignment = 1
- devices/dir = "$DM_DEV_DIR"
- devices/filter = "a|.*|"
- devices/global_filter = [ "a|$DM_DEV_DIR/mapper/${PREFIX}.*pv[0-9_]*$|", "r|.*|" ]
--devices/md_component_detection  = 0
-+devices/md_component_detection = 0
- devices/scan = "$DM_DEV_DIR"
- devices/sysfs_scan = 1
- devices/write_cache_state = 0
-diff --git a/test/shell/discards-thin.sh b/test/shell/discards-thin.sh
-index 3564a87..f27d4c3 100644
---- a/test/shell/discards-thin.sh
-+++ b/test/shell/discards-thin.sh
-@@ -25,8 +25,6 @@ export LVM_TEST_THIN_REPAIR_CMD=${LVM_TEST_THIN_REPAIR_CMD-/bin/false}
- #
- aux have_thin 1 1 0 || skip
- 
--aux lvmconf 'devices/scan_lvs = 1'
--
- aux prepare_vg 2 64
- get_devs
- 
-diff --git a/test/shell/lvconvert-thin.sh b/test/shell/lvconvert-thin.sh
-index 731c45b..1f8d2ed 100644
---- a/test/shell/lvconvert-thin.sh
-+++ b/test/shell/lvconvert-thin.sh
-@@ -17,8 +17,6 @@ export LVM_TEST_THIN_REPAIR_CMD=${LVM_TEST_THIN_REPAIR_CMD-/bin/false}
- 
- . lib/inittest
- 
--aux lvmconf 'devices/scan_lvs = 1'
--
- prepare_lvs() {
- 	lvremove -f $vg
- 	lvcreate -L10M -n $lv1 $vg
-diff --git a/test/shell/lvcreate-large-raid10.sh b/test/shell/lvcreate-large-raid10.sh
-index 1ad09aa..a46be37 100644
---- a/test/shell/lvcreate-large-raid10.sh
-+++ b/test/shell/lvcreate-large-raid10.sh
-@@ -20,7 +20,6 @@ SKIP_WITH_LVMPOLLD=1
- # FIXME  update test to make something useful on <16T
- aux can_use_16T || skip
- aux have_raid 1 3 0 || skip
--aux lvmconf 'devices/scan_lvs = 1'
- 
- aux prepare_vg 5
- 
-diff --git a/test/shell/lvcreate-large.sh b/test/shell/lvcreate-large.sh
-index b1cb0b0..473b0ed 100644
---- a/test/shell/lvcreate-large.sh
-+++ b/test/shell/lvcreate-large.sh
-@@ -17,8 +17,6 @@ SKIP_WITH_LVMPOLLD=1
- 
- . lib/inittest
- 
--aux lvmconf 'devices/scan_lvs = 1'
--
- # FIXME  update test to make something useful on <16T
- aux can_use_16T || skip
- 
-diff --git a/test/shell/pvcreate-operation-md.sh b/test/shell/pvcreate-operation-md.sh
-index 11f0887..4b51932 100644
---- a/test/shell/pvcreate-operation-md.sh
-+++ b/test/shell/pvcreate-operation-md.sh
-@@ -22,8 +22,7 @@ test -f /proc/mdstat && grep -q raid0 /proc/mdstat || \
- 	modprobe raid0 || skip
- 
- aux lvmconf 'devices/md_component_detection = 1'
--aux extend_filter_LVMTEST
--aux extend_filter "a|/dev/md.*|"
-+aux extend_filter_LVMTEST "a|/dev/md|"
- 
- aux prepare_devs 2
- 
-diff --git a/test/shell/pvcreate-restore.sh b/test/shell/pvcreate-restore.sh
-index 789f45c..d0b46eb 100644
---- a/test/shell/pvcreate-restore.sh
-+++ b/test/shell/pvcreate-restore.sh
-@@ -15,8 +15,6 @@ SKIP_WITH_LVMPOLLD=1
- 
- . lib/inittest
- 
--aux lvmconf 'devices/scan_lvs = 1'
--
- aux prepare_vg 4
- 
- lvcreate --type snapshot -s -L10 -n $lv1 $vg --virtualsize 2T
-diff --git a/test/shell/pvremove-thin.sh b/test/shell/pvremove-thin.sh
-index 84a2a55..9859b6c 100644
---- a/test/shell/pvremove-thin.sh
-+++ b/test/shell/pvremove-thin.sh
-@@ -18,8 +18,6 @@ SKIP_WITH_LVMPOLLD=1
- 
- . lib/inittest
- 
--aux lvmconf 'devices/scan_lvs = 1'
--
- aux prepare_vg
- 
- aux have_thin 1 8 0 || skip
-diff --git a/test/shell/scan-lvs.sh b/test/shell/scan-lvs.sh
-index 8e8a77d..f49bf4d 100644
---- a/test/shell/scan-lvs.sh
-+++ b/test/shell/scan-lvs.sh
-@@ -15,10 +15,9 @@ SKIP_WITH_LVMPOLLD=1
- 
- . lib/inittest
- 
-+# Sets 'scan_lvs = 1'
- aux extend_filter_LVMTEST
- 
--aux lvmconf 'devices/scan_lvs = 1'
--
- aux prepare_pvs 1
- 
- vgcreate $SHARED $vg1 "$dev1"
-@@ -44,4 +43,3 @@ lvchange -an "$vg1/$lv1"
- lvremove "$vg1/$lv1"
- 
- vgremove $vg1
--
-diff --git a/test/shell/snapshot-remove-dmsetup.sh b/test/shell/snapshot-remove-dmsetup.sh
-index 916aec9..19411ce 100644
---- a/test/shell/snapshot-remove-dmsetup.sh
-+++ b/test/shell/snapshot-remove-dmsetup.sh
-@@ -17,8 +17,6 @@ SKIP_WITH_LVMPOLLD=1
- 
- . lib/inittest
- 
--aux lvmconf 'devices/scan_lvs = 1'
--
- which mkfs.ext2 || skip
- 
- aux prepare_vg 5
-diff --git a/test/shell/snapshot-usage-exa.sh b/test/shell/snapshot-usage-exa.sh
-index f537f0d..5d666bf 100644
---- a/test/shell/snapshot-usage-exa.sh
-+++ b/test/shell/snapshot-usage-exa.sh
-@@ -18,8 +18,6 @@ SKIP_WITH_LVMPOLLD=1
- 
- . lib/inittest
- 
--aux lvmconf 'devices/scan_lvs = 1'
--
- aux can_use_16T || skip
- 
- aux prepare_pvs 1
-diff --git a/test/shell/snapshot-usage.sh b/test/shell/snapshot-usage.sh
-index 5cfdae6..bcfa16a 100644
---- a/test/shell/snapshot-usage.sh
-+++ b/test/shell/snapshot-usage.sh
-@@ -17,8 +17,6 @@ SKIP_WITH_LVMPOLLD=1
- 
- . lib/inittest
- 
--aux lvmconf 'devices/scan_lvs = 1'
--
- MKFS=mkfs.ext2
- which $MKFS || skip
- 
-diff --git a/test/shell/vgsplit-stacked.sh b/test/shell/vgsplit-stacked.sh
-index 09af3f7..331ee8e 100644
---- a/test/shell/vgsplit-stacked.sh
-+++ b/test/shell/vgsplit-stacked.sh
-@@ -15,8 +15,6 @@ SKIP_WITH_LVMPOLLD=1
- 
- . lib/inittest
- 
--aux lvmconf 'devices/scan_lvs = 1'
--
- aux extend_filter_LVMTEST
- aux prepare_pvs 3
- 
+Hi Nikhil,
+So far with migration_threshold set to 20480 from original 2048 has not seen this problem. I shall keep you posted on further internal testing on this.
+
+But I would like to understand more on the tunables we have with lvmcache. Can you please help refine the definitions and my understanding of the below.
+
+Defaults:
+migration_threshold 2048 
+random_threshold 4 
+sequential_threshold 512
+
+1) Migration_threshold: This tunable controls how many sectors (512B) of data are pulled in or pushed out of cache. So all flush/writeback operations from the cache device operates in multiples of this threshold. There is no migration ever in writethrough cache. ?Larger the number of sectors will help in moving larger context into/out of cache immediately and improve sequential performance, but shall adversely affect random performance.
+2) Sequential_threshold: This tunable is a count of IO requests that have to be contiguous (start from last IO end) to treat incoming IO as sequential. Each IO can be of any size. As long as the next IO is contiguous it shall get counted. All IOs only after hitting the sequential_threshold shall be bypassed from cache. Even if one IO misses the sequential pattern from last IO, the threshold gets reset to zero? And all intervening IO are cached?
+3) Random_threshold: This tunable is a count of IO requests that miss sequential condition to be considered as a random IO. In default condition, first 4 IO requests in the stream can never get cached. All IO between 4 and 512 requests in the stream get cached. And only after 512 requests does the caching module recognize incoming IO as sequential and stop caching further.
+
+Outside of this I also see 3 other tunables.
+??? "read_promote_adjustment",
+??? "write_promote_adjustment",
+??? "discard_promote_adjustment"
+
+To which I do not understand how this needs to be configured.
+Are there any other tunables that I am not aware of.
+
+Can you please help clarify on the same.
+
+Regards
+LN
+Sent from Mail for Windows 10
+
+From: Nikhil Kshirsagar
+Sent: Monday, August 5, 2019 2:42 PM
+To: LVM2 development
+Subject: Re: [lvm-devel] lvmcache in writeback mode gets stuck flushingdirtyblocks
+
+Can you try increasing migration threshold through the device mapper commands and check if this gets rid of the infinite flushes ?
+
+On Fri, 2 Aug, 2019, 5:14 PM Nikhil Kshirsagar, <nkshirsa@redhat.com> wrote:
+Hello,
+
+You are welcome.
+
+The migration threshold is in terms of chunks, I think.. So it should be at least one chunk so the looping forever won't happen. The bug we found was if chunksize goes beyond a certain value triggered by larger than one tb sized cached lv, it ends up with migration threshold hard coded to lower than the increased chunksize.
+
+Yes migration threshold right now needs better documentation and explanations. Also the ability to see it from lvm commands just like we can see chunksize. We are working on it through the bzs mentioned earlier. (See the bz about migration threshold needing better documentation in the man pages)
+
+I think right now you can get it only at the device mapper layer, will check..
+
+Regards,
+Nikhil.
 
 
+On Fri, 2 Aug, 2019, 5:09 PM Lakshmi Narasimhan Sundararajan, <lns@portworx.com> wrote:
+Hi Nikhil,
+Thank you for your email. Much appreciated.
+?
+In my environment, Chunksize is fixed at 1M irrespective of the pool size. This may take the number of entries over 1M and result in kernel warning. But the class of systems we are using are huge, and so the memory and cpu bottlenecks does not seem to be a factor in our testing.
+?
+I looked up at the bugs. The first one about chunksize > 1M, we should be safe on that given our chunksize is fixed at 1MB.
+The other one about migration threshold is interesting, I will have to validate this again.
+?
+What would be the unit of migration threshold?? Is it the number of 512 byte sectors? And what exactly is its definition?
+?
+And also curiously this does not seem to be exported through lvm cli, need to fetch this only through dmsetup?
+?
+Thanks
+LN
+Sent from Mail for Windows 10
+?
+From: Nikhil Kshirsagar
+Sent: Wednesday, July 31, 2019 3:04 PM
+To: LVM2 development
+Subject: Re: [lvm-devel] lvmcache in writeback mode gets stuck flushing dirtyblocks
+?
+This used to happen if the chunksize increased as a result of needing to use more than a million chunks to store the size of the cached lv. What is the size of the pool?
+?
+Regards,
+Nikhil.
+?
+On Tue, 30 Jul, 2019, 1:25 PM Lakshmi Narasimhan Sundararajan, <lns@portworx.com> wrote:
+Hi Team,
+A very good day to all.
+
+I am using lvmcache in writeback mode. When there are dirty blocks still in the lv, and if needs to be destroyed or flushed, then
+It seems to me that there are some conditions under which the dirty data flush gets stuck forever.
+?
+?
+As an example:
+root at pdc4-sm35:~# lvremove -f pwx0/pool
+? 367 blocks must still be flushed.
+? 367 blocks must still be flushed.
+? 367 blocks must still be flushed.
+? 367 blocks must still be flushed.
+? 367 blocks must still be flushed.
+? 367 blocks must still be flushed.
+^C
+root at pdc4-sm35:~#
+?
+I am running these version:
+root at pdc4-sm35:~# lvm version
+? LVM version:???? 2.02.133(2) (2015-10-30)
+? Library version: 1.02.110 (2015-10-30)
+? Driver version:? 4.34.0
+root at pdc4-sm35:~#
+?
+?
+This issue seems old and reported multiple places. There have been some acknowledgement that this issue is resolved in 2.02.133, but still I see it. Also, I have seen some posts report it in 2.02.170+ as well (here: https://bugs.debian.org/cgi-bin/bugreport.cgi?bug=878441) (Package: lvm2 Version: 2.02.173-1 Severity: normal)
+?
+I filed one here myself, https://github.com/lvmteam/lvm2/issues/22, trying? to understand from you experts where we are on this?
+?
+I would sincerely appreciate your help in understanding the state of this issue in more detail.
+?
+Best regards
+LN
+Sent from Mail for Windows 10
+?
+--
+lvm-devel mailing list
+lvm-devel at redhat.com
+https://www.redhat.com/mailman/listinfo/lvm-devel
+?
+--
+lvm-devel mailing list
+lvm-devel at redhat.com
+https://www.redhat.com/mailman/listinfo/lvm-devel
+
+
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20190812/fb18713a/attachment.htm>
