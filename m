@@ -1,60 +1,83 @@
-From: Peter Rajnoha <prajnoha@sourceware.org>
-Date: Tue, 13 Aug 2019 09:27:13 -0400
-Subject: master - udev: remove unsupported OPTIONS+="event_timeout" rule
-Message-ID: <201908131327.x7DDRD1c004123@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: Nir Soffer <nsoffer@redhat.com>
+Date: Fri, 16 Aug 2019 01:31:38 +0300
+Subject: [PATCH] tool: Allow suppressing backup warnings
+In-Reply-To: <CAMRbyytdRwTve-9mrmFbY_VyWiXSyDXWwu8fJFssAqehMFNvPQ@mail.gmail.com>
+References: <20190529121000.25206-1-nsoffer@redhat.com>
+	<CAMRbyytdRwTve-9mrmFbY_VyWiXSyDXWwu8fJFssAqehMFNvPQ@mail.gmail.com>
+Message-ID: <CAMRbyyvjtpMXB2v-ADXtdKy--ssoDeESfSBHf3a+bJyqbuiC6A@mail.gmail.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=125f27ac37bc9b93cc96f64052b9681b3d479ee1
-Commit:        125f27ac37bc9b93cc96f64052b9681b3d479ee1
-Parent:        e653f43732fd61f8dc272b157f323663abce3daa
-Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Tue Aug 13 15:18:30 2019 +0200
-Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Tue Aug 13 15:18:30 2019 +0200
+ping 2
 
-udev: remove unsupported OPTIONS+="event_timeout" rule
+On Mon, Jun 10, 2019 at 11:16 PM Nir Soffer <nsoffer@redhat.com> wrote:
 
-The OPTIONS+="event_timeout" is Unsupported since systemd/udev version 216,
-that is ~5 years ago.
-
-Since systemd/udev version 243, there's a new message printed if unsupported
-OPTIONS value is used:
-
-  Invalid value for OPTIONS key, ignoring: 'event_timeout=180'
-
-Resolves: https://bugzilla.redhat.com/show_bug.cgi?id=1740666
----
- WHATS_NEW               |    1 +
- udev/11-dm-lvm.rules.in |    2 --
- 2 files changed, 1 insertions(+), 2 deletions(-)
-
-diff --git a/WHATS_NEW b/WHATS_NEW
-index a7ccd39..63c3c27 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.03.06 - 
- ================================
-+  Remove unsupported OPTIONS+="event_timeout" udev rule from 11-dm-lvm.rules.
-   Prevent creating VGs with PVs with different logical block sizes.
-   Fix metadata writes from corrupting with large physical block size.
- 
-diff --git a/udev/11-dm-lvm.rules.in b/udev/11-dm-lvm.rules.in
-index 91cb991..7c58994 100644
---- a/udev/11-dm-lvm.rules.in
-+++ b/udev/11-dm-lvm.rules.in
-@@ -37,8 +37,6 @@ ENV{DM_SUBSYSTEM_UDEV_FLAG0}!="1", ENV{DM_NOSCAN}=="1", ENV{DM_UDEV_DISABLE_OTHE
- 
- ENV{DM_UDEV_DISABLE_SUBSYSTEM_RULES_FLAG}=="1", GOTO="lvm_end"
- 
--OPTIONS+="event_timeout=180"
--
- # Do not create symlinks for inappropriate subdevices.
- ENV{DM_LV_NAME}=="pvmove?*|?*_vorigin", GOTO="lvm_disable"
- ENV{DM_LV_LAYER}=="?*", GOTO="lvm_disable"
-
-
+> ping
+>
+> On Wed, May 29, 2019 at 3:10 PM Nir Soffer <nirsof@gmail.com> wrote:
+>
+>> We have a mechanism to show only single warning about disabled backup:
+>>
+>>     WARNING: This metadata update is NOT backed up
+>>
+>> In oVirt we disable local backup since it does not play well with oVirt
+>> clustered LVM solution, and this warning is not helpful. We can filter
+>> the message in oVirt logs, but I think the right place to fix this is in
+>> LVM.
+>>
+>> Add LVM_SUPPRESS_BACKUP_WARNINGS environment variable. If set, suppress
+>> also the first warning about disable backup.
+>> ---
+>>  lib/format_text/archiver.c | 3 +++
+>>  man/lvm.8_main             | 4 ++++
+>>  2 files changed, 7 insertions(+)
+>>
+>> diff --git a/lib/format_text/archiver.c b/lib/format_text/archiver.c
+>> index 052c2bd2b..0ea8d5e48 100644
+>> --- a/lib/format_text/archiver.c
+>> +++ b/lib/format_text/archiver.c
+>> @@ -196,10 +196,13 @@ int backup_init(struct cmd_context *cmd, const char
+>> *dir,
+>>                 log_error("Couldn't copy backup directory name.");
+>>                 return 0;
+>>         }
+>>         backup_enable(cmd, enabled);
+>>
+>> +    if (getenv("LVM_SUPPRESS_BACKUP_WARNINGS"))
+>> +        cmd->backup_params->suppress = 1;
+>> +
+>>         return 1;
+>>  }
+>>
+>>  void backup_exit(struct cmd_context *cmd)
+>>  {
+>> diff --git a/man/lvm.8_main b/man/lvm.8_main
+>> index 3e67b1bdf..43ce5150c 100644
+>> --- a/man/lvm.8_main
+>> +++ b/man/lvm.8_main
+>> @@ -470,10 +470,14 @@ together allow automated test scripts to discard
+>> uninteresting log data.
+>>  .TP
+>>  .B LVM_SUPPRESS_LOCKING_FAILURE_MESSAGES
+>>  Used to suppress warning messages when the configured locking is known
+>>  to be unavailable.
+>>  .TP
+>> +.B LVM_SUPPRESS_BACKUP_WARNINGS
+>> +Used to suppress warning messages when automatic metadata backup is
+>> +disabled.
+>> +.TP
+>>  .B DM_ABORT_ON_INTERNAL_ERRORS
+>>  Abort processing if the code detects a non-fatal internal error.
+>>  .TP
+>>  .B DM_DISABLE_UDEV
+>>  Avoid interaction with udev.  LVM will manage the relevant nodes in /dev
+>> --
+>> 2.17.2
+>>
+>>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20190816/07bd81ec/attachment.htm>
