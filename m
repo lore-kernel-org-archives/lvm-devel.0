@@ -1,83 +1,73 @@
-From: Nir Soffer <nsoffer@redhat.com>
-Date: Fri, 16 Aug 2019 01:31:38 +0300
-Subject: [PATCH] tool: Allow suppressing backup warnings
-In-Reply-To: <CAMRbyytdRwTve-9mrmFbY_VyWiXSyDXWwu8fJFssAqehMFNvPQ@mail.gmail.com>
-References: <20190529121000.25206-1-nsoffer@redhat.com>
-	<CAMRbyytdRwTve-9mrmFbY_VyWiXSyDXWwu8fJFssAqehMFNvPQ@mail.gmail.com>
-Message-ID: <CAMRbyyvjtpMXB2v-ADXtdKy--ssoDeESfSBHf3a+bJyqbuiC6A@mail.gmail.com>
+From: Heinz Mauelshagen <heinzm@sourceware.org>
+Date: Fri, 16 Aug 2019 12:07:22 -0400
+Subject: master - dmeventd: avoid bail out preventing repair in raid plugin
+Message-ID: <201908161607.x7GG7Mpx002042@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-ping 2
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=ad560a286a0b5d08086324e6194b060c136e9353
+Commit:        ad560a286a0b5d08086324e6194b060c136e9353
+Parent:        125f27ac37bc9b93cc96f64052b9681b3d479ee1
+Author:        Heinz Mauelshagen <heinzm@redhat.com>
+AuthorDate:    Fri Aug 16 16:25:08 2019 +0200
+Committer:     Heinz Mauelshagen <heinzm@redhat.com>
+CommitterDate: Fri Aug 16 18:07:03 2019 +0200
 
-On Mon, Jun 10, 2019 at 11:16 PM Nir Soffer <nsoffer@redhat.com> wrote:
+dmeventd: avoid bail out preventing repair in raid plugin
 
-> ping
->
-> On Wed, May 29, 2019 at 3:10 PM Nir Soffer <nirsof@gmail.com> wrote:
->
->> We have a mechanism to show only single warning about disabled backup:
->>
->>     WARNING: This metadata update is NOT backed up
->>
->> In oVirt we disable local backup since it does not play well with oVirt
->> clustered LVM solution, and this warning is not helpful. We can filter
->> the message in oVirt logs, but I think the right place to fix this is in
->> LVM.
->>
->> Add LVM_SUPPRESS_BACKUP_WARNINGS environment variable. If set, suppress
->> also the first warning about disable backup.
->> ---
->>  lib/format_text/archiver.c | 3 +++
->>  man/lvm.8_main             | 4 ++++
->>  2 files changed, 7 insertions(+)
->>
->> diff --git a/lib/format_text/archiver.c b/lib/format_text/archiver.c
->> index 052c2bd2b..0ea8d5e48 100644
->> --- a/lib/format_text/archiver.c
->> +++ b/lib/format_text/archiver.c
->> @@ -196,10 +196,13 @@ int backup_init(struct cmd_context *cmd, const char
->> *dir,
->>                 log_error("Couldn't copy backup directory name.");
->>                 return 0;
->>         }
->>         backup_enable(cmd, enabled);
->>
->> +    if (getenv("LVM_SUPPRESS_BACKUP_WARNINGS"))
->> +        cmd->backup_params->suppress = 1;
->> +
->>         return 1;
->>  }
->>
->>  void backup_exit(struct cmd_context *cmd)
->>  {
->> diff --git a/man/lvm.8_main b/man/lvm.8_main
->> index 3e67b1bdf..43ce5150c 100644
->> --- a/man/lvm.8_main
->> +++ b/man/lvm.8_main
->> @@ -470,10 +470,14 @@ together allow automated test scripts to discard
->> uninteresting log data.
->>  .TP
->>  .B LVM_SUPPRESS_LOCKING_FAILURE_MESSAGES
->>  Used to suppress warning messages when the configured locking is known
->>  to be unavailable.
->>  .TP
->> +.B LVM_SUPPRESS_BACKUP_WARNINGS
->> +Used to suppress warning messages when automatic metadata backup is
->> +disabled.
->> +.TP
->>  .B DM_ABORT_ON_INTERNAL_ERRORS
->>  Abort processing if the code detects a non-fatal internal error.
->>  .TP
->>  .B DM_DISABLE_UDEV
->>  Avoid interaction with udev.  LVM will manage the relevant nodes in /dev
->> --
->> 2.17.2
->>
->>
--------------- next part --------------
-An HTML attachment was scrubbed...
-URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20190816/07bd81ec/attachment.htm>
+Problem:
+even though dead raid component devices are detected, the
+raid plugin is bailing out thus preventing a repair attempt.
+
+Rational:
+in case of component device errors, the MD resynchronization
+thread runs in parallel with the thrown event being processed
+by the raid plugin.  The plugin retrieves the raid device status
+but that still reflects insync regions as 0 (when it should
+already be total regions) because the MD thread didn't update it yet.
+
+Solution:
+Remove the insync regions check and let lvconvert carry out its
+pre-repair checks and optionally carry out a repair attempt.
+
+Resolves: https://bugzilla.redhat.com/show_bug.cgi?id=1560739
+Related:  https://bugzilla.redhat.com/show_bug.cgi?id=1468590
+Related:  https://bugzilla.redhat.com/show_bug.cgi?id=1654860
+Related:  https://bugzilla.redhat.com/show_bug.cgi?id=1729303
+Related:  https://bugzilla.redhat.com/show_bug.cgi?id=1741016
+---
+ daemons/dmeventd/plugins/raid/dmeventd_raid.c |   16 ++++++----------
+ 1 files changed, 6 insertions(+), 10 deletions(-)
+
+diff --git a/daemons/dmeventd/plugins/raid/dmeventd_raid.c b/daemons/dmeventd/plugins/raid/dmeventd_raid.c
+index aa2b578..3431f1e 100644
+--- a/daemons/dmeventd/plugins/raid/dmeventd_raid.c
++++ b/daemons/dmeventd/plugins/raid/dmeventd_raid.c
+@@ -76,16 +76,12 @@ static int _process_raid_event(struct dso_state *state, char *params, const char
+ 	}
+ 
+ 	if (dead) {
+-		if (status->insync_regions < status->total_regions) {
+-			if (!state->warned) {
+-				state->warned = 1;
+-				log_warn("WARNING: waiting for resynchronization to finish "
+-					 "before initiating repair on RAID device %s.", device);
+-			}
+-
+-			goto out; /* Not yet done syncing with accessible devices */
+-		}
+-
++		/*
++		 * Use the first event to run a repair ignoring any additonal ones.
++		 *
++		 * We presume lvconvert to do pre-repair
++		 * checks to avoid bloat in this plugin.
++		 */
+ 		if (state->failed)
+ 			goto out; /* already reported */
+ 
+
+
