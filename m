@@ -1,62 +1,39 @@
-From: Heinz Mauelshagen <heinzm@sourceware.org>
-Date: Mon, 19 Aug 2019 11:36:42 -0400
-Subject: stable-2.02 - Revert "pvmove_poll: instrument"
-Message-ID: <201908191536.x7JFagNg016206@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: David Teigland <teigland@sourceware.org>
+Date: Mon, 19 Aug 2019 15:08:01 -0400
+Subject: master - man lvmthin: remove nonexistent topic
+Message-ID: <201908191908.x7JJ81A0023356@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=474963573af2112467fcd6b17f42971e3178eaa8
-Commit:        474963573af2112467fcd6b17f42971e3178eaa8
-Parent:        9e438b4bc6b9240b63fc79acfef3c77c01a848d8
-Author:        Heinz Mauelshagen <heinzm@redhat.com>
-AuthorDate:    Mon Aug 19 17:35:52 2019 +0200
-Committer:     Heinz Mauelshagen <heinzm@redhat.com>
-CommitterDate: Mon Aug 19 17:35:52 2019 +0200
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=a53c157db0110e21aaa9971f0fec7ac19afe91dd
+Commit:        a53c157db0110e21aaa9971f0fec7ac19afe91dd
+Parent:        4a3e707402032788e09282e0f54fdf82c8a0f8fc
+Author:        David Teigland <teigland@redhat.com>
+AuthorDate:    Mon Aug 19 14:06:32 2019 -0500
+Committer:     David Teigland <teigland@redhat.com>
+CommitterDate: Mon Aug 19 14:06:32 2019 -0500
 
-Revert "pvmove_poll: instrument"
+man lvmthin: remove nonexistent topic
 
-This reverts commit fdb014f02fe67d3a8455c919516e752ec07e9b04.
-
-Went in by mistake!
 ---
- tools/pvmove_poll.c |    7 -------
- 1 files changed, 0 insertions(+), 7 deletions(-)
+ man/lvmthin.7_main |    2 --
+ 1 files changed, 0 insertions(+), 2 deletions(-)
 
-diff --git a/tools/pvmove_poll.c b/tools/pvmove_poll.c
-index 23adf17..e50747c 100644
---- a/tools/pvmove_poll.c
-+++ b/tools/pvmove_poll.c
-@@ -78,28 +78,21 @@ int pvmove_update_metadata(struct cmd_context *cmd, struct volume_group *vg,
- 			   struct dm_list *lvs_changed __attribute__((unused)),
- 			   unsigned flags __attribute__((unused)))
- {
--printf("%s[%u] lv_mirr->read_ahead=%d\n", __func__, __LINE__, lv_mirr->read_ahead);
- 	if (!lv_update_and_reload(lv_mirr))
- 		return_0;
+diff --git a/man/lvmthin.7_main b/man/lvmthin.7_main
+index 251ba12..27bad57 100644
+--- a/man/lvmthin.7_main
++++ b/man/lvmthin.7_main
+@@ -226,8 +226,6 @@ or vgchange to activate thin snapshots with the "k" attribute.
  
--printf("%s[%u] lv_mirr->read_ahead=%d\n", __func__, __LINE__, lv_mirr->read_ahead);
- 	return 1;
- }
+ .SH Thin Topics
  
- int pvmove_finish(struct cmd_context *cmd, struct volume_group *vg,
- 		  struct logical_volume *lv_mirr, struct dm_list *lvs_changed)
- {
--	int read_ahead = lv_mirr->read_ahead;
--
--printf("%s[%u] lv_mirr->read_ahead=%d\n", __func__, __LINE__, lv_mirr->read_ahead);
- 	if (!dm_list_empty(lvs_changed) &&
- 	    (!_detach_pvmove_mirror(cmd, lv_mirr) ||
- 	    !replace_lv_with_error_segment(lv_mirr))) {
- 		log_error("ABORTING: Removal of temporary mirror failed");
- 		return 0;
- 	}
--	lv_mirr->read_ahead = read_ahead;
--printf("%s[%u] lv_mirr->read_ahead=%d\n", __func__, __LINE__, lv_mirr->read_ahead);
- 
- 	if (!lv_update_and_reload(lv_mirr))
- 		return_0;
+-.B Alternate syntax for specifying type thin-pool
+-.br
+ .B Automatic pool metadata LV
+ .br
+ .B Specify devices for data and metadata LVs
 
 
