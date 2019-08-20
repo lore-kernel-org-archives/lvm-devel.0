@@ -1,56 +1,48 @@
-From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Tue, 20 Aug 2019 07:02:25 -0400
-Subject: stable-2.02 - dmsetup: debug print
-Message-ID: <201908201102.x7KB2PtJ018507@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: David Teigland <teigland@sourceware.org>
+Date: Tue, 20 Aug 2019 10:32:57 -0400
+Subject: stable-2.02 - devices: put ifdef around BLKPBSZGET
+Message-ID: <201908201432.x7KEWvPq029295@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=53fcd4fd8fdca852bd8db079f943594c4deeded5
-Commit:        53fcd4fd8fdca852bd8db079f943594c4deeded5
-Parent:        ba629ceea194cc964a6dddb84641254776e58e16
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Aug 16 23:49:38 2019 +0200
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Tue Aug 20 12:59:05 2019 +0200
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=f55b8e387fbff3697fccf42cbc29e17e96da22fb
+Commit:        f55b8e387fbff3697fccf42cbc29e17e96da22fb
+Parent:        53fcd4fd8fdca852bd8db079f943594c4deeded5
+Author:        David Teigland <teigland@redhat.com>
+AuthorDate:    Tue Aug 20 09:32:26 2019 -0500
+Committer:     David Teigland <teigland@redhat.com>
+CommitterDate: Tue Aug 20 09:32:26 2019 -0500
 
-dmsetup: debug print
+devices: put ifdef around BLKPBSZGET
 
-Udev debugging is a bit tricky, so to more easily pair cookie ID,
-which is the lowest 16 bit - print cookie as hexa number.
-This simplify pairing of processed cookies while the 'higher bit flags'
-are changed for the same cookie.
+BLKPBSZGET is not defined before kernel version 2.6.32
+(e.g. rhel5)
 ---
- WHATS_NEW_DM    |    5 +++--
- tools/dmsetup.c |    1 +
- 2 files changed, 4 insertions(+), 2 deletions(-)
+ lib/device/dev-io.c |    2 ++
+ 1 files changed, 2 insertions(+), 0 deletions(-)
 
-diff --git a/WHATS_NEW_DM b/WHATS_NEW_DM
-index 718d174..1dc18ec 100644
---- a/WHATS_NEW_DM
-+++ b/WHATS_NEW_DM
-@@ -1,5 +1,6 @@
--Version 1.02.160 - 
--================================
-+Version 1.02.165 - 
-+=================================
-+  Add debug of dmsetup udevcomplete with hexa print DM_COOKIE_COMPLETED.
-   Fix versioning of dm_stats_create_region and dm_stats_create_region.
-   Parsing of cache status understand no_discard_passdown.
+diff --git a/lib/device/dev-io.c b/lib/device/dev-io.c
+index fd8d349..0289a17 100644
+--- a/lib/device/dev-io.c
++++ b/lib/device/dev-io.c
+@@ -156,6 +156,7 @@ int dev_get_direct_block_sizes(struct device *dev, unsigned int *physical_block_
+ 		do_close = 1;
+ 	}
  
-diff --git a/tools/dmsetup.c b/tools/dmsetup.c
-index bd080b8..5b21620 100644
---- a/tools/dmsetup.c
-+++ b/tools/dmsetup.c
-@@ -1694,6 +1694,7 @@ static int _udevcomplete(CMD_ARGS)
- 	if (!(cookie = _get_cookie_value(argv[0])))
- 		return_0;
- 
-+	printf("DM_COOKIE_COMPLETED=0x%-10x", cookie);
++#ifdef BLKPBSZGET /* not defined before kernel version 2.6.32 (e.g. rhel5) */
  	/*
- 	 * Strip flags from the cookie and use cookie magic instead.
- 	 * If the cookie has non-zero prefix and the base is zero then
+ 	 * BLKPBSZGET from kernel comment for blk_queue_physical_block_size:
+ 	 * "the lowest possible sector size that the hardware can operate on
+@@ -165,6 +166,7 @@ int dev_get_direct_block_sizes(struct device *dev, unsigned int *physical_block_
+ 		stack;
+ 		pbs = 0;
+ 	}
++#endif
+ 
+ 	/*
+ 	 * BLKSSZGET from kernel comment for blk_queue_logical_block_size:
 
 
