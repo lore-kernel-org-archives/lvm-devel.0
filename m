@@ -1,40 +1,87 @@
-From: David Teigland <teigland@sourceware.org>
-Date: Wed, 28 Aug 2019 13:42:14 -0400
-Subject: master - hints: check for malloc failure
-Message-ID: <201908281742.x7SHgEIX011388@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: Zdenek Kabelac <zkabelac@sourceware.org>
+Date: Tue, 20 Aug 2019 07:02:21 -0400
+Subject: stable-2.02 - activation: add synchronization point
+Message-ID: <201908201102.x7KB2LaZ018472@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=5b3fbccab9e243901f512f9db3059a3c5eb09fe8
-Commit:        5b3fbccab9e243901f512f9db3059a3c5eb09fe8
-Parent:        12707adac8ba9e3a58175616bcd59b0e229a6705
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Wed Aug 28 12:39:50 2019 -0500
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Wed Aug 28 12:41:57 2019 -0500
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=ba629ceea194cc964a6dddb84641254776e58e16
+Commit:        ba629ceea194cc964a6dddb84641254776e58e16
+Parent:        e5cdb114a6aa5d211e25a0919a28968d64e7cf01
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Fri Aug 16 23:49:59 2019 +0200
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Tue Aug 20 12:59:05 2019 +0200
 
-hints: check for malloc failure
+activation: add synchronization point
 
+Resuming of 'error' table entry followed with it's dirrect removal
+is now troublesame with latest udev as it may skip processing of
+udev rules for already 'dropped' device nodes.
+
+As we cannot 'synchronize' with udev while we know we have devices
+in suspended state - rework 'cleanup' so it collects nodes
+for removal into pending_delete list and process the list with
+synchronization once we are without any suspended nodes.
 ---
- lib/label/hints.c |    3 ++-
- 1 files changed, 2 insertions(+), 1 deletions(-)
+ WHATS_NEW                  |    1 +
+ lib/activate/dev_manager.c |   20 ++++++++++++--------
+ 2 files changed, 13 insertions(+), 8 deletions(-)
 
-diff --git a/lib/label/hints.c b/lib/label/hints.c
-index 580304d..6510fcf 100644
---- a/lib/label/hints.c
-+++ b/lib/label/hints.c
-@@ -608,7 +608,8 @@ static void _filter_to_str(struct cmd_context *cmd, int filter_cfg, char **strp)
- 		return;
+diff --git a/WHATS_NEW b/WHATS_NEW
+index fa8508f..549366c 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.186 - 
+ ================================
++  Synchronize with udev when dropping snapshot.
+   Add missing device synchronization point before removing pvmove node.
+   Correctly set read_ahead for LVs when pvmove is finished.
+   Fix metadata writes from corrupting with large physical block size.
+diff --git a/lib/activate/dev_manager.c b/lib/activate/dev_manager.c
+index 3e5c0a8..1dfd42b 100644
+--- a/lib/activate/dev_manager.c
++++ b/lib/activate/dev_manager.c
+@@ -3198,13 +3198,6 @@ static int _clean_tree(struct dev_manager *dm, struct dm_tree_node *root, const
+ 	const char *name, *uuid;
+ 	struct dm_str_list *dl;
+ 
+-	/* Deactivate any tracked pending delete nodes */
+-	dm_list_iterate_items(dl, &dm->pending_delete) {
+-		log_debug_activation("Deleting tracked UUID %s.", dl->str);
+-		if (!dm_tree_deactivate_children(root, dl->str, strlen(dl->str)))
+-			return_0;
+-	}
+-
+ 	while ((child = dm_tree_next_child(&handle, root, 0))) {
+ 		if (!(name = dm_tree_node_get_name(child)))
+ 			continue;
+@@ -3225,10 +3218,21 @@ static int _clean_tree(struct dev_manager *dm, struct dm_tree_node *root, const
+ 		if (non_toplevel_tree_dlid && !strcmp(non_toplevel_tree_dlid, uuid))
+ 			continue;
+ 
+-		if (!dm_tree_deactivate_children(root, uuid, strlen(uuid)))
++		if (!str_list_add(dm->mem, &dm->pending_delete, uuid))
+ 			return_0;
  	}
  
--	str = malloc(len);
-+	if (!(str = malloc(len)))
-+		return;
- 	memset(str, 0, len);
++	/* Deactivate any tracked pending delete nodes */
++	if (!dm_list_empty(&dm->pending_delete) && !dm_get_suspended_counter()) {
++		fs_unlock();
++		dm_tree_set_cookie(root, fs_get_cookie());
++		dm_list_iterate_items(dl, &dm->pending_delete) {
++			log_debug_activation("Deleting tracked UUID %s.", dl->str);
++			if (!dm_tree_deactivate_children(root, dl->str, strlen(dl->str)))
++				return_0;
++		}
++	}
++
+ 	return 1;
+ }
  
- 	for (cv = cn->v; cv; cv = cv->next) {
 
 
