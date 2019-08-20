@@ -1,150 +1,54 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Tue, 20 Aug 2019 06:53:17 -0400
-Subject: master - pvmove: correcting read_ahead setting
-Message-ID: <201908201053.x7KArHMD017959@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Tue, 20 Aug 2019 06:53:18 -0400
+Subject: master - pvmove: add missing synchronization
+Message-ID: <201908201053.x7KArIi1017965@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=0451225c1997273ffaa36c3eb595eae7737b7dda
-Commit:        0451225c1997273ffaa36c3eb595eae7737b7dda
-Parent:        a53c157db0110e21aaa9971f0fec7ac19afe91dd
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=0bdd6d6240251996694a8581432f726e5442c4a2
+Commit:        0bdd6d6240251996694a8581432f726e5442c4a2
+Parent:        0451225c1997273ffaa36c3eb595eae7737b7dda
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Aug 20 12:30:25 2019 +0200
+AuthorDate:    Tue Aug 20 12:23:08 2019 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Tue Aug 20 12:37:32 2019 +0200
+CommitterDate: Tue Aug 20 12:44:39 2019 +0200
 
-pvmove: correcting read_ahead setting
+pvmove: add missing synchronization
 
-When pvmove is finished, we do a tricky operation since we try to
-resume multiple different device that were all joined into 1 big tree.
-
-Currently we use the infromation from existing live DM table,
-where we can get list of all holders of pvmove device.
-We look for these nodes (by uuid) in new metadata, and we do now a full
-regular device add into dm tree structure.  All devices should be
-already PRELOAD with correct table before entering suspend state,
-however for correctly working readahead we need to put correct info
-also into RESUME tree.  Since table are preloaded, the same table
-is skip and resume, but correct read ahead is now set.
+Between 'resume' and 'remove' we need to wait for udev to synchronize,
+otherwise udev may 'skip' resume event processing if the udev node
+is already gone.
 ---
- WHATS_NEW                  |    1 +
- lib/activate/dev_manager.c |   47 +++++++++++++++++++++++++++++++------------
- 2 files changed, 35 insertions(+), 13 deletions(-)
+ WHATS_NEW           |    1 +
+ tools/pvmove_poll.c |    2 ++
+ 2 files changed, 3 insertions(+), 0 deletions(-)
 
 diff --git a/WHATS_NEW b/WHATS_NEW
-index 63c3c27..91543a7 100644
+index 91543a7..2c1bc16 100644
 --- a/WHATS_NEW
 +++ b/WHATS_NEW
 @@ -1,5 +1,6 @@
  Version 2.03.06 - 
  ================================
-+  Correctly set read_ahead for LVs when pvmove is finished.
++  Add missing device synchronization point before removing pvmove node.
+   Correctly set read_ahead for LVs when pvmove is finished.
    Remove unsupported OPTIONS+="event_timeout" udev rule from 11-dm-lvm.rules.
    Prevent creating VGs with PVs with different logical block sizes.
-   Fix metadata writes from corrupting with large physical block size.
-diff --git a/lib/activate/dev_manager.c b/lib/activate/dev_manager.c
-index 981f467..b218225 100644
---- a/lib/activate/dev_manager.c
-+++ b/lib/activate/dev_manager.c
-@@ -2034,10 +2034,20 @@ static uint16_t _get_udev_flags(struct dev_manager *dm, const struct logical_vol
- 
- static int _add_lv_to_dtree(struct dev_manager *dm, struct dm_tree *dtree,
- 			    const struct logical_volume *lv, int origin_only);
--
-+static int _add_new_lv_to_dtree(struct dev_manager *dm, struct dm_tree *dtree,
-+				const struct logical_volume *lv,
-+				struct lv_activate_opts *laopts,
-+				const char *layer);
-+/*
-+ * Check for device holders (ATM used only for removed pvmove targets)
-+ * and add them into dtree structures.
-+ * When 'laopts != NULL' add them as new nodes - which also corrects READ_AHEAD.
-+ * Note: correct table are already explicitelly PRELOADED.
-+ */
- static int _check_holder(struct dev_manager *dm, struct dm_tree *dtree,
--			 const struct logical_volume *lv, uint32_t major,
--			 const char *d_name)
-+			 const struct logical_volume *lv,
-+			 struct lv_activate_opts *laopts,
-+			 uint32_t major, const char *d_name)
- {
- 	const char *default_uuid_prefix = dm_uuid_prefix();
- 	const size_t default_uuid_prefix_len = strlen(default_uuid_prefix);
-@@ -2089,8 +2099,11 @@ static int _check_holder(struct dev_manager *dm, struct dm_tree *dtree,
- 			log_debug_activation("Found holder %s of %s.",
- 					     display_lvname(lv_det),
- 					     display_lvname(lv));
--			if (!_add_lv_to_dtree(dm, dtree, lv_det, 0))
--				goto_out;
-+			if (!laopts) {
-+				if (!_add_lv_to_dtree(dm, dtree, lv_det, 0))
-+					goto_out;
-+			} else if (!_add_new_lv_to_dtree(dm, dtree, lv_det, laopts, 0))
-+					goto_out;
- 		}
- 	}
- 
-@@ -2107,7 +2120,9 @@ out:
-  * i.e. PVMOVE is being finished and final table is going to be resumed.
-  */
- static int _add_holders_to_dtree(struct dev_manager *dm, struct dm_tree *dtree,
--				 const struct logical_volume *lv, struct dm_info *info)
-+				 const struct logical_volume *lv,
-+				 struct lv_activate_opts *laopts,
-+				 const struct dm_info *info)
- {
- 	const char *sysfs_dir = dm_sysfs_dir();
- 	char sysfs_path[PATH_MAX];
-@@ -2130,7 +2145,7 @@ static int _add_holders_to_dtree(struct dev_manager *dm, struct dm_tree *dtree,
- 	while ((dirent = readdir(d)))
- 		/* Expects minor is added to 'dm-' prefix */
- 		if (!strncmp(dirent->d_name, "dm-", 3) &&
--		    !_check_holder(dm, dtree, lv, info->major, dirent->d_name))
-+		    !_check_holder(dm, dtree, lv, laopts, info->major, dirent->d_name))
- 			goto_out;
- 
- 	r = 1;
-@@ -2202,7 +2217,7 @@ static int _add_dev_to_dtree(struct dev_manager *dm, struct dm_tree *dtree,
- 	 */
- 	if (info.exists && !lv_is_pvmove(lv) &&
- 	    !strchr(lv->name, '_') && !strncmp(lv->name, "pvmove", 6))
--		if (!_add_holders_to_dtree(dm, dtree, lv, &info))
-+		if (!_add_holders_to_dtree(dm, dtree, lv, NULL, &info))
- 			return_0;
- 
- 	return 1;
-@@ -3000,11 +3015,6 @@ static int _add_target_to_dtree(struct dev_manager *dm,
- 						  &dm->pvmove_mirror_count);
- }
- 
--static int _add_new_lv_to_dtree(struct dev_manager *dm, struct dm_tree *dtree,
--				const struct logical_volume *lv,
--				struct lv_activate_opts *laopts,
--				const char *layer);
--
- static int _add_new_external_lv_to_dtree(struct dev_manager *dm,
- 					 struct dm_tree *dtree,
- 					 struct logical_volume *external_lv,
-@@ -3439,6 +3449,17 @@ static int _add_new_lv_to_dtree(struct dev_manager *dm, struct dm_tree *dtree,
- 	    !_pool_register_callback(dm, dnode, lv))
+diff --git a/tools/pvmove_poll.c b/tools/pvmove_poll.c
+index e50747c..d379596 100644
+--- a/tools/pvmove_poll.c
++++ b/tools/pvmove_poll.c
+@@ -97,6 +97,8 @@ int pvmove_finish(struct cmd_context *cmd, struct volume_group *vg,
+ 	if (!lv_update_and_reload(lv_mirr))
  		return_0;
  
-+	/*
-+	 * Update tables for ANY PVMOVE holders for active LV where the name starts with 'pvmove',
-+	 * but it's not anymore PVMOVE LV and also it's not a PVMOVE _mimage LV.
-+	 * When resume happens, tables MUST be already preloaded with correct entries!
-+	 * (since we can't preload different table while devices are suspended)
-+	 */
-+	if (!lv_is_pvmove(lv) && !strncmp(lv->name, "pvmove", 6) && !strchr(lv->name, '_') &&
-+	    (dinfo = _cached_dm_info(dm->mem, dtree, lv, NULL)))
-+		if (!_add_holders_to_dtree(dm, dtree, lv, laopts, dinfo))
-+			return_0;
++	sync_local_dev_names(cmd);
 +
- 	if (read_ahead == DM_READ_AHEAD_AUTO) {
- 		/* we need RA at least twice a whole stripe - see the comment in md/raid0.c */
- 		read_ahead = max_stripe_size * 2;
+ 	/* Deactivate mirror LV */
+ 	if (!deactivate_lv(cmd, lv_mirr)) {
+ 		log_error("ABORTING: Unable to deactivate temporary logical "
 
 
