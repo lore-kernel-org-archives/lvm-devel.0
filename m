@@ -1,126 +1,135 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Mon, 26 Aug 2019 09:34:22 -0400
-Subject: master - lv_manip: add synchronizations
-Message-ID: <201908261334.x7QDYMm5005511@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Mon, 26 Aug 2019 09:39:51 -0400
+Subject: stable-2.02 - activation: extend handling of pending_delete
+Message-ID: <201908261339.x7QDdpdU005639@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=4b1dcc2eebb27cae54b4c618ab31072bdb230ea9
-Commit:        4b1dcc2eebb27cae54b4c618ab31072bdb230ea9
-Parent:        c98e34e4d0edbcb2594e93f06183838de0c6e2bc
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=c6e079cda3d2c15c0dddf34513e045188abbac15
+Commit:        c6e079cda3d2c15c0dddf34513e045188abbac15
+Parent:        f55b8e387fbff3697fccf42cbc29e17e96da22fb
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Mon Aug 26 13:28:17 2019 +0200
+AuthorDate:    Fri Aug 23 13:08:34 2019 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Mon Aug 26 15:32:19 2019 +0200
+CommitterDate: Mon Aug 26 15:36:41 2019 +0200
 
-lv_manip: add synchronizations
+activation: extend handling of pending_delete
 
-New udev in rawhide seems to be 'dropping' udev rule operations for devices
-that are no longer existing - while this is 'probably' a bug - it's
-revealing moments in lvm2 that likely should not run in a single
-transaction and we should wait for a cookie before submitting more work.
+With previous patch 30a98e4d6710a543692d40d11428ae4baea11b7b we
+started to put devices one pending_delete list instead
+of directly scheduling their removal.
 
-TODO: it seem more 'error' paths should always include synchronization
-before starting deactivating 'just activated' devices.
-We should probably figure out some 'automatic' solution for this instead
-of placing sync_local_dev_name() all over the place...
+However we have operations like 'snapshot merge' where we are
+resuming device tree in 2 subsequent activation calls - so
+1st such call will still have suspened devices and no chance
+to push 'remove' ioctl.
+
+Since we curently cannot easily solve this by doing just single
+activation call (which would be preferred solution) - we introduce
+a preservation of pending_delete via command structure and
+then restore it on next activation call.
+
+This way we keep to remove devices later - although it might be
+not the best moment - this may need futher tunning.
+
+Also we don't keep the list of operation in 1 trasaction
+(unless we do verify udev symlinks) - this could probably
+also make it more correct in terms of which 'remove' can
+be combined we already running 'resume'.
 ---
- lib/metadata/lv_manip.c       |   14 +++++++++++---
- lib/metadata/snapshot_manip.c |    5 +++++
- lib/metadata/thin_manip.c     |    6 ++++++
- tools/lvconvert.c             |   12 ++++++++++++
- 4 files changed, 34 insertions(+), 3 deletions(-)
+ lib/activate/dev_manager.c |   24 +++++++++++-------------
+ lib/commands/toolcontext.c |    8 ++++++++
+ lib/commands/toolcontext.h |    1 +
+ 3 files changed, 20 insertions(+), 13 deletions(-)
 
-diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
-index af3a16f..6451368 100644
---- a/lib/metadata/lv_manip.c
-+++ b/lib/metadata/lv_manip.c
-@@ -5830,9 +5830,17 @@ out:
- 
- 	ret = 1;
- bad:
--	if (activated && !deactivate_lv(cmd, lock_lv)) {
--		log_error("Problem deactivating %s.", display_lvname(lock_lv));
--		ret = 0;
-+	if (activated) {
-+		if (!sync_local_dev_names(lock_lv->vg->cmd)) {
-+			log_error("Failed to sync local devices before deactivating LV %s.",
-+				  display_lvname(lock_lv));
-+			return 0;
-+		}
-+
-+		if (!deactivate_lv(cmd, lock_lv)) {
-+			log_error("Problem deactivating %s.", display_lvname(lock_lv));
-+			ret = 0;
-+		}
- 	}
- 
- 	return ret;
-diff --git a/lib/metadata/snapshot_manip.c b/lib/metadata/snapshot_manip.c
-index 65d8dbd..d105942 100644
---- a/lib/metadata/snapshot_manip.c
-+++ b/lib/metadata/snapshot_manip.c
-@@ -292,6 +292,11 @@ int vg_remove_snapshot(struct logical_volume *cow)
- 
- 	if (is_origin_active &&
- 	    lv_is_virtual_origin(origin)) {
-+		if (!sync_local_dev_names(origin->vg->cmd)) {
-+			log_error("Failed to sync local devices before deactivating origin LV %s.",
-+				  display_lvname(origin));
-+			return 0;
-+		}
- 		if (!deactivate_lv(origin->vg->cmd, origin)) {
- 			log_error("Failed to deactivate logical volume \"%s\"",
- 				  origin->name);
-diff --git a/lib/metadata/thin_manip.c b/lib/metadata/thin_manip.c
-index b9c01ee..f947976 100644
---- a/lib/metadata/thin_manip.c
-+++ b/lib/metadata/thin_manip.c
-@@ -529,6 +529,12 @@ int update_pool_lv(struct logical_volume *lv, int activate)
- 			}
+diff --git a/lib/activate/dev_manager.c b/lib/activate/dev_manager.c
+index 1dfd42b..dd585da 100644
+--- a/lib/activate/dev_manager.c
++++ b/lib/activate/dev_manager.c
+@@ -3231,6 +3231,7 @@ static int _clean_tree(struct dev_manager *dm, struct dm_tree_node *root, const
+ 			if (!dm_tree_deactivate_children(root, dl->str, strlen(dl->str)))
+ 				return_0;
  		}
- 
-+		if (!sync_local_dev_names(lv->vg->cmd)) {
-+			log_error("Failed to sync local devices LV %s.",
-+				  display_lvname(lv));
-+			return 0;
-+		}
-+
- 		if (activate &&
- 		    !deactivate_lv(lv->vg->cmd, lv)) {
- 			log_error("Failed to deactivate %s.", display_lvname(lv));
-diff --git a/tools/lvconvert.c b/tools/lvconvert.c
-index ebc2243..31f9296 100644
---- a/tools/lvconvert.c
-+++ b/tools/lvconvert.c
-@@ -2513,6 +2513,12 @@ static int _lvconvert_cache_repair(struct cmd_context *cmd,
- 	/* TODO: any active validation of cache-pool metadata? */
- 
- deactivate_mlv:
-+	if (!sync_local_dev_names(cmd)) {
-+		log_error("Failed to sync local devices before deactivating LV %s.",
-+			  display_lvname(mlv));
-+		return 0;
-+	}
-+
- 	if (!deactivate_lv(cmd, mlv)) {
- 		log_error("Cannot deactivate pool metadata volume %s.",
- 			  display_lvname(mlv));
-@@ -2520,6 +2526,12 @@ deactivate_mlv:
++		dm_list_init(&dm->pending_delete);
  	}
  
- deactivate_pmslv:
-+	if (!sync_local_dev_names(cmd)) {
-+		log_error("Failed to sync local devices before deactivating LV %s.",
-+			  display_lvname(pmslv));
-+		return 0;
+ 	return 1;
+@@ -3357,25 +3358,22 @@ out_no_root:
+ int dev_manager_activate(struct dev_manager *dm, const struct logical_volume *lv,
+ 			 struct lv_activate_opts *laopts)
+ {
++	dm_list_splice(&dm->pending_delete, &lv->vg->cmd->pending_delete);
++
+ 	if (!_tree_action(dm, lv, laopts, ACTIVATE))
+ 		return_0;
+ 
+-	/*
+-	 * When lvm2 resumes a device and shortly after that it removes it,
+-	 * udevd rule will try to blindly call 'dmsetup info' on already removed
+-	 * device leaving the trace inside syslog about failing operation.
+-	 *
+-	 * TODO: It's not completely clear this call here is the best fix.
+-	 *       Maybe there can be a better sequence, but ATM we do usually resume
+-	 *       error device i.e. on cache deletion and remove it.
+-	 * TODO2: there could be more similar cases!
+-	 */
+-	if (!dm_list_empty(&dm->pending_delete))
+-		fs_unlock();
+-
+ 	if (!_tree_action(dm, lv, laopts, CLEAN))
+ 		return_0;
+ 
++	if (!dm_list_empty(&dm->pending_delete)) {
++		log_debug("Preserving %d device(s) for removal while being suspended.",
++			  dm_list_size(&dm->pending_delete));
++		if (!(str_list_dup(lv->vg->cmd->mem, &lv->vg->cmd->pending_delete,
++				   &dm->pending_delete)))
++			return_0;
 +	}
 +
- 	if (!deactivate_lv(cmd, pmslv)) {
- 		log_error("Cannot deactivate pool metadata spare volume %s.",
- 			  display_lvname(pmslv));
+ 	return 1;
+ }
+ 
+diff --git a/lib/commands/toolcontext.c b/lib/commands/toolcontext.c
+index 38e382f..c90cb57 100644
+--- a/lib/commands/toolcontext.c
++++ b/lib/commands/toolcontext.c
+@@ -2002,6 +2002,8 @@ struct cmd_context *create_toolcontext(unsigned is_clvmd,
+ 	cmd->current_settings = cmd->default_settings;
+ 
+ 	cmd->initialized.config = 1;
++
++	dm_list_init(&cmd->pending_delete);
+ out:
+ 	if (!cmd->initialized.config) {
+ 		destroy_toolcontext(cmd);
+@@ -2213,6 +2215,12 @@ int refresh_toolcontext(struct cmd_context *cmd)
+ 
+ 	cmd->initialized.config = 1;
+ 
++	if (!dm_list_empty(&cmd->pending_delete)) {
++		log_debug(INTERNAL_ERROR "Unprocessed pending delete for %d devices.",
++			  dm_list_size(&cmd->pending_delete));
++		dm_list_init(&cmd->pending_delete);
++	}
++
+ 	if (cmd->initialized.connections && !init_connections(cmd))
+ 		return_0;
+ 
+diff --git a/lib/commands/toolcontext.h b/lib/commands/toolcontext.h
+index 6e262e8..9c225b8 100644
+--- a/lib/commands/toolcontext.h
++++ b/lib/commands/toolcontext.h
+@@ -231,6 +231,7 @@ struct cmd_context {
+ 	const char *report_list_item_separator;
+ 	const char *time_format;
+ 	unsigned rand_seed;
++	struct dm_list pending_delete;		/* list of LVs for removal */
+ };
+ 
+ /*
 
 
