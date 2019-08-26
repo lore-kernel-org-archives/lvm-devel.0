@@ -1,150 +1,101 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Tue, 20 Aug 2019 07:02:12 -0400
-Subject: stable-2.02 - pvmove: correcting read_ahead setting
-Message-ID: <201908201102.x7KB2CKo018450@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Mon, 26 Aug 2019 11:26:13 -0400
+Subject: master - configure: check for prlimit
+Message-ID: <201908261526.x7QFQDU4009023@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=73d1646a0049d43edab367e4eb1d9bdcae9071e0
-Commit:        73d1646a0049d43edab367e4eb1d9bdcae9071e0
-Parent:        881f49a7676aae2fd35acc390d9882a2e950932c
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=55f1d8a2697c6641215604ee32181d7ead7b8d85
+Commit:        55f1d8a2697c6641215604ee32181d7ead7b8d85
+Parent:        a50c127904a99b5862c323ddc76bfcf760dd0805
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Aug 20 12:30:25 2019 +0200
+AuthorDate:    Mon Aug 26 17:19:16 2019 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Tue Aug 20 12:59:05 2019 +0200
+CommitterDate: Mon Aug 26 17:24:37 2019 +0200
 
-pvmove: correcting read_ahead setting
+configure: check for prlimit
 
-When pvmove is finished, we do a tricky operation since we try to
-resume multiple different device that were all joined into 1 big tree.
-
-Currently we use the infromation from existing live DM table,
-where we can get list of all holders of pvmove device.
-We look for these nodes (by uuid) in new metadata, and we do now a full
-regular device add into dm tree structure.  All devices should be
-already PRELOAD with correct table before entering suspend state,
-however for correctly working readahead we need to put correct info
-also into RESUME tree.  Since table are preloaded, the same table
-is skip and resume, but correct read ahead is now set.
+Update configure and make code compilable if prlimit() is not present.
+Since the code is suspicious do not cope yet with it's replacement
+with  set/getrlimit().
 ---
- WHATS_NEW                  |    1 +
- lib/activate/dev_manager.c |   47 +++++++++++++++++++++++++++++++------------
- 2 files changed, 35 insertions(+), 13 deletions(-)
+ configure              |    4 ++--
+ configure.ac           |    2 +-
+ include/configure.h.in |    3 +++
+ lib/label/label.c      |    2 ++
+ 4 files changed, 8 insertions(+), 3 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index d30e5cd..0dfd40d 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.02.186 - 
- ================================
-+  Correctly set read_ahead for LVs when pvmove is finished.
-   Fix metadata writes from corrupting with large physical block size.
-   Report no_discard_passdown for cache LVs with lvs -o+kernel_discards.
-   Prevent shared active mirror LVs with lvmlockd.
-diff --git a/lib/activate/dev_manager.c b/lib/activate/dev_manager.c
-index 24455b3..3e5c0a8 100644
---- a/lib/activate/dev_manager.c
-+++ b/lib/activate/dev_manager.c
-@@ -1809,10 +1809,20 @@ static uint16_t _get_udev_flags(struct dev_manager *dm, const struct logical_vol
+diff --git a/configure b/configure
+index 4c84765..7bb038a 100755
+--- a/configure
++++ b/configure
+@@ -1715,7 +1715,7 @@ Optional Packages:
+                           cache_restore tool: [autodetect]
+   --with-vdo=TYPE         vdo support: internal/none [internal]
+   --with-vdo-format=PATH  vdoformat tool: [autodetect]
+-  --with-writecache=TYPE  writecache support: internal/none [internal]
++  --with-writecache=TYPE  writecache support: internal/none [none]
+   --with-ocfdir=DIR       install OCF files in
+                           [PREFIX/lib/ocf/resource.d/lvm2]
+   --with-default-pid-dir=PID_DIR
+@@ -6647,7 +6647,7 @@ $as_echo "#define _REENTRANT 1" >>confdefs.h
  
- static int _add_lv_to_dtree(struct dev_manager *dm, struct dm_tree *dtree,
- 			    const struct logical_volume *lv, int origin_only);
--
-+static int _add_new_lv_to_dtree(struct dev_manager *dm, struct dm_tree *dtree,
-+				const struct logical_volume *lv,
-+				struct lv_activate_opts *laopts,
-+				const char *layer);
-+/*
-+ * Check for device holders (ATM used only for removed pvmove targets)
-+ * and add them into dtree structures.
-+ * When 'laopts != NULL' add them as new nodes - which also corrects READ_AHEAD.
-+ * Note: correct table are already explicitelly PRELOADED.
-+ */
- static int _check_holder(struct dev_manager *dm, struct dm_tree *dtree,
--			 const struct logical_volume *lv, uint32_t major,
--			 const char *d_name)
-+			 const struct logical_volume *lv,
-+			 struct lv_activate_opts *laopts,
-+			 uint32_t major, const char *d_name)
+ ################################################################################
+ for ac_func in ftruncate gethostname getpagesize gettimeofday localtime_r \
+-  memchr memset mkdir mkfifo munmap nl_langinfo pselect realpath rmdir setenv \
++  memchr memset mkdir mkfifo munmap nl_langinfo prlimit pselect realpath rmdir setenv \
+   setlocale strcasecmp strchr strcspn strdup strerror strncasecmp strndup \
+   strrchr strspn strstr strtol strtoul uname
+ do :
+diff --git a/configure.ac b/configure.ac
+index 830edb8..e3af0c4 100644
+--- a/configure.ac
++++ b/configure.ac
+@@ -153,7 +153,7 @@ AC_DEFINE([_REENTRANT], 1, [Define to use re-entrant thread safe versions])
+ ################################################################################
+ dnl -- Check for functions
+ AC_CHECK_FUNCS([ftruncate gethostname getpagesize gettimeofday localtime_r \
+-  memchr memset mkdir mkfifo munmap nl_langinfo pselect realpath rmdir setenv \
++  memchr memset mkdir mkfifo munmap nl_langinfo prlimit pselect realpath rmdir setenv \
+   setlocale strcasecmp strchr strcspn strdup strerror strncasecmp strndup \
+   strrchr strspn strstr strtol strtoul uname], , [AC_MSG_ERROR(bailing out)])
+ AC_FUNC_ALLOCA
+diff --git a/include/configure.h.in b/include/configure.h.in
+index a43053a..91a3a7d 100644
+--- a/include/configure.h.in
++++ b/include/configure.h.in
+@@ -292,6 +292,9 @@
+ /* Define to 1 if you have the <paths.h> header file. */
+ #undef HAVE_PATHS_H
+ 
++/* Define to 1 if you have the `prlimit' function. */
++#undef HAVE_PRLIMIT
++
+ /* Define to 1 if you have the `pselect' function. */
+ #undef HAVE_PSELECT
+ 
+diff --git a/lib/label/label.c b/lib/label/label.c
+index e786c89..dc4d32d 100644
+--- a/lib/label/label.c
++++ b/lib/label/label.c
+@@ -873,6 +873,7 @@ static void _free_hints(struct dm_list *hints)
+ 
+ static void _prepare_open_file_limit(struct cmd_context *cmd, unsigned int num_devs)
  {
- 	const char *default_uuid_prefix = dm_uuid_prefix();
- 	const size_t default_uuid_prefix_len = strlen(default_uuid_prefix);
-@@ -1863,8 +1873,11 @@ static int _check_holder(struct dev_manager *dm, struct dm_tree *dtree,
- 			log_debug_activation("Found holder %s of %s.",
- 					     display_lvname(lv_det),
- 					     display_lvname(lv));
--			if (!_add_lv_to_dtree(dm, dtree, lv_det, 0))
--				goto_out;
-+			if (!laopts) {
-+				if (!_add_lv_to_dtree(dm, dtree, lv_det, 0))
-+					goto_out;
-+			} else if (!_add_new_lv_to_dtree(dm, dtree, lv_det, laopts, 0))
-+					goto_out;
- 		}
++#ifdef HAVE_PRLIMIT
+ 	struct rlimit old, new;
+ 	unsigned int want = num_devs + BASE_FD_COUNT;
+ 	int rv;
+@@ -909,6 +910,7 @@ static void _prepare_open_file_limit(struct cmd_context *cmd, unsigned int num_d
+ 			log_warn("WARNING: cannot set open file limit for scanning %u devices.", num_devs);
+ 		return;
  	}
- 
-@@ -1881,7 +1894,9 @@ out:
-  * i.e. PVMOVE is being finished and final table is going to be resumed.
-  */
- static int _add_holders_to_dtree(struct dev_manager *dm, struct dm_tree *dtree,
--				 const struct logical_volume *lv, struct dm_info *info)
-+				 const struct logical_volume *lv,
-+				 struct lv_activate_opts *laopts,
-+				 const struct dm_info *info)
- {
- 	const char *sysfs_dir = dm_sysfs_dir();
- 	char sysfs_path[PATH_MAX];
-@@ -1904,7 +1919,7 @@ static int _add_holders_to_dtree(struct dev_manager *dm, struct dm_tree *dtree,
- 	while ((dirent = readdir(d)))
- 		/* Expects minor is added to 'dm-' prefix */
- 		if (!strncmp(dirent->d_name, "dm-", 3) &&
--		    !_check_holder(dm, dtree, lv, info->major, dirent->d_name))
-+		    !_check_holder(dm, dtree, lv, laopts, info->major, dirent->d_name))
- 			goto_out;
- 
- 	r = 1;
-@@ -1976,7 +1991,7 @@ static int _add_dev_to_dtree(struct dev_manager *dm, struct dm_tree *dtree,
- 	 */
- 	if (info.exists && !lv_is_pvmove(lv) &&
- 	    !strchr(lv->name, '_') && !strncmp(lv->name, "pvmove", 6))
--		if (!_add_holders_to_dtree(dm, dtree, lv, &info))
-+		if (!_add_holders_to_dtree(dm, dtree, lv, NULL, &info))
- 			return_0;
- 
- 	return 1;
-@@ -2719,11 +2734,6 @@ static int _add_target_to_dtree(struct dev_manager *dm,
- 						  &dm->pvmove_mirror_count);
++#endif
  }
  
--static int _add_new_lv_to_dtree(struct dev_manager *dm, struct dm_tree *dtree,
--				const struct logical_volume *lv,
--				struct lv_activate_opts *laopts,
--				const char *layer);
--
- static int _add_new_external_lv_to_dtree(struct dev_manager *dm,
- 					 struct dm_tree *dtree,
- 					 struct logical_volume *external_lv,
-@@ -3058,6 +3068,17 @@ static int _add_new_lv_to_dtree(struct dev_manager *dm, struct dm_tree *dtree,
- 	    !_pool_register_callback(dm, dnode, lv))
- 		return_0;
- 
-+	/*
-+	 * Update tables for ANY PVMOVE holders for active LV where the name starts with 'pvmove',
-+	 * but it's not anymore PVMOVE LV and also it's not a PVMOVE _mimage LV.
-+	 * When resume happens, tables MUST be already preloaded with correct entries!
-+	 * (since we can't preload different table while devices are suspended)
-+	 */
-+	if (!lv_is_pvmove(lv) && !strncmp(lv->name, "pvmove", 6) && !strchr(lv->name, '_') &&
-+	    (dinfo = _cached_dm_info(dm->mem, dtree, lv, NULL)))
-+		if (!_add_holders_to_dtree(dm, dtree, lv, laopts, dinfo))
-+			return_0;
-+
- 	if (read_ahead == DM_READ_AHEAD_AUTO) {
- 		/* we need RA at least twice a whole stripe - see the comment in md/raid0.c */
- 		read_ahead = max_stripe_size * 2;
+ /*
 
 
