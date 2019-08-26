@@ -1,48 +1,135 @@
-From: David Teigland <teigland@sourceware.org>
-Date: Tue, 20 Aug 2019 10:32:57 -0400
-Subject: stable-2.02 - devices: put ifdef around BLKPBSZGET
-Message-ID: <201908201432.x7KEWvPq029295@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: Zdenek Kabelac <zkabelac@sourceware.org>
+Date: Mon, 26 Aug 2019 09:34:14 -0400
+Subject: master - activation: extend handling of pending_delete
+Message-ID: <201908261334.x7QDYEmU005480@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=f55b8e387fbff3697fccf42cbc29e17e96da22fb
-Commit:        f55b8e387fbff3697fccf42cbc29e17e96da22fb
-Parent:        53fcd4fd8fdca852bd8db079f943594c4deeded5
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Tue Aug 20 09:32:26 2019 -0500
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Tue Aug 20 09:32:26 2019 -0500
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=7833c45fbe79e49ac22e50b90917b7d7ff2d78ac
+Commit:        7833c45fbe79e49ac22e50b90917b7d7ff2d78ac
+Parent:        a18f562913aaebf4587531fb40082718ec504f7a
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Fri Aug 23 13:08:34 2019 +0200
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Mon Aug 26 15:16:38 2019 +0200
 
-devices: put ifdef around BLKPBSZGET
+activation: extend handling of pending_delete
 
-BLKPBSZGET is not defined before kernel version 2.6.32
-(e.g. rhel5)
+With previous patch 30a98e4d6710a543692d40d11428ae4baea11b7b we
+started to put devices one pending_delete list instead
+of directly scheduling their removal.
+
+However we have operations like 'snapshot merge' where we are
+resuming device tree in 2 subsequent activation calls - so
+1st such call will still have suspened devices and no chance
+to push 'remove' ioctl.
+
+Since we curently cannot easily solve this by doing just single
+activation call (which would be preferred solution) - we introduce
+a preservation of pending_delete via command structure and
+then restore it on next activation call.
+
+This way we keep to remove devices later - although it might be
+not the best moment - this may need futher tunning.
+
+Also we don't keep the list of operation in 1 trasaction
+(unless we do verify udev symlinks) - this could probably
+also make it more correct in terms of which 'remove' can
+be combined we already running 'resume'.
 ---
- lib/device/dev-io.c |    2 ++
- 1 files changed, 2 insertions(+), 0 deletions(-)
+ lib/activate/dev_manager.c |   24 +++++++++++-------------
+ lib/commands/toolcontext.c |    8 ++++++++
+ lib/commands/toolcontext.h |    1 +
+ 3 files changed, 20 insertions(+), 13 deletions(-)
 
-diff --git a/lib/device/dev-io.c b/lib/device/dev-io.c
-index fd8d349..0289a17 100644
---- a/lib/device/dev-io.c
-+++ b/lib/device/dev-io.c
-@@ -156,6 +156,7 @@ int dev_get_direct_block_sizes(struct device *dev, unsigned int *physical_block_
- 		do_close = 1;
+diff --git a/lib/activate/dev_manager.c b/lib/activate/dev_manager.c
+index 3168e88..74dbc60 100644
+--- a/lib/activate/dev_manager.c
++++ b/lib/activate/dev_manager.c
+@@ -3612,6 +3612,7 @@ static int _clean_tree(struct dev_manager *dm, struct dm_tree_node *root, const
+ 			if (!dm_tree_deactivate_children(root, dl->str, strlen(dl->str)))
+ 				return_0;
+ 		}
++		dm_list_init(&dm->pending_delete);
  	}
  
-+#ifdef BLKPBSZGET /* not defined before kernel version 2.6.32 (e.g. rhel5) */
- 	/*
- 	 * BLKPBSZGET from kernel comment for blk_queue_physical_block_size:
- 	 * "the lowest possible sector size that the hardware can operate on
-@@ -165,6 +166,7 @@ int dev_get_direct_block_sizes(struct device *dev, unsigned int *physical_block_
- 		stack;
- 		pbs = 0;
- 	}
-+#endif
+ 	return 1;
+@@ -3738,25 +3739,22 @@ out_no_root:
+ int dev_manager_activate(struct dev_manager *dm, const struct logical_volume *lv,
+ 			 struct lv_activate_opts *laopts)
+ {
++	dm_list_splice(&dm->pending_delete, &lv->vg->cmd->pending_delete);
++
+ 	if (!_tree_action(dm, lv, laopts, ACTIVATE))
+ 		return_0;
  
- 	/*
- 	 * BLKSSZGET from kernel comment for blk_queue_logical_block_size:
+-	/*
+-	 * When lvm2 resumes a device and shortly after that it removes it,
+-	 * udevd rule will try to blindly call 'dmsetup info' on already removed
+-	 * device leaving the trace inside syslog about failing operation.
+-	 *
+-	 * TODO: It's not completely clear this call here is the best fix.
+-	 *       Maybe there can be a better sequence, but ATM we do usually resume
+-	 *       error device i.e. on cache deletion and remove it.
+-	 * TODO2: there could be more similar cases!
+-	 */
+-	if (!dm_list_empty(&dm->pending_delete))
+-		fs_unlock();
+-
+ 	if (!_tree_action(dm, lv, laopts, CLEAN))
+ 		return_0;
+ 
++	if (!dm_list_empty(&dm->pending_delete)) {
++		log_debug("Preserving %d device(s) for removal while being suspended.",
++			  dm_list_size(&dm->pending_delete));
++		if (!(str_list_dup(lv->vg->cmd->mem, &lv->vg->cmd->pending_delete,
++				   &dm->pending_delete)))
++			return_0;
++	}
++
+ 	return 1;
+ }
+ 
+diff --git a/lib/commands/toolcontext.c b/lib/commands/toolcontext.c
+index 1e03ea2..0a93553 100644
+--- a/lib/commands/toolcontext.c
++++ b/lib/commands/toolcontext.c
+@@ -1734,6 +1734,8 @@ struct cmd_context *create_toolcontext(unsigned is_clvmd,
+ 	cmd->current_settings = cmd->default_settings;
+ 
+ 	cmd->initialized.config = 1;
++
++	dm_list_init(&cmd->pending_delete);
+ out:
+ 	if (!cmd->initialized.config) {
+ 		destroy_toolcontext(cmd);
+@@ -1922,6 +1924,12 @@ int refresh_toolcontext(struct cmd_context *cmd)
+ 
+ 	cmd->initialized.config = 1;
+ 
++	if (!dm_list_empty(&cmd->pending_delete)) {
++		log_debug(INTERNAL_ERROR "Unprocessed pending delete for %d devices.",
++			  dm_list_size(&cmd->pending_delete));
++		dm_list_init(&cmd->pending_delete);
++	}
++
+ 	if (cmd->initialized.connections && !init_connections(cmd))
+ 		return_0;
+ 
+diff --git a/lib/commands/toolcontext.h b/lib/commands/toolcontext.h
+index 655d9f2..8a20d1f 100644
+--- a/lib/commands/toolcontext.h
++++ b/lib/commands/toolcontext.h
+@@ -239,6 +239,7 @@ struct cmd_context {
+ 	const char *report_list_item_separator;
+ 	const char *time_format;
+ 	unsigned rand_seed;
++	struct dm_list pending_delete;		/* list of LVs for removal */
+ };
+ 
+ /*
 
 
