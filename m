@@ -1,49 +1,49 @@
 From: Marian Csontos <mcsontos@sourceware.org>
-Date: Tue, 27 Aug 2019 06:23:29 -0400
-Subject: stable-2.02 - build: Fix make rpm with releases
-Message-ID: <201908271023.x7RANTPZ013904@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Tue, 27 Aug 2019 06:23:31 -0400
+Subject: stable-2.02 - cov: Fix a leak
+Message-ID: <201908271023.x7RANV84013914@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=e4f72e6655ff756c886ad78abcc696d3267e6c5f
-Commit:        e4f72e6655ff756c886ad78abcc696d3267e6c5f
-Parent:        8bcd482cc5fc58c9d5ff5305f1f1bff5d80eaa92
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=36523a398d50381f8355e719b98c3ce584b81a23
+Commit:        36523a398d50381f8355e719b98c3ce584b81a23
+Parent:        e4f72e6655ff756c886ad78abcc696d3267e6c5f
 Author:        Marian Csontos <mcsontos@redhat.com>
-AuthorDate:    Tue Jul 2 15:18:40 2019 +0200
+AuthorDate:    Tue Aug 27 12:21:41 2019 +0200
 Committer:     Marian Csontos <mcsontos@redhat.com>
 CommitterDate: Tue Aug 27 12:23:13 2019 +0200
 
-build: Fix make rpm with releases
+cov: Fix a leak
 
-- git describe returns just v2_02_182 instead of e.g.
-  v2_02_181-44-adf123, so cut needs -s option.
-
-- there is no dash in VERSION_DM so we need to split on space first.
 ---
- Makefile.in |    6 +++---
- 1 files changed, 3 insertions(+), 3 deletions(-)
+ lib/device/bcache.c |    5 +++--
+ 1 files changed, 3 insertions(+), 2 deletions(-)
 
-diff --git a/Makefile.in b/Makefile.in
-index e2f5a84..29d5bed 100644
---- a/Makefile.in
-+++ b/Makefile.in
-@@ -124,11 +124,11 @@ rpm: dist
- 	$(LN_S) -f $(abs_top_srcdir)/spec/build.inc $(rpmbuilddir)/SOURCES
- 	$(LN_S) -f $(abs_top_srcdir)/spec/macros.inc $(rpmbuilddir)/SOURCES
- 	$(LN_S) -f $(abs_top_srcdir)/spec/packages.inc $(rpmbuilddir)/SOURCES
--	DM_VER=$$(cut -d- -f1 $(top_srcdir)/VERSION_DM);\
--	GIT_VER=$$(cd $(top_srcdir); git describe | cut -d- --output-delimiter=. -f2,3 || echo 0);\
-+	DM_VER=$$(cut -d' ' -f1 $(top_srcdir)/VERSION_DM | cut -d- -f1);\
-+	GIT_VER=$$(cd $(top_srcdir); git describe | cut -s -d- --output-delimiter=. -f2,3);\
- 	sed -e "s,\(device_mapper_version\) [0-9.]*$$,\1 $$DM_VER," \
- 	    -e "s,^\(Version:[^0-9%]*\)[0-9.]*$$,\1 $(LVM_VER)," \
--	    -e "s,^\(Release:[^0-9%]*\)[0-9.]\+,\1 $$GIT_VER," \
-+	    -e "s,^\(Release:[^0-9%]*\)[0-9.]\+,\1 $${GIT_VER:-"0"}," \
- 	    $(top_srcdir)/spec/source.inc >$(rpmbuilddir)/SOURCES/source.inc
- 	rpmbuild -v --define "_topdir $(rpmbuilddir)" -ba $(top_srcdir)/spec/lvm2.spec
- 
+diff --git a/lib/device/bcache.c b/lib/device/bcache.c
+index a250bfd..d487ca2 100644
+--- a/lib/device/bcache.c
++++ b/lib/device/bcache.c
+@@ -516,6 +516,7 @@ static bool _sync_issue(struct io_engine *ioe, enum dir d, int fd,
+ 					  (unsigned long long)limit_nbytes,
+ 					  (unsigned long long)extra_nbytes,
+ 					  (unsigned long long)_last_byte_sector_size);
++                                free(io);
+ 				return false;
+ 			}
+ 		}
+@@ -547,8 +548,8 @@ static bool _sync_issue(struct io_engine *ioe, enum dir d, int fd,
+ 				log_debug("Device write error %d offset %llu len %llu", errno,
+ 					  (unsigned long long)(where + pos),
+ 					  (unsigned long long)(len - pos));
+-                	free(io);
+-                	return false;
++			free(io);
++			return false;
+ 		}
+ 		pos += rv;
+ 	}
 
 
