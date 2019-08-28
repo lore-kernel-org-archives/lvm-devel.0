@@ -1,40 +1,171 @@
-From: Marian Csontos <mcsontos@sourceware.org>
-Date: Wed, 28 Aug 2019 08:47:54 -0400
-Subject: stable-2.02 - cov: Fix memory leak
-Message-ID: <201908281247.x7SClsrE002193@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: David Teigland <teigland@sourceware.org>
+Date: Wed, 28 Aug 2019 13:36:16 -0400
+Subject: master - hints: fix copy of filter
+Message-ID: <201908281736.x7SHaGme011240@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=402b41f58dc14160ec21937d6308b0d9a1abba7d
-Commit:        402b41f58dc14160ec21937d6308b0d9a1abba7d
-Parent:        560dd9c552f49de0298104a69538b574f018fa40
-Author:        Marian Csontos <mcsontos@redhat.com>
-AuthorDate:    Wed Aug 28 10:45:04 2019 +0200
-Committer:     Marian Csontos <mcsontos@redhat.com>
-CommitterDate: Wed Aug 28 14:47:23 2019 +0200
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=12707adac8ba9e3a58175616bcd59b0e229a6705
+Commit:        12707adac8ba9e3a58175616bcd59b0e229a6705
+Parent:        dcbed38b3339ce4da722bccec8eaf7b8d775a6c2
+Author:        David Teigland <teigland@redhat.com>
+AuthorDate:    Wed Aug 28 12:33:04 2019 -0500
+Committer:     David Teigland <teigland@redhat.com>
+CommitterDate: Wed Aug 28 12:33:04 2019 -0500
 
-cov: Fix memory leak
+hints: fix copy of filter
 
+Only the first entry of the filter array was being
+included in the copy of the filter, rather than the
+entire thing.  The result is that hints would not be
+refreshed if the filter was changed but the first
+entry was unchanged.
 ---
- libdm/libdm-common.c |    3 ++-
- 1 files changed, 2 insertions(+), 1 deletions(-)
+ lib/label/hints.c |   79 +++++++++++++++++++++++++++++++++++++++++++++-------
+ 1 files changed, 68 insertions(+), 11 deletions(-)
 
-diff --git a/libdm/libdm-common.c b/libdm/libdm-common.c
-index c300223..b06e678 100644
---- a/libdm/libdm-common.c
-+++ b/libdm/libdm-common.c
-@@ -2012,7 +2012,8 @@ static int _sysfs_get_kernel_name(uint32_t major, uint32_t minor, char *buf, siz
- 			log_sys_error("readlink", sysfs_path);
- 		else {
- 			log_sys_debug("readlink", sysfs_path);
--			return _sysfs_find_kernel_name(major, minor, buf, buf_size);
-+			r = _sysfs_find_kernel_name(major, minor, buf, buf_size);
-+			goto bad;
- 		}
- 		goto bad;
+diff --git a/lib/label/hints.c b/lib/label/hints.c
+index 6de54bc..580304d 100644
+--- a/lib/label/hints.c
++++ b/lib/label/hints.c
+@@ -579,6 +579,52 @@ static void _apply_hints(struct cmd_context *cmd, struct dm_list *hints,
  	}
+ }
+ 
++static void _filter_to_str(struct cmd_context *cmd, int filter_cfg, char **strp)
++{
++	const struct dm_config_node *cn;
++	const struct dm_config_value *cv;
++	char *str;
++	int pos = 0;
++	int len = 0;
++	int ret;
++
++	*strp = NULL;
++
++	if (!(cn = find_config_tree_array(cmd, filter_cfg, NULL))) {
++		/* shouldn't happen because default is a|*| */
++		return;
++	}
++
++	for (cv = cn->v; cv; cv = cv->next) {
++		if (cv->type != DM_CFG_STRING)
++			continue;
++
++		len += (strlen(cv->v.str) + 1);
++	}
++	len++;
++
++	if (len == 1) {
++		/* shouldn't happen because default is a|*| */
++		return;
++	}
++
++	str = malloc(len);
++	memset(str, 0, len);
++
++	for (cv = cn->v; cv; cv = cv->next) {
++		if (cv->type != DM_CFG_STRING)
++			continue;
++
++		ret = snprintf(str + pos, len - pos, "%s", cv->v.str);
++
++		if (ret >= len - pos)
++			break;
++		pos += ret;
++	}
++
++	*strp = str;
++}
++
+ /*
+  * Return 1 and needs_refresh 0: the hints can be used
+  * Return 1 and needs_refresh 1: the hints can't be used and should be updated
+@@ -590,12 +636,11 @@ static int _read_hint_file(struct cmd_context *cmd, struct dm_list *hints, int *
+ {
+ 	char devpath[PATH_MAX];
+ 	FILE *fp;
+-	const struct dm_config_node *cn;
+ 	struct dev_iter *iter;
+ 	struct hint *hint;
+ 	struct device *dev;
+ 	char *split[HINT_LINE_WORDS];
+-	char *name, *pvid, *devn, *vgname, *p;
++	char *name, *pvid, *devn, *vgname, *p, *filter_str = NULL;
+ 	uint32_t read_hash = 0;
+ 	uint32_t calc_hash = INITIAL_CRC;
+ 	uint32_t read_count = 0;
+@@ -655,23 +700,31 @@ static int _read_hint_file(struct cmd_context *cmd, struct dm_list *hints, int *
+ 
+ 		keylen = strlen("global_filter:");
+ 		if (!strncmp(_hint_line, "global_filter:", keylen)) {
+-			cn = find_config_tree_array(cmd, devices_global_filter_CFG, NULL);
+-			if (strcmp(cn->v->v.str, _hint_line + keylen)) {
++			_filter_to_str(cmd, devices_global_filter_CFG, &filter_str);
++			if (!filter_str || strcmp(filter_str, _hint_line + keylen)) {
+ 				log_debug("ignore hints with different global_filter");
++				if (filter_str)
++					free(filter_str);
+ 				*needs_refresh = 1;
+ 				break;
+ 			}
++			if (filter_str)
++				free(filter_str);
+ 			continue;
+ 		}
+ 
+ 		keylen = strlen("filter:");
+ 		if (!strncmp(_hint_line, "filter:", keylen)) {
+-			cn = find_config_tree_array(cmd, devices_filter_CFG, NULL);
+-			if (strcmp(cn->v->v.str, _hint_line + keylen)) {
++			_filter_to_str(cmd, devices_filter_CFG, &filter_str);
++			if (!filter_str || strcmp(filter_str, _hint_line + keylen)) {
+ 				log_debug("ignore hints with different filter");
++				if (filter_str)
++					free(filter_str);
+ 				*needs_refresh = 1;
+ 				break;
+ 			}
++			if (filter_str)
++				free(filter_str);
+ 			continue;
+ 		}
+ 
+@@ -800,11 +853,11 @@ int write_hint_file(struct cmd_context *cmd, int newhints)
+ {
+ 	char devpath[PATH_MAX];
+ 	FILE *fp;
+-	const struct dm_config_node *cn;
+ 	struct lvmcache_info *info;
+ 	struct dev_iter *iter;
+ 	struct device *dev;
+ 	const char *vgname;
++	char *filter_str = NULL;
+ 	uint32_t hash = INITIAL_CRC;
+ 	uint32_t count = 0;
+ 	time_t t;
+@@ -855,11 +908,15 @@ int write_hint_file(struct cmd_context *cmd, int newhints)
+ 	fprintf(fp, "# Created by %s pid %d %s", cmd->name, getpid(), ctime(&t));
+ 	fprintf(fp, "hints_version: %d.%d\n", HINTS_VERSION_MAJOR, HINTS_VERSION_MINOR);
+ 
+-	cn = find_config_tree_array(cmd, devices_global_filter_CFG, NULL);
+-	fprintf(fp, "global_filter:%s\n", cn->v->v.str);
++	_filter_to_str(cmd, devices_global_filter_CFG, &filter_str);
++	fprintf(fp, "global_filter:%s\n", filter_str ?: "-");
++	if (filter_str)
++		free(filter_str);
+ 
+-	cn = find_config_tree_array(cmd, devices_filter_CFG, NULL);
+-	fprintf(fp, "filter:%s\n", cn->v->v.str);
++	_filter_to_str(cmd, devices_filter_CFG, &filter_str);
++	fprintf(fp, "filter:%s\n", filter_str ?: "-");
++	if (filter_str)
++		free(filter_str);
+ 
+ 	fprintf(fp, "scan_lvs:%d\n", cmd->scan_lvs);
+ 
 
 
