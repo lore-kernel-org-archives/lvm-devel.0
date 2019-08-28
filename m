@@ -1,105 +1,40 @@
-From: David Teigland <teigland@sourceware.org>
-Date: Tue, 27 Aug 2019 16:48:39 -0400
-Subject: master - fix duplicate pv size check
-Message-ID: <201908272048.x7RKmd1Y006786@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: Marian Csontos <mcsontos@sourceware.org>
+Date: Wed, 28 Aug 2019 08:47:54 -0400
+Subject: stable-2.02 - cov: Fix memory leak
+Message-ID: <201908281247.x7SClsrE002193@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=dcbed38b3339ce4da722bccec8eaf7b8d775a6c2
-Commit:        dcbed38b3339ce4da722bccec8eaf7b8d775a6c2
-Parent:        32a8865a272d31d5bc12332a4da0309ce3af9243
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Tue Aug 27 15:40:24 2019 -0500
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Tue Aug 27 15:40:24 2019 -0500
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=402b41f58dc14160ec21937d6308b0d9a1abba7d
+Commit:        402b41f58dc14160ec21937d6308b0d9a1abba7d
+Parent:        560dd9c552f49de0298104a69538b574f018fa40
+Author:        Marian Csontos <mcsontos@redhat.com>
+AuthorDate:    Wed Aug 28 10:45:04 2019 +0200
+Committer:     Marian Csontos <mcsontos@redhat.com>
+CommitterDate: Wed Aug 28 14:47:23 2019 +0200
 
-fix duplicate pv size check
+cov: Fix memory leak
 
-Fixes a segfault in the recent commit e01fddc57:
-"improve duplicate pv handling for md components"
-
-While choosing between duplicates, the info struct is
-not always valid; it may have been dropped already.
-
-Remove the code that was still using the info struct for
-size comparisons.  The size comparisons were a bogus check
-anyway because it was just preferring the dev that had
-already been chosen, it wasn't actually comparing the
-dev size to the PV size.  It would be good to use a
-dev/PV size comparison in the duplicate handling code, but
-the PV size is not available until after vg_read, not
-from the scan.
 ---
- lib/cache/lvmcache.c |   24 ------------------------
- 1 files changed, 0 insertions(+), 24 deletions(-)
+ libdm/libdm-common.c |    3 ++-
+ 1 files changed, 2 insertions(+), 1 deletions(-)
 
-diff --git a/lib/cache/lvmcache.c b/lib/cache/lvmcache.c
-index 87c0021..29d6446 100644
---- a/lib/cache/lvmcache.c
-+++ b/lib/cache/lvmcache.c
-@@ -491,12 +491,10 @@ static void _choose_duplicates(struct cmd_context *cmd,
- 	struct lvmcache_info *info;
- 	struct device *dev1, *dev2;
- 	uint32_t dev1_major, dev1_minor, dev2_major, dev2_minor;
--	uint64_t info_size, dev1_size, dev2_size;
- 	int in_subsys1, in_subsys2;
- 	int is_dm1, is_dm2;
- 	int has_fs1, has_fs2;
- 	int has_lv1, has_lv2;
--	int same_size1, same_size2;
- 	int prev_unchosen1, prev_unchosen2;
- 	int change;
- 
-@@ -613,11 +611,6 @@ next:
- 		dev2_major = MAJOR(dev2->dev);
- 		dev2_minor = MINOR(dev2->dev);
- 
--		if (!dev_get_size(dev1, &dev1_size))
--			dev1_size = 0;
--		if (!dev_get_size(dev2, &dev2_size))
--			dev2_size = 0;
--
- 		has_lv1 = (dev1->flags & DEV_USED_FOR_LV) ? 1 : 0;
- 		has_lv2 = (dev2->flags & DEV_USED_FOR_LV) ? 1 : 0;
- 
-@@ -630,21 +623,11 @@ next:
- 		has_fs1 = dm_device_has_mounted_fs(dev1_major, dev1_minor);
- 		has_fs2 = dm_device_has_mounted_fs(dev2_major, dev2_minor);
- 
--		info_size = info->device_size >> SECTOR_SHIFT;
--		same_size1 = (dev1_size == info_size);
--		same_size2 = (dev2_size == info_size);
--
- 		log_debug_cache("PV %s compare duplicates: %s %u:%u. %s %u:%u.",
- 				devl->dev->pvid,
- 				dev_name(dev1), dev1_major, dev1_minor,
- 				dev_name(dev2), dev2_major, dev2_minor);
- 
--		log_debug_cache("PV %s: wants size %llu. %s is %llu. %s is %llu.",
--				devl->dev->pvid,
--				(unsigned long long)info_size,
--				dev_name(dev1), (unsigned long long)dev1_size,
--				dev_name(dev2), (unsigned long long)dev2_size);
--
- 		log_debug_cache("PV %s: %s was prev %s. %s was prev %s.",
- 				devl->dev->pvid,
- 				dev_name(dev1), prev_unchosen1 ? "not chosen" : "<none>",
-@@ -686,13 +669,6 @@ next:
- 			/* change to 2 */
- 			change = 1;
- 			reason = "device is used by LV";
--		} else if (same_size1 && !same_size2) {
--			/* keep 1 */
--			reason = "device size is correct";
--		} else if (same_size2 && !same_size1) {
--			/* change to 2 */
--			change = 1;
--			reason = "device size is correct";
- 		} else if (has_fs1 && !has_fs2) {
- 			/* keep 1 */
- 			reason = "device has fs mounted";
+diff --git a/libdm/libdm-common.c b/libdm/libdm-common.c
+index c300223..b06e678 100644
+--- a/libdm/libdm-common.c
++++ b/libdm/libdm-common.c
+@@ -2012,7 +2012,8 @@ static int _sysfs_get_kernel_name(uint32_t major, uint32_t minor, char *buf, siz
+ 			log_sys_error("readlink", sysfs_path);
+ 		else {
+ 			log_sys_debug("readlink", sysfs_path);
+-			return _sysfs_find_kernel_name(major, minor, buf, buf_size);
++			r = _sysfs_find_kernel_name(major, minor, buf, buf_size);
++			goto bad;
+ 		}
+ 		goto bad;
+ 	}
 
 
