@@ -1,60 +1,62 @@
-From: Joe Thornber <thornber@sourceware.org>
-Date: Mon, 9 Sep 2019 13:20:24 -0400
-Subject: 2019-09-05-add-io-manager - Merge branch '2019-09-05-add-io-manager' of git+ssh://sourceware.org/git/lvm2 into 2019-09-05-add-io-manager
-Message-ID: <201909091720.x89HKOMS030001@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: David Teigland <teigland@sourceware.org>
+Date: Tue, 10 Sep 2019 11:04:39 -0400
+Subject: master - pvscan: allow use of noudevsync option
+Message-ID: <201909101504.x8AF4dvj010464@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=510a6e86a354537c981386e7a46d5f2c26855660
-Commit:        510a6e86a354537c981386e7a46d5f2c26855660
-Parent:        e4693f7f8db38230362255ebc30d6b8a5bd40918 13c702f862008192a36ee171e546ba0d247bcf9f
-Author:        Joe Thornber <ejt@redhat.com>
-AuthorDate:    Mon Sep 9 18:21:20 2019 +0100
-Committer:     Joe Thornber <ejt@redhat.com>
-CommitterDate: Mon Sep 9 18:21:20 2019 +0100
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=3e5e7fd6c93517278b2451a08f47e16d052babbb
+Commit:        3e5e7fd6c93517278b2451a08f47e16d052babbb
+Parent:        aae2e872b4572ba72fa0321391f7eb77f569e5ff
+Author:        David Teigland <teigland@redhat.com>
+AuthorDate:    Tue Sep 10 09:47:33 2019 -0500
+Committer:     David Teigland <teigland@redhat.com>
+CommitterDate: Tue Sep 10 09:47:33 2019 -0500
 
-Merge branch '2019-09-05-add-io-manager' of git+ssh://sourceware.org/git/lvm2 into 2019-09-05-add-io-manager
+pvscan: allow use of noudevsync option
 
+When pvscan is used to activate a VG via an
+asynchronous service (i.e. lvm2-pvscan), there
+is no requirement that the command wait for
+udev to create device nodes before returning.
 
- lib/device/io-manager.c |   62 +++++++++++++++++++++++++---------------------
- lib/device/io-manager.h |    4 +-
- 2 files changed, 36 insertions(+), 30 deletions(-)
+It's possible that waiting for udev is slow
+enough to cause the service running the command
+to time out.  So, allow the --noudevsync option
+to be given to pvscan to skip waiting for udev.
 
-diff --cc lib/device/io-manager.h
-index 253b3ad,af33259..923d0be
---- a/lib/device/io-manager.h
-+++ b/lib/device/io-manager.h
-@@@ -61,11 -61,11 +61,11 @@@ struct io_engine 
-  	// The path is there purely for logging.
-  	bool (*get_size)(struct io_engine *e, const char *path, int fd, sector_t *size);
-  	bool (*get_block_sizes)(struct io_engine *e, const char *path, int fd,
--                                 unsigned *physical, unsigned *logical);
-+                                 unsigned *physical_block_size, unsigned *logical_block_size);
-  };
-  
- -struct io_engine *create_async_io_engine(bool use_o_direct);
- -struct io_engine *create_sync_io_engine(bool use_o_direct);
- +struct io_engine *create_async_io_engine(void);
- +struct io_engine *create_sync_io_engine(void);
-  
-  // Same as create_async_io_engine(), except writes are not acted upon.
-  // Used when running with --test.
-@@@ -198,11 -197,10 +198,11 @@@ bool io_invalidate_dev(struct io_manage
-  bool io_invalidate_all(struct io_manager *iom);
-  
-  bool io_dev_size(struct io_dev *dev, uint64_t *sectors);
-- bool io_dev_block_sizes(struct io_dev *dev, unsigned *physical, unsigned *block_size);
-+ bool io_dev_block_sizes(struct io_dev *dev, unsigned *physical_block_size, unsigned *logical_block_size);
-  
-  // For testing and debug only
- -int io_get_fd(struct io_dev *dev);
- +void *io_get_dev_context(struct io_dev *dev);
- +int io_get_fd(void *dev_context);
-  bool io_is_well_formed(struct io_manager *iom);
-  
-  //----------------------------------------------------------------
+(This commit is not changing the lvm2-pvscan
+service itself to use --noudevsync.)
+
+Still unknown is whether there are any complex
+LV activation cases in which lvm itself requires
+access to a device node, in which case the udev
+wait could be needed by lvm itself.
+
+(When running an activation command directly
+from the command line, it's generally expected
+that the activated LVs are ready to use when
+the command is finished, so lvm waits for
+udev to finish creating the dev nodes.)
+---
+ tools/command-lines.in |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
+
+diff --git a/tools/command-lines.in b/tools/command-lines.in
+index 1169224..65221c0 100644
+--- a/tools/command-lines.in
++++ b/tools/command-lines.in
+@@ -1498,7 +1498,7 @@ DESC: Display PV information.
+ 
+ pvscan --cache_long
+ OO: --ignorelockingfailure, --reportformat ReportFmt,
+---activate ay, --major Number, --minor Number
++--activate ay, --major Number, --minor Number, --noudevsync
+ OP: PV|String ...
+ IO: --background
+ ID: pvscan_cache
 
 
