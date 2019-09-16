@@ -1,65 +1,42 @@
-From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Mon, 30 Sep 2019 07:38:39 -0400
-Subject: master - vdo: properly check percentage for resize
-Message-ID: <201909301138.x8UBcd00002521@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: David Teigland <teigland@sourceware.org>
+Date: Mon, 16 Sep 2019 14:02:24 -0400
+Subject: master - Revert "tests: drop unnecessary pid from LVMTEST prefix"
+Message-ID: <201909161802.x8GI2O2w012504@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=a98b77c16455ee97f5bd4b89536a3ae4efd8e009
-Commit:        a98b77c16455ee97f5bd4b89536a3ae4efd8e009
-Parent:        c813db8fc2ec15a8370bb291f662e15ba26682e8
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Mon Sep 30 13:25:42 2019 +0200
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Mon Sep 30 13:34:34 2019 +0200
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=13fb57bbb1deca9ea14e58a3a4edf284d3f4846c
+Commit:        13fb57bbb1deca9ea14e58a3a4edf284d3f4846c
+Parent:        6e1cf248d4a9520b6e342dc583f1e4f7d4c5f8fa
+Author:        David Teigland <teigland@redhat.com>
+AuthorDate:    Mon Sep 16 13:01:50 2019 -0500
+Committer:     David Teigland <teigland@redhat.com>
+CommitterDate: Mon Sep 16 13:01:50 2019 -0500
 
-vdo: properly check percentage for resize
+Revert "tests: drop unnecessary pid from LVMTEST prefix"
 
-Avoid checking 'lv_is_active()' since special LV types does this
-validation anyway what calling  _percent() function  and call it
-ONLY when none of special types is queried.
+This reverts commit 51c105702f24d64f1adc25a692ef37e20878cec5.
 
-This restores support for VDO resize (as with support for
-separate VDO pool activation, plain query for lv_is_active()
-is not working in this case).
+it seems the test system still needs this for some reason
 ---
- lib/metadata/lv_manip.c |   13 +++++--------
- 1 files changed, 5 insertions(+), 8 deletions(-)
+ test/lib/inittest.sh |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
 
-diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
-index 21d21ca..47ff167 100644
---- a/lib/metadata/lv_manip.c
-+++ b/lib/metadata/lv_manip.c
-@@ -4850,12 +4850,6 @@ static int _lvresize_adjust_policy(const struct logical_volume *lv,
- 		return 0;
- 	}
+diff --git a/test/lib/inittest.sh b/test/lib/inittest.sh
+index 4914b29..a6cefa8 100644
+--- a/test/lib/inittest.sh
++++ b/test/lib/inittest.sh
+@@ -68,7 +68,7 @@ export LVM_TEST_LVMPOLLD LVM_TEST_LOCK_TYPE_DLM LVM_TEST_LOCK_TYPE_SANLOCK
  
--	if (!lv_is_active(lv)) {
--		log_error("Can't read state of locally inactive LV %s.",
--			  display_lvname(lv));
--		return 0;
--	}
--
- 	if (lv_is_thin_pool(lv)) {
- 		if (!lv_thin_pool_percent(lv, 1, &percent))
- 			return_0;
-@@ -4870,9 +4864,12 @@ static int _lvresize_adjust_policy(const struct logical_volume *lv,
- 	} else if (lv_is_vdo_pool(lv)) {
- 		if (!lv_vdo_pool_percent(lv, &percent))
- 			return_0;
--	} else {
--		if (!lv_snapshot_percent(lv, &percent))
-+	} else if (!lv_snapshot_percent(lv, &percent))
- 			return_0;
-+	else if (!lv_is_active(lv)) {
-+		log_error("Can't read state of locally inactive LV %s.",
-+			  display_lvname(lv));
-+		return 0;
- 	}
+ TESTOLDPWD=$(pwd)
+ COMMON_PREFIX="LVMTEST"
+-PREFIX="${COMMON_PREFIX}"
++PREFIX="${COMMON_PREFIX}$$"
  
- 	*amount = _adjust_amount(percent, policy_threshold, policy_amount);
+ # Check we are not conflickting with some exiting setup
+ if test -z "$SKIP_ROOT_DM_CHECK" ; then
 
 
