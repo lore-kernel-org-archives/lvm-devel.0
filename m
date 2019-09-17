@@ -1,116 +1,52 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Tue, 17 Sep 2019 07:18:47 -0400
-Subject: master - lvconvert: improve validation thin and cache pool conversion
-Message-ID: <201909171118.x8HBIlAT025582@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Tue, 17 Sep 2019 07:18:50 -0400
+Subject: master - tests: pool conversion
+Message-ID: <201909171118.x8HBIo3u025596@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=7612c21f5511c58bac81fc46e304bd9f4cd2cd75
-Commit:        7612c21f5511c58bac81fc46e304bd9f4cd2cd75
-Parent:        13fb57bbb1deca9ea14e58a3a4edf284d3f4846c
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=ee6b9b78ece389813895e3ecf79e5bbcbafee871
+Commit:        ee6b9b78ece389813895e3ecf79e5bbcbafee871
+Parent:        7612c21f5511c58bac81fc46e304bd9f4cd2cd75
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Sep 6 18:09:40 2019 +0200
+AuthorDate:    Tue Sep 17 11:27:13 2019 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Tue Sep 17 13:13:49 2019 +0200
 
-lvconvert: improve validation thin and cache pool conversion
+tests: pool conversion
 
-Limit convertible LVs to thin-pool and cache-pools.
-Also fix return code on  interal error path to return ECMD_FAILED.
+Test conversion of cached LV.
 ---
- WHATS_NEW         |    1 +
- tools/lvconvert.c |   52 +++++++++++++++++++++++++++++++++++++++++++++++-----
- 2 files changed, 48 insertions(+), 5 deletions(-)
+ test/shell/lvconvert-cache-thin.sh |   16 ++++++++++++++++
+ 1 files changed, 16 insertions(+), 0 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index cb93bbe..518b944 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.03.06 - 
- ================================
-+  Enhance validation for thin and cache pool conversion and swapping.
-   Improve internal removal of cached devices.
-   Synchronize with udev when dropping snapshot.
-   Add missing device synchronization point before removing pvmove node.
-diff --git a/tools/lvconvert.c b/tools/lvconvert.c
-index 31f9296..d64ab22 100644
---- a/tools/lvconvert.c
-+++ b/tools/lvconvert.c
-@@ -4455,24 +4455,66 @@ static int _lvconvert_to_pool_or_swap_metadata_single(struct cmd_context *cmd,
- 	struct dm_list *use_pvh = NULL;
- 	int to_thinpool = 0;
- 	int to_cachepool = 0;
-+	int lvt_enum = get_lvt_enum(lv);
-+	struct lv_type *lvtype;
+diff --git a/test/shell/lvconvert-cache-thin.sh b/test/shell/lvconvert-cache-thin.sh
+index e1d38b8..7dda6e6 100644
+--- a/test/shell/lvconvert-cache-thin.sh
++++ b/test/shell/lvconvert-cache-thin.sh
+@@ -51,4 +51,20 @@ check lv_field $vg/$lv1 segtype "thin"
+ lvconvert --uncache $vg/tpool
+ lvs -a $vg
  
- 	switch (cmd->command->command_enum) {
- 	case lvconvert_to_thinpool_or_swap_metadata_CMD:
-+		if (lv_is_cache(lv))
-+			/* For cached LV check the cache origin LV type */
-+			lvt_enum = get_lvt_enum(seg_lv(first_seg(lv), 0));
- 		to_thinpool = 1;
- 		break;
- 	case lvconvert_to_cachepool_or_swap_metadata_CMD:
-+		if (lv_is_cache(lv))
-+			goto_bad; /* Cache over cache is not supported */
- 		to_cachepool = 1;
- 		break;
- 	default:
--		log_error(INTERNAL_ERROR "Invalid lvconvert pool command");
--		return 0;
--	};
-+		log_error(INTERNAL_ERROR "Invalid lvconvert pool command.");
-+		return ECMD_FAILED;
-+	}
++lvremove -f $vg
 +
-+	switch (lvt_enum) {
-+	case thinpool_LVT:
-+		if (!to_thinpool)
-+			goto_bad; /* can't accept cache-pool */
-+		break; /* swap thin-pool */
-+	case cachepool_LVT:
-+		if (!to_cachepool)
-+			goto_bad; /* can't accept thin-pool */
-+		break; /* swap cache-pool */
-+	case linear_LVT:
-+	case raid_LVT:
-+	case striped_LVT:
-+	case zero_LVT:
-+		break;
-+	default:
-+bad:
-+		lvtype = get_lv_type(lvt_enum);
-+		log_error("LV %s with type %s cannot be used as a %s pool LV.",
-+			  display_lvname(lv), lvtype ? lvtype->name : "unknown",
-+			  to_thinpool ? "thin" : "cache");
-+		return ECMD_FAILED;
-+	}
- 
- 	if (lv_is_origin(lv)) {
- 		log_error("Cannot convert logical volume %s under snapshot.",
- 			  display_lvname(lv));
--		return 0;
--	};
-+		return ECMD_FAILED;
-+	}
++# Check conversion of cached LV works as thin-pool
++lvcreate -L10 -n $lv $vg
++lvcreate -L10 -n $lv1 $vg
++lvcreate -H -L10 $vg/$lv
 +
-+	if (!lv_is_visible(lv)) {
-+		log_error("Can't convert internal LV %s.",
-+			  display_lvname(lv));
-+		return ECMD_FAILED;
-+	}
++# Stack of cache over cache is unsupported ATM
++fail lvconvert --yes --cachepool $vg/$lv
 +
-+	if (lv_is_locked(lv)) {
-+		log_error("Can't convert locked LV %s.",
-+			  display_lvname(lv));
-+		return ECMD_FAILED;
-+	}
- 
- 	if (cmd->position_argc > 1) {
- 		/* First pos arg is required LV, remaining are optional PVs. */
++# Thin-pool cannot use cached metaddata LV  (meta should be on FAST device)
++fail lvconvert --yes --thinpool $vg/$lv1 --poolmetadata $vg/$lv
++
++# Thin-pool CAN use cached data LV
++lvconvert --yes --thinpool $vg/$lv
++
+ vgremove -f $vg
 
 
