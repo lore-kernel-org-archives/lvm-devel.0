@@ -1,325 +1,62 @@
-From: David Teigland <teigland@sourceware.org>
-Date: Fri, 20 Sep 2019 11:00:59 -0400
-Subject: master - tests: add cache-single-split
-Message-ID: <201909201500.x8KF0xdB018891@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: Heinz Mauelshagen <heinzm@sourceware.org>
+Date: Fri, 20 Sep 2019 11:55:35 -0400
+Subject: master - Revert "dmeventd: avoid bail out preventing repair in raid plugin"
+Message-ID: <201909201555.x8KFtZ1w022791@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=8d8b5e4f75694f62a9af9cda707509f0814d8c8a
-Commit:        8d8b5e4f75694f62a9af9cda707509f0814d8c8a
-Parent:        5d3bced5eab1244939958422446e0dfb5b6b79d4
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Wed Sep 18 15:14:22 2019 -0500
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Fri Sep 20 09:59:37 2019 -0500
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=6fc46af8ecd9532aca41df43fd588fb207ed4e92
+Commit:        6fc46af8ecd9532aca41df43fd588fb207ed4e92
+Parent:        8d8b5e4f75694f62a9af9cda707509f0814d8c8a
+Author:        Heinz Mauelshagen <heinzm@redhat.com>
+AuthorDate:    Fri Sep 20 17:26:36 2019 +0200
+Committer:     Heinz Mauelshagen <heinzm@redhat.com>
+CommitterDate: Fri Sep 20 17:52:37 2019 +0200
 
-tests: add cache-single-split
+Revert "dmeventd: avoid bail out preventing repair in raid plugin"
 
+This reverts commit ad560a286a0b5d08086324e6194b060c136e9353.
+
+The reverted patch also removed the warning which we realized we need
+to keep as valuable process information (see related bugzilla below).
+
+In a followup patch, we'll keep the message and avoid bailing out thus
+always allowing lvconvert to try repairing if 'allocate' fault policy set.
+
+Related: https://bugzilla.redhat.com/show_bug.cgi?id=1751887
 ---
- test/shell/cache-single-split.sh |  293 ++++++++++++++++++++++++++++++++++++++
- 1 files changed, 293 insertions(+), 0 deletions(-)
+ daemons/dmeventd/plugins/raid/dmeventd_raid.c |   16 ++++++++++------
+ 1 files changed, 10 insertions(+), 6 deletions(-)
 
-diff --git a/test/shell/cache-single-split.sh b/test/shell/cache-single-split.sh
-new file mode 100644
-index 0000000..90c3ddb
---- /dev/null
-+++ b/test/shell/cache-single-split.sh
-@@ -0,0 +1,293 @@
-+#!/usr/bin/env bash
-+
-+# Copyright (C) 2018 Red Hat, Inc. All rights reserved.
-+#
-+# This copyrighted material is made available to anyone wishing to use,
-+# modify, copy, or redistribute it subject to the terms and conditions
-+# of the GNU General Public License v.2.
-+#
-+# You should have received a copy of the GNU General Public License
-+# along with this program; if not, write to the Free Software Foundation,
-+# Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
-+
-+# Test single lv cache options
-+
-+SKIP_WITH_LVMPOLLD=1
-+
-+. lib/inittest
-+
-+mkfs_mount_umount()
-+{
-+        lvt=$1
-+
-+        lvchange -ay $vg/$lvt
-+
-+        mkfs.xfs -f -s size=4096 "$DM_DEV_DIR/$vg/$lvt"
-+        mount "$DM_DEV_DIR/$vg/$lvt" "$mount_dir"
-+        cp pattern1 "$mount_dir/pattern1"
-+        dd if=/dev/zero of="$mount_dir/zeros2M" bs=1M count=32 conv=fdatasync
-+        umount "$mount_dir"
-+
-+        lvchange -an $vg/$lvt
-+}
-+
-+mount_umount()
-+{
-+        lvt=$1
-+
-+        lvchange -ay $vg/$lvt
-+
-+        mount "$DM_DEV_DIR/$vg/$lvt" "$mount_dir"
-+        diff pattern1 "$mount_dir/pattern1"
-+        dd if="$mount_dir/zeros2M" of=/dev/null bs=1M count=32
-+        umount "$mount_dir"
-+
-+        lvchange -an $vg/$lvt
-+}
-+
-+aux have_cache 1 10 0 || skip
-+which mkfs.xfs || skip
-+
-+mount_dir="mnt"
-+mkdir -p "$mount_dir"
-+
-+# generate random data
-+dd if=/dev/urandom of=pattern1 bs=512K count=1
-+
-+aux prepare_devs 4
-+
-+vgcreate $SHARED $vg "$dev1" "$dev2" "$dev3" "$dev4"
-+
-+lvcreate -n $lv1 -l 16 -an $vg "$dev1" "$dev4"
-+lvcreate -n $lv2 -l 4 -an $vg "$dev2"
-+
-+#
-+# split when no devs are missing
-+# while inactive
-+# both cachemodes work the same
-+#
-+
-+lvconvert -y --type cache --cachevol $lv2 --cachemode writethrough $vg/$lv1
-+
-+check lv_field $vg/$lv1 segtype "cache"
-+check lv_field $vg/$lv1 cachemode "writethrough"
-+
-+mkfs_mount_umount $lv1
-+
-+lvconvert --splitcache $vg/$lv1
-+lvs -o segtype $vg/$lv1 | grep linear
-+lvs -o segtype $vg/$lv2 | grep linear
-+
-+lvchange -ay $vg/$lv2
-+cache_check "$DM_DEV_DIR/$vg/$lv2"
-+lvchange -an $vg/$lv2
-+
-+lvconvert -y --type cache --cachevol $lv2 --cachemode writeback $vg/$lv1
-+
-+check lv_field $vg/$lv1 segtype "cache"
-+check lv_field $vg/$lv1 cachemode "writeback"
-+
-+mkfs_mount_umount $lv1
-+
-+lvconvert --splitcache $vg/$lv1
-+lvs -o segtype $vg/$lv1 | grep linear
-+lvs -o segtype $vg/$lv2 | grep linear
-+
-+lvchange -ay $vg/$lv2
-+cache_check "$DM_DEV_DIR/$vg/$lv2"
-+lvchange -an $vg/$lv2
-+
-+mount_umount $lv1
-+
-+
-+#
-+# split when no devs are missing
-+# while active
-+# both cachemodes work the same
-+#
-+
-+lvconvert -y --type cache --cachevol $lv2 --cachemode writethrough $vg/$lv1
-+
-+check lv_field $vg/$lv1 segtype "cache"
-+check lv_field $vg/$lv1 cachemode "writethrough"
-+
-+mkfs_mount_umount $lv1
-+
-+lvchange -ay $vg/$lv1
-+
-+lvconvert --splitcache $vg/$lv1
-+lvs -o segtype $vg/$lv1 | grep linear
-+lvs -o segtype $vg/$lv2 | grep linear
-+
-+lvchange -ay $vg/$lv2
-+cache_check "$DM_DEV_DIR/$vg/$lv2"
-+lvchange -an $vg/$lv2
-+
-+mount_umount $lv1
-+
-+lvconvert -y --type cache --cachevol $lv2 --cachemode writeback $vg/$lv1
-+
-+check lv_field $vg/$lv1 segtype "cache"
-+check lv_field $vg/$lv1 cachemode "writeback"
-+
-+lvchange -an $vg/$lv1
-+lvchange -an $vg/$lv2
-+
-+mkfs_mount_umount $lv1
-+
-+lvchange -ay $vg/$lv1
-+
-+lvconvert --splitcache $vg/$lv1
-+lvs -o segtype $vg/$lv1 | grep linear
-+lvs -o segtype $vg/$lv2 | grep linear
-+
-+lvchange -ay $vg/$lv2
-+cache_check "$DM_DEV_DIR/$vg/$lv2"
-+lvchange -an $vg/$lv2
-+
-+#
-+# split while cachevol is missing
-+# writethrough
-+#
-+
-+lvconvert -y --type cache --cachevol $lv2 --cachemode writethrough $vg/$lv1
-+
-+check lv_field $vg/$lv1 segtype "cache"
-+check lv_field $vg/$lv1 cachemode "writethrough"
-+
-+lvchange -an $vg/$lv1
-+lvchange -an $vg/$lv2
-+
-+mkfs_mount_umount $lv1
-+
-+lvchange -ay $vg/$lv1
-+
-+aux disable_dev "$dev2"
-+
-+lvconvert --splitcache $vg/$lv1
-+
-+lvs -o segtype $vg/$lv1 | grep linear
-+
-+aux enable_dev "$dev2"
-+
-+lvs -o segtype $vg/$lv2 | grep linear
-+
-+lvchange -ay --activationmode partial $vg/$lv2
-+cache_check "$DM_DEV_DIR/$vg/$lv2"
-+lvchange -an $vg/$lv2
-+
-+vgck --updatemetadata $vg
-+lvs $vg
-+vgchange -an $vg
-+vgextend --restoremissing $vg "$dev2"
-+
-+mount_umount $lv1
-+
-+#
-+# split while cachevol is missing
-+# writeback
-+#
-+
-+lvremove $vg/$lv2
-+lvcreate -n $lv2 -l 4 -an $vg "$dev2"
-+
-+lvconvert -y --type cache --cachevol $lv2 --cachemode writeback $vg/$lv1
-+
-+check lv_field $vg/$lv1 segtype "cache"
-+check lv_field $vg/$lv1 cachemode "writeback"
-+
-+mkfs_mount_umount $lv1
-+
-+aux disable_dev "$dev2"
-+
-+not lvconvert --splitcache $vg/$lv1
-+lvconvert --splitcache --force --yes $vg/$lv1
-+
-+lvs -o segtype $vg/$lv1 | grep linear
-+
-+aux enable_dev "$dev2"
-+
-+lvs -o segtype $vg/$lv2 | grep linear
-+
-+lvchange -ay --activationmode partial $vg/$lv2
-+cache_check "$DM_DEV_DIR/$vg/$lv2"
-+lvchange -an $vg/$lv2
-+
-+vgck --updatemetadata $vg
-+lvs $vg
-+vgchange -an $vg
-+vgextend --restoremissing $vg "$dev2"
-+
-+#
-+# split while cachevol has 1 of 2 PVs
-+# writethrough
-+#
-+
-+lvremove $vg/$lv2
-+lvcreate -n $lv2 -l 14 -an $vg "$dev2" "$dev3"
-+
-+lvconvert -y --type cache --cachevol $lv2 --cachemode writethrough $vg/$lv1
-+
-+check lv_field $vg/$lv1 segtype "cache"
-+check lv_field $vg/$lv1 cachemode "writethrough"
-+
-+mkfs_mount_umount $lv1
-+
-+aux disable_dev "$dev3"
-+
-+lvconvert --splitcache $vg/$lv1
-+
-+lvs -o segtype $vg/$lv1 | grep linear
-+
-+aux enable_dev "$dev3"
-+
-+lvs -o segtype $vg/$lv2 | grep linear
-+
-+lvchange -ay --activationmode partial $vg/$lv2
-+cache_check "$DM_DEV_DIR/$vg/$lv2"
-+lvchange -an $vg/$lv2
-+
-+vgck --updatemetadata $vg
-+lvs $vg
-+vgchange -an $vg
-+vgextend --restoremissing $vg "$dev3"
-+
-+mount_umount $lv1
-+
-+#
-+# split while cachevol has 1 of 2 PVs
-+# writeback
-+#
-+
-+lvremove $vg/$lv2
-+lvcreate -n $lv2 -l 14 -an $vg "$dev2" "$dev3"
-+
-+lvconvert -y --type cache --cachevol $lv2 --cachemode writeback $vg/$lv1
-+
-+check lv_field $vg/$lv1 segtype "cache"
-+check lv_field $vg/$lv1 cachemode "writeback"
-+
-+mkfs_mount_umount $lv1
-+
-+aux disable_dev "$dev3"
-+
-+not lvconvert --splitcache $vg/$lv1
-+lvconvert --splitcache --force --yes $vg/$lv1
-+
-+lvs -o segtype $vg/$lv1 | grep linear
-+
-+aux enable_dev "$dev3"
-+
-+lvs -o segtype $vg/$lv2 | grep linear
-+
-+lvchange -ay --activationmode partial $vg/$lv2
-+cache_check "$DM_DEV_DIR/$vg/$lv2"
-+lvchange -an $vg/$lv2
-+
-+vgck --updatemetadata $vg
-+lvs $vg
-+vgchange -an $vg
-+vgextend --restoremissing $vg "$dev3"
-+
-+vgremove -ff $vg
-+
+diff --git a/daemons/dmeventd/plugins/raid/dmeventd_raid.c b/daemons/dmeventd/plugins/raid/dmeventd_raid.c
+index 3431f1e..aa2b578 100644
+--- a/daemons/dmeventd/plugins/raid/dmeventd_raid.c
++++ b/daemons/dmeventd/plugins/raid/dmeventd_raid.c
+@@ -76,12 +76,16 @@ static int _process_raid_event(struct dso_state *state, char *params, const char
+ 	}
+ 
+ 	if (dead) {
+-		/*
+-		 * Use the first event to run a repair ignoring any additonal ones.
+-		 *
+-		 * We presume lvconvert to do pre-repair
+-		 * checks to avoid bloat in this plugin.
+-		 */
++		if (status->insync_regions < status->total_regions) {
++			if (!state->warned) {
++				state->warned = 1;
++				log_warn("WARNING: waiting for resynchronization to finish "
++					 "before initiating repair on RAID device %s.", device);
++			}
++
++			goto out; /* Not yet done syncing with accessible devices */
++		}
++
+ 		if (state->failed)
+ 			goto out; /* already reported */
+ 
 
 
