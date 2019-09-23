@@ -1,60 +1,76 @@
 From: David Teigland <teigland@sourceware.org>
-Date: Fri, 20 Sep 2019 17:36:37 -0400
-Subject: master - tests: update cache-single-split
-Message-ID: <201909202136.x8KLabLL008455@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Mon, 23 Sep 2019 15:22:05 -0400
+Subject: master - drop cvol dm uuid suffix for cachevol LVs
+Message-ID: <201909231922.x8NJM5e0026201@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=338a60bb417e413820a6d1faeed864222607c8ef
-Commit:        338a60bb417e413820a6d1faeed864222607c8ef
-Parent:        27c3c1d7c8dcb160f29d1610f3993f41afc72a6d
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=5191057d9df3e5b92db3f80c412b99aea1074358
+Commit:        5191057d9df3e5b92db3f80c412b99aea1074358
+Parent:        338a60bb417e413820a6d1faeed864222607c8ef
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Fri Sep 20 16:33:35 2019 -0500
+AuthorDate:    Mon Sep 23 14:10:56 2019 -0500
 Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Fri Sep 20 16:36:14 2019 -0500
+CommitterDate: Mon Sep 23 14:13:31 2019 -0500
 
-tests: update cache-single-split
+drop cvol dm uuid suffix for cachevol LVs
 
-the new use of uuid suffixes on internal dm devs
-has impacted splitting when an LV is active,
-so temporarily disable that until fixed.
+The "-cvol" suffix on the uuid is interfering with
+activation code, so drop the suffix for now.
 ---
- test/shell/cache-single-split.sh |    6 +++---
- 1 files changed, 3 insertions(+), 3 deletions(-)
+ lib/activate/dev_manager.c  |    2 +-
+ lib/misc/lvm-string.c       |    2 --
+ lib/writecache/writecache.c |    2 +-
+ 3 files changed, 2 insertions(+), 4 deletions(-)
 
-diff --git a/test/shell/cache-single-split.sh b/test/shell/cache-single-split.sh
-index 90c3ddb..edfa087 100644
---- a/test/shell/cache-single-split.sh
-+++ b/test/shell/cache-single-split.sh
-@@ -113,7 +113,7 @@ check lv_field $vg/$lv1 cachemode "writethrough"
+diff --git a/lib/activate/dev_manager.c b/lib/activate/dev_manager.c
+index b85237d..32e795d 100644
+--- a/lib/activate/dev_manager.c
++++ b/lib/activate/dev_manager.c
+@@ -46,7 +46,7 @@ typedef enum {
+ } action_t;
  
- mkfs_mount_umount $lv1
+ /* This list must match lib/misc/lvm-string.c:build_dm_uuid(). */
+-const char *uuid_suffix_list[] = { "pool", "cdata", "cmeta", "tdata", "tmeta", "vdata", "vpool", "cvol", NULL};
++const char *uuid_suffix_list[] = { "pool", "cdata", "cmeta", "tdata", "tmeta", "vdata", "vpool", NULL};
  
--lvchange -ay $vg/$lv1
-+# lvchange -ay $vg/$lv1
+ struct dlid_list {
+ 	struct dm_list list;
+diff --git a/lib/misc/lvm-string.c b/lib/misc/lvm-string.c
+index 4034b40..bb66214 100644
+--- a/lib/misc/lvm-string.c
++++ b/lib/misc/lvm-string.c
+@@ -157,7 +157,6 @@ static const char *_lvname_has_reserved_component_string(const char *lvname)
+ 		"_cdata",
+ 		"_cmeta",
+ 		"_corig",
+-		"_cvol",
+ 		"_wcorig",
+ 		"_mimage",
+ 		"_mlog",
+@@ -254,7 +253,6 @@ char *build_dm_uuid(struct dm_pool *mem, const struct logical_volume *lv,
+ 			(lv_is_cache(lv) && lv_is_pending_delete(lv)) ? "real" :
+ 			lv_is_cache_pool_data(lv) ? "cdata" :
+ 			lv_is_cache_pool_metadata(lv) ? "cmeta" :
+-			lv_is_cache_vol(lv) ? "cvol" :
+ 			// FIXME: dm-tree needs fixes for mirrors/raids
+ 			//lv_is_mirror_image(lv) ? "mimage" :
+ 			//lv_is_mirror_log(lv) ? "mlog" :
+diff --git a/lib/writecache/writecache.c b/lib/writecache/writecache.c
+index 0a5b485..07a2d63 100644
+--- a/lib/writecache/writecache.c
++++ b/lib/writecache/writecache.c
+@@ -263,7 +263,7 @@ static int _writecache_add_target_line(struct dev_manager *dm,
+ 	if (!(origin_uuid = build_dm_uuid(mem, seg_lv(seg, 0), "real")))
+ 		return_0;
  
- lvconvert --splitcache $vg/$lv1
- lvs -o segtype $vg/$lv1 | grep linear
-@@ -135,7 +135,7 @@ lvchange -an $vg/$lv2
+-	if (!(fast_uuid = build_dm_uuid(mem, seg->writecache, "cvol")))
++	if (!(fast_uuid = build_dm_uuid(mem, seg->writecache, NULL)))
+ 		return_0;
  
- mkfs_mount_umount $lv1
- 
--lvchange -ay $vg/$lv1
-+# lvchange -ay $vg/$lv1
- 
- lvconvert --splitcache $vg/$lv1
- lvs -o segtype $vg/$lv1 | grep linear
-@@ -160,7 +160,7 @@ lvchange -an $vg/$lv2
- 
- mkfs_mount_umount $lv1
- 
--lvchange -ay $vg/$lv1
-+# lvchange -ay $vg/$lv1
- 
- aux disable_dev "$dev2"
- 
+ 	if (!dm_tree_node_add_writecache_target(node, len,
 
 
