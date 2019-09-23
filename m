@@ -1,45 +1,160 @@
 From: David Teigland <teigland@sourceware.org>
-Date: Mon, 23 Sep 2019 15:22:08 -0400
-Subject: master - lvconvert: allow --cache shortcut for --type cache with cachevol
-Message-ID: <201909231922.x8NJM8IM026228@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Mon, 23 Sep 2019 17:36:33 -0400
+Subject: master - tests: add writecache-split
+Message-ID: <201909232136.x8NLaXY9001959@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=4fe4c30e7a29017e11de867b7f0d65524f283c1a
-Commit:        4fe4c30e7a29017e11de867b7f0d65524f283c1a
-Parent:        a353bfdd9f5f612967e514240b8c4cb06d924a19
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=e35cf0f623ba591c12a1a2eaed126d47bf11103c
+Commit:        e35cf0f623ba591c12a1a2eaed126d47bf11103c
+Parent:        4fe4c30e7a29017e11de867b7f0d65524f283c1a
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Mon Sep 23 11:07:12 2019 -0500
+AuthorDate:    Mon Sep 23 14:37:46 2019 -0500
 Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Mon Sep 23 14:21:09 2019 -0500
+CommitterDate: Mon Sep 23 16:35:01 2019 -0500
 
-lvconvert: allow --cache shortcut for --type cache with cachevol
+tests: add writecache-split
 
 ---
- tools/command-lines.in |    8 ++++++++
- 1 files changed, 8 insertions(+), 0 deletions(-)
+ test/shell/writecache-split.sh |  128 ++++++++++++++++++++++++++++++++++++++++
+ 1 files changed, 128 insertions(+), 0 deletions(-)
 
-diff --git a/tools/command-lines.in b/tools/command-lines.in
-index 65221c0..7be4715 100644
---- a/tools/command-lines.in
-+++ b/tools/command-lines.in
-@@ -482,6 +482,14 @@ ID: lvconvert_to_cache_with_cachevol
- DESC: Attach a cache to an LV, converts the LV to type cache.
- RULE: all and lv_is_visible
- 
-+# alternate form of lvconvert --type cache
-+lvconvert --cache --cachevol LV LV_linear_striped_raid_thinpool
-+OO: OO_LVCONVERT_CACHE, OO_LVCONVERT, --poolmetadatasize SizeMB, --chunksize SizeKB
-+ID: lvconvert_to_cache_with_cachevol
-+DESC: Attach a cache to an LV, converts the LV to type cache.
-+RULE: all and lv_is_visible
-+FLAGS: SECONDARY_SYNTAX
+diff --git a/test/shell/writecache-split.sh b/test/shell/writecache-split.sh
+new file mode 100644
+index 0000000..b28cec9
+--- /dev/null
++++ b/test/shell/writecache-split.sh
+@@ -0,0 +1,128 @@
++#!/usr/bin/env bash
 +
- ---
- 
- lvconvert --type thin-pool LV_linear_striped_raid_cache
++# Copyright (C) 2018 Red Hat, Inc. All rights reserved.
++#
++# This copyrighted material is made available to anyone wishing to use,
++# modify, copy, or redistribute it subject to the terms and conditions
++# of the GNU General Public License v.2.
++#
++# You should have received a copy of the GNU General Public License
++# along with this program; if not, write to the Free Software Foundation,
++# Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
++
++# Test single lv cache options
++
++SKIP_WITH_LVMPOLLD=1
++
++. lib/inittest
++
++mkfs_mount_umount()
++{
++        lvt=$1
++
++        lvchange -ay $vg/$lvt
++
++        mkfs.xfs -f -s size=4096 "$DM_DEV_DIR/$vg/$lvt"
++        mount "$DM_DEV_DIR/$vg/$lvt" "$mount_dir"
++        cp pattern1 "$mount_dir/pattern1"
++        dd if=/dev/zero of="$mount_dir/zeros2M" bs=1M count=32 conv=fdatasync
++        umount "$mount_dir"
++
++        lvchange -an $vg/$lvt
++}
++
++mount_umount()
++{
++        lvt=$1
++
++        lvchange -ay $vg/$lvt
++
++        mount "$DM_DEV_DIR/$vg/$lvt" "$mount_dir"
++        diff pattern1 "$mount_dir/pattern1"
++        dd if="$mount_dir/zeros2M" of=/dev/null bs=1M count=32
++        umount "$mount_dir"
++
++        lvchange -an $vg/$lvt
++}
++
++aux have_cache 1 10 0 || skip
++which mkfs.xfs || skip
++
++mount_dir="mnt"
++mkdir -p "$mount_dir"
++
++# generate random data
++dd if=/dev/urandom of=pattern1 bs=512K count=1
++
++aux prepare_devs 4
++
++vgcreate $SHARED $vg "$dev1" "$dev2" "$dev3" "$dev4"
++
++lvcreate -n $lv1 -l 16 -an $vg "$dev1" "$dev4"
++lvcreate -n $lv2 -l 4 -an $vg "$dev2"
++
++#
++# split when no devs are missing
++#
++
++lvconvert -y --type writecache --cachevol $lv2 $vg/$lv1
++
++mkfs_mount_umount $lv1
++
++lvconvert --splitcache $vg/$lv1
++lvs -o segtype $vg/$lv1 | grep linear
++lvs -o segtype $vg/$lv2 | grep linear
++
++mount_umount $lv1
++
++#
++# split while cachevol is missing
++#
++
++lvconvert -y --type writecache --cachevol $lv2 $vg/$lv1
++
++mkfs_mount_umount $lv1
++
++aux disable_dev "$dev2"
++
++not lvconvert --splitcache $vg/$lv1
++lvconvert --splitcache --force --yes $vg/$lv1
++
++lvs -o segtype $vg/$lv1 | grep linear
++
++aux enable_dev "$dev2"
++lvs -o segtype $vg/$lv2 | grep linear
++
++vgck --updatemetadata $vg
++lvs $vg
++vgchange -an $vg
++vgextend --restoremissing $vg "$dev2"
++
++
++#
++# split while cachevol has 1 of 2 PVs
++#
++
++lvremove $vg/$lv2
++lvcreate -n $lv2 -l 14 -an $vg "$dev2" "$dev3"
++
++lvconvert -y --type writecache --cachevol $lv2 $vg/$lv1
++
++mkfs_mount_umount $lv1
++
++aux disable_dev "$dev3"
++
++not lvconvert --splitcache $vg/$lv1
++lvconvert --splitcache --force --yes $vg/$lv1
++
++lvs -o segtype $vg/$lv1 | grep linear
++
++aux enable_dev "$dev3"
++lvs -o segtype $vg/$lv2 | grep linear
++
++vgck --updatemetadata $vg
++lvs $vg
++vgchange -an $vg
++vgextend --restoremissing $vg "$dev3"
++
++vgremove -ff $vg
 
 
