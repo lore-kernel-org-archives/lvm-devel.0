@@ -1,39 +1,42 @@
-From: David Teigland <teigland@sourceware.org>
-Date: Mon, 16 Sep 2019 12:46:07 -0400
-Subject: master - tests: drop unnecessary pid from LVMTEST prefix
-Message-ID: <201909161646.x8GGk7WB009551@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: Joe Thornber <thornber@redhat.com>
+Date: Fri, 27 Sep 2019 09:32:39 +0100
+Subject: kernel BUG at drivers/md/persistent-data/dm-space-map-disk.c:178 with scsi_mod.use_blk_mq=y
+In-Reply-To: <alpine.LRH.2.11.1909261819300.15810@mx.ewheeler.net>
+References: <alpine.LRH.2.11.1909251814220.15810@mx.ewheeler.net>
+	<20190925200138.GA20584@redhat.com>
+	<alpine.LRH.2.11.1909261819300.15810@mx.ewheeler.net>
+Message-ID: <20190927083239.xy6jwbkbektwqu3h@reti>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=51c105702f24d64f1adc25a692ef37e20878cec5
-Commit:        51c105702f24d64f1adc25a692ef37e20878cec5
-Parent:        df36a8eadfbbfe547cc734259dfc598cb773b59c
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Thu Sep 12 14:52:13 2019 -0500
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Thu Sep 12 14:52:13 2019 -0500
+Hi Eric,
 
-tests: drop unnecessary pid from LVMTEST prefix
+On Thu, Sep 26, 2019 at 06:27:09PM +0000, Eric Wheeler wrote:
+> I pvmoved the tmeta to an SSD logical volume (dm-linear) on a non-bcache 
+> volume and we got the same trace this morning, so while the tdata still 
+> passes through bcache, all meta operations are direct to an SSD. This is 
+> still using multi-queue scsi, but dm_mod.use_blk_mq=N.
+> 
+> Since bcache is no longer involved with metadata operations, and since 
+> this appears to be a metadata issue, are there any other reasons to 
+> suspect bcache?
 
----
- test/lib/inittest.sh |    2 +-
- 1 files changed, 1 insertions(+), 1 deletions(-)
+Did you recreate the pool, or are you just using the existing pool but with
+a different IO path?  If it's the latter then there could still be something
+wrong with the metadata, introduced while bcache was in the stack.
 
-diff --git a/test/lib/inittest.sh b/test/lib/inittest.sh
-index a6cefa8..4914b29 100644
---- a/test/lib/inittest.sh
-+++ b/test/lib/inittest.sh
-@@ -68,7 +68,7 @@ export LVM_TEST_LVMPOLLD LVM_TEST_LOCK_TYPE_DLM LVM_TEST_LOCK_TYPE_SANLOCK
- 
- TESTOLDPWD=$(pwd)
- COMMON_PREFIX="LVMTEST"
--PREFIX="${COMMON_PREFIX}$$"
-+PREFIX="${COMMON_PREFIX}"
- 
- # Check we are not conflickting with some exiting setup
- if test -z "$SKIP_ROOT_DM_CHECK" ; then
+Would it be possible to send me a copy of the metadata device please so
+I can double check the space maps (I presume you've run thin_check on it)?
+
+[Assuming you're using the existing pool] Another useful experiment would be to 
+thump_dump and then thin_restore the metadata, which will create totally fresh
+metadata and see if you can still reproduce the issue.
+
+Thanks,
+
+- Joe
 
 
