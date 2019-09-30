@@ -1,37 +1,37 @@
 From: David Teigland <teigland@sourceware.org>
-Date: Mon, 30 Sep 2019 12:39:56 -0400
-Subject: master - scan: use PV size for choosing duplicate PV
-Message-ID: <201909301639.x8UGdugw024774@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Mon, 30 Sep 2019 12:39:59 -0400
+Subject: master - scan: use PV device name hint for choosing duplicate PV
+Message-ID: <201909301639.x8UGdx9Q024786@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=4910a31f6d3a9e52e8be85c6409b5fa93895874a
-Commit:        4910a31f6d3a9e52e8be85c6409b5fa93895874a
-Parent:        f3084ee2e577abe05e4707730f3cb96f2cb5ec45
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=f836fe3836e990e41b2c2b59c2af7ef6b979097f
+Commit:        f836fe3836e990e41b2c2b59c2af7ef6b979097f
+Parent:        4910a31f6d3a9e52e8be85c6409b5fa93895874a
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Fri Sep 27 11:11:57 2019 -0500
+AuthorDate:    Fri Sep 27 11:34:55 2019 -0500
 Committer:     David Teigland <teigland@redhat.com>
 CommitterDate: Mon Sep 30 11:38:10 2019 -0500
 
-scan: use PV size for choosing duplicate PV
+scan: use PV device name hint for choosing duplicate PV
 
-Prefer a device if it matches the size of the PV.
+Prefer a device if its name matches the PV device name hint.
 ---
- lib/cache/lvmcache.c |   41 +++++++++++++++++++++++++++++++++++++++++
- 1 files changed, 41 insertions(+), 0 deletions(-)
+ lib/cache/lvmcache.c |   36 ++++++++++++++++++++++++++++++++++--
+ 1 files changed, 34 insertions(+), 2 deletions(-)
 
 diff --git a/lib/cache/lvmcache.c b/lib/cache/lvmcache.c
-index 7ee94c2..d45b6db 100644
+index d45b6db..316624f 100644
 --- a/lib/cache/lvmcache.c
 +++ b/lib/cache/lvmcache.c
-@@ -387,6 +387,23 @@ const char *lvmcache_vgname_from_info(struct lvmcache_info *info)
- 	return NULL;
+@@ -404,6 +404,23 @@ static uint64_t _get_pvsummary_size(char *pvid)
+ 	return 0;
  }
  
-+static uint64_t _get_pvsummary_size(char *pvid)
++static const char *_get_pvsummary_device_hint(char *pvid)
 +{
 +	char pvid_s[ID_LEN + 1] __attribute__((aligned(8)));
 +	struct lvmcache_vginfo *vginfo;
@@ -41,69 +41,69 @@ index 7ee94c2..d45b6db 100644
 +		dm_list_iterate_items(pvl, &vginfo->pvsummaries) {
 +			(void) dm_strncpy(pvid_s, (char *) &pvl->pv->id, sizeof(pvid_s));
 +			if (!strcmp(pvid_s, pvid))
-+				return pvl->pv->size;
++				return pvl->pv->device_hint;
 +		}
 +	}
 +
-+	return 0;
++	return NULL;
 +}
 +
  /*
   * Check if any PVs in vg->pvs have the same PVID as any
   * entries in _unused_duplicates.
-@@ -492,10 +509,12 @@ static void _choose_duplicates(struct cmd_context *cmd,
- 	struct lvmcache_info *info;
- 	struct device *dev1, *dev2;
- 	uint32_t dev1_major, dev1_minor, dev2_major, dev2_minor;
-+	uint64_t dev1_size, dev2_size, pv_size;
- 	int in_subsys1, in_subsys2;
- 	int is_dm1, is_dm2;
+@@ -502,6 +519,7 @@ static void _choose_duplicates(struct cmd_context *cmd,
+ {
+ 	char *pvid;
+ 	const char *reason;
++	const char *device_hint;
+ 	struct dm_list altdevs;
+ 	struct dm_list new_unused;
+ 	struct dev_types *dt = cmd->dev_types;
+@@ -515,6 +533,7 @@ static void _choose_duplicates(struct cmd_context *cmd,
  	int has_fs1, has_fs2;
  	int has_lv1, has_lv2;
-+	int same_size1, same_size2;
+ 	int same_size1, same_size2;
++	int same_name1 = 0, same_name2 = 0;
  	int prev_unchosen1, prev_unchosen2;
  	int change;
  
-@@ -612,6 +631,15 @@ next:
- 		dev2_major = MAJOR(dev2->dev);
- 		dev2_minor = MINOR(dev2->dev);
+@@ -640,6 +659,11 @@ next:
+ 		same_size1 = (dev1_size == pv_size);
+ 		same_size2 = (dev2_size == pv_size);
  
-+		if (!dev_get_size(dev1, &dev1_size))
-+			dev1_size = 0;
-+		if (!dev_get_size(dev2, &dev2_size))
-+			dev2_size = 0;
-+
-+		pv_size = _get_pvsummary_size(devl->dev->pvid);
-+		same_size1 = (dev1_size == pv_size);
-+		same_size2 = (dev2_size == pv_size);
++		if ((device_hint = _get_pvsummary_device_hint(devl->dev->pvid))) {
++			same_name1 = !strcmp(device_hint, dev_name(dev1));
++			same_name2 = !strcmp(device_hint, dev_name(dev2));
++		}
 +
  		has_lv1 = (dev1->flags & DEV_USED_FOR_LV) ? 1 : 0;
  		has_lv2 = (dev2->flags & DEV_USED_FOR_LV) ? 1 : 0;
  
-@@ -629,6 +657,12 @@ next:
- 				dev_name(dev1), dev1_major, dev1_minor,
- 				dev_name(dev2), dev2_major, dev2_minor);
+@@ -652,10 +676,11 @@ next:
+ 		has_fs1 = dm_device_has_mounted_fs(dev1_major, dev1_minor);
+ 		has_fs2 = dm_device_has_mounted_fs(dev2_major, dev2_minor);
  
-+		log_debug_cache("PV %s: size %llu. %s is %llu. %s is %llu.",
-+				devl->dev->pvid,
-+				(unsigned long long)pv_size,
-+				dev_name(dev1), (unsigned long long)dev1_size,
-+				dev_name(dev2), (unsigned long long)dev2_size);
-+
- 		log_debug_cache("PV %s: %s was prev %s. %s was prev %s.",
+-		log_debug_cache("PV %s compare duplicates: %s %u:%u. %s %u:%u.",
++		log_debug_cache("PV %s compare duplicates: %s %u:%u. %s %u:%u. device_hint %s.",
  				devl->dev->pvid,
- 				dev_name(dev1), prev_unchosen1 ? "not chosen" : "<none>",
-@@ -670,6 +704,13 @@ next:
+ 				dev_name(dev1), dev1_major, dev1_minor,
+-				dev_name(dev2), dev2_major, dev2_minor);
++				dev_name(dev2), dev2_major, dev2_minor,
++				device_hint ?: "none");
+ 
+ 		log_debug_cache("PV %s: size %llu. %s is %llu. %s is %llu.",
+ 				devl->dev->pvid,
+@@ -711,6 +736,13 @@ next:
  			/* change to 2 */
  			change = 1;
- 			reason = "device is used by LV";
-+		} else if (same_size1 && !same_size2) {
+ 			reason = "device size is correct";
++		} else if (same_name1 && !same_name2) {
 +			/* keep 1 */
-+			reason = "device size is correct";
-+		} else if (same_size2 && !same_size1) {
++			reason = "device name matches previous";
++		} else if (same_name2 && !same_name1) {
 +			/* change to 2 */
 +			change = 1;
-+			reason = "device size is correct";
++			reason = "device name matches previous";
  		} else if (has_fs1 && !has_fs2) {
  			/* keep 1 */
  			reason = "device has fs mounted";
