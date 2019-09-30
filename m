@@ -1,81 +1,127 @@
 From: David Teigland <teigland@sourceware.org>
-Date: Mon, 30 Sep 2019 12:39:41 -0400
-Subject: master - metadata: import device name hint from metadata
-Message-ID: <201909301639.x8UGdfVY024735@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Mon, 30 Sep 2019 12:39:42 -0400
+Subject: master - pvscan: use quick activation only with matching PV device names
+Message-ID: <201909301639.x8UGdgjD024746@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=3a8e41a67b3f0edb0fcb27302351f7d58b6ef8c5
-Commit:        3a8e41a67b3f0edb0fcb27302351f7d58b6ef8c5
-Parent:        fcfabb26a535f9b967e96ad44300377598622c0d
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=0c23d3fc8402e49e61c9c490d9c2c9c2d58596e8
+Commit:        0c23d3fc8402e49e61c9c490d9c2c9c2d58596e8
+Parent:        3a8e41a67b3f0edb0fcb27302351f7d58b6ef8c5
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Wed Sep 4 14:13:14 2019 -0500
+AuthorDate:    Wed Sep 4 15:59:49 2019 -0500
 Committer:     David Teigland <teigland@redhat.com>
 CommitterDate: Mon Sep 30 11:38:10 2019 -0500
 
-metadata: import device name hint from metadata
+pvscan: use quick activation only with matching PV device names
 
-Start by using it in a comment for a missing PV.
+When the PV device names in the VG metadata do not match the
+current PV device names seen on the system, do not use the
+optimized activation function (that avoids extra device scanning.)
+
+When the device names do not match, it's a clue that there could
+be duplicate PVs, in which case we want to scan all devicess to
+find any duplicates and stop the activation if found.
+
+This does not prevent autoactivating a VG from the incorrect
+duplicate PV, because the incorrect duplicate may appear by itself
+first.  At that point its duplicate PV does not exist to be seen.
+(A future enhancement could use the WWID to strengthen this
+detection.)
 ---
- lib/format_text/import_vsn1.c |    6 ++++++
- lib/metadata/metadata.c       |    5 ++++-
- lib/metadata/pv.h             |    1 +
- 3 files changed, 11 insertions(+), 1 deletions(-)
+ tools/pvscan.c |   30 ++++++++++++++++++++++--------
+ 1 files changed, 22 insertions(+), 8 deletions(-)
 
-diff --git a/lib/format_text/import_vsn1.c b/lib/format_text/import_vsn1.c
-index f29abce..2785ab3 100644
---- a/lib/format_text/import_vsn1.c
-+++ b/lib/format_text/import_vsn1.c
-@@ -184,6 +184,7 @@ static int _read_pv(struct cmd_context *cmd,
- 	struct physical_volume *pv;
- 	struct pv_list *pvl;
- 	const struct dm_config_value *cv;
-+	const char *device_hint;
- 	uint64_t size, ba_start;
+diff --git a/tools/pvscan.c b/tools/pvscan.c
+index b025ae3..96ef438 100644
+--- a/tools/pvscan.c
++++ b/tools/pvscan.c
+@@ -929,17 +929,19 @@ static int _online_vg_file_create(struct cmd_context *cmd, const char *vgname)
+  * scan/read in order to process/activate the VG.
+  */
  
- 	if (!(pvl = dm_pool_zalloc(mem, sizeof(*pvl))) ||
-@@ -228,6 +229,11 @@ static int _read_pv(struct cmd_context *cmd,
- 		return 0;
+-static int _get_devs_from_saved_vg(struct cmd_context *cmd, char *vgname,
++static int _get_devs_from_saved_vg(struct cmd_context *cmd, const char *vgname,
+ 				   struct dm_list *saved_vgs,
+ 				   struct dm_list *devs)
+ {
+ 	char path[PATH_MAX];
+ 	char file_vgname[NAME_LEN];
++	char uuidstr[64] __attribute__((aligned(8)));
+ 	struct pv_list *pvl;
+ 	struct device_list *devl;
+ 	struct device *dev;
+ 	struct volume_group *vg;
+ 	const char *pvid;
++	const char *name1, *name2;
+ 	dev_t devno;
+ 	int file_major = 0, file_minor = 0;
+ 
+@@ -978,6 +980,16 @@ static int _get_devs_from_saved_vg(struct cmd_context *cmd, char *vgname,
+ 			return 0;
+ 		}
+ 
++		name1 = dev_name(dev);
++		name2 = pvl->pv->device_hint;
++
++		if (strcmp(name1, name2)) {
++			if (!id_write_format((const struct id *)pvid, uuidstr, sizeof(uuidstr)))
++				uuidstr[0] = '\0';
++			log_print("PVID %s read from %s last written to %s.", uuidstr, name1, name2);
++			return 0;
++		}
++
+ 		if (!(devl = zalloc(sizeof(*devl))))
+ 			return_0;
+ 
+@@ -1024,8 +1036,8 @@ static int _get_devs_from_saved_vg(struct cmd_context *cmd, char *vgname,
+  * is important when there are many devs.
+  */
+ 
+-static int _pvscan_aa_direct(struct cmd_context *cmd, struct pvscan_aa_params *pp, char *vgname,
+-			     struct dm_list *saved_vgs)
++static int _pvscan_aa_quick(struct cmd_context *cmd, struct pvscan_aa_params *pp, const char *vgname,
++			    struct dm_list *saved_vgs, int *no_quick)
+ {
+ 	struct dm_list devs; /* device_list */
+ 	struct volume_group *vg;
+@@ -1044,7 +1056,8 @@ static int _pvscan_aa_direct(struct cmd_context *cmd, struct pvscan_aa_params *p
+ 	 * The dev_cache gives us struct devices from the devnums.
+ 	 */
+ 	if (!_get_devs_from_saved_vg(cmd, vgname, saved_vgs, &devs)) {
+-		log_error("pvscan activation for VG %s failed to find devices.", vgname);
++		log_print("pvscan[%d] VG %s not using quick activation.", getpid(), vgname);
++		*no_quick = 1;
+ 		return ECMD_FAILED;
  	}
  
-+	if (dm_config_get_str(pvn, "device", &device_hint)) {
-+		if (!(pv->device_hint = dm_pool_strdup(mem, device_hint)))
-+			log_error("Failed to allocate memory for device hint in read_pv.");
-+	}
+@@ -1132,6 +1145,7 @@ static int _pvscan_aa(struct cmd_context *cmd, struct pvscan_aa_params *pp,
+ {
+ 	struct processing_handle *handle = NULL;
+ 	struct dm_str_list *sl, *sl2;
++	int no_quick = 0;
+ 	int ret;
+ 
+ 	if (dm_list_empty(vgnames)) {
+@@ -1169,12 +1183,12 @@ static int _pvscan_aa(struct cmd_context *cmd, struct pvscan_aa_params *pp,
+ 
+ 	if (dm_list_size(vgnames) == 1) {
+ 		dm_list_iterate_items(sl, vgnames)
+-			ret = _pvscan_aa_direct(cmd, pp, (char *)sl->str, saved_vgs);
+-	} else {
+-		/* FIXME: suppress label scan in process_each if label scan already done? */
+-		ret = process_each_vg(cmd, 0, NULL, NULL, vgnames, READ_FOR_ACTIVATE, 0, handle, _pvscan_aa_single);
++			ret = _pvscan_aa_quick(cmd, pp, sl->str, saved_vgs, &no_quick);
+ 	}
+ 
++	if ((dm_list_size(vgnames) > 1) || no_quick)
++		ret = process_each_vg(cmd, 0, NULL, NULL, vgnames, READ_FOR_ACTIVATE, 0, handle, _pvscan_aa_single);
 +
- 	if (!_read_uint64(pvn, "pe_start", &pv->pe_start)) {
- 		log_error("Couldn't read extent start value (pe_start) "
- 			  "for physical volume.");
-diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
-index b434967..cf5c563 100644
---- a/lib/metadata/metadata.c
-+++ b/lib/metadata/metadata.c
-@@ -4971,7 +4971,10 @@ struct volume_group *vg_read(struct cmd_context *cmd, const char *vg_name, const
- 		if (!pvl->pv->dev) {
- 			/* The obvious and common case of a missing device. */
+ 	destroy_processing_handle(cmd, handle);
  
--			log_warn("WARNING: VG %s is missing PV %s.", vg_name, uuidstr);
-+			if (pvl->pv->device_hint)
-+				log_warn("WARNING: VG %s is missing PV %s (last written to %s).", vg_name, uuidstr, pvl->pv->device_hint);
-+			else
-+				log_warn("WARNING: VG %s is missing PV %s.", vg_name, uuidstr);
- 			missing_pv_dev++;
- 
- 		} else if (pvl->pv->status & MISSING_PV) {
-diff --git a/lib/metadata/pv.h b/lib/metadata/pv.h
-index 3430c2e..efa13e0 100644
---- a/lib/metadata/pv.h
-+++ b/lib/metadata/pv.h
-@@ -26,6 +26,7 @@ struct physical_volume {
- 	struct id id;
- 	struct id old_id;		/* Set during pvchange -u. */
- 	struct device *dev;
-+	const char *device_hint;	/* primary name last time metadata was written */
- 	const struct format_type *fmt;
- 	struct format_instance *fid;
- 
+ 	return ret;
 
 
