@@ -1,60 +1,104 @@
 From: Heinz Mauelshagen <heinzm@sourceware.org>
-Date: Wed, 2 Oct 2019 11:15:41 -0400
-Subject: stable-2.02 - test: add checks for not 100% sync ratio after initiation of check/repair
-Message-ID: <201910021515.x92FFfNA004036@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Wed, 2 Oct 2019 11:15:45 -0400
+Subject: stable-2.02 - test: add RAID lvextend resynchronization test
+Message-ID: <201910021515.x92FFjNL004058@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=a087da2f51e2b455a056bcf0550cb02a65d40a53
-Commit:        a087da2f51e2b455a056bcf0550cb02a65d40a53
-Parent:        1f970f590f969d5a3d8b9d458ae257bf93c00432
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=a0b30eadd14ec3cc0f47f8d5cddd3026ffe08b31
+Commit:        a0b30eadd14ec3cc0f47f8d5cddd3026ffe08b31
+Parent:        a087da2f51e2b455a056bcf0550cb02a65d40a53
 Author:        Heinz Mauelshagen <heinzm@redhat.com>
-AuthorDate:    Wed Oct 2 14:48:53 2019 +0200
+AuthorDate:    Wed Oct 2 14:54:00 2019 +0200
 Committer:     Heinz Mauelshagen <heinzm@redhat.com>
-CommitterDate: Wed Oct 2 17:03:49 2019 +0200
+CommitterDate: Wed Oct 2 17:03:51 2019 +0200
 
-test: add checks for not 100% sync ratio after initiation of check/repair
+test: add RAID lvextend resynchronization test
 
-Related: rhbz1640630
+Due to a dm-raid target flaw fixed in target version 1.15.0,
+extents of raid sets don't get resynchronized when new MD bitmp
+pages have to be allocated due to the extension.
+
+Introduce lvextend-raid.sh to test this flaw.
+
+Related: rhbz1671964
 ---
- test/shell/lvchange-raid.sh |    4 ++++
- 1 files changed, 4 insertions(+), 0 deletions(-)
+ test/shell/lvextend-raid.sh |   65 +++++++++++++++++++++++++++++++++++++++++++
+ 1 files changed, 65 insertions(+), 0 deletions(-)
 
-diff --git a/test/shell/lvchange-raid.sh b/test/shell/lvchange-raid.sh
-index 1972a68..3a9ed60 100644
---- a/test/shell/lvchange-raid.sh
-+++ b/test/shell/lvchange-raid.sh
-@@ -139,6 +139,7 @@ run_writemostly_check() {
- 	check lv_attr_bit health $vg/${lv}_rimage_1 "-"
- }
- 
+diff --git a/test/shell/lvextend-raid.sh b/test/shell/lvextend-raid.sh
+new file mode 100644
+index 0000000..8988411
+--- /dev/null
++++ b/test/shell/lvextend-raid.sh
+@@ -0,0 +1,65 @@
++#!/usr/bin/env bash
 +
- # run_syncaction_check <VG> <LV>
- run_syncaction_check() {
- 	local device
-@@ -183,17 +184,20 @@ run_syncaction_check() {
- 	# "check" should find discrepancies but not change them
- 	# 'lvs' should show results
- 	lvchange --syncaction check $vg/$lv
-+	not lv_field $vg/$lv sync_percent "100.00"
- 	aux wait_for_sync $vg $lv
- 	check lv_attr_bit health $vg/$lv "m"
- 	not check lv_field $vg/$lv raid_mismatch_count "0"
- 
- 	# "repair" will fix discrepancies
- 	lvchange --syncaction repair $vg/$lv
-+	not lv_field $vg/$lv sync_percent "100.00"
- 	aux wait_for_sync $vg $lv
- 
- 	# Final "check" should show no mismatches
- 	# 'lvs' should show results
- 	lvchange --syncaction check $vg/$lv
-+	not lv_field $vg/$lv sync_percent "100.00"
- 	aux wait_for_sync $vg $lv
- 	check lv_attr_bit health $vg/$lv "-"
- 	check lv_field $vg/$lv raid_mismatch_count "0"
++# Copyright (C) 2019 Red Hat, Inc. All rights reserved.
++#
++# This copyrighted material is made available to anyone wishing to use,
++# modify, copy, or redistribute it subject to the terms and conditions
++# of the GNU General Public License v.2.
++#
++# You should have received a copy of the GNU General Public License
++# along with this program; if not, write to the Free Software Foundation,
++# Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
++
++
++SKIP_WITH_LVMPOLLD=1
++
++. lib/inittest
++
++v1_15_0=0
++aux have_raid 1 15 0 && v1_15_0=1
++
++# Use smallest regionsize to save VG space
++regionsize=`getconf PAGESIZE` # in bytes
++let pageregions=regionsize*8  # number of regions per MD bitmap page
++
++# in KiB
++let regionsize=regionsize/1024
++
++# in MiB
++let lvsz=pageregions*regionsize/1024
++let lvext=lvsz/8
++
++aux prepare_pvs 2 $(($lvsz + 3 * $lvext))
++get_devs
++vgcreate -s 4k $vg ${DEVICES[@]}
++
++aux delay_dev "$dev1"  0 50
++
++# Create raid1 LV consuming 1 MD bitmap page
++lvcreate --yes --type raid1 --regionsize ${regionsize}K -L$(($lvsz-$lvext))M -n $lv1 $vg
++not check lv_field $vg/$lv1 sync_percent "100.00"
++check lv_field $vg/$lv1 size "$(($lvsz-$lvext)).00m" $vg/$lv1
++aux wait_for_sync $vg $lv1
++check lv_field $vg/$lv1 sync_percent "100.00"
++check lv_field $vg/$lv1 region_size "4.00k"
++
++# Extend so that full MD bitmap page is consumed
++lvextend -y -L+${lvext}M $vg/$lv1
++not check lv_field $vg/$lv1 sync_percent "100.00"
++check lv_field $vg/$lv1 size "$(($lvsz)).00m" $vg/$lv1
++aux wait_for_sync $vg $lv1
++check lv_field $vg/$lv1 sync_percent "100.00"
++
++# Extend so that another MD bitmap page is allocated
++lvextend -y -L+${lvext}M $vg/$lv1
++if [ $v1_15_0 -eq 1 ]
++then
++	not check lv_field $vg/$lv1 sync_percent "100.00"
++else
++	check lv_field $vg/$lv1 sync_percent "100.00"
++fi
++aux wait_for_sync $vg $lv1
++check lv_field $vg/$lv1 sync_percent "100.00"
++check lv_field $vg/$lv1 size "$(($lvsz+$lvext)).00m" $vg/$lv1
++
++vgremove -ff $vg
 
 
