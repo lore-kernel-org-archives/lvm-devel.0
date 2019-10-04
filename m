@@ -1,43 +1,58 @@
 From: David Teigland <teigland@sourceware.org>
-Date: Fri, 4 Oct 2019 12:08:05 -0400
-Subject: master - tests: improve lib wipefs_a
-Message-ID: <201910041608.x94G85HO032563@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Fri, 4 Oct 2019 13:06:26 -0400
+Subject: master - vgremove: remove internal lvmlock LV
+Message-ID: <201910041706.x94H6Q0p004441@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=a22729a5577689d896ea13a82e6af7f7dde30412
-Commit:        a22729a5577689d896ea13a82e6af7f7dde30412
-Parent:        414f903cdc161e553100af6ad03e68fbf94617c3
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=b6240c91882a98df9eceab0312eec893b7051765
+Commit:        b6240c91882a98df9eceab0312eec893b7051765
+Parent:        a22729a5577689d896ea13a82e6af7f7dde30412
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Fri Oct 4 11:04:44 2019 -0500
+AuthorDate:    Fri Oct 4 12:01:30 2019 -0500
 Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Fri Oct 4 11:06:38 2019 -0500
+CommitterDate: Fri Oct 4 12:01:30 2019 -0500
 
-tests: improve lib wipefs_a
+vgremove: remove internal lvmlock LV
 
-in wipefs fallback, use limited dd and mdadm --zero-superblock
-to avoid writing to entire dev in case dev space is provisioned
-on write.
+If a VG is forcibly changed from lock_type sanlock to
+lock_type none, the internal lvmlock LV is left behind.
+If that LV is not removed before vgremove is run on the
+VG, then an internal check will be triggered by the
+hidden lvmlock LV.  So, check for and remove a left over
+lvmlock LV during vgremove.
 ---
- test/lib/aux.sh |    3 ++-
- 1 files changed, 2 insertions(+), 1 deletions(-)
+ lib/locking/lvmlockd.c |    8 ++++++++
+ 1 files changed, 8 insertions(+), 0 deletions(-)
 
-diff --git a/test/lib/aux.sh b/test/lib/aux.sh
-index 8ceb5db..36e1c2b 100644
---- a/test/lib/aux.sh
-+++ b/test/lib/aux.sh
-@@ -804,7 +804,8 @@ wipefs_a() {
- 	if wipefs -V >/dev/null; then
- 		wipefs -a "$dev"
- 	else
--		dd if=/dev/zero of="$dev" bs=1024 || true
-+		dd if=/dev/zero of="$dev" bs=4096 count=8 || true
-+		mdadm --zero-superblock "$dev" || true
- 	fi
+diff --git a/lib/locking/lvmlockd.c b/lib/locking/lvmlockd.c
+index 612de5d..bdd567d 100644
+--- a/lib/locking/lvmlockd.c
++++ b/lib/locking/lvmlockd.c
+@@ -374,6 +374,7 @@ static int _remove_sanlock_lv(struct cmd_context *cmd, struct volume_group *vg)
+ 		return 0;
+ 	}
+ 
++	log_debug("sanlock lvmlock LV removed");
+ 	return 1;
  }
  
+@@ -1028,6 +1029,13 @@ int lockd_free_vg_before(struct cmd_context *cmd, struct volume_group *vg,
+ 
+ 	switch (lock_type_num) {
+ 	case LOCK_TYPE_NONE:
++		/*
++		 * If a sanlock VG was forcibly changed to none,
++		 * the sanlock_lv may have been left behind.
++		 */
++		if (vg->sanlock_lv)
++			_remove_sanlock_lv(cmd, vg);
++		return 1;
+ 	case LOCK_TYPE_CLVM:
+ 		return 1;
+ 	case LOCK_TYPE_DLM:
 
 
