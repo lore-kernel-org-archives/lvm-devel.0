@@ -1,52 +1,42 @@
-From: David Teigland <teigland@sourceware.org>
-Date: Tue, 8 Oct 2019 11:00:23 -0400
-Subject: master - man: lvmcache note dm-cache block size issue
-Message-ID: <201910081500.x98F0NU5002902@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: Marian Csontos <mcsontos@sourceware.org>
+Date: Wed, 9 Oct 2019 09:13:39 -0400
+Subject: master - test: Minimize data written by metadata-zero-space
+Message-ID: <201910091313.x99DDdVt004004@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=53b97b146df4de99207c580c1304d016832e318b
-Commit:        53b97b146df4de99207c580c1304d016832e318b
-Parent:        b6240c91882a98df9eceab0312eec893b7051765
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Tue Oct 8 09:59:38 2019 -0500
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Tue Oct 8 09:59:38 2019 -0500
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=df26b73b8e4355df7f6d4d664edad2b86991b352
+Commit:        df26b73b8e4355df7f6d4d664edad2b86991b352
+Parent:        53b97b146df4de99207c580c1304d016832e318b
+Author:        Marian Csontos <mcsontos@redhat.com>
+AuthorDate:    Wed Oct 9 15:11:03 2019 +0200
+Committer:     Marian Csontos <mcsontos@redhat.com>
+CommitterDate: Wed Oct 9 15:11:03 2019 +0200
 
-man: lvmcache note dm-cache block size issue
+test: Minimize data written by metadata-zero-space
 
+The test is checking only 2 megabytes, but is rewriting much more. Bad
+for limited ramdisk.
 ---
- man/lvmcache.7_main |   15 +++++++++++++++
- 1 files changed, 15 insertions(+), 0 deletions(-)
+ test/shell/metadata-zero-space.sh |    3 ++-
+ 1 files changed, 2 insertions(+), 1 deletions(-)
 
-diff --git a/man/lvmcache.7_main b/man/lvmcache.7_main
-index 9f3e526..0eefc89 100644
---- a/man/lvmcache.7_main
-+++ b/man/lvmcache.7_main
-@@ -140,6 +140,21 @@ metadata.)  This can be used with dm-cache.
+diff --git a/test/shell/metadata-zero-space.sh b/test/shell/metadata-zero-space.sh
+index 1bd1eef..d037ab2 100644
+--- a/test/shell/metadata-zero-space.sh
++++ b/test/shell/metadata-zero-space.sh
+@@ -21,7 +21,8 @@ get_devs
  
- \&
+ # Fill with random data so if the space between metadata
+ # copies are not zeroed the grep for zeros will fail.
+-dd if=/dev/urandom of="$dev1" bs=1M || true
++dd if=/dev/urandom of="$dev1" bs=1M count=1 || true
++dd if=/dev/urandom of="$dev1" bs=1M skip=15 count=1 || true
  
-+.SS dm-cache block size
-+
-+\&
-+
-+A cache pool will have a logical block size of 4096 bytes if it is created
-+on a device with a logical block size of 4096 bytes.
-+
-+If a main LV has logical block size 512 (with an existing xfs file system
-+using that size), then it cannot use a cache pool with a 4096 logical
-+block size.  If the cache pool is attached, the main LV will likely fail
-+to mount.
-+
-+To avoid this problem, use a mkfs option to specify a 4096 block size for
-+the file system, or attach the cache pool before running mkfs.
-+
- .SS dm-writecache block size
+ pvcreate --pvmetadatacopies 2 "$dev1"
  
- \&
 
 
