@@ -1,45 +1,56 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Mon, 14 Oct 2019 09:21:35 -0400
-Subject: master - tests: disable caching of VDO
-Message-ID: <201910141321.x9EDLZcR018706@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Mon, 14 Oct 2019 09:21:40 -0400
+Subject: master - lvconvert: use struct initializer
+Message-ID: <201910141321.x9EDLeZg018717@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=e6691aa04be8bbe8768c6a7a520b36498066b9e8
-Commit:        e6691aa04be8bbe8768c6a7a520b36498066b9e8
-Parent:        76a9a86fd359681a598a6509eb90940c3a10f1f3
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=ddaf2002c94a33863ef7adf69ad4cdffcfbd73c5
+Commit:        ddaf2002c94a33863ef7adf69ad4cdffcfbd73c5
+Parent:        e6691aa04be8bbe8768c6a7a520b36498066b9e8
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed Oct 9 15:27:44 2019 +0200
+AuthorDate:    Mon Oct 14 11:53:59 2019 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Mon Oct 14 15:13:47 2019 +0200
 
-tests: disable caching of VDO
+lvconvert: use struct initializer
 
-Disable until vdo gets fixed, then require fixed version.
-Otherwise test kills kernel
+Always good to keep rest of structure initilized with zeros.
 ---
- test/shell/lvcreate-vdo-cache.sh |    6 +++++-
- 1 files changed, 5 insertions(+), 1 deletions(-)
+ tools/lvconvert.c |   11 +++++------
+ 1 files changed, 5 insertions(+), 6 deletions(-)
 
-diff --git a/test/shell/lvcreate-vdo-cache.sh b/test/shell/lvcreate-vdo-cache.sh
-index c3d3ed0..a104a16 100644
---- a/test/shell/lvcreate-vdo-cache.sh
-+++ b/test/shell/lvcreate-vdo-cache.sh
-@@ -20,7 +20,11 @@ SKIP_WITH_LVMPOLLD=1
- #
- # Main
- #
--aux have_vdo 6 2 0 || skip
-+
-+#
-+# FIXME: tempororarily disable this test until fixed VDO driver is relase
-+#
-+aux have_vdo 96 2 0 || skip
- aux have_cache 1 3 0 || skip
+diff --git a/tools/lvconvert.c b/tools/lvconvert.c
+index caef5d5..8ecbf34 100644
+--- a/tools/lvconvert.c
++++ b/tools/lvconvert.c
+@@ -5290,7 +5290,11 @@ static int _lvconvert_detach_writecache(struct cmd_context *cmd,
  
- which mkfs.ext4 || skip
+ static int _writecache_zero(struct cmd_context *cmd, struct logical_volume *lv)
+ {
+-	struct wipe_params wp;
++	struct wipe_params wp = {
++		.do_wipe_signatures = 1, /* optional, to print warning if clobbering something */
++		.do_zero = 1,            /* required for dm-writecache to work */
++		.zero_sectors = 1
++	};
+ 	int ret;
+ 
+ 	if (!activate_lv(cmd, lv)) {
+@@ -5298,11 +5302,6 @@ static int _writecache_zero(struct cmd_context *cmd, struct logical_volume *lv)
+ 		return 0;
+ 	}
+ 
+-	wp.do_wipe_signatures = 1; /* optional, to print warning if clobbering something */
+-	wp.do_zero = 1;            /* required for dm-writecache to work */
+-	wp.zero_sectors = 1;
+-	wp.zero_value = 0;
+-
+ 	ret = wipe_lv(lv, wp);
+ 
+ 	if (!deactivate_lv(cmd, lv)) {
 
 
