@@ -1,57 +1,45 @@
 From: David Teigland <teigland@sourceware.org>
-Date: Wed, 16 Oct 2019 10:51:01 -0400
-Subject: master - tests: metadata-zero-space long vgnames
-Message-ID: <201910161451.x9GEp1qw030216@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Wed, 16 Oct 2019 14:33:59 -0400
+Subject: stable-2.02 - devs: check for no dev when dropping aliases
+Message-ID: <201910161833.x9GIXxnM011280@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=55bf692bff777e3beefed5b89a28c1fb1ebe1d32
-Commit:        55bf692bff777e3beefed5b89a28c1fb1ebe1d32
-Parent:        998e7b107513697b3ea966ba49aeef3fe115d908
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=f50af80199f723f7b1970ee33ddf959ea79fcbef
+Commit:        f50af80199f723f7b1970ee33ddf959ea79fcbef
+Parent:        219c4c2ce2c605960ad760ac99be27b2665a8c43
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Wed Oct 16 09:46:48 2019 -0500
+AuthorDate:    Wed Oct 16 13:32:28 2019 -0500
 Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Wed Oct 16 09:46:48 2019 -0500
+CommitterDate: Wed Oct 16 13:32:28 2019 -0500
 
-tests: metadata-zero-space long vgnames
+devs: check for no dev when dropping aliases
 
-In the hex dump output, grep for the vgname
-followed by one space.  This allows for test pids
-with up to seven digits, which are used to contruct
-the variable vgname used by the test.  Otherwise
-the long vgname wraps to the next line and fails to
-match in grep.
+When scanning fails to find a device path and
+looks for device aliases, check if the device
+itself still exists to avoid a potential segfault.
 ---
- test/shell/metadata-zero-space.sh |    6 +++---
- 1 files changed, 3 insertions(+), 3 deletions(-)
+ lib/label/label.c |    5 +++++
+ 1 files changed, 5 insertions(+), 0 deletions(-)
 
-diff --git a/test/shell/metadata-zero-space.sh b/test/shell/metadata-zero-space.sh
-index d037ab2..f04de48 100644
---- a/test/shell/metadata-zero-space.sh
-+++ b/test/shell/metadata-zero-space.sh
-@@ -39,9 +39,9 @@ xxd meta.raw > meta.txt
- # to help debug if the next grep fails
- ls -l meta.txt
- head -n 100 meta.txt
--grep -A4 -B4 1200 meta.txt
-+grep -A4 -B4 '01200:' meta.txt
+diff --git a/lib/label/label.c b/lib/label/label.c
+index 8107e33..e4a1068 100644
+--- a/lib/label/label.c
++++ b/lib/label/label.c
+@@ -734,6 +734,11 @@ static int _scan_list(struct cmd_context *cmd, struct dev_filter *f,
+ 		retried_open = 1;
  
--grep -B1 "$vg {" meta.txt > meta.vg
-+grep -B1 "$vg " meta.txt > meta.vg
+ 		dm_list_iterate_items_safe(devl, devl2, &reopen_devs) {
++			if (!devl->dev) {
++				dm_list_del(&devl->list);
++				continue;
++			}
++
+ 			_drop_bad_aliases(devl->dev);
  
- cat meta.vg
- 
-@@ -73,7 +73,7 @@ dd if="$dev1" of=meta.raw bs=1M seek=15 count=1
- 
- xxd meta.raw > meta.txt
- 
--grep -B1 "$vg {" meta.txt > meta.vg
-+grep -B1 "$vg " meta.txt > meta.vg
- 
- cat meta.vg
- 
+ 			if (dm_list_empty(&devl->dev->aliases)) {
 
 
