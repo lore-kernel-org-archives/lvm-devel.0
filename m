@@ -1,59 +1,38 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Thu, 17 Oct 2019 07:05:18 -0400
-Subject: master - cachevol: support removal of cachevol
-Message-ID: <201910171105.x9HB5IeI023654@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Thu, 17 Oct 2019 07:05:21 -0400
+Subject: master - tests: skip when raid is not present
+Message-ID: <201910171105.x9HB5LH8023669@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=ec85dfe0f8096ee486c39c22b740f3938932707e
-Commit:        ec85dfe0f8096ee486c39c22b740f3938932707e
-Parent:        5938cde11bb7298104871acf47d60b0fd5835b71
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=f07e5c1fe43524ec6f9da6afaf95c5b328972703
+Commit:        f07e5c1fe43524ec6f9da6afaf95c5b328972703
+Parent:        ec85dfe0f8096ee486c39c22b740f3938932707e
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu Oct 17 12:48:56 2019 +0200
+AuthorDate:    Wed Oct 16 21:58:39 2019 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Thu Oct 17 13:03:50 2019 +0200
 
-cachevol: support removal of cachevol
+tests: skip when raid is not present
 
-Removal of cachevol is equivalent of lvconvert --uncache
-and works the same way as with cachepool.
 ---
- lib/metadata/lv_manip.c |    6 ++++--
- 1 files changed, 4 insertions(+), 2 deletions(-)
+ test/shell/lvextend-raid.sh |    1 +
+ 1 files changed, 1 insertions(+), 0 deletions(-)
 
-diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
-index b5b9a4a..815ea99 100644
---- a/lib/metadata/lv_manip.c
-+++ b/lib/metadata/lv_manip.c
-@@ -6278,7 +6278,8 @@ int lv_remove_single(struct cmd_context *cmd, struct logical_volume *lv,
- 	/* FIXME Ensure not referred to by another existing LVs */
- 	ask_discard = find_config_tree_bool(cmd, devices_issue_discards_CFG, NULL);
+diff --git a/test/shell/lvextend-raid.sh b/test/shell/lvextend-raid.sh
+index 8988411..1c0e9c6 100644
+--- a/test/shell/lvextend-raid.sh
++++ b/test/shell/lvextend-raid.sh
+@@ -15,6 +15,7 @@ SKIP_WITH_LVMPOLLD=1
  
--	if (lv_is_active(lv)) {
-+	if (!lv_is_cache_vol(lv) &&
-+	    lv_is_active(lv)) {
- 		if (!lv_check_not_in_use(lv, 1))
- 			return_0;
+ . lib/inittest
  
-@@ -6355,6 +6356,7 @@ int lv_remove_single(struct cmd_context *cmd, struct logical_volume *lv,
++aux have_raid 1 3 0 || skip
+ v1_15_0=0
+ aux have_raid 1 15 0 && v1_15_0=1
  
- 	/* Used cache pool, COW or historical LV cannot be activated */
- 	if (!lv_is_used_cache_pool(lv) &&
-+	    !lv_is_cache_vol(lv) &&
- 	    !lv_is_cow(lv) && !lv_is_historical(lv) &&
- 	    !deactivate_lv_with_sub_lv(lv))
- 		/* FIXME Review and fix the snapshot error paths! */
-@@ -6404,7 +6406,7 @@ int lv_remove_single(struct cmd_context *cmd, struct logical_volume *lv,
- 		}
- 	}
- 
--	if (lv_is_used_cache_pool(lv)) {
-+	if (lv_is_used_cache_pool(lv) || lv_is_cache_vol(lv)) {
- 		/* Cache pool removal drops cache layer
- 		 * If the cache pool is not linked, we can simply remove it. */
- 		if (!(cache_seg = get_only_segment_using_this_lv(lv)))
 
 
