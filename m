@@ -1,77 +1,71 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Mon, 21 Oct 2019 09:32:59 -0400
-Subject: master - lv_manip: add lv_uniq_rename_update
-Message-ID: <201910211332.x9LDWx8X019549@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Mon, 21 Oct 2019 09:33:03 -0400
+Subject: master - lvm-string: add drop_lvname_suffix
+Message-ID: <201910211333.x9LDX386019562@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=2266a1863f048899dc6f54c4d62ae05b33605349
-Commit:        2266a1863f048899dc6f54c4d62ae05b33605349
-Parent:        5714c8c9cc12d9442ad9ee85fb73a8ae49d6b548
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=766dedb62899f764ef75f21b17b86c0f17f9d009
+Commit:        766dedb62899f764ef75f21b17b86c0f17f9d009
+Parent:        2266a1863f048899dc6f54c4d62ae05b33605349
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Mon Oct 21 09:16:45 2019 +0200
+AuthorDate:    Mon Oct 21 09:17:57 2019 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Mon Oct 21 12:14:15 2019 +0200
 
-lv_manip: add lv_uniq_rename_update
+lvm-string: add drop_lvname_suffix
 
-Add function to rename LV to either passed name or if
-the name is already in use, generate new lvol% name.
+Internal function to drop suffix out of lvname.
 ---
- lib/metadata/lv_manip.c          |   24 ++++++++++++++++++++++++
- lib/metadata/metadata-exported.h |    2 ++
- 2 files changed, 26 insertions(+), 0 deletions(-)
+ lib/misc/lvm-string.c |   24 ++++++++++++++++++++++++
+ lib/misc/lvm-string.h |    1 +
+ 2 files changed, 25 insertions(+), 0 deletions(-)
 
-diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
-index 815ea99..ae103d3 100644
---- a/lib/metadata/lv_manip.c
-+++ b/lib/metadata/lv_manip.c
-@@ -4626,6 +4626,30 @@ int lv_rename_update(struct cmd_context *cmd, struct logical_volume *lv,
- }
+diff --git a/lib/misc/lvm-string.c b/lib/misc/lvm-string.c
+index 4034b40..d96d431 100644
+--- a/lib/misc/lvm-string.c
++++ b/lib/misc/lvm-string.c
+@@ -290,3 +290,27 @@ char *first_substring(const char *str, ...)
  
- /*
-+ * Rename LV to new name, if name is occupies, lvol% is generated.
-+ * VG must be locked by caller.
-+ */
-+int lv_uniq_rename_update(struct cmd_context *cmd, struct logical_volume *lv,
-+			  const char *new_name, int update_mda)
-+{
-+	char uniq_name[NAME_LEN];
+ 	return r;
+ }
 +
-+	/* If the name is in use, generate new lvol%d */
-+	if (lv_name_is_used_in_vg(lv->vg, new_name, NULL)) {
-+		if (!generate_lv_name(lv->vg, "lvol%d", uniq_name, sizeof(uniq_name))) {
-+			log_error("Failed to generate unique name for unused logical volume.");
-+			return 0;
-+		}
-+		new_name = uniq_name;
++/* Cut suffix (if present) and write the name into NAME_LEN sized new_name buffer
++ * When suffix is NULL, everythin past the last '_' is removed.
++ * Returns 1 when suffix was removed, 0 otherwise.
++ */
++int drop_lvname_suffix(char *new_name, const char *name, const char *suffix)
++{
++	char *c;
++
++	if (!dm_strncpy(new_name, name, NAME_LEN)) {
++		log_debug(INTERNAL_ERROR "Name is too long.");
++		return 0;
 +	}
 +
-+	if (!lv_rename_update(cmd, lv, new_name, 0))
-+		return_0;
++	if (!(c = strrchr(new_name, '_')))
++		return 0;
++
++	if (suffix && strcmp(c + 1, suffix))
++		return 0;
++
++	*c = 0; /* remove suffix */
 +
 +	return 1;
 +}
-+
-+/*
-  * Core of LV renaming routine.
-  * VG must be locked by caller.
+diff --git a/lib/misc/lvm-string.h b/lib/misc/lvm-string.h
+index 4e7404a..5d2f95a 100644
+--- a/lib/misc/lvm-string.h
++++ b/lib/misc/lvm-string.h
+@@ -57,5 +57,6 @@ int is_reserved_lvname(const char *name);
+  * first match or else NULL.
   */
-diff --git a/lib/metadata/metadata-exported.h b/lib/metadata/metadata-exported.h
-index f340093..c61c85c 100644
---- a/lib/metadata/metadata-exported.h
-+++ b/lib/metadata/metadata-exported.h
-@@ -845,6 +845,8 @@ int lv_rename(struct cmd_context *cmd, struct logical_volume *lv,
- 	      const char *new_name);
- int lv_rename_update(struct cmd_context *cmd, struct logical_volume *lv,
- 		     const char *new_name, int update_mda);
-+int lv_uniq_rename_update(struct cmd_context *cmd, struct logical_volume *lv,
-+			  const char *new_name, int update_mda);
+ char *first_substring(const char *str, ...);
++int drop_lvname_suffix(char *new_name, const char *name, const char *suffix);
  
- /* Updates and reloads metadata for given lv */
- int lv_update_and_reload(struct logical_volume *lv);
+ #endif
 
 
