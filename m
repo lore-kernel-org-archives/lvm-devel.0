@@ -1,50 +1,54 @@
 From: Marian Csontos <mcsontos@sourceware.org>
-Date: Tue, 22 Oct 2019 07:32:38 -0400
-Subject: stable-2.02 - cov: Clarify the control flow
-Message-ID: <201910221132.x9MBWcKG025380@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Tue, 22 Oct 2019 07:32:41 -0400
+Subject: stable-2.02 - dm: Fix compilation of dmsetup
+Message-ID: <201910221132.x9MBWfpF025391@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=c24fa7b7b714871950e0366ca4c35d0e601786ff
-Commit:        c24fa7b7b714871950e0366ca4c35d0e601786ff
-Parent:        3fe2610cff1afc1eaf9bc9c141950fe8ded73793
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=c65f3fd8dfaae6efd8529a846c6f2a9f604c440d
+Commit:        c65f3fd8dfaae6efd8529a846c6f2a9f604c440d
+Parent:        c24fa7b7b714871950e0366ca4c35d0e601786ff
 Author:        Marian Csontos <mcsontos@redhat.com>
-AuthorDate:    Mon Oct 21 15:32:09 2019 +0200
+AuthorDate:    Mon Oct 21 16:31:53 2019 +0200
 Committer:     Marian Csontos <mcsontos@redhat.com>
-CommitterDate: Mon Oct 21 15:32:09 2019 +0200
+CommitterDate: Tue Oct 22 10:37:40 2019 +0200
 
-cov: Clarify the control flow
+dm: Fix compilation of dmsetup
 
-Return need a clean up but it is not bailing out due to an error.
-
-Fix: 402b41f58dc14160ec21937d6308b0d9a1abba7d
+Fix: 889c88e9dab33195efc4dc0400a4b0aaa3383948
 ---
- libdm/libdm-common.c |    3 ++-
- 1 files changed, 2 insertions(+), 1 deletions(-)
+ libdm/libdevmapper.h |    2 +-
+ tools/dmsetup.c      |    2 +-
+ 2 files changed, 2 insertions(+), 2 deletions(-)
 
-diff --git a/libdm/libdm-common.c b/libdm/libdm-common.c
-index b06e678..32d052c 100644
---- a/libdm/libdm-common.c
-+++ b/libdm/libdm-common.c
-@@ -2013,7 +2013,7 @@ static int _sysfs_get_kernel_name(uint32_t major, uint32_t minor, char *buf, siz
- 		else {
- 			log_sys_debug("readlink", sysfs_path);
- 			r = _sysfs_find_kernel_name(major, minor, buf, buf_size);
--			goto bad;
-+			goto out;
- 		}
- 		goto bad;
- 	}
-@@ -2034,6 +2034,7 @@ static int _sysfs_get_kernel_name(uint32_t major, uint32_t minor, char *buf, siz
- 	strcpy(buf, name);
- 	r = 1;
- bad:
-+out:
- 	dm_free(temp_buf);
- 	dm_free(sysfs_path);
+diff --git a/libdm/libdevmapper.h b/libdm/libdevmapper.h
+index 81c67dc..18fe9f9 100644
+--- a/libdm/libdevmapper.h
++++ b/libdm/libdevmapper.h
+@@ -123,7 +123,7 @@ enum {
  
+ 	DM_DEVICE_ARM_POLL,
+ 
+-	DM_GET_TARGET_VERSION
++	DM_DEVICE_GET_TARGET_VERSION
+ };
+ 
+ /*
+diff --git a/tools/dmsetup.c b/tools/dmsetup.c
+index dfa9e34..b5419ca 100644
+--- a/tools/dmsetup.c
++++ b/tools/dmsetup.c
+@@ -2595,7 +2595,7 @@ static int _target_version(CMD_ARGS)
+ 	struct dm_task *dmt;
+ 	struct dm_versions *target;
+ 
+-	if (!(dmt = dm_task_create(DM_GET_TARGET_VERSION)))
++	if (!(dmt = dm_task_create(DM_DEVICE_GET_TARGET_VERSION)))
+ 		return_0;
+ 
+ 	if (!dm_task_set_name(dmt, argv[0]))
 
 
