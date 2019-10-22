@@ -1,54 +1,39 @@
-From: Marian Csontos <mcsontos@sourceware.org>
-Date: Tue, 22 Oct 2019 07:32:41 -0400
-Subject: stable-2.02 - dm: Fix compilation of dmsetup
-Message-ID: <201910221132.x9MBWfpF025391@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: Zdenek Kabelac <zkabelac@sourceware.org>
+Date: Tue, 22 Oct 2019 07:41:33 -0400
+Subject: master - gcc: older version can't see udev is always set
+Message-ID: <201910221141.x9MBfXSc025765@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=c65f3fd8dfaae6efd8529a846c6f2a9f604c440d
-Commit:        c65f3fd8dfaae6efd8529a846c6f2a9f604c440d
-Parent:        c24fa7b7b714871950e0366ca4c35d0e601786ff
-Author:        Marian Csontos <mcsontos@redhat.com>
-AuthorDate:    Mon Oct 21 16:31:53 2019 +0200
-Committer:     Marian Csontos <mcsontos@redhat.com>
-CommitterDate: Tue Oct 22 10:37:40 2019 +0200
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=a7563dc6a1f8b46e13c6cf1a7fbeeb611310b29a
+Commit:        a7563dc6a1f8b46e13c6cf1a7fbeeb611310b29a
+Parent:        967e2decd22cee4aa4426cfda5732860e1a085b3
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Tue Oct 22 10:43:11 2019 +0200
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Tue Oct 22 13:39:22 2019 +0200
 
-dm: Fix compilation of dmsetup
+gcc: older version can't see udev is always set
 
-Fix: 889c88e9dab33195efc4dc0400a4b0aaa3383948
 ---
- libdm/libdevmapper.h |    2 +-
- tools/dmsetup.c      |    2 +-
- 2 files changed, 2 insertions(+), 2 deletions(-)
+ lib/device/dev-cache.c |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
 
-diff --git a/libdm/libdevmapper.h b/libdm/libdevmapper.h
-index 81c67dc..18fe9f9 100644
---- a/libdm/libdevmapper.h
-+++ b/libdm/libdevmapper.h
-@@ -123,7 +123,7 @@ enum {
+diff --git a/lib/device/dev-cache.c b/lib/device/dev-cache.c
+index a15e239..3dcfc10 100644
+--- a/lib/device/dev-cache.c
++++ b/lib/device/dev-cache.c
+@@ -1087,7 +1087,7 @@ out:
+ static void _insert_dirs(struct dm_list *dirs)
+ {
+ 	struct dir_list *dl;
+-	struct udev *udev;
++	struct udev *udev = NULL;
+ 	int with_udev;
  
- 	DM_DEVICE_ARM_POLL,
- 
--	DM_GET_TARGET_VERSION
-+	DM_DEVICE_GET_TARGET_VERSION
- };
- 
- /*
-diff --git a/tools/dmsetup.c b/tools/dmsetup.c
-index dfa9e34..b5419ca 100644
---- a/tools/dmsetup.c
-+++ b/tools/dmsetup.c
-@@ -2595,7 +2595,7 @@ static int _target_version(CMD_ARGS)
- 	struct dm_task *dmt;
- 	struct dm_versions *target;
- 
--	if (!(dmt = dm_task_create(DM_GET_TARGET_VERSION)))
-+	if (!(dmt = dm_task_create(DM_DEVICE_GET_TARGET_VERSION)))
- 		return_0;
- 
- 	if (!dm_task_set_name(dmt, argv[0]))
+ 	with_udev = obtain_device_list_from_udev() &&
 
 
