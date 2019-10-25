@@ -1,53 +1,63 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Fri, 25 Oct 2019 18:55:36 -0400
-Subject: stable-2.02 - tests: really check disabling of lvmetad
-Message-ID: <201910252255.x9PMtaEk011992@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Fri, 25 Oct 2019 18:55:40 -0400
+Subject: stable-2.02 - snapshot: correctly check device id of merged thin
+Message-ID: <201910252255.x9PMtexN012007@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=bc200e0b16676398eb0e2244ffa14315d25a1a5a
-Commit:        bc200e0b16676398eb0e2244ffa14315d25a1a5a
-Parent:        36b8b9ed5c4b96d3a6482d76ca3eae54c62f9f2b
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=20d94e4072a93c199781e282d142ba7c80c9a437
+Commit:        20d94e4072a93c199781e282d142ba7c80c9a437
+Parent:        bc200e0b16676398eb0e2244ffa14315d25a1a5a
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu Oct 24 16:43:06 2019 +0200
+AuthorDate:    Fri Oct 25 23:31:08 2019 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Sat Oct 26 00:29:44 2019 +0200
+CommitterDate: Sat Oct 26 00:39:20 2019 +0200
 
-tests: really check disabling of lvmetad
+snapshot: correctly check device id of merged thin
 
-Since lvconvert validated LV types that can be repaired,
-the test was not working properly for longer time...
+When checking device id of a thin device that is just being
+merged - the snapshot actually could have been already finished
+which means  '-real' suffix for the LV is already gone and just LV
+is there - so check explicitely for this condition and use
+correct UUID for this case.
 ---
- test/shell/lvmetad-disabled.sh |   13 +++++++------
- 1 files changed, 7 insertions(+), 6 deletions(-)
+ lib/activate/dev_manager.c |   11 ++++++++++-
+ 1 files changed, 10 insertions(+), 1 deletions(-)
 
-diff --git a/test/shell/lvmetad-disabled.sh b/test/shell/lvmetad-disabled.sh
-index 84d7b54..389d191 100644
---- a/test/shell/lvmetad-disabled.sh
-+++ b/test/shell/lvmetad-disabled.sh
-@@ -55,13 +55,14 @@ grep "$dev1" out
- grep "$dev2" out
- not grep "WARNING: Not using lvmetad" out
+diff --git a/lib/activate/dev_manager.c b/lib/activate/dev_manager.c
+index 886e11b..becbf6d 100644
+--- a/lib/activate/dev_manager.c
++++ b/lib/activate/dev_manager.c
+@@ -1594,6 +1594,9 @@ int dev_manager_thin_percent(struct dev_manager *dm,
+ 	return 1;
+ }
  
--# We don't care about the repair, and we know it's
--# not valid on this lv.  We are just running repair
--# because we know one side effect is to disable lvmetad.
--# FIXME: we should install lvmetactl so that we can
--# use that to directly disable lvmetad for tests like this.
--not lvconvert --repair $vg1/$lv1 2>&1 | tee out
-+if aux have_raid 1 7 0 ; then
-+# lvconvert validates repairable volumes.
-+# We want to excercise if disabling of lvmetad works when it's running.
-+# For this we create 'raid1' array and run repair on it.
-+lvcreate --type raid1 -m1 --nosync -l1 --alloc anywhere -n $lv2 $vg1
-+lvconvert -y --repair $vg1/$lv2 2>&1 | tee out
- grep "WARNING: Disabling lvmetad cache" out
-+fi
++/*
++ * Explore state of running DM table to obtain currently used deviceId
++ */
+ int dev_manager_thin_device_id(struct dev_manager *dm,
+ 			       const struct logical_volume *lv,
+ 			       uint32_t *device_id)
+@@ -1603,10 +1606,16 @@ int dev_manager_thin_device_id(struct dev_manager *dm,
+ 	struct dm_info info;
+ 	uint64_t start, length;
+ 	char *params, *target_type = NULL;
++	const char *layer = lv_layer(lv);
+ 	int r = 0;
  
- pvs  -vvvv 2>&1 | tee out
- grep "$dev1" out
++	if (lv_is_merging_origin(lv) && !lv_info(lv->vg->cmd, lv, 1, NULL, 0, 0))
++		/* If the merge has already happened, that table
++		 * can already be using correct LV without -real layer */
++		layer = NULL;
++
+ 	/* Build dlid for the thin layer */
+-	if (!(dlid = build_dm_uuid(dm->mem, lv, lv_layer(lv))))
++	if (!(dlid = build_dm_uuid(dm->mem, lv, layer)))
+ 		return_0;
+ 
+ 	if (!(dmt = _setup_task_run(DM_DEVICE_TABLE, &info, NULL, dlid, 0, 0, 0, 0, 1, 0)))
 
 
