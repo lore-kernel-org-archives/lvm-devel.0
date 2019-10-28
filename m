@@ -1,183 +1,157 @@
 From: Joe Thornber <thornber@sourceware.org>
-Date: Mon, 28 Oct 2019 11:16:11 -0400
-Subject: master - [bcache] add bcache_abort()
-Message-ID: <201910281516.x9SFGBcW002141@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Mon, 28 Oct 2019 11:16:12 -0400
+Subject: master - [label] Use bcache_abort_fd() to ensure blocks are no longer in the cache.
+Message-ID: <201910281516.x9SFGCWK002147@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=2938b4dcca0a1df661758abfab7f402ea7aab018
-Commit:        2938b4dcca0a1df661758abfab7f402ea7aab018
-Parent:        6163b733e1564b4c322204b9a8208e2ea4e63181
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=6b0d969b2a85ba69046afa26af4d7bcddddbccd5
+Commit:        6b0d969b2a85ba69046afa26af4d7bcddddbccd5
+Parent:        2938b4dcca0a1df661758abfab7f402ea7aab018
 Author:        Joe Thornber <ejt@redhat.com>
-AuthorDate:    Mon Oct 28 14:29:47 2019 +0000
+AuthorDate:    Mon Oct 28 15:01:47 2019 +0000
 Committer:     Joe Thornber <ejt@redhat.com>
-CommitterDate: Mon Oct 28 15:00:53 2019 +0000
+CommitterDate: Mon Oct 28 15:01:47 2019 +0000
 
-[bcache] add bcache_abort()
+[label] Use bcache_abort_fd() to ensure blocks are no longer in the cache.
 
-This gives us a way to cope with write failures.
+The return value from bcache_invalidate_fd() was not being checked.
+
+So I've introduced a little function, _invalidate_fd() that always
+calls bcache_abort_fd() if the write fails.
 ---
- lib/device/bcache.c  |   33 ++++++++++++++++++++++++
- lib/device/bcache.h  |    7 +++++
- test/unit/bcache_t.c |   67 +++++++++++++++++++++++++++++++++++++++++++++++++-
- 3 files changed, 106 insertions(+), 1 deletions(-)
+ lib/label/label.c |   32 ++++++++++++++++++++------------
+ 1 files changed, 20 insertions(+), 12 deletions(-)
 
-diff --git a/lib/device/bcache.c b/lib/device/bcache.c
-index d100419..b0edf28 100644
---- a/lib/device/bcache.c
-+++ b/lib/device/bcache.c
-@@ -1382,6 +1382,39 @@ bool bcache_invalidate_fd(struct bcache *cache, int fd)
- 
- //----------------------------------------------------------------
- 
-+static bool _abort_v(struct radix_tree_iterator *it,
-+                     uint8_t *kb, uint8_t *ke, union radix_value v)
-+{
-+	struct block *b = v.ptr;
-+
-+	if (b->ref_count) {
-+		log_fatal("bcache_abort: block (%d, %llu) still held",
-+			 b->fd, (unsigned long long) b->index);
-+		return true;
-+	}
-+
-+	_unlink_block(b);
-+	_free_block(b);
-+
-+	// We can't remove the block from the radix tree yet because
-+	// we're in the middle of an iteration.
-+	return true;
-+}
-+
-+void bcache_abort_fd(struct bcache *cache, int fd)
-+{
-+        union key k;
-+	struct radix_tree_iterator it;
-+
-+	k.parts.fd = fd;
-+
-+	it.visit = _abort_v;
-+	radix_tree_iterate(cache->rtree, k.bytes, k.bytes + sizeof(k.parts.fd), &it);
-+	radix_tree_remove_prefix(cache->rtree, k.bytes, k.bytes + sizeof(k.parts.fd));
-+}
-+
-+//----------------------------------------------------------------
-+
- void bcache_set_last_byte(struct bcache *cache, int fd, uint64_t offset, int sector_size)
- {
- 	_last_byte_fd = fd;
-diff --git a/lib/device/bcache.h b/lib/device/bcache.h
-index 8c16caa..7622fd3 100644
---- a/lib/device/bcache.h
-+++ b/lib/device/bcache.h
-@@ -144,6 +144,13 @@ bool bcache_invalidate(struct bcache *cache, int fd, block_address index);
-  */
- bool bcache_invalidate_fd(struct bcache *cache, int fd);
- 
-+/*
-+ * Call this function if flush, or invalidate fail and you do not
-+ * wish to retry the writes.  This will throw away any dirty data
-+ * not written.  If any blocks for fd are held, then it will call
-+ * abort().
-+ */
-+void bcache_abort_fd(struct bcache *cache, int fd);
- 
- //----------------------------------------------------------------
- // The next four functions are utilities written in terms of the above api.
-diff --git a/test/unit/bcache_t.c b/test/unit/bcache_t.c
-index 92c2d57..668d24d 100644
---- a/test/unit/bcache_t.c
-+++ b/test/unit/bcache_t.c
-@@ -793,7 +793,6 @@ static void test_invalidate_after_write_error(void *context)
- 
- static void test_invalidate_held_block(void *context)
- {
--
- 	struct fixture *f = context;
- 	struct mock_engine *me = f->me;
- 	struct bcache *cache = f->cache;
-@@ -810,6 +809,67 @@ static void test_invalidate_held_block(void *context)
+diff --git a/lib/label/label.c b/lib/label/label.c
+index dc4d32d..7dcaf8a 100644
+--- a/lib/label/label.c
++++ b/lib/label/label.c
+@@ -620,6 +620,14 @@ static void _drop_bad_aliases(struct device *dev)
+ 	}
  }
  
- //----------------------------------------------------------------
-+// abort tests
-+
-+static void test_abort_no_blocks(void *context)
++// Like bcache_invalidate, only it throws any dirty data away if the
++// write fails.
++static void _invalidate_fd(struct bcache *cache, int fd)
 +{
-+	struct fixture *f = context;
-+	struct bcache *cache = f->cache;
-+	int fd = 17;
-+
-+	// We have no expectations
-+	bcache_abort_fd(cache, fd);
++	if (!bcache_invalidate_fd(cache, fd))
++		bcache_abort_fd(cache, fd);
 +}
 +
-+static void test_abort_single_block(void *context)
-+{
-+	struct fixture *f = context;
-+	struct bcache *cache = f->cache;
-+	struct block *b;
-+	int fd = 17;
-+
-+	T_ASSERT(bcache_get(cache, fd, 0, GF_ZERO, &b));
-+	bcache_put(b);
-+
-+	bcache_abort_fd(cache, fd);
-+
-+	// no write should be issued
-+	T_ASSERT(bcache_flush(cache));
-+}
-+
-+static void test_abort_only_specific_fd(void *context)
-+{
-+	struct fixture *f = context;
-+	struct mock_engine *me = f->me;
-+	struct bcache *cache = f->cache;
-+	struct block *b;
-+	int fd1 = 17, fd2 = 18;
-+
-+	T_ASSERT(bcache_get(cache, fd1, 0, GF_ZERO, &b));
-+	bcache_put(b);
-+
-+	T_ASSERT(bcache_get(cache, fd1, 1, GF_ZERO, &b));
-+	bcache_put(b);
-+
-+	T_ASSERT(bcache_get(cache, fd2, 0, GF_ZERO, &b));
-+	bcache_put(b);
-+
-+	T_ASSERT(bcache_get(cache, fd2, 1, GF_ZERO, &b));
-+	bcache_put(b);
-+
-+	bcache_abort_fd(cache, fd2);
-+
-+	// writes for fd1 should still be issued
-+	_expect_write(me, fd1, 0);
-+	_expect_write(me, fd1, 1);
-+
-+	_expect(me, E_WAIT);
-+	_expect(me, E_WAIT);
-+
-+	T_ASSERT(bcache_flush(cache));
-+}
-+
-+//----------------------------------------------------------------
- // Chasing a bug reported by dct
+ /*
+  * Read or reread label/metadata from selected devs.
+  *
+@@ -731,7 +739,7 @@ static int _scan_list(struct cmd_context *cmd, struct dev_filter *f,
+ 		 * drop it from bcache.
+ 		 */
+ 		if (scan_failed || !is_lvm_device) {
+-			bcache_invalidate_fd(scan_bcache, devl->dev->bcache_fd);
++			_invalidate_fd(scan_bcache, devl->dev->bcache_fd);
+ 			_scan_dev_close(devl->dev);
+ 		}
  
- static void _cycle(struct fixture *f, unsigned nr_cache_blocks)
-@@ -897,6 +957,11 @@ static struct test_suite *_small_tests(void)
- 	T("invalidate-read-error", "invalidate a block that errored", test_invalidate_after_read_error);
- 	T("invalidate-write-error", "invalidate a block that errored", test_invalidate_after_write_error);
- 	T("invalidate-fails-in-held", "invalidating a held block fails", test_invalidate_held_block);
-+
-+	T("abort-with-no-blocks", "you can call abort, even if there are no blocks in the cache", test_abort_no_blocks);
-+	T("abort-single-block", "single block get silently discarded", test_abort_single_block);
-+	T("abort-specific-fd", "abort doesn't effect other fds", test_abort_only_specific_fd);
-+
- 	T("concurrent-reads-after-invalidate", "prefetch should still issue concurrent reads after invalidate",
-           test_concurrent_reads_after_invalidate);
+@@ -996,7 +1004,7 @@ int label_scan(struct cmd_context *cmd)
+ 		 * so this will usually not be true.
+ 		 */
+ 		if (_in_bcache(dev)) {
+-			bcache_invalidate_fd(scan_bcache, dev->bcache_fd);
++			_invalidate_fd(scan_bcache, dev->bcache_fd);
+ 			_scan_dev_close(dev);
+ 		}
+ 	};
+@@ -1169,7 +1177,7 @@ int label_scan_devs(struct cmd_context *cmd, struct dev_filter *f, struct dm_lis
  
+ 	dm_list_iterate_items(devl, devs) {
+ 		if (_in_bcache(devl->dev)) {
+-			bcache_invalidate_fd(scan_bcache, devl->dev->bcache_fd);
++			_invalidate_fd(scan_bcache, devl->dev->bcache_fd);
+ 			_scan_dev_close(devl->dev);
+ 		}
+ 	}
+@@ -1196,7 +1204,7 @@ int label_scan_devs_rw(struct cmd_context *cmd, struct dev_filter *f, struct dm_
+ 
+ 	dm_list_iterate_items(devl, devs) {
+ 		if (_in_bcache(devl->dev)) {
+-			bcache_invalidate_fd(scan_bcache, devl->dev->bcache_fd);
++			_invalidate_fd(scan_bcache, devl->dev->bcache_fd);
+ 			_scan_dev_close(devl->dev);
+ 		}
+ 		/*
+@@ -1218,7 +1226,7 @@ int label_scan_devs_excl(struct dm_list *devs)
+ 
+ 	dm_list_iterate_items(devl, devs) {
+ 		if (_in_bcache(devl->dev)) {
+-			bcache_invalidate_fd(scan_bcache, devl->dev->bcache_fd);
++			_invalidate_fd(scan_bcache, devl->dev->bcache_fd);
+ 			_scan_dev_close(devl->dev);
+ 		}
+ 		/*
+@@ -1238,7 +1246,7 @@ int label_scan_devs_excl(struct dm_list *devs)
+ void label_scan_invalidate(struct device *dev)
+ {
+ 	if (_in_bcache(dev)) {
+-		bcache_invalidate_fd(scan_bcache, dev->bcache_fd);
++		_invalidate_fd(scan_bcache, dev->bcache_fd);
+ 		_scan_dev_close(dev);
+ 	}
+ }
+@@ -1320,7 +1328,7 @@ int label_read(struct device *dev)
+ 	dm_list_add(&one_dev, &devl->list);
+ 
+ 	if (_in_bcache(dev)) {
+-		bcache_invalidate_fd(scan_bcache, dev->bcache_fd);
++		_invalidate_fd(scan_bcache, dev->bcache_fd);
+ 		_scan_dev_close(dev);
+ 	}
+ 
+@@ -1362,7 +1370,7 @@ int label_scan_open_excl(struct device *dev)
+ 	if (_in_bcache(dev) && !(dev->flags & DEV_BCACHE_EXCL)) {
+ 		/* FIXME: avoid tossing out bcache blocks just to replace fd. */
+ 		log_debug("Close and reopen excl %s", dev_name(dev));
+-		bcache_invalidate_fd(scan_bcache, dev->bcache_fd);
++		_invalidate_fd(scan_bcache, dev->bcache_fd);
+ 		_scan_dev_close(dev);
+ 	}
+ 	dev->flags |= DEV_BCACHE_EXCL;
+@@ -1375,7 +1383,7 @@ int label_scan_open_rw(struct device *dev)
+ 	if (_in_bcache(dev) && !(dev->flags & DEV_BCACHE_WRITE)) {
+ 		/* FIXME: avoid tossing out bcache blocks just to replace fd. */
+ 		log_debug("Close and reopen rw %s", dev_name(dev));
+-		bcache_invalidate_fd(scan_bcache, dev->bcache_fd);
++		_invalidate_fd(scan_bcache, dev->bcache_fd);
+ 		_scan_dev_close(dev);
+ 	}
+ 	dev->flags |= DEV_BCACHE_WRITE;
+@@ -1423,7 +1431,7 @@ bool dev_write_bytes(struct device *dev, uint64_t start, size_t len, void *data)
+ 	if (_in_bcache(dev) && !(dev->flags & DEV_BCACHE_WRITE)) {
+ 		/* FIXME: avoid tossing out bcache blocks just to replace fd. */
+ 		log_debug("Close and reopen to write %s", dev_name(dev));
+-		bcache_invalidate_fd(scan_bcache, dev->bcache_fd);
++		_invalidate_fd(scan_bcache, dev->bcache_fd);
+ 		_scan_dev_close(dev);
+ 
+ 		dev->flags |= DEV_BCACHE_WRITE;
+@@ -1469,7 +1477,7 @@ bool dev_write_zeros(struct device *dev, uint64_t start, size_t len)
+ 	if (_in_bcache(dev) && !(dev->flags & DEV_BCACHE_WRITE)) {
+ 		/* FIXME: avoid tossing out bcache blocks just to replace fd. */
+ 		log_debug("Close and reopen to write %s", dev_name(dev));
+-		bcache_invalidate_fd(scan_bcache, dev->bcache_fd);
++		_invalidate_fd(scan_bcache, dev->bcache_fd);
+ 		_scan_dev_close(dev);
+ 
+ 		dev->flags |= DEV_BCACHE_WRITE;
+@@ -1520,7 +1528,7 @@ bool dev_set_bytes(struct device *dev, uint64_t start, size_t len, uint8_t val)
+ 	if (_in_bcache(dev) && !(dev->flags & DEV_BCACHE_WRITE)) {
+ 		/* FIXME: avoid tossing out bcache blocks just to replace fd. */
+ 		log_debug("Close and reopen to write %s", dev_name(dev));
+-		bcache_invalidate_fd(scan_bcache, dev->bcache_fd);
++		_invalidate_fd(scan_bcache, dev->bcache_fd);
+ 		_scan_dev_close(dev);
+ 		/* goes to label_scan_open() since bcache_fd < 0 */
+ 	}
 
 
