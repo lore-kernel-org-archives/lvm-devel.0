@@ -1,100 +1,69 @@
-From: Ben Sims <ben.sims@citrix.com>
-Date: Tue, 29 Oct 2019 08:44:39 +0000
-Subject: Performance regression between V2_02_177 and V2_02_180
-In-Reply-To: <1571324396950.37136@citrix.com>
-References: <1571324396950.37136@citrix.com>
-Message-ID: <1572338679419.1072@citrix.com>
+From: Joe Thornber <thornber@sourceware.org>
+Date: Tue, 29 Oct 2019 06:42:53 -0400
+Subject: master - [bcache] add unit test
+Message-ID: <201910291042.x9TAgriG030330@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-I'm not sure if anybody saw my original mail, there may have been a race condition with me actually joining the mailing list.
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=5fdebf9bbf68a53b9d2153dbd8bf27a36e0ef3cd
+Commit:        5fdebf9bbf68a53b9d2153dbd8bf27a36e0ef3cd
+Parent:        6b0d969b2a85ba69046afa26af4d7bcddddbccd5
+Author:        Joe Thornber <ejt@redhat.com>
+AuthorDate:    Tue Oct 29 10:33:31 2019 +0000
+Committer:     Joe Thornber <ejt@redhat.com>
+CommitterDate: Tue Oct 29 10:33:31 2019 +0000
+
+[bcache] add unit test
+
+abort-forces-read
+---
+ test/unit/bcache_t.c |   24 ++++++++++++++++++++++++
+ 1 files changed, 24 insertions(+), 0 deletions(-)
+
+diff --git a/test/unit/bcache_t.c b/test/unit/bcache_t.c
+index 668d24d..2a8f931 100644
+--- a/test/unit/bcache_t.c
++++ b/test/unit/bcache_t.c
+@@ -837,6 +837,29 @@ static void test_abort_single_block(void *context)
+ 	T_ASSERT(bcache_flush(cache));
+ }
+ 
++static void test_abort_forces_reread(void *context)
++{
++	struct fixture *f = context;
++	struct mock_engine *me = f->me;
++	struct bcache *cache = f->cache;
++	struct block *b;
++	int fd = 17;
++
++	_expect_read(me, fd, 0);
++	_expect(me, E_WAIT);
++	T_ASSERT(bcache_get(cache, fd, 0, GF_DIRTY, &b));
++	bcache_put(b);
++
++	bcache_abort_fd(cache, fd);
++	T_ASSERT(bcache_flush(cache));
++
++	// Check the block is re-read
++	_expect_read(me, fd, 0);
++	_expect(me, E_WAIT);
++	T_ASSERT(bcache_get(cache, fd, 0, 0, &b));
++	bcache_put(b);
++}
++
+ static void test_abort_only_specific_fd(void *context)
+ {
+ 	struct fixture *f = context;
+@@ -960,6 +983,7 @@ static struct test_suite *_small_tests(void)
+ 
+ 	T("abort-with-no-blocks", "you can call abort, even if there are no blocks in the cache", test_abort_no_blocks);
+ 	T("abort-single-block", "single block get silently discarded", test_abort_single_block);
++	T("abort-forces-read", "if a block has been discarded then another read is necc.", test_abort_forces_reread);
+ 	T("abort-specific-fd", "abort doesn't effect other fds", test_abort_only_specific_fd);
+ 
+ 	T("concurrent-reads-after-invalidate", "prefetch should still issue concurrent reads after invalidate",
 
 
-I can confirm the performance regression, is caused my async io, turning this off in the lvm.conf gets back my performance.
-
-We work in a libaio intensive environment, so there is contention for libaio ring.
-
-
-I'm wondering if libaio should be on by default?
-
-
-Thanks,
-
-
-Ben
-
-
-________________________________
-From: Ben Sims
-Sent: 17 October 2019 15:59
-To: lvm-devel@redhat.com
-Subject: Performance regression between V2_02_177 and V2_02_180
-
-
-Hi lvm-devel
-
-
-I'm trying to analyze a performance regression in short lived commands such as lvchange.
-
-
-V2_02_177
-
-
-time /sbin/lvchange -ay /dev/abc/def
-
-
-real    0m0.085s
-user    0m0.000s
-sys    0m0.013s
-
-
-V2_02_180
-
-
-time /sbin/lvchange -ay /dev/abc/def
-
-
-real    0m0.115s
-user    0m0.007s
-sys    0m0.007s
-
-
-I confirmed these measurements independently with perf over the course of a long test calling lvchange many times. The difference in individual calls is small but adds up.
-
-
-The reg first occurred due to commit
-
-
-commit db41fe6c5dab7ff66db9c0568f0e1e1b31657be3
-Author: Alasdair G Kergon <agk@redhat.com>
-Date:   Mon Jan 22 18:17:58 2018 +0000
-
-    lvmcache: Use asynchronous I/O when scanning devices.
-
-
-I notice that the new bcache is reading significantly more data 262144 bytes (two blocks of 131072 bytes from /dev/sda ) compared to 28672 bytes in 4k reads made in V2_02_177. Whats the rational for reading so much more data?
-
-
-The extra overhead of this io estimated with strace does not appear to account for the slow down, but perhaps the processing of this data does?
-
-
-I'm currently instrumenting the code, but thought i would ask on the mailing list.
-
-
-Thanks,
-
-
-Ben
-
-
-
-
-
-
-
--------------- next part --------------
-An HTML attachment was scrubbed...
-URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20191029/902074bb/attachment.htm>
