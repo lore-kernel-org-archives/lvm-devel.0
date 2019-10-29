@@ -1,52 +1,60 @@
-From: Joe Thornber <thornber@sourceware.org>
-Date: Tue, 29 Oct 2019 06:42:55 -0400
-Subject: master - [bcache] pass up the error from io_submit rather than using generic -EIO
-Message-ID: <201910291042.x9TAgtZw030340@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: David Teigland <teigland@redhat.com>
+Date: Tue, 29 Oct 2019 09:58:02 -0500
+Subject: Performance regression between V2_02_177 and V2_02_180
+In-Reply-To: <1572338679419.1072@citrix.com>
+References: <1571324396950.37136@citrix.com>
+ <1572338679419.1072@citrix.com>
+Message-ID: <20191029145802.GA25248@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=2b3c39e402b966043a65ae649797defb6db597fc
-Commit:        2b3c39e402b966043a65ae649797defb6db597fc
-Parent:        5fdebf9bbf68a53b9d2153dbd8bf27a36e0ef3cd
-Author:        Joe Thornber <ejt@redhat.com>
-AuthorDate:    Tue Oct 29 10:39:20 2019 +0000
-Committer:     Joe Thornber <ejt@redhat.com>
-CommitterDate: Tue Oct 29 10:39:20 2019 +0000
+On Tue, Oct 29, 2019 at 08:44:39AM +0000, Ben Sims wrote:
+> I can confirm the performance regression, is caused my async io, turning
+> this off in the lvm.conf gets back my performance.
+> 
+> We work in a libaio intensive environment, so there is contention for
+> libaio ring.
 
-[bcache] pass up the error from io_submit rather than using generic -EIO
+That's interesting, I've never heard about aio from independent programs
+running on the system interfering like that.  Apart from the observation,
+have you read about this anywhere so I could understand it better?
 
-Author: Heming Zhao
----
- lib/device/bcache.c |    7 +++++--
- 1 files changed, 5 insertions(+), 2 deletions(-)
+> I'm wondering if libaio should be on by default?
 
-diff --git a/lib/device/bcache.c b/lib/device/bcache.c
-index b0edf28..1249d6e 100644
---- a/lib/device/bcache.c
-+++ b/lib/device/bcache.c
-@@ -293,6 +293,10 @@ static bool _async_issue(struct io_engine *ioe, enum dir d, int fd,
- 
- 	if (r < 0) {
- 		_cb_free(e->cbs, cb);
-+	       ((struct block *) context)->error = r;
-+	       log_warn("io_submit <%c> off %llu bytes %llu return %d:%s",
-+	                (d == DIR_READ) ? 'R' : 'W', (long long unsigned)offset,
-+                        (long long unsigned) nbytes, r, strerror(-r));
- 		return false;
- 	}
- 
-@@ -869,8 +873,7 @@ static void _issue_low_level(struct block *b, enum dir d)
- 	dm_list_move(&cache->io_pending, &b->list);
- 
- 	if (!cache->engine->issue(cache->engine, d, b->fd, sb, se, b->data, b)) {
--		/* FIXME: if io_submit() set an errno, return that instead of EIO? */
--		_complete_io(b, -EIO);
-+		_complete_io(b, b->error);
- 		return;
- 	}
- }
+It's possible that we should change the use_aio default to 0 if most cases
+don't benefit (e.g. small number of PVs), or have contention as you've
+seen.
+
+> I notice that the new bcache is reading significantly more data 262144
+> bytes (two blocks of 131072 bytes from /dev/sda ) compared to 28672
+> bytes in 4k reads made in V2_02_177. Whats the rational for reading so
+> much more data?
+
+It seemed to be a reasonable balance between iops and size when testing
+various combinations.
+
+That said, the bcache.c io layer is being replaced and renamed soon since
+there were some aspects of that code that weren't ideally suited for lvm.
+That will be using smaller block sizes.
+
+> The extra overhead of this io estimated with strace does not appear to
+> account for the slow down, but perhaps the processing of this data does?
+
+If you eliminate the aio contention you mentioned above, I wouldn't expect
+the actual io to be a factor.
+
+> I'm currently instrumenting the code, but thought i would ask on the
+> mailing list.
+
+There was a lot of transition churn that's best to avoid while doing test
+comparisions.  I suggest testing with 2.02.176 as the old version, and
+then using the latest releases from stable-2.02 and master branches.  I
+think lvm with bcache was released too early, and there have been
+significant fixes and improvements added in both branches.
+
+Dave
 
 
