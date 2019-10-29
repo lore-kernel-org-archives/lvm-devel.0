@@ -1,157 +1,100 @@
-From: Joe Thornber <thornber@sourceware.org>
-Date: Mon, 28 Oct 2019 11:16:12 -0400
-Subject: master - [label] Use bcache_abort_fd() to ensure blocks are no longer in the cache.
-Message-ID: <201910281516.x9SFGCWK002147@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: Ben Sims <ben.sims@citrix.com>
+Date: Tue, 29 Oct 2019 08:44:39 +0000
+Subject: Performance regression between V2_02_177 and V2_02_180
+In-Reply-To: <1571324396950.37136@citrix.com>
+References: <1571324396950.37136@citrix.com>
+Message-ID: <1572338679419.1072@citrix.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=6b0d969b2a85ba69046afa26af4d7bcddddbccd5
-Commit:        6b0d969b2a85ba69046afa26af4d7bcddddbccd5
-Parent:        2938b4dcca0a1df661758abfab7f402ea7aab018
-Author:        Joe Thornber <ejt@redhat.com>
-AuthorDate:    Mon Oct 28 15:01:47 2019 +0000
-Committer:     Joe Thornber <ejt@redhat.com>
-CommitterDate: Mon Oct 28 15:01:47 2019 +0000
-
-[label] Use bcache_abort_fd() to ensure blocks are no longer in the cache.
-
-The return value from bcache_invalidate_fd() was not being checked.
-
-So I've introduced a little function, _invalidate_fd() that always
-calls bcache_abort_fd() if the write fails.
----
- lib/label/label.c |   32 ++++++++++++++++++++------------
- 1 files changed, 20 insertions(+), 12 deletions(-)
-
-diff --git a/lib/label/label.c b/lib/label/label.c
-index dc4d32d..7dcaf8a 100644
---- a/lib/label/label.c
-+++ b/lib/label/label.c
-@@ -620,6 +620,14 @@ static void _drop_bad_aliases(struct device *dev)
- 	}
- }
- 
-+// Like bcache_invalidate, only it throws any dirty data away if the
-+// write fails.
-+static void _invalidate_fd(struct bcache *cache, int fd)
-+{
-+	if (!bcache_invalidate_fd(cache, fd))
-+		bcache_abort_fd(cache, fd);
-+}
-+
- /*
-  * Read or reread label/metadata from selected devs.
-  *
-@@ -731,7 +739,7 @@ static int _scan_list(struct cmd_context *cmd, struct dev_filter *f,
- 		 * drop it from bcache.
- 		 */
- 		if (scan_failed || !is_lvm_device) {
--			bcache_invalidate_fd(scan_bcache, devl->dev->bcache_fd);
-+			_invalidate_fd(scan_bcache, devl->dev->bcache_fd);
- 			_scan_dev_close(devl->dev);
- 		}
- 
-@@ -996,7 +1004,7 @@ int label_scan(struct cmd_context *cmd)
- 		 * so this will usually not be true.
- 		 */
- 		if (_in_bcache(dev)) {
--			bcache_invalidate_fd(scan_bcache, dev->bcache_fd);
-+			_invalidate_fd(scan_bcache, dev->bcache_fd);
- 			_scan_dev_close(dev);
- 		}
- 	};
-@@ -1169,7 +1177,7 @@ int label_scan_devs(struct cmd_context *cmd, struct dev_filter *f, struct dm_lis
- 
- 	dm_list_iterate_items(devl, devs) {
- 		if (_in_bcache(devl->dev)) {
--			bcache_invalidate_fd(scan_bcache, devl->dev->bcache_fd);
-+			_invalidate_fd(scan_bcache, devl->dev->bcache_fd);
- 			_scan_dev_close(devl->dev);
- 		}
- 	}
-@@ -1196,7 +1204,7 @@ int label_scan_devs_rw(struct cmd_context *cmd, struct dev_filter *f, struct dm_
- 
- 	dm_list_iterate_items(devl, devs) {
- 		if (_in_bcache(devl->dev)) {
--			bcache_invalidate_fd(scan_bcache, devl->dev->bcache_fd);
-+			_invalidate_fd(scan_bcache, devl->dev->bcache_fd);
- 			_scan_dev_close(devl->dev);
- 		}
- 		/*
-@@ -1218,7 +1226,7 @@ int label_scan_devs_excl(struct dm_list *devs)
- 
- 	dm_list_iterate_items(devl, devs) {
- 		if (_in_bcache(devl->dev)) {
--			bcache_invalidate_fd(scan_bcache, devl->dev->bcache_fd);
-+			_invalidate_fd(scan_bcache, devl->dev->bcache_fd);
- 			_scan_dev_close(devl->dev);
- 		}
- 		/*
-@@ -1238,7 +1246,7 @@ int label_scan_devs_excl(struct dm_list *devs)
- void label_scan_invalidate(struct device *dev)
- {
- 	if (_in_bcache(dev)) {
--		bcache_invalidate_fd(scan_bcache, dev->bcache_fd);
-+		_invalidate_fd(scan_bcache, dev->bcache_fd);
- 		_scan_dev_close(dev);
- 	}
- }
-@@ -1320,7 +1328,7 @@ int label_read(struct device *dev)
- 	dm_list_add(&one_dev, &devl->list);
- 
- 	if (_in_bcache(dev)) {
--		bcache_invalidate_fd(scan_bcache, dev->bcache_fd);
-+		_invalidate_fd(scan_bcache, dev->bcache_fd);
- 		_scan_dev_close(dev);
- 	}
- 
-@@ -1362,7 +1370,7 @@ int label_scan_open_excl(struct device *dev)
- 	if (_in_bcache(dev) && !(dev->flags & DEV_BCACHE_EXCL)) {
- 		/* FIXME: avoid tossing out bcache blocks just to replace fd. */
- 		log_debug("Close and reopen excl %s", dev_name(dev));
--		bcache_invalidate_fd(scan_bcache, dev->bcache_fd);
-+		_invalidate_fd(scan_bcache, dev->bcache_fd);
- 		_scan_dev_close(dev);
- 	}
- 	dev->flags |= DEV_BCACHE_EXCL;
-@@ -1375,7 +1383,7 @@ int label_scan_open_rw(struct device *dev)
- 	if (_in_bcache(dev) && !(dev->flags & DEV_BCACHE_WRITE)) {
- 		/* FIXME: avoid tossing out bcache blocks just to replace fd. */
- 		log_debug("Close and reopen rw %s", dev_name(dev));
--		bcache_invalidate_fd(scan_bcache, dev->bcache_fd);
-+		_invalidate_fd(scan_bcache, dev->bcache_fd);
- 		_scan_dev_close(dev);
- 	}
- 	dev->flags |= DEV_BCACHE_WRITE;
-@@ -1423,7 +1431,7 @@ bool dev_write_bytes(struct device *dev, uint64_t start, size_t len, void *data)
- 	if (_in_bcache(dev) && !(dev->flags & DEV_BCACHE_WRITE)) {
- 		/* FIXME: avoid tossing out bcache blocks just to replace fd. */
- 		log_debug("Close and reopen to write %s", dev_name(dev));
--		bcache_invalidate_fd(scan_bcache, dev->bcache_fd);
-+		_invalidate_fd(scan_bcache, dev->bcache_fd);
- 		_scan_dev_close(dev);
- 
- 		dev->flags |= DEV_BCACHE_WRITE;
-@@ -1469,7 +1477,7 @@ bool dev_write_zeros(struct device *dev, uint64_t start, size_t len)
- 	if (_in_bcache(dev) && !(dev->flags & DEV_BCACHE_WRITE)) {
- 		/* FIXME: avoid tossing out bcache blocks just to replace fd. */
- 		log_debug("Close and reopen to write %s", dev_name(dev));
--		bcache_invalidate_fd(scan_bcache, dev->bcache_fd);
-+		_invalidate_fd(scan_bcache, dev->bcache_fd);
- 		_scan_dev_close(dev);
- 
- 		dev->flags |= DEV_BCACHE_WRITE;
-@@ -1520,7 +1528,7 @@ bool dev_set_bytes(struct device *dev, uint64_t start, size_t len, uint8_t val)
- 	if (_in_bcache(dev) && !(dev->flags & DEV_BCACHE_WRITE)) {
- 		/* FIXME: avoid tossing out bcache blocks just to replace fd. */
- 		log_debug("Close and reopen to write %s", dev_name(dev));
--		bcache_invalidate_fd(scan_bcache, dev->bcache_fd);
-+		_invalidate_fd(scan_bcache, dev->bcache_fd);
- 		_scan_dev_close(dev);
- 		/* goes to label_scan_open() since bcache_fd < 0 */
- 	}
+I'm not sure if anybody saw my original mail, there may have been a race condition with me actually joining the mailing list.
 
 
+I can confirm the performance regression, is caused my async io, turning this off in the lvm.conf gets back my performance.
+
+We work in a libaio intensive environment, so there is contention for libaio ring.
+
+
+I'm wondering if libaio should be on by default?
+
+
+Thanks,
+
+
+Ben
+
+
+________________________________
+From: Ben Sims
+Sent: 17 October 2019 15:59
+To: lvm-devel@redhat.com
+Subject: Performance regression between V2_02_177 and V2_02_180
+
+
+Hi lvm-devel
+
+
+I'm trying to analyze a performance regression in short lived commands such as lvchange.
+
+
+V2_02_177
+
+
+time /sbin/lvchange -ay /dev/abc/def
+
+
+real    0m0.085s
+user    0m0.000s
+sys    0m0.013s
+
+
+V2_02_180
+
+
+time /sbin/lvchange -ay /dev/abc/def
+
+
+real    0m0.115s
+user    0m0.007s
+sys    0m0.007s
+
+
+I confirmed these measurements independently with perf over the course of a long test calling lvchange many times. The difference in individual calls is small but adds up.
+
+
+The reg first occurred due to commit
+
+
+commit db41fe6c5dab7ff66db9c0568f0e1e1b31657be3
+Author: Alasdair G Kergon <agk@redhat.com>
+Date:   Mon Jan 22 18:17:58 2018 +0000
+
+    lvmcache: Use asynchronous I/O when scanning devices.
+
+
+I notice that the new bcache is reading significantly more data 262144 bytes (two blocks of 131072 bytes from /dev/sda ) compared to 28672 bytes in 4k reads made in V2_02_177. Whats the rational for reading so much more data?
+
+
+The extra overhead of this io estimated with strace does not appear to account for the slow down, but perhaps the processing of this data does?
+
+
+I'm currently instrumenting the code, but thought i would ask on the mailing list.
+
+
+Thanks,
+
+
+Ben
+
+
+
+
+
+
+
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20191029/902074bb/attachment.htm>
