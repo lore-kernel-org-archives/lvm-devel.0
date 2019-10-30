@@ -1,41 +1,51 @@
-From: David Teigland <teigland@sourceware.org>
-Date: Mon,  2 May 2022 14:47:44 +0000 (GMT)
-Subject: main - improve description of devices option
-Message-ID: <20220502144744.87EE63858D3C@sourceware.org>
+From: Tony Asleson <tasleson@sourceware.org>
+Date: Wed, 30 Oct 2019 11:44:49 -0400
+Subject: master - lvmdbustest.py: Add nested helper function major_minor
+Message-ID: <201910301544.x9UFinfi016819@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=dd28460017356d9a1a30a787b5572e9bcbf1c4a4
-Commit:        dd28460017356d9a1a30a787b5572e9bcbf1c4a4
-Parent:        494372b4eed0c8f6040e3357939eb7511ac25745
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Mon May 2 09:46:28 2022 -0500
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Mon May 2 09:47:02 2022 -0500
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=c786636afba068fc0f560b6dd1dd9dd532c35135
+Commit:        c786636afba068fc0f560b6dd1dd9dd532c35135
+Parent:        e1d3a6c552e8d23837c17934a83c3925cd40252d
+Author:        Tony Asleson <tasleson@redhat.com>
+AuthorDate:    Wed Oct 9 11:48:00 2019 -0500
+Committer:     Tony Asleson <tasleson@redhat.com>
+CommitterDate: Wed Oct 30 10:38:40 2019 -0500
 
-improve description of devices option
+lvmdbustest.py: Add nested helper function major_minor
 
 ---
- tools/args.h | 5 +++--
- 1 file changed, 3 insertions(+), 2 deletions(-)
+ test/dbus/lvmdbustest.py |    7 +++++--
+ 1 files changed, 5 insertions(+), 2 deletions(-)
 
-diff --git a/tools/args.h b/tools/args.h
-index c4d8fe7ff..57d2dfc52 100644
---- a/tools/args.h
-+++ b/tools/args.h
-@@ -245,8 +245,9 @@ arg(deviceidtype_ARG, '\0', "deviceidtype", string_VAL, 0, 0,
-     "then it will override the default type that lvm would use.\n")
+diff --git a/test/dbus/lvmdbustest.py b/test/dbus/lvmdbustest.py
+index a9d7fac..0b7140a 100755
+--- a/test/dbus/lvmdbustest.py
++++ b/test/dbus/lvmdbustest.py
+@@ -1316,6 +1316,10 @@ class TestDbusService(unittest.TestCase):
+ 				EOD))
  
- arg(devices_ARG, '\0', "devices", pv_VAL, ARG_GROUPABLE, 0,
--    "Devices that the command can use. This option can be repeated\n"
--    "or accepts a comma separated list of devices. This overrides\n"
-+    "Restricts the devices that are visible and accessible to the command.\n"
-+    "Devices not listed will appear to be missing. This option can be\n"
-+    "repeated, or accepts a comma separated list of devices. This overrides\n"
-     "the devices file.\n")
+ 	def test_pv_scan(self):
++
++		def major_minor(d):
++			return (int(d.properties['MAJOR']), int(d.properties['MINOR']))
++
+ 		devices = TestDbusService._get_devices()
  
- arg(devicesfile_ARG, '\0', "devicesfile", string_VAL, 0, 0,
+ 		self.assertEqual(self._pv_scan(False, True, [], []), '/')
+@@ -1327,8 +1331,7 @@ class TestDbusService(unittest.TestCase):
+ 		self.assertEqual(self._pv_scan(False, True, block_path, []), '/')
+ 		self._check_consistency()
+ 
+-		mm = [(int(d.properties['MAJOR']), int(d.properties['MINOR']))
+-				for d in devices]
++		mm = [major_minor(d) for d in devices]
+ 
+ 		self.assertEqual(self._pv_scan(False, True, block_path, mm), '/')
+ 		self._check_consistency()
+
 
