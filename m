@@ -1,90 +1,108 @@
 From: Tony Asleson <tasleson@sourceware.org>
-Date: Wed, 30 Oct 2019 11:44:03 -0400
-Subject: master - lvmdbusdtest.py: Use common function for tag add
-Message-ID: <201910301544.x9UFi3fo016639@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Wed, 30 Oct 2019 11:44:04 -0400
+Subject: master - lvmdbustest.py: Add function for lv path check
+Message-ID: <201910301544.x9UFi45x016653@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=22a22a735fef7bcd0f1acc80e99f500925e3572c
-Commit:        22a22a735fef7bcd0f1acc80e99f500925e3572c
-Parent:        62136c056a506568ede876ce41e826478399085b
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=b8d496911765ec07f80eee174623e503506e7401
+Commit:        b8d496911765ec07f80eee174623e503506e7401
+Parent:        22a22a735fef7bcd0f1acc80e99f500925e3572c
 Author:        Tony Asleson <tasleson@redhat.com>
-AuthorDate:    Thu Oct 3 15:05:37 2019 -0500
+AuthorDate:    Thu Oct 3 15:19:51 2019 -0500
 Committer:     Tony Asleson <tasleson@redhat.com>
 CommitterDate: Wed Oct 30 10:38:40 2019 -0500
 
-lvmdbusdtest.py: Use common function for tag add
+lvmdbustest.py: Add function for lv path check
 
 ---
- test/dbus/lvmdbustest.py |   40 +++++++++++++++-------------------------
- 1 files changed, 15 insertions(+), 25 deletions(-)
+ test/dbus/lvmdbustest.py |   55 +++++++++++++++++++--------------------------
+ 1 files changed, 23 insertions(+), 32 deletions(-)
 
 diff --git a/test/dbus/lvmdbustest.py b/test/dbus/lvmdbustest.py
-index da1fc69..0384d5e 100755
+index 0384d5e..1ab4ce6 100755
 --- a/test/dbus/lvmdbustest.py
 +++ b/test/dbus/lvmdbustest.py
-@@ -1715,23 +1715,25 @@ class TestDbusService(unittest.TestCase):
- 						dbus.Int32(g_tmo),
- 						EOD))
+@@ -489,6 +489,26 @@ class TestDbusService(unittest.TestCase):
+ 			self.assertTrue(path == '/')
+ 			self._check_consistency()
  
-+	def _tag_add_common(self, vg_proxy, tag):
-+		tmp = self.handle_return(
-+			vg_proxy.Vg.TagsAdd(
-+				dbus.Array([tag], 's'),
-+				dbus.Int32(g_tmo),
-+				EOD))
-+		self.assertTrue(tmp == '/')
-+		vg_proxy.update()
++	def _verify_lv_paths(self, vg, new_name):
++		"""
++		# Go through each LV and make sure it has the correct path back to the
++		# VG
++		:return:
++		"""
++		lv_paths = vg.Lvs
 +
-+		self.assertTrue(
-+			tag in vg_proxy.Vg.Tags,
-+			"%s not in %s" % (tag, str(vg_proxy.Vg.Tags)))
++		for l in lv_paths:
++			lv_proxy = ClientProxy(self.bus, l,
++								   interfaces=(LV_COMMON_INT,)).LvCommon
++			self.assertTrue(
++				lv_proxy.Vg == vg.object_path, "%s != %s" %
++				(lv_proxy.Vg, vg.object_path))
++			full_name = "%s/%s" % (new_name, lv_proxy.Name)
++			lv_path = self._lookup(full_name)
++			self.assertTrue(
++				lv_path == lv_proxy.object_path, "%s != %s" %
++				(lv_path, lv_proxy.object_path))
 +
- 	def test_tag_names(self):
- 		vg_proxy = self._vg_create()
+ 	# noinspection PyUnresolvedReferences
+ 	def test_vg_rename(self):
+ 		vg = self._vg_create().Vg
+@@ -524,20 +544,8 @@ class TestDbusService(unittest.TestCase):
+ 		# VG
+ 		vg.update()
  
- 		for i in range(1, 64):
- 			tag = rs(i, "", self._ALLOWABLE_TAG_CH)
+-		lv_paths = vg.Lvs
+-		self.assertTrue(len(lv_paths) == 5)
 -
--			tmp = self.handle_return(
--				vg_proxy.Vg.TagsAdd(
--					dbus.Array([tag], 's'),
--					dbus.Int32(g_tmo),
--					EOD))
--			self.assertTrue(tmp == '/')
--			vg_proxy.update()
--
+-		for l in lv_paths:
+-			lv_proxy = ClientProxy(self.bus, l,
+-									interfaces=(LV_COMMON_INT,)).LvCommon
 -			self.assertTrue(
--				tag in vg_proxy.Vg.Tags,
--				"%s not in %s" % (tag, str(vg_proxy.Vg.Tags)))
-+			self._tag_add_common(vg_proxy, tag)
+-				lv_proxy.Vg == vg.object_path, "%s != %s" %
+-				(lv_proxy.Vg, vg.object_path))
+-			full_name = "%s/%s" % (new_name, lv_proxy.Name)
+-			lv_path = self._lookup(full_name)
+-			self.assertTrue(
+-				lv_path == lv_proxy.object_path, "%s != %s" %
+-				(lv_path, lv_proxy.object_path))
++		self.assertTrue(len(vg.Lvs) == 5)
++		self._verify_lv_paths(vg, new_name)
  
- 			self.assertEqual(
- 				i, len(vg_proxy.Vg.Tags),
-@@ -1739,20 +1741,8 @@ class TestDbusService(unittest.TestCase):
+ 	def _verify_hidden_lookups(self, lv_common_object, vgname):
+ 		hidden_lv_paths = lv_common_object.HiddenLvs
+@@ -602,26 +610,9 @@ class TestDbusService(unittest.TestCase):
+ 		self.assertTrue(path == '/')
+ 		self._check_consistency()
  
- 	def test_tag_regression(self):
- 		vg_proxy = self._vg_create()
+-		# Go through each LV and make sure it has the correct path back to the
+-		# VG
+ 		vg.update()
+ 		thin_pool.update()
 -
- 		tag = '--h/K.6g0A4FOEatf3+k_nI/Yp&L_u2oy-=j649x:+dUcYWPEo6.IWT0c'
+-		lv_paths = vg.Lvs
 -
--		tmp = self.handle_return(
--			vg_proxy.Vg.TagsAdd(
--				dbus.Array([tag], 's'),
--				dbus.Int32(g_tmo),
--				EOD))
--		self.assertTrue(tmp == '/')
--		vg_proxy.update()
+-		for l in lv_paths:
+-			lv_proxy = ClientProxy(self.bus, l,
+-									interfaces=(LV_COMMON_INT,)).LvCommon
+-			self.assertTrue(
+-				lv_proxy.Vg == vg.object_path, "%s != %s" %
+-				(lv_proxy.Vg, vg.object_path))
+-			full_name = "%s/%s" % (new_name, lv_proxy.Name)
+-			# print('Full Name %s' % (full_name))
+-			lv_path = self._lookup(full_name)
+-			self.assertTrue(
+-				lv_path == lv_proxy.object_path, "%s != %s" %
+-				(lv_path, lv_proxy.object_path))
 -
--		self.assertTrue(
--			tag in vg_proxy.Vg.Tags,
--			"%s not in %s" % (tag, str(vg_proxy.Vg.Tags)))
-+		self._tag_add_common(vg_proxy, tag)
++		self._verify_lv_paths(vg, new_name)
+ 		# noinspection PyTypeChecker
+ 		self._verify_hidden_lookups(thin_pool.LvCommon, new_name)
  
- 	def _verify_existence(self, cmd, operation, resource_name):
- 		ec, stdout, stderr = call_lvm(cmd)
 
 
