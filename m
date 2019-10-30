@@ -1,74 +1,73 @@
-From: Marian Csontos <mcsontos@sourceware.org>
-Date: Wed, 18 May 2022 16:25:52 +0000 (GMT)
-Subject: main - pre-release
-Message-ID: <20220518162552.EA6D33858406@sourceware.org>
+From: Tony Asleson <tasleson@sourceware.org>
+Date: Wed, 30 Oct 2019 11:45:49 -0400
+Subject: master - lvmdbusd: Debug msg. improvements.
+Message-ID: <201910301545.x9UFjnT1017006@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=6d1e894a867681af7a811ed63bc435f3aa55fec8
-Commit:        6d1e894a867681af7a811ed63bc435f3aa55fec8
-Parent:        9aa3ea1c9859aa6a1d8b9ac918fa47ae24927735
-Author:        Marian Csontos <mcsontos@redhat.com>
-AuthorDate:    Wed May 18 18:17:06 2022 +0200
-Committer:     Marian Csontos <mcsontos@redhat.com>
-CommitterDate: Wed May 18 18:17:06 2022 +0200
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=1bbf97757736b49065bd6944d36e7a6db6f3aa7e
+Commit:        1bbf97757736b49065bd6944d36e7a6db6f3aa7e
+Parent:        4dcb36aba4160ffe9ae90c93642e717e813e4779
+Author:        Tony Asleson <tasleson@redhat.com>
+AuthorDate:    Fri Oct 11 10:46:22 2019 -0500
+Committer:     Tony Asleson <tasleson@redhat.com>
+CommitterDate: Wed Oct 30 10:38:40 2019 -0500
 
-pre-release
+lvmdbusd: Debug msg. improvements.
 
 ---
- VERSION      |  2 +-
- VERSION_DM   |  2 +-
- WHATS_NEW    | 10 ++++++++--
- WHATS_NEW_DM |  4 ++--
- 4 files changed, 12 insertions(+), 6 deletions(-)
+ daemons/lvmdbusd/main.py    |   10 +++++-----
+ daemons/lvmdbusd/manager.py |    4 ++--
+ 2 files changed, 7 insertions(+), 7 deletions(-)
 
-diff --git a/VERSION b/VERSION
-index fba090956..5b09a281e 100644
---- a/VERSION
-+++ b/VERSION
-@@ -1 +1 @@
--2.03.16(2)-git (2022-02-07)
-+2.03.16(2) (2022-05-18)
-diff --git a/VERSION_DM b/VERSION_DM
-index d122183b2..c31ec0a43 100644
---- a/VERSION_DM
-+++ b/VERSION_DM
-@@ -1 +1 @@
--1.02.185-git (2022-02-07)
-+1.02.185 (2022-05-18)
-diff --git a/WHATS_NEW b/WHATS_NEW
-index db8265a78..3a5e39c09 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,7 +1,13 @@
--Version 2.03.16 - 
--====================================
-+Version 2.03.16 - 18th May 2022
-+===============================
-   Fix segfault when handling selection with historical LVs.
-   Add support --vdosettings with lvcreate, lvconvert, lvchange.
-+  Filtering multipath devices respects blacklist setting from multipath
-+  configuration.
-+  lvmdevices support for removing by device id using --deviceidtype and
-+  --deldev.
-+  Display writecache block size with lvs -o writecache_block_size.
-+  Improve cachesettings description in man lvmcache.
-   Fix lossing of delete message on thin-pool extension.
+diff --git a/daemons/lvmdbusd/main.py b/daemons/lvmdbusd/main.py
+index 9988143..b0a82d4 100644
+--- a/daemons/lvmdbusd/main.py
++++ b/daemons/lvmdbusd/main.py
+@@ -44,10 +44,10 @@ def process_request():
+ 		try:
+ 			req = cfg.worker_q.get(True, 5)
+ 			log_debug(
+-				"Running method: %s with args %s" %
+-				(str(req.method), str(req.arguments)))
++				"Method start: %s with args %s (callback = %s)" %
++				(str(req.method), str(req.arguments), str(req.cb)))
+ 			req.run_cmd()
+-			log_debug("Method complete ")
++			log_debug("Method complete: %s" % str(req.method))
+ 		except queue.Empty:
+ 			pass
+ 		except Exception:
+@@ -159,8 +159,8 @@ def main():
  
- Version 2.03.15 - 07th February 2022
-diff --git a/WHATS_NEW_DM b/WHATS_NEW_DM
-index c63436221..9cb770879 100644
---- a/WHATS_NEW_DM
-+++ b/WHATS_NEW_DM
-@@ -1,5 +1,5 @@
--Version 1.02.185 - 
--=====================================
-+Version 1.02.185 - 18th May 2022
-+================================
+ 	# Using a thread to process requests, we cannot hang the dbus library
+ 	# thread that is handling the dbus interface
+-	thread_list.append(threading.Thread(target=process_request,
+-										name='process_request'))
++	thread_list.append(
++		threading.Thread(target=process_request, name='process_request'))
  
- Version 1.02.183 - 07th February 2022
- =====================================
+ 	# Have a single thread handling updating lvm and the dbus model so we
+ 	# don't have multiple threads doing this as the same time
+diff --git a/daemons/lvmdbusd/manager.py b/daemons/lvmdbusd/manager.py
+index 8de05db..2857e9a 100644
+--- a/daemons/lvmdbusd/manager.py
++++ b/daemons/lvmdbusd/manager.py
+@@ -107,10 +107,10 @@ class Manager(AutomatedProperties):
+ 		rc = cfg.load(log=False)
+ 
+ 		if rc != 0:
+-			utils.log_debug('Manager.Refresh - exit %d' % (rc),
++			utils.log_debug('Manager.Refresh - exit %d %d' % (rc, lc),
+ 							'bg_black', 'fg_light_red')
+ 		else:
+-			utils.log_debug('Manager.Refresh - exit %d' % (rc))
++			utils.log_debug('Manager.Refresh - exit %d %d' % (rc, lc))
+ 		return rc + lc
+ 
+ 	@dbus.service.method(
+
 
