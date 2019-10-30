@@ -1,44 +1,54 @@
 From: Tony Asleson <tasleson@sourceware.org>
-Date: Wed, 30 Oct 2019 11:43:44 -0400
-Subject: master - lvmdbustest.py: Add blurb about scan_lvs = 1
-Message-ID: <201910301543.x9UFhi19016552@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Wed, 30 Oct 2019 11:43:51 -0400
+Subject: master - lvmdbusd: Add check for reserved name '_vdata'
+Message-ID: <201910301543.x9UFhpc9016572@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=b7c64fe8e29ffc003364da93047b9e003c35fc96
-Commit:        b7c64fe8e29ffc003364da93047b9e003c35fc96
-Parent:        b0286fa1277a9fc7a293916a3c8a3e460d276aa2
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=bafe5d15b1e3c1e31b9c4c32cd875dc5dfe2a2fb
+Commit:        bafe5d15b1e3c1e31b9c4c32cd875dc5dfe2a2fb
+Parent:        b7c64fe8e29ffc003364da93047b9e003c35fc96
 Author:        Tony Asleson <tasleson@redhat.com>
-AuthorDate:    Thu Oct 3 11:57:10 2019 -0500
+AuthorDate:    Thu Oct 3 12:19:07 2019 -0500
 Committer:     Tony Asleson <tasleson@redhat.com>
 CommitterDate: Wed Oct 30 10:38:40 2019 -0500
 
-lvmdbustest.py: Add blurb about scan_lvs = 1
+lvmdbusd: Add check for reserved name '_vdata'
 
-When developing and testing on a local system, to get the unit
-test to pass the test_nesting test, editing the test conf will achieve
-the success too.
+Added for vdo support.
 ---
- test/dbus/lvmdbustest.py |    4 ++++
- 1 files changed, 4 insertions(+), 0 deletions(-)
+ daemons/lvmdbusd/utils.py |    2 +-
+ test/dbus/lvmdbustest.py  |    2 +-
+ 2 files changed, 2 insertions(+), 2 deletions(-)
 
+diff --git a/daemons/lvmdbusd/utils.py b/daemons/lvmdbusd/utils.py
+index 8d64117..40b8a68 100644
+--- a/daemons/lvmdbusd/utils.py
++++ b/daemons/lvmdbusd/utils.py
+@@ -455,7 +455,7 @@ _ALLOWABLE_CH_SET = set(_ALLOWABLE_CH)
+ _ALLOWABLE_VG_LV_CH = string.ascii_letters + string.digits + '.-_+'
+ _ALLOWABLE_VG_LV_CH_SET = set(_ALLOWABLE_VG_LV_CH)
+ _LV_NAME_RESERVED = ("_cdata", "_cmeta", "_corig", "_mimage", "_mlog",
+-	"_pmspare", "_rimage", "_rmeta", "_tdata", "_tmeta", "_vorigin")
++	"_pmspare", "_rimage", "_rmeta", "_tdata", "_tmeta", "_vorigin", "_vdata")
+ 
+ # Tags can have the characters, based on the code
+ # a-zA-Z0-9._-+/=!:&#
 diff --git a/test/dbus/lvmdbustest.py b/test/dbus/lvmdbustest.py
-index 9bc1683..4ae8b25 100755
+index 4ae8b25..31dc4ff 100755
 --- a/test/dbus/lvmdbustest.py
 +++ b/test/dbus/lvmdbustest.py
-@@ -1871,6 +1871,10 @@ class TestDbusService(unittest.TestCase):
- 		#
- 		# NOTE: This needs an equivalent of aux extend_filter_LVMTEST
- 		# when run from lvm2 testsuite. See dbustest.sh.
-+		# Also if developing locally with actual devices one can achieve this
-+		# by editing lvm.conf with "devices/scan_lvs = 1"  As testing
-+		# typically utilizes loopback, this test is skipped in
-+		# those environments.
- 		pv_object_path = self.objs[PV_INT][0].object_path
- 
- 		if not self.objs[PV_INT][0].Pv.Name.startswith("/dev"):
+@@ -1670,7 +1670,7 @@ class TestDbusService(unittest.TestCase):
+ 		for reserved in (
+ 				"_cdata", "_cmeta", "_corig", "_mimage", "_mlog",
+ 				"_pmspare", "_rimage", "_rmeta", "_tdata", "_tmeta",
+-				"_vorigin"):
++				"_vorigin", "_vdata"):
+ 			with self.assertRaises(dbus.exceptions.DBusException):
+ 				self.handle_return(
+ 					vg_proxy.Vg.LvCreateLinear(
 
 
