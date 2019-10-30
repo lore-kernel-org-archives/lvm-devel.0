@@ -1,194 +1,106 @@
-From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Thu, 31 Oct 2019 08:18:00 -0400
-Subject: stable-2.02 - mirror: remove unused code
-Message-ID: <201910311218.x9VCI08A010832@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: Tony Asleson <tasleson@sourceware.org>
+Date: Wed, 30 Oct 2019 11:44:50 -0400
+Subject: master - lvmdbustest.py: Create common func. _create_cache_lv
+Message-ID: <201910301544.x9UFiodI016825@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=4b7bcf3ed4b5e427984bd7883238e681405edf5f
-Commit:        4b7bcf3ed4b5e427984bd7883238e681405edf5f
-Parent:        cf426744aef84d993b95926b23489f55f9a25838
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu Oct 31 12:10:00 2019 +0100
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Thu Oct 31 13:00:01 2019 +0100
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=455498f206e60c513ce36083d1f336aad11e33f8
+Commit:        455498f206e60c513ce36083d1f336aad11e33f8
+Parent:        c786636afba068fc0f560b6dd1dd9dd532c35135
+Author:        Tony Asleson <tasleson@redhat.com>
+AuthorDate:    Wed Oct 9 12:29:52 2019 -0500
+Committer:     Tony Asleson <tasleson@redhat.com>
+CommitterDate: Wed Oct 30 10:38:40 2019 -0500
 
-mirror: remove unused code
+lvmdbustest.py: Create common func. _create_cache_lv
 
 ---
- lib/metadata/mirror.c |  157 -------------------------------------------------
- 1 files changed, 0 insertions(+), 157 deletions(-)
+ test/dbus/lvmdbustest.py |   52 ++++++++++++++++++---------------------------
+ 1 files changed, 21 insertions(+), 31 deletions(-)
 
-diff --git a/lib/metadata/mirror.c b/lib/metadata/mirror.c
-index 6cd88cb..411079a 100644
---- a/lib/metadata/mirror.c
-+++ b/lib/metadata/mirror.c
-@@ -1176,163 +1176,6 @@ int collapse_mirrored_lv(struct logical_volume *lv)
- 	return 1;
- }
+diff --git a/test/dbus/lvmdbustest.py b/test/dbus/lvmdbustest.py
+index 0b7140a..aed5511 100755
+--- a/test/dbus/lvmdbustest.py
++++ b/test/dbus/lvmdbustest.py
+@@ -1424,22 +1424,25 @@ class TestDbusService(unittest.TestCase):
+ 		self.assertTrue(
+ 			'/com/redhat/lvmdbus1/CachePool' in cache_pool.object_path)
  
--#if 0
--/* FIXME: reconfigure_mirror_images: remove this code? */
--static int _get_mirror_fault_policy(struct cmd_context *cmd __attribute__((unused)),
--				   int log_policy)
--{
--	const char *policy = NULL;
--/*
--	if (log_policy)
--		policy = find_config_tree_str(cmd, activation_mirror_log_fault_policy_CFG);
--	else {
--		policy = find_config_tree_str(cmd, activation_mirror_image_fault_policy_CFG);
--		if (!policy)
--			policy = find_config_tree_str(cmd, activation_mirror_device_fault_policy_CFG);
--	}
--*/
--	if (!strcmp(policy, "remove"))
--		return MIRROR_REMOVE;
--	else if (!strcmp(policy, "allocate"))
--		return MIRROR_ALLOCATE;
--	else if (!strcmp(policy, "allocate_anywhere"))
--		return MIRROR_ALLOCATE_ANYWHERE;
+-	def test_cache_lv_create(self):
++	def _create_cache_lv(self):
++		vg, cache_pool = self._create_cache_pool()
+ 
+-		for destroy_cache in [True, False]:
+-			vg, cache_pool = self._create_cache_pool()
++		lv_to_cache = self._create_lv(size=mib(8), vg=vg)
+ 
+-			lv_to_cache = self._create_lv(size=mib(8), vg=vg)
++		c_lv_path = self.handle_return(
++			cache_pool.CachePool.CacheLv(
++				dbus.ObjectPath(lv_to_cache.object_path),
++				dbus.Int32(g_tmo),
++				EOD))
+ 
+-			c_lv_path = self.handle_return(
+-				cache_pool.CachePool.CacheLv(
+-					dbus.ObjectPath(lv_to_cache.object_path),
+-					dbus.Int32(g_tmo),
+-					EOD))
++		intf = (LV_COMMON_INT, LV_INT, CACHE_LV_INT)
++		cached_lv = ClientProxy(self.bus, c_lv_path, interfaces=intf)
++		return vg, cache_pool, cached_lv
+ 
+-			intf = (LV_COMMON_INT, LV_INT, CACHE_LV_INT)
+-			cached_lv = ClientProxy(self.bus, c_lv_path, interfaces=intf)
++	def test_cache_lv_create(self):
+ 
++		for destroy_cache in [True, False]:
++			vg, _, cached_lv = self._create_cache_lv()
+ 			uncached_lv_path = self.handle_return(
+ 				cached_lv.CachedLv.DetachCachePool(
+ 					dbus.Boolean(destroy_cache),
+@@ -1459,31 +1462,18 @@ class TestDbusService(unittest.TestCase):
+ 		internal state update.
+ 		:return:
+ 		"""
+-		vg, cache_pool = self._create_cache_pool()
 -
--	if (log_policy)
--		log_error("Bad activation/mirror_log_fault_policy");
--	else
--		log_error("Bad activation/mirror_device_fault_policy");
+-		lv_to_cache = self._create_lv(size=mib(8), vg=vg)
 -
--	return MIRROR_REMOVE;
--}
+-		c_lv_path = self.handle_return(
+-			cache_pool.CachePool.CacheLv(
+-				dbus.ObjectPath(lv_to_cache.object_path),
+-				dbus.Int32(g_tmo),
+-				EOD))
++		def verify_cache_lv_count():
++			cur_objs, _ = get_objects()
++			self.assertEqual(len(cur_objs[CACHE_LV_INT]), 2)
++			self._check_consistency()
+ 
+-		# Make sure we only have expected # of cached LV
+-		cur_objs, _ = get_objects()
+-		self.assertEqual(len(cur_objs[CACHE_LV_INT]), 2)
++		_, _, cached_lv = self._create_cache_lv()
+ 
+-		intf = (LV_COMMON_INT, LV_INT, CACHE_LV_INT)
+-		cached_lv = ClientProxy(self.bus, c_lv_path, interfaces=intf)
++		verify_cache_lv_count()
+ 		new_name = 'renamed_' + cached_lv.LvCommon.Name
 -
--static int _get_mirror_log_fault_policy(struct cmd_context *cmd)
--{
--	return _get_mirror_fault_policy(cmd, 1);
--}
+ 		self.handle_return(
+ 			cached_lv.Lv.Rename(dbus.String(new_name), dbus.Int32(g_tmo), EOD))
 -
--static int _get_mirror_device_fault_policy(struct cmd_context *cmd)
--{
--	return _get_mirror_fault_policy(cmd, 0);
--}
--
--/*
-- * replace_mirror_images
-- * @mirrored_seg: segment (which may be linear now) to restore
-- * @num_mirrors: number of copies we should end up with
-- * @replace_log: replace log if not present
-- * @in_sync: was the original mirror in-sync?
-- *
-- * in_sync will be set to 0 if new mirror devices are being added
-- * In other words, it is only useful if the log (and only the log)
-- * is being restored.
-- *
-- * Returns: 0 on failure, 1 on reconfig, -1 if no reconfig done
-- */
--static int _replace_mirror_images(struct lv_segment *mirrored_seg,
--				 uint32_t num_mirrors,
--				 int log_policy, int in_sync)
--{
--	int r = -1;
--	struct logical_volume *lv = mirrored_seg->lv;
--
--	/* FIXME: Use lvconvert rather than duplicating its code */
--
--	if (mirrored_seg->area_count < num_mirrors) {
--		log_warn("WARNING: Failed to replace mirror device in %s.",
--			 display_lvname(mirrored_seg->lv);
--
--		if ((mirrored_seg->area_count > 1) && !mirrored_seg->log_lv)
--			log_warn("WARNING: Use 'lvconvert -m %d %s --corelog' to replace failed devices.",
--				 num_mirrors - 1, display_lvname(lv));
--		else
--			log_warn("WARNING: Use 'lvconvert -m %d %s' to replace failed devices.",
--				 num_mirrors - 1, display_lvname(lv));
--		r = 0;
--
--		/* REMEMBER/FIXME: set in_sync to 0 if a new mirror device was added */
--		in_sync = 0;
--	}
--
--	/*
--	 * FIXME: right now, we ignore the allocation policy specified to
--	 * allocate the new log.
--	 */
--	if ((mirrored_seg->area_count > 1) && !mirrored_seg->log_lv &&
--	    (log_policy != MIRROR_REMOVE)) {
--		log_warn("WARNING: Failed to replace mirror log device in %s.",
--			 display_lvname(lv));
--
--		log_warn("WARNING: Use 'lvconvert -m %d %s' to replace failed devices.",
--			 mirrored_seg->area_count - 1 , display_lvname(lv));
--		r = 0;
--	}
--
--	return r;
--}
--
--int reconfigure_mirror_images(struct lv_segment *mirrored_seg, uint32_t num_mirrors,
--			      struct dm_list *removable_pvs, unsigned remove_log)
--{
--	int r;
--	int in_sync;
--	int log_policy, dev_policy;
--	uint32_t old_num_mirrors = mirrored_seg->area_count;
--	int had_log = (mirrored_seg->log_lv) ? 1 : 0;
--
--	/* was the mirror in-sync before problems? */
--	in_sync = _mirrored_lv_in_sync(mirrored_seg->lv);
--
--	/*
--	 * While we are only removing devices, we can have sync set.
--	 * Setting this is only useful if we are moving to core log
--	 * otherwise the disk log will contain the sync information
--	 */
--	init_mirror_in_sync(in_sync);
--
--	r = _remove_mirror_images(mirrored_seg->lv, old_num_mirrors - num_mirrors,
--				  is_mirror_image_removable, removable_pvs,
--				  remove_log, 0, NULL, 0);
--	if (!r)
--		/* Unable to remove bad devices */
--		return 0;
--
--	log_warn("WARNING: Bad device removed from mirror volume %s.",
--		  display_lvname(mirrored_seg->lv));
--
--	log_policy = _get_mirror_log_fault_policy(mirrored_seg->lv->vg->cmd);
--	dev_policy = _get_mirror_device_fault_policy(mirrored_seg->lv->vg->cmd);
--
--	r = _replace_mirror_images(mirrored_seg,
--				  (dev_policy != MIRROR_REMOVE) ?
--				  old_num_mirrors : num_mirrors,
--				  log_policy, in_sync);
--
--	if (!r)
--		/* Failed to replace device(s) */
--		log_warn("WARNING: Unable to find substitute device for mirror volume %s.",
--			 display_lvname(mirrored_seg->lv));
--	else if (r > 0)
--		/* Success in replacing device(s) */
--		log_warn("WARNING: Mirror volume %s restored - substitute for failed device found.",
--			 display_lvname(mirrored_seg->lv));
--	else
--		/* Bad device removed, but not replaced because of policy */
--		if (mirrored_seg->area_count == 1) {
--			log_warn("WARNING: Mirror volume %s converted to linear due to device failure.",
--				  display_lvname(mirrored_seg->lv);
--		} else if (had_log && !mirrored_seg->log_lv) {
--			log_warn("WARNING: Mirror volume %s disk log removed due to device failure.",
--				  display_lvname(mirrored_seg->lv));
--		}
--	/*
--	 * If we made it here, we at least removed the bad device.
--	 * Consider this success.
--	 */
--	return 1;
--}
--#endif
--
- static int _create_mimage_lvs(struct alloc_handle *ah,
- 			      uint32_t num_mirrors,
- 			      uint32_t stripes,
+-		# Make sure we only have expected # of cached LV
+-		cur_objs, _ = get_objects()
+-		self.assertEqual(len(cur_objs[CACHE_LV_INT]), 2)
+-		self._check_consistency()
++		verify_cache_lv_count()
+ 
+ 	def test_vg_change(self):
+ 		vg_proxy = self._vg_create()
 
 
