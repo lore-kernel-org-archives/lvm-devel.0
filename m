@@ -1,103 +1,39 @@
 From: Tony Asleson <tasleson@sourceware.org>
-Date: Wed, 30 Oct 2019 11:45:18 -0400
-Subject: master - testlib.py: WS corrections
-Message-ID: <201910301545.x9UFjIfQ016912@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Wed, 30 Oct 2019 11:45:43 -0400
+Subject: master - lvmdbusd: Bug fix for activate/deactivate
+Message-ID: <201910301545.x9UFjh03016970@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=b7aab9ba594b9b627ec09b8e0dab5cd75e7178cf
-Commit:        b7aab9ba594b9b627ec09b8e0dab5cd75e7178cf
-Parent:        89373761c808c21181751d622e987b323355b677
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=f56b21ae2c7667d69c050653d527f9071ef83ad5
+Commit:        f56b21ae2c7667d69c050653d527f9071ef83ad5
+Parent:        9e15c83673436342a60b8f982e521eb32d972a0c
 Author:        Tony Asleson <tasleson@redhat.com>
-AuthorDate:    Wed Oct 9 19:59:44 2019 -0500
+AuthorDate:    Thu Oct 10 16:49:09 2019 -0500
 Committer:     Tony Asleson <tasleson@redhat.com>
 CommitterDate: Wed Oct 30 10:38:40 2019 -0500
 
-testlib.py: WS corrections
+lvmdbusd: Bug fix for activate/deactivate
 
+Prevent the daemon from stalling when it gets stuck on a y/n prompt.
 ---
- test/dbus/testlib.py |   29 +++++++++++++++++------------
- 1 files changed, 17 insertions(+), 12 deletions(-)
+ daemons/lvmdbusd/cmdhandler.py |    1 +
+ 1 files changed, 1 insertions(+), 0 deletions(-)
 
-diff --git a/test/dbus/testlib.py b/test/dbus/testlib.py
-index bf88beb..ad2d93b 100644
---- a/test/dbus/testlib.py
-+++ b/test/dbus/testlib.py
-@@ -169,8 +169,8 @@ class RemoteInterface(object):
- 		if not props:
- 			for _ in range(0, 3):
- 				try:
--					prop_interface = dbus.Interface(self.dbus_object,
--						'org.freedesktop.DBus.Properties')
-+					prop_interface = dbus.Interface(
-+						self.dbus_object, 'org.freedesktop.DBus.Properties')
- 					props = prop_interface.GetAll(self.interface)
- 					break
- 				except dbus.exceptions.DBusException as dbe:
-@@ -180,8 +180,9 @@ class RemoteInterface(object):
- 			for kl, vl in list(props.items()):
- 				# Verify type is correct!
- 				if self.introspect:
--					verify_type(vl, self.introspect[self.interface]
--					['properties'][kl]['p_type'])
-+					verify_type(
-+						vl, self.introspect[self.interface]
-+						['properties'][kl]['p_type'])
- 				setattr(self, kl, vl)
+diff --git a/daemons/lvmdbusd/cmdhandler.py b/daemons/lvmdbusd/cmdhandler.py
+index 67d4321..e0bb105 100644
+--- a/daemons/lvmdbusd/cmdhandler.py
++++ b/daemons/lvmdbusd/cmdhandler.py
+@@ -738,6 +738,7 @@ def activate_deactivate(op, name, activate, control_flags, options):
+ 		op += 'n'
  
- 	@property
-@@ -189,8 +190,8 @@ class RemoteInterface(object):
- 		return self.dbus_object.object_path
+ 	cmd.append(op)
++	cmd.append("-y")
+ 	cmd.append(name)
+ 	return call(cmd)
  
- 	def __init__(
--			self, dbus_object, interface, introspect,
--			properties=None, timelimit=-1):
-+			self, dbus_object, interface,
-+			introspect, properties=None, timelimit=-1):
- 		self.dbus_object = dbus_object
- 		self.interface = interface
- 		self.introspect = introspect
-@@ -203,6 +204,7 @@ class RemoteInterface(object):
- 		self.dbus_interface = dbus.Interface(self.dbus_object, self.interface)
- 		self._set_props(properties)
- 
-+	# noinspection PyTypeChecker
- 	def __getattr__(self, item):
- 		if hasattr(self.dbus_interface, item):
- 			return functools.partial(self._wrapper, item)
-@@ -221,8 +223,9 @@ class RemoteInterface(object):
- 
- 		if self.tmo > 0.0:
- 			if diff > self.tmo:
--				std_err_print("\n Time exceeded: %f > %f %s" %
--								(diff, self.tmo, _method_name))
-+				std_err_print(
-+					"\n Time exceeded: %f > %f %s" %
-+					(diff, self.tmo, _method_name))
- 
- 		if self.introspect:
- 			if 'RETURN_VALUE' in self.introspect[
-@@ -259,12 +262,14 @@ class ClientProxy(object):
- 	def _common(self, interface, introspect, properties):
- 		short_name = ClientProxy._intf_short_name(interface)
- 		self.short_interface_names.append(short_name)
--		ro = RemoteInterface(self.dbus_object, interface, introspect,
--								properties, timelimit=self.tmo)
-+		ro = RemoteInterface(
-+			self.dbus_object, interface, introspect, properties,
-+			timelimit=self.tmo)
- 		setattr(self, short_name, ro)
- 
--	def __init__(self, bus, object_path, interface_prop_hash=None,
--					interfaces=None, timelimit=-1):
-+	def __init__(
-+			self, bus, object_path, interface_prop_hash=None,
-+			interfaces=None, timelimit=-1):
- 		self.object_path = object_path
- 		self.short_interface_names = []
- 		self.tmo = timelimit
 
 
