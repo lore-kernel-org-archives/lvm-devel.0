@@ -1,125 +1,51 @@
 From: Tony Asleson <tasleson@sourceware.org>
-Date: Wed, 30 Oct 2019 11:44:20 -0400
-Subject: master - lvmdbustest.py: Add func. _pv_scan
-Message-ID: <201910301544.x9UFiKxQ016720@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Wed, 30 Oct 2019 11:44:25 -0400
+Subject: master - lvmdbustest.py: Remove 2 TODOs
+Message-ID: <201910301544.x9UFiPsJ016734@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=c5f4f2efb64944ea8a1eae0eee46069d8328324f
-Commit:        c5f4f2efb64944ea8a1eae0eee46069d8328324f
-Parent:        69d48479759693b8118e2a32b53cab8a9758e21f
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=ceb808d26f56ebd75baa379780ad55163197a20f
+Commit:        ceb808d26f56ebd75baa379780ad55163197a20f
+Parent:        c5f4f2efb64944ea8a1eae0eee46069d8328324f
 Author:        Tony Asleson <tasleson@redhat.com>
-AuthorDate:    Thu Oct 3 16:11:18 2019 -0500
+AuthorDate:    Thu Oct 3 17:01:27 2019 -0500
 Committer:     Tony Asleson <tasleson@redhat.com>
 CommitterDate: Wed Oct 30 10:38:40 2019 -0500
 
-lvmdbustest.py: Add func. _pv_scan
+lvmdbustest.py: Remove 2 TODOs
 
+This issue has been resolved, sizes > 2**32-1 not supported.
 ---
- test/dbus/lvmdbustest.py |   77 +++++++++++----------------------------------
- 1 files changed, 19 insertions(+), 58 deletions(-)
+ test/dbus/lvmdbustest.py |    6 ------
+ 1 files changed, 0 insertions(+), 6 deletions(-)
 
 diff --git a/test/dbus/lvmdbustest.py b/test/dbus/lvmdbustest.py
-index 497a605..92e4331 100755
+index 92e4331..d703a0a 100755
 --- a/test/dbus/lvmdbustest.py
 +++ b/test/dbus/lvmdbustest.py
-@@ -1314,75 +1314,36 @@ class TestDbusService(unittest.TestCase):
- 		context = pyudev.Context()
- 		return context.list_devices(subsystem='block', MAJOR='8')
+@@ -1181,9 +1181,6 @@ class TestDbusService(unittest.TestCase):
  
--	def test_pv_scan(self):
--		devices = TestDbusService._get_devices()
+ 	def test_vg_max_pv(self):
+ 		vg = self._vg_create().Vg
 -
-+	def _pv_scan(self, activate, cache, device_paths, major_minors):
- 		mgr = self._manager().Manager
-+		return self.handle_return(
-+			mgr.PvScan(
-+				dbus.Boolean(activate),
-+				dbus.Boolean(cache),
-+				dbus.Array(device_paths, 's'),
-+				dbus.Array(major_minors, '(ii)'),
-+				dbus.Int32(g_tmo),
-+				EOD))
+-		# BZ: https://bugzilla.redhat.com/show_bug.cgi?id=1280496
+-		# TODO: Add a test back for larger values here when bug is resolved
+ 		for p in [0, 1, 10, 100, 100, 1024, 2 ** 32 - 1]:
+ 			rc = self.handle_return(
+ 				vg.MaxPvSet(
+@@ -1196,9 +1193,6 @@ class TestDbusService(unittest.TestCase):
  
--		self.assertEqual(
--			self.handle_return(
--				mgr.PvScan(
--					dbus.Boolean(False),
--					dbus.Boolean(True),
--					dbus.Array([], 's'),
--					dbus.Array([], '(ii)'),
--					dbus.Int32(g_tmo),
--					EOD)), '/')
-+	def test_pv_scan(self):
-+		devices = TestDbusService._get_devices()
- 
-+		self.assertEqual(self._pv_scan(False, True, [], []), '/')
- 		self._check_consistency()
--		self.assertEqual(
--			self.handle_return(
--				mgr.PvScan(
--					dbus.Boolean(False),
--					dbus.Boolean(False),
--					dbus.Array([], 's'),
--					dbus.Array([], '(ii)'),
--					dbus.Int32(g_tmo),
--					EOD)), '/')
+ 	def test_vg_max_lv(self):
+ 		vg = self._vg_create().Vg
 -
-+		self.assertEqual(self._pv_scan(False, False, [], []), '/')
- 		self._check_consistency()
- 
--		block_path = []
--		for d in devices:
--			block_path.append(d.properties['DEVNAME'])
--
--		self.assertEqual(
--			self.handle_return(
--				mgr.PvScan(
--					dbus.Boolean(False),
--					dbus.Boolean(True),
--					dbus.Array(block_path, 's'),
--					dbus.Array([], '(ii)'),
--					dbus.Int32(g_tmo),
--					EOD)), '/')
--
-+		block_path = [d.properties['DEVNAME'] for d in devices]
-+		self.assertEqual(self._pv_scan(False, True, block_path, []), '/')
- 		self._check_consistency()
- 
--		mm = []
--		for d in devices:
--			mm.append((int(d.properties['MAJOR']), int(d.properties['MINOR'])))
--
--		self.assertEqual(
--			self.handle_return(
--				mgr.PvScan(
--					dbus.Boolean(False),
--					dbus.Boolean(True),
--					dbus.Array(block_path, 's'),
--					dbus.Array(mm, '(ii)'),
--					dbus.Int32(g_tmo),
--					EOD)), '/')
-+		mm = [(int(d.properties['MAJOR']), int(d.properties['MINOR']))
-+				for d in devices]
- 
-+		self.assertEqual(self._pv_scan(False, True, block_path, mm), '/')
- 		self._check_consistency()
- 
--		self.assertEqual(
--			self.handle_return(
--				mgr.PvScan(
--					dbus.Boolean(False),
--					dbus.Boolean(True),
--					dbus.Array([], 's'),
--					dbus.Array(mm, '(ii)'),
--					dbus.Int32(g_tmo),
--					EOD)), '/')
-+		self.assertEqual(self._pv_scan(False, True, [], mm), '/')
- 		self._check_consistency()
- 
- 	@staticmethod
+-		# BZ: https://bugzilla.redhat.com/show_bug.cgi?id=1280496
+-		# TODO: Add a test back for larger values here when bug is resolved
+ 		for p in [0, 1, 10, 100, 100, 1024, 2 ** 32 - 1]:
+ 			rc = self.handle_return(
+ 				vg.MaxLvSet(
 
 
