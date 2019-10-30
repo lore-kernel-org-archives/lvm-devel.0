@@ -1,42 +1,97 @@
-From: Joe Thornber <thornber@sourceware.org>
-Date: Tue, 29 Oct 2019 11:22:17 -0400
-Subject: master - [bcache] bcache_invalidate_fd, only remove prefixes on success.
-Message-ID: <201910291522.x9TFMH5W018741@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: Ben Sims <ben.sims@citrix.com>
+Date: Wed, 30 Oct 2019 09:34:51 +0000
+Subject: Performance regression between V2_02_177 and V2_02_180
+In-Reply-To: <20191029145802.GA25248@redhat.com>
+References: <1571324396950.37136@citrix.com>
+	<1572338679419.1072@citrix.com>,<20191029145802.GA25248@redhat.com>
+Message-ID: <1572428091306.94800@citrix.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=25e7bf021a4e7c5ad5f925b86605bf025ff1a949
-Commit:        25e7bf021a4e7c5ad5f925b86605bf025ff1a949
-Parent:        7e8296f4788d6a83863a268582280587ade2e26c
-Author:        Joe Thornber <ejt@redhat.com>
-AuthorDate:    Tue Oct 29 15:21:11 2019 +0000
-Committer:     Joe Thornber <ejt@redhat.com>
-CommitterDate: Tue Oct 29 15:21:11 2019 +0000
+Hi David,
 
-[bcache] bcache_invalidate_fd, only remove prefixes on success.
+Thanks for your detailed response.
 
----
- lib/device/bcache.c |    5 ++++-
- 1 files changed, 4 insertions(+), 1 deletions(-)
+I have not observed any contention directly but the comment in the commit
 
-diff --git a/lib/device/bcache.c b/lib/device/bcache.c
-index b0edf28..04d49f1 100644
---- a/lib/device/bcache.c
-+++ b/lib/device/bcache.c
-@@ -1376,7 +1376,10 @@ bool bcache_invalidate_fd(struct bcache *cache, int fd)
- 	it.success = true;
- 	it.it.visit = _invalidate_v;
- 	radix_tree_iterate(cache->rtree, k.bytes, k.bytes + sizeof(k.parts.fd), &it.it);
--	radix_tree_remove_prefix(cache->rtree, k.bytes, k.bytes + sizeof(k.parts.fd));
-+
-+	if (it.success)
-+		radix_tree_remove_prefix(cache->rtree, k.bytes, k.bytes + sizeof(k.parts.fd));
-+
- 	return it.success;
- }
- 
+    "ca66d520326493311a3c7132b1bcee0807862301
+
+    io: use sync io if aio fails
+    
+    io_setup() for aio may fail if a system has reached the
+    aio request limit.  In this case, fall back to using sync io..." 
+
+implies that aio is a resource with a limit and open for contention. I observed heavy background aio traffic with perf probes from our virtual disk backends, I don't believe the io_submit calls in LVM are blocking as they are submitted with O_DIRECT and strace time to return is low.
+
+So that was my theory although it's only supported by circumstantial evidence.
+
+If I have the test cycles today I could plot some graphs of performance against background aio activity, and if this shows contention jump in with some kernel probes.
+
+This may off course be academic if lvm moves to io_uring. Have there been any experiments in this area?
+
+Thanks,
+
+Ben
+
+
+
+
+
+________________________________________
+From: David Teigland <teigland@redhat.com>
+Sent: 29 October 2019 14:58
+To: Ben Sims
+Cc: lvm-devel at redhat.com
+Subject: Re: [lvm-devel] Performance regression between V2_02_177 and V2_02_180
+
+On Tue, Oct 29, 2019 at 08:44:39AM +0000, Ben Sims wrote:
+> I can confirm the performance regression, is caused my async io, turning
+> this off in the lvm.conf gets back my performance.
+>
+> We work in a libaio intensive environment, so there is contention for
+> libaio ring.
+
+That's interesting, I've never heard about aio from independent programs
+running on the system interfering like that.  Apart from the observation,
+have you read about this anywhere so I could understand it better?
+
+> I'm wondering if libaio should be on by default?
+
+It's possible that we should change the use_aio default to 0 if most cases
+don't benefit (e.g. small number of PVs), or have contention as you've
+seen.
+
+> I notice that the new bcache is reading significantly more data 262144
+> bytes (two blocks of 131072 bytes from /dev/sda ) compared to 28672
+> bytes in 4k reads made in V2_02_177. Whats the rational for reading so
+> much more data?
+
+It seemed to be a reasonable balance between iops and size when testing
+various combinations.
+
+That said, the bcache.c io layer is being replaced and renamed soon since
+there were some aspects of that code that weren't ideally suited for lvm.
+That will be using smaller block sizes.
+
+> The extra overhead of this io estimated with strace does not appear to
+> account for the slow down, but perhaps the processing of this data does?
+
+If you eliminate the aio contention you mentioned above, I wouldn't expect
+the actual io to be a factor.
+
+> I'm currently instrumenting the code, but thought i would ask on the
+> mailing list.
+
+There was a lot of transition churn that's best to avoid while doing test
+comparisions.  I suggest testing with 2.02.176 as the old version, and
+then using the latest releases from stable-2.02 and master branches.  I
+think lvm with bcache was released too early, and there have been
+significant fixes and improvements added in both branches.
+
+Dave
+
 
 
