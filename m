@@ -1,44 +1,136 @@
-From: David Teigland <teigland@redhat.com>
-Date: Wed, 30 Oct 2019 09:07:01 -0500
-Subject: Performance regression between V2_02_177 and V2_02_180
-In-Reply-To: <1572428091306.94800@citrix.com>
-References: <1571324396950.37136@citrix.com> <1572338679419.1072@citrix.com>
-	<20191029145802.GA25248@redhat.com>
-	<1572428091306.94800@citrix.com>
-Message-ID: <20191030140701.GA15378@redhat.com>
+From: Tony Asleson <tasleson@sourceware.org>
+Date: Wed, 30 Oct 2019 11:43:38 -0400
+Subject: master - lvmdbusd: Remove duplicate error handling code
+Message-ID: <201910301543.x9UFhccA016523@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On Wed, Oct 30, 2019 at 09:34:51AM +0000, Ben Sims wrote:
-> I have not observed any contention directly but the comment in the commit
-> 
->     "ca66d520326493311a3c7132b1bcee0807862301
-> 
->     io: use sync io if aio fails
->     
->     io_setup() for aio may fail if a system has reached the
->     aio request limit.  In this case, fall back to using sync io..." 
-> 
-> implies that aio is a resource with a limit and open for contention. I
-> observed heavy background aio traffic with perf probes from our virtual
-> disk backends, I don't believe the io_submit calls in LVM are blocking
-> as they are submitted with O_DIRECT and strace time to return is low.
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=df38eb49aba94308804efdf309c08521165664d0
+Commit:        df38eb49aba94308804efdf309c08521165664d0
+Parent:        25e7bf021a4e7c5ad5f925b86605bf025ff1a949
+Author:        Tony Asleson <tasleson@redhat.com>
+AuthorDate:    Tue Oct 1 15:17:30 2019 -0500
+Committer:     Tony Asleson <tasleson@redhat.com>
+CommitterDate: Wed Oct 30 10:38:40 2019 -0500
 
-OK, I thought you were referring to contention that would cause lvm's
-async io to suffer, as opposed to simply being unavailable.  If other
-programs are consuming all of the available aio, then you can increase
-/proc/sys/fs/aio-max-nr, which would hopefully make some available for
-lvm.
+lvmdbusd: Remove duplicate error handling code
 
-> This may off course be academic if lvm moves to io_uring. Have there
-> been any experiments in this area?
+vg, lv, pv code had the same function for handling command execution.
+Move to utility function and abstract the difference.
+---
+ daemons/lvmdbusd/lv.py    |   10 ++--------
+ daemons/lvmdbusd/pv.py    |   10 ++--------
+ daemons/lvmdbusd/utils.py |    9 +++++++++
+ daemons/lvmdbusd/vg.py    |   11 +++--------
+ 4 files changed, 16 insertions(+), 24 deletions(-)
 
-No, but it does sound interesting.  I should check if the userspace
-library for that has matured.
-
-Dave
+diff --git a/daemons/lvmdbusd/lv.py b/daemons/lvmdbusd/lv.py
+index c0029b8..f65e7da 100644
+--- a/daemons/lvmdbusd/lv.py
++++ b/daemons/lvmdbusd/lv.py
+@@ -10,7 +10,7 @@
+ from .automatedproperties import AutomatedProperties
+ 
+ from . import utils
+-from .utils import vg_obj_path_generate, log_error
++from .utils import vg_obj_path_generate, log_error, _handle_execute
+ import dbus
+ from . import cmdhandler
+ from . import cfg
+@@ -275,13 +275,7 @@ class LvCommon(AutomatedProperties):
+ 
+ 	@staticmethod
+ 	def handle_execute(rc, out, err):
+-		if rc == 0:
+-			cfg.load()
+-		else:
+-			# Need to work on error handling, need consistent
+-			raise dbus.exceptions.DBusException(
+-				LV_INTERFACE,
+-				'Exit code %s, stderr = %s' % (str(rc), err))
++		_handle_execute(rc, out, err, LV_INTERFACE)
+ 
+ 	@staticmethod
+ 	def validate_dbus_object(lv_uuid, lv_name):
+diff --git a/daemons/lvmdbusd/pv.py b/daemons/lvmdbusd/pv.py
+index e5f8b9d..9c0f1b2 100644
+--- a/daemons/lvmdbusd/pv.py
++++ b/daemons/lvmdbusd/pv.py
+@@ -14,7 +14,7 @@ import dbus
+ from .cfg import PV_INTERFACE
+ from . import cmdhandler
+ from .utils import vg_obj_path_generate, n, pv_obj_path_generate, \
+-	lv_object_path_method
++	lv_object_path_method, _handle_execute
+ from .loader import common
+ from .request import RequestEntry
+ from .state import State
+@@ -144,13 +144,7 @@ class Pv(AutomatedProperties):
+ 
+ 	@staticmethod
+ 	def handle_execute(rc, out, err):
+-		if rc == 0:
+-			cfg.load()
+-		else:
+-			# Need to work on error handling, need consistent
+-			raise dbus.exceptions.DBusException(
+-				PV_INTERFACE,
+-				'Exit code %s, stderr = %s' % (str(rc), err))
++		return _handle_execute(rc, out, err, PV_INTERFACE)
+ 
+ 	@staticmethod
+ 	def validate_dbus_object(pv_uuid, pv_name):
+diff --git a/daemons/lvmdbusd/utils.py b/daemons/lvmdbusd/utils.py
+index 3c006c4..8d64117 100644
+--- a/daemons/lvmdbusd/utils.py
++++ b/daemons/lvmdbusd/utils.py
+@@ -26,6 +26,15 @@ import signal
+ STDOUT_TTY = os.isatty(sys.stdout.fileno())
+ 
+ 
++def _handle_execute(rc, out, err, interface):
++	if rc == 0:
++		cfg.load()
++	else:
++		# Need to work on error handling, need consistent
++		raise dbus.exceptions.DBusException(
++			interface, 'Exit code %s, stderr = %s' % (str(rc), err))
++
++
+ def rtype(dbus_type):
+ 	"""
+ 	Decorator making sure that the decorated function returns a value of
+diff --git a/daemons/lvmdbusd/vg.py b/daemons/lvmdbusd/vg.py
+index 7011ff8..cfcc53b 100644
+--- a/daemons/lvmdbusd/vg.py
++++ b/daemons/lvmdbusd/vg.py
+@@ -10,7 +10,8 @@
+ from .automatedproperties import AutomatedProperties
+ 
+ from . import utils
+-from .utils import pv_obj_path_generate, vg_obj_path_generate, n
++from .utils import pv_obj_path_generate, vg_obj_path_generate, n, \
++	_handle_execute
+ import dbus
+ from . import cfg
+ from .cfg import VG_INTERFACE
+@@ -154,13 +155,7 @@ class Vg(AutomatedProperties):
+ 
+ 	@staticmethod
+ 	def handle_execute(rc, out, err):
+-		if rc == 0:
+-			cfg.load()
+-		else:
+-			# Need to work on error handling, need consistent
+-			raise dbus.exceptions.DBusException(
+-				VG_INTERFACE,
+-				'Exit code %s, stderr = %s' % (str(rc), err))
++		return _handle_execute(rc, out, err, VG_INTERFACE)
+ 
+ 	@staticmethod
+ 	def validate_dbus_object(vg_uuid, vg_name):
 
 
