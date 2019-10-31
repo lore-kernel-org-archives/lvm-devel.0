@@ -1,367 +1,194 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Thu, 31 Oct 2019 10:44:05 -0400
-Subject: master - mirror: fix leg splitting
-Message-ID: <201910311444.x9VEi5b5018504@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Thu, 31 Oct 2019 10:44:13 -0400
+Subject: master - mirror: remove unused code
+Message-ID: <201910311444.x9VEiDKX018518@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=80b2de9e6a947b17d1cd2eda70ed0f9d73624534
-Commit:        80b2de9e6a947b17d1cd2eda70ed0f9d73624534
-Parent:        8b3cf53e24277177f2c04a5d666f86afdab271c6
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=c21440536d2a129dc4cb3194a59eb62f72e002c6
+Commit:        c21440536d2a129dc4cb3194a59eb62f72e002c6
+Parent:        ab315e7a814c8ccddc866966d88df38803240c61
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu Oct 31 11:45:28 2019 +0100
+AuthorDate:    Thu Oct 31 12:10:00 2019 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Thu Oct 31 15:31:30 2019 +0100
 
-mirror: fix leg splitting
+mirror: remove unused code
 
-Enhance lv_info with lv_info_with_name_check.
-This 'variant' not only check existance if UUID in DM table
-but also compares its  DM name  whether it's matching expected LV name.
-Otherwise activation may 'skip' activation with rename in case the
-DM UUID already exists, just device is different name.
-
-This change make fairly easier manipulation with i.e. detached mirror
-leg which ATM is using same UUID - just the LV name have been changed.
-
-Used code was not able to run 'activation' (and do a rename) and just
-skipped the call. So the code used to do a workaround and 'tried'
-to deactivate such LV firts - this however work only in non-clvmd case,
-as cluster was not having the lock for deactivated LV.
-
-With this extended lv_info code will run 'activation' and will
-synchronize the name to match expected LV name.
-
-Patch extends _lv_info() with new paramter 'with_name_check',
-which is later translated into 'name_check' argument for
-_info_run() which in case of name mismatch evaluates the
-check as if device does not exists.
-
-Such call is only used in one place _lv_activate() which then
-let activation run.  All other invocation of _info() calls
-are left intact.
-
-TODO: fix mirror table manipulation (and raid)....
 ---
- lib/activate/activate.c    |   48 ++++++++++++++++++++++++++-----------------
- lib/activate/activate.h    |    2 +
- lib/activate/dev_manager.c |   30 ++++++++++++++++++---------
- lib/activate/dev_manager.h |    2 +-
- 4 files changed, 52 insertions(+), 30 deletions(-)
+ lib/metadata/mirror.c |  157 -------------------------------------------------
+ 1 files changed, 0 insertions(+), 157 deletions(-)
 
-diff --git a/lib/activate/activate.c b/lib/activate/activate.c
-index 232d581..a82a5cb 100644
---- a/lib/activate/activate.c
-+++ b/lib/activate/activate.c
-@@ -620,7 +620,7 @@ static int _lv_info(struct cmd_context *cmd, const struct logical_volume *lv,
- 		    int use_layer, struct lvinfo *info,
- 		    const struct lv_segment *seg,
- 		    struct lv_seg_status *seg_status,
--		    int with_open_count, int with_read_ahead)
-+		    int with_open_count, int with_read_ahead, int with_name_check)
- {
- 	struct dm_info dminfo;
- 
-@@ -638,7 +638,7 @@ static int _lv_info(struct cmd_context *cmd, const struct logical_volume *lv,
- 	/* New thin-pool has no layer, but -tpool suffix needs to be queried */
- 	if (!use_layer && lv_is_new_thin_pool(lv)) {
- 		/* Check if there isn't existing old thin pool mapping in the table */
--		if (!dev_manager_info(cmd, lv, NULL, 0, 0, &dminfo, NULL, NULL))
-+		if (!dev_manager_info(cmd, lv, NULL, 0, 0, 0, &dminfo, NULL, NULL))
- 			return_0;
- 		if (!dminfo.exists)
- 			use_layer = 1;
-@@ -651,8 +651,9 @@ static int _lv_info(struct cmd_context *cmd, const struct logical_volume *lv,
- 
- 	if (!dev_manager_info(cmd, lv,
- 			      (use_layer) ? lv_layer(lv) : NULL,
--			      with_open_count, with_read_ahead,
--			      &dminfo, (info) ? &info->read_ahead : NULL,
-+			      with_open_count, with_read_ahead, with_name_check,
-+			      &dminfo,
-+			      (info) ? &info->read_ahead : NULL,
- 			      seg_status))
- 		return_0;
- 
-@@ -681,7 +682,16 @@ int lv_info(struct cmd_context *cmd, const struct logical_volume *lv, int use_la
- 	if (!activation())
- 		return 0;
- 
--	return _lv_info(cmd, lv, use_layer, info, NULL, NULL, with_open_count, with_read_ahead);
-+	return _lv_info(cmd, lv, use_layer, info, NULL, NULL, with_open_count, with_read_ahead, 0);
-+}
-+
-+int lv_info_with_name_check(struct cmd_context *cmd, const struct logical_volume *lv,
-+			    int use_layer, struct lvinfo *info)
-+{
-+	if (!activation())
-+		return 0;
-+
-+	return _lv_info(cmd, lv, use_layer, info, NULL, NULL, 0, 0, 1);
- }
- 
- /*
-@@ -711,16 +721,16 @@ int lv_info_with_seg_status(struct cmd_context *cmd,
- 		 * STATUS is collected from cache LV */
- 		if (!(lv_seg = get_only_segment_using_this_lv(lv)))
- 			return_0;
--		(void) _lv_info(cmd, lv_seg->lv, 1, NULL, lv_seg, &status->seg_status, 0, 0);
-+		(void) _lv_info(cmd, lv_seg->lv, 1, NULL, lv_seg, &status->seg_status, 0, 0, 0);
- 		return 1;
- 	}
- 
- 	if (lv_is_thin_pool(lv)) {
- 		/* Always collect status for '-tpool' */
--		if (_lv_info(cmd, lv, 1, &status->info, lv_seg, &status->seg_status, 0, 0) &&
-+		if (_lv_info(cmd, lv, 1, &status->info, lv_seg, &status->seg_status, 0, 0, 0) &&
- 		    (status->seg_status.type == SEG_STATUS_THIN_POOL)) {
- 			/* There is -tpool device, but query 'active' state of 'fake' thin-pool */
--			if (!_lv_info(cmd, lv, 0, NULL, NULL, NULL, 0, 0) &&
-+			if (!_lv_info(cmd, lv, 0, NULL, NULL, NULL, 0, 0, 0) &&
- 			    !status->seg_status.thin_pool->needs_check)
- 				status->info.exists = 0; /* So pool LV is not active */
- 		}
-@@ -729,10 +739,10 @@ int lv_info_with_seg_status(struct cmd_context *cmd,
- 
- 	if (lv_is_external_origin(lv)) {
- 		if (!_lv_info(cmd, lv, 0, &status->info, NULL, NULL,
--			      with_open_count, with_read_ahead))
-+			      with_open_count, with_read_ahead, 0))
- 			return_0;
- 
--		(void) _lv_info(cmd, lv, 1, NULL, lv_seg, &status->seg_status, 0, 0);
-+		(void) _lv_info(cmd, lv, 1, NULL, lv_seg, &status->seg_status, 0, 0, 0);
- 		return 1;
- 	}
- 
-@@ -745,13 +755,13 @@ int lv_info_with_seg_status(struct cmd_context *cmd,
- 		/* Show INFO for actual origin and grab status for merging origin */
- 		if (!_lv_info(cmd, lv, 0, &status->info, lv_seg,
- 			      lv_is_merging_origin(lv) ? &status->seg_status : NULL,
--			      with_open_count, with_read_ahead))
-+			      with_open_count, with_read_ahead, 0))
- 			return_0;
- 
- 		if (status->info.exists &&
- 		    (status->seg_status.type != SEG_STATUS_SNAPSHOT)) /* Not merging */
- 			/* Grab STATUS from layered -real */
--			(void) _lv_info(cmd, lv, 1, NULL, lv_seg, &status->seg_status, 0, 0);
-+			(void) _lv_info(cmd, lv, 1, NULL, lv_seg, &status->seg_status, 0, 0, 0);
- 		return 1;
- 	}
- 
-@@ -760,7 +770,7 @@ int lv_info_with_seg_status(struct cmd_context *cmd,
- 			olv = origin_from_cow(lv);
- 
- 			if (!_lv_info(cmd, olv, 0, &status->info, first_seg(olv), &status->seg_status,
--				      with_open_count, with_read_ahead))
-+				      with_open_count, with_read_ahead, 0))
- 				return_0;
- 
- 			if (status->seg_status.type == SEG_STATUS_SNAPSHOT ||
-@@ -782,13 +792,13 @@ int lv_info_with_seg_status(struct cmd_context *cmd,
- 
- 	if (lv_is_vdo(lv)) {
- 		if (!_lv_info(cmd, lv, 0, &status->info, NULL, NULL,
--			      with_open_count, with_read_ahead))
-+			      with_open_count, with_read_ahead, 0))
- 			return_0;
- 		if (status->info.exists) {
- 			/* Status for VDO pool */
- 			(void) _lv_info(cmd, seg_lv(lv_seg, 0), 1, NULL,
- 					first_seg(seg_lv(lv_seg, 0)),
--					&status->seg_status, 0, 0);
-+					&status->seg_status, 0, 0, 0);
- 			/* Use VDO pool segtype result for VDO segtype */
- 			status->seg_status.seg = lv_seg;
- 		}
-@@ -797,10 +807,10 @@ int lv_info_with_seg_status(struct cmd_context *cmd,
- 
- 	if (lv_is_vdo_pool(lv)) {
- 		/* Always collect status for '-vpool' */
--		if (_lv_info(cmd, lv, 1, &status->info, lv_seg, &status->seg_status, 0, 0) &&
-+		if (_lv_info(cmd, lv, 1, &status->info, lv_seg, &status->seg_status, 0, 0, 0) &&
- 		    (status->seg_status.type == SEG_STATUS_VDO_POOL)) {
- 			/* There is -tpool device, but query 'active' state of 'fake' vdo-pool */
--			if (!_lv_info(cmd, lv, 0, NULL, NULL, NULL, 0, 0))
-+			if (!_lv_info(cmd, lv, 0, NULL, NULL, NULL, 0, 0, 0))
- 				status->info.exists = 0; /* So VDO pool LV is not active */
- 		}
- 
-@@ -808,7 +818,7 @@ int lv_info_with_seg_status(struct cmd_context *cmd,
- 	}
- 
- 	return _lv_info(cmd, lv, 0, &status->info, lv_seg, &status->seg_status,
--			with_open_count, with_read_ahead);
-+			with_open_count, with_read_ahead, 0);
- }
- 
- #define OPEN_COUNT_CHECK_RETRIES 25
-@@ -2573,7 +2583,7 @@ static int _lv_activate(struct cmd_context *cmd, const char *lvid_s,
- 			     laopts->noscan ? " noscan" : "",
- 			     laopts->temporary ? " temporary" : "");
- 
--	if (!lv_info(cmd, lv, 0, &info, 0, 0))
-+	if (!lv_info_with_name_check(cmd, lv, 0, &info))
- 		goto_out;
- 
- 	/*
-diff --git a/lib/activate/activate.h b/lib/activate/activate.h
-index dc13f17..4bb755c 100644
---- a/lib/activate/activate.h
-+++ b/lib/activate/activate.h
-@@ -146,6 +146,8 @@ int lv_info(struct cmd_context *cmd, const struct logical_volume *lv, int use_la
- 	    struct lvinfo *info, int with_open_count, int with_read_ahead);
- int lv_info_by_lvid(struct cmd_context *cmd, const char *lvid_s, int use_layer,
- 		    struct lvinfo *info, int with_open_count, int with_read_ahead);
-+int lv_info_with_name_check(struct cmd_context *cmd, const struct logical_volume *lv,
-+			    int use_layer, struct lvinfo *info);
- 
- /*
-  * Returns 1 if lv_info_and_seg_status structure has been populated,
-diff --git a/lib/activate/dev_manager.c b/lib/activate/dev_manager.c
-index c87076c..1adb44d 100644
---- a/lib/activate/dev_manager.c
-+++ b/lib/activate/dev_manager.c
-@@ -248,6 +248,7 @@ static uint32_t _seg_len(const struct lv_segment *seg)
- static int _info_run(const char *dlid, struct dm_info *dminfo,
- 		     uint32_t *read_ahead,
- 		     struct lv_seg_status *seg_status,
-+		     const char *name_check,
- 		     int with_open_count, int with_read_ahead,
- 		     uint32_t major, uint32_t minor)
- {
-@@ -258,6 +259,7 @@ static int _info_run(const char *dlid, struct dm_info *dminfo,
- 	void *target = NULL;
- 	uint64_t target_start, target_length, start, length;
- 	char *target_name, *target_params;
-+	const char *dev_name;
- 
- 	if (seg_status) {
- 		dmtask = DM_DEVICE_STATUS;
-@@ -271,6 +273,11 @@ static int _info_run(const char *dlid, struct dm_info *dminfo,
- 				    with_open_count, with_flush, 0)))
- 		return_0;
- 
-+	if (name_check && dminfo->exists &&
-+	    (dev_name = dm_task_get_name(dmt)) &&
-+	    (strcmp(name_check, dev_name) != 0))
-+		dminfo->exists = 0;	/* mismatching name -> device does not exist */
-+
- 	if (with_read_ahead && dminfo->exists) {
- 		if (!dm_task_get_read_ahead(dmt, read_ahead))
- 			goto_out;
-@@ -791,18 +798,19 @@ static int _original_uuid_format_check_required(struct cmd_context *cmd)
- 
- static int _info(struct cmd_context *cmd,
- 		 const char *name, const char *dlid,
--		 int with_open_count, int with_read_ahead,
-+		 int with_open_count, int with_read_ahead, int with_name_check,
- 		 struct dm_info *dminfo, uint32_t *read_ahead,
- 		 struct lv_seg_status *seg_status)
- {
- 	char old_style_dlid[sizeof(UUID_PREFIX) + 2 * ID_LEN];
- 	const char *suffix, *suffix_position;
-+	const char *name_check = (with_name_check) ? name : NULL;
- 	unsigned i = 0;
- 
- 	log_debug_activation("Getting device info for %s [%s].", name, dlid);
- 
- 	/* Check for dlid */
--	if (!_info_run(dlid, dminfo, read_ahead, seg_status,
-+	if (!_info_run(dlid, dminfo, read_ahead, seg_status, name_check,
- 		       with_open_count, with_read_ahead, 0, 0))
- 		return_0;
- 
-@@ -818,7 +826,8 @@ static int _info(struct cmd_context *cmd,
- 			(void) strncpy(old_style_dlid, dlid, sizeof(old_style_dlid));
- 			old_style_dlid[sizeof(old_style_dlid) - 1] = '\0';
- 			if (!_info_run(old_style_dlid, dminfo, read_ahead, seg_status,
--				       with_open_count, with_read_ahead, 0, 0))
-+				       name_check, with_open_count, with_read_ahead,
-+				       0, 0))
- 				return_0;
- 			if (dminfo->exists)
- 				return 1;
-@@ -831,7 +840,7 @@ static int _info(struct cmd_context *cmd,
- 
- 	/* Check for dlid before UUID_PREFIX was added */
- 	if (!_info_run(dlid + sizeof(UUID_PREFIX) - 1, dminfo, read_ahead, seg_status,
--		       with_open_count, with_read_ahead, 0, 0))
-+		       name_check, with_open_count, with_read_ahead, 0, 0))
- 		return_0;
- 
+diff --git a/lib/metadata/mirror.c b/lib/metadata/mirror.c
+index a4ecb96..73fed56 100644
+--- a/lib/metadata/mirror.c
++++ b/lib/metadata/mirror.c
+@@ -1125,163 +1125,6 @@ int collapse_mirrored_lv(struct logical_volume *lv)
  	return 1;
-@@ -861,7 +870,7 @@ out:
- 
- static int _info_by_dev(uint32_t major, uint32_t minor, struct dm_info *info)
- {
--	return _info_run(NULL, info, NULL, 0, 0, 0, major, minor);
-+	return _info_run(NULL, info, NULL, NULL, NULL, 0, 0, major, minor);
  }
  
- int dev_manager_check_prefix_dm_major_minor(uint32_t major, uint32_t minor, const char *prefix)
-@@ -883,7 +892,7 @@ int dev_manager_check_prefix_dm_major_minor(uint32_t major, uint32_t minor, cons
- 
- int dev_manager_info(struct cmd_context *cmd,
- 		     const struct logical_volume *lv, const char *layer,
--		     int with_open_count, int with_read_ahead,
-+		     int with_open_count, int with_read_ahead, int with_name_check,
- 		     struct dm_info *dminfo, uint32_t *read_ahead,
- 		     struct lv_seg_status *seg_status)
- {
-@@ -896,7 +905,8 @@ int dev_manager_info(struct cmd_context *cmd,
- 	if (!(dlid = build_dm_uuid(cmd->mem, lv, layer)))
- 		goto_out;
- 
--	if (!(r = _info(cmd, name, dlid, with_open_count, with_read_ahead,
-+	if (!(r = _info(cmd, name, dlid,
-+			with_open_count, with_read_ahead, with_name_check,
- 			dminfo, read_ahead, seg_status)))
- 		stack;
- out:
-@@ -2096,7 +2106,7 @@ static int _add_dev_to_dtree(struct dev_manager *dm, struct dm_tree *dtree,
- 	if (!(dlid = build_dm_uuid(dm->track_pending_delete ? dm->cmd->pending_delete_mem : dm->mem, lv, layer)))
- 		return_0;
- 
--	if (!_info(dm->cmd, name, dlid, 1, 0, &info, NULL, NULL))
-+	if (!_info(dm->cmd, name, dlid, 1, 0, 0, &info, NULL, NULL))
- 		return_0;
- 
- 	/*
-@@ -2396,7 +2406,7 @@ static int _add_cvol_subdev_to_dtree(struct dev_manager *dm, struct dm_tree *dtr
- 	if (!(name = dm_build_dm_name(dm->mem, lv->vg->name, pool_lv->name, layer)))
- 		return_0;
- 
--	if (!_info(dm->cmd, name, dlid, 1, 0, &info, NULL, NULL))
-+	if (!_info(dm->cmd, name, dlid, 1, 0, 0, &info, NULL, NULL))
- 		return_0;
- 
- 	if (info.exists) {
-@@ -2692,7 +2702,7 @@ static char *_add_error_or_zero_device(struct dev_manager *dm, struct dm_tree *d
- 				      seg->lv->name, errid)))
- 		return_NULL;
- 
--	if (!_info(dm->cmd, name, dlid, 1, 0, &info, NULL, NULL))
-+	if (!_info(dm->cmd, name, dlid, 1, 0, 0, &info, NULL, NULL))
- 		return_NULL;
- 
- 	if (!info.exists) {
-diff --git a/lib/activate/dev_manager.h b/lib/activate/dev_manager.h
-index d3d9ce4..5bff477 100644
---- a/lib/activate/dev_manager.h
-+++ b/lib/activate/dev_manager.h
-@@ -47,7 +47,7 @@ void dev_manager_exit(void);
-  */
- int dev_manager_info(struct cmd_context *cmd, const struct logical_volume *lv,
- 		     const char *layer,
--		     int with_open_count, int with_read_ahead,
-+		     int with_open_count, int with_read_ahead, int with_name_check,
- 		     struct dm_info *dminfo, uint32_t *read_ahead,
- 		     struct lv_seg_status *seg_status);
- 
+-#if 0
+-/* FIXME: reconfigure_mirror_images: remove this code? */
+-static int _get_mirror_fault_policy(struct cmd_context *cmd __attribute__((unused)),
+-				   int log_policy)
+-{
+-	const char *policy = NULL;
+-/*
+-	if (log_policy)
+-		policy = find_config_tree_str(cmd, activation_mirror_log_fault_policy_CFG);
+-	else {
+-		policy = find_config_tree_str(cmd, activation_mirror_image_fault_policy_CFG);
+-		if (!policy)
+-			policy = find_config_tree_str(cmd, activation_mirror_device_fault_policy_CFG);
+-	}
+-*/
+-	if (!strcmp(policy, "remove"))
+-		return MIRROR_REMOVE;
+-	else if (!strcmp(policy, "allocate"))
+-		return MIRROR_ALLOCATE;
+-	else if (!strcmp(policy, "allocate_anywhere"))
+-		return MIRROR_ALLOCATE_ANYWHERE;
+-
+-	if (log_policy)
+-		log_error("Bad activation/mirror_log_fault_policy");
+-	else
+-		log_error("Bad activation/mirror_device_fault_policy");
+-
+-	return MIRROR_REMOVE;
+-}
+-
+-static int _get_mirror_log_fault_policy(struct cmd_context *cmd)
+-{
+-	return _get_mirror_fault_policy(cmd, 1);
+-}
+-
+-static int _get_mirror_device_fault_policy(struct cmd_context *cmd)
+-{
+-	return _get_mirror_fault_policy(cmd, 0);
+-}
+-
+-/*
+- * replace_mirror_images
+- * @mirrored_seg: segment (which may be linear now) to restore
+- * @num_mirrors: number of copies we should end up with
+- * @replace_log: replace log if not present
+- * @in_sync: was the original mirror in-sync?
+- *
+- * in_sync will be set to 0 if new mirror devices are being added
+- * In other words, it is only useful if the log (and only the log)
+- * is being restored.
+- *
+- * Returns: 0 on failure, 1 on reconfig, -1 if no reconfig done
+- */
+-static int _replace_mirror_images(struct lv_segment *mirrored_seg,
+-				 uint32_t num_mirrors,
+-				 int log_policy, int in_sync)
+-{
+-	int r = -1;
+-	struct logical_volume *lv = mirrored_seg->lv;
+-
+-	/* FIXME: Use lvconvert rather than duplicating its code */
+-
+-	if (mirrored_seg->area_count < num_mirrors) {
+-		log_warn("WARNING: Failed to replace mirror device in %s.",
+-			 display_lvname(mirrored_seg->lv);
+-
+-		if ((mirrored_seg->area_count > 1) && !mirrored_seg->log_lv)
+-			log_warn("WARNING: Use 'lvconvert -m %d %s --corelog' to replace failed devices.",
+-				 num_mirrors - 1, display_lvname(lv));
+-		else
+-			log_warn("WARNING: Use 'lvconvert -m %d %s' to replace failed devices.",
+-				 num_mirrors - 1, display_lvname(lv));
+-		r = 0;
+-
+-		/* REMEMBER/FIXME: set in_sync to 0 if a new mirror device was added */
+-		in_sync = 0;
+-	}
+-
+-	/*
+-	 * FIXME: right now, we ignore the allocation policy specified to
+-	 * allocate the new log.
+-	 */
+-	if ((mirrored_seg->area_count > 1) && !mirrored_seg->log_lv &&
+-	    (log_policy != MIRROR_REMOVE)) {
+-		log_warn("WARNING: Failed to replace mirror log device in %s.",
+-			 display_lvname(lv));
+-
+-		log_warn("WARNING: Use 'lvconvert -m %d %s' to replace failed devices.",
+-			 mirrored_seg->area_count - 1 , display_lvname(lv));
+-		r = 0;
+-	}
+-
+-	return r;
+-}
+-
+-int reconfigure_mirror_images(struct lv_segment *mirrored_seg, uint32_t num_mirrors,
+-			      struct dm_list *removable_pvs, unsigned remove_log)
+-{
+-	int r;
+-	int in_sync;
+-	int log_policy, dev_policy;
+-	uint32_t old_num_mirrors = mirrored_seg->area_count;
+-	int had_log = (mirrored_seg->log_lv) ? 1 : 0;
+-
+-	/* was the mirror in-sync before problems? */
+-	in_sync = _mirrored_lv_in_sync(mirrored_seg->lv);
+-
+-	/*
+-	 * While we are only removing devices, we can have sync set.
+-	 * Setting this is only useful if we are moving to core log
+-	 * otherwise the disk log will contain the sync information
+-	 */
+-	init_mirror_in_sync(in_sync);
+-
+-	r = _remove_mirror_images(mirrored_seg->lv, old_num_mirrors - num_mirrors,
+-				  is_mirror_image_removable, removable_pvs,
+-				  remove_log, 0, NULL, 0);
+-	if (!r)
+-		/* Unable to remove bad devices */
+-		return 0;
+-
+-	log_warn("WARNING: Bad device removed from mirror volume %s.",
+-		  display_lvname(mirrored_seg->lv));
+-
+-	log_policy = _get_mirror_log_fault_policy(mirrored_seg->lv->vg->cmd);
+-	dev_policy = _get_mirror_device_fault_policy(mirrored_seg->lv->vg->cmd);
+-
+-	r = _replace_mirror_images(mirrored_seg,
+-				  (dev_policy != MIRROR_REMOVE) ?
+-				  old_num_mirrors : num_mirrors,
+-				  log_policy, in_sync);
+-
+-	if (!r)
+-		/* Failed to replace device(s) */
+-		log_warn("WARNING: Unable to find substitute device for mirror volume %s.",
+-			 display_lvname(mirrored_seg->lv));
+-	else if (r > 0)
+-		/* Success in replacing device(s) */
+-		log_warn("WARNING: Mirror volume %s restored - substitute for failed device found.",
+-			 display_lvname(mirrored_seg->lv));
+-	else
+-		/* Bad device removed, but not replaced because of policy */
+-		if (mirrored_seg->area_count == 1) {
+-			log_warn("WARNING: Mirror volume %s converted to linear due to device failure.",
+-				  display_lvname(mirrored_seg->lv);
+-		} else if (had_log && !mirrored_seg->log_lv) {
+-			log_warn("WARNING: Mirror volume %s disk log removed due to device failure.",
+-				  display_lvname(mirrored_seg->lv));
+-		}
+-	/*
+-	 * If we made it here, we at least removed the bad device.
+-	 * Consider this success.
+-	 */
+-	return 1;
+-}
+-#endif
+-
+ static int _create_mimage_lvs(struct alloc_handle *ah,
+ 			      uint32_t num_mirrors,
+ 			      uint32_t stripes,
 
 
