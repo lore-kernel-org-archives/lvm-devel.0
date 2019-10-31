@@ -1,40 +1,43 @@
-From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Wed,  7 May 2014 10:15:23 +0000 (UTC)
-Subject: master - make: fix commit 1756bf6
-Message-ID: <20140507101523.CDD7660302@fedorahosted.org>
+From: Zdenek Kabelac <zkabelac@sourceware.org>
+Date: Thu, 31 Oct 2019 08:17:45 -0400
+Subject: stable-2.02 - tests: needs exclusive activation for conversion
+Message-ID: <201910311217.x9VCHjAs010793@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=9d64573da135b489e1b3079612e77363526ca44d
-Commit:        9d64573da135b489e1b3079612e77363526ca44d
-Parent:        1899783aa646cfc7f4851de7231f4f2db65b6986
-Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Wed May 7 12:13:36 2014 +0200
-Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Wed May 7 12:13:36 2014 +0200
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=8b741b3bbac6121f05caa455b31fed0983a30b64
+Commit:        8b741b3bbac6121f05caa455b31fed0983a30b64
+Parent:        5ee3d6dbdffc47467727d8c89fc91d84aa97189a
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Wed Oct 30 09:36:10 2019 +0100
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Wed Oct 30 09:36:10 2019 +0100
 
-make: fix commit 1756bf6
+tests: needs exclusive activation for conversion
 
-"DIST_TARGET" should be "DISTCLEAN_TARGET"
+For online convertion LVs must be activated localy exclusive as
+cache can only work for exclusive activation.
 ---
- scripts/Makefile.in |    2 +-
- 1 files changed, 1 insertions(+), 1 deletions(-)
+ test/shell/lvconvert-cache-thin.sh |    4 ++--
+ 1 files changed, 2 insertions(+), 2 deletions(-)
 
-diff --git a/scripts/Makefile.in b/scripts/Makefile.in
-index c2842a4..2c92033 100644
---- a/scripts/Makefile.in
-+++ b/scripts/Makefile.in
-@@ -125,7 +125,7 @@ install_tmpfiles_configuration:
- 	$(INSTALL_DIR) $(tmpfiles_dir)
- 	$(INSTALL_DATA) lvm2_tmpfiles_red_hat.conf $(tmpfiles_dir)/lvm2.conf
+diff --git a/test/shell/lvconvert-cache-thin.sh b/test/shell/lvconvert-cache-thin.sh
+index 7dda6e6..ad4a03e 100644
+--- a/test/shell/lvconvert-cache-thin.sh
++++ b/test/shell/lvconvert-cache-thin.sh
+@@ -54,8 +54,8 @@ lvs -a $vg
+ lvremove -f $vg
  
--DIST_TARGETS += \
-+DISTCLEAN_TARGETS += \
- 	blkdeactivate.sh \
- 	blk_availability_init_red_hat \
- 	blk_availability_systemd_red_hat.service \
+ # Check conversion of cached LV works as thin-pool
+-lvcreate -L10 -n $lv $vg
+-lvcreate -L10 -n $lv1 $vg
++lvcreate -aey -L10 -n $lv $vg
++lvcreate -aey -L10 -n $lv1 $vg
+ lvcreate -H -L10 $vg/$lv
+ 
+ # Stack of cache over cache is unsupported ATM
 
 
