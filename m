@@ -1,83 +1,96 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Thu, 31 Oct 2019 10:44:18 -0400
-Subject: master - manip: optimize lvs_using_lv
-Message-ID: <201910311444.x9VEiIIj018538@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Thu, 31 Oct 2019 10:44:24 -0400
+Subject: master - raid: drop internal error
+Message-ID: <201910311444.x9VEiO6g018550@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=3d9fc7d6f32db7fb605e0551afacb0fc3ccac3ea
-Commit:        3d9fc7d6f32db7fb605e0551afacb0fc3ccac3ea
-Parent:        c21440536d2a129dc4cb3194a59eb62f72e002c6
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=8689b4ed8217bab779a6136a0e3d3b963bac11f4
+Commit:        8689b4ed8217bab779a6136a0e3d3b963bac11f4
+Parent:        3d9fc7d6f32db7fb605e0551afacb0fc3ccac3ea
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu Oct 31 12:38:56 2019 +0100
+AuthorDate:    Thu Oct 31 11:47:39 2019 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Thu Oct 31 15:31:30 2019 +0100
 
-manip: optimize lvs_using_lv
+raid: drop internal error
 
-Instead of checking all LVs in a VG - do just a direct copy of LVs
-from the existing list ->segs_using_thin_lv.
-
-TODO: maybe it could be better to expose seg_list to /tools...
+Fix some internal error reports and debug trace returns
 ---
- lib/metadata/mirror.c |   33 ++++++++-------------------------
- 1 files changed, 8 insertions(+), 25 deletions(-)
+ lib/metadata/raid_manip.c |   23 ++++++++++-------------
+ 1 files changed, 10 insertions(+), 13 deletions(-)
 
-diff --git a/lib/metadata/mirror.c b/lib/metadata/mirror.c
-index 73fed56..01f0246 100644
---- a/lib/metadata/mirror.c
-+++ b/lib/metadata/mirror.c
-@@ -1323,10 +1323,8 @@ struct dm_list *lvs_using_lv(struct cmd_context *cmd, struct volume_group *vg,
- 			  struct logical_volume *lv)
- {
- 	struct dm_list *lvs;
--	struct logical_volume *lv1;
--	struct lv_list *lvl, *lvl1;
--	struct lv_segment *seg;
--	uint32_t s;
-+	struct lv_list *lvl;
-+	struct seg_list *sl;
- 
- 	if (!(lvs = dm_pool_alloc(cmd->mem, sizeof(*lvs)))) {
- 		log_error("lvs list alloc failed.");
-@@ -1335,29 +1333,14 @@ struct dm_list *lvs_using_lv(struct cmd_context *cmd, struct volume_group *vg,
- 
- 	dm_list_init(lvs);
- 
--	/* Loop through all LVs except the one supplied */
--	dm_list_iterate_items(lvl1, &vg->lvs) {
--		lv1 = lvl1->lv;
--		if (lv1 == lv)
--			continue;
--
-+	dm_list_iterate_items(sl, &lv->segs_using_this_lv) {
- 		/* Find whether any segment points at the supplied LV */
--		dm_list_iterate_items(seg, &lv1->segments) {
--			for (s = 0; s < seg->area_count; s++) {
--				if (seg_type(seg, s) != AREA_LV ||
--				    seg_lv(seg, s) != lv)
--					continue;
--				if (!(lvl = dm_pool_alloc(cmd->mem, sizeof(*lvl)))) {
--					log_error("lv_list alloc failed.");
--					return NULL;
--				}
--				lvl->lv = lv1;
--				dm_list_add(lvs, &lvl->list);
--				goto next_lv;
--			}
-+		if (!(lvl = dm_pool_alloc(cmd->mem, sizeof(*lvl)))) {
-+			log_error("lv_list alloc failed.");
-+			return NULL;
+diff --git a/lib/metadata/raid_manip.c b/lib/metadata/raid_manip.c
+index 183435b..a1c51aa 100644
+--- a/lib/metadata/raid_manip.c
++++ b/lib/metadata/raid_manip.c
+@@ -213,7 +213,7 @@ static int _get_available_removed_sublvs(const struct logical_volume *lv, uint32
+ 		if (seg_type(seg, s) != AREA_LV || !(slv = seg_lv(seg, s))) {
+ 			log_error(INTERNAL_ERROR "Missing image sub lv in area %" PRIu32 " of LV %s.",
+ 				  s, display_lvname(lv));
+-			return_0;
++			return 0;
  		}
--	      next_lv:
--		;
-+		lvl->lv = sl->seg->lv;
-+		dm_list_add(lvs, &lvl->list);
+ 
+ 		(slv->status & LV_REMOVE_AFTER_RESHAPE) ? (*removed_slvs)++ : (*available_slvs)++;
+@@ -619,10 +619,9 @@ static int _lv_update_reload_fns_reset_eliminate_lvs(struct logical_volume *lv,
+ 
+ 	/* Update and reload to clear out reset flags in the metadata and in the kernel */
+ 	log_debug_metadata("Updating metadata mappings for %s.", display_lvname(lv));
+-	if ((r != 2 || flags_reset) && !(r = (origin_only ? lv_update_and_reload_origin(lv) : lv_update_and_reload(lv)))) {
+-		log_error(INTERNAL_ERROR "Update of LV %s failed.", display_lvname(lv));
+-		return 0;
+-	}
++	if ((r != 2 || flags_reset) &&
++	    !(r = (origin_only ? lv_update_and_reload_origin(lv) : lv_update_and_reload(lv))))
++		return_0;
+ 
+ 	return 1;
+ }
+@@ -1829,7 +1828,7 @@ static int _raid_reshape_add_images(struct logical_volume *lv,
+ 
+ 	if (new_image_count == old_image_count) {
+ 		log_error(INTERNAL_ERROR "No change of image count on LV %s.", display_lvname(lv));
+-		return_0;
++		return 0;
  	}
  
- 	return lvs;
+ 	vg = lv->vg;
+@@ -1955,7 +1954,7 @@ static int _raid_reshape_remove_images(struct logical_volume *lv,
+ 
+ 	if (new_image_count == old_image_count) {
+ 		log_error(INTERNAL_ERROR "No change of image count on LV %s.", display_lvname(lv));
+-		return_0;
++		return 0;
+ 	}
+ 
+ 	switch (_reshaped_state(lv, new_image_count, &devs_health, &devs_in_sync)) {
+@@ -6374,8 +6373,8 @@ static int _conversion_options_allowed(const struct lv_segment *seg_from,
+ 			return_0;
+ 
+ 		if (dm_snprintf(fmt, sz, "%s%s%s", basic_fmt, (seg_from->segtype == *segtype_to) ? "" : type_fmt, question_fmt) < 0) {
+-			log_error(INTERNAL_ERROR "dm_snprintf failed.");
+-			return_0;
++			log_error("dm_snprintf failed.");
++			return 0;
+ 		}
+ 
+ 		if (yes_no_prompt(fmt, lvseg_name(seg_from), display_lvname(seg_from->lv),
+@@ -7184,10 +7183,8 @@ int partial_raid_lv_supports_degraded_activation(const struct logical_volume *cl
+ 	if (!_lv_may_be_activated_in_degraded_mode(lv, &not_capable) || not_capable)
+ 		return_0;
+ 
+-	if (!for_each_sub_lv(lv, _lv_may_be_activated_in_degraded_mode, &not_capable)) {
+-		log_error(INTERNAL_ERROR "for_each_sub_lv failure.");
+-		return 0;
+-	}
++	if (!for_each_sub_lv(lv, _lv_may_be_activated_in_degraded_mode, &not_capable))
++		return_0;
+ 
+ 	return !not_capable;
+ }
 
 
