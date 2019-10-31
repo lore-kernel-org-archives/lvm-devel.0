@@ -1,106 +1,83 @@
-From: Tony Asleson <tasleson@sourceware.org>
-Date: Wed, 30 Oct 2019 11:44:50 -0400
-Subject: master - lvmdbustest.py: Create common func. _create_cache_lv
-Message-ID: <201910301544.x9UFiodI016825@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: Zdenek Kabelac <zkabelac@sourceware.org>
+Date: Thu, 31 Oct 2019 08:18:03 -0400
+Subject: stable-2.02 - manip: optimize lvs_using_lv
+Message-ID: <201910311218.x9VCI3vJ010842@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=455498f206e60c513ce36083d1f336aad11e33f8
-Commit:        455498f206e60c513ce36083d1f336aad11e33f8
-Parent:        c786636afba068fc0f560b6dd1dd9dd532c35135
-Author:        Tony Asleson <tasleson@redhat.com>
-AuthorDate:    Wed Oct 9 12:29:52 2019 -0500
-Committer:     Tony Asleson <tasleson@redhat.com>
-CommitterDate: Wed Oct 30 10:38:40 2019 -0500
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=2c46c60155a1a22626875b1023ce964216f23f95
+Commit:        2c46c60155a1a22626875b1023ce964216f23f95
+Parent:        4b7bcf3ed4b5e427984bd7883238e681405edf5f
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Thu Oct 31 12:38:56 2019 +0100
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Thu Oct 31 13:00:01 2019 +0100
 
-lvmdbustest.py: Create common func. _create_cache_lv
+manip: optimize lvs_using_lv
 
+Instead of checking all LVs in a VG - do just a direct copy of LVs
+from the existing list ->segs_using_thin_lv.
+
+TODO: maybe it could be better to expose seg_list to /tools...
 ---
- test/dbus/lvmdbustest.py |   52 ++++++++++++++++++---------------------------
- 1 files changed, 21 insertions(+), 31 deletions(-)
+ lib/metadata/mirror.c |   33 ++++++++-------------------------
+ 1 files changed, 8 insertions(+), 25 deletions(-)
 
-diff --git a/test/dbus/lvmdbustest.py b/test/dbus/lvmdbustest.py
-index 0b7140a..aed5511 100755
---- a/test/dbus/lvmdbustest.py
-+++ b/test/dbus/lvmdbustest.py
-@@ -1424,22 +1424,25 @@ class TestDbusService(unittest.TestCase):
- 		self.assertTrue(
- 			'/com/redhat/lvmdbus1/CachePool' in cache_pool.object_path)
+diff --git a/lib/metadata/mirror.c b/lib/metadata/mirror.c
+index 411079a..4e88f25 100644
+--- a/lib/metadata/mirror.c
++++ b/lib/metadata/mirror.c
+@@ -1374,10 +1374,8 @@ struct dm_list *lvs_using_lv(struct cmd_context *cmd, struct volume_group *vg,
+ 			  struct logical_volume *lv)
+ {
+ 	struct dm_list *lvs;
+-	struct logical_volume *lv1;
+-	struct lv_list *lvl, *lvl1;
+-	struct lv_segment *seg;
+-	uint32_t s;
++	struct lv_list *lvl;
++	struct seg_list *sl;
  
--	def test_cache_lv_create(self):
-+	def _create_cache_lv(self):
-+		vg, cache_pool = self._create_cache_pool()
+ 	if (!(lvs = dm_pool_alloc(cmd->mem, sizeof(*lvs)))) {
+ 		log_error("lvs list alloc failed.");
+@@ -1386,29 +1384,14 @@ struct dm_list *lvs_using_lv(struct cmd_context *cmd, struct volume_group *vg,
  
--		for destroy_cache in [True, False]:
--			vg, cache_pool = self._create_cache_pool()
-+		lv_to_cache = self._create_lv(size=mib(8), vg=vg)
+ 	dm_list_init(lvs);
  
--			lv_to_cache = self._create_lv(size=mib(8), vg=vg)
-+		c_lv_path = self.handle_return(
-+			cache_pool.CachePool.CacheLv(
-+				dbus.ObjectPath(lv_to_cache.object_path),
-+				dbus.Int32(g_tmo),
-+				EOD))
- 
--			c_lv_path = self.handle_return(
--				cache_pool.CachePool.CacheLv(
--					dbus.ObjectPath(lv_to_cache.object_path),
--					dbus.Int32(g_tmo),
--					EOD))
-+		intf = (LV_COMMON_INT, LV_INT, CACHE_LV_INT)
-+		cached_lv = ClientProxy(self.bus, c_lv_path, interfaces=intf)
-+		return vg, cache_pool, cached_lv
- 
--			intf = (LV_COMMON_INT, LV_INT, CACHE_LV_INT)
--			cached_lv = ClientProxy(self.bus, c_lv_path, interfaces=intf)
-+	def test_cache_lv_create(self):
- 
-+		for destroy_cache in [True, False]:
-+			vg, _, cached_lv = self._create_cache_lv()
- 			uncached_lv_path = self.handle_return(
- 				cached_lv.CachedLv.DetachCachePool(
- 					dbus.Boolean(destroy_cache),
-@@ -1459,31 +1462,18 @@ class TestDbusService(unittest.TestCase):
- 		internal state update.
- 		:return:
- 		"""
--		vg, cache_pool = self._create_cache_pool()
+-	/* Loop through all LVs except the one supplied */
+-	dm_list_iterate_items(lvl1, &vg->lvs) {
+-		lv1 = lvl1->lv;
+-		if (lv1 == lv)
+-			continue;
 -
--		lv_to_cache = self._create_lv(size=mib(8), vg=vg)
--
--		c_lv_path = self.handle_return(
--			cache_pool.CachePool.CacheLv(
--				dbus.ObjectPath(lv_to_cache.object_path),
--				dbus.Int32(g_tmo),
--				EOD))
-+		def verify_cache_lv_count():
-+			cur_objs, _ = get_objects()
-+			self.assertEqual(len(cur_objs[CACHE_LV_INT]), 2)
-+			self._check_consistency()
++	dm_list_iterate_items(sl, &lv->segs_using_this_lv) {
+ 		/* Find whether any segment points at the supplied LV */
+-		dm_list_iterate_items(seg, &lv1->segments) {
+-			for (s = 0; s < seg->area_count; s++) {
+-				if (seg_type(seg, s) != AREA_LV ||
+-				    seg_lv(seg, s) != lv)
+-					continue;
+-				if (!(lvl = dm_pool_alloc(cmd->mem, sizeof(*lvl)))) {
+-					log_error("lv_list alloc failed.");
+-					return NULL;
+-				}
+-				lvl->lv = lv1;
+-				dm_list_add(lvs, &lvl->list);
+-				goto next_lv;
+-			}
++		if (!(lvl = dm_pool_alloc(cmd->mem, sizeof(*lvl)))) {
++			log_error("lv_list alloc failed.");
++			return NULL;
+ 		}
+-	      next_lv:
+-		;
++		lvl->lv = sl->seg->lv;
++		dm_list_add(lvs, &lvl->list);
+ 	}
  
--		# Make sure we only have expected # of cached LV
--		cur_objs, _ = get_objects()
--		self.assertEqual(len(cur_objs[CACHE_LV_INT]), 2)
-+		_, _, cached_lv = self._create_cache_lv()
- 
--		intf = (LV_COMMON_INT, LV_INT, CACHE_LV_INT)
--		cached_lv = ClientProxy(self.bus, c_lv_path, interfaces=intf)
-+		verify_cache_lv_count()
- 		new_name = 'renamed_' + cached_lv.LvCommon.Name
--
- 		self.handle_return(
- 			cached_lv.Lv.Rename(dbus.String(new_name), dbus.Int32(g_tmo), EOD))
--
--		# Make sure we only have expected # of cached LV
--		cur_objs, _ = get_objects()
--		self.assertEqual(len(cur_objs[CACHE_LV_INT]), 2)
--		self._check_consistency()
-+		verify_cache_lv_count()
- 
- 	def test_vg_change(self):
- 		vg_proxy = self._vg_create()
+ 	return lvs;
 
 
