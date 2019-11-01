@@ -1,72 +1,40 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Fri, 1 Nov 2019 11:26:15 -0400
-Subject: stable-2.02 - tests: avoid checking command result in cluster
-Message-ID: <201911011526.xA1FQFsZ016341@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Fri, 1 Nov 2019 11:26:16 -0400
+Subject: stable-2.02 - tests: conversion only of exclusive lv
+Message-ID: <201911011526.xA1FQGEa016347@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=df00a62fd0a4a4f8a57ac34a80b37ddfb6e98d74
-Commit:        df00a62fd0a4a4f8a57ac34a80b37ddfb6e98d74
-Parent:        796efef15e048abe4122e7348b22b45d0b73b5bf
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=010062cf03327340053bd1e96613bda9240e3464
+Commit:        010062cf03327340053bd1e96613bda9240e3464
+Parent:        df00a62fd0a4a4f8a57ac34a80b37ddfb6e98d74
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Nov 1 15:46:16 2019 +0100
+AuthorDate:    Fri Nov 1 15:59:17 2019 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Fri Nov 1 15:56:03 2019 +0100
+CommitterDate: Fri Nov 1 15:59:17 2019 +0100
 
-tests: avoid checking command result in cluster
+tests: conversion only of exclusive lv
 
-When running cluster test with clvmd, the actual 'monitoring'
-happens in cluster - so the 'already monitored' message
-is also logged within clvmd code and the command cannot
-see such effect.
-
-clvmd was incapable to report this information back to command
-so it cannot be displayed this way.
-
-Add 'lvs -o+seg_monitor' validation which also works in clustered mode.
+We can 'cache' only exclusively active LV in cluster.
 ---
- test/shell/dmeventd-restart.sh |   14 ++++++++++----
- 1 files changed, 10 insertions(+), 4 deletions(-)
+ test/shell/cache-no-discard.sh |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
 
-diff --git a/test/shell/dmeventd-restart.sh b/test/shell/dmeventd-restart.sh
-index 65f1655..7d1d253 100644
---- a/test/shell/dmeventd-restart.sh
-+++ b/test/shell/dmeventd-restart.sh
-@@ -31,10 +31,13 @@ dmeventd -R -f &
- echo $! >LOCAL_DMEVENTD
- sleep 2 # wait a bit, so we talk to the new dmeventd later
+diff --git a/test/shell/cache-no-discard.sh b/test/shell/cache-no-discard.sh
+index 3ab0594..4593622 100644
+--- a/test/shell/cache-no-discard.sh
++++ b/test/shell/cache-no-discard.sh
+@@ -35,7 +35,7 @@ pvcreate "$DM_DEV_DIR/$vg/$lv"
+ vgcreate -s 128K $vg1 "$DM_DEV_DIR/$vg/$lv"
  
-+check lv_field $vg/3way seg_monitor "monitored"
-+check lv_field $vg/4way seg_monitor "monitored"
- lvchange --monitor y --verbose $vg/3way 2>&1 | tee lvchange.out
--grep 'already monitored' lvchange.out
-+# only non-cluster tests can check command result
-+test -e LOCAL_CLVMD || grep 'already monitored' lvchange.out
- lvchange --monitor y --verbose $vg/4way 2>&1 | tee lvchange.out
--grep 'already monitored' lvchange.out
-+test -e LOCAL_CLVMD || grep 'already monitored' lvchange.out
+ # Create simple cache LV
+-lvcreate -L2 -n $lv1 $vg1
++lvcreate -aey -L2 -n $lv1 $vg1
+ lvcreate -H -L2 $vg1/$lv1
  
- # now try what happens if no dmeventd is running
- kill -9 "$(< LOCAL_DMEVENTD)"
-@@ -49,11 +52,14 @@ sleep 7
- not pgrep dmeventd
- rm LOCAL_DMEVENTD
- 
-+check lv_field $vg/3way seg_monitor "not monitored"
-+check lv_field $vg/4way seg_monitor "not monitored"
-+
- lvchange --monitor y --verbose $vg/3way 2>&1 | tee lvchange.out
- pgrep -o dmeventd >LOCAL_DMEVENTD
--not grep 'already monitored' lvchange.out
-+test -e LOCAL_CLVMD || not grep 'already monitored' lvchange.out
- 
- lvchange --monitor y --verbose $vg/$lv2 2>&1 | tee lvchange.out
--not grep 'already monitored' lvchange.out
-+test -e LOCAL_CLVMD || not grep 'already monitored' lvchange.out
- 
- vgremove -ff $vg
+ #lvs -ao+kernel_discards $vg1
 
 
