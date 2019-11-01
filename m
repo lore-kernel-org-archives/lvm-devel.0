@@ -1,45 +1,39 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Fri, 1 Nov 2019 11:32:02 -0400
-Subject: master - tests: be happy with less then 90 percent
-Message-ID: <201911011532.xA1FW2Tl016985@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Fri, 1 Nov 2019 11:32:06 -0400
+Subject: master - tests: skip test if scsi_debug is not available
+Message-ID: <201911011532.xA1FW60W017003@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=c67a03727b427f7b6a1ae4375e0d51dfafe2ea42
-Commit:        c67a03727b427f7b6a1ae4375e0d51dfafe2ea42
-Parent:        dbaa4cdcdf312239f26029cb7f206b54587c407a
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=dbaa4cdcdf312239f26029cb7f206b54587c407a
+Commit:        dbaa4cdcdf312239f26029cb7f206b54587c407a
+Parent:        5f064e22211959149798ebbd92497c3fc953c489
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Nov 1 16:21:52 2019 +0100
+AuthorDate:    Fri Nov 1 16:07:20 2019 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Fri Nov 1 16:31:12 2019 +0100
 
-tests: be happy with less then 90 percent
+tests: skip test if scsi_debug is not available
 
-Thin metadata evolve between kernel version, so it's not always
-precisely predictible its usage - so let's met test happy,
-when it gets bellow 90%.
 ---
- test/shell/lvextend-thin-metadata-dmeventd.sh |    5 ++++-
- 1 files changed, 4 insertions(+), 1 deletions(-)
+ test/shell/large-physical-sector-size.sh |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
 
-diff --git a/test/shell/lvextend-thin-metadata-dmeventd.sh b/test/shell/lvextend-thin-metadata-dmeventd.sh
-index 20b70d3..2f16d48 100644
---- a/test/shell/lvextend-thin-metadata-dmeventd.sh
-+++ b/test/shell/lvextend-thin-metadata-dmeventd.sh
-@@ -111,7 +111,10 @@ lvs -a $vg
- lvextend --use-policies --config "\
- activation/thin_pool_autoextend_percent=1 \
- activation/thin_pool_autoextend_threshold=99" $vg/pool
--test "$(meta_percent_)" -lt "88"
-+# Originaly wanted to test <88% -
-+#  however some older kernels consume a bit more space, so be happy
-+#  when it's <90%
-+test "$(meta_percent_)" -lt "90"
+diff --git a/test/shell/large-physical-sector-size.sh b/test/shell/large-physical-sector-size.sh
+index 891f409..d076d86 100644
+--- a/test/shell/large-physical-sector-size.sh
++++ b/test/shell/large-physical-sector-size.sh
+@@ -22,7 +22,7 @@ LOGICAL_BLOCK_SIZE=4096
+ # 4096 << 9 = 2MB physical block size
+ PHYSICAL_BLOCK_SHIFT=9
  
- # After such operatoin creation of thin LV has to pass
- lvcreate -V20 $vg/pool
+-aux prepare_scsi_debug_dev 256 sector_size=$LOGICAL_BLOCK_SIZE physblk_exp=$PHYSICAL_BLOCK_SHIFT
++aux prepare_scsi_debug_dev 256 sector_size=$LOGICAL_BLOCK_SIZE physblk_exp=$PHYSICAL_BLOCK_SHIFT || skip
+ 
+ check sysfs "$(< SCSI_DEBUG_DEV)" queue/logical_block_size "$LOGICAL_BLOCK_SIZE"
+ 
 
 
