@@ -1,66 +1,40 @@
-From: Heinz Mauelshagen <heinzm@sourceware.org>
-Date: Thu, 7 Nov 2019 11:47:47 -0500
-Subject: stable-2.02 - man: adjust 'disks' to 'devices' as used throughout
-Message-ID: <201911071647.xA7GllEd002796@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: Zdenek Kabelac <zkabelac@sourceware.org>
+Date: Fri, 8 Nov 2019 09:14:55 -0500
+Subject: stable-2.02 - cov: ensure read_ahead is available
+Message-ID: <201911081414.xA8EEsCN008286@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=ffd959d2c0c1a5108e91efa77ac06d185fd8edb6
-Commit:        ffd959d2c0c1a5108e91efa77ac06d185fd8edb6
-Parent:        343d80a7fe883d84aaa27f0a6960a20fa20ce790
-Author:        Heinz Mauelshagen <heinzm@redhat.com>
-AuthorDate:    Thu Nov 7 17:47:35 2019 +0100
-Committer:     Heinz Mauelshagen <heinzm@redhat.com>
-CommitterDate: Thu Nov 7 17:47:35 2019 +0100
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=f90c3d69cedf94fa094bc71cc98376d58d970223
+Commit:        f90c3d69cedf94fa094bc71cc98376d58d970223
+Parent:        67bdae069751e4779e738283e3d8a5873622bfc0
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Fri Nov 1 21:01:51 2019 +0100
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Fri Nov 8 13:04:45 2019 +0100
 
-man: adjust 'disks' to 'devices' as used throughout
+cov: ensure  read_ahead is available
 
+Make sure read_ahead pointer is not NULL when quering for RA.
 ---
- man/lvmraid.7_main |    8 ++++----
- 1 files changed, 4 insertions(+), 4 deletions(-)
+ lib/activate/dev_manager.c |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
 
-diff --git a/man/lvmraid.7_main b/man/lvmraid.7_main
-index c27f1fa..151771b 100644
---- a/man/lvmraid.7_main
-+++ b/man/lvmraid.7_main
-@@ -1688,7 +1688,7 @@ raid6_ls_6
- RAID6 N continue
- .br
- \[bu]
--Same as raid5_ls for N-1 disks with fixed Q-Syndrome N
-+Same as raid5_ls for N-1 devices with fixed Q-Syndrome N
- .br
- \[bu]
- Used for RAID Takeover
-@@ -1699,7 +1699,7 @@ raid6_la_6
- RAID6 N continue
- .br
- \[bu]
--Same as raid5_la for N-1 disks with fixed Q-Syndrome N
-+Same as raid5_la for N-1 devices with fixed Q-Syndrome N
- .br
- \[bu]
- Used forRAID Takeover
-@@ -1710,7 +1710,7 @@ raid6_rs_6
- RAID6 N continue
- .br
- \[bu]
--Same as raid5_rs for N-1 disks with fixed Q-Syndrome N
-+Same as raid5_rs for N-1 devices with fixed Q-Syndrome N
- .br
- \[bu]
- Used for RAID Takeover
-@@ -1721,7 +1721,7 @@ raid6_ra_6
- RAID6 N continue
- .br
- \[bu]
--Same as raid5_ra for N-1 disks with fixed Q-Syndrome N
-+Same as raid5_ra for N-1 devices with fixed Q-Syndrome N
- .br
- \[bu]
- Used for RAID Takeover
+diff --git a/lib/activate/dev_manager.c b/lib/activate/dev_manager.c
+index feec861..7acb3e9 100644
+--- a/lib/activate/dev_manager.c
++++ b/lib/activate/dev_manager.c
+@@ -270,7 +270,7 @@ static int _info_run(const char *dlid, struct dm_info *dminfo,
+ 	    (strcmp(name_check, devname) != 0))
+ 		dminfo->exists = 0;	/* mismatching name -> device does not exist */
+ 
+-	if (with_read_ahead && dminfo->exists) {
++	if (with_read_ahead && read_ahead && dminfo->exists) {
+ 		if (!dm_task_get_read_ahead(dmt, read_ahead))
+ 			goto_out;
+ 	} else if (read_ahead)
 
 
