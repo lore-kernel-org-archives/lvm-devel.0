@@ -1,47 +1,51 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Fri, 8 Nov 2019 09:15:03 -0500
-Subject: stable-2.02 - lvmcache: free resource on error path
-Message-ID: <201911081415.xA8EF3gj008335@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Fri, 8 Nov 2019 09:15:14 -0500
+Subject: stable-2.02 - gcc: avoid declartion shadowing
+Message-ID: <201911081415.xA8EFEKS008359@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=34bde8b6c7e517239a05334683a09f2b5075fdcc
-Commit:        34bde8b6c7e517239a05334683a09f2b5075fdcc
-Parent:        f90c3d69cedf94fa094bc71cc98376d58d970223
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=50fb24f5c208ff9b89b80a1f7aa32dcdafd98e12
+Commit:        50fb24f5c208ff9b89b80a1f7aa32dcdafd98e12
+Parent:        ffd959d2c0c1a5108e91efa77ac06d185fd8edb6
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Nov 8 12:51:48 2019 +0100
+AuthorDate:    Fri Nov 1 19:35:28 2019 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Fri Nov 8 15:11:50 2019 +0100
+CommitterDate: Fri Nov 8 13:03:20 2019 +0100
 
-lvmcache: free resource on error path
+gcc: avoid declartion shadowing
 
-Free allocated svg on error path.
-Also explicitely ignore dm_strncpy() result.
-(We know it will end with failure here.)
+dev_name is global in device.h
 ---
- lib/cache/lvmcache.c |    4 +++-
- 1 files changed, 3 insertions(+), 1 deletions(-)
+ lib/activate/dev_manager.c |    6 +++---
+ 1 files changed, 3 insertions(+), 3 deletions(-)
 
-diff --git a/lib/cache/lvmcache.c b/lib/cache/lvmcache.c
-index 9890325..c12ec2b 100644
---- a/lib/cache/lvmcache.c
-+++ b/lib/cache/lvmcache.c
-@@ -325,10 +325,12 @@ void lvmcache_save_vg(struct volume_group *vg, int precommitted)
+diff --git a/lib/activate/dev_manager.c b/lib/activate/dev_manager.c
+index 317a2a7..feec861 100644
+--- a/lib/activate/dev_manager.c
++++ b/lib/activate/dev_manager.c
+@@ -251,7 +251,7 @@ static int _info_run(const char *dlid, struct dm_info *dminfo,
+ 	void *target = NULL;
+ 	uint64_t target_start, target_length, start, length;
+ 	char *target_name, *target_params;
+-	const char *dev_name;
++	const char *devname;
  
- 		dm_list_init(&svg->saved_vg_to_free);
+ 	if (seg_status) {
+ 		dmtask = DM_DEVICE_STATUS;
+@@ -266,8 +266,8 @@ static int _info_run(const char *dlid, struct dm_info *dminfo,
+ 		return_0;
  
--		dm_strncpy(svg->vgid, (const char *)vg->id.uuid, sizeof(svg->vgid));
-+		/* Ignore result code, size we intentionally short-cut & pad with 0 */
-+		(void) dm_strncpy(svg->vgid, (const char *)vg->id.uuid, sizeof(svg->vgid));
+ 	if (name_check && dminfo->exists &&
+-	    (dev_name = dm_task_get_name(dmt)) &&
+-	    (strcmp(name_check, dev_name) != 0))
++	    (devname = dm_task_get_name(dmt)) &&
++	    (strcmp(name_check, devname) != 0))
+ 		dminfo->exists = 0;	/* mismatching name -> device does not exist */
  
- 		if (!dm_hash_insert(_saved_vg_hash, svg->vgid, svg)) {
- 			log_error("lvmcache: failed to insert saved_vg %s", svg->vgid);
-+			dm_free(svg);
- 			return;
- 		}
- 	} else {
+ 	if (with_read_ahead && dminfo->exists) {
 
 
