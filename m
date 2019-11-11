@@ -1,52 +1,53 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Mon, 11 Nov 2019 16:46:10 -0500
-Subject: master - gcc: avoid declaration shadowing
-Message-ID: <37271.119111116460503319@us-mta-200.us.mimecast.lan>
+Date: Mon, 11 Nov 2019 16:46:13 -0500
+Subject: master - cov: missing checks of syscalls
+Message-ID: <17297.119111116460801271@us-mta-133.us.mimecast.lan>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=8679d45917c321ea76c48c150395db833ba7b812
-Commit:        8679d45917c321ea76c48c150395db833ba7b812
-Parent:        e184f77109d973297fa80edaa8dca7447b64b40e
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=30a23a194167d270d235afea469352f3d709a466
+Commit:        30a23a194167d270d235afea469352f3d709a466
+Parent:        8679d45917c321ea76c48c150395db833ba7b812
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Nov 1 19:35:28 2019 +0100
+AuthorDate:    Fri Nov 8 15:42:42 2019 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Mon Nov 11 22:44:18 2019 +0100
+CommitterDate: Mon Nov 11 22:44:25 2019 +0100
 
-gcc: avoid declaration shadowing
+cov: missing checks of syscalls
 
-dev_name is global in device.h
+Check for sigprocmask errors
 ---
- lib/activate/dev_manager.c |    6 +++---
- 1 files changed, 3 insertions(+), 3 deletions(-)
+ libdaemon/server/daemon-server.c |    9 ++++++---
+ 1 files changed, 6 insertions(+), 3 deletions(-)
 
-diff --git a/lib/activate/dev_manager.c b/lib/activate/dev_manager.c
-index 1adb44d..51ba298 100644
---- a/lib/activate/dev_manager.c
-+++ b/lib/activate/dev_manager.c
-@@ -259,7 +259,7 @@ static int _info_run(const char *dlid, struct dm_info *dminfo,
- 	void *target = NULL;
- 	uint64_t target_start, target_length, start, length;
- 	char *target_name, *target_params;
--	const char *dev_name;
-+	const char *devname;
+diff --git a/libdaemon/server/daemon-server.c b/libdaemon/server/daemon-server.c
+index 2df4e89..0b1810c 100644
+--- a/libdaemon/server/daemon-server.c
++++ b/libdaemon/server/daemon-server.c
+@@ -653,14 +653,17 @@ void daemon_start(daemon_state s)
+ 		FD_ZERO(&in);
+ 		FD_SET(s.socket_fd, &in);
  
- 	if (seg_status) {
- 		dmtask = DM_DEVICE_STATUS;
-@@ -274,8 +274,8 @@ static int _info_run(const char *dlid, struct dm_info *dminfo,
- 		return_0;
+-		sigprocmask(SIG_SETMASK, &new_set, NULL);
++		if (sigprocmask(SIG_SETMASK, &new_set, NULL))
++			perror("sigprocmask error");
+ 		if (_shutdown_requested && !s.threads->next) {
+-			sigprocmask(SIG_SETMASK, &old_set, NULL);
++			if (sigprocmask(SIG_SETMASK, &old_set, NULL))
++				perror("sigprocmask error");
+ 			INFO(&s, "%s shutdown requested", s.name);
+ 			break;
+ 		}
+ 		ret = pselect(s.socket_fd + 1, &in, NULL, NULL, _get_timeout(s), &old_set);
+-		sigprocmask(SIG_SETMASK, &old_set, NULL);
++		if (sigprocmask(SIG_SETMASK, &old_set, NULL))
++			perror("sigprocmask error");
  
- 	if (name_check && dminfo->exists &&
--	    (dev_name = dm_task_get_name(dmt)) &&
--	    (strcmp(name_check, dev_name) != 0))
-+	    (devname = dm_task_get_name(dmt)) &&
-+	    (strcmp(name_check, devname) != 0))
- 		dminfo->exists = 0;	/* mismatching name -> device does not exist */
- 
- 	if (with_read_ahead && dminfo->exists) {
+ 		if (ret < 0) {
+ 			if (errno != EINTR && errno != EAGAIN &&
 
 
 
