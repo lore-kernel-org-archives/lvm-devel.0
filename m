@@ -1,51 +1,106 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Thu, 14 Nov 2019 12:07:10 -0500
-Subject: master - cov: fix memory leak
-Message-ID: <70013.119111412070602458@us-mta-378.us.mimecast.lan>
+Date: Thu, 14 Nov 2019 12:07:15 -0500
+Subject: master - devtype: simplify code
+Message-ID: <88255.119111412071000847@us-mta-38.us.mimecast.lan>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=33c8e4de33b2b2fced148e04f725af9d350a989a
-Commit:        33c8e4de33b2b2fced148e04f725af9d350a989a
-Parent:        13c254fc05386d05ab6bbda2806f9ca4d3358a0c
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=43f149526d5074dbc6deeaca38e30d02611eadf8
+Commit:        43f149526d5074dbc6deeaca38e30d02611eadf8
+Parent:        33c8e4de33b2b2fced148e04f725af9d350a989a
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu Nov 14 16:23:38 2019 +0100
+AuthorDate:    Thu Nov 14 16:57:02 2019 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Thu Nov 14 18:05:41 2019 +0100
+CommitterDate: Thu Nov 14 18:06:14 2019 +0100
 
-cov: fix memory leak
+devtype: simplify code
 
-Reapply 23cc7ddc50e2800a6dc248de897a4c88c1514160 to internal version
-of libdm.
+Update code with simpler form and check for fclose().
 ---
- device_mapper/libdm-common.c |    4 +++-
- 1 files changed, 3 insertions(+), 1 deletions(-)
+ lib/device/dev-type.c |   39 +++++++++++++--------------------------
+ 1 files changed, 13 insertions(+), 26 deletions(-)
 
-diff --git a/device_mapper/libdm-common.c b/device_mapper/libdm-common.c
-index 1cb29f1..bc691d6 100644
---- a/device_mapper/libdm-common.c
-+++ b/device_mapper/libdm-common.c
-@@ -2012,7 +2012,8 @@ static int _sysfs_get_kernel_name(uint32_t major, uint32_t minor, char *buf, siz
- 			log_sys_error("readlink", sysfs_path);
- 		else {
- 			log_sys_debug("readlink", sysfs_path);
--			return _sysfs_find_kernel_name(major, minor, buf, buf_size);
-+			r = _sysfs_find_kernel_name(major, minor, buf, buf_size);
-+			goto out;
- 		}
- 		goto bad;
- 	}
-@@ -2033,6 +2034,7 @@ static int _sysfs_get_kernel_name(uint32_t major, uint32_t minor, char *buf, siz
- 	strcpy(buf, name);
- 	r = 1;
- bad:
-+out:
- 	free(temp_buf);
- 	free(sysfs_path);
+diff --git a/lib/device/dev-type.c b/lib/device/dev-type.c
+index ebe0f99..fba4dc9 100644
+--- a/lib/device/dev-type.c
++++ b/lib/device/dev-type.c
+@@ -42,7 +42,6 @@ int dev_is_pmem(struct device *dev)
+ {
+ 	FILE *fp;
+ 	char path[PATH_MAX];
+-	char buffer[64];
+ 	int is_pmem = 0;
  
+ 	if (dm_snprintf(path, sizeof(path), "%sdev/block/%d:%d/queue/dax",
+@@ -56,27 +55,16 @@ int dev_is_pmem(struct device *dev)
+ 	if (!(fp = fopen(path, "r")))
+ 		return 0;
+ 
+-	if (!fgets(buffer, sizeof(buffer), fp)) {
+-		log_warn("Failed to read %s.", path);
+-		if (fclose(fp))
+-			log_sys_debug("fclose", path);
+-		return 0;
+-	} else if (sscanf(buffer, "%d", &is_pmem) != 1) {
+-		log_warn("Failed to parse %s '%s'.", path, buffer);
+-		if (fclose(fp))
+-			log_sys_debug("fclose", path);
+-		return 0;
+-	}
++	if (fscanf(fp, "%d", &is_pmem) != 1)
++		log_warn("Failed to parse DAX %s.", path);
++
++	if (is_pmem)
++		log_debug("%s is pmem", dev_name(dev));
+ 
+ 	if (fclose(fp))
+ 		log_sys_debug("fclose", path);
+ 
+-	if (is_pmem) {
+-		log_debug("%s is pmem", dev_name(dev));
+-		return 1;
+-	}
+-
+-	return 0;
++	return is_pmem ? 1 : 0;
+ }
+ 
+ int dev_is_lv(struct device *dev)
+@@ -84,6 +72,7 @@ int dev_is_lv(struct device *dev)
+ 	FILE *fp;
+ 	char path[PATH_MAX];
+ 	char buffer[64];
++	int ret = 0;
+ 
+ 	if (dm_snprintf(path, sizeof(path), "%sdev/block/%d:%d/dm/uuid",
+ 			dm_sysfs_dir(),
+@@ -96,17 +85,15 @@ int dev_is_lv(struct device *dev)
+ 	if (!(fp = fopen(path, "r")))
+ 		return 0;
+ 
+-	if (!fgets(buffer, sizeof(buffer), fp)) {
++	if (!fgets(buffer, sizeof(buffer), fp))
+ 		log_warn("Failed to read %s.", path);
+-		fclose(fp);
+-		return 0;
+-	}
++	else if (!strncmp(buffer, "LVM-", 4))
++		ret = 1;
+ 
+-	fclose(fp);
++	if (fclose(fp))
++		log_sys_debug("fclose", path);
+ 
+-	if (!strncmp(buffer, "LVM-", 4))
+-		return 1;
+-	return 0;
++	return ret;
+ }
+ 
+ struct dev_types *create_dev_types(const char *proc_dir,
 
 
 
