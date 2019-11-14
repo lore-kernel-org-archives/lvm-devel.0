@@ -1,119 +1,46 @@
-From: agk@sourceware.org <agk@sourceware.org>
-Date: 27 Apr 2007 20:41:50 -0000
-Subject: LVM2 ./WHATS_NEW lib/config/config.c lib/confi ...
-Message-ID: <20070427204150.14814.qmail@sourceware.org>
+From: Zdenek Kabelac <zkabelac@sourceware.org>
+Date: Thu, 14 Nov 2019 12:08:10 -0500
+Subject: master - cov: add explicit ret value ignoring
+Message-ID: <34182.119111412080601617@us-mta-230.us.mimecast.lan>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	agk at sourceware.org	2007-04-27 21:41:50
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=33c1d2e92137876116fd81cdca61874cc8e299c7
+Commit:        33c1d2e92137876116fd81cdca61874cc8e299c7
+Parent:        ad0343d8cb9644912961a72760df083378104078
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Thu Nov 14 17:11:01 2019 +0100
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Thu Nov 14 18:06:42 2019 +0100
 
-Modified files:
-	.              : WHATS_NEW 
-	lib/config     : config.c config.h 
+cov: add explicit ret value ignoring
 
-Log message:
-	Fix get_config_uint64() to read a 64-bit value not a 32-bit one.
+We don't need to check for any error result codes here.
+---
+ lib/metadata/thin_manip.c |    4 ++--
+ 1 files changed, 2 insertions(+), 2 deletions(-)
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.610&r2=1.611
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/config/config.c.diff?cvsroot=lvm2&r1=1.57&r2=1.58
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/config/config.h.diff?cvsroot=lvm2&r1=1.23&r2=1.24
+diff --git a/lib/metadata/thin_manip.c b/lib/metadata/thin_manip.c
+index f947976..0704f2b 100644
+--- a/lib/metadata/thin_manip.c
++++ b/lib/metadata/thin_manip.c
+@@ -503,11 +503,11 @@ int update_pool_lv(struct logical_volume *lv, int activate)
+ 			 *   which Node has pool active.
+ 			 */
+ 			if (!activate_lv(lv->vg->cmd, lv)) {
+-				init_dmeventd_monitor(monitored);
++				(void) init_dmeventd_monitor(monitored);
+ 				return_0;
+ 			}
+ 			if (!lv_is_active(lv)) {
+-				init_dmeventd_monitor(monitored);
++				(void) init_dmeventd_monitor(monitored);
+ 				log_error("Cannot activate thin pool %s, perhaps skipped in lvm.conf volume_list?",
+ 					  display_lvname(lv));
+ 				return 0;
 
---- LVM2/WHATS_NEW	2007/04/27 19:26:56	1.610
-+++ LVM2/WHATS_NEW	2007/04/27 20:41:49	1.611
-@@ -1,5 +1,6 @@
- Version 2.02.25 -
- =================================
-+  Fix get_config_uint64() to read a 64-bit value not a 32-bit one.
-   Add -Wformat-security and change one fprintf() to fputs().
-   Move regex functions into libdevmapper.
-   Change some #include lines to search only standard system directories.
---- LVM2/lib/config/config.c	2007/04/26 16:40:46	1.57
-+++ LVM2/lib/config/config.c	2007/04/27 20:41:50	1.58
-@@ -357,7 +357,7 @@
- 		break;
- 
- 	case CFG_INT:
--		fprintf(fp, "%d", v->v.i);
-+		fprintf(fp, "%" PRId64, v->v.i);
- 		break;
- 
- 	case CFG_EMPTY_ARRAY:
-@@ -568,7 +568,7 @@
- 	switch (p->t) {
- 	case TOK_INT:
- 		v->type = CFG_INT;
--		v->v.i = strtol(p->tb, NULL, 0);	/* FIXME: check error */
-+		v->v.i = strtoll(p->tb, NULL, 0);	/* FIXME: check error */
- 		match(TOK_INT);
- 		break;
- 
-@@ -871,25 +871,26 @@
- 	return _find_config_str(cn, NULL, path, fail);
- }
- 
--static int _find_config_int(const struct config_node *cn1,
--			    const struct config_node *cn2,
--			    const char *path, int fail)
-+static int64_t _find_config_int64(const struct config_node *cn1,
-+				  const struct config_node *cn2,
-+				  const char *path, int64_t fail)
- {
- 	const struct config_node *n = _find_first_config_node(cn1, cn2, path);
- 
- 	if (n && n->v && n->v->type == CFG_INT) {
--		log_very_verbose("Setting %s to %d", path, n->v->v.i);
-+		log_very_verbose("Setting %s to %" PRId64, path, n->v->v.i);
- 		return n->v->v.i;
- 	}
- 
--	log_very_verbose("%s not found in config: defaulting to %d",
-+	log_very_verbose("%s not found in config: defaulting to %" PRId64,
- 			 path, fail);
- 	return fail;
- }
- 
- int find_config_int(const struct config_node *cn, const char *path, int fail)
- {
--	return _find_config_int(cn, NULL, path, fail);
-+	/* FIXME Add log_error message on overflow */
-+	return (int) _find_config_int64(cn, NULL, path, (int64_t) fail);
- }
- 
- static float _find_config_float(const struct config_node *cn1,
-@@ -931,7 +932,8 @@
- int find_config_tree_int(struct cmd_context *cmd, const char *path,
-                          int fail)
- {
--	return _find_config_int(cmd->cft_override ? cmd->cft_override->root : NULL, cmd->cft->root, path, fail);
-+	/* FIXME Add log_error message on overflow */
-+	return (int) _find_config_int64(cmd->cft_override ? cmd->cft_override->root : NULL, cmd->cft->root, path, (int64_t) fail);
- }
- 
- float find_config_tree_float(struct cmd_context *cmd, const char *path,
-@@ -1023,7 +1025,6 @@
- 	if (!n || !n->v || n->v->type != CFG_INT)
- 		return 0;
- 
--	/* FIXME Support 64-bit value! */
- 	*result = (uint64_t) n->v->v.i;
- 	return 1;
- }
---- LVM2/lib/config/config.h	2007/04/25 20:38:39	1.23
-+++ LVM2/lib/config/config.h	2007/04/27 20:41:50	1.24
-@@ -31,7 +31,7 @@
- struct config_value {
- 	int type;
- 	union {
--		int i;
-+		int64_t i;
- 		float r;
- 		char *str;
- 	} v;
 
 
