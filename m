@@ -1,56 +1,66 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Thu, 14 Nov 2019 12:08:01 -0500
-Subject: master - cov: more checks for failing syscalls
-Message-ID: <77153.119111412075901261@us-mta-420.us.mimecast.lan>
+Date: Thu, 14 Nov 2019 12:08:05 -0500
+Subject: master - cov: remove unused headers
+Message-ID: <11655.119111412080202397@us-mta-224.us.mimecast.lan>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=9ee3af7efc4bece83769a75586ffcb0f07a74d16
-Commit:        9ee3af7efc4bece83769a75586ffcb0f07a74d16
-Parent:        cbabdf2fca6131660cfb5525ed9edb3f7a41525a
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=ad0343d8cb9644912961a72760df083378104078
+Commit:        ad0343d8cb9644912961a72760df083378104078
+Parent:        9ee3af7efc4bece83769a75586ffcb0f07a74d16
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu Nov 14 16:56:12 2019 +0100
+AuthorDate:    Thu Nov 14 16:55:09 2019 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Thu Nov 14 18:06:42 2019 +0100
 
-cov: more checks for failing syscalls
+cov: remove unused headers
 
 ---
- daemons/dmeventd/dmeventd.c      |    3 ++-
- libdaemon/server/daemon-server.c |    3 ++-
- 2 files changed, 4 insertions(+), 2 deletions(-)
+ lib/cache/lvmcache.c            |    1 -
+ lib/metadata/cache_manip.c      |    1 -
+ lib/metadata/writecache_manip.c |    2 --
+ 3 files changed, 0 insertions(+), 4 deletions(-)
 
-diff --git a/daemons/dmeventd/dmeventd.c b/daemons/dmeventd/dmeventd.c
-index 33859ef..ae1e6a6 100644
---- a/daemons/dmeventd/dmeventd.c
-+++ b/daemons/dmeventd/dmeventd.c
-@@ -1745,7 +1745,8 @@ static void _init_thread_signals(void)
- 	sigdelset(&my_sigset, SIGHUP);
- 	sigdelset(&my_sigset, SIGQUIT);
+diff --git a/lib/cache/lvmcache.c b/lib/cache/lvmcache.c
+index 25d110d..6224fe0 100644
+--- a/lib/cache/lvmcache.c
++++ b/lib/cache/lvmcache.c
+@@ -21,7 +21,6 @@
+ #include "lib/locking/locking.h"
+ #include "lib/metadata/metadata.h"
+ #include "lib/mm/memlock.h"
+-#include "lib/datastruct/str_list.h"
+ #include "lib/format_text/format-text.h"
+ #include "lib/config/config.h"
  
--	pthread_sigmask(SIG_BLOCK, &my_sigset, NULL);
-+	if (pthread_sigmask(SIG_BLOCK, &my_sigset, NULL))
-+		log_sys_error("pthread_sigmask", "SIG_BLOCK");
- }
+diff --git a/lib/metadata/cache_manip.c b/lib/metadata/cache_manip.c
+index 2f35d83..5613a22 100644
+--- a/lib/metadata/cache_manip.c
++++ b/lib/metadata/cache_manip.c
+@@ -23,7 +23,6 @@
+ #include "lib/config/defaults.h"
+ #include "lib/metadata/lv_alloc.h"
+ #include "lib/misc/lvm-signal.h"
+-#include "lib/activate/dev_manager.h"
  
- /*
-diff --git a/libdaemon/server/daemon-server.c b/libdaemon/server/daemon-server.c
-index 66e43d4..0368a94 100644
---- a/libdaemon/server/daemon-server.c
-+++ b/libdaemon/server/daemon-server.c
-@@ -656,7 +656,8 @@ void daemon_start(daemon_state s)
- 		failed = 1; /* FD out of available selectable set */
+ /* https://github.com/jthornber/thin-provisioning-tools/blob/master/caching/cache_metadata_size.cc */
+ #define DM_TRANSACTION_OVERHEAD		4096  /* KiB */
+diff --git a/lib/metadata/writecache_manip.c b/lib/metadata/writecache_manip.c
+index 73fbd2e..5a5a759 100644
+--- a/lib/metadata/writecache_manip.c
++++ b/lib/metadata/writecache_manip.c
+@@ -21,8 +21,6 @@
+ #include "lib/metadata/segtype.h"
+ #include "lib/activate/activate.h"
+ #include "lib/config/defaults.h"
+-#include "lib/metadata/lv_alloc.h"
+-#include "lib/misc/lvm-signal.h"
+ #include "lib/activate/dev_manager.h"
  
- 	sigfillset(&new_set);
--	sigprocmask(SIG_SETMASK, NULL, &old_set);
-+	if (sigprocmask(SIG_SETMASK, NULL, &old_set))
-+		perror("sigprocmask error");
- 
- 	while (!failed) {
- 		_reset_timeout(s);
+ int lv_is_writecache_origin(const struct logical_volume *lv)
 
 
 
