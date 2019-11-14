@@ -1,108 +1,40 @@
-From: David Teigland <teigland@sourceware.org>
-Date: Wed, 27 Nov 2019 10:27:34 -0500
-Subject: master - scanning: use bool type for _scan_text_mismatch
-Message-ID: <49365.119112710273000513@us-mta-235.us.mimecast.lan>
+From: Zdenek Kabelac <zkabelac@sourceware.org>
+Date: Thu, 14 Nov 2019 12:08:27 -0500
+Subject: master - tests: enusure lib is initilized
+Message-ID: <82977.119111412082300129@us-mta-152.us.mimecast.lan>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=98a8099da9e43561a1fe981bbf2866e373f0d07a
-Commit:        98a8099da9e43561a1fe981bbf2866e373f0d07a
-Parent:        b400353c71397954a7cc4c4b52b9570715104773
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Wed Nov 27 09:26:04 2019 -0600
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Wed Nov 27 09:26:49 2019 -0600
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=91df257b53849ca4206f4c3d45c71bff83c4a5ee
+Commit:        91df257b53849ca4206f4c3d45c71bff83c4a5ee
+Parent:        e92d3bd1f75d335fba5303c433516ea4ebe5cab1
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Thu Nov 14 13:04:29 2019 +0100
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Thu Nov 14 18:06:42 2019 +0100
 
-scanning: use bool type for _scan_text_mismatch
+tests: enusure lib is initilized
 
 ---
- lib/metadata/metadata.c |   20 +++++++-------------
- 1 files changed, 7 insertions(+), 13 deletions(-)
+ test/Makefile.in |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
 
-diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
-index 1ac5445..b12db60 100644
---- a/lib/metadata/metadata.c
-+++ b/lib/metadata/metadata.c
-@@ -4577,7 +4577,7 @@ void vg_write_commit_bad_mdas(struct cmd_context *cmd, struct volume_group *vg)
-  * reread metadata.
-  */
+diff --git a/test/Makefile.in b/test/Makefile.in
+index fcb612d..9fa908e 100644
+--- a/test/Makefile.in
++++ b/test/Makefile.in
+@@ -315,7 +315,7 @@ lib/dm-version-expected: $(top_srcdir)/VERSION_DM .lib-dir-stamp
+ CMDS = lvm $(shell cat $(top_builddir)/tools/.commands 2>/dev/null)
+ LIB = $(addprefix lib/, $(LIB_SECURETEST) $(LIB_DMSECURETEST) $(LIB_SHARED) $(LIB_LOCAL) $(LIB_NOT) $(LIB_LINK_NOT) $(LIB_FLAVOURS))
  
--static int _scan_text_mismatch(struct cmd_context *cmd, const char *vgname, const char *vgid)
-+static bool _scan_text_mismatch(struct cmd_context *cmd, const char *vgname, const char *vgid)
- {
- 	struct dm_list mda_list;
- 	struct mda_list *mdal, *safe;
-@@ -4588,7 +4588,7 @@ static int _scan_text_mismatch(struct cmd_context *cmd, const char *vgname, cons
- 	struct raw_locn *rlocn;
- 	struct device *dev;
- 	uint32_t bad_fields;
--	int ret = 1;
-+	bool ret = true;
- 
- 	/*
- 	 * if cmd->can_use_one_scan, check one mda_header is unchanged,
-@@ -4610,7 +4610,6 @@ static int _scan_text_mismatch(struct cmd_context *cmd, const char *vgname, cons
- 
- 		if (!(dev = mda_get_device(mda))) {
- 			log_debug("rescan for text mismatch - no mda dev");
--			ret = 1;
- 			goto out;
- 		}
- 
-@@ -4624,13 +4623,11 @@ static int _scan_text_mismatch(struct cmd_context *cmd, const char *vgname, cons
- 		 */
- 		if (!dev_invalidate_bytes(dev, 4096, 512)) {
- 			log_debug("rescan for text mismatch - cannot invalidate");
--			ret = 1;
- 			goto out;
- 		}
- 
- 		if (!(mdah = raw_read_mda_header(cmd->fmt, area, 1, 0, &bad_fields))) {
- 			log_debug("rescan for text mismatch - no mda header");
--			ret = 1;
- 			goto out;
- 		}
- 
-@@ -4638,18 +4635,16 @@ static int _scan_text_mismatch(struct cmd_context *cmd, const char *vgname, cons
- 
- 		if (bad_fields) {
- 			log_debug("rescan for text mismatch - bad_fields");
--			ret = 1;
- 		} else if (rlocn->checksum != mda->scan_text_checksum) {
- 			log_debug("rescan for text checksum mismatch - now %x prev %x",
- 				  rlocn->checksum, mda->scan_text_checksum);
--			ret = 1;
- 		} else if (rlocn->offset != mda->scan_text_offset) {
- 			log_debug("rescan for text offset mismatch - now %llu prev %llu",
- 				  (unsigned long long)rlocn->offset,
- 				  (unsigned long long)mda->scan_text_offset);
--			ret = 1;
- 		} else {
--			ret = 0;
-+			/* the common case where fields match and no rescan needed */
-+			ret = false;
- 		}
- 
- 		dm_pool_free(cmd->mem, mdah);
-@@ -4668,12 +4663,11 @@ static int _scan_text_mismatch(struct cmd_context *cmd, const char *vgname, cons
- 		log_debug("rescan for text mismatch - no mdas");
- 		goto out;
- 	}
--
--	ret = 0;
--
- out:
- 	if (!ret)
--		log_debug("rescan skipped - text offset and checksum unchanged");
-+		log_debug("rescan skipped - unchanged offset %llu checksum %x",
-+			  (unsigned long long)mda->scan_text_offset,
-+			  mda->scan_text_checksum);
- 
- 	dm_list_iterate_items_safe(mdal, safe, &mda_list) {
- 		dm_list_del(&mdal->list);
+-.tests-stamp: $(ALL) $(LIB) $(SUBDIRS) lib/version-expected lib/dm-version-expected unit-test
++.tests-stamp: .lib-dir-stamp $(ALL) $(LIB) $(SUBDIRS) lib/version-expected lib/dm-version-expected unit-test
+ 	@echo "    [TEST-STAMP]"
+ 	@if test "$(srcdir)" != . ; then \
+ 		echo "Linking tests to builddir."; \
 
 
 
