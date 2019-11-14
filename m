@@ -1,248 +1,171 @@
-From: David Teigland <teigland@sourceware.org>
-Date: Wed, 27 Nov 2019 12:21:07 -0500
-Subject: master - pvck: move some arg processing
-Message-ID: <24827.119112712210201509@us-mta-311.us.mimecast.lan>
+From: Zdenek Kabelac <zkabelac@sourceware.org>
+Date: Thu, 14 Nov 2019 12:09:32 -0500
+Subject: master - debug: enhance debug messages
+Message-ID: <77665.119111412081901783@us-mta-36.us.mimecast.lan>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=53126ceada394f7c12ce95c4cd8d824132d418eb
-Commit:        53126ceada394f7c12ce95c4cd8d824132d418eb
-Parent:        94076245df6e99492a7a0bb2d8c2f2bc2616259d
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Mon Oct 21 16:39:46 2019 -0500
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Wed Nov 27 11:13:47 2019 -0600
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=e92d3bd1f75d335fba5303c433516ea4ebe5cab1
+Commit:        e92d3bd1f75d335fba5303c433516ea4ebe5cab1
+Parent:        14e01d6316479a1ee6225010f36d348c103a26c7
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Thu Nov 14 17:00:56 2019 +0100
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Thu Nov 14 18:06:42 2019 +0100
 
-pvck: move some arg processing
+debug: enhance debug messages
 
 ---
- tools/pvck.c |  103 +++++++++++++++++++++-------------------------------------
- 1 files changed, 37 insertions(+), 66 deletions(-)
+ lib/label/hints.c |   42 ++++++++++++++++++++++--------------------
+ 1 files changed, 22 insertions(+), 20 deletions(-)
 
-diff --git a/tools/pvck.c b/tools/pvck.c
-index 231faf9..d2c2f9d 100644
---- a/tools/pvck.c
-+++ b/tools/pvck.c
-@@ -807,8 +807,8 @@ static int _dump_current_text(struct device *dev,
+diff --git a/lib/label/hints.c b/lib/label/hints.c
+index 45ab2ff..d913b68 100644
+--- a/lib/label/hints.c
++++ b/lib/label/hints.c
+@@ -192,7 +192,7 @@ static int _hints_exists(void)
+ 	if (!stat(_hints_file, &buf))
+ 		return 1;
+ 	if (errno != ENOENT)
+-		log_debug("hints_exist errno %d", errno);
++		log_sys_debug("stat", _hints_file);
+ 	return 0;
+ }
+ 
+@@ -203,7 +203,7 @@ static int _nohints_exists(void)
+ 	if (!stat(_nohints_file, &buf))
+ 		return 1;
+ 	if (errno != ENOENT)
+-		log_debug("nohints_exist errno %d", errno);
++		log_sys_debug("stat", _nohints_file);
+ 	return 0;
+ }
+ 
+@@ -214,7 +214,7 @@ static int _newhints_exists(void)
+ 	if (!stat(_newhints_file, &buf))
+ 		return 1;
+ 	if (errno != ENOENT)
+-		log_debug("newhints_exist errno %d", errno);
++		log_sys_debug("stat", _newhints_file);
+ 	return 0;
+ }
+ 
+@@ -225,7 +225,7 @@ static int _touch_newhints(void)
+ 	if (!(fp = fopen(_newhints_file, "w")))
+ 		return_0;
+ 	if (fclose(fp))
+-		stack;
++		log_sys_debug("fclose", _newhints_file);
  	return 1;
  }
  
--static int _dump_label_and_pv_header(struct cmd_context *cmd, int print_fields,
--				     struct device *dev,
-+static int _dump_label_and_pv_header(struct cmd_context *cmd, uint64_t labelsector, struct device *dev,
-+				     int print_fields,
- 				     int *found_label,
- 				     uint64_t *mda1_offset, uint64_t *mda1_size,
- 				     uint64_t *mda2_offset, uint64_t *mda2_size,
-@@ -824,22 +824,11 @@ static int _dump_label_and_pv_header(struct cmd_context *cmd, int print_fields,
- 	uint64_t pvhe_offset;
- 	uint64_t dlocn_offset;
- 	char *buf;
--	uint64_t labelsector;
- 	uint64_t tmp;
- 	int mda_count = 0;
- 	int bad = 0;
- 	int di;
- 
--	/*
--	 * By default LVM skips the first sector (sector 0), and writes
--	 * the label_header in the second sector (sector 1).
--	 * (sector size 512 bytes)
--	 */
--	if (arg_is_set(cmd, labelsector_ARG))
--		labelsector = arg_uint64_value(cmd, labelsector_ARG, UINT64_C(0));
--	else
--		labelsector = 1;
--
- 	lh_offset = labelsector * 512; /* from start of disk */
- 
- 	if (!(buf = zalloc(512)))
-@@ -1194,26 +1183,15 @@ static int _dump_mda_header(struct cmd_context *cmd,
+@@ -236,7 +236,7 @@ static int _touch_nohints(void)
+ 	if (!(fp = fopen(_nohints_file, "w")))
+ 		return_0;
+ 	if (fclose(fp))
+-		stack;
++		log_sys_debug("fclose", _nohints_file);
  	return 1;
  }
  
--static int _dump_headers(struct cmd_context *cmd,
-+static int _dump_headers(struct cmd_context *cmd, uint64_t labelsector, struct device *dev,
- 			 int argc, char **argv)
- {
--	struct device *dev;
--	const char *pv_name;
- 	uint64_t mda1_offset = 0, mda1_size = 0, mda2_offset = 0, mda2_size = 0;
- 	uint32_t mda1_checksum, mda2_checksum;
- 	int mda_count = 0;
- 	int bad = 0;
- 
--	pv_name = argv[0];
--
--	if (!(dev = dev_cache_get(cmd, pv_name, cmd->filter))) {
--		log_error("No device found for %s %s.", pv_name, dev_cache_filtered_reason(pv_name));
--		return ECMD_FAILED;
--	}
--
--	label_scan_setup_bcache();
--
--	if (!_dump_label_and_pv_header(cmd, 1, dev, NULL,
-+	if (!_dump_label_and_pv_header(cmd, labelsector, dev, 1, NULL,
- 			&mda1_offset, &mda1_size, &mda2_offset, &mda2_size, &mda_count))
- 		bad++;
- 
-@@ -1261,12 +1239,10 @@ static int _dump_headers(struct cmd_context *cmd,
- 	return ECMD_PROCESSED;
+@@ -247,26 +247,26 @@ static int _touch_hints(void)
+ 	if (!(fp = fopen(_hints_file, "w")))
+ 		return_0;
+ 	if (fclose(fp))
+-		stack;
++		log_sys_debug("fclose", _hints_file);
+ 	return 1;
  }
  
--static int _dump_metadata(struct cmd_context *cmd,
-+static int _dump_metadata(struct cmd_context *cmd, uint64_t labelsector, struct device *dev,
- 			 int argc, char **argv,
- 			 int print_metadata, int print_area)
+ static void _unlink_nohints(void)
  {
--	struct device *dev;
--	const char *pv_name;
- 	const char *tofile = NULL;
- 	uint64_t mda1_offset = 0, mda1_size = 0, mda2_offset = 0, mda2_size = 0;
- 	uint32_t mda1_checksum, mda2_checksum;
-@@ -1283,16 +1259,7 @@ static int _dump_metadata(struct cmd_context *cmd,
- 	if (arg_is_set(cmd, pvmetadatacopies_ARG))
- 		mda_num = arg_int_value(cmd, pvmetadatacopies_ARG, 1);
- 
--	pv_name = argv[0];
--
--	if (!(dev = dev_cache_get(cmd, pv_name, cmd->filter))) {
--		log_error("No device found for %s %s.", pv_name, dev_cache_filtered_reason(pv_name));
--		return ECMD_FAILED;
--	}
--
--	label_scan_setup_bcache();
--
--	if (!_dump_label_and_pv_header(cmd, 0, dev, NULL,
-+	if (!_dump_label_and_pv_header(cmd, labelsector, dev, 0, NULL,
- 			&mda1_offset, &mda1_size, &mda2_offset, &mda2_size, &mda_count))
- 		bad++;
- 
-@@ -1338,8 +1305,7 @@ static int _dump_metadata(struct cmd_context *cmd,
- 	return ECMD_PROCESSED;
+-	if (unlink(_nohints_file))
+-		log_debug("unlink_nohints errno %d", errno);
++	if (unlink(_nohints_file) && errno != ENOENT)
++		log_sys_debug("unlink", _nohints_file);
  }
  
--static int _dump_found(struct cmd_context *cmd, struct device *dev,
--		       uint64_t labelsector)
-+static int _dump_found(struct cmd_context *cmd, uint64_t labelsector, struct device *dev)
+ static void _unlink_hints(void)
  {
- 	uint64_t mda1_offset = 0, mda1_size = 0, mda2_offset = 0, mda2_size = 0;
- 	uint32_t mda1_checksum = 0, mda2_checksum = 0;
-@@ -1347,7 +1313,7 @@ static int _dump_found(struct cmd_context *cmd, struct device *dev,
- 	int mda_count = 0;
- 	int bad = 0;
+-	if (unlink(_hints_file))
+-		log_debug("unlink_hints errno %d", errno);
++	if (unlink(_hints_file) && errno != ENOENT)
++		log_sys_debug("unlink", _hints_file);
+ }
  
--	if (!_dump_label_and_pv_header(cmd, 0, dev, &found_label,
-+	if (!_dump_label_and_pv_header(cmd, labelsector, dev, 0, &found_label,
- 			&mda1_offset, &mda1_size, &mda2_offset, &mda2_size, &mda_count))
- 		bad++;
- 
-@@ -1392,12 +1358,10 @@ static int _dump_found(struct cmd_context *cmd, struct device *dev,
-  * zeroed/damaged.
-  */
- 
--static int _dump_search(struct cmd_context *cmd,
-+static int _dump_search(struct cmd_context *cmd, uint64_t labelsector, struct device *dev,
- 			int argc, char **argv)
+ static void _unlink_newhints(void)
  {
- 	char str[256];
--	struct device *dev;
--	const char *pv_name;
- 	const char *tofile = NULL;
- 	char *buf;
- 	struct mda_header *mh;
-@@ -1416,16 +1380,7 @@ static int _dump_search(struct cmd_context *cmd,
- 	if (arg_is_set(cmd, pvmetadatacopies_ARG))
- 		mda_num = arg_int_value(cmd, pvmetadatacopies_ARG, 1);
+-	if (unlink(_newhints_file))
+-		log_debug("unlink_newhints errno %d", errno);
++	if (unlink(_newhints_file) && errno != ENOENT)
++		log_sys_debug("unlink", _newhints_file);
+ }
  
--	pv_name = argv[0];
--
--	if (!(dev = dev_cache_get(cmd, pv_name, cmd->filter))) {
--		log_error("No device found for %s %s.", pv_name, dev_cache_filtered_reason(pv_name));
--		return ECMD_FAILED;
--	}
--
--	label_scan_setup_bcache();
--
--	_dump_label_and_pv_header(cmd, 0, dev, NULL,
-+	_dump_label_and_pv_header(cmd, labelsector, dev, 0, NULL,
- 			&mda1_offset, &mda1_size, &mda2_offset, &mda2_size, &mda_count);
+ static int _clear_hints(struct cmd_context *cmd)
+@@ -275,7 +275,7 @@ static int _clear_hints(struct cmd_context *cmd)
+ 	time_t t;
  
- 	/*
-@@ -1524,23 +1479,44 @@ int pvck(struct cmd_context *cmd, int argc, char **argv)
- 	int bad = 0;
- 	int i;
+ 	if (!(fp = fopen(_hints_file, "w"))) {
+-		log_warn("Failed to clear hint file.");
++		log_warn("WARNING: Failed to clear hint file.");
+ 		/* shouldn't happen, but try to unlink in case */
+ 		_unlink_hints();
+ 		return 0;
+@@ -286,10 +286,10 @@ static int _clear_hints(struct cmd_context *cmd)
+ 	fprintf(fp, "# Created empty by %s pid %d %s", cmd->name, getpid(), ctime(&t));
  
-+	/*
-+	 * By default LVM skips the first sector (sector 0), and writes
-+	 * the label_header in the second sector (sector 1).
-+	 * (sector size 512 bytes)
-+	 */
-+	if (arg_is_set(cmd, labelsector_ARG))
-+		labelsector = arg_uint64_value(cmd, labelsector_ARG, UINT64_C(0));
-+
- 	if (arg_is_set(cmd, dump_ARG)) {
-+		pv_name = argv[0];
-+
-+		if (!(dev = dev_cache_get(cmd, pv_name, cmd->filter))) {
-+			log_error("No device found for %s %s.", pv_name, dev_cache_filtered_reason(pv_name));
-+			return ECMD_FAILED;
-+		}
-+	}
-+
-+	label_scan_setup_bcache();
-+
-+	if (arg_is_set(cmd, dump_ARG)) {
-+		cmd->use_hints = 0;
-+
- 		dump = arg_str_value(cmd, dump_ARG, NULL);
+ 	if (fflush(fp))
+-		log_debug("clear_hints flush errno %d", errno);
++		log_sys_debug("fflush", _hints_file);
  
- 		if (!strcmp(dump, "metadata"))
--			return _dump_metadata(cmd, argc, argv, PRINT_CURRENT, 0);
-+			return _dump_metadata(cmd, labelsector, dev, argc, argv, PRINT_CURRENT, 0);
+ 	if (fclose(fp))
+-		log_debug("clear_hints close errno %d", errno);
++		log_sys_debug("fclose", _hints_file);
  
- 		if (!strcmp(dump, "metadata_all"))
--			return _dump_metadata(cmd, argc, argv, PRINT_ALL, 0);
-+			return _dump_metadata(cmd, labelsector, dev, argc, argv, PRINT_ALL, 0);
+ 	return 1;
+ }
+@@ -313,7 +313,7 @@ static int _lock_hints(struct cmd_context *cmd, int mode, int nonblock)
  
- 		if (!strcmp(dump, "metadata_area"))
--			return _dump_metadata(cmd, argc, argv, 0, 1);
-+			return _dump_metadata(cmd, labelsector, dev, argc, argv, 0, 1);
- 
- 		if (!strcmp(dump, "metadata_search"))
--			return _dump_search(cmd, argc, argv);
-+			return _dump_search(cmd, labelsector, dev, argc, argv);
- 
- 		if (!strcmp(dump, "headers"))
--			return _dump_headers(cmd, argc, argv);
-+			return _dump_headers(cmd, labelsector, dev, argc, argv);
- 
- 		log_error("Unknown dump value.");
- 		return ECMD_FAILED;
-@@ -1551,11 +1527,6 @@ int pvck(struct cmd_context *cmd, int argc, char **argv)
- 	 * but this is here to preserve the historical output.
- 	 */
- 
--	if (arg_is_set(cmd, labelsector_ARG))
--		labelsector = arg_uint64_value(cmd, labelsector_ARG, UINT64_C(0));
--
--	label_scan_setup_bcache();
--
- 	for (i = 0; i < argc; i++) {
- 		pv_name = argv[i];
- 
-@@ -1564,7 +1535,7 @@ int pvck(struct cmd_context *cmd, int argc, char **argv)
- 			continue;
- 		}
- 
--		if (!_dump_found(cmd, dev, labelsector))
-+		if (!_dump_found(cmd, labelsector, dev))
- 			bad++;
+ 	fd = open(_hints_file, O_RDWR);
+ 	if (fd < 0) {
+-		log_debug("lock_hints open errno %d", errno);
++		log_sys_debug("open", _hints_file);
+ 		return 0;
  	}
  
+@@ -641,10 +641,13 @@ static int _read_hint_file(struct cmd_context *cmd, struct dm_list *hints, int *
+ 	int ret = 1;
+ 	int i;
+ 
+-	if (!(fp = fopen(_hints_file, "r")))
++	if (!(fp = fopen(_hints_file, "r"))) {
++		if (errno != ENOENT)
++			log_sys_debug("fopen", _hints_file);
+ 		return 0;
++	}
+ 
+-	log_debug("Reading hint file");
++	log_debug("Reading hint file %s.", _hints_file);
+ 
+ 	for (i = 0; i < HINT_LINE_WORDS; i++)
+ 		split[i] = NULL;
+@@ -773,7 +776,7 @@ static int _read_hint_file(struct cmd_context *cmd, struct dm_list *hints, int *
+ 	}
+ 
+ 	if (fclose(fp))
+-		stack;
++		log_sys_debug("fclose", _hints_file);
+ 
+ 	if (!ret)
+ 		return 0;
+@@ -1354,4 +1357,3 @@ int get_hints(struct cmd_context *cmd, struct dm_list *hints_out, int *newhints,
+ 
+ 	return 1;
+ }
+-
 
 
 
