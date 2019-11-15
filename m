@@ -1,88 +1,49 @@
-From: David Teigland <teigland@sourceware.org>
-Date: Thu, 14 Nov 2019 13:18:23 -0500
-Subject: master - Revert "hints: rewrite function"
-Message-ID: <03498.119111413181901667@us-mta-206.us.mimecast.lan>
+From: Zdenek Kabelac <zkabelac@sourceware.org>
+Date: Fri, 15 Nov 2019 06:38:31 -0500
+Subject: master - revert "dmeventd: vdo plugin link lvm library"
+Message-ID: <30713.119111506382600133@us-mta-40.us.mimecast.lan>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=7ea71a9eb94a703975d8f59f941d02039def3be4
-Commit:        7ea71a9eb94a703975d8f59f941d02039def3be4
-Parent:        31a862a6be181764c3f505580916e11882b195a7
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Thu Nov 14 12:15:05 2019 -0600
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Thu Nov 14 12:15:05 2019 -0600
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=dccc50f6f60390b18e5387cd38647209f36fa998
+Commit:        dccc50f6f60390b18e5387cd38647209f36fa998
+Parent:        7ea71a9eb94a703975d8f59f941d02039def3be4
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Fri Nov 15 12:20:28 2019 +0100
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Fri Nov 15 12:37:41 2019 +0100
 
-Revert "hints: rewrite function"
+revert "dmeventd: vdo plugin link lvm library"
 
-This reverts commit 70fb31b5d6863248b5adfb2581b706cbb158b30e.
+This reverts commit cbabdf2fca6131660cfb5525ed9edb3f7a41525a.
+and add extra comment why this code may look unused, but
+in runtime is necessary.
 ---
- lib/label/hints.c |   39 ++++++++++++++++++++++++++-------------
- 1 files changed, 26 insertions(+), 13 deletions(-)
+ daemons/dmeventd/plugins/vdo/dmeventd_vdo.c |    8 ++++++++
+ 1 files changed, 8 insertions(+), 0 deletions(-)
 
-diff --git a/lib/label/hints.c b/lib/label/hints.c
-index 45ab2ff..f8e8f45 100644
---- a/lib/label/hints.c
-+++ b/lib/label/hints.c
-@@ -586,29 +586,42 @@ static void _filter_to_str(struct cmd_context *cmd, int filter_cfg, char **strp)
- 	char *str;
- 	int pos = 0;
- 	int len = 0;
-+	int ret;
+diff --git a/daemons/dmeventd/plugins/vdo/dmeventd_vdo.c b/daemons/dmeventd/plugins/vdo/dmeventd_vdo.c
+index 7c4ec47..399b737 100644
+--- a/daemons/dmeventd/plugins/vdo/dmeventd_vdo.c
++++ b/daemons/dmeventd/plugins/vdo/dmeventd_vdo.c
+@@ -16,6 +16,14 @@
+ #include "daemons/dmeventd/plugins/lvm2/dmeventd_lvm.h"
+ #include "daemons/dmeventd/libdevmapper-event.h"
  
- 	*strp = NULL;
- 
--	if (!(cn = find_config_tree_array(cmd, filter_cfg, NULL)))
-+	if (!(cn = find_config_tree_array(cmd, filter_cfg, NULL))) {
- 		/* shouldn't happen because default is a|*| */
- 		return;
-+	}
++/*
++ * Use parser from new device_mapper library.
++ * Although during compilation we can see dm_vdo_status_parse()
++ * in runtime we are linked agains systems libdm 'older' library
++ * which does not provide this symbol and plugin fails to load
++ */
++#include "device_mapper/vdo/status.c"
 +
-+	for (cv = cn->v; cv; cv = cv->next) {
-+		if (cv->type != DM_CFG_STRING)
-+			continue;
+ #include <sys/wait.h>
+ #include <stdarg.h>
  
--	for (cv = cn->v; cv; cv = cv->next)
--		if (cv->type == DM_CFG_STRING)
--			len += strlen(cv->v.str) + 1;
-+		len += (strlen(cv->v.str) + 1);
-+	}
-+	len++;
-+
-+	if (len == 1) {
-+		/* shouldn't happen because default is a|*| */
-+		return;
-+	}
- 
--	if (!len++ || !(str = malloc(len)))
-+	if (!(str = malloc(len)))
- 		return;
-+	memset(str, 0, len);
- 
--	for (cv = cn->v; cv; cv = cv->next)
--		if (cv->type == DM_CFG_STRING) {
--			len = strlen(cv->v.str);
--			memcpy(str + pos, cv->v.str, len);
--			pos += len;
--			str[pos++] = 0;
--		}
-+	for (cv = cn->v; cv; cv = cv->next) {
-+		if (cv->type != DM_CFG_STRING)
-+			continue;
- 
--	str[pos] = 0;
-+		ret = snprintf(str + pos, len - pos, "%s", cv->v.str);
-+
-+		if (ret >= len - pos)
-+			break;
-+		pos += ret;
-+	}
- 
- 	*strp = str;
- }
 
 
 
