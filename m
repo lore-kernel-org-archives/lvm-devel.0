@@ -1,49 +1,41 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Fri, 15 Nov 2019 06:38:31 -0500
-Subject: master - revert "dmeventd: vdo plugin link lvm library"
-Message-ID: <30713.119111506382600133@us-mta-40.us.mimecast.lan>
+Date: Fri, 15 Nov 2019 06:38:36 -0500
+Subject: master - tests: reduce amount of written date
+Message-ID: <83782.119111506382900339@us-mta-57.us.mimecast.lan>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=dccc50f6f60390b18e5387cd38647209f36fa998
-Commit:        dccc50f6f60390b18e5387cd38647209f36fa998
-Parent:        7ea71a9eb94a703975d8f59f941d02039def3be4
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=496c368528c20b02d12be19b8fe359b9f0c2cea6
+Commit:        496c368528c20b02d12be19b8fe359b9f0c2cea6
+Parent:        dccc50f6f60390b18e5387cd38647209f36fa998
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Nov 15 12:20:28 2019 +0100
+AuthorDate:    Fri Nov 15 12:36:39 2019 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Fri Nov 15 12:37:41 2019 +0100
+CommitterDate: Fri Nov 15 12:37:44 2019 +0100
 
-revert "dmeventd: vdo plugin link lvm library"
+tests: reduce amount of written date
 
-This reverts commit cbabdf2fca6131660cfb5525ed9edb3f7a41525a.
-and add extra comment why this code may look unused, but
-in runtime is necessary.
+Since we reduced created LV to 4M - dd also just 4M.
 ---
- daemons/dmeventd/plugins/vdo/dmeventd_vdo.c |    8 ++++++++
- 1 files changed, 8 insertions(+), 0 deletions(-)
+ .../lvconvert-raid-reshape-stripes-load-reload.sh  |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
 
-diff --git a/daemons/dmeventd/plugins/vdo/dmeventd_vdo.c b/daemons/dmeventd/plugins/vdo/dmeventd_vdo.c
-index 7c4ec47..399b737 100644
---- a/daemons/dmeventd/plugins/vdo/dmeventd_vdo.c
-+++ b/daemons/dmeventd/plugins/vdo/dmeventd_vdo.c
-@@ -16,6 +16,14 @@
- #include "daemons/dmeventd/plugins/lvm2/dmeventd_lvm.h"
- #include "daemons/dmeventd/libdevmapper-event.h"
+diff --git a/test/shell/lvconvert-raid-reshape-stripes-load-reload.sh b/test/shell/lvconvert-raid-reshape-stripes-load-reload.sh
+index 185bb57..a38d928 100644
+--- a/test/shell/lvconvert-raid-reshape-stripes-load-reload.sh
++++ b/test/shell/lvconvert-raid-reshape-stripes-load-reload.sh
+@@ -56,7 +56,7 @@ mount "$DM_DEV_DIR/$vg/$lv1" "$mount_dir"
  
-+/*
-+ * Use parser from new device_mapper library.
-+ * Although during compilation we can see dm_vdo_status_parse()
-+ * in runtime we are linked agains systems libdm 'older' library
-+ * which does not provide this symbol and plugin fails to load
-+ */
-+#include "device_mapper/vdo/status.c"
-+
- #include <sys/wait.h>
- #include <stdarg.h>
+ echo 3 >/proc/sys/vm/drop_caches
+ # FIXME: This is filling up ram disk. Use sane amount of data please! Rate limit the data written!
+-dd if=/dev/urandom of="$mount_dir/random" bs=1M count=50 conv=fdatasync
++dd if=/dev/urandom of="$mount_dir/random" bs=1M count=4 conv=fdatasync
+ checksum_ "$mount_dir/random" >MD5
  
+ # FIXME: wait_for_sync - is this really testing anything under load?
 
 
 
