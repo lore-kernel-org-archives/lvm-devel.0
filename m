@@ -1,58 +1,59 @@
-From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Thu,  5 Jan 2017 14:56:37 +0000 (UTC)
-Subject: master - cache: resize is still unsupported
-Message-ID: <20170105145637.C0CAA60E29@fedorahosted.org>
+From: Marian Csontos <mcsontos@sourceware.org>
+Date: Wed, 20 Nov 2019 09:33:01 -0500
+Subject: stable-2.02 - WHATS_NEW: update
+Message-ID: <05208.119112009325601261@us-mta-312.us.mimecast.lan>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=3e9c03cbbcf102029d11f312e1cd1d20284b6d03
-Commit:        3e9c03cbbcf102029d11f312e1cd1d20284b6d03
-Parent:        1f5dde38a7ec18d86c38c0b7e1cb2a953ea5cf44
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu Jan 5 15:32:25 2017 +0100
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Thu Jan 5 15:34:22 2017 +0100
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=26f94d91195531730c22eac26c741f1b4d2e0f1e
+Commit:        26f94d91195531730c22eac26c741f1b4d2e0f1e
+Parent:        9e45ad04b035468bc4ed7a68e654bfa5641f6b2c
+Author:        Marian Csontos <mcsontos@redhat.com>
+AuthorDate:    Wed Oct 23 09:32:36 2019 +0200
+Committer:     Marian Csontos <mcsontos@redhat.com>
+CommitterDate: Wed Nov 20 15:30:34 2019 +0100
 
-cache: resize is still unsupported
+WHATS_NEW: update
 
-During rework of resize code this validation check
-has been lost (in my resize branch). Upstream
-is still not supporting resize of any cache type LV
-so needs to be prevented.
 ---
- WHATS_NEW               |    1 +
- lib/metadata/lv_manip.c |    5 +++++
- 2 files changed, 6 insertions(+), 0 deletions(-)
+ WHATS_NEW    |    2 ++
+ WHATS_NEW_DM |    1 +
+ 2 files changed, 3 insertions(+), 0 deletions(-)
 
 diff --git a/WHATS_NEW b/WHATS_NEW
-index 5fb5904..3fde645 100644
+index 49c31a4..50fd519 100644
 --- a/WHATS_NEW
 +++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.02.169 - 
- =====================================
-+  Restore check preventing resize of cache type volumes (2.02.158).
-   Add missing udev sync when flushing dirty cache content.
-   vgchange -p accepts only uint32 numbers.
-   Report thin LV date for merged LV when the merge is in progress.
-diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
-index 9759cda..a954bf7 100644
---- a/lib/metadata/lv_manip.c
-+++ b/lib/metadata/lv_manip.c
-@@ -4687,6 +4687,11 @@ static int _lvresize_check(struct logical_volume *lv,
- 		return 0;
- 	}
+@@ -3,6 +3,7 @@ Version 2.02.187 -
+   Fix resize of thin-pool with data and metadata of different segtype.
+   Fix splitting mirror leg in cluster.
+   Fix activation order when removing merged snapshot.
++  Add support for DM_DEVICE_GET_TARGET_VERSION into device_mapper.
+   Add lvextend-raid.sh to check on RaidLV extensions synchronization.
+   Fix lvmetad shutdown and avoid lenghty timeouts when rebooting system.
+   Prevent creating VGs with PVs with different logical block sizes.
+@@ -10,6 +11,7 @@ Version 2.02.187 -
+   Activate thin-pool layered volume as 'read-only' device.
+   Ignore crypto devices with UUID signature CRYPT-SUBDEV.
+   Enhance validation for thin and cache pool conversion and swapping.
++  Fixed activation on boot - lvm2 no longer activates incomplete VGs.
  
-+	if (lv_is_cache_type(lv)) {
-+		log_error("Unable to resize logical volumes of cache type.");
-+		return 0;
-+	}
-+
- 	if (!lv_is_visible(lv) &&
- 	    !lv_is_thin_pool_metadata(lv) &&
- 	    !lv_is_lockd_sanlock_lv(lv)) {
+ Version 2.02.186 - 27th August 2019
+ ===================================
+diff --git a/WHATS_NEW_DM b/WHATS_NEW_DM
+index 576ad38..6a909c0 100644
+--- a/WHATS_NEW_DM
++++ b/WHATS_NEW_DM
+@@ -1,5 +1,6 @@
+ Version 1.02.166 - 
+ ===================================
++  Add support for DM_DEVICE_GET_TARGET_VERSION.
+ 
+ Version 1.02.164 - 27th August 2019
+ ===================================
+
 
 
