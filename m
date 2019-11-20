@@ -1,56 +1,42 @@
-From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Fri, 20 Jan 2017 23:04:01 +0000 (UTC)
-Subject: master - lvmcmd2lib: support new command
-Message-ID: <20170120230401.6557B60D7E@fedorahosted.org>
+From: Marian Csontos <mcsontos@sourceware.org>
+Date: Wed, 20 Nov 2019 09:34:04 -0500
+Subject: master - test: Fix handling leftovers from previous tests
+Message-ID: <07980.119112009335900673@us-mta-225.us.mimecast.lan>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=d80f9a107fc869d541a36c8c9d12c32589c34c12
-Commit:        d80f9a107fc869d541a36c8c9d12c32589c34c12
-Parent:        04a9cad499848cfc025d33ca28e9f657abc80ca3
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed Jan 18 09:53:46 2017 +0100
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Fri Jan 20 23:55:07 2017 +0100
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=1e669ab315c32aba3f47c37771f26ab7c8e151dd
+Commit:        1e669ab315c32aba3f47c37771f26ab7c8e151dd
+Parent:        7474440d3b540d20eb4f997efeb31b881cc6ac8e
+Author:        Marian Csontos <mcsontos@redhat.com>
+AuthorDate:    Wed Nov 20 15:23:48 2019 +0100
+Committer:     Marian Csontos <mcsontos@redhat.com>
+CommitterDate: Wed Nov 20 15:27:03 2019 +0100
 
-lvmcmd2lib: support new command
+test: Fix handling leftovers from previous tests
 
-Internal command which reads lvm.conf settins and passes it
-via envvar to dmeventd monitoring thread.
+teardown fails current PREFIX is prefix of previously failed test with
+leftovers in dmtable.
 ---
- WHATS_NEW         |    1 +
- tools/lvmcmdlib.c |    5 ++++-
- 2 files changed, 5 insertions(+), 1 deletions(-)
+ test/lib/aux.sh |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index e5b735f..94411ae 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.02.169 - 
- =====================================
-+  Support new internal command _dmeventd_thin_command.
-   Introduce new dmeventd/thin_command configurable setting.
-   Use new default units 'r' for displaying sizes.
-   Also unmount mount point on top of MD device if using blkdeactivate -u.
-diff --git a/tools/lvmcmdlib.c b/tools/lvmcmdlib.c
-index 276c8b3..0243768 100644
---- a/tools/lvmcmdlib.c
-+++ b/tools/lvmcmdlib.c
-@@ -83,7 +83,10 @@ int lvm2_run(void *handle, const char *cmdline)
- 		memlock_inc_daemon(cmd);
- 	} else if (!strcmp(cmdline, "_memlock_dec"))
- 		memlock_dec_daemon(cmd);
--	else
-+	else if (!strcmp(cmdline, "_dmeventd_thin_command")) {
-+		if (setenv(cmdline, find_config_tree_str(cmd, dmeventd_thin_command_CFG, NULL), 1))
-+			ret = ECMD_FAILED;
-+	} else
- 		ret = lvm_run_command(cmd, argc, argv);
+diff --git a/test/lib/aux.sh b/test/lib/aux.sh
+index 6822d7e..566e9b5 100644
+--- a/test/lib/aux.sh
++++ b/test/lib/aux.sh
+@@ -520,7 +520,7 @@ teardown() {
  
-       out:
+ 	if test ! -f SKIP_THIS_TEST ; then
+ 		# Evaluate left devices only for non-skipped tests
+-		TEST_LEAKED_DEVICES=$(dmsetup table | grep "$PREFIX" | grep -v "${PREFIX}pv") || true
++		TEST_LEAKED_DEVICES=$(dmsetup table | grep "$PREFIX" | grep -Ev "${PREFIX}(pv|[0-9])") || true
+ 	fi
+ 
+ 	kill_tagged_processes
+
 
 
