@@ -1,62 +1,44 @@
-From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Fri,  6 Jan 2017 22:40:21 +0000 (UTC)
-Subject: master - raid: postpone archiving until metadata are changed
-Message-ID: <20170106224021.3A20360506@fedorahosted.org>
+From: Marian Csontos <mcsontos@sourceware.org>
+Date: Wed, 20 Nov 2019 09:33:03 -0500
+Subject: stable-2.02 - test: Fix handling leftovers from previous tests
+Message-ID: <86211.119112009330000855@us-mta-310.us.mimecast.lan>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=a4be2be5a441e3a85d50ce5728b9d1b82e7d1fc6
-Commit:        a4be2be5a441e3a85d50ce5728b9d1b82e7d1fc6
-Parent:        0d2a9ebec6b7555a09f26aa513b2a2f94fc19027
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Jan 6 23:36:31 2017 +0100
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Fri Jan 6 23:39:04 2017 +0100
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=61c321d110630d4fc2ed8f75cb3a9ba78e29599b
+Commit:        61c321d110630d4fc2ed8f75cb3a9ba78e29599b
+Parent:        26f94d91195531730c22eac26c741f1b4d2e0f1e
+Author:        Marian Csontos <mcsontos@redhat.com>
+AuthorDate:    Wed Nov 20 15:23:48 2019 +0100
+Committer:     Marian Csontos <mcsontos@redhat.com>
+CommitterDate: Wed Nov 20 15:31:21 2019 +0100
 
-raid: postpone archiving until metadata are changed
+test: Fix handling leftovers from previous tests
 
-Avoid archiving of lvm2 metadata when there is call of 'lvconvert --repair'
-on healthy raid LV.
+teardown fails current PREFIX is prefix of previously failed test with
+leftovers in dmtable.
+
+(cherry picked from commit 1e669ab315c32aba3f47c37771f26ab7c8e151dd)
 ---
- lib/metadata/raid_manip.c |    9 ++++++---
- 1 files changed, 6 insertions(+), 3 deletions(-)
+ test/lib/aux.sh |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
 
-diff --git a/lib/metadata/raid_manip.c b/lib/metadata/raid_manip.c
-index bceff79..8c88280 100644
---- a/lib/metadata/raid_manip.c
-+++ b/lib/metadata/raid_manip.c
-@@ -3952,9 +3952,6 @@ static int _lv_raid_rebuild_or_replace(struct logical_volume *lv,
- 		return 0;
- 	}
+diff --git a/test/lib/aux.sh b/test/lib/aux.sh
+index 2241062..ec0699f 100644
+--- a/test/lib/aux.sh
++++ b/test/lib/aux.sh
+@@ -568,7 +568,7 @@ teardown() {
  
--	if (!archive(lv->vg))
--		return_0;
--
- 	/*
- 	 * How many sub-LVs are being removed?
- 	 */
-@@ -3972,6 +3969,9 @@ static int _lv_raid_rebuild_or_replace(struct logical_volume *lv,
- 		    lv_is_on_pvs(seg_metalv(raid_seg, s), remove_pvs)) {
- 			match_count++;
- 			if (rebuild) {
-+				if ((match_count == 1) &&
-+				    !archive(lv->vg))
-+					return_0;
- 				seg_lv(raid_seg, s)->status |= LV_REBUILD;
- 				seg_metalv(raid_seg, s)->status |= LV_REBUILD;
- 			}
-@@ -4017,6 +4017,9 @@ static int _lv_raid_rebuild_or_replace(struct logical_volume *lv,
- 	if (rebuild)
- 		goto skip_alloc;
+ 	if test ! -f SKIP_THIS_TEST ; then
+ 		# Evaluate left devices only for non-skipped tests
+-		TEST_LEAKED_DEVICES=$(dmsetup table | grep "$PREFIX" | grep -v "${PREFIX}pv") || true
++		TEST_LEAKED_DEVICES=$(dmsetup table | grep "$PREFIX" | grep -Ev "${PREFIX}(pv|[0-9])") || true
+ 	fi
  
-+	if (!archive(lv->vg))
-+		return_0;
-+
- 	/* Prevent any PVs holding image components from being used for allocation */
- 	if (!_avoid_pvs_with_other_images_of_lv(lv, allocate_pvs)) {
- 		log_error("Failed to prevent PVs holding image components "
+ 	kill_tagged_processes
+
 
 
