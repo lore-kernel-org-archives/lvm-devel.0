@@ -1,72 +1,49 @@
-From: NeilBrown <neilb@suse.com>
-Date: Wed, 04 Jan 2017 14:30:52 +1100
-Subject: [lvm2 PATCH] Remove special-case for md in 69-dm-lvm-metadata.rules
-Message-ID: <87eg0jmrgz.fsf@notabene.neil.brown.name>
+From: Marian Csontos <mcsontos@sourceware.org>
+Date: Wed, 20 Nov 2019 09:32:57 -0500
+Subject: stable-2.02 - build: autoconf
+Message-ID: <40294.119112009325300773@us-mta-346.us.mimecast.lan>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=9e45ad04b035468bc4ed7a68e654bfa5641f6b2c
+Commit:        9e45ad04b035468bc4ed7a68e654bfa5641f6b2c
+Parent:        245d7fcd590583166f6cdd78a81bac903fea92eb
+Author:        Marian Csontos <mcsontos@redhat.com>
+AuthorDate:    Wed Oct 23 09:22:42 2019 +0200
+Committer:     Marian Csontos <mcsontos@redhat.com>
+CommitterDate: Wed Nov 20 15:27:42 2019 +0100
 
-This special casing brings no value.  It appears to attempt to
-determine if the array is active yet or not, and to skip
-processing if the array has not yet been started.
-However, if the array hasn't been started, then "blkid" will
-not have been able to read a signature, so:
-  ENV{ID_FS_TYPE}!="LVM2_member|LVM1_member", GOTO="lvm_end"
-will have caused all this code to be skipped.
+build: autoconf
 
-Further, this code causes incorrect behaviour in at least one case.
-It assumes that the first "add" event should be ignored, as it will be
-followed by a "change" event which indicates the array coming on line.
-This is consistent with how the kernel sends events, but not always
-consistent with how this script sees event.
-Specifically: if the initrd has "mdadm" support installed, but not
-"lvm2" support, then the initial "add" and "change" events will
-happen while the initrd is in charge and this file is not available.
-Once the root filesystem is mountd, this file will be available
-and "udevadm trigger --action=add" will be run.
-So the first and only event seen by this script for an md device will be
-"add", and it will incorrectly ignore it.
-
-It is probable that the special handling for "loop" should be removed as
-well, but I have not actually seen that cause a problem, so I'm
-leaving it unchanged.
-
-Signed-off-by: NeilBrown <neilb@suse.com>
 ---
- udev/69-dm-lvm-metad.rules.in | 10 ----------
- 1 file changed, 10 deletions(-)
+ configure |    4 ++--
+ 1 files changed, 2 insertions(+), 2 deletions(-)
 
-diff --git a/udev/69-dm-lvm-metad.rules.in b/udev/69-dm-lvm-metad.rules.in
-index bd75fc8efcd5..db213ed67f21 100644
---- a/udev/69-dm-lvm-metad.rules.in
-+++ b/udev/69-dm-lvm-metad.rules.in
-@@ -50,16 +50,6 @@ KERNEL!="dm-[0-9]*", GOTO="next"
- ENV{DM_UDEV_PRIMARY_SOURCE_FLAG}=="1", ENV{DM_ACTIVATION}=="1", GOTO="lvm_scan"
- GOTO="lvm_end"
+diff --git a/configure b/configure
+index 4d2fb2f..fe0e8e2 100755
+--- a/configure
++++ b/configure
+@@ -12688,7 +12688,7 @@ if ${am_cv_pathless_PYTHON+:} false; then :
+   $as_echo_n "(cached) " >&6
+ else
  
--# MD device:
--LABEL="next"
--KERNEL!="md[0-9]*", GOTO="next"
--IMPORT{db}="LVM_MD_PV_ACTIVATED"
--ACTION=="add", ENV{LVM_MD_PV_ACTIVATED}=="1", GOTO="lvm_scan"
--ACTION=="change", ENV{LVM_MD_PV_ACTIVATED}!="1", TEST=="md/array_state", ENV{LVM_MD_PV_ACTIVATED}="1", GOTO="lvm_scan"
--ACTION=="add", KERNEL=="md[0-9]*p[0-9]*", GOTO="lvm_scan"
--ENV{LVM_MD_PV_ACTIVATED}!="1", ENV{SYSTEMD_READY}="0"
--GOTO="lvm_end"
--
- # Loop device:
- LABEL="next"
- KERNEL!="loop[0-9]*", GOTO="next"
--- 
-2.11.0
+-	for am_cv_pathless_PYTHON in python python2 python3 python3.3 python3.2 python3.1 python3.0 python2.7  python2.6 python2.5 python2.4 python2.3 python2.2 python2.1 python2.0 none; do
++	for am_cv_pathless_PYTHON in python python2 python3 python3.5 python3.4 python3.3 python3.2 python3.1 python3.0 python2.7  python2.6 python2.5 python2.4 python2.3 python2.2 python2.1 python2.0 none; do
+ 	  test "$am_cv_pathless_PYTHON" = none && break
+ 	  prog="import sys
+ # split strings by '.' and convert to numeric.  Append some zeros
+@@ -13256,7 +13256,7 @@ if ${am_cv_pathless_PYTHON+:} false; then :
+   $as_echo_n "(cached) " >&6
+ else
+ 
+-	for am_cv_pathless_PYTHON in python python2 python3 python3.3 python3.2 python3.1 python3.0 python2.7  python2.6 python2.5 python2.4 python2.3 python2.2 python2.1 python2.0 none; do
++	for am_cv_pathless_PYTHON in python python2 python3 python3.5 python3.4 python3.3 python3.2 python3.1 python3.0 python2.7  python2.6 python2.5 python2.4 python2.3 python2.2 python2.1 python2.0 none; do
+ 	  test "$am_cv_pathless_PYTHON" = none && break
+ 	  prog="import sys
+ # split strings by '.' and convert to numeric.  Append some zeros
 
--------------- next part --------------
-A non-text attachment was scrubbed...
-Name: signature.asc
-Type: application/pgp-signature
-Size: 832 bytes
-Desc: not available
-URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20170104/aea394a4/attachment.sig>
+
+
