@@ -1,70 +1,88 @@
-From: Bryn Reeves <bmr@fedoraproject.org>
-Date: Wed, 25 Jan 2017 16:22:34 +0000 (UTC)
-Subject: master - man: add update_filemap to dmstats.8.in
-Message-ID: <20170125162234.4B28A60E07@fedorahosted.org>
+From: Lidong Zhong <lidong.zhong@suse.com>
+Date: Mon, 25 Nov 2019 09:59:33 +0000
+Subject: [PATCH] filter-partitiond: ignore invalid partitions of loop devices
+Message-ID: <20191125095907.13663-1-lidong.zhong@suse.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=2350ea0060cd729f36245df5622b38c4b8d9bb12
-Commit:        2350ea0060cd729f36245df5622b38c4b8d9bb12
-Parent:        b999d5f501bc959cad138e4a3a2459af90d0a3ca
-Author:        Bryn M. Reeves <bmr@redhat.com>
-AuthorDate:    Sat Dec 17 16:36:26 2016 +0000
-Committer:     Bryn M. Reeves <bmr@redhat.com>
-CommitterDate: Wed Jan 25 16:15:21 2017 +0000
+After detaching the loop device, partitions of the device become
+invalid but sometimes they are still visible. And running lvm2
+commands will report error messages like:
 
-man: add update_filemap to dmstats.8.in
+linux-cno1:~ # pvs
+  Error reading device /dev/loop0p1 at 0 length 4096.
+  Error reading device /dev/loop0p2 at 0 length 4096.
+  PV         VG Fmt  Attr PSize PFree
+  /dev/sda1     lvm2 ---  1.00g 1.00g
 
+This patch is written for ignoring the invalid partitions of loop
+devices.
+
+Signed-off-by: Lidong Zhong <lidong.zhong@suse.com>
 ---
- man/dmstats.8.in |   26 ++++++++++++++++++++++++++
- 1 files changed, 26 insertions(+), 0 deletions(-)
+ lib/filters/filter-partitioned.c | 33 +++++++++++++++++++++++++++++++++
+ 1 file changed, 33 insertions(+)
 
-diff --git a/man/dmstats.8.in b/man/dmstats.8.in
-index c3ede01..167711c 100644
---- a/man/dmstats.8.in
-+++ b/man/dmstats.8.in
-@@ -212,6 +212,17 @@ dmstats \(em device-mapper statistics management
- .  ad b
- ..
- .CMD_UNGROUP
-+.HP
-+.B dmstats
-+.de CMD_UPDATE_FILEMAP
-+.  ad l
-+.  BR update_filemap
-+.  RI file_path
-+.  RB [ \-\-groupid
-+.  IR id ]
-+.  ad b
-+..
-+.CMD_UPDATE_FILEMAP
- .
- .PD
- .ad b
-@@ -668,6 +679,21 @@ Remove an existing group and return all the group's regions to their
- original state.
+diff --git a/lib/filters/filter-partitioned.c b/lib/filters/filter-partitioned.c
+index 1a700543c..1f04601bd 100644
+--- a/lib/filters/filter-partitioned.c
++++ b/lib/filters/filter-partitioned.c
+@@ -19,10 +19,35 @@
  
- The group to be removed is specified using \fB\-\-groupid\fP.
-+.HP
-+.CMD_UPDATE_FILEMAP
-+.br
-+Update a group of \fBdmstats\fP regions specified by \fBgroup_id\fP,
-+that were previously created with \fB\-\-filemap\fP. This will add
-+and remove regions to reflect changes in the allocated extents of
-+the file on-disk, since the time that it was crated or last updated.
+ #define MSG_SKIPPING "%s: Skipping: Partition table signature found"
+ 
++static int _loop_is_with_partscan(dev_t dev)
++{
++	FILE *fp;
++	int partscan = 1;
++	char path[PATH_MAX];
++	char buffer[64];
 +
-+Use of this command is not normally needed since the \fBdmfilemapd\fP
-+daemon will automatically monitor filemap groups and perform these
-+updates when required.
++	if (dm_snprintf(path, sizeof(path), "%sdev/block/%d:%d/loop/partscan",
++			dm_sysfs_dir(),
++			(int) MAJOR(dev),
++			(int) MINOR(dev)) < 0) {
++		log_warn("Sysfs path for partscan is too long.");
++		return 0;
++	}
 +
-+If a filemapped group was created with \fB\-\-nominitor\fP, or the
-+daemon has been killed, the \fBupdate_filemap\fP can be used to
-+manually force an update.
- .
- .SH REGIONS, AREAS, AND GROUPS
- .
++	if (!(fp = fopen(path, "r")))
++		return 0; /* not there -> no partscan */
++
++	if (fclose(fp))
++		log_sys_debug("fclose", path);
++
++	return partscan;
++}
++
+ static int _passes_partitioned_filter(struct cmd_context *cmd, struct dev_filter *f, struct device *dev, const char *use_filter_name)
+ {
+ 	struct dev_types *dt = (struct dev_types *) f->private;
+ 	int ret;
++	dev_t devt;
+ 
+ 	ret = dev_is_partitioned(dt, dev);
+ 
+@@ -42,6 +67,14 @@ static int _passes_partitioned_filter(struct cmd_context *cmd, struct dev_filter
+ 		return 0;
+ 	}
+ 
++	/*check if it's a valid loop partition*/
++	if (MAJOR(dev->dev) == dt->blkext_major && (2 == dev_get_primary_dev(dt, dev, &devt))) {
++		if(MAJOR(devt) == dt->loop_major && !_loop_is_with_partscan(devt)) {
++			log_debug_devs("Partitioned filter skip invalide loop partition: %s.", dev_name(dev));
++			return 0;
++		}   
++	}
++
+ 	return 1;
+ }
+ 
+-- 
+2.16.4
+
 
 
