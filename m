@@ -1,40 +1,126 @@
 From: David Teigland <teigland@sourceware.org>
-Date: Tue, 26 Nov 2019 12:21:57 -0500
-Subject: master - writecache: modprobe dm-writecache
-Message-ID: <49945.119112612215000135@us-mta-13.us.mimecast.lan>
+Date: Tue, 26 Nov 2019 15:42:15 -0500
+Subject: master - pvcreate, pvremove: fix reacquiring global lock after prompt
+Message-ID: <68675.119112615421101829@us-mta-372.us.mimecast.lan>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=1c9b36618ec8357350ed4d83c807ae0bf27a12be
-Commit:        1c9b36618ec8357350ed4d83c807ae0bf27a12be
-Parent:        bbd8badaef630c3534ccd1ae27602b66c37d5c6e
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=2037476008ea42e79388a407355c7f285656a5d9
+Commit:        2037476008ea42e79388a407355c7f285656a5d9
+Parent:        1c9b36618ec8357350ed4d83c807ae0bf27a12be
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Tue Nov 26 11:21:09 2019 -0600
+AuthorDate:    Tue Nov 26 14:34:43 2019 -0600
 Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Tue Nov 26 11:21:09 2019 -0600
+CommitterDate: Tue Nov 26 14:34:43 2019 -0600
 
-writecache: modprobe dm-writecache
+pvcreate,pvremove: fix reacquiring global lock after prompt
 
+When pvcreate/pvremove prompt the user, they first release
+the global lock, then acquire it again after the prompt,
+to avoid blocking other commands while waiting for a user
+response.  This release/reacquire changes the locking
+order with respect to the hints flock (and potentially other
+locks).  So, to avoid deadlock, use a nonblocking request
+when reacquiring the global lock.
 ---
- lib/writecache/writecache.c |    2 +-
- 1 files changed, 1 insertions(+), 1 deletions(-)
+ lib/locking/locking.c |   14 +++++++++++---
+ lib/locking/locking.h |    1 +
+ lib/misc/lvm-flock.c  |    2 +-
+ tools/toollib.c       |    5 +++--
+ 4 files changed, 16 insertions(+), 6 deletions(-)
 
-diff --git a/lib/writecache/writecache.c b/lib/writecache/writecache.c
-index 0a5b485..130922a 100644
---- a/lib/writecache/writecache.c
-+++ b/lib/writecache/writecache.c
-@@ -214,7 +214,7 @@ static int _target_present(struct cmd_context *cmd,
+diff --git a/lib/locking/locking.c b/lib/locking/locking.c
+index 3058a8b..65ff8c2 100644
+--- a/lib/locking/locking.c
++++ b/lib/locking/locking.c
+@@ -338,7 +338,7 @@ int sync_local_dev_names(struct cmd_context* cmd)
+  * an explicitly acquired ex global lock to sh in process_each.
+  */
  
- 	if (!_writecache_checked) {
- 		_writecache_checked = 1;
--		_writecache_present =  target_present(cmd, TARGET_NAME_WRITECACHE, 0);
-+		_writecache_present =  target_present(cmd, TARGET_NAME_WRITECACHE, 1);
+-static int _lockf_global(struct cmd_context *cmd, const char *mode, int convert)
++static int _lockf_global(struct cmd_context *cmd, const char *mode, int convert, int nonblock)
+ {
+ 	uint32_t flags = 0;
+ 	int ret;
+@@ -346,6 +346,9 @@ static int _lockf_global(struct cmd_context *cmd, const char *mode, int convert)
+ 	if (convert)
+ 		flags |= LCK_CONVERT;
+ 
++	if (nonblock)
++		flags |= LCK_NONBLOCK;
++
+ 	if (!strcmp(mode, "ex")) {
+ 		flags |= LCK_WRITE;
+ 
+@@ -379,7 +382,7 @@ static int _lockf_global(struct cmd_context *cmd, const char *mode, int convert)
+ 
+ int lockf_global(struct cmd_context *cmd, const char *mode)
+ {
+-	return _lockf_global(cmd, mode, 0);
++	return _lockf_global(cmd, mode, 0, 0);
+ }
+ 
+ int lockf_global_convert(struct cmd_context *cmd, const char *mode)
+@@ -388,7 +391,12 @@ int lockf_global_convert(struct cmd_context *cmd, const char *mode)
+ 	if (cmd->lockf_global_ex && !strcmp(mode, "ex"))
+ 		return 1;
+ 
+-	return _lockf_global(cmd, mode, 1);
++	return _lockf_global(cmd, mode, 1, 0);
++}
++
++int lockf_global_nonblock(struct cmd_context *cmd, const char *mode)
++{
++	return _lockf_global(cmd, mode, 0, 1);
+ }
+ 
+ int lock_global(struct cmd_context *cmd, const char *mode)
+diff --git a/lib/locking/locking.h b/lib/locking/locking.h
+index 746667a..3e8ae6f 100644
+--- a/lib/locking/locking.h
++++ b/lib/locking/locking.h
+@@ -75,6 +75,7 @@ int activate_lvs(struct cmd_context *cmd, struct dm_list *lvs, unsigned exclusiv
+ 
+ int lockf_global(struct cmd_context *cmd, const char *mode);
+ int lockf_global_convert(struct cmd_context *cmd, const char *mode);
++int lockf_global_nonblock(struct cmd_context *cmd, const char *mode);
+ int lock_global(struct cmd_context *cmd, const char *mode);
+ int lock_global_convert(struct cmd_context *cmd, const char *mode);
+ 
+diff --git a/lib/misc/lvm-flock.c b/lib/misc/lvm-flock.c
+index d65601d..d48ff22 100644
+--- a/lib/misc/lvm-flock.c
++++ b/lib/misc/lvm-flock.c
+@@ -164,7 +164,7 @@ static int _do_write_priority_flock(const char *file, int *fd, int operation, ui
+ 	strcpy(file_aux, file);
+ 	strcat(file_aux, AUX_LOCK_SUFFIX);
+ 
+-	if ((r = _do_flock(file_aux, &fd_aux, LOCK_EX, 0))) {
++	if ((r = _do_flock(file_aux, &fd_aux, LOCK_EX, nonblock))) {
+ 		if (operation == LOCK_EX) {
+ 			r = _do_flock(file, fd, operation, nonblock);
+ 			_undo_flock(file_aux, fd_aux);
+diff --git a/tools/toollib.c b/tools/toollib.c
+index ee2419b..a5304bf 100644
+--- a/tools/toollib.c
++++ b/tools/toollib.c
+@@ -5577,10 +5577,11 @@ int pvcreate_each_device(struct cmd_context *cmd,
+ 	 * Reacquire the lock that was released above before waiting, then
+ 	 * check again that the devices can still be used.  If the second loop
+ 	 * finds them changed, or can't find them any more, then they aren't
+-	 * used.
++	 * used.  Use a non-blocking request when reacquiring to avoid
++	 * potential deadlock since this is not the normal locking sequence.
+ 	 */
+ 
+-	if (!lockf_global(cmd, "ex")) {
++	if (!lockf_global_nonblock(cmd, "ex")) {
+ 		log_error("Failed to reacquire global lock after prompt.");
+ 		goto_out;
  	}
- 
- 	return _writecache_present;
 
 
 
