@@ -1,20 +1,20 @@
 From: Heinz Mauelshagen <heinzm@sourceware.org>
-Date: Tue, 26 Nov 2019 16:31:21 -0500
-Subject: stable-2.02 - lvcreate: ensure striped raid region size is at least stripe size
-Message-ID: <66652.119112616311601662@us-mta-411.us.mimecast.lan>
+Date: Tue, 26 Nov 2019 16:32:20 -0500
+Subject: master - lvcreate: ensure striped raid region size is at least stripe size
+Message-ID: <11018.119112616321401256@us-mta-395.us.mimecast.lan>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=50c56ade2a7a89f751091669fb8b31854f93eff1
-Commit:        50c56ade2a7a89f751091669fb8b31854f93eff1
-Parent:        61c321d110630d4fc2ed8f75cb3a9ba78e29599b
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=29db9c6325ac3552b0ba3a0f49682e8e8112cca2
+Commit:        29db9c6325ac3552b0ba3a0f49682e8e8112cca2
+Parent:        2037476008ea42e79388a407355c7f285656a5d9
 Author:        Heinz Mauelshagen <heinzm@redhat.com>
 AuthorDate:    Tue Nov 26 22:17:34 2019 +0100
 Committer:     Heinz Mauelshagen <heinzm@redhat.com>
-CommitterDate: Tue Nov 26 22:30:54 2019 +0100
+CommitterDate: Tue Nov 26 22:31:58 2019 +0100
 
 lvcreate: ensure striped raid region size is at least stripe size
 
@@ -34,21 +34,21 @@ Resolves: https://bugzilla.redhat.com/show_bug.cgi?id=1698225
  2 files changed, 8 insertions(+), 0 deletions(-)
 
 diff --git a/WHATS_NEW b/WHATS_NEW
-index 50fd519..047479b 100644
+index e5af036..41d0e56 100644
 --- a/WHATS_NEW
 +++ b/WHATS_NEW
 @@ -1,5 +1,6 @@
- Version 2.02.187 - 
+ Version 2.03.07 - 
  ===================================
 +  Ensure minimum required region size on striped RaidLV creation.
    Fix resize of thin-pool with data and metadata of different segtype.
-   Fix splitting mirror leg in cluster.
+   Improve mirror type leg splitting.
    Fix activation order when removing merged snapshot.
 diff --git a/tools/lvcreate.c b/tools/lvcreate.c
-index 6e8cc90..c27b798 100644
+index ebe6c9f..4a1534c 100644
 --- a/tools/lvcreate.c
 +++ b/tools/lvcreate.c
-@@ -574,6 +574,13 @@ static int _read_raid_params(struct cmd_context *cmd,
+@@ -575,6 +575,13 @@ static int _read_raid_params(struct cmd_context *cmd,
  			log_error("Minimum recovery rate cannot be higher than maximum.");
  			return 0;
  		}
