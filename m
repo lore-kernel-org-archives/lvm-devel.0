@@ -1,20 +1,20 @@
 From: Heinz Mauelshagen <heinzm@sourceware.org>
-Date: Tue, 26 Nov 2019 16:32:20 -0500
+Date: Tue, 26 Nov 2019 16:34:39 -0500
 Subject: master - lvcreate: ensure striped raid region size is at least stripe size
-Message-ID: <11018.119112616321401256@us-mta-395.us.mimecast.lan>
+Message-ID: <29137.119112616343500325@us-mta-21.us.mimecast.lan>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=29db9c6325ac3552b0ba3a0f49682e8e8112cca2
-Commit:        29db9c6325ac3552b0ba3a0f49682e8e8112cca2
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=54a9d086db46a4e61e2edbcd6c35ed2d913f6a46
+Commit:        54a9d086db46a4e61e2edbcd6c35ed2d913f6a46
 Parent:        2037476008ea42e79388a407355c7f285656a5d9
 Author:        Heinz Mauelshagen <heinzm@redhat.com>
 AuthorDate:    Tue Nov 26 22:17:34 2019 +0100
 Committer:     Heinz Mauelshagen <heinzm@redhat.com>
-CommitterDate: Tue Nov 26 22:31:58 2019 +0100
+CommitterDate: Tue Nov 26 22:27:06 2019 +0100
 
 lvcreate: ensure striped raid region size is at least stripe size
 
@@ -29,21 +29,9 @@ larger or equal to stripe size.
 
 Resolves: https://bugzilla.redhat.com/show_bug.cgi?id=1698225
 ---
- WHATS_NEW        |    1 +
  tools/lvcreate.c |    7 +++++++
- 2 files changed, 8 insertions(+), 0 deletions(-)
+ 1 files changed, 7 insertions(+), 0 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index e5af036..41d0e56 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.03.07 - 
- ===================================
-+  Ensure minimum required region size on striped RaidLV creation.
-   Fix resize of thin-pool with data and metadata of different segtype.
-   Improve mirror type leg splitting.
-   Fix activation order when removing merged snapshot.
 diff --git a/tools/lvcreate.c b/tools/lvcreate.c
 index ebe6c9f..4a1534c 100644
 --- a/tools/lvcreate.c
