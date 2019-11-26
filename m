@@ -1,68 +1,88 @@
-From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Thu, 14 Nov 2019 12:08:13 -0500
-Subject: master - cov: use zalloc
-Message-ID: <05869.119111412081001377@us-mta-153.us.mimecast.lan>
+From: Marian Csontos <mcsontos@sourceware.org>
+Date: Tue, 26 Nov 2019 04:08:13 -0500
+Subject: master - tests: Find md name using lsblk
+Message-ID: <67349.119112604080800561@us-mta-281.us.mimecast.lan>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=9af1d63b4d96facb0aa055a44c2f61eac01e13f2
-Commit:        9af1d63b4d96facb0aa055a44c2f61eac01e13f2
-Parent:        33c1d2e92137876116fd81cdca61874cc8e299c7
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu Nov 14 17:13:58 2019 +0100
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Thu Nov 14 18:06:42 2019 +0100
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=b6902585187e9a7e29fb57d8415743db1bf80dab
+Commit:        b6902585187e9a7e29fb57d8415743db1bf80dab
+Parent:        4757ce4c2a4d67ca7170fd25a5dc6e160fb7a788
+Author:        Marian Csontos <mcsontos@redhat.com>
+AuthorDate:    Tue Nov 26 09:11:05 2019 +0100
+Committer:     Marian Csontos <mcsontos@redhat.com>
+CommitterDate: Tue Nov 26 09:13:17 2019 +0100
 
-cov: use zalloc
+tests: Find md name using lsblk
 
-Instead of malloc() memset() -> zalloc()
+After stopping MD device and rescanning the leg, it is created with
+different name.
 ---
- tools/pvck.c |    9 +++------
- 1 files changed, 3 insertions(+), 6 deletions(-)
+ test/shell/duplicate-pvs-md0.sh |    6 ++----
+ test/shell/duplicate-pvs-md1.sh |    9 +++------
+ 2 files changed, 5 insertions(+), 10 deletions(-)
 
-diff --git a/tools/pvck.c b/tools/pvck.c
-index c9692b0..4a267dd 100644
---- a/tools/pvck.c
-+++ b/tools/pvck.c
-@@ -655,9 +655,8 @@ static int _dump_meta_area(struct device *dev, const char *tofile,
- 	if (!tofile)
- 		return_0;
- 
--	if (!(meta_buf = malloc(mda_size)))
-+	if (!(meta_buf = zalloc(mda_size)))
- 		return_0;
--	memset(meta_buf, 0, mda_size);
- 
- 	if (!dev_read_bytes(dev, mda_offset, mda_size, meta_buf)) {
- 		log_print("CHECK: failed to read metadata area at offset %llu size %llu",
-@@ -713,12 +712,11 @@ static int _dump_current_text(struct device *dev,
- 	int ri = rlocn_index; /* 0 or 1 */
- 	int bad = 0;
- 
--	if (!(meta_buf = malloc(meta_size))) {
-+	if (!(meta_buf = zalloc(meta_size))) {
- 		log_print("CHECK: mda_header_%d.raw_locn[%d] no mem for metadata text size %llu", mn, ri,
- 			  (unsigned long long)meta_size);
- 		return 0;
- 	}
--	memset(meta_buf, 0, meta_size);
- 
- 	/*
- 	 * Read the metadata text specified by the raw_locn so we can
-@@ -1496,9 +1494,8 @@ static int _dump_search(struct cmd_context *cmd,
- 	log_print("Searching for metadata in mda%d at offset %llu size %llu", mda_num,
- 		  (unsigned long long)mda_offset, (unsigned long long)mda_size);
- 
--	if (!(buf = malloc(mda_size)))
-+	if (!(buf = zalloc(mda_size)))
- 		return ECMD_FAILED;
--	memset(buf, 0, mda_size);
- 
- 	if (!dev_read_bytes(dev, mda_offset, mda_size, buf)) {
- 		log_print("CHECK: failed to read metadata area at offset %llu size %llu",
+diff --git a/test/shell/duplicate-pvs-md0.sh b/test/shell/duplicate-pvs-md0.sh
+index 036f570..6ff9ba2 100644
+--- a/test/shell/duplicate-pvs-md0.sh
++++ b/test/shell/duplicate-pvs-md0.sh
+@@ -368,8 +368,7 @@ aux enable_dev "$dev2"
+ aux aux udev_wait
+ cat /proc/mdstat
+ # for some reason enabling dev2 starts an odd md dev
+-mdadm --stop "$mddev" || true
+-mdadm --stop --scan
++mdadm --stop $(lsblk -al -o NAME --noheadings "$dev2" | grep '^md') || true
+ cat /proc/mdstat
+ aux wipefs_a "$dev1" || true
+ aux wipefs_a "$dev2" || true
+@@ -434,8 +433,7 @@ aux enable_dev "$dev2"
+ aux aux udev_wait
+ cat /proc/mdstat
+ # for some reason enabling dev2 starts an odd md dev
+-mdadm --stop "$mddev" || true
+-mdadm --stop --scan
++mdadm --stop $(lsblk -al -o NAME --noheadings "$dev2" | grep '^md') || true
+ cat /proc/mdstat
+ aux wipefs_a "$dev1" || true
+ aux wipefs_a "$dev2" || true
+diff --git a/test/shell/duplicate-pvs-md1.sh b/test/shell/duplicate-pvs-md1.sh
+index 64d9b98..0e1b83c 100644
+--- a/test/shell/duplicate-pvs-md1.sh
++++ b/test/shell/duplicate-pvs-md1.sh
+@@ -415,8 +415,7 @@ aux enable_dev "$dev2"
+ aux udev_wait
+ cat /proc/mdstat
+ # for some reason enabling dev2 starts an odd md dev
+-mdadm --stop "$mddev" || true
+-mdadm --stop --scan
++mdadm --stop $(lsblk -al -o NAME --noheadings "$dev2" | grep '^md') || true
+ cat /proc/mdstat
+ aux wipefs_a "$dev1" || true
+ aux wipefs_a "$dev2" || true
+@@ -480,8 +479,7 @@ aux enable_dev "$dev2"
+ aux udev_wait
+ cat /proc/mdstat
+ # for some reason enabling dev2 starts an odd md dev
+-mdadm --stop "$mddev" || true
+-mdadm --stop --scan
++mdadm --stop $(lsblk -al -o NAME --noheadings "$dev2" | grep '^md') || true
+ cat /proc/mdstat
+ aux wipefs_a "$dev1" || true
+ aux wipefs_a "$dev2" || true
+@@ -619,8 +617,7 @@ aux enable_dev "$dev4"
+ aux udev_wait
+ cat /proc/mdstat
+ # for some reason enabling dev2 starts an odd md dev
+-mdadm --stop "$mddev" || true
+-mdadm --stop --scan
++mdadm --stop $(lsblk -al -o NAME --noheadings "$dev2" | grep '^md') || true
+ cat /proc/mdstat
+ aux wipefs_a "$dev1" || true
+ aux wipefs_a "$dev2" || true
 
 
 
