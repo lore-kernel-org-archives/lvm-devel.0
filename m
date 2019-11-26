@@ -1,62 +1,40 @@
-From: Marian Csontos <mcsontos@sourceware.org>
-Date: Tue, 26 Nov 2019 04:36:52 -0500
-Subject: master - tests: update to md dev name
-Message-ID: <51331.119112604364500135@us-mta-147.us.mimecast.lan>
+From: David Teigland <teigland@sourceware.org>
+Date: Tue, 26 Nov 2019 12:21:57 -0500
+Subject: master - writecache: modprobe dm-writecache
+Message-ID: <49945.119112612215000135@us-mta-13.us.mimecast.lan>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=bbd8badaef630c3534ccd1ae27602b66c37d5c6e
-Commit:        bbd8badaef630c3534ccd1ae27602b66c37d5c6e
-Parent:        b6902585187e9a7e29fb57d8415743db1bf80dab
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=1c9b36618ec8357350ed4d83c807ae0bf27a12be
+Commit:        1c9b36618ec8357350ed4d83c807ae0bf27a12be
+Parent:        bbd8badaef630c3534ccd1ae27602b66c37d5c6e
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Wed Oct 2 12:51:17 2019 -0500
-Committer:     Marian Csontos <mcsontos@redhat.com>
-CommitterDate: Tue Nov 26 10:34:51 2019 +0100
+AuthorDate:    Tue Nov 26 11:21:09 2019 -0600
+Committer:     David Teigland <teigland@redhat.com>
+CommitterDate: Tue Nov 26 11:21:09 2019 -0600
 
-tests: update to md dev name
+writecache: modprobe dm-writecache
 
-Restore WAIT_MD_DEV in teardown.
-
-NOTE: The name of MD device may have changed.
-
-(cherry picked from commit c2ff8876f97a5840cd9d6fcda1bec55ef6220dc3)
 ---
- test/lib/aux.sh |    7 +++++--
- 1 files changed, 5 insertions(+), 2 deletions(-)
+ lib/writecache/writecache.c |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
 
-diff --git a/test/lib/aux.sh b/test/lib/aux.sh
-index 19365cd..566e9b5 100644
---- a/test/lib/aux.sh
-+++ b/test/lib/aux.sh
-@@ -421,13 +421,15 @@ teardown_devs() {
- 	teardown_udev_cookies
+diff --git a/lib/writecache/writecache.c b/lib/writecache/writecache.c
+index 0a5b485..130922a 100644
+--- a/lib/writecache/writecache.c
++++ b/lib/writecache/writecache.c
+@@ -214,7 +214,7 @@ static int _target_present(struct cmd_context *cmd,
  
- 	test ! -f MD_DEV || cleanup_md_dev
-+
-+	test ! -f WAIT_MD_DEV || mddev=$(< WAIT_MD_DEV)
- 	udev_wait
--	mdadm --stop --scan || true
-+	test ! -f WAIT_MD_DEV || mdadm --stop $mddev || true
- 	udev_wait
- 	test ! -f DEVICES || teardown_devs_prefixed "$PREFIX"
- 	test ! -f RAMDISK || { modprobe -r brd || true ; }
+ 	if (!_writecache_checked) {
+ 		_writecache_checked = 1;
+-		_writecache_present =  target_present(cmd, TARGET_NAME_WRITECACHE, 0);
++		_writecache_present =  target_present(cmd, TARGET_NAME_WRITECACHE, 1);
+ 	}
  
--	mdadm --stop --scan || true
-+	test ! -f WAIT_MD_DEV || mdadm --stop $mddev || true
- 
- 	# NOTE: SCSI_DEBUG_DEV test must come before the LOOP test because
- 	# prepare_scsi_debug_dev() also sets LOOP to short-circuit prepare_loop()
-@@ -792,6 +794,7 @@ wait_md_create() {
- 			break
- 		fi
- 	done
-+	echo "$md" > WAIT_MD_DEV
- }
- 
- wipefs_a() {
+ 	return _writecache_present;
 
 
 
