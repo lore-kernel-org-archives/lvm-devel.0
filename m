@@ -1,56 +1,108 @@
 From: David Teigland <teigland@sourceware.org>
-Date: Tue, 26 Nov 2019 17:52:54 -0500
-Subject: master - tests hints: update check for io count
-Message-ID: <31950.119112617525100325@us-mta-161.us.mimecast.lan>
+Date: Wed, 27 Nov 2019 10:27:34 -0500
+Subject: master - scanning: use bool type for _scan_text_mismatch
+Message-ID: <49365.119112710273000513@us-mta-235.us.mimecast.lan>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=b400353c71397954a7cc4c4b52b9570715104773
-Commit:        b400353c71397954a7cc4c4b52b9570715104773
-Parent:        a61272a6f048e56ea75e34ad190af10ff9773c8c
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=98a8099da9e43561a1fe981bbf2866e373f0d07a
+Commit:        98a8099da9e43561a1fe981bbf2866e373f0d07a
+Parent:        b400353c71397954a7cc4c4b52b9570715104773
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Tue Nov 26 16:31:38 2019 -0600
+AuthorDate:    Wed Nov 27 09:26:04 2019 -0600
 Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Tue Nov 26 16:52:28 2019 -0600
+CommitterDate: Wed Nov 27 09:26:49 2019 -0600
 
-tests hints: update check for io count
+scanning: use bool type for _scan_text_mismatch
 
-Running a reporting command on a VG now includes one
-additional read to check the mda_header for any change
-to the vg between scan and lock.
 ---
- test/shell/hints.sh |   10 ++++++----
- 1 files changed, 6 insertions(+), 4 deletions(-)
+ lib/metadata/metadata.c |   20 +++++++-------------
+ 1 files changed, 7 insertions(+), 13 deletions(-)
 
-diff --git a/test/shell/hints.sh b/test/shell/hints.sh
-index 019912e..f95505a 100644
---- a/test/shell/hints.sh
-+++ b/test/shell/hints.sh
-@@ -52,15 +52,17 @@ pvs
- grep -v -E "$dev1|$dev2" $HINTS > tmptest
- not grep scan: tmptest
+diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
+index 1ac5445..b12db60 100644
+--- a/lib/metadata/metadata.c
++++ b/lib/metadata/metadata.c
+@@ -4577,7 +4577,7 @@ void vg_write_commit_bad_mdas(struct cmd_context *cmd, struct volume_group *vg)
+  * reread metadata.
+  */
  
--# test that 'pvs' submits only two reads, one for each PV in hints
-+# test that 'pvs' submits only three reads, one for each PV in hints
-+# for initial scan, and one more in vg_read rescan check
+-static int _scan_text_mismatch(struct cmd_context *cmd, const char *vgname, const char *vgid)
++static bool _scan_text_mismatch(struct cmd_context *cmd, const char *vgname, const char *vgid)
+ {
+ 	struct dm_list mda_list;
+ 	struct mda_list *mdal, *safe;
+@@ -4588,7 +4588,7 @@ static int _scan_text_mismatch(struct cmd_context *cmd, const char *vgname, cons
+ 	struct raw_locn *rlocn;
+ 	struct device *dev;
+ 	uint32_t bad_fields;
+-	int ret = 1;
++	bool ret = true;
  
- if [ -e "/usr/bin/strace" ]; then
- strace -e io_submit pvs 2>&1|tee tmptest
--test "$(grep io_submit tmptest | wc -l)" -eq 2
-+test "$(grep io_submit tmptest | wc -l)" -eq 3
+ 	/*
+ 	 * if cmd->can_use_one_scan, check one mda_header is unchanged,
+@@ -4610,7 +4610,6 @@ static int _scan_text_mismatch(struct cmd_context *cmd, const char *vgname, cons
  
--# test that 'pvs -a' submits six reads, one for each device
-+# test that 'pvs -a' submits seven reads, one for each device,
-+# and one more in vg_read rescan check
- strace -e io_submit pvs -a 2>&1|tee tmptest
--test "$(grep io_submit tmptest | wc -l)" -eq 6
-+test "$(grep io_submit tmptest | wc -l)" -eq 7
- fi
+ 		if (!(dev = mda_get_device(mda))) {
+ 			log_debug("rescan for text mismatch - no mda dev");
+-			ret = 1;
+ 			goto out;
+ 		}
  
- #
+@@ -4624,13 +4623,11 @@ static int _scan_text_mismatch(struct cmd_context *cmd, const char *vgname, cons
+ 		 */
+ 		if (!dev_invalidate_bytes(dev, 4096, 512)) {
+ 			log_debug("rescan for text mismatch - cannot invalidate");
+-			ret = 1;
+ 			goto out;
+ 		}
+ 
+ 		if (!(mdah = raw_read_mda_header(cmd->fmt, area, 1, 0, &bad_fields))) {
+ 			log_debug("rescan for text mismatch - no mda header");
+-			ret = 1;
+ 			goto out;
+ 		}
+ 
+@@ -4638,18 +4635,16 @@ static int _scan_text_mismatch(struct cmd_context *cmd, const char *vgname, cons
+ 
+ 		if (bad_fields) {
+ 			log_debug("rescan for text mismatch - bad_fields");
+-			ret = 1;
+ 		} else if (rlocn->checksum != mda->scan_text_checksum) {
+ 			log_debug("rescan for text checksum mismatch - now %x prev %x",
+ 				  rlocn->checksum, mda->scan_text_checksum);
+-			ret = 1;
+ 		} else if (rlocn->offset != mda->scan_text_offset) {
+ 			log_debug("rescan for text offset mismatch - now %llu prev %llu",
+ 				  (unsigned long long)rlocn->offset,
+ 				  (unsigned long long)mda->scan_text_offset);
+-			ret = 1;
+ 		} else {
+-			ret = 0;
++			/* the common case where fields match and no rescan needed */
++			ret = false;
+ 		}
+ 
+ 		dm_pool_free(cmd->mem, mdah);
+@@ -4668,12 +4663,11 @@ static int _scan_text_mismatch(struct cmd_context *cmd, const char *vgname, cons
+ 		log_debug("rescan for text mismatch - no mdas");
+ 		goto out;
+ 	}
+-
+-	ret = 0;
+-
+ out:
+ 	if (!ret)
+-		log_debug("rescan skipped - text offset and checksum unchanged");
++		log_debug("rescan skipped - unchanged offset %llu checksum %x",
++			  (unsigned long long)mda->scan_text_offset,
++			  mda->scan_text_checksum);
+ 
+ 	dm_list_iterate_items_safe(mdal, safe, &mda_list) {
+ 		dm_list_del(&mdal->list);
 
 
 
