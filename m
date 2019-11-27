@@ -1,210 +1,129 @@
 From: David Teigland <teigland@sourceware.org>
-Date: Wed, 27 Nov 2019 12:20:59 -0500
-Subject: master - metadata: add vg_from_config_tree
-Message-ID: <54536.119112712205500723@us-mta-88.us.mimecast.lan>
+Date: Wed, 27 Nov 2019 12:21:00 -0500
+Subject: master - scan: add simple scan to find a pvid
+Message-ID: <88287.119112712205802029@us-mta-372.us.mimecast.lan>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=74ad2cd76f68596c0a718f3a9d951a4c72214691
-Commit:        74ad2cd76f68596c0a718f3a9d951a4c72214691
-Parent:        13c629fb7840e73a38afb9396cae93ea10955a21
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=94076245df6e99492a7a0bb2d8c2f2bc2616259d
+Commit:        94076245df6e99492a7a0bb2d8c2f2bc2616259d
+Parent:        74ad2cd76f68596c0a718f3a9d951a4c72214691
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Tue Oct 29 14:31:37 2019 -0500
+AuthorDate:    Wed Oct 30 15:11:57 2019 -0500
 Committer:     David Teigland <teigland@redhat.com>
 CommitterDate: Wed Nov 27 11:13:47 2019 -0600
 
-metadata: add vg_from_config_tree
+scan: add simple scan to find a pvid
 
-Add cmd/fmt args to import functions so that
-they can be used without the fid arg which.
 ---
- lib/format_text/import-export.h |   10 +++++++---
- lib/format_text/import.c        |   28 +++++++++++++++++++++-------
- lib/format_text/import_vsn1.c   |   16 ++++++++--------
- lib/metadata/metadata.c         |    4 ++--
- lib/metadata/metadata.h         |    6 ++++--
- 5 files changed, 42 insertions(+), 22 deletions(-)
+ lib/label/label.c |   70 +++++++++++++++++++++++++++++++++++++++++++++++++++++
+ lib/label/label.h |    2 +
+ 2 files changed, 72 insertions(+), 0 deletions(-)
 
-diff --git a/lib/format_text/import-export.h b/lib/format_text/import-export.h
-index 0bfc60b..da76852 100644
---- a/lib/format_text/import-export.h
-+++ b/lib/format_text/import-export.h
-@@ -47,11 +47,15 @@ enum pv_vg_lv_e {
- 
- struct text_vg_version_ops {
- 	int (*check_version) (const struct dm_config_tree * cf);
--	struct volume_group *(*read_vg) (struct format_instance * fid,
--					 const struct dm_config_tree *cf,
--					 unsigned allow_lvmetad_extensions);
-+
-+	struct volume_group *(*read_vg) (struct cmd_context *cmd,
-+					 const struct format_type *fmt,
-+					 struct format_instance *fid,
-+					 const struct dm_config_tree *cft);
-+
- 	void (*read_desc) (struct dm_pool * mem, const struct dm_config_tree *cf,
- 			   time_t *when, char **desc);
-+
- 	int (*read_vgsummary) (const struct format_type *fmt,
- 			       const struct dm_config_tree *cft,
- 			       struct lvmcache_vgsummary *vgsummary);
-diff --git a/lib/format_text/import.c b/lib/format_text/import.c
-index 79276dd..a4ea98b 100644
---- a/lib/format_text/import.c
-+++ b/lib/format_text/import.c
-@@ -15,6 +15,7 @@
- 
- #include "lib/misc/lib.h"
+diff --git a/lib/label/label.c b/lib/label/label.c
+index 64b7ca0..680630b 100644
+--- a/lib/label/label.c
++++ b/lib/label/label.c
+@@ -24,6 +24,8 @@
+ #include "lib/activate/activate.h"
+ #include "lib/label/hints.h"
  #include "lib/metadata/metadata.h"
-+#include "lib/commands/toolcontext.h"
- #include "import-export.h"
++#include "lib/format_text/format-text.h"
++#include "lib/format_text/layout.h"
  
- /* FIXME Use tidier inclusion method */
-@@ -181,7 +182,7 @@ struct volume_group *text_read_metadata(struct format_instance *fid,
- 		if (!(*vsn)->check_version(cft))
- 			continue;
- 
--		if (!(vg = (*vsn)->read_vg(fid, cft, 0)))
-+		if (!(vg = (*vsn)->read_vg(fid->fmt->cmd, fid->fmt, fid, cft)))
- 			goto_out;
- 
- 		(*vsn)->read_desc(vg->vgmem, cft, when, desc);
-@@ -210,9 +211,9 @@ struct volume_group *text_read_metadata_file(struct format_instance *fid,
- 				  when, desc);
+ #include <sys/stat.h>
+ #include <fcntl.h>
+@@ -919,6 +921,74 @@ static void _prepare_open_file_limit(struct cmd_context *cmd, unsigned int num_d
+ #endif
  }
  
--static struct volume_group *_import_vg_from_config_tree(const struct dm_config_tree *cft,
-+static struct volume_group *_import_vg_from_config_tree(struct cmd_context *cmd,
- 							struct format_instance *fid,
--							unsigned allow_lvmetad_extensions)
-+							const struct dm_config_tree *cft)
- {
- 	struct volume_group *vg = NULL;
- 	struct text_vg_version_ops **vsn;
-@@ -227,7 +228,7 @@ static struct volume_group *_import_vg_from_config_tree(const struct dm_config_t
- 		 * The only path to this point uses cached vgmetadata,
- 		 * so it can use cached PV state too.
- 		 */
--		if (!(vg = (*vsn)->read_vg(fid, cft, allow_lvmetad_extensions)))
-+		if (!(vg = (*vsn)->read_vg(cmd, fid->fmt, fid, cft)))
- 			stack;
- 		else {
- 			set_pv_devices(fid, vg, NULL);
-@@ -243,8 +244,21 @@ static struct volume_group *_import_vg_from_config_tree(const struct dm_config_t
- 	return vg;
- }
- 
--struct volume_group *import_vg_from_config_tree(const struct dm_config_tree *cft,
--						struct format_instance *fid)
-+struct volume_group *import_vg_from_config_tree(struct cmd_context *cmd,
-+						struct format_instance *fid,
-+						const struct dm_config_tree *cft)
- {
--	return _import_vg_from_config_tree(cft, fid, 0);
-+	return _import_vg_from_config_tree(cmd, fid, cft);
- }
-+
-+struct volume_group *vg_from_config_tree(struct cmd_context *cmd, const struct dm_config_tree *cft)
++int label_scan_for_pvid(struct cmd_context *cmd, char *pvid, struct device **dev_out)
 +{
-+	static struct text_vg_version_ops *ops;
++	char buf[LABEL_SIZE] __attribute__((aligned(8)));
++	struct dm_list devs;
++	struct dev_iter *iter;
++	struct device_list *devl, *devl2;
++	struct device *dev;
++	struct pv_header *pvh;
++	int ret = 0;
 +
-+	_init_text_import();
++	dm_list_init(&devs);
 +
-+	ops = _text_vsn_list[0];
++	dev_cache_scan();
 +
-+	return ops->read_vg(cmd, cmd->fmt, NULL, cft);
++	if (!(iter = dev_iter_create(cmd->filter, 0))) {
++		log_error("Scanning failed to get devices.");
++		return 0;
++	}
++
++	log_debug_devs("Filtering devices to scan");
++
++	while ((dev = dev_iter_get(cmd, iter))) {
++		if (!(devl = zalloc(sizeof(*devl))))
++			continue;
++		devl->dev = dev;
++		dm_list_add(&devs, &devl->list);
++	};
++	dev_iter_destroy(iter);
++
++	if (!scan_bcache) {
++		if (!_setup_bcache())
++			goto_out;
++	}
++
++	log_debug_devs("Reading labels for pvid");
++
++	dm_list_iterate_items(devl, &devs) {
++		dev = devl->dev;
++
++		memset(buf, 0, sizeof(buf));
++
++		if (!label_scan_open(dev))
++			continue;
++
++		if (!dev_read_bytes(dev, 512, LABEL_SIZE, buf)) {
++			_scan_dev_close(dev);
++			goto out;
++		}
++
++		pvh = (struct pv_header *)(buf + 32);
++
++		if (!memcmp(pvh->pv_uuid, pvid, ID_LEN)) {
++			*dev_out = devl->dev;
++			_scan_dev_close(dev);
++			break;
++		}
++
++		_scan_dev_close(dev);
++	}
++	ret = 1;
++ out:
++	dm_list_iterate_items_safe(devl, devl2, &devs) {
++		dm_list_del(&devl->list);
++		free(devl);
++	}
++	return ret;
 +}
 +
-diff --git a/lib/format_text/import_vsn1.c b/lib/format_text/import_vsn1.c
-index d7ff786..2bdbfee 100644
---- a/lib/format_text/import_vsn1.c
-+++ b/lib/format_text/import_vsn1.c
-@@ -993,7 +993,7 @@ static int _read_lvsegs(struct cmd_context *cmd,
- }
- 
- static int _read_sections(struct cmd_context *cmd,
--			  struct format_type *fmt,
-+			  const struct format_type *fmt,
- 			  struct format_instance *fid,
- 			  struct dm_pool *mem,
- 			  const char *section, section_fn fn,
-@@ -1016,19 +1016,18 @@ static int _read_sections(struct cmd_context *cmd,
- 	}
- 
- 	for (n = n->child; n; n = n->sib) {
--		if (!fn(cmd, fmt, fid, mem, vg, vgsummary, n, vgn, pv_hash, lv_hash))
-+		if (!fn(cmd, (struct format_type *)fmt, fid, mem, vg, vgsummary, n, vgn, pv_hash, lv_hash))
- 			return_0;
- 	}
- 
- 	return 1;
- }
- 
--static struct volume_group *_read_vg(struct format_instance *fid,
--				     const struct dm_config_tree *cft,
--				     unsigned allow_lvmetad_extensions)
-+static struct volume_group *_read_vg(struct cmd_context *cmd,
-+				     const struct format_type *fmt,
-+				     struct format_instance *fid,
-+				     const struct dm_config_tree *cft)
- {
--	struct cmd_context *cmd = fid->fmt->cmd;
--	struct format_type *fmt = (struct format_type *)fid->fmt;
- 	struct dm_pool *mem;
- 	const struct dm_config_node *vgn;
- 	const struct dm_config_value *cv;
-@@ -1234,7 +1233,8 @@ static struct volume_group *_read_vg(struct format_instance *fid,
- 	dm_hash_destroy(pv_hash);
- 	dm_hash_destroy(lv_hash);
- 
--	vg_set_fid(vg, fid);
-+	if (fid)
-+		vg_set_fid(vg, fid);
- 
- 	/*
- 	 * Finished.
-diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
-index b12db60..1371b97 100644
---- a/lib/metadata/metadata.c
-+++ b/lib/metadata/metadata.c
-@@ -999,7 +999,7 @@ static int _vg_update_embedded_copy(struct volume_group *vg, struct volume_group
- 	if (!(cft = export_vg_to_config_tree(vg)))
- 		return_0;
- 
--	if (!(*vg_embedded = import_vg_from_config_tree(cft, vg->fid))) {
-+	if (!(*vg_embedded = import_vg_from_config_tree(vg->cmd, vg->fid, cft))) {
- 		dm_config_destroy(cft);
- 		return_0;
- 	}
-@@ -5220,7 +5220,7 @@ struct volume_group *vg_read(struct cmd_context *cmd, const char *vg_name, const
- 			goto out;
- 		}
- 
--		if (!(vg->vg_committed = import_vg_from_config_tree(cft, vg->fid)))
-+		if (!(vg->vg_committed = import_vg_from_config_tree(cmd, vg->fid, cft)))
- 			log_warn("WARNING: vg_read no vg copy: copy import failed");
- 
- 		dm_config_destroy(cft);
-diff --git a/lib/metadata/metadata.h b/lib/metadata/metadata.h
-index 377a063..f199fc4 100644
---- a/lib/metadata/metadata.h
-+++ b/lib/metadata/metadata.h
-@@ -477,8 +477,10 @@ void lv_calculate_readahead(const struct logical_volume *lv, uint32_t *read_ahea
-  * For internal metadata caching.
-  */
- struct dm_config_tree *export_vg_to_config_tree(struct volume_group *vg);
--struct volume_group *import_vg_from_config_tree(const struct dm_config_tree *cft,
--						struct format_instance *fid);
-+struct volume_group *import_vg_from_config_tree(struct cmd_context *cmd,
-+						struct format_instance *fid,
-+						const struct dm_config_tree *cft);
-+struct volume_group *vg_from_config_tree(struct cmd_context *cmd, const struct dm_config_tree *cft);
- 
  /*
-  * Mirroring functions
+  * Scan devices on the system to discover which are LVM devices.
+  * Info about the LVM devices (PVs) is saved in lvmcache in a
+diff --git a/lib/label/label.h b/lib/label/label.h
+index 33a91fa..4108906 100644
+--- a/lib/label/label.h
++++ b/lib/label/label.h
+@@ -118,6 +118,8 @@ int label_scan_open(struct device *dev);
+ int label_scan_open_excl(struct device *dev);
+ int label_scan_open_rw(struct device *dev);
+ 
++int label_scan_for_pvid(struct cmd_context *cmd, char *pvid, struct device **dev_out);
++
+ /*
+  * Wrappers around bcache equivalents.
+  * (these make it easier to disable bcache and revert to direct rw if needed)
 
 
 
