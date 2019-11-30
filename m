@@ -1,66 +1,325 @@
-From: David Teigland <teigland@sourceware.org>
-Date: Wed, 27 Nov 2019 12:21:33 -0500
-Subject: master - pvck: use zalloc in more places
-Message-ID: <87843.119112712212900709@us-mta-84.us.mimecast.lan>
+From: Marian Csontos <mcsontos@sourceware.org>
+Date: Sat, 30 Nov 2019 08:58:28 -0500
+Subject: master - build: make generate
+Message-ID: <57585.119113008582400233@us-mta-40.us.mimecast.lan>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=5a88b2ce7fcdffec909f7f236d9bcfe0a615b6b9
-Commit:        5a88b2ce7fcdffec909f7f236d9bcfe0a615b6b9
-Parent:        3145a855836c4cf50d4b6064b3e6f1ce4a366aad
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Wed Nov 27 11:17:15 2019 -0600
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Wed Nov 27 11:17:15 2019 -0600
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=0a7495e6808473ee60385d3a4b6f48ac2240da72
+Commit:        0a7495e6808473ee60385d3a4b6f48ac2240da72
+Parent:        5a88b2ce7fcdffec909f7f236d9bcfe0a615b6b9
+Author:        Marian Csontos <mcsontos@redhat.com>
+AuthorDate:    Sat Nov 30 14:24:22 2019 +0100
+Committer:     Marian Csontos <mcsontos@redhat.com>
+CommitterDate: Sat Nov 30 14:24:22 2019 +0100
 
-pvck: use zalloc in more places
+build: make generate
 
 ---
- tools/pvck.c |   10 +++-------
- 1 files changed, 3 insertions(+), 7 deletions(-)
+ man/pvck.8_pregen |  245 ++++++++++++++++++++++++++++++++++++++++++++++++++---
+ 1 files changed, 233 insertions(+), 12 deletions(-)
 
-diff --git a/tools/pvck.c b/tools/pvck.c
-index cc23d9b..4eaf8b4 100644
---- a/tools/pvck.c
-+++ b/tools/pvck.c
-@@ -226,11 +226,9 @@ static void _copy_out_metadata(char *buf, uint32_t start, uint32_t first_start,
- 	/* terminating 0 byte */
- 	new_len++;
+diff --git a/man/pvck.8_pregen b/man/pvck.8_pregen
+index 6cdfe42..ea9d17d 100644
+--- a/man/pvck.8_pregen
++++ b/man/pvck.8_pregen
+@@ -7,14 +7,173 @@ pvck - Check metadata on physical volumes
+ .br
+     [ \fIoption_args\fP ]
+ .br
++.P
++.ad l
++    \fB--commandprofile\fP \fIString\fP
++.ad b
++.br
++.ad l
++    \fB--config\fP \fIString\fP
++.ad b
++.br
++.ad l
++ \fB-d\fP|\fB--debug\fP
++.ad b
++.br
++.ad l
++    \fB--driverloaded\fP \fBy\fP|\fBn\fP
++.ad b
++.br
++.ad l
++    \fB--dump\fP \fIString\fP
++.ad b
++.br
++.ad l
++ \fB-f\fP|\fB--file\fP \fIString\fP
++.ad b
++.br
++.ad l
++ \fB-h\fP|\fB--help\fP
++.ad b
++.br
++.ad l
++    \fB--labelsector\fP \fINumber\fP
++.ad b
++.br
++.ad l
++    \fB--lockopt\fP \fIString\fP
++.ad b
++.br
++.ad l
++    \fB--longhelp\fP
++.ad b
++.br
++.ad l
++    \fB--nolocking\fP
++.ad b
++.br
++.ad l
++    \fB--profile\fP \fIString\fP
++.ad b
++.br
++.ad l
++    \fB--[pv]metadatacopies\fP \fB0\fP|\fB1\fP|\fB2\fP
++.ad b
++.br
++.ad l
++ \fB-q\fP|\fB--quiet\fP
++.ad b
++.br
++.ad l
++    \fB--repair\fP
++.ad b
++.br
++.ad l
++    \fB--repairtype\fP \fBpv_header\fP|\fBmetadata\fP|\fBlabel_header\fP
++.ad b
++.br
++.ad l
++    \fB--settings\fP \fIString\fP
++.ad b
++.br
++.ad l
++ \fB-t\fP|\fB--test\fP
++.ad b
++.br
++.ad l
++ \fB-v\fP|\fB--verbose\fP
++.ad b
++.br
++.ad l
++    \fB--version\fP
++.ad b
++.br
++.ad l
++ \fB-y\fP|\fB--yes\fP
++.ad b
+ .SH DESCRIPTION
+-pvck checks LVM metadata on PVs.
++pvck checks and repairs LVM metadata on PVs.
  
--	if (!(new_buf = malloc(new_len)))
-+	if (!(new_buf = zalloc(new_len)))
- 		return;
+-Use the --dump option to extract metadata from PVs for debugging.
+-With dump, set --pvmetadatacopies 2 to extract metadata from a
+-second metadata area at the end of the device. Use the --file
+-option to save the raw metadata to a specified file. (The raw
+-metadata is not usable with vgcfgbackup and vgcfgrestore.)
++.SS Dump
++
++.B headers
++.br
++Print header values and warn if any values are incorrect.  Checks the
++label_header, pv_header, mda_header(s), and metadata text.
++
++.B metadata
++.br
++Print or save the current metadata text, using headers to locate the
++metadata.  If headers are damaged, the metadata may not be found.  Use
++--settings "mda_num=2" to look in mda2 (the second mda at the end of the
++device (if used).  The metadata text is printed to stdout.  With --file,
++the metadata text is saved to a file.
++
++.B metadata_all
++.br
++List or save all versions of metadata found in the metadata area, using
++headers to locate the metadata.  If headers are damaged, the metadata may
++not be found.  Use --settings "mda_num=2" as above.  All metadata versions
++are listed (add -v to include descriptions and dates in the listing.)
++With -file, all versions are written to a file.
++
++.B metadata_search
++.br
++Search for all versions of metadata in the common locations.  This does
++not use headers, so it can find metadata even when headers are damaged.
++Use --settings "mda_num=2" as above.  All metadata versions are listed
++(add -v to include descriptions and dates in the listing.)  With --file,
++all versions are written to a file.  To save one copy of metadata, use
++--settings "metadata_offset=<offset>", where the offset is taken from the
++dump listing.
++
++.B metadata_area
++.br
++Save the entire text metadata area to a file without processing.
++
++.SS Repair
++
++.B --repair
++.br
++Repair headers and metadata on a PV.  This uses a metadata input file that
++was extracted by --dump, or a backup file (from /etc/lvm/backup).  When
++possible, use metadata saved by --dump from another PV in the same VG (or
++from a second metadata area on the PV).
++
++There are cases where the PV UUID needs to be specified for the PV being
++repaired.  It is specified using --settings "pv_uuid=<UUID>".  In
++particular, if the device name for the PV being repaired does not match
++the previous device name of the PV, then LVM may not be able to determine
++the correct PV UUID.  When headers are damaged on more than one PV in a
++VG, it is important for the user to determine the correct PV UUID and
++specify it in --settings.  Otherwise, the wrong PV UUID could be used if
++device names have been swapped since the metadata was last written.
++
++If a PV had no metadata areas and the pv_header is damaged, then the
++repair will not know to create no metadata areas during repair.  It will
++by default repair metadata in mda1.  To repair with no metadata areas, use
++--settings "mda_offset=0 mda_size=0".
++
++There are cases where repair should be run on all PVs in the VG (using the
++same metadata file):  if all PVs in the VG are damaged, if using an old
++metadata version, or if a backup file is used instead of raw metadata.
++
++Using --repair is equivalent to running --repairtype pv_header followed by
++--repairtype metadata.
++
++.B --repairtype pv_header
++.br
++Repairs the header sector, containing the pv_header and label_header.
++
++.B --repairtype metadata
++.br
++Repairs the mda_header and metadata text.  It requires the headers to be
++correct (having been undamaged or already repaired).
++
++.B --repairtype label_header
++.br
++Repairs label_header fields, leaving the pv_header (in the same sector)
++unchanged.  (repairtype pv_header should usually be used instead.)
  
--	memset(new_buf, 0, new_len);
--
- 	if (len_a) {
- 		memcpy(new_buf, buf+start, len_a);
- 		memcpy(new_buf+len_a, buf+512, len_b);
-@@ -752,9 +750,8 @@ static int _dump_meta_area(struct device *dev, const char *tofile,
- 	if (!tofile)
- 		return_0;
+ .SH USAGE
+ Check for metadata on a device
+@@ -26,8 +185,9 @@ Check for metadata on a device
+ [ COMMON_OPTIONS ]
+ .RE
+ .br
++-
  
--	if (!(meta_buf = malloc(mda_size)))
-+	if (!(meta_buf = zalloc(mda_size)))
- 		return_0;
--	memset(meta_buf, 0, mda_size);
+-Print metadata from a device
++Check and print LVM headers and metadata on a device
+ .br
+ .P
+ \fBpvck\fP \fB--dump\fP \fIString\fP \fIPV\fP
+@@ -38,12 +198,51 @@ Print metadata from a device
+ .ad b
+ .br
+ .ad l
++[    \fB--settings\fP \fIString\fP ]
++.ad b
++.br
++.ad l
+ [    \fB--[pv]metadatacopies\fP \fB0\fP|\fB1\fP|\fB2\fP ]
+ .ad b
+ .br
+ [ COMMON_OPTIONS ]
+ .RE
+ .br
++-
++
++Repair LVM headers or metadata on a device
++.br
++.P
++\fBpvck\fP \fB--repairtype\fP \fBpv_header\fP|\fBmetadata\fP|\fBlabel_header\fP \fIPV\fP
++.br
++.RS 4
++.ad l
++[ \fB-f\fP|\fB--file\fP \fIString\fP ]
++.ad b
++.br
++.ad l
++[    \fB--settings\fP \fIString\fP ]
++.ad b
++.br
++[ COMMON_OPTIONS ]
++.RE
++.br
++-
++
++Repair LVM headers and metadata on a device
++.br
++.P
++\fBpvck\fP \fB--repair\fP \fB-f\fP|\fB--file\fP \fIString\fP \fIPV\fP
++.br
++.RS 4
++.ad l
++[    \fB--settings\fP \fIString\fP ]
++.ad b
++.br
++[ COMMON_OPTIONS ]
++.RE
++.br
++-
  
- 	if (!dev_read_bytes(dev, mda_offset, mda_size, meta_buf)) {
- 		log_print("CHECK: failed to read metadata area at offset %llu size %llu",
-@@ -2468,9 +2465,8 @@ static int _backup_file_to_raw_metadata(char *back_buf, uint64_t back_size,
- 
- 	text_max = back_size * 2;
- 
--	if (!(text_buf = malloc(text_max)))
-+	if (!(text_buf = zalloc(text_max)))
- 		return_0;
--	memset(text_buf, 0, text_max);
- 
- 	p = back_buf;
- 	text_pos = 0;
+ Common options for command:
+ .
+@@ -147,16 +346,19 @@ For testing and debugging.
+ .ad l
+ \fB--dump\fP \fIString\fP
+ .br
+-Dump metadata from a PV. Option values include \fBmetadata\fP
+-to print or save the current text metadata, \fBmetadata_area\fP
+-to save the entire text metadata area to a file, \fBmetadata_all\fP
+-to save the current and any previous complete versions of metadata
+-to a file, and \fBheaders\fP to print and check LVM headers.
++Dump headers and metadata from a PV for debugging and repair.
++Option values include: \fBheaders\fP to print and check LVM headers,
++\fBmetadata\fP to print or save the current text metadata,
++\fBmetadata_all\fP to list or save all versions of metadata,
++\fBmetadata_search\fP to list or save all versions of metadata,
++searching standard locations in case of damaged headers,
++\fBmetadata_area\fP to save an entire text metadata area to a file.
+ .ad b
+ .HP
+ .ad l
+ \fB-f\fP|\fB--file\fP \fIString\fP
+ .br
++Metadata file to read or write.
+ .ad b
+ .HP
+ .ad l
+@@ -220,6 +422,25 @@ Repeat once to also suppress any prompts with answer 'no'.
+ .ad b
+ .HP
+ .ad l
++\fB--repair\fP
++.br
++Repair headers and metadata on a PV.
++.ad b
++.HP
++.ad l
++\fB--repairtype\fP \fBpv_header\fP|\fBmetadata\fP|\fBlabel_header\fP
++.br
++Repair headers and metadata on a PV. See command description.
++.ad b
++.HP
++.ad l
++\fB--settings\fP \fIString\fP
++.br
++Specifies command specific settings in "Key = Value" form.
++Repeat this option to specify multiple values.
++.ad b
++.HP
++.ad l
+ \fB-t\fP|\fB--test\fP
+ .br
+ Run in test mode. Commands will not update metadata.
 
 
 
