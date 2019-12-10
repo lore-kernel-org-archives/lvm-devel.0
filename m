@@ -1,60 +1,58 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Tue, 10 Dec 2019 09:46:23 -0500
-Subject: master - libdm: set maj:min while creating and reloading device
-Message-ID: <93901.119121009462100423@us-mta-354.us.mimecast.lan>
+Date: Tue, 10 Dec 2019 09:46:25 -0500
+Subject: master - debug: print VG name in log messages for segment errors
+Message-ID: <32255.119121009462300985@us-mta-190.us.mimecast.lan>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=4353823306800fda4184a4a4278d036ca345993b
-Commit:        4353823306800fda4184a4a4278d036ca345993b
-Parent:        df0bc5081c1b84c2ae7c8d8dc92305f90f161683
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Dec 10 13:28:44 2019 +0100
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=e70d5d470c196f81c125c2705c065302608dbfbe
+Commit:        e70d5d470c196f81c125c2705c065302608dbfbe
+Parent:        4353823306800fda4184a4a4278d036ca345993b
+Author:        Nikhil Kshirsagar <nkshirsa@redhat.com>
+AuthorDate:    Tue Nov 26 12:36:45 2019 +0530
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Tue Dec 10 15:42:59 2019 +0100
+CommitterDate: Tue Dec 10 15:44:06 2019 +0100
 
-libdm: set maj:min while creating and reloading device
+debug: print VG name in log messages for segment errors
 
-Add maj:min to the task structure for RELOAD - which is now
-handled in _flatten() and will just skip passing device name.
+Signed-off-by: Nikhil Kshirsagar <nkshirsa@redhat.com>
 ---
- libdm/ioctl/libdm-iface.c |    6 ++++++
- 1 files changed, 6 insertions(+), 0 deletions(-)
+ lib/metadata/merge.c |    6 +++---
+ 1 files changed, 3 insertions(+), 3 deletions(-)
 
-diff --git a/libdm/ioctl/libdm-iface.c b/libdm/ioctl/libdm-iface.c
-index ae44abf..7ad549c 100644
---- a/libdm/ioctl/libdm-iface.c
-+++ b/libdm/ioctl/libdm-iface.c
-@@ -1429,6 +1429,7 @@ static int _check_uevent_generated(struct dm_ioctl *dmi)
+diff --git a/lib/metadata/merge.c b/lib/metadata/merge.c
+index e482921..11b26b4 100644
+--- a/lib/metadata/merge.c
++++ b/lib/metadata/merge.c
+@@ -73,7 +73,7 @@ int lv_merge_segments(struct logical_volume *lv)
  
- static int _create_and_load_v4(struct dm_task *dmt)
- {
-+	struct dm_info info;
- 	struct dm_task *task;
- 	int r;
- 	uint32_t cookie;
-@@ -1459,6 +1460,9 @@ static int _create_and_load_v4(struct dm_task *dmt)
- 	if (!dm_task_run(task))
- 		goto_bad;
+ #define seg_error(msg) do { \
+ 		log_error("LV %s, segment %u invalid: %s for %s segment.", \
+-			  seg->lv->name, seg_count, (msg), lvseg_name(seg)); \
++			  display_lvname(seg->lv), seg_count, (msg), lvseg_name(seg)); \
+ 		if ((*error_count)++ > ERROR_MAX) \
+ 			return; \
+ 	} while (0)
+@@ -86,14 +86,14 @@ int lv_merge_segments(struct logical_volume *lv)
+  */
+ #define raid_seg_error(msg) do { \
+ 	log_error("LV %s invalid: %s for %s segment", \
+-		  seg->lv->name, (msg), lvseg_name(seg)); \
++		  display_lvname(seg->lv), (msg), lvseg_name(seg)); \
+ 	if ((*error_count)++ > ERROR_MAX) \
+ 		return; \
+ } while (0)
  
-+	if (!dm_task_get_info(task, &info) || !info.exists)
-+		goto_bad;
-+
- 	dm_task_destroy(task);
- 
- 	/* Next load the table */
-@@ -1476,6 +1480,8 @@ static int _create_and_load_v4(struct dm_task *dmt)
- 		goto revert;
- 	}
- 
-+	task->major = info.major;
-+	task->minor = info.minor;
- 	task->read_only = dmt->read_only;
- 	task->head = dmt->head;
- 	task->tail = dmt->tail;
+ #define raid_seg_error_val(msg, val) do { \
+ 	log_error("LV %s invalid: %s (is %u) for %s segment", \
+-		  seg->lv->name, (msg), (val), lvseg_name(seg)); \
++		  display_lvname(seg->lv), (msg), (val), lvseg_name(seg)); \
+ 	if ((*error_count)++ > ERROR_MAX) \
+ 		return; \
+ } while(0)
 
 
 
