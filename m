@@ -1,62 +1,52 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Tue, 10 Dec 2019 09:46:51 -0500
-Subject: master - test: fix missing waiting on udev
-Message-ID: <90862.119121009464700583@us-mta-18.us.mimecast.lan>
+Date: Tue, 10 Dec 2019 09:46:58 -0500
+Subject: master - tests: improve secure test
+Message-ID: <94984.119121009465400477@us-mta-205.us.mimecast.lan>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=611d4107a4b3c434c4266ae6f2638927541bc9b6
-Commit:        611d4107a4b3c434c4266ae6f2638927541bc9b6
-Parent:        3b6defcf1fb20d3a9b2fb4f407e9abd4a8291bb0
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=4a52855899bdbd8bc570a667a03394872667e754
+Commit:        4a52855899bdbd8bc570a667a03394872667e754
+Parent:        611d4107a4b3c434c4266ae6f2638927541bc9b6
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Dec 10 13:40:56 2019 +0100
+AuthorDate:    Tue Dec 10 13:43:47 2019 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Tue Dec 10 15:44:16 2019 +0100
 
-test: fix missing waiting on udev
+tests: improve secure test
 
-After device creation we need to wait for a cookie so it's not forgotten
-in the system.
+Validate we capture core while original task sleeps.
 ---
- test/lib/dmsecuretest.c |    6 +++---
- 1 files changed, 3 insertions(+), 3 deletions(-)
+ test/shell/dmsecuretest.sh |    6 ++++--
+ 1 files changed, 4 insertions(+), 2 deletions(-)
 
-diff --git a/test/lib/dmsecuretest.c b/test/lib/dmsecuretest.c
-index d90546c..19265bf 100644
---- a/test/lib/dmsecuretest.c
-+++ b/test/lib/dmsecuretest.c
-@@ -48,6 +48,7 @@ int main (int argc, char *argv[])
- 	char aes[] = "434r0pono02pn68sson9268222p3789q703sr62427o78o308518o3228s6n2122";
- 	const char *device = (argc > 1) ? argv[1] : "/dev/loop0";  /* device for use */
- 	const char *devname = (argc > 2) ? argv[2] : "test-secure"; /* name of dm device */
-+	const char *cipher = (argc > 3) ? argv[3] : "aes-xts-plain64"; /* name of dm device */
- 	uint32_t cookie = 0;
- 	char table[300];
- 	struct dm_task *dmt;
-@@ -63,7 +64,7 @@ int main (int argc, char *argv[])
- 		(void) dm_task_set_name(dmt, devname);
- 		(void) dm_task_secure_data(dmt);
- 		rot13(aes);
--		snprintf(table, sizeof(table), "aes-xts-plain64 %s 0 %s %u", aes, device, sz);
-+		snprintf(table, sizeof(table), "%s %s 0 %s %u", cipher, aes, device, sz);
- 		memset(aes, 0, sizeof(aes));
- 		(void) dm_task_add_target(dmt, 0, sz, "crypt", table);
- 		memset(table, 0, sizeof(table));
-@@ -71,10 +72,9 @@ int main (int argc, char *argv[])
- 		(void) dm_task_set_cookie(dmt, &cookie, DM_UDEV_DISABLE_LIBRARY_FALLBACK);
- 		(void) dm_task_run(dmt);
- 		(void) dm_task_destroy(dmt);
-+		(void) dm_udev_wait(cookie); /* Finish udev processing */
- 	}
+diff --git a/test/shell/dmsecuretest.sh b/test/shell/dmsecuretest.sh
+index 75ad56d..0f53ea7 100644
+--- a/test/shell/dmsecuretest.sh
++++ b/test/shell/dmsecuretest.sh
+@@ -45,7 +45,9 @@ sleep .5
+ dmsetup status "$DMTEST"
  
--	dm_task_update_nodes();
--
- 	/* At this point there should be no memory trace from a secure table line */
+ # generate core file for running&sleeping binary
+-gcore "$PID"
++gcore "$PID" | tee out
++# check we capture core while  dmsecuretest was already sleeping
++grep "nanosleep" out
+ kill "$PID" || true
+ wait
  
- #ifdef SLEEP
+@@ -55,7 +57,7 @@ cat cmdout
+ not grep "$SECURE" "core.$PID" || {
+ 	## cp "core.$PID" /dev/shm/core
+ 	rm -f "core.$PID"
+-        dmsetup remove "$DMTEST"
++	should dmsetup remove "$DMTEST" # go around weird bugs
+ 	die "!!! Secure string $SECURE found present in core.$PID !!!"
+ }
+ rm -f "core.$PID"
 
 
 
