@@ -1,63 +1,46 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Tue, 10 Dec 2019 09:46:39 -0500
-Subject: master - vg_read: use else for 3 case
-Message-ID: <65832.119121009463300509@us-mta-393.us.mimecast.lan>
+Date: Tue, 10 Dec 2019 09:46:46 -0500
+Subject: master - test: fail on device create
+Message-ID: <81551.119121009464301725@us-mta-335.us.mimecast.lan>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=abc0a8faba2a1437f4f9d158310acb8af6ab2fe5
-Commit:        abc0a8faba2a1437f4f9d158310acb8af6ab2fe5
-Parent:        5555765cfc71a87eadcb1f6ac9bdd41f2e3c9052
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=3b6defcf1fb20d3a9b2fb4f407e9abd4a8291bb0
+Commit:        3b6defcf1fb20d3a9b2fb4f407e9abd4a8291bb0
+Parent:        8ab1d489f3e3ab140f014d5b5a10859e396bce66
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu Nov 28 15:09:27 2019 +0100
+AuthorDate:    Tue Dec 10 13:30:55 2019 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Tue Dec 10 15:44:16 2019 +0100
 
-vg_read: use else for 3 case
+test: fail on device create
 
-Make it visible we check for ==, >, <  of same var.
+Correct validation of prepared device and fail if the device can't
+be created.
 ---
- lib/metadata/metadata.c |   11 ++---------
- 1 files changed, 2 insertions(+), 9 deletions(-)
+ test/lib/aux.sh |    6 +++++-
+ 1 files changed, 5 insertions(+), 1 deletions(-)
 
-diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
-index 5856a92..24958d0 100644
---- a/lib/metadata/metadata.c
-+++ b/lib/metadata/metadata.c
-@@ -4878,10 +4878,7 @@ static struct volume_group *_vg_read(struct cmd_context *cmd,
+diff --git a/test/lib/aux.sh b/test/lib/aux.sh
+index cbe0e21..ea126de 100644
+--- a/test/lib/aux.sh
++++ b/test/lib/aux.sh
+@@ -874,7 +874,11 @@ prepare_devs() {
+ 	wait
+ 	finish_udev_transaction
  
- 		if (vg->seqno == vg_ret->seqno) {
- 			release_vg(vg);
--			continue;
--		}
--
--		if (vg->seqno > vg_ret->seqno) {
-+		} else if (vg->seqno > vg_ret->seqno) {
- 			log_warn("WARNING: ignoring metadata seqno %u on %s for seqno %u on %s for VG %s.",
- 				 vg_ret->seqno, dev_name(dev_ret),
- 				 vg->seqno, dev_name(mda_dev), vg->name);
-@@ -4890,17 +4887,13 @@ static struct volume_group *_vg_read(struct cmd_context *cmd,
- 			vg_ret = vg;
- 			dev_ret = mda_dev;
- 			vg_fmtdata = NULL;
--			continue;
--		}
--
--		if (vg_ret->seqno > vg->seqno) {
-+		} else { /* vg->seqno < vg_ret->seqno */
- 			log_warn("WARNING: ignoring metadata seqno %u on %s for seqno %u on %s for VG %s.",
- 				 vg->seqno, dev_name(mda_dev),
- 				 vg_ret->seqno, dev_name(dev_ret), vg->name);
- 			found_old_metadata = 1;
- 			release_vg(vg);
- 			vg_fmtdata = NULL;
--			continue;
- 		}
- 	}
- 
+-	if test -f CREATE_FAILED -a -n "$LVM_TEST_BACKING_DEVICE"; then
++	if test -f CREATE_FAILED ; then
++		if test -z "$LVM_TEST_BACKING_DEVICE"; then
++			echo "failed"
++			return 1
++		fi
+ 		LVM_TEST_BACKING_DEVICE=
+ 		rm -f BACKING_DEV CREATE_FAILED
+ 		prepare_devs "$@"
 
 
 
