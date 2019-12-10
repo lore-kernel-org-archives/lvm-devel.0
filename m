@@ -1,70 +1,62 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Tue, 10 Dec 2019 09:46:49 -0500
-Subject: master - test: aux setup
-Message-ID: <75024.119121009464000387@us-mta-270.us.mimecast.lan>
+Date: Tue, 10 Dec 2019 09:46:51 -0500
+Subject: master - test: fix missing waiting on udev
+Message-ID: <90862.119121009464700583@us-mta-18.us.mimecast.lan>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=8ab1d489f3e3ab140f014d5b5a10859e396bce66
-Commit:        8ab1d489f3e3ab140f014d5b5a10859e396bce66
-Parent:        89d839e54116d29e78909c63eb20ab50dc00e93f
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=611d4107a4b3c434c4266ae6f2638927541bc9b6
+Commit:        611d4107a4b3c434c4266ae6f2638927541bc9b6
+Parent:        3b6defcf1fb20d3a9b2fb4f407e9abd4a8291bb0
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Dec 10 13:30:11 2019 +0100
+AuthorDate:    Tue Dec 10 13:40:56 2019 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Tue Dec 10 15:44:16 2019 +0100
 
-test: aux setup
+test: fix missing waiting on udev
 
-Avoid endless loop if there was no 'remove' progress.
+After device creation we need to wait for a cookie so it's not forgotten
+in the system.
 ---
- test/lib/aux.sh |   12 ++++++------
- 1 files changed, 6 insertions(+), 6 deletions(-)
+ test/lib/dmsecuretest.c |    6 +++---
+ 1 files changed, 3 insertions(+), 3 deletions(-)
 
-diff --git a/test/lib/aux.sh b/test/lib/aux.sh
-index 566e9b5..cbe0e21 100644
---- a/test/lib/aux.sh
-+++ b/test/lib/aux.sh
-@@ -382,7 +382,7 @@ teardown_devs_prefixed() {
+diff --git a/test/lib/dmsecuretest.c b/test/lib/dmsecuretest.c
+index d90546c..19265bf 100644
+--- a/test/lib/dmsecuretest.c
++++ b/test/lib/dmsecuretest.c
+@@ -48,6 +48,7 @@ int main (int argc, char *argv[])
+ 	char aes[] = "434r0pono02pn68sson9268222p3789q703sr62427o78o308518o3228s6n2122";
+ 	const char *device = (argc > 1) ? argv[1] : "/dev/loop0";  /* device for use */
+ 	const char *devname = (argc > 2) ? argv[2] : "test-secure"; /* name of dm device */
++	const char *cipher = (argc > 3) ? argv[3] : "aes-xts-plain64"; /* name of dm device */
+ 	uint32_t cookie = 0;
+ 	char table[300];
+ 	struct dm_task *dmt;
+@@ -63,7 +64,7 @@ int main (int argc, char *argv[])
+ 		(void) dm_task_set_name(dmt, devname);
+ 		(void) dm_task_secure_data(dmt);
+ 		rot13(aes);
+-		snprintf(table, sizeof(table), "aes-xts-plain64 %s 0 %s %u", aes, device, sz);
++		snprintf(table, sizeof(table), "%s %s 0 %s %u", cipher, aes, device, sz);
+ 		memset(aes, 0, sizeof(aes));
+ 		(void) dm_task_add_target(dmt, 0, sz, "crypt", table);
+ 		memset(table, 0, sizeof(table));
+@@ -71,10 +72,9 @@ int main (int argc, char *argv[])
+ 		(void) dm_task_set_cookie(dmt, &cookie, DM_UDEV_DISABLE_LIBRARY_FALLBACK);
+ 		(void) dm_task_run(dmt);
+ 		(void) dm_task_destroy(dmt);
++		(void) dm_udev_wait(cookie); /* Finish udev processing */
+ 	}
  
- 		while :; do
- 			local sortby="name"
--			local num_devs=0
-+			local progress=0
+-	dm_task_update_nodes();
+-
+ 	/* At this point there should be no memory trace from a secure table line */
  
- 			# HACK: sort also by minors - so we try to close 'possibly later' created device first
- 			test "$i" = 0 || sortby="-minor"
-@@ -392,23 +392,23 @@ teardown_devs_prefixed() {
- 				DM_NAME=${dm##DM_NAME=}
- 				DM_NAME=${DM_NAME%%;DM_OPEN*}
- 				DM_OPEN=${dm##*;DM_OPEN=}
-+				local force="-f"
- 				if test "$i" = 0; then
- 					if test "$once" = 1 ; then
- 						once=0
- 						echo "## removing stray mapped devices with names beginning with $prefix: "
- 					fi
- 					test "$DM_OPEN" = 0 || break  # stop loop with 1st. opened device
--					dmsetup remove "$DM_NAME" --mangle none || true # &>/dev/null || touch REMOVE_FAILED &
--				else
--					dmsetup remove -f "$DM_NAME" --mangle none || true
-+					force=""
- 				fi
- 
--				num_devs=$(( num_devs + 1 ))
-+				# Succesfull 'remove' signals progress
-+				dmsetup remove $force "$DM_NAME" --mangle none && progress=1
- 			done
- 
- 			test "$i" = 0 || break
- 
--			test "$num_devs" -gt 0 || break
-+			test "$progress" = 1 || break
- 
- 			udev_wait
- 			wait
+ #ifdef SLEEP
 
 
 
