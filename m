@@ -1,40 +1,38 @@
-From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Fri, 26 Mar 2021 12:18:04 +0000 (GMT)
-Subject: main - tests: try to observe some unusual problem
-Message-ID: <20210326121804.7803B3858024@sourceware.org>
+From: Joe Thornber <thornber@redhat.com>
+Date: Tue, 7 Jan 2020 10:35:46 +0000
+Subject: [dm-devel] kernel BUG at drivers/md/persistent-data/dm-space-map-disk.c:178
+In-Reply-To: <alpine.LRH.2.11.1912271946380.26683@mx.ewheeler.net>
+References: <alpine.LRH.2.11.1909251814220.15810@mx.ewheeler.net>
+	<alpine.LRH.2.11.1912201829300.26683@mx.ewheeler.net>
+	<alpine.LRH.2.11.1912270137420.26683@mx.ewheeler.net>
+	<alpine.LRH.2.11.1912271946380.26683@mx.ewheeler.net>
+Message-ID: <20200107103546.asf4tmlfdmk6xsub@reti>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=6db533c4393e1e8ca02e957c529afaf67fa7e20b
-Commit:        6db533c4393e1e8ca02e957c529afaf67fa7e20b
-Parent:        3ed79d8dfe8b75830d8fd6925d7cef5ef1ebd8f2
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Mar 26 11:36:22 2021 +0100
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Fri Mar 26 11:36:22 2021 +0100
+On Sat, Dec 28, 2019 at 02:13:07AM +0000, Eric Wheeler wrote:
+> On Fri, 27 Dec 2019, Eric Wheeler wrote:
 
-tests: try to observe some unusual problem
+> > Just hit the bug again without mq-scsi (scsi_mod.use_blk_mq=n), all other 
+> > times MQ has been turned on. 
+> > 
+> > I'm trying the -ENOSPC hack which will flag the pool as being out of space 
+> > so I can recover more gracefully than a BUG_ON. Here's a first-draft 
+> > patch, maybe the spinlock will even prevent the issue.
+> > 
+> > Compile tested, I'll try on a real system tomorrow.
+> > 
+> > Comments welcome:
 
-Lets see, why it's very occasionaly able to active LV.
----
- test/shell/duplicate-vgnames.sh | 2 +-
- 1 file changed, 1 insertion(+), 1 deletion(-)
+Both sm_ll_find_free_block() and sm_ll_inc() can trigger synchronous IO.  So you
+absolutely cannot use a spin lock.
 
-diff --git a/test/shell/duplicate-vgnames.sh b/test/shell/duplicate-vgnames.sh
-index 0f98f9c37..0bbc08937 100644
---- a/test/shell/duplicate-vgnames.sh
-+++ b/test/shell/duplicate-vgnames.sh
-@@ -399,7 +399,7 @@ grep $UUID2 out | grep active
- grep $UUID3 out | not grep active
- vgchange -an
- 
--not vgchange -ay $vg1
-+not vgchange -ay -vvvv $vg1
- lvs --foreign -o vguuid,active |tee out
- grep $UUID1 out | not grep active
- grep $UUID2 out | not grep active
+dm_pool_alloc_data_block() holds a big rw semaphore which should prevent anything
+else trying to allocate at the same time.
+
+- Joe
 
 
