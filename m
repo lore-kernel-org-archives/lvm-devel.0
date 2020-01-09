@@ -1,40 +1,39 @@
-From: David Teigland <teigland@sourceware.org>
-Date: Wed, 29 Jan 2020 11:39:18 -0500
-Subject: master - lvmlockd: use ret value in query function
-Message-ID: <34122.120012911391300121@us-mta-189.us.mimecast.lan>
+From: Tony Asleson <tasleson@sourceware.org>
+Date: Thu, 9 Jan 2020 14:20:19 -0500
+Subject: master - WHATS_NEW: VDO lvmdbusd adds
+Message-ID: <81885.120010914201700527@us-mta-77.us.mimecast.lan>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=8810c11bc924e8871f97aa25c61e73b3b3f1fa87
-Commit:        8810c11bc924e8871f97aa25c61e73b3b3f1fa87
-Parent:        7404216241827d903dcb3ff441bae0c8819309d2
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Wed Jan 29 10:37:28 2020 -0600
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Wed Jan 29 10:37:28 2020 -0600
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=dad2660a387ed32dc8146b497d279089c1ce48ed
+Commit:        dad2660a387ed32dc8146b497d279089c1ce48ed
+Parent:        c496ba6505dda29bb1fb48b326cfd959ab0facd4
+Author:        Tony Asleson <tasleson@redhat.com>
+AuthorDate:    Thu Jan 9 13:11:41 2020 -0600
+Committer:     Tony Asleson <tasleson@redhat.com>
+CommitterDate: Thu Jan 9 13:11:41 2020 -0600
 
-lvmlockd: use ret value in query function
+WHATS_NEW: VDO lvmdbusd adds
 
 ---
- lib/locking/lvmlockd.c | 2 +-
- 1 file changed, 1 insertion(+), 1 deletion(-)
+ WHATS_NEW |    2 ++
+ 1 files changed, 2 insertions(+), 0 deletions(-)
 
-diff --git a/lib/locking/lvmlockd.c b/lib/locking/lvmlockd.c
-index f396478..cbe2121 100644
---- a/lib/locking/lvmlockd.c
-+++ b/lib/locking/lvmlockd.c
-@@ -2114,7 +2114,7 @@ static int _query_lock_lv(struct cmd_context *cmd, struct volume_group *vg,
- 	if (result == -ENOENT)
- 		return 1;
+diff --git a/WHATS_NEW b/WHATS_NEW
+index ec41e54..b3c6102 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,7 @@
+ Version 2.03.08 - 
+ ====================================
++  Added VDO lvmdbusd methods for enable/disable compression & dedupe.
++  Added VDO lvmdbusd method for converting LV to VDO pool.
  
--	return 1;
-+	return ret;
- }
- 
- /*
+ Version 2.03.07 - 30th November 2019
+ ====================================
 
 
 
