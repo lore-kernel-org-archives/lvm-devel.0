@@ -1,47 +1,59 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Mon, 13 Jan 2020 11:42:02 -0500
-Subject: stable-2.02 - raid: disallow reshape of stacked LVs
-Message-ID: <79992.120011311415701241@us-mta-124.us.mimecast.lan>
+Date: Mon, 13 Jan 2020 11:42:04 -0500
+Subject: stable-2.02 - vdo: avoid running initialization of cache pool vars
+Message-ID: <08824.120011311420100115@us-mta-42.us.mimecast.lan>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=36210c2b491424d7a0ab27d0a65effd6fc6ecc4c
-Commit:        36210c2b491424d7a0ab27d0a65effd6fc6ecc4c
-Parent:        50c56ade2a7a89f751091669fb8b31854f93eff1
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=c575c1c9ff71d95b6af0ec75798dd597491ca0b8
+Commit:        c575c1c9ff71d95b6af0ec75798dd597491ca0b8
+Parent:        36210c2b491424d7a0ab27d0a65effd6fc6ecc4c
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Mon Jan 13 17:27:24 2020 +0100
+AuthorDate:    Mon Jan 6 15:57:08 2020 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Mon Jan 13 17:41:22 2020 +0100
 
-raid: disallow reshape of stacked LVs
+vdo: avoid running initialization of cache pool vars
 
-Until we resolve reshape for 'stacked' devices, we need to disable it.
-So users can no longer reshape i.e. thin-pool data volumes, causing
-ATM bad thin-pool problems.
+Since VDO is also pool, the old if() case missed to know about this,
+and executed unnecesserily initialization of cache pool variables.
+This was usually harmless when using 'smaller' sizes of VDO pools,
+but for big VDO pool size, we were reporting senseless messages
+about big cache chunk sizes.
 ---
- lib/metadata/raid_manip.c | 6 ++++++
- 1 file changed, 6 insertions(+)
+ tools/lvcreate.c | 16 +++++++++-------
+ 1 file changed, 9 insertions(+), 7 deletions(-)
 
-diff --git a/lib/metadata/raid_manip.c b/lib/metadata/raid_manip.c
-index 9030261..548faf1 100644
---- a/lib/metadata/raid_manip.c
-+++ b/lib/metadata/raid_manip.c
-@@ -6444,6 +6444,12 @@ int lv_raid_convert(struct logical_volume *lv,
- 	uint32_t available_slvs, removed_slvs;
- 	takeover_fn_t takeover_fn;
+diff --git a/tools/lvcreate.c b/tools/lvcreate.c
+index c27b798..4be8e03 100644
+--- a/tools/lvcreate.c
++++ b/tools/lvcreate.c
+@@ -395,13 +395,15 @@ static int _update_extents_params(struct volume_group *vg,
+ 						     &lp->discards,
+ 						     &lp->zero_new_blocks))
+ 				return_0;
+-		} else if (!update_cache_pool_params(vg->cmd, vg->profile, vg->extent_size,
+-						     lp->segtype, lp->target_attr,
+-						     lp->extents,
+-						     &lp->pool_metadata_extents,
+-						     &lp->thin_chunk_size_calc_policy,
+-						     &lp->chunk_size))
+-			return_0;
++		} else if (segtype_is_cache_pool(lp->segtype) || segtype_is_cache(lp->segtype)) {
++			if (!update_cache_pool_params(vg->cmd, vg->profile, vg->extent_size,
++						      lp->segtype, lp->target_attr,
++						      lp->extents,
++						      &lp->pool_metadata_extents,
++						      &lp->thin_chunk_size_calc_policy,
++						      &lp->chunk_size))
++				return_0;
++		}
  
-+	/* FIXME Can't reshape volume in use - aka not toplevel devices */
-+	if (!dm_list_empty(&lv->segs_using_this_lv)) {
-+		log_error("Can't reshape stacked volume %s.", display_lvname(lv));
-+		return 0;
-+	}
-+
- 	/* FIXME If not active, prompt and activate */
- 	/* FIXME Some operations do not require the LV to be active */
- 	/* LV must be active to perform raid conversion operations */
+ 		if (lcp->percent == PERCENT_FREE || lcp->percent == PERCENT_PVS) {
+ 			if (lp->extents <= (2 * lp->pool_metadata_extents)) {
 
 
 
