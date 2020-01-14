@@ -1,59 +1,69 @@
-From: David Teigland <teigland@sourceware.org>
-Date: Tue, 11 Apr 2017 13:19:20 -0400
-Subject: master - lvconvert: require different LV for pool
-Message-ID: <201704111719.v3BHJKI2013365@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: Eric Biggers <ebiggers@kernel.org>
+Date: Tue, 14 Jan 2020 13:52:48 -0800
+Subject: kernel BUG at drivers/md/persistent-data/dm-space-map-disk.c:178
+In-Reply-To: <20200107122825.qr7o5d6dpwa6kv62@reti>
+References: <alpine.LRH.2.11.1909251814220.15810@mx.ewheeler.net>
+	<alpine.LRH.2.11.1912201829300.26683@mx.ewheeler.net>
+	<alpine.LRH.2.11.1912270137420.26683@mx.ewheeler.net>
+	<alpine.LRH.2.11.1912271946380.26683@mx.ewheeler.net>
+	<20200107103546.asf4tmlfdmk6xsub@reti>
+	<20200107104627.plviq37qhok2igt4@reti>
+	<20200107122825.qr7o5d6dpwa6kv62@reti>
+Message-ID: <20200114215248.GK41220@gmail.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=04d7444afa88f1f4e56065888124fff775a5638f
-Commit:        04d7444afa88f1f4e56065888124fff775a5638f
-Parent:        a96c8b46b62c316381eb029416b92197d9cfa4de
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Tue Apr 11 12:15:10 2017 -0500
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Tue Apr 11 12:17:14 2017 -0500
+On Tue, Jan 07, 2020 at 12:28:25PM +0000, Joe Thornber wrote:
+> On Tue, Jan 07, 2020 at 10:46:27AM +0000, Joe Thornber wrote:
+> > I'll get a patch to you later today.
+> 
+> Eric,
+> 
+> Patch below.  I've run it through a bunch of tests in the dm test suite.  But
+> obviously I have never hit your issue.  Will do more testing today.
+> 
+> - Joe
+> 
+> 
+> 
+> Author: Joe Thornber <ejt@redhat.com>
+> Date:   Tue Jan 7 11:58:42 2020 +0000
+> 
+>     [dm-thin, dm-cache] Fix bug in space-maps.
+>     
+>     The space-maps track the reference counts for disk blocks.  There are variants
+>     for tracking metadata blocks, and data blocks.
+>     
+>     We implement transactionality by never touching blocks from the previous
+>     transaction, so we can rollback in the event of a crash.
+>     
+>     When allocating a new block we need to ensure the block is free (has reference
+>     count of 0) in both the current and previous transaction.  Prior to this patch we
+>     were doing this by searching for a free block in the previous transaction, and
+>     relying on a 'begin' counter to track where the last allocation in the current
+>     transaction was.  This 'begin' field was not being updated in all code paths (eg,
+>     increment of a data block reference count due to breaking sharing of a neighbour
+>     block in the same btree leaf).
+>     
+>     This patch keeps the 'begin' field, but now it's just a hint to speed up the search.
+>     Instead we search the current transaction for a free block, and then double check
+>     it's free in the old transaction.  Much simpler.
+> 
 
-lvconvert: require different LV for pool
+I happened to notice this patch is on the linux-dm/for-next branch
+(https://git.kernel.org/pub/scm/linux/kernel/git/device-mapper/linux-dm.git/commit/?h=for-next&id=2137c0dcc04b24efb4c38d4b46b7194575718dd5)
+and it has:
 
-When convering an LV to a cache or thin LV, require
-that an LV being converted to cache pool or thin pool
-at the same time be a different LV.
----
- tools/lvconvert.c |   12 ++++++++++++
- 1 files changed, 12 insertions(+), 0 deletions(-)
+	Reported-by: Eric Biggers <ebiggers@google.com>
 
-diff --git a/tools/lvconvert.c b/tools/lvconvert.c
-index c18b5a4..f4ee660 100644
---- a/tools/lvconvert.c
-+++ b/tools/lvconvert.c
-@@ -3826,6 +3826,12 @@ static int _lvconvert_to_cache_vol_single(struct cmd_context *cmd,
- 			goto out;
- 		}
- 
-+		if (cachepool_lv == lv) {
-+			log_error("Use a different LV for cache pool LV and cache LV %s.",
-+				  display_lvname(cachepool_lv));
-+			goto out;
-+		}
-+
- 		if (!_lvconvert_to_pool(cmd, cachepool_lv, lv, 0, 1, &vg->pvs)) {
- 			log_error("LV %s could not be converted to a cache pool.",
- 				  display_lvname(cachepool_lv));
-@@ -3924,6 +3930,12 @@ static int _lvconvert_to_thin_with_external_single(struct cmd_context *cmd,
- 			goto out;
- 		}
- 
-+		if (thinpool_lv == lv) {
-+			log_error("Use a different LV for thin pool LV and thin LV %s.",
-+				  display_lvname(thinpool_lv));
-+			goto out;
-+		}
-+
- 		if (!_lvconvert_to_pool(cmd, thinpool_lv, lv, 1, 0, &vg->pvs)) {
- 			log_error("LV %s could not be converted to a thin pool.",
- 				  display_lvname(thinpool_lv));
+This is wrong, I didn't report this.  I think you meant to put:
+
+	Reported-by: Eric Wheeler <dm-devel@lists.ewheeler.net>
+
+- Eric (the other one)
+
 
 
