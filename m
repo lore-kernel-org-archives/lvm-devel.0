@@ -1,83 +1,74 @@
-From: Heinz Mauelshagen <heinzm@sourceware.org>
-Date: Mon, 10 Apr 2017 12:16:37 -0400
-Subject: master - signals: fix SIGINT blocking flaw causing inconsistent metadata
-Message-ID: <201704101616.v3AGGbVA026560@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: Mike Snitzer <snitzer@redhat.com>
+Date: Tue, 14 Jan 2020 20:22:35 -0500
+Subject: kernel BUG at drivers/md/persistent-data/dm-space-map-disk.c:178
+In-Reply-To: <20200114215248.GK41220@gmail.com>
+References: <alpine.LRH.2.11.1909251814220.15810@mx.ewheeler.net>
+	<alpine.LRH.2.11.1912201829300.26683@mx.ewheeler.net>
+	<alpine.LRH.2.11.1912270137420.26683@mx.ewheeler.net>
+	<alpine.LRH.2.11.1912271946380.26683@mx.ewheeler.net>
+	<20200107103546.asf4tmlfdmk6xsub@reti>
+	<20200107104627.plviq37qhok2igt4@reti>
+	<20200107122825.qr7o5d6dpwa6kv62@reti>
+	<20200114215248.GK41220@gmail.com>
+Message-ID: <CAMM=eLfODVMDtGahspZsGsBM5Ty_dt+8idJVTyeudzHZQqsDdA@mail.gmail.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=9a689fb8f0a6b1675a4e819f4837bf2e0269832f
-Commit:        9a689fb8f0a6b1675a4e819f4837bf2e0269832f
-Parent:        ef3e1013aa8d7797fa432e2da219255178b8ede3
-Author:        Heinz Mauelshagen <heinzm@redhat.com>
-AuthorDate:    Mon Apr 10 18:16:09 2017 +0200
-Committer:     Heinz Mauelshagen <heinzm@redhat.com>
-CommitterDate: Mon Apr 10 18:16:09 2017 +0200
+On Tue, Jan 14, 2020 at 4:53 PM Eric Biggers <ebiggers@kernel.org> wrote:
+>
+> On Tue, Jan 07, 2020 at 12:28:25PM +0000, Joe Thornber wrote:
+> > On Tue, Jan 07, 2020 at 10:46:27AM +0000, Joe Thornber wrote:
+> > > I'll get a patch to you later today.
+> >
+> > Eric,
+> >
+> > Patch below.  I've run it through a bunch of tests in the dm test suite.  But
+> > obviously I have never hit your issue.  Will do more testing today.
+> >
+> > - Joe
+> >
+> >
+> >
+> > Author: Joe Thornber <ejt@redhat.com>
+> > Date:   Tue Jan 7 11:58:42 2020 +0000
+> >
+> >     [dm-thin, dm-cache] Fix bug in space-maps.
+> >
+> >     The space-maps track the reference counts for disk blocks.  There are variants
+> >     for tracking metadata blocks, and data blocks.
+> >
+> >     We implement transactionality by never touching blocks from the previous
+> >     transaction, so we can rollback in the event of a crash.
+> >
+> >     When allocating a new block we need to ensure the block is free (has reference
+> >     count of 0) in both the current and previous transaction.  Prior to this patch we
+> >     were doing this by searching for a free block in the previous transaction, and
+> >     relying on a 'begin' counter to track where the last allocation in the current
+> >     transaction was.  This 'begin' field was not being updated in all code paths (eg,
+> >     increment of a data block reference count due to breaking sharing of a neighbour
+> >     block in the same btree leaf).
+> >
+> >     This patch keeps the 'begin' field, but now it's just a hint to speed up the search.
+> >     Instead we search the current transaction for a free block, and then double check
+> >     it's free in the old transaction.  Much simpler.
+> >
+>
+> I happened to notice this patch is on the linux-dm/for-next branch
+> (https://git.kernel.org/pub/scm/linux/kernel/git/device-mapper/linux-dm.git/commit/?h=for-next&id=2137c0dcc04b24efb4c38d4b46b7194575718dd5)
+> and it has:
+>
+>         Reported-by: Eric Biggers <ebiggers@google.com>
+>
+> This is wrong, I didn't report this.  I think you meant to put:
+>
+>         Reported-by: Eric Wheeler <dm-devel@lists.ewheeler.net>
+>
+> - Eric (the other one)
 
-signals: fix SIGINT blocking flaw causing inconsistent metadata
+Fixed it up, not sure how that happened, sorry about that!
 
-SIGINT isn't blocked properly after a sigint_allow(),
-sigint_restore() cycle leading to illicit interruptable
-metadata updates.  These can leave corrupted metadata behind.
-
-Issues addressed in this commit:
-
-sigint_allow() fails to set _oldmasked[] members properly due
-to an offset by one bug on indexing the members of the array.
-
-It bails out prematurely comparing to MAX_SIGINTS causing nesting
-depths to be one less than MAX_SIGINTS.  Fix the comparision.
-
-Correct the related comparison flaw in sigint_restore().
-
-Initialize all sig_atomic_t variables consequently.
-
-Resolves: rhbz1440766
----
- lib/misc/lvm-signal.c |    8 ++++----
- 1 files changed, 4 insertions(+), 4 deletions(-)
-
-diff --git a/lib/misc/lvm-signal.c b/lib/misc/lvm-signal.c
-index 7e78407..15d8a6f 100644
---- a/lib/misc/lvm-signal.c
-+++ b/lib/misc/lvm-signal.c
-@@ -22,7 +22,7 @@
- static sigset_t _oldset;
- static int _signals_blocked = 0;
- static volatile sig_atomic_t _sigint_caught = 0;
--static volatile sig_atomic_t _handler_installed;
-+static volatile sig_atomic_t _handler_installed = 0;
- 
- /* Support 3 level nesting, increase if needed more */
- #define MAX_SIGINTS 3
-@@ -67,7 +67,7 @@ void sigint_allow(void)
- 	 * Do not overwrite the backed-up handler data -
- 	 * just increase nesting count.
- 	 */
--	if (++_handler_installed >= MAX_SIGINTS)
-+	if (++_handler_installed > MAX_SIGINTS)
- 		return;
- 
- 	/* Grab old sigaction for SIGINT: shall not fail. */
-@@ -85,7 +85,7 @@ void sigint_allow(void)
- 	if (sigprocmask(0, NULL, &sigs))
- 		log_sys_debug("sigprocmask", "");
- 
--	if ((_oldmasked[_handler_installed] = sigismember(&sigs, SIGINT))) {
-+	if ((_oldmasked[_handler_installed - 1] = sigismember(&sigs, SIGINT))) {
- 		sigdelset(&sigs, SIGINT);
- 		if (sigprocmask(SIG_SETMASK, &sigs, NULL))
- 			log_sys_debug("sigprocmask", "SIG_SETMASK");
-@@ -98,7 +98,7 @@ void sigint_restore(void)
- 		return;
- 
- 	if (!_handler_installed ||
--	    --_handler_installed >= MAX_SIGINTS)
-+	    --_handler_installed > MAX_SIGINTS)
- 		return;
- 
- 	/* Nesting count went below MAX_SIGINTS. */
 
 
