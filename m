@@ -1,45 +1,45 @@
-From: Heinz Mauelshagen <heinzm@sourceware.org>
-Date: Wed, 12 Apr 2017 13:31:50 -0400
-Subject: master - lvconvert: better message on --regionsize
-Message-ID: <201704121731.v3CHVoTC029974@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: David Teigland <teigland@sourceware.org>
+Date: Wed, 15 Jan 2020 10:47:39 -0500
+Subject: master - add suggestion message for mirror LVs
+Message-ID: <83902.120011510473502325@us-mta-62.us.mimecast.lan>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=9a20c0a0aff98cce9df1958b64a552f23a3149b9
-Commit:        9a20c0a0aff98cce9df1958b64a552f23a3149b9
-Parent:        f5b0697c0535a532aa81bcf78e59fb6d7cdd9fe0
-Author:        Heinz Mauelshagen <heinzm@redhat.com>
-AuthorDate:    Wed Apr 12 19:31:02 2017 +0200
-Committer:     Heinz Mauelshagen <heinzm@redhat.com>
-CommitterDate: Wed Apr 12 19:31:20 2017 +0200
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=d53bfae273677975bd805bfaa3d7e7cd995aaa52
+Commit:        d53bfae273677975bd805bfaa3d7e7cd995aaa52
+Parent:        2f6d0a6408220a1f6a96a9f39779846578d88b8c
+Author:        Heming Zhao <heming.zhao@suse.com>
+AuthorDate:    Wed Jan 15 02:44:30 2020 +0000
+Committer:     David Teigland <teigland@redhat.com>
+CommitterDate: Wed Jan 15 09:46:54 2020 -0600
 
-lvconvert: better message on --regionsize
+add suggestion message for mirror LVs
 
-Enhance message on "lvconvert --regionsize size RaidLV".
-in case the regionsize does not change and return error.
+Currently the error messages are not clear. This very easy to
+guide user to execute "--removemissing --force", it is dangerous
+and will make the LVs to be destroied.
+
+Signed-off-by: Zhao Heming <heming.zhao@suse.com>
 ---
- lib/metadata/raid_manip.c |    5 +++--
- 1 files changed, 3 insertions(+), 2 deletions(-)
+ tools/vgreduce.c | 2 ++
+ 1 file changed, 2 insertions(+)
 
-diff --git a/lib/metadata/raid_manip.c b/lib/metadata/raid_manip.c
-index b58ba2d..60de51e 100644
---- a/lib/metadata/raid_manip.c
-+++ b/lib/metadata/raid_manip.c
-@@ -5792,9 +5792,10 @@ static int _region_size_change_requested(struct logical_volume *lv, int yes, con
- 		return_0;
- 
- 	if (region_size == seg->region_size) {
--		log_print_unless_silent("Region size wouldn't change on %s LV %s.",
-+		log_print_unless_silent("Region size is already %s on %s LV %s.",
-+					display_size(lv->vg->cmd, region_size),
- 					lvseg_name(seg), display_lvname(lv));
--		return 1;
-+		return 0;
+diff --git a/tools/vgreduce.c b/tools/vgreduce.c
+index b001ccb..4a4202e 100644
+--- a/tools/vgreduce.c
++++ b/tools/vgreduce.c
+@@ -67,6 +67,8 @@ static int _consolidate_vg(struct cmd_context *cmd, struct volume_group *vg)
+ 		cmd->handles_missing_pvs = 1;
+ 		log_error("There are still partial LVs in VG %s.", vg->name);
+ 		log_error("To remove them unconditionally use: vgreduce --removemissing --force.");
++		log_error("To remove them unconditionally from mirror LVs use: vgreduce"
++				  " --removemissing --mirrorsonly --force.");
+ 		log_warn("WARNING: Proceeding to remove empty missing PVs.");
  	}
  
- 	if (!_check_region_size_constraints(lv, seg->segtype, region_size, seg->stripe_size))
+
 
 
