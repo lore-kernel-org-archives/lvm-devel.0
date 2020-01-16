@@ -1,70 +1,43 @@
 From: Joe Thornber <thornber@sourceware.org>
-Date: Thu, 16 Jan 2020 10:34:57 -0500
-Subject: stable-2.02 - [bcache] add unit test
-Message-ID: <69466.120011610345300669@us-mta-93.us.mimecast.lan>
+Date: Thu, 16 Jan 2020 10:35:02 -0500
+Subject: stable-2.02 - [bcache] bcache_invalidate_fd, only remove prefixes on success.
+Message-ID: <61537.120011610345800608@us-mta-422.us.mimecast.lan>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=056eb0a8809aee3ca888aff4fe8e22bf8884a0cc
-Commit:        056eb0a8809aee3ca888aff4fe8e22bf8884a0cc
-Parent:        babde3da5530e4bbda5fb474fb5ea32a55adf16f
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=019fa6f8eec799ebc7a9b9c5b31354ff1717db12
+Commit:        019fa6f8eec799ebc7a9b9c5b31354ff1717db12
+Parent:        1e2e12f19c584c3568c255c5d89ed8aadbe61b9c
 Author:        Joe Thornber <ejt@redhat.com>
-AuthorDate:    Tue Oct 29 10:33:31 2019 +0000
+AuthorDate:    Tue Oct 29 15:21:11 2019 +0000
 Committer:     Joe Thornber <ejt@redhat.com>
-CommitterDate: Thu Jan 16 14:58:12 2020 +0000
+CommitterDate: Thu Jan 16 14:58:56 2020 +0000
 
-[bcache] add unit test
+[bcache] bcache_invalidate_fd, only remove prefixes on success.
 
-abort-forces-read
 ---
- test/unit/bcache_t.c | 24 ++++++++++++++++++++++++
- 1 file changed, 24 insertions(+)
+ lib/device/bcache.c | 5 ++++-
+ 1 file changed, 4 insertions(+), 1 deletion(-)
 
-diff --git a/test/unit/bcache_t.c b/test/unit/bcache_t.c
-index 668d24d77..2a8f931e4 100644
---- a/test/unit/bcache_t.c
-+++ b/test/unit/bcache_t.c
-@@ -837,6 +837,29 @@ static void test_abort_single_block(void *context)
- 	T_ASSERT(bcache_flush(cache));
+diff --git a/lib/device/bcache.c b/lib/device/bcache.c
+index 72cc59929..b64707ecc 100644
+--- a/lib/device/bcache.c
++++ b/lib/device/bcache.c
+@@ -1291,7 +1291,10 @@ bool bcache_invalidate_fd(struct bcache *cache, int fd)
+ 	it.success = true;
+ 	it.it.visit = _invalidate_v;
+ 	radix_tree_iterate(cache->rtree, k.bytes, k.bytes + sizeof(k.parts.fd), &it.it);
+-	radix_tree_remove_prefix(cache->rtree, k.bytes, k.bytes + sizeof(k.parts.fd));
++
++	if (it.success)
++		radix_tree_remove_prefix(cache->rtree, k.bytes, k.bytes + sizeof(k.parts.fd));
++
+ 	return it.success;
  }
  
-+static void test_abort_forces_reread(void *context)
-+{
-+	struct fixture *f = context;
-+	struct mock_engine *me = f->me;
-+	struct bcache *cache = f->cache;
-+	struct block *b;
-+	int fd = 17;
-+
-+	_expect_read(me, fd, 0);
-+	_expect(me, E_WAIT);
-+	T_ASSERT(bcache_get(cache, fd, 0, GF_DIRTY, &b));
-+	bcache_put(b);
-+
-+	bcache_abort_fd(cache, fd);
-+	T_ASSERT(bcache_flush(cache));
-+
-+	// Check the block is re-read
-+	_expect_read(me, fd, 0);
-+	_expect(me, E_WAIT);
-+	T_ASSERT(bcache_get(cache, fd, 0, 0, &b));
-+	bcache_put(b);
-+}
-+
- static void test_abort_only_specific_fd(void *context)
- {
- 	struct fixture *f = context;
-@@ -960,6 +983,7 @@ static struct test_suite *_small_tests(void)
- 
- 	T("abort-with-no-blocks", "you can call abort, even if there are no blocks in the cache", test_abort_no_blocks);
- 	T("abort-single-block", "single block get silently discarded", test_abort_single_block);
-+	T("abort-forces-read", "if a block has been discarded then another read is necc.", test_abort_forces_reread);
- 	T("abort-specific-fd", "abort doesn't effect other fds", test_abort_only_specific_fd);
- 
- 	T("concurrent-reads-after-invalidate", "prefetch should still issue concurrent reads after invalidate",
 
 
 
