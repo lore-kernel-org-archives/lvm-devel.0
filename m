@@ -1,60 +1,43 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Mon, 20 Jan 2020 09:22:48 -0500
-Subject: stable-2.02 - raid: more limitted prohibition of stacked raid usage
-Message-ID: <41474.120012009224600623@us-mta-54.us.mimecast.lan>
+Date: Tue, 21 Jan 2020 11:10:50 -0500
+Subject: stable-2.02 - aux: writeerror_dev checks for delay target
+Message-ID: <74954.120012111104500685@us-mta-100.us.mimecast.lan>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=f8ef0307372f13e1a5e74bd5741898f343c520bd
-Commit:        f8ef0307372f13e1a5e74bd5741898f343c520bd
-Parent:        c66e01569862a421d137eedbf9e6abe4e1152853
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=5ab4d44a3b05cf77836b3be2c812a738131367ae
+Commit:        5ab4d44a3b05cf77836b3be2c812a738131367ae
+Parent:        f8ef0307372f13e1a5e74bd5741898f343c520bd
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu Jan 16 16:43:55 2020 +0100
+AuthorDate:    Tue Jan 21 16:49:34 2020 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Mon Jan 20 15:21:38 2020 +0100
+CommitterDate: Tue Jan 21 16:49:34 2020 +0100
 
-raid: more limitted prohibition of stacked raid usage
+aux: writeerror_dev  checks for delay target
 
-We actually need to prohibit only reshaping cases which are
-running over multiple commands.
 ---
- lib/metadata/raid_manip.c | 13 +++++++------
- 1 file changed, 7 insertions(+), 6 deletions(-)
+ test/lib/aux.sh | 5 +++++
+ 1 file changed, 5 insertions(+)
 
-diff --git a/lib/metadata/raid_manip.c b/lib/metadata/raid_manip.c
-index 548faf1..0b0c091 100644
---- a/lib/metadata/raid_manip.c
-+++ b/lib/metadata/raid_manip.c
-@@ -6216,6 +6216,13 @@ static int _set_convenient_raid145610_segtype_to(const struct lv_segment *seg_fr
- 	if (seg_flag) {
- 		if (!(*segtype = get_segtype_from_flag(cmd, seg_flag)))
- 			return_0;
-+
-+		/* FIXME Can't reshape volume in use - aka not toplevel devices */
-+		if (!dm_list_empty(&seg_from->lv->segs_using_this_lv)) {
-+			log_error("Can't reshape stacked volume %s.", display_lvname(seg_from->lv));
-+			return 0;
-+		}
-+
- 		if (segtype_sav != *segtype) {
- 			log_warn("Replaced LV type %s%s with possible type %s.",
- 				 segtype_sav->name, _get_segtype_alias_str(seg_from->lv, segtype_sav),
-@@ -6444,12 +6451,6 @@ int lv_raid_convert(struct logical_volume *lv,
- 	uint32_t available_slvs, removed_slvs;
- 	takeover_fn_t takeover_fn;
+diff --git a/test/lib/aux.sh b/test/lib/aux.sh
+index b90063d..7a8d054 100644
+--- a/test/lib/aux.sh
++++ b/test/lib/aux.sh
+@@ -1137,6 +1137,11 @@ writeerror_dev() {
+ 	local name=${PREFIX}-errordev
  
--	/* FIXME Can't reshape volume in use - aka not toplevel devices */
--	if (!dm_list_empty(&lv->segs_using_this_lv)) {
--		log_error("Can't reshape stacked volume %s.", display_lvname(lv));
--		return 0;
--	}
--
- 	/* FIXME If not active, prompt and activate */
- 	/* FIXME Some operations do not require the LV to be active */
- 	/* LV must be active to perform raid conversion operations */
+ 	if test ! -e ERR_DEV; then
++		# delay target is used for error mapping
++		if test ! -f HAVE_DM_DELAY ; then
++			target_at_least dm-delay 1 1 0 || return 0
++			touch HAVE_DM_DELAY
++		fi
+ 		dmsetup create -u "TEST-$name" "$name" --table "0 4611686018427387904 error"
+ 		# Take major:minor of our error device
+ 		echo "$name" > ERR_DEV_NAME
 
 
 
