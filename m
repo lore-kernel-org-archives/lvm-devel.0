@@ -1,42 +1,43 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Tue, 21 Jan 2020 11:11:12 -0500
-Subject: stable-2.02 - tests: skip test when dm-delay is not available
-Message-ID: <18969.120012111110700247@us-mta-170.us.mimecast.lan>
+Date: Tue, 21 Jan 2020 11:11:23 -0500
+Subject: stable-2.02 - tests: partial revert of test change of b6e6ea2d65785f03f3cee7938be635bcb8ad4944
+Message-ID: <08172.120012111111800571@us-mta-297.us.mimecast.lan>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=62888e9c7692443066e90494764791753277f02e
-Commit:        62888e9c7692443066e90494764791753277f02e
-Parent:        5ab4d44a3b05cf77836b3be2c812a738131367ae
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=a1f06e2faebfbc091b4bbb900398cda05264c753
+Commit:        a1f06e2faebfbc091b4bbb900398cda05264c753
+Parent:        62888e9c7692443066e90494764791753277f02e
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Jan 21 16:49:53 2020 +0100
+AuthorDate:    Tue Jan 21 17:07:20 2020 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Tue Jan 21 16:49:53 2020 +0100
+CommitterDate: Tue Jan 21 17:07:20 2020 +0100
 
-tests: skip test when dm-delay is not available
+tests: partial revert of test change of b6e6ea2d65785f03f3cee7938be635bcb8ad4944
 
+With the update with commit b6e6ea2d65785f03f3cee7938be635bcb8ad4944
+the test file has been updated - however stable branch still has
+clvmd & lvmetad so we want to omit runnig unit tests for these runs.
 ---
- test/shell/pv-corruption.sh | 4 ++++
- 1 file changed, 4 insertions(+)
+ test/unit/unit-test.sh | 2 ++
+ 1 file changed, 2 insertions(+)
 
-diff --git a/test/shell/pv-corruption.sh b/test/shell/pv-corruption.sh
-index 3958ee1..b3c5059 100644
---- a/test/shell/pv-corruption.sh
-+++ b/test/shell/pv-corruption.sh
-@@ -17,6 +17,10 @@ SKIP_WITH_LVMPOLLD=1
+diff --git a/test/unit/unit-test.sh b/test/unit/unit-test.sh
+index f545f14..e8332d6 100644
+--- a/test/unit/unit-test.sh
++++ b/test/unit/unit-test.sh
+@@ -13,6 +13,8 @@
  
- . lib/inittest
+ SKIP_WITH_LVMLOCKD=1
+ SKIP_WITH_LVMPOLLD=1
++SKIP_WITH_LVMETAD=1
++SKIP_WITH_CLVMD=1
  
-+# skip test early if there is no 'delay' target available
-+aux target_at_least dm-delay 1 1 0 || skip "missing dm-delay target"
-+touch HAVE_DM_DELAY
-+
- #
- # Main
- #
+ SKIP_ROOT_DM_CHECK=1
+ 
 
 
 
