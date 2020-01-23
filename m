@@ -1,68 +1,81 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Thu, 23 Jan 2020 04:32:45 -0500
-Subject: master - vdo: adapt for multi line vdo_format output
-Message-ID: <54904.120012304324000149@us-mta-342.us.mimecast.lan>
+Date: Thu, 23 Jan 2020 04:32:51 -0500
+Subject: master - tests: writeerror_dev
+Message-ID: <01436.120012304324400321@us-mta-189.us.mimecast.lan>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=cf844941d4f0939a78a9e0d0e0ef932172e55bfb
-Commit:        cf844941d4f0939a78a9e0d0e0ef932172e55bfb
-Parent:        d7bf7091c35d3d34aae0d118fa4b78cd30cd4778
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=ecb77e9db31c88ed1a53e3194366e642f9b04e5a
+Commit:        ecb77e9db31c88ed1a53e3194366e642f9b04e5a
+Parent:        cf844941d4f0939a78a9e0d0e0ef932172e55bfb
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed Jan 22 12:57:23 2020 +0100
+AuthorDate:    Mon Jan 20 13:15:46 2020 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Thu Jan 23 10:32:15 2020 +0100
 
-vdo: adapt for multi line vdo_format output
+tests: writeerror_dev
 
-Do not close pipeline after 1st. line parsed from vdo_format.
-Also reprint the output for a user so new messages from vdo_format
-can be seen by users.
+Intruduce aux function for easy simulation of disk areas,
+that are 'normally' readable, but will fail on write.
 ---
- lib/metadata/vdo_manip.c | 15 +++++++++++----
- 1 file changed, 11 insertions(+), 4 deletions(-)
+ test/lib/aux.sh | 27 +++++++++++++++++++++++++++
+ 1 file changed, 27 insertions(+)
 
-diff --git a/lib/metadata/vdo_manip.c b/lib/metadata/vdo_manip.c
-index 26694cc..b690e73 100644
---- a/lib/metadata/vdo_manip.c
-+++ b/lib/metadata/vdo_manip.c
-@@ -317,15 +317,17 @@ static int _format_vdo_pool_data_lv(struct logical_volume *data_lv,
- 	}
+diff --git a/test/lib/aux.sh b/test/lib/aux.sh
+index ea126de..a9d1fe4 100644
+--- a/test/lib/aux.sh
++++ b/test/lib/aux.sh
+@@ -516,6 +516,8 @@ teardown() {
+ 	echo -n "## teardown..."
+ 	unset LVM_LOG_FILE_EPOCH
  
- 	if (!*logical_size)
--		while (fgets(buf, sizeof(buf), f)) {
-+		while (!feof(f) && fgets(buf, sizeof(buf), f)) {
- 			/* TODO: Watch out for locales */
- 			if (sscanf(buf, "Logical blocks defaulted to " FMTu64 " blocks", &lb) == 1) {
- 				*logical_size = lb * DM_VDO_BLOCK_SIZE;
- 				log_verbose("Available VDO logical blocks " FMTu64 " (%s).",
- 					    lb, display_size(data_lv->vg->cmd, *logical_size));
--				break;
--			} else
--				log_warn("WARNING: Cannot parse output '%s' from %s.", buf, argv[0]);
-+			}
-+			if ((dpath = strchr(buf, '\n')))
-+				*dpath = 0; /* cut last '\n' away */
-+			if (buf[0])
-+				log_print("  %s", buf); /* Print vdo_format messages */
- 		}
- 
- 	if (!pipe_close(&pdata)) {
-@@ -333,6 +335,11 @@ static int _format_vdo_pool_data_lv(struct logical_volume *data_lv,
- 		return 0;
- 	}
- 
-+	if (!*logical_size) {
-+		log_error("Number of VDO logical blocks was not provided by vdo_format output.");
-+		return 0;
-+	}
++	test ! -f ERR_DEV || should dmsetup remove $(cat ERR_DEV_NAME)
 +
- 	return 1;
+ 	if test -f TESTNAME ; then
+ 
+ 	if test ! -f SKIP_THIS_TEST ; then
+@@ -954,6 +956,8 @@ common_dev_() {
+ 		case "$tgtype" in
+ 		delay)
+ 			echo "$from $len delay $pvdev $(( pos + offset )) $read_ms $pvdev $(( pos + offset )) $write_ms" ;;
++		writeerror)
++			echo "$from $len delay $pvdev $(( pos + offset )) 0 $(cat ERR_DEV) 0 0" ;;
+ 		error|zero)
+ 			echo "$from $len $tgtype" ;;
+ 		esac
+@@ -1082,6 +1086,29 @@ error_dev() {
  }
  
+ #
++# Convert device to device with write errors but normal reads.
++# For this 'delay' dev is used and reroutes 'reads' back to original device
++# and for writes it will use extra new TEST-errordev (huge error target)
++# i.e.  writeerror_dev "$dev1" 8:32
++writeerror_dev() {
++	local name=${PREFIX}-errordev
++
++	if test ! -e ERR_DEV; then
++		# delay target is used for error mapping
++		if test ! -f HAVE_DM_DELAY ; then
++			target_at_least dm-delay 1 1 0 || return 0
++			touch HAVE_DM_DELAY
++		fi
++		dmsetup create -u "TEST-$name" "$name" --table "0 4611686018427387904 error"
++		# Take major:minor of our error device
++		echo "$name" > ERR_DEV_NAME
++		dmsetup info -c  --noheadings -o major,minor "$name" > ERR_DEV
++	fi
++
++	common_dev_ writeerror "$@"
++}
++
++#
+ # Convert existing device to a device with zero segments
+ # Takes the list of pairs of zero segment from:len
+ # Combination with error or delay is unsupported
 
 
 
