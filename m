@@ -1,225 +1,153 @@
 From: David Teigland <teigland@sourceware.org>
-Date: Thu, 30 Jan 2020 15:10:03 -0500
-Subject: master - man: updates to lvmcache
-Message-ID: <05702.120013015095801141@us-mta-302.us.mimecast.lan>
+Date: Fri, 31 Jan 2020 12:58:20 -0500
+Subject: master - writecache: report status fields
+Message-ID: <01363.120013112581501313@us-mta-235.us.mimecast.lan>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=2444e830a90fe84721bd61f950946eedcbce0af7
-Commit:        2444e830a90fe84721bd61f950946eedcbce0af7
-Parent:        8810c11bc924e8871f97aa25c61e73b3b3f1fa87
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=bddbbcb98ca135b91aa688c04c1c8be7d76a2bd1
+Commit:        bddbbcb98ca135b91aa688c04c1c8be7d76a2bd1
+Parent:        2444e830a90fe84721bd61f950946eedcbce0af7
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Thu Jan 30 14:09:21 2020 -0600
+AuthorDate:    Fri Jan 31 11:52:49 2020 -0600
 Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Thu Jan 30 14:09:21 2020 -0600
+CommitterDate: Fri Jan 31 11:52:49 2020 -0600
 
-man: updates to lvmcache
+writecache: report status fields
 
+reporting fields (-o) directly from kernel:
+writecache_total_blocks
+writecache_free_blocks
+writecache_writeback_blocks
+writecache_error
+
+The data_percent field shows used cache blocks / total cache blocks.
 ---
- man/lvmcache.7_main | 99 +++++++++++++++++++++++++++++------------------------
- 1 file changed, 54 insertions(+), 45 deletions(-)
+ device_mapper/all.h           |  2 +-
+ device_mapper/libdm-targets.c |  4 ++--
+ lib/metadata/lv.c             |  8 ++++++++
+ lib/report/columns.h          |  4 ++++
+ lib/report/properties.c       |  9 +++++++++
+ lib/report/report.c           | 21 +++++++++++++++++++++
+ 6 files changed, 45 insertions(+), 3 deletions(-)
 
-diff --git a/man/lvmcache.7_main b/man/lvmcache.7_main
-index 985b79a..fb91be8 100644
---- a/man/lvmcache.7_main
-+++ b/man/lvmcache.7_main
-@@ -5,24 +5,32 @@ lvmcache \(em LVM caching
- .SH DESCRIPTION
+diff --git a/device_mapper/all.h b/device_mapper/all.h
+index 57673b4..b23485f 100644
+--- a/device_mapper/all.h
++++ b/device_mapper/all.h
+@@ -383,7 +383,7 @@ int dm_get_status_cache(struct dm_pool *mem, const char *params,
+ 			struct dm_status_cache **status);
  
- \fBlvm\fP(8) includes two kinds of caching that can be used to improve the
--performance of a Logical Volume (LV). Typically, a smaller, faster device
--is used to improve i/o performance of a larger, slower LV. To do this, a
--separate LV is created from the faster device, and then the original LV is
--converted to start using the fast LV.
-+performance of a Logical Volume (LV). When caching, varying subsets of an
-+LV's data are temporarily stored on a smaller, faster device (e.g. an SSD)
-+to improve the performance of the LV.
+ struct dm_status_writecache {
+-	uint32_t error;
++	uint64_t error;
+ 	uint64_t total_blocks;
+ 	uint64_t free_blocks;
+ 	uint64_t writeback_blocks;
+diff --git a/device_mapper/libdm-targets.c b/device_mapper/libdm-targets.c
+index d82e28b..86cb847 100644
+--- a/device_mapper/libdm-targets.c
++++ b/device_mapper/libdm-targets.c
+@@ -366,8 +366,8 @@ int dm_get_status_writecache(struct dm_pool *mem, const char *params,
+ 	if (!(s = dm_pool_zalloc(mem, sizeof(struct dm_status_writecache))))
+ 		return_0;
+ 
+-	if (sscanf(params, "%u %llu %llu %llu",
+-		   &s->error,
++	if (sscanf(params, "%llu %llu %llu %llu",
++		   (unsigned long long *)&s->error,
+ 		   (unsigned long long *)&s->total_blocks,
+ 		   (unsigned long long *)&s->free_blocks,
+ 		   (unsigned long long *)&s->writeback_blocks) != 4) {
+diff --git a/lib/metadata/lv.c b/lib/metadata/lv.c
+index 4c2ab2b..ab26b8d 100644
+--- a/lib/metadata/lv.c
++++ b/lib/metadata/lv.c
+@@ -405,6 +405,14 @@ dm_percent_t lvseg_percent_with_info_and_seg_status(const struct lv_with_info_an
+ 			}
+ 		}
+ 		break;
++	case SEG_STATUS_WRITECACHE:
++		if (type != PERCENT_GET_DATA)
++			p = DM_PERCENT_INVALID;
++		else {
++			uint64_t used = s->writecache->total_blocks - s->writecache->free_blocks;
++			p = dm_make_percent(used, s->writecache->total_blocks);
++		}
++		break;
+ 	case SEG_STATUS_RAID:
+ 		switch (type) {
+ 		case PERCENT_GET_DIRTY:
+diff --git a/lib/report/columns.h b/lib/report/columns.h
+index 0a89451..31a1d17 100644
+--- a/lib/report/columns.h
++++ b/lib/report/columns.h
+@@ -151,6 +151,10 @@ FIELD(LVSSTATUS, lv, STR, "VDOCompressionState", lvid, 0, vdo_compression_state,
+ FIELD(LVSSTATUS, lv, STR, "VDOIndexState", lvid, 0, vdo_index_state, vdo_index_state, "For vdo pools, state of index for deduplication.", 0)
+ FIELD(LVSSTATUS, lv, NUM, "VDOUsedSize", lvid, 0, vdo_used_size, vdo_used_size, "For vdo pools, currently used space.", 0)
+ FIELD(LVSSTATUS, lv, NUM, "VDOSaving%", lvid, 0, vdo_saving_percent, vdo_saving_percent, "For vdo pools, percentage of saved space.", 0)
++FIELD(LVSSTATUS, lv, NUM, "WCacheTotalBlocks", lvid, 0, writecache_total_blocks, writecache_total_blocks, "Total writecache blocks.", 0)
++FIELD(LVSSTATUS, lv, NUM, "WCacheFreeBlocks", lvid, 0, writecache_free_blocks, writecache_free_blocks, "Total writecache free blocks.", 0)
++FIELD(LVSSTATUS, lv, NUM, "WCacheWritebackBlocks", lvid, 0, writecache_writeback_blocks, writecache_writeback_blocks, "Total writecache writeback blocks.", 0)
++FIELD(LVSSTATUS, lv, NUM, "WCacheErrors", lvid, 0, writecache_error, writecache_error, "Total writecache errors.", 0)
+ /*
+  * End of LVSSTATUS type fields
+  */
+diff --git a/lib/report/properties.c b/lib/report/properties.c
+index 25e263f..3257505 100644
+--- a/lib/report/properties.c
++++ b/lib/report/properties.c
+@@ -279,6 +279,15 @@ GET_PV_NUM_PROPERTY_FN(pv_ba_size, SECTOR_SIZE * pv->ba_size)
+ #define _cache_write_misses_set prop_not_implemented_set
+ #define _cache_write_misses_get prop_not_implemented_get
+ 
++#define _writecache_total_blocks_set prop_not_implemented_set
++#define _writecache_total_blocks_get prop_not_implemented_get
++#define _writecache_free_blocks_set prop_not_implemented_set
++#define _writecache_free_blocks_get prop_not_implemented_get
++#define _writecache_writeback_blocks_set prop_not_implemented_set
++#define _writecache_writeback_blocks_get prop_not_implemented_get
++#define _writecache_error_set prop_not_implemented_set
++#define _writecache_error_get prop_not_implemented_get
 +
-+To do this with lvm, a new special LV is first created from the faster
-+device. This LV will hold the cache. Then, the new fast LV is attached to
-+the main LV by way of an lvconvert command. lvconvert inserts one of the
-+device mapper caching targets into the main LV's i/o path. The device
-+mapper target combines the main LV and fast LV into a hybrid device that looks
-+like the main LV, but has better performance. While the main LV is being
-+used, portions of its data will be temporarily and transparently stored on
-+the special fast LV.
+ #define _vdo_operating_mode_set prop_not_implemented_set
+ #define _vdo_operating_mode_get prop_not_implemented_get
+ #define _vdo_compression_state_set prop_not_implemented_set
+diff --git a/lib/report/report.c b/lib/report/report.c
+index 70ee514..d379e2a 100644
+--- a/lib/report/report.c
++++ b/lib/report/report.c
+@@ -3875,6 +3875,27 @@ GENERATE_CACHE_STATUS_DISP_FN(read_misses)
+ GENERATE_CACHE_STATUS_DISP_FN(write_hits)
+ GENERATE_CACHE_STATUS_DISP_FN(write_misses)
  
- The two kinds of caching are:
++/*
++ * Macro to generate '_writecache_<cache_status_field_name>_disp' reporting function.
++ * The 'writecache_status_field_name' is field name from struct dm_writecache_status.
++ */
++#define GENERATE_WRITECACHE_STATUS_DISP_FN(writecache_status_field_name) \
++static int _writecache_ ## writecache_status_field_name ## _disp (struct dm_report *rh, \
++							struct dm_pool *mem, \
++							struct dm_report_field *field, \
++							const void *data, \
++							void *private) \
++{ \
++	const struct lv_with_info_and_seg_status *lvdm = (const struct lv_with_info_and_seg_status *) data; \
++	if (lvdm->seg_status.type != SEG_STATUS_WRITECACHE) \
++		return _field_set_value(field, "", &GET_TYPE_RESERVED_VALUE(num_undef_64)); \
++	return dm_report_field_uint64(rh, field, &lvdm->seg_status.writecache->writecache_status_field_name); \
++}
++
++GENERATE_WRITECACHE_STATUS_DISP_FN(total_blocks)
++GENERATE_WRITECACHE_STATUS_DISP_FN(free_blocks)
++GENERATE_WRITECACHE_STATUS_DISP_FN(writeback_blocks)
++GENERATE_WRITECACHE_STATUS_DISP_FN(error)
  
- .IP \[bu] 2
--A read and write hot-spot cache, using the dm-cache kernel module.  This
--cache is slow moving, and adjusts the cache content over time so that the
--most used parts of the LV are kept on the faster device.  Both reads and
--writes use the cache. LVM refers to this using the LV type \fBcache\fP.
-+A read and write hot-spot cache, using the dm-cache kernel module.
-+This cache tracks access patterns and adjusts its content deliberately so
-+that commonly used parts of the main LV are likely to be found on the fast
-+storage. LVM refers to this using the LV type \fBcache\fP.
- 
- .IP \[bu] 2
--A streaming write cache, using the dm-writecache kernel module.  This
--cache is intended to be used with SSD or PMEM devices to speed up all
--writes to an LV.  Reads do not use this cache.  LVM refers to this using
--the LV type \fBwritecache\fP.
-+A write cache, using the dm-writecache kernel module.  This cache can be
-+used with SSD or PMEM devices to speed up all writes to the main LV. Data
-+read from the main LV is not stored in the cache, only newly written data.
-+LVM refers to this using the LV type \fBwritecache\fP.
- 
- .SH USAGE
- 
-@@ -30,30 +38,31 @@ Both kinds of caching use similar lvm commands:
- 
- .B 1. Identify main LV that needs caching
- 
--A main LV exists on slower devices.
-+The main LV may already exist, and is located on larger, slower devices.
-+A main LV would be created with a command like:
- 
- .nf
--  $ lvcreate -n main -L Size vg /dev/slow
-+  $ lvcreate -n main -L Size vg /dev/slow_hhd
- .fi
- 
- .B 2. Identify fast LV to use as the cache
- 
--A fast LV exists on faster devices.  This LV will be used to hold the
--cache.
-+A fast LV is created using one or more fast devices, like an SSD.  This
-+special LV will be used to hold the cache:
- 
- .nf
--  $ lvcreate -n fast -L Size vg /dev/fast
-+  $ lvcreate -n fast -L Size vg /dev/fast_ssd
- 
-   $ lvs -a
-   LV   Attr       Type   Devices
--  fast -wi------- linear /dev/fast
--  main -wi------- linear /dev/slow
-+  fast -wi------- linear /dev/fast_ssd
-+  main -wi------- linear /dev/slow_hhd
- .fi
- 
- .B 3. Start caching the main LV
- 
--To start caching the main LV using the fast LV, convert the main LV to the
--desired caching type, and specify the fast LV to use:
-+To start caching the main LV, convert the main LV to the desired caching
-+type, and specify the fast LV to use as the cache:
- 
- .nf
- using dm-cache:
-@@ -83,16 +92,16 @@ using dm-cache:
-   $ lvs -a
-   LV           Pool        Type   Devices       
-   main         [fast_cvol] cache  main_corig(0) 
--  [fast_cvol]              linear /dev/fast
--  [main_corig]             linear /dev/slow
-+  [fast_cvol]              linear /dev/fast_ssd
-+  [main_corig]             linear /dev/slow_hhd
- 
- using dm-writecache:
- 
-   $ lvs -a
-   LV            Pool        Type       Devices       
-   main          [fast_cvol] writecache main_wcorig(0)
--  [fast_cvol]               linear     /dev/fast
--  [main_wcorig]             linear     /dev/slow
-+  [fast_cvol]               linear     /dev/fast_ssd
-+  [main_wcorig]             linear     /dev/slow_hhd
- 
- using dm-cache (with cachepool):
- 
-@@ -100,9 +109,9 @@ using dm-cache (with cachepool):
-   LV                 Pool         Type       Devices        
-   main               [fast_cpool] cache      main_corig(0)  
-   [fast_cpool]                    cache-pool fast_pool_cdata(0)  
--  [fast_cpool_cdata]              linear     /dev/fast
--  [fast_cpool_cmeta]              linear     /dev/fast
--  [main_corig]                    linear     /dev/slow
-+  [fast_cpool_cdata]              linear     /dev/fast_ssd
-+  [fast_cpool_cmeta]              linear     /dev/fast_ssd
-+  [main_corig]                    linear     /dev/slow_hhd
- .fi
- 
- .B 5. Use the main LV
-@@ -120,8 +129,8 @@ attached.
- 
-   $ lvs -a
-   LV   VG Attr       Type   Devices    
--  fast vg -wi------- linear /dev/fast
--  main vg -wi------- linear /dev/slow
-+  fast vg -wi------- linear /dev/fast_ssd
-+  main vg -wi------- linear /dev/slow_hhd
- .fi
- 
- 
-@@ -137,21 +146,21 @@ attached.
- .I LV
- .br
- 
--Pass this option a standard LV.  With a cachevol, cache data and metadata
--are contained within the single LV.  This is used with dm-writecache or
--dm-cache.
-+Pass this option a fast LV that should be used to hold the cache.  With a
-+cachevol, cache data and metadata are stored in different parts of the
-+same fast LV.  This option can be used with dm-writecache or dm-cache.
- 
- .B --cachepool
- .IR CachePoolLV | LV
- .br
- 
--Pass this option a cache pool object.  With a cache pool, lvm places cache
--data and cache metadata on different LVs.  The two LVs together are called
--a cache pool.  This permits specific placement of data and metadata.  A
--cache pool is represented as a special type of LV that cannot be used
--directly.  (If a standard LV is passed to this option, lvm will first
--convert it to a cache pool by combining it with another LV to use for
--metadata.)  This can be used with dm-cache.
-+Pass this option a cachepool LV or a standard LV.  When using a cache
-+pool, lvm places cache data and cache metadata on different LVs.  The two
-+LVs together are called a cache pool.  This permits specific placement of
-+data and metadata.  A cache pool is represented as a special type of LV
-+that cannot be used directly.  If a standard LV is passed with this
-+option, lvm will first convert it to a cache pool by combining it with
-+another LV to use for metadata.  This option can be used with dm-cache.
- 
- \&
- 
-@@ -267,8 +276,8 @@ LV that references two sub LVs, one for data and one for metadata.
- To create a cache pool from two separate LVs:
- 
- .nf
--$ lvcreate -n fast -L DataSize vg /dev/fast1
--$ lvcreate -n fastmeta -L MetadataSize vg /dev/fast2
-+$ lvcreate -n fast -L DataSize vg /dev/fast_ssd1
-+$ lvcreate -n fastmeta -L MetadataSize vg /dev/fast_ssd2
- $ lvconvert --type cache-pool --poolmetadata fastmeta vg/fast
- .fi
- 
-@@ -286,8 +295,8 @@ cache pool LV from the two specified LVs, and use the cache pool to start
- caching the main LV.
- 
- .nf
--$ lvcreate -n fast -L DataSize vg /dev/fast1
--$ lvcreate -n fastmeta -L MetadataSize vg /dev/fast2
-+$ lvcreate -n fast -L DataSize vg /dev/fast_ssd1
-+$ lvcreate -n fastmeta -L MetadataSize vg /dev/fast_ssd2
- $ lvconvert --type cache --cachepool fast --poolmetadata fastmeta vg/main
- .fi
- 
-@@ -418,7 +427,7 @@ and metadata LVs, each of the sub-LVs can use raid1.)
- 
- .nf
- $ lvcreate -n main -L Size vg /dev/slow
--$ lvcreate --type raid1 -m 1 -n fast -L Size vg /dev/fast1 /dev/fast2
-+$ lvcreate --type raid1 -m 1 -n fast -L Size vg /dev/ssd1 /dev/ssd2
- $ lvconvert --type cache --cachevol fast vg/main
- .fi
- 
+ /*
+  * Macro to generate '_vdo_<vdo_field_name>_disp' reporting function.
 
 
 
