@@ -1,73 +1,50 @@
-From: wysochanski@sourceware.org <wysochanski@sourceware.org>
-Date: 26 Apr 2007 16:40:46 -0000
-Subject: LVM2 ./WHATS_NEW lib/config/config.c lib/datas ...
-Message-ID: <20070426164046.18648.qmail@sourceware.org>
+From: David Teigland <teigland@sourceware.org>
+Date: Mon, 3 Feb 2020 12:21:59 -0500
+Subject: master - man: lvmcache writecache watermark percent
+Message-ID: <45844.120020312215201309@us-mta-311.us.mimecast.lan>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	wysochanski at sourceware.org	2007-04-26 17:40:46
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=64a82a1c79a4aaef5359150f960932aee4df1982
+Commit:        64a82a1c79a4aaef5359150f960932aee4df1982
+Parent:        bddbbcb98ca135b91aa688c04c1c8be7d76a2bd1
+Author:        David Teigland <teigland@redhat.com>
+AuthorDate:    Mon Feb 3 11:21:24 2020 -0600
+Committer:     David Teigland <teigland@redhat.com>
+CommitterDate: Mon Feb 3 11:21:24 2020 -0600
 
-Modified files:
-	.              : WHATS_NEW 
-	lib/config     : config.c 
-	lib/datastruct : lvm-types.h 
+man: lvmcache writecache watermark percent
 
-Log message:
-	Fix warnings on x86_64 involving ptrdiff_t:
-	config/config.c:493: warning: format '%d' expects type 'int', but argument 5 has type 'long int'
-	
-	Modified original patch from Jim Meyering <jim@meyering.net>
+---
+ man/lvmcache.7_main | 8 ++++----
+ 1 file changed, 4 insertions(+), 4 deletions(-)
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.605&r2=1.606
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/config/config.c.diff?cvsroot=lvm2&r1=1.56&r2=1.57
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/datastruct/lvm-types.h.diff?cvsroot=lvm2&r1=1.11&r2=1.12
+diff --git a/man/lvmcache.7_main b/man/lvmcache.7_main
+index fb91be8..d8e8dc7 100644
+--- a/man/lvmcache.7_main
++++ b/man/lvmcache.7_main
+@@ -221,14 +221,14 @@ $ lvconvert --type writecache --cachevol fast \\
+ Tunable options are:
+ 
+ .IP \[bu] 2
+-high_watermark = <count>
++high_watermark = <percent>
+ 
+-Start writeback when the number of used blocks reach this watermark
++Start writeback when the writecache usage reaches this percent (0-100).
+ 
+ .IP \[bu] 2
+-low_watermark = <count>
++low_watermark = <percent>
+ 
+-Stop writeback when the number of used blocks drops below this watermark
++Stop writeback when the writecache usage reaches this percent (0-100).
+ 
+ .IP \[bu] 2
+ writeback_jobs = <count>
 
---- LVM2/WHATS_NEW	2007/04/25 21:10:55	1.605
-+++ LVM2/WHATS_NEW	2007/04/26 16:40:45	1.606
-@@ -1,5 +1,6 @@
- Version 2.02.25 -
- =================================
-+  Fix warnings on x86_64 involving ptrdiff_t in log_error messages
-   Update pvck to include text metadata area and record detection
-   Add support functions for analysis of config sections
-   Update pvck to read labels on disk, with --labelsector parameter
---- LVM2/lib/config/config.c	2007/04/25 20:38:39	1.56
-+++ LVM2/lib/config/config.c	2007/04/26 16:40:46	1.57
-@@ -83,7 +83,8 @@
- 
- #define match(t) do {\
-    if (!_match_aux(p, (t))) {\
--	log_error("Parse error at byte %d (line %d): unexpected token", p->tb - p->fb + 1, p->line); \
-+	log_error("Parse error at byte %" PRIptrdiff_t " (line %d): unexpected token", \
-+		  p->tb - p->fb + 1, p->line); \
-       return 0;\
-    } \
- } while(0);
-@@ -590,7 +591,8 @@
- 		break;
- 
- 	default:
--		log_error("Parse error at byte %d (line %d): expected a value", p->tb - p->fb + 1, p->line);
-+		log_error("Parse error at byte %" PRIptrdiff_t " (line %d): expected a value",
-+			  p->tb - p->fb + 1, p->line);
- 		return 0;
- 	}
- 	return v;
---- LVM2/lib/datastruct/lvm-types.h	2005/05/09 17:45:06	1.11
-+++ LVM2/lib/datastruct/lvm-types.h	2007/04/26 16:40:46	1.12
-@@ -23,6 +23,7 @@
- 
- /* Define some portable printing types */
- #define PRIsize_t "zu"
-+#define PRIptrdiff_t "td"
- 
- struct str_list {
- 	struct list list;
 
 
