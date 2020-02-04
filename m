@@ -1,49 +1,77 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Tue, 4 Feb 2020 11:22:58 -0500
-Subject: master - lvmlockctl: use inline initilizers
-Message-ID: <56095.120020411225101873@us-mta-225.us.mimecast.lan>
+Date: Tue, 4 Feb 2020 11:23:02 -0500
+Subject: master - command: validate reporting of previous argument
+Message-ID: <14193.120020411225801673@us-mta-316.us.mimecast.lan>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=91d16fc049ba2034708aa6a0bab5f548040dfd3b
-Commit:        91d16fc049ba2034708aa6a0bab5f548040dfd3b
-Parent:        d01f27f41135189611d2030ec87ff5714eb259af
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=e6a3c0901703bf98827e2da456daf0ced42dd96c
+Commit:        e6a3c0901703bf98827e2da456daf0ced42dd96c
+Parent:        4791d0f035e006e9541d27ef2c3dcb6ea561324a
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed Jan 29 15:47:40 2020 +0100
+AuthorDate:    Thu Jan 30 15:08:30 2020 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Tue Feb 4 17:22:06 2020 +0100
 
-lvmlockctl: use inline initilizers
+command: validate reporting of previous argument
 
-clang: ensure r_name[] is in all possible paths defined.
+When reporting parsing error, report 'previous' argument
+only when there is one.
 ---
- daemons/lvmlockd/lvmlockctl.c | 7 +++----
- 1 file changed, 3 insertions(+), 4 deletions(-)
+ tools/command.c | 16 ++++++++--------
+ 1 file changed, 8 insertions(+), 8 deletions(-)
 
-diff --git a/daemons/lvmlockd/lvmlockctl.c b/daemons/lvmlockd/lvmlockctl.c
-index 40432b5..c2a998c 100644
---- a/daemons/lvmlockd/lvmlockctl.c
-+++ b/daemons/lvmlockd/lvmlockctl.c
-@@ -280,13 +280,12 @@ static void format_info_line(char *line, char *r_name, char *r_type)
- 
- static void format_info(void)
- {
--	char line[MAX_LINE];
--	char r_name[MAX_NAME+1];
--	char r_type[MAX_NAME+1];
-+	char line[MAX_LINE] = { 0 };
-+	char r_name[MAX_NAME+1] = { 0 };
-+	char r_type[MAX_NAME+1] = { 0 };
- 	int i, j;
- 
- 	j = 0;
--	memset(line, 0, sizeof(line));
- 
- 	for (i = 0; i < dump_len; i++) {
- 		line[j++] = dump_buf[i];
+diff --git a/tools/command.c b/tools/command.c
+index 0cbd877..50791b1 100644
+--- a/tools/command.c
++++ b/tools/command.c
+@@ -999,8 +999,8 @@ static void __add_optional_opt_line(struct cmd_context *cmdtool, struct command
+ 		else if (takes_arg)
+ 			_update_prev_opt_arg(cmdtool, cmd, argv[i], OPTIONAL);
+ 		else {
+-			log_error("Parsing command defs: can't parse argc %d argv %s prev %s.",
+-				i, argv[i], argv[i-1]);
++			log_error("Parsing command defs: can't parse argc %d argv %s%s%s.",
++				i, argv[i], (i > 0) ? " prev " : "", (i > 0) ? argv[i - 1] : "");
+ 			cmd->cmd_flags |= CMD_FLAG_PARSE_ERROR;
+ 			return;
+ 		}
+@@ -1025,8 +1025,8 @@ static void _add_ignore_opt_line(struct cmd_context *cmdtool, struct command *cm
+ 		else if (takes_arg)
+ 			_update_prev_opt_arg(cmdtool, cmd, argv[i], IGNORE);
+ 		else {
+-			log_error("Parsing command defs: can't parse argc %d argv %s prev %s.",
+-				i, argv[i], argv[i-1]);
++			log_error("Parsing command defs: can't parse argc %d argv %s%s%s.",
++				  i, argv[i], (i > 0) ? " prev " : "", (i > 0) ? argv[i - 1] : "");
+ 			cmd->cmd_flags |= CMD_FLAG_PARSE_ERROR;
+ 			return;
+ 		}
+@@ -1060,8 +1060,8 @@ static void _add_required_opt_line(struct cmd_context *cmdtool, struct command *
+ 		else if (takes_arg)
+ 			_update_prev_opt_arg(cmdtool, cmd, argv[i], REQUIRED);
+ 		else {
+-			log_error("Parsing command defs: can't parse argc %d argv %s prev %s.",
+-				  i, argv[i], argv[i-1]);
++			log_error("Parsing command defs: can't parse argc %d argv %s%s%s.",
++				  i, argv[i], (i > 0) ? " prev " : "", (i > 0) ? argv[i - 1] : "");
+ 			cmd->cmd_flags |= CMD_FLAG_PARSE_ERROR;
+ 			return;
+ 		}
+@@ -1150,8 +1150,8 @@ static void _add_required_line(struct cmd_context *cmdtool, struct command *cmd,
+ 			/* set property for previous required_pos_arg */
+ 			_update_prev_pos_arg(cmd, argv[i], REQUIRED);
+ 		} else {
+-			log_error("Parsing command defs: can't parse argc %d argv %s prev %s.",
+-				  i, argv[i], argv[i-1]);
++			log_error("Parsing command defs: can't parse argc %d argv %s%s%s.",
++				  i, argv[i], (i > 0) ? " prev " : "", (i > 0) ? argv[i - 1] : "");
+ 			cmd->cmd_flags |= CMD_FLAG_PARSE_ERROR;
+ 			return;
+ 		}
 
 
 
