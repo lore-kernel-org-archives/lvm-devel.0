@@ -1,40 +1,49 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
 Date: Tue, 4 Feb 2020 11:22:32 -0500
-Subject: master - bcache: fix memleak on error path
-Message-ID: <37020.120020411222900355@us-mta-428.us.mimecast.lan>
+Subject: master - pvck: avoid memleak of vgname
+Message-ID: <00627.120020411222701807@us-mta-218.us.mimecast.lan>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=c5e5ae4c95e5d02bfa5d018364954281053a9440
-Commit:        c5e5ae4c95e5d02bfa5d018364954281053a9440
-Parent:        1bde35e596536abc176cb70506353476cd1705b1
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=1bde35e596536abc176cb70506353476cd1705b1
+Commit:        1bde35e596536abc176cb70506353476cd1705b1
+Parent:        ac38b576f9f6daedf22a0d8472586bfe7de7c57e
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed Jan 29 17:31:17 2020 +0100
+AuthorDate:    Wed Jan 29 16:55:49 2020 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Tue Feb 4 17:22:06 2020 +0100
 
-bcache: fix memleak on error path
+pvck: avoid memleak of vgname
 
-clang: free io on error path.
+clang: no vgname buffer leak.
 ---
- lib/device/bcache.c | 1 +
- 1 file changed, 1 insertion(+)
+ tools/pvck.c | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
 
-diff --git a/lib/device/bcache.c b/lib/device/bcache.c
-index 04d49f1..a7d8055 100644
---- a/lib/device/bcache.c
-+++ b/lib/device/bcache.c
-@@ -515,6 +515,7 @@ static bool _sync_issue(struct io_engine *ioe, enum dir d, int fd,
- 					  (unsigned long long)limit_nbytes,
- 					  (unsigned long long)extra_nbytes,
- 					  (unsigned long long)_last_byte_sector_size);
-+				free(io);
- 				return false;
- 			}
- 		}
+diff --git a/tools/pvck.c b/tools/pvck.c
+index 0266218..d57e026 100644
+--- a/tools/pvck.c
++++ b/tools/pvck.c
+@@ -788,7 +788,7 @@ static int _dump_current_text(struct device *dev,
+ {
+ 	char *meta_buf;
+ 	struct dm_config_tree *cft;
+-	const char *vgname = NULL;
++	char *vgname = NULL;
+ 	uint32_t crc;
+ 	uint32_t seqno = 0;
+ 	int mn = mda_num; /* 1 or 2 */
+@@ -895,6 +895,7 @@ static int _dump_current_text(struct device *dev,
+ 
+  out:
+ 	free(meta_buf);
++	free(vgname);
+ 	if (bad)
+ 		return 0;
+ 	return 1;
 
 
 
