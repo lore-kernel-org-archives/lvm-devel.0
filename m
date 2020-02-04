@@ -1,77 +1,160 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Tue, 4 Feb 2020 11:23:02 -0500
-Subject: master - command: validate reporting of previous argument
-Message-ID: <14193.120020411225801673@us-mta-316.us.mimecast.lan>
+Date: Tue, 4 Feb 2020 11:23:03 -0500
+Subject: master - dmeventd: nicer error path for reading pipe
+Message-ID: <56678.120020411225500979@us-mta-318.us.mimecast.lan>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=e6a3c0901703bf98827e2da456daf0ced42dd96c
-Commit:        e6a3c0901703bf98827e2da456daf0ced42dd96c
-Parent:        4791d0f035e006e9541d27ef2c3dcb6ea561324a
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=4791d0f035e006e9541d27ef2c3dcb6ea561324a
+Commit:        4791d0f035e006e9541d27ef2c3dcb6ea561324a
+Parent:        91d16fc049ba2034708aa6a0bab5f548040dfd3b
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu Jan 30 15:08:30 2020 +0100
+AuthorDate:    Wed Jan 29 16:41:28 2020 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Tue Feb 4 17:22:06 2020 +0100
 
-command: validate reporting of previous argument
+dmeventd: nicer error path for reading pipe
 
-When reporting parsing error, report 'previous' argument
-only when there is one.
+When _daemon_read()/_client_read() fails during the read,
+ensure memory allocated withing function is also release here
+(so caller does not need to care). Also improve code readbility a bit
+a for same functionality use more similar code.
 ---
- tools/command.c | 16 ++++++++--------
- 1 file changed, 8 insertions(+), 8 deletions(-)
+ daemons/dmeventd/dmeventd.c           | 39 ++++++++++++++++-------------------
+ daemons/dmeventd/libdevmapper-event.c | 35 ++++++++++++++++++-------------
+ 2 files changed, 39 insertions(+), 35 deletions(-)
 
-diff --git a/tools/command.c b/tools/command.c
-index 0cbd877..50791b1 100644
---- a/tools/command.c
-+++ b/tools/command.c
-@@ -999,8 +999,8 @@ static void __add_optional_opt_line(struct cmd_context *cmdtool, struct command
- 		else if (takes_arg)
- 			_update_prev_opt_arg(cmdtool, cmd, argv[i], OPTIONAL);
- 		else {
--			log_error("Parsing command defs: can't parse argc %d argv %s prev %s.",
--				i, argv[i], argv[i-1]);
-+			log_error("Parsing command defs: can't parse argc %d argv %s%s%s.",
-+				i, argv[i], (i > 0) ? " prev " : "", (i > 0) ? argv[i - 1] : "");
- 			cmd->cmd_flags |= CMD_FLAG_PARSE_ERROR;
- 			return;
+diff --git a/daemons/dmeventd/dmeventd.c b/daemons/dmeventd/dmeventd.c
+index 4fcb381..36a35ba 100644
+--- a/daemons/dmeventd/dmeventd.c
++++ b/daemons/dmeventd/dmeventd.c
+@@ -1485,37 +1485,34 @@ static int _client_read(struct dm_event_fifos *fifos,
+ 		t.tv_usec = 0;
+ 		ret = select(fifos->client + 1, &fds, NULL, NULL, &t);
+ 
+-		if (!ret && !bytes)	/* nothing to read */
+-			return 0;
++		if (!ret && bytes)
++			continue; /* trying to finish read */
+ 
+-		if (!ret)	/* trying to finish read */
+-			continue;
+-
+-		if (ret < 0)	/* error */
+-			return 0;
++		if (ret <= 0)	/* nothing to read */
++			goto bad;
+ 
+ 		ret = read(fifos->client, buf + bytes, size - bytes);
+ 		bytes += ret > 0 ? ret : 0;
+-		if (header && (bytes == 2 * sizeof(uint32_t))) {
++		if (!msg->data && (bytes == 2 * sizeof(uint32_t))) {
+ 			msg->cmd = ntohl(header[0]);
+-			size = msg->size = ntohl(header[1]);
+ 			bytes = 0;
+-			if (!size)
+-				break; /* No data -> error */
+-			buf = msg->data = malloc(msg->size);
+-			if (!buf)
+-				break; /* No mem -> error */
+-			header = 0;
++
++			if (!(size = msg->size = ntohl(header[1])))
++				break;
++
++			if (!(buf = msg->data = malloc(msg->size)))
++				goto bad;
  		}
-@@ -1025,8 +1025,8 @@ static void _add_ignore_opt_line(struct cmd_context *cmdtool, struct command *cm
- 		else if (takes_arg)
- 			_update_prev_opt_arg(cmdtool, cmd, argv[i], IGNORE);
- 		else {
--			log_error("Parsing command defs: can't parse argc %d argv %s prev %s.",
--				i, argv[i], argv[i-1]);
-+			log_error("Parsing command defs: can't parse argc %d argv %s%s%s.",
-+				  i, argv[i], (i > 0) ? " prev " : "", (i > 0) ? argv[i - 1] : "");
- 			cmd->cmd_flags |= CMD_FLAG_PARSE_ERROR;
- 			return;
+ 	}
+ 
+-	if (bytes != size) {
+-		free(msg->data);
+-		msg->data = NULL;
+-		return 0;
+-	}
++	if (bytes == size)
++		return 1;
+ 
+-	return 1;
++bad:
++	free(msg->data);
++	msg->data = NULL;
++
++	return 0;
+ }
+ 
+ /*
+diff --git a/daemons/dmeventd/libdevmapper-event.c b/daemons/dmeventd/libdevmapper-event.c
+index 491374e..780d10d 100644
+--- a/daemons/dmeventd/libdevmapper-event.c
++++ b/daemons/dmeventd/libdevmapper-event.c
+@@ -237,16 +237,16 @@ static int _daemon_read(struct dm_event_fifos *fifos,
+ 			ret = select(fifos->server + 1, &fds, NULL, NULL, &tval);
+ 			if (ret < 0 && errno != EINTR) {
+ 				log_error("Unable to read from event server.");
+-				return 0;
++				goto bad;
+ 			}
+ 			if ((ret == 0) && (i > 4) && !bytes) {
+ 				log_error("No input from event server.");
+-				return 0;
++				goto bad;
+ 			}
  		}
-@@ -1060,8 +1060,8 @@ static void _add_required_opt_line(struct cmd_context *cmdtool, struct command *
- 		else if (takes_arg)
- 			_update_prev_opt_arg(cmdtool, cmd, argv[i], REQUIRED);
- 		else {
--			log_error("Parsing command defs: can't parse argc %d argv %s prev %s.",
--				  i, argv[i], argv[i-1]);
-+			log_error("Parsing command defs: can't parse argc %d argv %s%s%s.",
-+				  i, argv[i], (i > 0) ? " prev " : "", (i > 0) ? argv[i - 1] : "");
- 			cmd->cmd_flags |= CMD_FLAG_PARSE_ERROR;
- 			return;
+ 		if (ret < 1) {
+ 			log_error("Unable to read from event server.");
+-			return 0;
++			goto bad;
  		}
-@@ -1150,8 +1150,8 @@ static void _add_required_line(struct cmd_context *cmdtool, struct command *cmd,
- 			/* set property for previous required_pos_arg */
- 			_update_prev_pos_arg(cmd, argv[i], REQUIRED);
- 		} else {
--			log_error("Parsing command defs: can't parse argc %d argv %s prev %s.",
--				  i, argv[i], argv[i-1]);
-+			log_error("Parsing command defs: can't parse argc %d argv %s%s%s.",
-+				  i, argv[i], (i > 0) ? " prev " : "", (i > 0) ? argv[i - 1] : "");
- 			cmd->cmd_flags |= CMD_FLAG_PARSE_ERROR;
- 			return;
+ 
+ 		ret = read(fifos->server, buf + bytes, size);
+@@ -255,25 +255,32 @@ static int _daemon_read(struct dm_event_fifos *fifos,
+ 				continue;
+ 
+ 			log_error("Unable to read from event server.");
+-			return 0;
++			goto bad;
  		}
+ 
+ 		bytes += ret;
+-		if (header && (bytes == 2 * sizeof(uint32_t))) {
++		if (!msg->data && (bytes == 2 * sizeof(uint32_t))) {
+ 			msg->cmd = ntohl(header[0]);
+-			msg->size = ntohl(header[1]);
+-			buf = msg->data = malloc(msg->size);
+-			size = msg->size;
+ 			bytes = 0;
+-			header = 0;
++
++			if (!(size = msg->size = ntohl(header[1])))
++				break;
++
++			if (!(buf = msg->data = malloc(msg->size))) {
++				log_error("Unable to allocate message data.");
++				return 0;
++			}
+ 		}
+ 	}
+ 
+-	if (bytes != size) {
+-		free(msg->data);
+-		msg->data = NULL;
+-	}
+-	return bytes == size;
++	if (bytes == size)
++		return 1;
++
++bad:
++	free(msg->data);
++	msg->data = NULL;
++
++	return 0;
+ }
+ 
+ /* Write message to daemon. */
 
 
 
