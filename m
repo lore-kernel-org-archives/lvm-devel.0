@@ -1,41 +1,41 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Tue, 4 Feb 2020 11:22:33 -0500
-Subject: master - tests: compatible with older kernels
-Message-ID: <32218.120020411222000561@us-mta-251.us.mimecast.lan>
+Date: Tue, 4 Feb 2020 11:22:45 -0500
+Subject: master - cov: check error code from mutex init
+Message-ID: <18956.120020411223902209@us-mta-27.us.mimecast.lan>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=62ad12d0d05d8ffa26df4f1b1b6ef3b2113420b1
-Commit:        62ad12d0d05d8ffa26df4f1b1b6ef3b2113420b1
-Parent:        c0de37ab1888a53cce97007c3f4fdfb6f85ab5bf
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=555d6d4e62b5a10a8f52454a93e3cdc65e0d1abd
+Commit:        555d6d4e62b5a10a8f52454a93e3cdc65e0d1abd
+Parent:        d6ac039b65a371caeabb1bf2a191e609ed2cd9f8
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed Jan 29 15:50:57 2020 +0100
+AuthorDate:    Thu Jan 30 12:48:40 2020 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Tue Feb 4 17:22:06 2020 +0100
 
-tests: compatible with older kernels
+cov: check error code from mutex init
 
-Older kernels just show syscall stacktrace.
 ---
- test/shell/dmsecuretest.sh | 2 +-
- 1 file changed, 1 insertion(+), 1 deletion(-)
+ daemons/dmeventd/dmeventd.c | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
 
-diff --git a/test/shell/dmsecuretest.sh b/test/shell/dmsecuretest.sh
-index 0f53ea7..144b1f4 100644
---- a/test/shell/dmsecuretest.sh
-+++ b/test/shell/dmsecuretest.sh
-@@ -47,7 +47,7 @@ dmsetup status "$DMTEST"
- # generate core file for running&sleeping binary
- gcore "$PID" | tee out
- # check we capture core while  dmsecuretest was already sleeping
--grep "nanosleep" out
-+grep "nanosleep" out || grep kernel_vsyscall out
- kill "$PID" || true
- wait
+diff --git a/daemons/dmeventd/dmeventd.c b/daemons/dmeventd/dmeventd.c
+index ae1e6a6..4fcb381 100644
+--- a/daemons/dmeventd/dmeventd.c
++++ b/daemons/dmeventd/dmeventd.c
+@@ -2237,7 +2237,8 @@ int main(int argc, char *argv[])
  
+ 	_init_thread_signals();
+ 
+-	pthread_mutex_init(&_global_mutex, NULL);
++	if (pthread_mutex_init(&_global_mutex, NULL))
++		exit(EXIT_FAILURE);
+ 
+ 	if (!_systemd_activation && !_open_fifos(&fifos))
+ 		exit(EXIT_FIFO_FAILURE);
 
 
 
