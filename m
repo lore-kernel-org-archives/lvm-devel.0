@@ -1,60 +1,47 @@
 From: David Teigland <teigland@sourceware.org>
-Date: Wed, 5 Feb 2020 16:56:39 -0500
-Subject: stable-2.02 - lvmetad: fix heap memory leak
-Message-ID: <17183.120020516563500309@us-mta-220.us.mimecast.lan>
+Date: Thu, 6 Feb 2020 12:29:21 -0500
+Subject: master - writecache: prevent snapshots
+Message-ID: <41440.120020612291501847@us-mta-38.us.mimecast.lan>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=bcf9556b8fcd16ad8997f80cc92785f295c66701
-Commit:        bcf9556b8fcd16ad8997f80cc92785f295c66701
-Parent:        a1f06e2faebfbc091b4bbb900398cda05264c753
-Author:        wangjufeng <wangjufeng@huawei.com>
-AuthorDate:    Wed Feb 5 13:39:39 2020 +0800
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=ffea7daec3d09fb4315104bb346cfa9d6db6f9e9
+Commit:        ffea7daec3d09fb4315104bb346cfa9d6db6f9e9
+Parent:        2a6078f96168e860474b42c42b1924fc353c4558
+Author:        David Teigland <teigland@redhat.com>
+AuthorDate:    Thu Feb 6 11:27:33 2020 -0600
 Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Wed Feb 5 15:30:17 2020 -0600
+CommitterDate: Thu Feb 6 11:27:33 2020 -0600
 
-lvmetad: fix heap memory leak
+writecache: prevent snapshots
 
-error could be reproduced by calling pvs periodically:
-    #!/bin/bash
-    while :
-    do
-        pvs
-        sleep 1
-    done
-
-use top command to watch RES memory of lvmetad. After a few minutes,
-its RES memory will grow for a few KB. Then stop calling pvs, while
-its RES will not decrease.
-
-This is because, when lvmetad make reponse for clent request, it
-will malloc new chunk for s->vgid_to_metadata, while actually the
-new chunk should be added to the reponse dm_config_tree, or it will
-make the chunk list of s->vgid_to_metadata keep growing.
-
-Signed-off-by: wangjufeng <wangjufeng@huawei.com>
-Reviewed-by: liuzhiqiang <liuzhiqiang26@huawei.com>
-Reviewed-by: guiyao <guiyao@huawei.com>
+there appear to be problems with taking a snapshot
+of an LV with a writecache, so block it until that
+is understood or fixed.
 ---
- daemons/lvmetad/lvmetad-core.c | 2 +-
- 1 file changed, 1 insertion(+), 1 deletion(-)
+ lib/metadata/snapshot_manip.c | 5 ++++-
+ 1 file changed, 4 insertions(+), 1 deletion(-)
 
-diff --git a/daemons/lvmetad/lvmetad-core.c b/daemons/lvmetad/lvmetad-core.c
-index 2628022..76aa62c 100644
---- a/daemons/lvmetad/lvmetad-core.c
-+++ b/daemons/lvmetad/lvmetad-core.c
-@@ -730,7 +730,7 @@ static response vg_lookup(lvmetad_state *s, request r)
- 	if (!(res.cft->root = n = dm_config_create_node(res.cft, "response")))
- 		goto nomem_un;
+diff --git a/lib/metadata/snapshot_manip.c b/lib/metadata/snapshot_manip.c
+index e58aea4..64e27ae 100644
+--- a/lib/metadata/snapshot_manip.c
++++ b/lib/metadata/snapshot_manip.c
+@@ -385,8 +385,11 @@ int validate_snapshot_origin(const struct logical_volume *origin_lv)
+ 			log_warn("WARNING: Consider using the raid1 mirror type to avoid this.");
+ 			log_warn("WARNING: See global/mirror_segtype_default in lvm.conf.");
+ 		}
+-	} else if (lv_is_raid_type(origin_lv) && !lv_is_raid(origin_lv))
++	} else if (lv_is_raid_type(origin_lv) && !lv_is_raid(origin_lv)) {
+ 		err = "raid subvolumes";
++	} else if (lv_is_writecache(origin_lv)) {
++		err = "writecache";
++	}
  
--	if (!(n->v = dm_config_create_value(cft)))
-+	if (!(n->v = dm_config_create_value(res.cft)))
- 		goto nomem_un;
- 
- 	n->parent = res.cft->root;
+ 	if (err) {
+ 		log_error("Snapshots of %s are not supported.", err);
 
 
 
