@@ -1,41 +1,43 @@
 From: David Teigland <teigland@sourceware.org>
-Date: Fri, 7 Feb 2020 11:33:57 -0500
-Subject: master - writecache: skip zeroing in test mode
-Message-ID: <45515.120020711335200575@us-mta-364.us.mimecast.lan>
+Date: Fri, 7 Feb 2020 11:33:59 -0500
+Subject: master - writecache: check for invalid cachevol
+Message-ID: <06062.120020711334900909@us-mta-177.us.mimecast.lan>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=8f794f2095583d41393ee9c697f470015b29f064
-Commit:        8f794f2095583d41393ee9c697f470015b29f064
-Parent:        744b75f88158156f7d8ffe6c2bc5af9856e63258
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=744b75f88158156f7d8ffe6c2bc5af9856e63258
+Commit:        744b75f88158156f7d8ffe6c2bc5af9856e63258
+Parent:        b756cb3e49b762b3a5160f9748aeb5bf995ae80e
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Fri Feb 7 10:32:10 2020 -0600
+AuthorDate:    Fri Feb 7 10:26:59 2020 -0600
 Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Fri Feb 7 10:32:10 2020 -0600
+CommitterDate: Fri Feb 7 10:26:59 2020 -0600
 
-writecache: skip zeroing in test mode
+writecache: check for invalid cachevol
 
 ---
- tools/lvconvert.c | 3 +++
- 1 file changed, 3 insertions(+)
+ tools/lvconvert.c | 5 +++++
+ 1 file changed, 5 insertions(+)
 
 diff --git a/tools/lvconvert.c b/tools/lvconvert.c
-index a1fb8c1..cd9a3e8 100644
+index a83b019..a1fb8c1 100644
 --- a/tools/lvconvert.c
 +++ b/tools/lvconvert.c
-@@ -5351,6 +5351,9 @@ static int _writecache_zero(struct cmd_context *cmd, struct logical_volume *lv)
- 	};
- 	int ret;
+@@ -5578,6 +5578,11 @@ static int _lvconvert_writecache_attach_single(struct cmd_context *cmd,
+ 		goto bad;
+ 	}
  
-+	if (test_mode())
-+		return 1;
++	if (lv_fast == lv) {
++		log_error("Invalid cachevol LV.");
++		goto bad;
++	}
 +
- 	if (!activate_lv(cmd, lv)) {
- 		log_error("Failed to activate LV %s for zeroing.", display_lvname(lv));
- 		return 0;
+ 	if (!seg_is_linear(first_seg(lv_fast))) {
+ 		log_error("LV %s must be linear to use as a writecache.", display_lvname(lv_fast));
+ 		goto bad;
 
 
 
