@@ -1,63 +1,41 @@
 From: David Teigland <teigland@sourceware.org>
-Date: Fri, 7 Feb 2020 11:22:35 -0500
-Subject: master - writecache: fix return value
-Message-ID: <55415.120020711223100587@us-mta-385.us.mimecast.lan>
+Date: Fri, 7 Feb 2020 11:33:57 -0500
+Subject: master - writecache: skip zeroing in test mode
+Message-ID: <45515.120020711335200575@us-mta-364.us.mimecast.lan>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=b756cb3e49b762b3a5160f9748aeb5bf995ae80e
-Commit:        b756cb3e49b762b3a5160f9748aeb5bf995ae80e
-Parent:        96985b1373d58b411a80c2985f348466e78cbe6e
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=8f794f2095583d41393ee9c697f470015b29f064
+Commit:        8f794f2095583d41393ee9c697f470015b29f064
+Parent:        744b75f88158156f7d8ffe6c2bc5af9856e63258
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Fri Feb 7 10:21:07 2020 -0600
+AuthorDate:    Fri Feb 7 10:32:10 2020 -0600
 Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Fri Feb 7 10:21:07 2020 -0600
+CommitterDate: Fri Feb 7 10:32:10 2020 -0600
 
-writecache: fix return value
+writecache: skip zeroing in test mode
 
 ---
- tools/lvconvert.c | 8 ++++----
- 1 file changed, 4 insertions(+), 4 deletions(-)
+ tools/lvconvert.c | 3 +++
+ 1 file changed, 3 insertions(+)
 
 diff --git a/tools/lvconvert.c b/tools/lvconvert.c
-index f6a329b..a83b019 100644
+index a1fb8c1..cd9a3e8 100644
 --- a/tools/lvconvert.c
 +++ b/tools/lvconvert.c
-@@ -5580,13 +5580,13 @@ static int _lvconvert_writecache_attach_single(struct cmd_context *cmd,
+@@ -5351,6 +5351,9 @@ static int _writecache_zero(struct cmd_context *cmd, struct logical_volume *lv)
+ 	};
+ 	int ret;
  
- 	if (!seg_is_linear(first_seg(lv_fast))) {
- 		log_error("LV %s must be linear to use as a writecache.", display_lvname(lv_fast));
--		return 0;
-+		goto bad;
- 	}
- 
- 	/* fast LV shouldn't generally be active by itself, but just in case. */
- 	if (lv_info(cmd, lv_fast, 1, NULL, 0, 0)) {
- 		log_error("LV %s must be inactive to attach.", display_lvname(lv_fast));
--		return 0;
-+		goto bad;
- 	}
- 
- 	memset(&settings, 0, sizeof(settings));
-@@ -5594,13 +5594,13 @@ static int _lvconvert_writecache_attach_single(struct cmd_context *cmd,
- 
- 	if (!_get_writecache_settings(cmd, &settings, &block_size_sectors)) {
- 		log_error("Invalid writecache settings.");
--		return 0;
-+		goto bad;
- 	}
- 
- 	if (!arg_is_set(cmd, yes_ARG) &&
- 	    yes_no_prompt("Erase all existing data on %s? [y/n]: ", display_lvname(lv_fast)) == 'n') {
- 		log_error("Conversion aborted.");
--		return 0;
-+		goto bad;
- 	}
- 
- 	/* Ensure the two LVs are not active elsewhere. */
++	if (test_mode())
++		return 1;
++
+ 	if (!activate_lv(cmd, lv)) {
+ 		log_error("Failed to activate LV %s for zeroing.", display_lvname(lv));
+ 		return 0;
 
 
 
