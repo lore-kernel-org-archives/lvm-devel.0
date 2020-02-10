@@ -1,53 +1,65 @@
-From: agk@sourceware.org <agk@sourceware.org>
-Date: 26 Apr 2007 17:14:58 -0000
-Subject: LVM2 lib/device/dev-cache.c man/lvm.conf.5
-Message-ID: <20070426171458.5977.qmail@sourceware.org>
+From: Marian Csontos <mcsontos@sourceware.org>
+Date: Mon, 10 Feb 2020 09:45:07 -0500
+Subject: stable-2.02 - raid: better place for blocking reshapes
+Message-ID: <13679.120021009450200271@us-mta-343.us.mimecast.lan>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	agk at sourceware.org	2007-04-26 18:14:57
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=253d10f840682f85dad0e4c29f55ff50f94792fa
+Commit:        253d10f840682f85dad0e4c29f55ff50f94792fa
+Parent:        bcf9556b8fcd16ad8997f80cc92785f295c66701
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Fri Feb 7 15:14:05 2020 +0100
+Committer:     Marian Csontos <mcsontos@redhat.com>
+CommitterDate: Mon Feb 10 15:44:46 2020 +0100
 
-Modified files:
-	lib/device     : dev-cache.c 
-	man            : lvm.conf.5 
+raid: better place for blocking reshapes
 
-Log message:
-	add preferred_names to man page.
+Still the place can be better to block only particular reshape
+operations which ATM cause kernel problems.
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/device/dev-cache.c.diff?cvsroot=lvm2&r1=1.46&r2=1.47
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/man/lvm.conf.5.diff?cvsroot=lvm2&r1=1.18&r2=1.19
+We check if the new number of images is higher - and prevent to take
+conversion if the volume is in use (i.e. thin-pool's data LV).
 
---- LVM2/lib/device/dev-cache.c	2007/04/26 16:44:58	1.46
-+++ LVM2/lib/device/dev-cache.c	2007/04/26 17:14:57	1.47
-@@ -155,6 +155,9 @@
- 	char *s0, *s1;
- 	struct stat stat0, stat1;
+(cherry picked from commit 96985b1373d58b411a80c2985f348466e78cbe6e)
+---
+ lib/metadata/raid_manip.c | 13 +++++++------
+ 1 file changed, 7 insertions(+), 6 deletions(-)
+
+diff --git a/lib/metadata/raid_manip.c b/lib/metadata/raid_manip.c
+index 0b0c09181..f51e9c401 100644
+--- a/lib/metadata/raid_manip.c
++++ b/lib/metadata/raid_manip.c
+@@ -2298,6 +2298,13 @@ static int _raid_reshape(struct logical_volume *lv,
+ 	if ((new_image_count = new_stripes + seg->segtype->parity_devs) < 2)
+ 		return_0;
  
-+	/*
-+	 * FIXME Better to compare patterns one-at-a-time against all names.
-+	 */
- 	if (_cache.preferred_names_matcher) {
- 		m0 = matcher_run(_cache.preferred_names_matcher, path0);
- 		m1 = matcher_run(_cache.preferred_names_matcher, path1);
---- LVM2/man/lvm.conf.5	2007/02/28 18:27:13	1.18
-+++ LVM2/man/lvm.conf.5	2007/04/26 17:14:57	1.19
-@@ -81,6 +81,11 @@
- Devices in directories outside this hierarchy will be ignored.
- Defaults to "/dev".
- .IP
-+\fBpreferred_names\fP \(em List of patterns compared in turn against
-+all the pathnames referencing the same device in in the scanned directories.
-+The pathname that matches the earliest pattern in the list is the
-+one used in any output.
-+.IP
- \fBfilter\fP \(em List of patterns to apply to devices found by a scan.
- Patterns are regular expressions delimited by any character and preceded
- by \fBa\fP (for accept) or \fBr\fP (for reject).  The list is traversed
++	/* FIXME Can't reshape volume in use - aka not toplevel devices */
++	if (old_image_count < new_image_count &&
++	    !dm_list_empty(&seg->lv->segs_using_this_lv)) {
++		log_error("Unable to convert stacked volume %s.", display_lvname(seg->lv));
++		return 0;
++	}
++
+ 	if (!_check_max_raid_devices(new_image_count))
+ 		return_0;
+ 
+@@ -6217,12 +6224,6 @@ static int _set_convenient_raid145610_segtype_to(const struct lv_segment *seg_fr
+ 		if (!(*segtype = get_segtype_from_flag(cmd, seg_flag)))
+ 			return_0;
+ 
+-		/* FIXME Can't reshape volume in use - aka not toplevel devices */
+-		if (!dm_list_empty(&seg_from->lv->segs_using_this_lv)) {
+-			log_error("Can't reshape stacked volume %s.", display_lvname(seg_from->lv));
+-			return 0;
+-		}
+-
+ 		if (segtype_sav != *segtype) {
+ 			log_warn("Replaced LV type %s%s with possible type %s.",
+ 				 segtype_sav->name, _get_segtype_alias_str(seg_from->lv, segtype_sav),
+
 
 
