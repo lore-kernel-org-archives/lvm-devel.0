@@ -1,43 +1,62 @@
-From: David Teigland <teigland@sourceware.org>
-Date: Fri, 7 Feb 2020 11:33:59 -0500
-Subject: master - writecache: check for invalid cachevol
-Message-ID: <06062.120020711334900909@us-mta-177.us.mimecast.lan>
+From: Zdenek Kabelac <zkabelac@sourceware.org>
+Date: Mon, 10 Feb 2020 09:44:52 -0500
+Subject: master - vdo: fix vdoformat when -V is specified
+Message-ID: <56652.120021009444602865@us-mta-156.us.mimecast.lan>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=744b75f88158156f7d8ffe6c2bc5af9856e63258
-Commit:        744b75f88158156f7d8ffe6c2bc5af9856e63258
-Parent:        b756cb3e49b762b3a5160f9748aeb5bf995ae80e
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Fri Feb 7 10:26:59 2020 -0600
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Fri Feb 7 10:26:59 2020 -0600
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=3716aa848efef716ba8596d585a312fdb61850d3
+Commit:        3716aa848efef716ba8596d585a312fdb61850d3
+Parent:        8f794f2095583d41393ee9c697f470015b29f064
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Mon Feb 10 15:41:30 2020 +0100
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Mon Feb 10 15:41:30 2020 +0100
 
-writecache: check for invalid cachevol
+vdo: fix vdoformat when -V is specified
 
+The previous patch improved read of pipe when lvm2 was looking
+for default logical size, but we clearly must read pipe also
+for -V case, when the logical size is already defined.
 ---
- tools/lvconvert.c | 5 +++++
- 1 file changed, 5 insertions(+)
+ lib/metadata/vdo_manip.c | 16 ++++++++--------
+ 1 file changed, 8 insertions(+), 8 deletions(-)
 
-diff --git a/tools/lvconvert.c b/tools/lvconvert.c
-index a83b019..a1fb8c1 100644
---- a/tools/lvconvert.c
-+++ b/tools/lvconvert.c
-@@ -5578,6 +5578,11 @@ static int _lvconvert_writecache_attach_single(struct cmd_context *cmd,
- 		goto bad;
+diff --git a/lib/metadata/vdo_manip.c b/lib/metadata/vdo_manip.c
+index b690e73..335e7dd 100644
+--- a/lib/metadata/vdo_manip.c
++++ b/lib/metadata/vdo_manip.c
+@@ -316,19 +316,19 @@ static int _format_vdo_pool_data_lv(struct logical_volume *data_lv,
+ 		return 0;
  	}
  
-+	if (lv_fast == lv) {
-+		log_error("Invalid cachevol LV.");
-+		goto bad;
+-	if (!*logical_size)
+-		while (!feof(f) && fgets(buf, sizeof(buf), f)) {
+-			/* TODO: Watch out for locales */
++	while (!feof(f) && fgets(buf, sizeof(buf), f)) {
++		/* TODO: Watch out for locales */
++		if (!*logical_size)
+ 			if (sscanf(buf, "Logical blocks defaulted to " FMTu64 " blocks", &lb) == 1) {
+ 				*logical_size = lb * DM_VDO_BLOCK_SIZE;
+ 				log_verbose("Available VDO logical blocks " FMTu64 " (%s).",
+ 					    lb, display_size(data_lv->vg->cmd, *logical_size));
+ 			}
+-			if ((dpath = strchr(buf, '\n')))
+-				*dpath = 0; /* cut last '\n' away */
+-			if (buf[0])
+-				log_print("  %s", buf); /* Print vdo_format messages */
+-		}
++		if ((dpath = strchr(buf, '\n')))
++			*dpath = 0; /* cut last '\n' away */
++		if (buf[0])
++			log_print("  %s", buf); /* Print vdo_format messages */
 +	}
-+
- 	if (!seg_is_linear(first_seg(lv_fast))) {
- 		log_error("LV %s must be linear to use as a writecache.", display_lvname(lv_fast));
- 		goto bad;
+ 
+ 	if (!pipe_close(&pdata)) {
+ 		log_error("Command %s failed.", argv[0]);
 
 
 
