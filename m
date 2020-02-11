@@ -1,128 +1,103 @@
-From: Marian Csontos <mcsontos@sourceware.org>
-Date: Tue, 11 Feb 2020 05:02:08 -0500
-Subject: v2_03_08 annotated tag has been created
-Message-ID: <45553.120021105020300119@us-mta-337.us.mimecast.lan>
+From: Zdenek Kabelac <zkabelac@sourceware.org>
+Date: Tue, 11 Feb 2020 11:24:40 -0500
+Subject: master - cachevol: stop dm errors with uncaching cache with cachevol
+Message-ID: <81083.120021111243402225@us-mta-21.us.mimecast.lan>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=490690356ce890f2d90fea3b7f69475ee4ea5296
-Commit:        490690356ce890f2d90fea3b7f69475ee4ea5296
-Parent:        0000000000000000000000000000000000000000
-Author:        Marian Csontos <mcsontos@redhat.com>
-AuthorDate:    2020-02-11 09:53 +0000
-Committer:     Marian Csontos <mcsontos@redhat.com>
-CommitterDate: 2020-02-11 09:53 +0000
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=892a182975049ebe732860c30c866fe2de5b7717
+Commit:        892a182975049ebe732860c30c866fe2de5b7717
+Parent:        25b97e522d8f0d8226aa3a50c69f0ec9de17b88c
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Tue Feb 11 17:11:39 2020 +0100
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Tue Feb 11 17:19:57 2020 +0100
 
-annotated tag: v2_03_08 has been created
-	    at 490690356ce890f2d90fea3b7f69475ee4ea5296 (tag)
-       tagging b9752d719ce533c10eff9e6dbad560da33f50b65 (commit)
-      replaces v2_03_07
+cachevol: stop dm errors with uncaching cache with cachevol
 
-Release 2.03.08
+Fix the anoying kernel message reported:
+device-mapper: cache: 253:2: metadata operation 'dm_cache_commit' failed: error = -5
+which has been reported while cachevol has been removed.
+Happened via confusing variable - so switch the variable to commonly user '_size'
+which presents a value in sector units and avoid 'scaling' this as extent length
+by vg extent size when placing 'error' target on removal path.
 
-- IMPORTANT: Prohibit reshape of stacked raid LVs to prevent corruption.
-- Improved handling of writecache and VDO volumes.
------BEGIN PGP SIGNATURE-----
-Version: GnuPG v2.0.22 (GNU/Linux)
+Patch shouldn't have impact on actual users data, since at this moment
+of removal all date should have been already flushed to origin device.
 
-iQIcBAABAgAGBQJeQnrMAAoJELkRJDHlCQOfzpkP/3lsfoRQRTG0hGoa1ZMzazG+
-ahz60PvSIjmKfdRvROpPL0xjJ9Uk4WZ3m4UDglkwg874jQ69snO3Enys+xhFcCNV
-cmuYlXybRfsjQ0O1jg6K0dfppNXdNwWbmi1ZuiOEXaWeNenvS2wgz3nczxFlLHUA
-Ay/xRyP15egnlPjoMsFfoBCuIITB7MmIbdFppPWP7fsLjonHIE6eQKWdDTu3zWgg
-i/KmCYIjIpdWZH8hCwW7n5Qw6odKbUMV8eo81szTEuLK2JoRGG+2g018Kc+hutLQ
-45grMHdUUi5dQ8JUQwlHgC4xPksIwpzHYkeXuH+MsvW/LzWRK8Pic9G3Gpyzv7LX
-yJAPd1V6N/oYBWk1LwV4p2ZmBzL61vmC6QKgYqMLrq/6FpqJNNFjToCRo7R+BqHQ
-PC2Xvj05DdB17sPhmmSyPnuyMZlae56HRGbeide4FXeAN3BkFg+eSzn9jo855FZm
-7Elt/lbbao6hz5gLjqjL7F+gHS72W1tFOLRVoFEOjz13LkYTODSl1ojH6zIcE/hM
-6GAKDFf1tBp8fxC4FOSQQM5slHmkx5IuRaDftw27swhjDlGGluCplrw9646Vuo2I
-ErLZb9sOF3mwvT80M0cwidOOcoJ23jm1O//RDh60LS4aY+iw32/5Yozj5jA2DchH
-yoUpObU7KyiYP2gchPZn
-=cNyC
------END PGP SIGNATURE-----
+m
+---
+ WHATS_NEW                  |  1 +
+ lib/activate/dev_manager.c | 14 +++++++-------
+ 2 files changed, 8 insertions(+), 7 deletions(-)
 
-David Teigland (19):
-      pvck: deal with coverity warnings
-      update option description for settings
-      man pvck: describe settings
-      pvck: show specific dump option values
-      drop warnings about missing pvs in foreign vgs
-      man: pvck dump description improvements
-      lvmlockd: use ret value in query function
-      man: updates to lvmcache
-      writecache: report status fields
-      man: lvmcache writecache watermark percent
-      writecache: reject invalid high/low watermark setting
-      vgsplit: handle cachevol
-      pvmove: prevent moving writecache device
-      tests: move vgsplit writecache
-      writecache: fix splitcache when origin is raid
-      writecache: prevent snapshots
-      writecache: fix return value
-      writecache: check for invalid cachevol
-      writecache: skip zeroing in test mode
-
-Heming Zhao (2):
-      fix corosync.conf: no interface error
-      add suggestion message for mirror LVs
-
-Marian Csontos (4):
-      post-release
-      tests: VDO detection in dbus tests
-      tests: Some lvmdbus tests require larger PVs
-      pre-release
-
-Nikhil Kshirsagar (1):
-      debug: print VG name in log messages for segment errors
-
-Tony Asleson (1):
-      WHATS_NEW: VDO lvmdbusd adds
-
-Vojtech Trefny (2):
-      lvmdbusd: Add VDO enable/disable compress & dedup
-      lvmdbusd: Add function to convert LV into a VDO pool
-
-Zdenek Kabelac (38):
-      libdm: support device RELOAD with maj:min and devname set
-      libdm: set maj:min while creating and reloading device
-      debug: avoid to slashes in debug message
-      debug: enhance messages
-      vg_read: use else for 3 case
-      clenaup: simpler form
-      test: aux setup
-      test: fail on device create
-      test: fix missing waiting on udev
-      tests: improve secure test
-      raid: disallow reshape of stacked LVs
-      vdo: avoid running initialization of cache pool vars
-      tests: update for readahead
-      WHATS_NEW: update
-      raid: more limitted prohibition of stacked raid usage
-      vdo: adapt for multi line vdo_format output
-      tests: writeerror_dev
-      tests: add corruption write on PV test
-      WHATS_NEW: update
-      tests: compatible with older kernels
-      dmsetup: no memleak on failed realocation
-      pvck: avoid memleak of vgname
-      bcache: fix memleak on error path
-      cov: unused header file removal
-      cov: widen before calculating min_chunk_size
-      cov: check error code from mutex init
-      lvmlockd: move eval of ENOENT
-      lvmlockctl: ensure result value is always defined
-      lvmlockctl: use inline initilizers
-      dmeventd: nicer error path for reading pipe
-      command: validate reporting of previous argument
-      lv_manip: add error handling for _reserve_area
-      raid: add internal error for no segment
-      lv_manip: add extra check for existin origin_lv
-      generate: remake
-      WHATS_NEW: update
-      raid: better place for blocking reshapes
-      vdo: fix vdoformat when -V is specified
+diff --git a/WHATS_NEW b/WHATS_NEW
+index d1c545b..30f1391 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.03.09 - 
+ ====================================
++  Fix showing of a dm kernel error when uncaching a volume with cachevol.
+ 
+ Version 2.03.08 - 11th February 2020
+ ====================================
+diff --git a/lib/activate/dev_manager.c b/lib/activate/dev_manager.c
+index 8569e86..c8a22fb 100644
+--- a/lib/activate/dev_manager.c
++++ b/lib/activate/dev_manager.c
+@@ -3161,8 +3161,8 @@ static int _add_new_lv_to_dtree(struct dev_manager *dm, struct dm_tree *dtree,
+ 		char *dlid_meta;
+ 		char *dlid_data;
+ 		char *dlid_pool;
+-		uint64_t meta_len = first_seg(lv)->metadata_len;
+-		uint64_t data_len = first_seg(lv)->data_len;
++		uint64_t meta_size = first_seg(lv)->metadata_len;
++		uint64_t data_size = first_seg(lv)->data_len;
+ 		uint16_t udev_flags = _get_udev_flags(dm, lv, layer,
+ 					     laopts->noscan, laopts->temporary,
+ 					     0);
+@@ -3210,12 +3210,12 @@ static int _add_new_lv_to_dtree(struct dev_manager *dm, struct dm_tree *dtree,
+ 
+ 		if (dm->track_pending_delete) {
+ 			log_debug_activation("Using error for pending meta delete %s.", display_lvname(lv));
+-			if (!dm_tree_node_add_error_target(dnode_meta, (uint64_t)lv->vg->extent_size * meta_len))
++			if (!dm_tree_node_add_error_target(dnode_meta, meta_size))
+ 				return_0;
+ 		} else {
+ 			/* add load_segment to meta dnode: linear, size of meta area */
+ 			if (!add_linear_area_to_dtree(dnode_meta,
+-						      meta_len,
++						      meta_size,
+ 						      lv->vg->extent_size,
+ 						      lv->vg->cmd->use_linear_target,
+ 						      lv->vg->name, lv->name))
+@@ -3239,19 +3239,19 @@ static int _add_new_lv_to_dtree(struct dev_manager *dm, struct dm_tree *dtree,
+ 
+ 		if (dm->track_pending_delete) {
+ 			log_debug_activation("Using error for pending data delete %s.", display_lvname(lv));
+-			if (!dm_tree_node_add_error_target(dnode_data, (uint64_t)lv->vg->extent_size * data_len))
++			if (!dm_tree_node_add_error_target(dnode_data, data_size))
+ 				return_0;
+ 		} else {
+ 			/* add load_segment to data dnode: linear, size of data area */
+ 			if (!add_linear_area_to_dtree(dnode_data,
+-						      data_len,
++						      data_size,
+ 						      lv->vg->extent_size,
+ 						      lv->vg->cmd->use_linear_target,
+ 						      lv->vg->name, lv->name))
+ 				return_0;
+ 
+ 			/* add seg_area to prev load_seg: offset 0 maps to cachepool lv after meta */
+-			if (!dm_tree_node_add_target_area(dnode_data, NULL, dlid_pool, meta_len))
++			if (!dm_tree_node_add_target_area(dnode_data, NULL, dlid_pool, meta_size))
+ 				return_0;
+ 		}
+ 	}
 
 
 
