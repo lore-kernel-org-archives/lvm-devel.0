@@ -1,80 +1,49 @@
-From: Jim Meyering <jim@meyering.net>
-Date: Fri, 27 Apr 2007 12:00:54 +0200
-Subject: clvmd-cman.c: another unchecked malloc
-In-Reply-To: <87lkgf2qkj.fsf@rho.meyering.net> (Jim Meyering's message of
-	"Thu\, 26 Apr 2007 15\:49\:48 +0200")
-References: <87lkgf2qkj.fsf@rho.meyering.net>
-Message-ID: <874pn216i1.fsf@rho.meyering.net>
+From: David Teigland <teigland@sourceware.org>
+Date: Thu, 27 Feb 2020 12:35:06 -0500
+Subject: master - man: lvmcache raid1 references
+Message-ID: <202002271735.01RHZ6B9019396@lists01.pubmisc.prod.ext.phx2.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Jim Meyering <jim@meyering.net> wrote:
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=c392ccaa470dbf1481cbf1c9e899ce9c59f2caea
+Commit:        c392ccaa470dbf1481cbf1c9e899ce9c59f2caea
+Parent:        9532bb577a82df454254ab65002f4be5bcc65060
+Author:        Jonathan Brassow <jbrassow@redhat.com>
+AuthorDate:    Thu Feb 27 11:33:55 2020 -0600
+Committer:     David Teigland <teigland@redhat.com>
+CommitterDate: Thu Feb 27 11:33:55 2020 -0600
 
-> There's an unchecked malloc in clvmd-cman.c's get_members function:
->
-> 	if (node_updown == NULL) {
-> 		node_updown =
-> 			(int *) malloc(sizeof(int) *
-> 				       max(num_nodes, max_updown_nodes));
-> 		memset(node_updown, 0,
-> 		       sizeof(int) * max(num_nodes, max_updown_nodes));
-> 	}
->
-> Here's a fix.
-> At the same time, I've taken the liberty of factoring out
-> the common sub-expression (buffer length) and eliminating
-> the cast on malloc's return value.
->
-> 	* daemons/clvmd/clvmd-cman.c (get_members): Don't dereference NULL
-> 	upon failed malloc.
->
-> Index: daemons/clvmd/clvmd-cman.c
-> ===================================================================
-> RCS file: /cvs/lvm2/LVM2/daemons/clvmd/clvmd-cman.c,v
-> retrieving revision 1.17
-> diff -u -p -r1.17 clvmd-cman.c
-> --- daemons/clvmd/clvmd-cman.c	23 Apr 2007 14:55:28 -0000	1.17
-> +++ daemons/clvmd/clvmd-cman.c	26 Apr 2007 13:46:02 -0000
-> @@ -320,11 +320,10 @@ static void get_members()
->  	}
->
->  	if (node_updown == NULL) {
-> -		node_updown =
-> -			(int *) malloc(sizeof(int) *
-> -				       max(num_nodes, max_updown_nodes));
-> -		memset(node_updown, 0,
-> -		       sizeof(int) * max(num_nodes, max_updown_nodes));
-> +		size_t buf_len = sizeof(int) * max(num_nodes, max_updown_nodes));
+man: lvmcache raid1 references
 
-Whoops.
-Now that I've installed enough -devel packages to compile that file,
-I see that there are too many parentheses above.
-Here's a corrected patch:
+---
+ man/lvmcache.7_main | 8 ++++----
+ 1 file changed, 4 insertions(+), 4 deletions(-)
 
-Index: daemons/clvmd/clvmd-cman.c
-===================================================================
-RCS file: /cvs/lvm2/LVM2/daemons/clvmd/clvmd-cman.c,v
-retrieving revision 1.17
-diff -u -p -r1.17 clvmd-cman.c
---- daemons/clvmd/clvmd-cman.c	23 Apr 2007 14:55:28 -0000	1.17
-+++ daemons/clvmd/clvmd-cman.c	27 Apr 2007 10:00:06 -0000
-@@ -320,11 +320,10 @@ static void get_members()
- 	}
+diff --git a/man/lvmcache.7_main b/man/lvmcache.7_main
+index d8e8dc7..425904e 100644
+--- a/man/lvmcache.7_main
++++ b/man/lvmcache.7_main
+@@ -417,13 +417,13 @@ compact, and stores dirty bits in a separate btree, which improves the
+ speed of shutting down the cache.  With \fBauto\fP, lvm selects the best
+ option provided by the current dm-cache kernel module.
+ 
+-.SS mirrored cache device
++.SS RAID1 cache device
+ 
+ \&
+ 
+-The fast LV holding the cache can be created as a raid1 mirror so that it
+-can tolerate a device failure.  (When using dm-cache with separate data
+-and metadata LVs, each of the sub-LVs can use raid1.)
++RAID1 can be used to create the fast LV holding the cache so that it can
++tolerate a device failure.  (When using dm-cache with separate data
++and metadata LVs, each of the sub-LVs can use RAID1.)
+ 
+ .nf
+ $ lvcreate -n main -L Size vg /dev/slow
 
- 	if (node_updown == NULL) {
--		node_updown =
--			(int *) malloc(sizeof(int) *
--				       max(num_nodes, max_updown_nodes));
--		memset(node_updown, 0,
--		       sizeof(int) * max(num_nodes, max_updown_nodes));
-+		size_t bufsiz = sizeof(int) * max(num_nodes, max_updown_nodes);
-+		node_updown = malloc(bufsiz);
-+		if (node_updown)
-+			memset(node_updown, 0, bufsiz);
- 	}
- }
 
 
