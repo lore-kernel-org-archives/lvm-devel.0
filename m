@@ -1,43 +1,67 @@
-From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Wed, 25 Mar 2020 18:55:55 +0000 (GMT)
-Subject: master - vdo: make vdopool wrapping device is read-only
-Message-ID: <20200325185555.D16E0385E00C@sourceware.org>
+From: Marian Csontos <mcsontos@sourceware.org>
+Date: Thu, 26 Mar 2020 12:46:42 +0000 (GMT)
+Subject: master - pre-release
+Message-ID: <20200326124642.31B35385E006@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=caff31df192bc4b06c8b0e9c75cbe93ff79581a5
-Commit:        caff31df192bc4b06c8b0e9c75cbe93ff79581a5
-Parent:        e6b93dc24e293bb06403f914ed5c03f9afa1a8ee
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed Mar 11 12:57:44 2020 +0100
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Mon Mar 23 17:13:26 2020 +0100
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=e1c2b4126520f05a5d2d515121e89263ec45a2bf
+Commit:        e1c2b4126520f05a5d2d515121e89263ec45a2bf
+Parent:        caff31df192bc4b06c8b0e9c75cbe93ff79581a5
+Author:        Marian Csontos <mcsontos@redhat.com>
+AuthorDate:    Thu Mar 26 12:21:16 2020 +0100
+Committer:     Marian Csontos <mcsontos@redhat.com>
+CommitterDate: Thu Mar 26 12:21:16 2020 +0100
 
-vdo: make vdopool wrapping device is read-only
+pre-release
 
-When vdopool is activated standalone - we use a wrapping linear device
-to hold actual vdo device active - for this we can set-up read-only
-device to ensure there cannot be made write through this device to
-actual pool device.
 ---
- lib/activate/dev_manager.c | 2 +-
- 1 file changed, 1 insertion(+), 1 deletion(-)
+ VERSION      | 2 +-
+ VERSION_DM   | 2 +-
+ WHATS_NEW    | 4 ++--
+ WHATS_NEW_DM | 4 ++--
+ 4 files changed, 6 insertions(+), 6 deletions(-)
 
-diff --git a/lib/activate/dev_manager.c b/lib/activate/dev_manager.c
-index 3b991319f..75d4df0e6 100644
---- a/lib/activate/dev_manager.c
-+++ b/lib/activate/dev_manager.c
-@@ -86,7 +86,7 @@ int read_only_lv(const struct logical_volume *lv, const struct lv_activate_opts
- 		return 0; /* Keep RAID SubLvs writable */
+diff --git a/VERSION b/VERSION
+index d19920bf8..8c4a9a8e0 100644
+--- a/VERSION
++++ b/VERSION
+@@ -1 +1 @@
+-2.03.09(2)-git (2020-02-11)
++2.03.09(2) (2020-03-26)
+diff --git a/VERSION_DM b/VERSION_DM
+index b3b975d24..0ae62fd7e 100644
+--- a/VERSION_DM
++++ b/VERSION_DM
+@@ -1 +1 @@
+-1.02.171-git (2020-02-11)
++1.02.171 (2020-03-26)
+diff --git a/WHATS_NEW b/WHATS_NEW
+index 664df6138..db914c073 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,5 @@
+-Version 2.03.09 - 
+-====================================
++Version 2.03.09 - 26th March 2020
++=================================
+   Fix formating of vdopool (vdo_slab_size_mb was smaller by 2 bits).
+   Fix showing of a dm kernel error when uncaching a volume with cachevol.
  
- 	if (!layer) {
--		if (lv_is_thin_pool(lv))
-+		if (lv_is_thin_pool(lv) || lv_is_vdo_pool(lv))
- 			return 1;
- 	}
+diff --git a/WHATS_NEW_DM b/WHATS_NEW_DM
+index 4cb0bd33b..12bdceac3 100644
+--- a/WHATS_NEW_DM
++++ b/WHATS_NEW_DM
+@@ -1,5 +1,5 @@
+-Version 1.02.171 - 
+-=====================================
++Version 1.02.171 - 26th March 2020
++==================================
+   Fix dm_list interators with gcc 10 optimization (-ftree-pta).
+   Dmeventd handles timer without looping on short intervals.
  
 
 
