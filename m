@@ -1,67 +1,46 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Wed,  8 Apr 2020 13:36:27 +0000 (GMT)
-Subject: stable-2.02 - container_of: use offsetof from stddef
-Message-ID: <20200408133627.073F1385BF81@sourceware.org>
+Date: Wed,  8 Apr 2020 13:36:28 +0000 (GMT)
+Subject: stable-2.02 - lvconvert: no validation for thin-pools not used by lvm2
+Message-ID: <20200408133628.2A0D1388700B@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=5f766b32cf0d88644232a43a59247476a16fbc9c
-Commit:        5f766b32cf0d88644232a43a59247476a16fbc9c
-Parent:        5d93892d4ae67b355ab6b418c0c404e1536d055f
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=1316cafbe988307264e4f87dbcffaf56bc2ab388
+Commit:        1316cafbe988307264e4f87dbcffaf56bc2ab388
+Parent:        5f766b32cf0d88644232a43a59247476a16fbc9c
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu Mar 5 12:58:34 2020 +0100
+AuthorDate:    Wed Apr 8 11:46:42 2020 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Wed Apr 8 15:22:54 2020 +0200
+CommitterDate: Wed Apr 8 15:31:17 2020 +0200
 
-container_of:  use offsetof from stddef
+lvconvert: no validation for thin-pools not used by lvm2
 
-Use standardized offsetof() macro from stddef.
-Helps to build valid code with latest gcc10 with -O2.
+lvm2 supports thin-pool to be later used by other tools doing
+virtual volumes themself (i.e. docker) - in this case we
+shall not validate transaction Id - is this is used by
+other tools and lvm2 keeps value 0 - so the transationId
+validation need to be skipped in this case.
 ---
- base/memory/container_of.h | 6 ++++--
- lib/device/bcache.h        | 2 +-
- 2 files changed, 5 insertions(+), 3 deletions(-)
+ tools/lvconvert.c | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
 
-diff --git a/base/memory/container_of.h b/base/memory/container_of.h
-index 4e4c662bf..ddb795935 100644
---- a/base/memory/container_of.h
-+++ b/base/memory/container_of.h
-@@ -1,4 +1,4 @@
--// Copyright (C) 2018 Red Hat, Inc. All rights reserved.
-+// Copyright (C) 2018 - 2020 Red Hat, Inc. All rights reserved.
- // 
- // This file is part of LVM2.
- //
-@@ -13,10 +13,12 @@
- #ifndef BASE_MEMORY_CONTAINER_OF_H
- #define BASE_MEMORY_CONTAINER_OF_H
+diff --git a/tools/lvconvert.c b/tools/lvconvert.c
+index 677bed134..0bc1a0128 100644
+--- a/tools/lvconvert.c
++++ b/tools/lvconvert.c
+@@ -2325,7 +2325,8 @@ static int _lvconvert_thin_pool_repair(struct cmd_context *cmd,
+ 		goto deactivate_mlv;
+ 	}
  
-+#include <stddef.h>  // offsetof
-+
- //----------------------------------------------------------------
- 
- #define container_of(v, t, head) \
--    ((t *)((const char *)(v) - (const char *)&((t *) 0)->head))
-+    ((t *)((const char *)(v) - offsetof(t, head)))
- 
- //----------------------------------------------------------------
- 
-diff --git a/lib/device/bcache.h b/lib/device/bcache.h
-index f9067f70c..c5e6da1ad 100644
---- a/lib/device/bcache.h
-+++ b/lib/device/bcache.h
-@@ -25,7 +25,7 @@
- 
- // FIXME: move somewhere more sensible
- #define container_of(v, t, head) \
--    ((t *)((const char *)(v) - (const char *)&((t *) 0)->head))
-+    ((t *)((const char *)(v) - offsetof(t, head)))
- 
- /*----------------------------------------------------------------*/
- 
+-	if (thin_dump[0]) {
++	/* Check matching transactionId when thin-pool is used by lvm2 (transactionId != 0) */
++	if (first_seg(pool_lv)->transaction_id && thin_dump[0]) {
+ 		argv[0] = thin_dump;
+ 		argv[1] = pms_path;
+ 		argv[2] = NULL;
 
 
 
