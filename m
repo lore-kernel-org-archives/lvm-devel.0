@@ -1,50 +1,67 @@
-From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 25 Oct 2010 13:02:28 -0000
-Subject: LVM2/lib/cache lvmcache.c lvmcache.h
-Message-ID: <20101025130228.7836.qmail@sourceware.org>
+From: Zdenek Kabelac <zkabelac@sourceware.org>
+Date: Wed,  8 Apr 2020 13:36:27 +0000 (GMT)
+Subject: stable-2.02 - container_of: use offsetof from stddef
+Message-ID: <20200408133627.073F1385BF81@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2010-10-25 13:02:26
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=5f766b32cf0d88644232a43a59247476a16fbc9c
+Commit:        5f766b32cf0d88644232a43a59247476a16fbc9c
+Parent:        5d93892d4ae67b355ab6b418c0c404e1536d055f
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Thu Mar 5 12:58:34 2020 +0100
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Wed Apr 8 15:22:54 2020 +0200
 
-Modified files:
-	lib/cache      : lvmcache.c lvmcache.h 
+container_of:  use offsetof from stddef
 
-Log message:
-	Use 'const' struct id *pvid for device_from_pvid()
-	
-	Update interface for device_from_pvid and use const pointer.
+Use standardized offsetof() macro from stddef.
+Helps to build valid code with latest gcc10 with -O2.
+---
+ base/memory/container_of.h | 6 ++++--
+ lib/device/bcache.h        | 2 +-
+ 2 files changed, 5 insertions(+), 3 deletions(-)
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/cache/lvmcache.c.diff?cvsroot=lvm2&r1=1.95&r2=1.96
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/cache/lvmcache.h.diff?cvsroot=lvm2&r1=1.33&r2=1.34
-
---- LVM2/lib/cache/lvmcache.c	2010/09/30 21:06:51	1.95
-+++ LVM2/lib/cache/lvmcache.c	2010/10/25 13:02:26	1.96
-@@ -733,7 +733,7 @@
- 	return pvids;
- }
+diff --git a/base/memory/container_of.h b/base/memory/container_of.h
+index 4e4c662bf..ddb795935 100644
+--- a/base/memory/container_of.h
++++ b/base/memory/container_of.h
+@@ -1,4 +1,4 @@
+-// Copyright (C) 2018 Red Hat, Inc. All rights reserved.
++// Copyright (C) 2018 - 2020 Red Hat, Inc. All rights reserved.
+ // 
+ // This file is part of LVM2.
+ //
+@@ -13,10 +13,12 @@
+ #ifndef BASE_MEMORY_CONTAINER_OF_H
+ #define BASE_MEMORY_CONTAINER_OF_H
  
--struct device *device_from_pvid(struct cmd_context *cmd, struct id *pvid,
-+struct device *device_from_pvid(struct cmd_context *cmd, const struct id *pvid,
- 				unsigned *scan_done_once)
- {
- 	struct label *label;
---- LVM2/lib/cache/lvmcache.h	2010/05/19 11:52:21	1.33
-+++ LVM2/lib/cache/lvmcache.h	2010/10/25 13:02:26	1.34
-@@ -94,7 +94,7 @@
- struct lvmcache_vginfo *vginfo_from_vgid(const char *vgid);
- struct lvmcache_info *info_from_pvid(const char *pvid, int valid_only);
- const char *vgname_from_vgid(struct dm_pool *mem, const char *vgid);
--struct device *device_from_pvid(struct cmd_context *cmd, struct id *pvid,
-+struct device *device_from_pvid(struct cmd_context *cmd, const struct id *pvid,
- 				unsigned *scan_done_once);
- const char *pvid_from_devname(struct cmd_context *cmd,
- 			      const char *dev_name);
++#include <stddef.h>  // offsetof
++
+ //----------------------------------------------------------------
+ 
+ #define container_of(v, t, head) \
+-    ((t *)((const char *)(v) - (const char *)&((t *) 0)->head))
++    ((t *)((const char *)(v) - offsetof(t, head)))
+ 
+ //----------------------------------------------------------------
+ 
+diff --git a/lib/device/bcache.h b/lib/device/bcache.h
+index f9067f70c..c5e6da1ad 100644
+--- a/lib/device/bcache.h
++++ b/lib/device/bcache.h
+@@ -25,7 +25,7 @@
+ 
+ // FIXME: move somewhere more sensible
+ #define container_of(v, t, head) \
+-    ((t *)((const char *)(v) - (const char *)&((t *) 0)->head))
++    ((t *)((const char *)(v) - offsetof(t, head)))
+ 
+ /*----------------------------------------------------------------*/
+ 
+
 
 
