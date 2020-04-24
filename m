@@ -1,37 +1,96 @@
-From: wgh@torlan.ru <wgh@torlan.ru>
-Date: Wed, 22 Apr 2020 00:16:29 +0300
-Subject: [PATCH] Fix scripts/lvmlocks.service.in using nonexistent --lock-opt autowait
-Message-ID: <20200421211629.425256-1-wgh@torlan.ru>
+From: David Teigland <teigland@sourceware.org>
+Date: Fri, 24 Apr 2020 16:16:55 +0000 (GMT)
+Subject: master - remove vg_read_error
+Message-ID: <20200424161655.82395386EC42@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-From: Maxim Plotnikov <wgh@torlan.ru>
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=d945b53ff7076bf7713f5e3b9ad7b79ed1db14c0
+Commit:        d945b53ff7076bf7713f5e3b9ad7b79ed1db14c0
+Parent:        4047a321285fc0d1a70fd519fb53fc778fe6093b
+Author:        David Teigland <teigland@redhat.com>
+AuthorDate:    Fri Apr 24 11:14:29 2020 -0500
+Committer:     David Teigland <teigland@redhat.com>
+CommitterDate: Fri Apr 24 11:14:29 2020 -0500
 
-The --lock-opt autowait was dropped back in 9ab6bdce01,
-and attempting to specify it has quite an opposite effect:
-no waiting is done, which makes the unit almost useless.
+remove vg_read_error
+
+Once converted results to error numbers but is now just a null check.
 ---
- scripts/lvmlocks.service.in | 2 +-
- 1 file changed, 1 insertion(+), 1 deletion(-)
+ lib/metadata/metadata-exported.h |  3 ---
+ lib/metadata/metadata.c          | 11 -----------
+ tools/vgmerge.c                  |  4 +---
+ tools/vgsplit.c                  |  2 +-
+ 4 files changed, 2 insertions(+), 18 deletions(-)
 
-diff --git a/scripts/lvmlocks.service.in b/scripts/lvmlocks.service.in
-index f6a951f19..a3d0bd48d 100644
---- a/scripts/lvmlocks.service.in
-+++ b/scripts/lvmlocks.service.in
-@@ -8,7 +8,7 @@ Type=oneshot
- RemainAfterExit=yes
+diff --git a/lib/metadata/metadata-exported.h b/lib/metadata/metadata-exported.h
+index 52bc77673..083f74a28 100644
+--- a/lib/metadata/metadata-exported.h
++++ b/lib/metadata/metadata-exported.h
+@@ -744,9 +744,6 @@ struct volume_group *vg_read_for_update(struct cmd_context *cmd, const char *vg_
+ 			 const char *vgid, uint32_t read_flags, uint32_t lockd_state);
+ struct volume_group *vg_read_orphans(struct cmd_context *cmd, const char *orphan_vgname);
  
- # start lockspaces and wait for them to finish starting
--ExecStart=@SBINDIR@/lvm vgchange --lock-start --lock-opt autowait
-+ExecStart=@SBINDIR@/lvm vgchange --lock-start --lock-opt auto
+-/* this is historical and being removed, don't use */
+-uint32_t vg_read_error(struct volume_group *vg_handle);
+-
+ /* pe_start and pe_end relate to any existing data so that new metadata
+ * areas can avoid overlap */
+ struct physical_volume *pv_create(const struct cmd_context *cmd,
+diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
+index b42d7a9b9..4b8dce902 100644
+--- a/lib/metadata/metadata.c
++++ b/lib/metadata/metadata.c
+@@ -4010,17 +4010,6 @@ static int _access_vg_exported(struct cmd_context *cmd, struct volume_group *vg)
+ 	return 0;
+ }
  
- # stop lockspaces and wait for them to finish stopping
- ExecStop=@SBINDIR@/lvmlockctl --stop-lockspaces --wait 1
--- 
-2.24.1
+-/*
+- * Test the validity of a VG handle returned by vg_read() or vg_read_for_update().
+- */
+-uint32_t vg_read_error(struct volume_group *vg_handle)
+-{
+-	if (!vg_handle)
+-		return FAILED_ALLOCATION;
+-
+-	return SUCCESS;
+-}
+-
+ struct format_instance *alloc_fid(const struct format_type *fmt,
+ 				  const struct format_instance_ctx *fic)
+ {
+diff --git a/tools/vgmerge.c b/tools/vgmerge.c
+index 903504c57..895018a6f 100644
+--- a/tools/vgmerge.c
++++ b/tools/vgmerge.c
+@@ -21,10 +21,8 @@ static struct volume_group *_vgmerge_vg_read(struct cmd_context *cmd,
+ 	struct volume_group *vg;
+ 	log_verbose("Checking for volume group \"%s\"", vg_name);
+ 	vg = vg_read_for_update(cmd, vg_name, NULL, 0, 0);
+-	if (vg_read_error(vg)) {
+-		release_vg(vg);
++	if (!vg)
+ 		return NULL;
+-	}
+ 
+ 	if (vg_is_shared(vg)) {
+ 		log_error("vgmerge not allowed for lock_type %s", vg->lock_type);
+diff --git a/tools/vgsplit.c b/tools/vgsplit.c
+index 3dc19ecea..1a422e683 100644
+--- a/tools/vgsplit.c
++++ b/tools/vgsplit.c
+@@ -691,7 +691,7 @@ int vgsplit(struct cmd_context *cmd, int argc, char **argv)
+ 
+ 		vg_to = vg_read_for_update(cmd, vg_name_to, NULL, 0, 0);
+ 
+-		if (vg_read_error(vg_to)) {
++		if (!vg_to) {
+ 			log_error("Volume group \"%s\" became inconsistent: "
+ 				  "please fix manually", vg_name_to);
+ 			goto bad;
 
 
 
