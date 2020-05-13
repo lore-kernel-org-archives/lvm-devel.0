@@ -1,60 +1,68 @@
 From: David Teigland <teigland@sourceware.org>
-Date: Wed, 13 May 2020 22:27:23 +0000 (GMT)
-Subject: master - devs: add some checks for a dev with no path name
-Message-ID: <20200513222723.A13833858D34@sourceware.org>
+Date: Wed, 13 May 2020 22:27:24 +0000 (GMT)
+Subject: master - hints: free hint structs on exit
+Message-ID: <20200513222724.C1E92385DC14@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=2f29765e7fd1135d070310683cf486f07d041c81
-Commit:        2f29765e7fd1135d070310683cf486f07d041c81
-Parent:        2d1fe38d84d499011d13ae1ea11535398528fc87
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=5c095400de2f84511726cc8178800d19657b814d
+Commit:        5c095400de2f84511726cc8178800d19657b814d
+Parent:        2f29765e7fd1135d070310683cf486f07d041c81
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Wed May 13 15:47:20 2020 -0500
+AuthorDate:    Wed May 13 17:19:41 2020 -0500
 Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Wed May 13 16:26:26 2020 -0500
+CommitterDate: Wed May 13 17:20:16 2020 -0500
 
-devs: add some checks for a dev with no path name
+hints: free hint structs on exit
 
-It's possible for a dev-cache entry to remain after all
-paths for it have been removed, and other parts of the
-code expect that a dev always has a name.  A better fix
-may be to remove a device from dev-cache after all paths
-to it have been removed.
+and free on a couple error paths.
 ---
- lib/device/dev-io.c | 3 +++
- lib/label/hints.c   | 3 +++
- 2 files changed, 6 insertions(+)
+ lib/commands/toolcontext.c | 1 +
+ lib/label/hints.c          | 3 +++
+ 2 files changed, 4 insertions(+)
 
-diff --git a/lib/device/dev-io.c b/lib/device/dev-io.c
-index 735441f19..33b9345ee 100644
---- a/lib/device/dev-io.c
-+++ b/lib/device/dev-io.c
-@@ -86,6 +86,9 @@ static int _dev_get_size_dev(struct device *dev, uint64_t *size)
- 	int fd = dev->bcache_fd;
- 	int do_close = 0;
+diff --git a/lib/commands/toolcontext.c b/lib/commands/toolcontext.c
+index 2bd7fabd2..63b6811e5 100644
+--- a/lib/commands/toolcontext.c
++++ b/lib/commands/toolcontext.c
+@@ -1598,6 +1598,7 @@ struct cmd_context *create_toolcontext(unsigned is_clvmd,
+ 	dm_list_init(&cmd->formats);
+ 	dm_list_init(&cmd->segtypes);
+ 	dm_list_init(&cmd->tags);
++	dm_list_init(&cmd->hints);
+ 	dm_list_init(&cmd->config_files);
+ 	label_init();
  
-+	if (dm_list_empty(&dev->aliases))
-+		return 0;
-+
- 	if (dev->size_seqno == _dev_size_seqno) {
- 		log_very_verbose("%s: using cached size %" PRIu64 " sectors",
- 				 name, dev->size);
 diff --git a/lib/label/hints.c b/lib/label/hints.c
-index 48fb661b4..349d5aaef 100644
+index 349d5aaef..9546f4880 100644
 --- a/lib/label/hints.c
 +++ b/lib/label/hints.c
-@@ -419,6 +419,9 @@ static int _dev_in_hint_hash(struct cmd_context *cmd, struct device *dev)
+@@ -351,6 +351,7 @@ static void _unlock_hints(struct cmd_context *cmd)
+ 
+ void hints_exit(struct cmd_context *cmd)
  {
- 	uint64_t devsize = 0;
- 
-+	if (dm_list_empty(&dev->aliases))
-+		return 0;
-+
- 	if (!cmd->filter->passes_filter(cmd, cmd->filter, dev, "regex"))
++	free_hints(&cmd->hints);
+ 	if (_hints_fd == -1)
+ 		return;
+ 	return _unlock_hints(cmd);
+@@ -1321,6 +1322,7 @@ int get_hints(struct cmd_context *cmd, struct dm_list *hints_out, int *newhints,
+ 	 */
+ 	if (!_read_hint_file(cmd, &hints_list, &needs_refresh)) {
+ 		log_debug("get_hints: read fail");
++		free_hints(&hints_list);
+ 		_unlock_hints(cmd);
  		return 0;
+ 	}
+@@ -1333,6 +1335,7 @@ int get_hints(struct cmd_context *cmd, struct dm_list *hints_out, int *newhints,
+ 	 */
+ 	if (needs_refresh) {
+ 		log_debug("get_hints: needs refresh");
++		free_hints(&hints_list);
  
+ 		if (!_lock_hints(cmd, LOCK_EX, NONBLOCK))
+ 			return 0;
 
 
