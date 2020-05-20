@@ -1,46 +1,43 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Wed, 20 May 2020 14:03:18 +0000 (GMT)
-Subject: master - cov: check for deactivation failure
-Message-ID: <20200520140318.D12FB395B08C@sourceware.org>
+Date: Wed, 20 May 2020 14:03:24 +0000 (GMT)
+Subject: master - tests: add wait on udev processing
+Message-ID: <20200520140324.84C74395CC20@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=33fdeaf3f18c02f13fb20e9a7fe8bf99e8e21cba
-Commit:        33fdeaf3f18c02f13fb20e9a7fe8bf99e8e21cba
-Parent:        2a304d7a75b572282c288c60497c7c489e7c3cbd
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=d3b515cea54bae28c438eeef77cd3625d9b2a00c
+Commit:        d3b515cea54bae28c438eeef77cd3625d9b2a00c
+Parent:        deb51601818ec9d2f9a29205896125c82cf6ce00
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri May 15 17:44:03 2020 +0200
+AuthorDate:    Fri May 15 16:56:40 2020 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Wed May 20 15:55:39 2020 +0200
+CommitterDate: Wed May 20 16:01:20 2020 +0200
 
-cov: check for deactivation failure
+tests: add wait on udev processing
 
+Trying to avoid collision with udev watch rule preventing to
+succeed 'dmsetup remove' becuase it keeps device open.
 ---
- tools/vgchange.c | 9 +++++++--
- 1 file changed, 7 insertions(+), 2 deletions(-)
+ test/shell/thin-foreign-repair.sh | 4 +++-
+ 1 file changed, 3 insertions(+), 1 deletion(-)
 
-diff --git a/tools/vgchange.c b/tools/vgchange.c
-index a10bf1165..58c8ddc84 100644
---- a/tools/vgchange.c
-+++ b/tools/vgchange.c
-@@ -991,8 +991,13 @@ static int _vgchange_locktype_single(struct cmd_context *cmd, const char *vg_nam
- 	 * deactivate it.
- 	 */
- 	if (vg->lock_type && !strcmp(vg->lock_type, "sanlock") &&
--	    (cmd->command->command_enum == vgchange_locktype_CMD))
--		deactivate_lv(cmd, vg->sanlock_lv);
-+	    (cmd->command->command_enum == vgchange_locktype_CMD)) {
-+		if (!deactivate_lv(cmd, vg->sanlock_lv)) {
-+			log_error("Failed to deativate %s.",
-+				  display_lvname(vg->sanlock_lv));
-+			return ECMD_FAILED;
-+		}
-+	}
+diff --git a/test/shell/thin-foreign-repair.sh b/test/shell/thin-foreign-repair.sh
+index 147a9a073..8b4018e4e 100644
+--- a/test/shell/thin-foreign-repair.sh
++++ b/test/shell/thin-foreign-repair.sh
+@@ -56,7 +56,9 @@ dmsetup create "$THIN" --table "0 40960 thin $DM_DEV_DIR/mapper/$POOL 0"
  
- 	log_print_unless_silent("Volume group \"%s\" successfully changed", vg->name);
+ mkfs.ext4 "$DM_DEV_DIR/mapper/$THIN"
+ 
+-dmsetup remove "$THIN"
++aux udev_wait
++
++dmsetup remove "$THIN" || { sleep .5 ; dmsetup remove "$THIN" }
+ 
+ lvchange -an $vg/pool
  
 
 
