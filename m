@@ -1,60 +1,56 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Wed, 20 May 2020 14:03:22 +0000 (GMT)
-Subject: master - pvck: set dump on one call
-Message-ID: <20200520140322.42CDA395CC54@sourceware.org>
+Date: Wed, 20 May 2020 14:03:19 +0000 (GMT)
+Subject: master - cov: check strdup for NULL
+Message-ID: <20200520140319.F2DB5395BC64@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=16da6651a1eebd776aa461db76cecaf3997cbf50
-Commit:        16da6651a1eebd776aa461db76cecaf3997cbf50
-Parent:        cf74123830250984743d28687e66a0954510b4fa
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=ce8277b47ed95e71e31c933b5c6a35b24dd52756
+Commit:        ce8277b47ed95e71e31c933b5c6a35b24dd52756
+Parent:        33fdeaf3f18c02f13fb20e9a7fe8bf99e8e21cba
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri May 15 15:05:39 2020 +0200
+AuthorDate:    Fri May 15 17:22:18 2020 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Wed May 20 15:55:39 2020 +0200
 
-pvck: set dump on one call
+cov: check strdup for NULL
 
-arg_str_value() has built-in  arg_is_set().
-
-Also this makes it obvious to coverity 'dump != NULL' & 'repair != NULL'
-at the branch code path.
 ---
- tools/pvck.c | 8 ++------
- 1 file changed, 2 insertions(+), 6 deletions(-)
+ tools/command.c | 12 ++++++++----
+ 1 file changed, 8 insertions(+), 4 deletions(-)
 
-diff --git a/tools/pvck.c b/tools/pvck.c
-index 71bfc1b63..a0f567eeb 100644
---- a/tools/pvck.c
-+++ b/tools/pvck.c
-@@ -3065,11 +3065,9 @@ int pvck(struct cmd_context *cmd, int argc, char **argv)
- 
- 	label_scan_setup_bcache();
- 
--	if (arg_is_set(cmd, dump_ARG)) {
-+	if ((dump = arg_str_value(cmd, dump_ARG, NULL))) {
- 		cmd->use_hints = 0;
- 
--		dump = arg_str_value(cmd, dump_ARG, NULL);
--
- 		if (!strcmp(dump, "metadata"))
- 			ret = _dump_metadata(cmd, dump, &set, labelsector, dev, def, PRINT_CURRENT, 0);
- 
-@@ -3096,11 +3094,9 @@ int pvck(struct cmd_context *cmd, int argc, char **argv)
- 		return ECMD_PROCESSED;
+diff --git a/tools/command.c b/tools/command.c
+index 50791b169..511dda13d 100644
+--- a/tools/command.c
++++ b/tools/command.c
+@@ -2319,7 +2319,8 @@ static void _print_val_man(struct command_name *cname, int opt_enum, int val_enu
  	}
  
--	if (arg_is_set(cmd, repairtype_ARG)) {
-+	if ((repair = arg_str_value(cmd, repairtype_ARG, NULL))) {
- 		cmd->use_hints = 0;
+ 	if (strchr(str, '|')) {
+-		line = strdup(str);
++		if (!(line = strdup(str)))
++			return;
+ 		_split_line(line, &line_argc, line_argv, '|');
+ 		for (i = 0; i < line_argc; i++) {
+ 			if (i)
+@@ -3606,9 +3607,12 @@ int main(int argc, char *argv[])
+ 		goto out_free;
+ 	}
  
--		repair = arg_str_value(cmd, repairtype_ARG, NULL);
--
- 		if (!strcmp(repair, "label_header"))
- 			ret = _repair_label_header(cmd, repair, &set, labelsector, dev);
- 
+-	if (optind < argc)
+-		cmdname = strdup(argv[optind++]);
+-	else {
++	if (optind < argc) {
++		if (!(cmdname = strdup(argv[optind++]))) {
++			log_error("Out of memory.");
++			goto out_free;
++		}
++	} else {
+ 		log_error("Missing command name.");
+ 		goto out_free;
+ 	}
 
 
