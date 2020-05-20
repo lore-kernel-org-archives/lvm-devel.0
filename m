@@ -1,40 +1,74 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Wed, 20 May 2020 14:03:21 +0000 (GMT)
-Subject: master - cov: lvconvert: missing check for function failure
-Message-ID: <20200520140321.2186B395CC34@sourceware.org>
+Date: Wed, 20 May 2020 14:03:23 +0000 (GMT)
+Subject: master - list: use container_of
+Message-ID: <20200520140323.63B37395CC4E@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=cf74123830250984743d28687e66a0954510b4fa
-Commit:        cf74123830250984743d28687e66a0954510b4fa
-Parent:        ce8277b47ed95e71e31c933b5c6a35b24dd52756
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=deb51601818ec9d2f9a29205896125c82cf6ce00
+Commit:        deb51601818ec9d2f9a29205896125c82cf6ce00
+Parent:        16da6651a1eebd776aa461db76cecaf3997cbf50
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Sun May 17 18:29:54 2020 +0200
+AuthorDate:    Fri May 15 14:41:23 2020 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Wed May 20 15:55:39 2020 +0200
+CommitterDate: Wed May 20 16:01:20 2020 +0200
 
-cov: lvconvert: missing check for function failure
+list:  use container_of
 
+Reuse macro
 ---
- tools/lvconvert.c | 3 ++-
- 1 file changed, 2 insertions(+), 1 deletion(-)
+ base/data-struct/list.h              | 4 ++--
+ daemons/lvmlockd/lvmlockd-internal.h | 6 ++----
+ 2 files changed, 4 insertions(+), 6 deletions(-)
 
-diff --git a/tools/lvconvert.c b/tools/lvconvert.c
-index e969b4459..cf935385f 100644
---- a/tools/lvconvert.c
-+++ b/tools/lvconvert.c
-@@ -5589,7 +5589,8 @@ static struct logical_volume *_lv_writecache_create(struct cmd_context *cmd,
+diff --git a/base/data-struct/list.h b/base/data-struct/list.h
+index 54cb1c10b..e0a6256a4 100644
+--- a/base/data-struct/list.h
++++ b/base/data-struct/list.h
+@@ -1,7 +1,7 @@
+ #ifndef BASE_DATA_STRUCT_LIST_H
+ #define BASE_DATA_STRUCT_LIST_H
  
- 	memcpy(&seg->writecache_settings, settings, sizeof(struct writecache_settings));
+-#include <stddef.h> /* offsetof */
++#include "base/memory/container_of.h"
  
--	add_seg_to_segs_using_this_lv(lv_fast, seg);
-+	if (!add_seg_to_segs_using_this_lv(lv_fast, seg))
-+		return_NULL;
+ //----------------------------------------------------------------
  
- 	return lv_wcorig;
- }
+@@ -100,7 +100,7 @@ struct dm_list *dm_list_next(const struct dm_list *head, const struct dm_list *e
+  * contained in a structure of type t, return the containing structure.
+  */
+ #define dm_list_struct_base(v, t, head) \
+-    ((t *)((const char *)(v) - offsetof(t, head)))
++    container_of(v, t, head)
+ 
+ /*
+  * Given the address v of an instance of 'struct dm_list list' contained in
+diff --git a/daemons/lvmlockd/lvmlockd-internal.h b/daemons/lvmlockd/lvmlockd-internal.h
+index 04100c0c1..191c44926 100644
+--- a/daemons/lvmlockd/lvmlockd-internal.h
++++ b/daemons/lvmlockd/lvmlockd-internal.h
+@@ -11,6 +11,8 @@
+ #ifndef _LVM_LVMLOCKD_INTERNAL_H
+ #define _LVM_LVMLOCKD_INTERNAL_H
+ 
++#include "base/memory/container_of.h"
++
+ #define MAX_NAME 64
+ #define MAX_ARGS 64
+ 
+@@ -217,10 +219,6 @@ struct val_blk {
+ /* lm_unlock flags */
+ #define LMUF_FREE_VG 0x00000001
+ 
+-#define container_of(ptr, type, member) ({                      \
+-	const typeof( ((type *)0)->member ) *__mptr = (ptr);    \
+-	(type *)( (char *)__mptr - offsetof(type,member) );})
+-
+ static inline void INIT_LIST_HEAD(struct list_head *list)
+ {
+ 	list->next = list;
 
 
