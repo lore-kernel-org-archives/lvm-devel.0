@@ -1,64 +1,106 @@
-From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Thu, 21 May 2020 13:21:44 +0000 (GMT)
-Subject: master - tests: also udev wait on clean-up path
-Message-ID: <20200521132144.B2E69397241F@sourceware.org>
+From: Marian Csontos <mcsontos@sourceware.org>
+Date: Thu, 21 May 2020 13:34:28 +0000 (GMT)
+Subject: master - test: Use printf to generate data
+Message-ID: <20200521133428.14B9D3972460@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=761034921c447ca7e167492454efce170593997a
-Commit:        761034921c447ca7e167492454efce170593997a
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=53803821de166109131c4d4e5396116f89dbb082
+Commit:        53803821de166109131c4d4e5396116f89dbb082
 Parent:        b5811b7c9cb27a76ef1a7e237067ef56bd7308a3
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu May 21 15:19:31 2020 +0200
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Thu May 21 15:21:05 2020 +0200
+Author:        Marian Csontos <mcsontos@redhat.com>
+AuthorDate:    Thu May 21 15:33:24 2020 +0200
+Committer:     Marian Csontos <mcsontos@redhat.com>
+CommitterDate: Thu May 21 15:33:24 2020 +0200
 
-tests: also udev wait on clean-up path
+test: Use printf to generate data
 
+...to avoid unnecessary dependency on python
 ---
- test/shell/thin-foreign-repair.sh | 14 ++++++++++----
- 1 file changed, 10 insertions(+), 4 deletions(-)
+ test/shell/integrity-dmeventd.sh | 8 +++-----
+ test/shell/integrity-large.sh    | 8 +++-----
+ test/shell/integrity-misc.sh     | 8 +++-----
+ test/shell/integrity.sh          | 8 +++-----
+ 4 files changed, 12 insertions(+), 20 deletions(-)
 
-diff --git a/test/shell/thin-foreign-repair.sh b/test/shell/thin-foreign-repair.sh
-index 8b4018e4e..55e9f62c6 100644
---- a/test/shell/thin-foreign-repair.sh
-+++ b/test/shell/thin-foreign-repair.sh
-@@ -17,9 +17,15 @@ SKIP_WITH_LVMPOLLD=1
+diff --git a/test/shell/integrity-dmeventd.sh b/test/shell/integrity-dmeventd.sh
+index a4be8c93c..ed2436aca 100644
+--- a/test/shell/integrity-dmeventd.sh
++++ b/test/shell/integrity-dmeventd.sh
+@@ -22,11 +22,9 @@ mkdir -p $mnt
  
- . lib/inittest
+ aux prepare_devs 6 64
  
-+clean_thin_()
-+{
-+	aux udev_wait
-+	dmsetup remove "$THIN" || { sleep .5 ; dmsetup remove "$THIN" ; }
-+}
-+
- cleanup_mounted_and_teardown()
- {
--	dmsetup remove $THIN || true
-+	clean_thin_ || true
- 	vgremove -ff $vg
- 	aux teardown
- }
-@@ -56,9 +62,7 @@ dmsetup create "$THIN" --table "0 40960 thin $DM_DEV_DIR/mapper/$POOL 0"
+-PYTHON="$(which python3 python2 python 2>/dev/null | head -n 1)"
+-test -n "$PYTHON" || skip
+-$PYTHON -c "print 'A'*16384" >> fileA
+-$PYTHON -c "print 'B'*16384" >> fileB
+-$PYTHON -c "print 'C'*16384" >> fileC
++printf "%0.sA" {1..16384} >> fileA
++printf "%0.sB" {1..16384} >> fileB
++printf "%0.sC" {1..16384} >> fileC
  
- mkfs.ext4 "$DM_DEV_DIR/mapper/$THIN"
+ # generate random data
+ dd if=/dev/urandom of=randA bs=512K count=2
+diff --git a/test/shell/integrity-large.sh b/test/shell/integrity-large.sh
+index 7d8e133df..7a333c101 100644
+--- a/test/shell/integrity-large.sh
++++ b/test/shell/integrity-large.sh
+@@ -25,11 +25,9 @@ mkdir -p $mnt
+ # raid1 LV needs to be extended to 512MB to test imeta being exended
+ aux prepare_devs 4 600
  
--aux udev_wait
--
--dmsetup remove "$THIN" || { sleep .5 ; dmsetup remove "$THIN" }
-+clean_thin_
+-PYTHON="$(which python3 python2 python 2>/dev/null | head -n 1)"
+-test -n "$PYTHON" || skip
+-$PYTHON -c "print 'A'*16384" >> fileA
+-$PYTHON -c "print 'B'*16384" >> fileB
+-$PYTHON -c "print 'C'*16384" >> fileC
++printf "%0.sA" {1..16384} >> fileA
++printf "%0.sB" {1..16384} >> fileB
++printf "%0.sC" {1..16384} >> fileC
  
- lvchange -an $vg/pool
+ # generate random data
+ dd if=/dev/urandom of=randA bs=512K count=2
+diff --git a/test/shell/integrity-misc.sh b/test/shell/integrity-misc.sh
+index 735e5bf86..a176f18e0 100644
+--- a/test/shell/integrity-misc.sh
++++ b/test/shell/integrity-misc.sh
+@@ -22,11 +22,9 @@ mkdir -p $mnt
  
-@@ -72,3 +76,5 @@ lvchange -ay $vg/pool
- dmsetup create "$THIN" --table "0 40960 thin $DM_DEV_DIR/mapper/$POOL 0"
+ aux prepare_devs 5 64
  
- fsck -n "$DM_DEV_DIR/mapper/$THIN"
-+
-+# exit calls cleanup_mounted_and_teardown
+-PYTHON="$(which python3 python2 python 2>/dev/null | head -n 1)"
+-test -n "$PYTHON" || skip
+-$PYTHON -c "print 'A'*16384" >> fileA
+-$PYTHON -c "print 'B'*16384" >> fileB
+-$PYTHON -c "print 'C'*16384" >> fileC
++printf "%0.sA" {1..16384} >> fileA
++printf "%0.sB" {1..16384} >> fileB
++printf "%0.sC" {1..16384} >> fileC
+ 
+ # generate random data
+ dd if=/dev/urandom of=randA bs=512K count=2
+diff --git a/test/shell/integrity.sh b/test/shell/integrity.sh
+index b241c984d..6baccf00c 100644
+--- a/test/shell/integrity.sh
++++ b/test/shell/integrity.sh
+@@ -23,11 +23,9 @@ mkdir -p $mnt
+ 
+ aux prepare_devs 5 64
+ 
+-PYTHON="$(which python3 python2 python 2>/dev/null | head -n 1)"
+-test -n "$PYTHON" || skip
+-$PYTHON -c "print 'A'*16384" >> fileA
+-$PYTHON -c "print 'B'*16384" >> fileB
+-$PYTHON -c "print 'C'*16384" >> fileC
++printf "%0.sA" {1..16384} >> fileA
++printf "%0.sB" {1..16384} >> fileB
++printf "%0.sC" {1..16384} >> fileC
+ 
+ # generate random data
+ dd if=/dev/urandom of=randA bs=512K count=2
 
 
