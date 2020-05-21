@@ -1,56 +1,101 @@
-From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Wed, 20 May 2020 14:03:19 +0000 (GMT)
-Subject: master - cov: check strdup for NULL
-Message-ID: <20200520140319.F2DB5395BC64@sourceware.org>
+From: Marian Csontos <mcsontos@sourceware.org>
+Date: Thu, 21 May 2020 13:09:37 +0000 (GMT)
+Subject: master - [WIP] tests: Use python single liner to generate data
+Message-ID: <20200521130937.32EBC3972C1B@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=ce8277b47ed95e71e31c933b5c6a35b24dd52756
-Commit:        ce8277b47ed95e71e31c933b5c6a35b24dd52756
-Parent:        33fdeaf3f18c02f13fb20e9a7fe8bf99e8e21cba
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri May 15 17:22:18 2020 +0200
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Wed May 20 15:55:39 2020 +0200
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=02397e337a5d1bb19544be4a1724aa98d1cb0008
+Commit:        02397e337a5d1bb19544be4a1724aa98d1cb0008
+Parent:        70a45c44e89534b6d5f9adeb04620f43453c67bf
+Author:        Marian Csontos <mcsontos@redhat.com>
+AuthorDate:    Wed May 6 12:10:50 2020 +0200
+Committer:     Marian Csontos <mcsontos@redhat.com>
+CommitterDate: Thu May 21 15:05:02 2020 +0200
 
-cov: check strdup for NULL
+[WIP] tests: Use python single liner to generate data
 
 ---
- tools/command.c | 12 ++++++++----
- 1 file changed, 8 insertions(+), 4 deletions(-)
+ test/shell/integrity-dmeventd.sh | 7 ++++---
+ test/shell/integrity-large.sh    | 7 ++++---
+ test/shell/integrity-misc.sh     | 7 ++++---
+ test/shell/integrity.sh          | 7 ++++---
+ 4 files changed, 16 insertions(+), 12 deletions(-)
 
-diff --git a/tools/command.c b/tools/command.c
-index 50791b169..511dda13d 100644
---- a/tools/command.c
-+++ b/tools/command.c
-@@ -2319,7 +2319,8 @@ static void _print_val_man(struct command_name *cname, int opt_enum, int val_enu
- 	}
+diff --git a/test/shell/integrity-dmeventd.sh b/test/shell/integrity-dmeventd.sh
+index 58899ca80..665e0e9a2 100644
+--- a/test/shell/integrity-dmeventd.sh
++++ b/test/shell/integrity-dmeventd.sh
+@@ -22,9 +22,10 @@ mkdir -p $mnt
  
- 	if (strchr(str, '|')) {
--		line = strdup(str);
-+		if (!(line = strdup(str)))
-+			return;
- 		_split_line(line, &line_argc, line_argv, '|');
- 		for (i = 0; i < line_argc; i++) {
- 			if (i)
-@@ -3606,9 +3607,12 @@ int main(int argc, char *argv[])
- 		goto out_free;
- 	}
+ aux prepare_devs 6 64
  
--	if (optind < argc)
--		cmdname = strdup(argv[optind++]);
--	else {
-+	if (optind < argc) {
-+		if (!(cmdname = strdup(argv[optind++]))) {
-+			log_error("Out of memory.");
-+			goto out_free;
-+		}
-+	} else {
- 		log_error("Missing command name.");
- 		goto out_free;
- 	}
+-for i in `seq 1 16384`; do echo -n "A" >> fileA; done
+-for i in `seq 1 16384`; do echo -n "B" >> fileB; done
+-for i in `seq 1 16384`; do echo -n "C" >> fileC; done
++PYTHON="$(which python3 python2 python | head -n 1)"
++$PYTHON -c "print 'A'*16384" >> fileA
++$PYTHON -c "print 'B'*16384" >> fileB
++$PYTHON -c "print 'C'*16384" >> fileC
+ 
+ # generate random data
+ dd if=/dev/urandom of=randA bs=512K count=2
+diff --git a/test/shell/integrity-large.sh b/test/shell/integrity-large.sh
+index 0c36e4d54..81fc48ec5 100644
+--- a/test/shell/integrity-large.sh
++++ b/test/shell/integrity-large.sh
+@@ -25,9 +25,10 @@ mkdir -p $mnt
+ # raid1 LV needs to be extended to 512MB to test imeta being exended
+ aux prepare_devs 4 600
+ 
+-for i in `seq 1 16384`; do echo -n "A" >> fileA; done
+-for i in `seq 1 16384`; do echo -n "B" >> fileB; done
+-for i in `seq 1 16384`; do echo -n "C" >> fileC; done
++PYTHON="$(which python3 python2 python | head -n 1)"
++$PYTHON -c "print 'A'*16384" >> fileA
++$PYTHON -c "print 'B'*16384" >> fileB
++$PYTHON -c "print 'C'*16384" >> fileC
+ 
+ # generate random data
+ dd if=/dev/urandom of=randA bs=512K count=2
+diff --git a/test/shell/integrity-misc.sh b/test/shell/integrity-misc.sh
+index 73b0a67d8..0483885ca 100644
+--- a/test/shell/integrity-misc.sh
++++ b/test/shell/integrity-misc.sh
+@@ -22,9 +22,10 @@ mkdir -p $mnt
+ 
+ aux prepare_devs 5 64
+ 
+-for i in `seq 1 16384`; do echo -n "A" >> fileA; done
+-for i in `seq 1 16384`; do echo -n "B" >> fileB; done
+-for i in `seq 1 16384`; do echo -n "C" >> fileC; done
++PYTHON="$(which python3 python2 python | head -n 1)"
++$PYTHON -c "print 'A'*16384" >> fileA
++$PYTHON -c "print 'B'*16384" >> fileB
++$PYTHON -c "print 'C'*16384" >> fileC
+ 
+ # generate random data
+ dd if=/dev/urandom of=randA bs=512K count=2
+diff --git a/test/shell/integrity.sh b/test/shell/integrity.sh
+index 7e4f2cb0b..b01920818 100644
+--- a/test/shell/integrity.sh
++++ b/test/shell/integrity.sh
+@@ -23,9 +23,10 @@ mkdir -p $mnt
+ 
+ aux prepare_devs 5 64
+ 
+-for i in `seq 1 16384`; do echo -n "A" >> fileA; done
+-for i in `seq 1 16384`; do echo -n "B" >> fileB; done
+-for i in `seq 1 16384`; do echo -n "C" >> fileC; done
++PYTHON="$(which python3 python2 python | head -n 1)"
++$PYTHON -c "print 'A'*16384" >> fileA
++$PYTHON -c "print 'B'*16384" >> fileB
++$PYTHON -c "print 'C'*16384" >> fileC
+ 
+ # generate random data
+ dd if=/dev/urandom of=randA bs=512K count=2
 
 
