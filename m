@@ -1,108 +1,158 @@
 From: David Teigland <teigland@sourceware.org>
-Date: Fri, 29 May 2020 16:01:04 +0000 (GMT)
-Subject: master - pvck: dump headers_only to skip metadata text
-Message-ID: <20200529160104.EC7603840C14@sourceware.org>
+Date: Fri, 29 May 2020 16:01:06 +0000 (GMT)
+Subject: master - tests: integrity wait for sync
+Message-ID: <20200529160106.19FE23894417@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=5410dd5441aa827b381ff64dfc6be6e4589d87a1
-Commit:        5410dd5441aa827b381ff64dfc6be6e4589d87a1
-Parent:        be61bd6ff5c6c186f38cb36f8878e310df20eff0
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=7b04ed07ba2e68f527ebb4f8d2b2bd092692f2d2
+Commit:        7b04ed07ba2e68f527ebb4f8d2b2bd092692f2d2
+Parent:        5410dd5441aa827b381ff64dfc6be6e4589d87a1
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Thu May 28 15:51:59 2020 -0500
+AuthorDate:    Fri May 29 10:57:56 2020 -0500
 Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Thu May 28 15:51:59 2020 -0500
+CommitterDate: Fri May 29 10:57:56 2020 -0500
 
-pvck: dump headers_only to skip metadata text
+tests: integrity wait for sync
 
-pvck --dump headers reads the metadata text area
-to compute the text metadata checksum to compare
-with the mda_header checksum.
-The new header_only will skip reading the metadata
-text and not validate the mda_header checksum.
+The test was using a raid+integrity LV without
+first waiting for the integrity sync, which could
+cause the test to fail (depending on init speed)
+where it depends on integrity to work in uninitialized
+areas.
+
+Also use cmp instead of diff.
 ---
- tools/lvmcmdline.c |  1 +
- tools/pvck.c       | 12 ++++++++++--
- tools/vals.h       |  2 +-
- 3 files changed, 12 insertions(+), 3 deletions(-)
+ test/shell/integrity.sh | 46 +++++++++++++++++++++++++++++++++-------------
+ 1 file changed, 33 insertions(+), 13 deletions(-)
 
-diff --git a/tools/lvmcmdline.c b/tools/lvmcmdline.c
-index d87a8f053..608653827 100644
---- a/tools/lvmcmdline.c
-+++ b/tools/lvmcmdline.c
-@@ -1092,6 +1092,7 @@ int repairtype_arg(struct cmd_context *cmd, struct arg_values *av)
- int dumptype_arg(struct cmd_context *cmd, struct arg_values *av)
- {
- 	if (!strcmp(av->value, "headers") ||
-+	    !strcmp(av->value, "headers_only") ||
- 	    !strcmp(av->value, "metadata") ||
- 	    !strcmp(av->value, "metadata_all") ||
- 	    !strcmp(av->value, "metadata_search") ||
-diff --git a/tools/pvck.c b/tools/pvck.c
-index a0f567eeb..cd2c5b6d4 100644
---- a/tools/pvck.c
-+++ b/tools/pvck.c
-@@ -24,6 +24,7 @@
+diff --git a/test/shell/integrity.sh b/test/shell/integrity.sh
+index 77e9430fe..0143129e6 100644
+--- a/test/shell/integrity.sh
++++ b/test/shell/integrity.sh
+@@ -78,14 +78,14 @@ _test_fs_with_error() {
+ 	dd if=$mnt/fileA of=tmp bs=1k
+ 	ls -l tmp
+ 	stat -c %s tmp
+-	diff fileA tmp
++	cmp -b fileA tmp
+ 	rm tmp
  
- #define PRINT_CURRENT 1
- #define PRINT_ALL 2
-+#define PRINT_NONE 3
+ 	# read partial fileB which was corrupted
+ 	not dd if=$mnt/fileB of=tmp bs=1k
+ 	ls -l tmp
+ 	stat -c %s tmp | grep 12288
+-	not diff fileB tmp
++	not cmp -b fileB tmp
+ 	rm tmp
  
- #define ID_STR_SIZE 40 /* uuid formatted with dashes is 38 chars */
+ 	umount $mnt
+@@ -118,14 +118,14 @@ _test_fs_with_raid() {
+ 	dd if=$mnt/fileA of=tmp bs=1k
+ 	ls -l tmp
+ 	stat -c %s tmp | grep 16384
+-	diff fileA tmp
++	cmp -b fileA tmp
+ 	rm tmp
  
-@@ -1388,6 +1389,7 @@ static int _dump_headers(struct cmd_context *cmd, const char *dump, struct setti
- {
- 	uint64_t mda1_offset = 0, mda1_size = 0, mda2_offset = 0, mda2_size = 0; /* bytes */
- 	uint32_t mda1_checksum, mda2_checksum;
-+	int print_metadata = 0;
- 	int mda_count = 0;
- 	int bad = 0;
+ 	# read complete fileB, corruption is corrected by raid
+ 	dd if=$mnt/fileB of=tmp bs=1k
+ 	ls -l tmp
+ 	stat -c %s tmp | grep 16384
+-	diff fileB tmp
++	cmp -b fileB tmp
+ 	rm tmp
  
-@@ -1400,14 +1402,17 @@ static int _dump_headers(struct cmd_context *cmd, const char *dump, struct setti
- 		return 1;
- 	}
+ 	umount $mnt
+@@ -161,15 +161,15 @@ _add_more_data_to_mnt() {
+ }
  
-+	if (!strcmp(dump, "headers_only"))
-+		print_metadata = PRINT_NONE;
-+
- 	/*
- 	 * The first mda is always 4096 bytes from the start of the device.
- 	 */
--	if (!_dump_mda_header(cmd, set, 1, 0, 0, NULL, dev, def, 4096, mda1_size, &mda1_checksum, NULL))
-+	if (!_dump_mda_header(cmd, set, 1, print_metadata, 0, NULL, dev, def, 4096, mda1_size, &mda1_checksum, NULL))
- 		bad++;
+ _verify_data_on_mnt() {
+-	diff randA $mnt/randA
+-	diff randB $mnt/randB
+-	diff randC $mnt/randC
+-	diff fileA $mnt/1/fileA
+-	diff fileB $mnt/1/fileB
+-	diff fileC $mnt/1/fileC
+-	diff fileA $mnt/2/fileA
+-	diff fileB $mnt/2/fileB
+-	diff fileC $mnt/2/fileC
++	cmp -b randA $mnt/randA
++	cmp -b randB $mnt/randB
++	cmp -b randC $mnt/randC
++	cmp -b fileA $mnt/1/fileA
++	cmp -b fileB $mnt/1/fileB
++	cmp -b fileC $mnt/1/fileC
++	cmp -b fileA $mnt/2/fileA
++	cmp -b fileB $mnt/2/fileB
++	cmp -b fileC $mnt/2/fileC
+ }
  
- 	if (mda2_offset) {
--		if (!_dump_mda_header(cmd, set, 1, 0, 0, NULL, dev, def, mda2_offset, mda2_size, &mda2_checksum, NULL))
-+		if (!_dump_mda_header(cmd, set, 1, print_metadata, 0, NULL, dev, def, mda2_offset, mda2_size, &mda2_checksum, NULL))
- 			bad++;
+ _verify_data_on_lv() {
+@@ -221,6 +221,8 @@ _wait_recalc() {
  
- 		/* This probably indicates that one was committed and the other not. */
-@@ -3083,6 +3088,9 @@ int pvck(struct cmd_context *cmd, int argc, char **argv)
- 		else if (!strcmp(dump, "headers"))
- 			ret = _dump_headers(cmd, dump, &set, labelsector, dev, def);
+ _prepare_vg
+ lvcreate --type raid1 -m1 --raidintegrity y -n $lv1 -l 8 $vg
++_wait_recalc $vg/${lv1}_rimage_0
++_wait_recalc $vg/${lv1}_rimage_1
+ _test_fs_with_raid
+ lvchange -an $vg/$lv1
+ lvconvert --raidintegrity n $vg/$lv1
+@@ -229,6 +231,9 @@ vgremove -ff $vg
  
-+		else if (!strcmp(dump, "headers_only"))
-+			ret = _dump_headers(cmd, dump, &set, labelsector, dev, def);
-+
- 		else if (!strcmp(dump, "backup_to_raw")) {
- 			ret = _dump_backup_to_raw(cmd, &set);
+ _prepare_vg
+ lvcreate --type raid1 -m2 --raidintegrity y -n $lv1 -l 8 $vg
++_wait_recalc $vg/${lv1}_rimage_0
++_wait_recalc $vg/${lv1}_rimage_1
++_wait_recalc $vg/${lv1}_rimage_2
+ _test_fs_with_raid
+ lvchange -an $vg/$lv1
+ lvconvert --raidintegrity n $vg/$lv1
+@@ -237,6 +242,9 @@ vgremove -ff $vg
  
-diff --git a/tools/vals.h b/tools/vals.h
-index 70404436b..623859e4d 100644
---- a/tools/vals.h
-+++ b/tools/vals.h
-@@ -142,7 +142,7 @@ val(reportformat_VAL, reportformat_arg, "ReportFmt", "basic|json")
- val(configreport_VAL, configreport_arg, "ConfigReport", "log|vg|lv|pv|pvseg|seg")
- val(configtype_VAL, configtype_arg, "ConfigType", "current|default|diff|full|list|missing|new|profilable|profilable-command|profilable-metadata")
- val(repairtype_VAL, repairtype_arg, "RepairType", "pv_header|metadata|label_header")
--val(dumptype_VAL, dumptype_arg, "DumpType", "headers|metadata|metadata_all|metadata_search")
-+val(dumptype_VAL, dumptype_arg, "DumpType", "headers|headers_only|metadata|metadata_all|metadata_search")
+ _prepare_vg
+ lvcreate --type raid4 --raidintegrity y -n $lv1 -l 8 $vg
++_wait_recalc $vg/${lv1}_rimage_0
++_wait_recalc $vg/${lv1}_rimage_1
++_wait_recalc $vg/${lv1}_rimage_2
+ _test_fs_with_raid
+ lvchange -an $vg/$lv1
+ lvconvert --raidintegrity n $vg/$lv1
+@@ -245,6 +253,9 @@ vgremove -ff $vg
  
- /* this should always be last */
- val(VAL_COUNT, NULL, NULL, NULL)
+ _prepare_vg
+ lvcreate --type raid5 --raidintegrity y -n $lv1 -l 8 $vg
++_wait_recalc $vg/${lv1}_rimage_0
++_wait_recalc $vg/${lv1}_rimage_1
++_wait_recalc $vg/${lv1}_rimage_2
+ _test_fs_with_raid
+ lvchange -an $vg/$lv1
+ lvconvert --raidintegrity n $vg/$lv1
+@@ -253,6 +264,11 @@ vgremove -ff $vg
+ 
+ _prepare_vg
+ lvcreate --type raid6 --raidintegrity y -n $lv1 -l 8 $vg
++_wait_recalc $vg/${lv1}_rimage_0
++_wait_recalc $vg/${lv1}_rimage_1
++_wait_recalc $vg/${lv1}_rimage_2
++_wait_recalc $vg/${lv1}_rimage_3
++_wait_recalc $vg/${lv1}_rimage_4
+ _test_fs_with_raid
+ lvchange -an $vg/$lv1
+ lvconvert --raidintegrity n $vg/$lv1
+@@ -261,6 +277,10 @@ vgremove -ff $vg
+ 
+ _prepare_vg
+ lvcreate --type raid10 --raidintegrity y -n $lv1 -l 8 $vg
++_wait_recalc $vg/${lv1}_rimage_0
++_wait_recalc $vg/${lv1}_rimage_1
++_wait_recalc $vg/${lv1}_rimage_2
++_wait_recalc $vg/${lv1}_rimage_3
+ _test_fs_with_raid
+ lvchange -an $vg/$lv1
+ lvconvert --raidintegrity n $vg/$lv1
 
 
