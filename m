@@ -1,41 +1,36 @@
-From: David Teigland <teigland@sourceware.org>
-Date: Mon,  1 Jun 2020 21:08:08 +0000 (GMT)
-Subject: master - Change dev->bcache_fd default value from 0 to -1
-Message-ID: <20200601210808.BDED43851C37@sourceware.org>
+From: Yi Wang <wang.yi59@zte.com.cn>
+Date: Wed, 3 Jun 2020 08:07:48 +0800
+Subject: [PATCH] activation: replace link_path with lv_path according to the previous condition check.
+Message-ID: <1591142868-40764-1-git-send-email-wang.yi59@zte.com.cn>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=b59127a8386a407407a0361b9bcad028ce31a733
-Commit:        b59127a8386a407407a0361b9bcad028ce31a733
-Parent:        d14a8040d4a2b264130cdb730cead935b0bf19f0
-Author:        Zhao Heming <heming.zhao@suse.com>
-AuthorDate:    Mon Jun 1 12:22:15 2020 -0500
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Mon Jun 1 12:22:15 2020 -0500
+From: LiaoPingfang <liao.pingfang@zte.com.cn>
 
-Change dev->bcache_fd default value from 0 to -1
+link_path should be lv_path, per previous condition check: if (!lstat(lv_path, &buf)).
 
-This fix can avoid bcache_fd will mistakenly open/close in later.
-
-Signed-off-by: Zhao Heming <heming.zhao@suse.com>
+Signed-off-by: LiaoPingfang <liao.pingfang@zte.com.cn>
 ---
- lib/device/dev-cache.c | 1 +
- 1 file changed, 1 insertion(+)
+ lib/activate/fs.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
 
-diff --git a/lib/device/dev-cache.c b/lib/device/dev-cache.c
-index 6af559cab..c3f7c49be 100644
---- a/lib/device/dev-cache.c
-+++ b/lib/device/dev-cache.c
-@@ -65,6 +65,7 @@ static int _insert(const char *path, const struct stat *info,
- static void _dev_init(struct device *dev)
- {
- 	dev->fd = -1;
-+	dev->bcache_fd = -1;
- 	dev->read_ahead = -1;
+diff --git a/lib/activate/fs.c b/lib/activate/fs.c
+index b2c99fc..a92819c 100644
+--- a/lib/activate/fs.c
++++ b/lib/activate/fs.c
+@@ -176,7 +176,7 @@ static int _mk_link(const char *dev_dir, const char *vg_name,
+ 	if (!lstat(lv_path, &buf)) {
+ 		if (!S_ISLNK(buf.st_mode) && !S_ISBLK(buf.st_mode)) {
+ 			log_error("Symbolic link %s not created: file exists",
+-				  link_path);
++				  lv_path);
+ 			return 0;
+ 		}
  
- 	dev->ext.enabled = 0;
+-- 
+2.9.5
 
 
