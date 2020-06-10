@@ -1,114 +1,564 @@
 From: David Teigland <teigland@sourceware.org>
-Date: Wed, 10 Jun 2020 21:10:21 +0000 (GMT)
-Subject: master - writecache: activate to check block size
-Message-ID: <20200610211021.A462C3870855@sourceware.org>
+Date: Wed, 10 Jun 2020 21:10:22 +0000 (GMT)
+Subject: master - tests: writecache tests
+Message-ID: <20200610211022.C497B383F875@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=ba27b9ee2a67d189a56827774001436556cae8a5
-Commit:        ba27b9ee2a67d189a56827774001436556cae8a5
-Parent:        38eaa1035b13ba1633d0002fa53071d5b7098ef9
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=6ea3654868e3727b9197113f973e1c7edeed38b2
+Commit:        6ea3654868e3727b9197113f973e1c7edeed38b2
+Parent:        ba27b9ee2a67d189a56827774001436556cae8a5
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Wed Jun 10 15:58:25 2020 -0500
+AuthorDate:    Wed Jun 10 16:08:28 2020 -0500
 Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Wed Jun 10 15:58:25 2020 -0500
+CommitterDate: Wed Jun 10 16:09:36 2020 -0500
 
-writecache: activate to check block size
+tests: writecache tests
 
-backport fixes from later commit
+backport updates from later commits
 ---
- tools/lvconvert.c | 34 +++++++++++++++++++++++++++++-----
- 1 file changed, 29 insertions(+), 5 deletions(-)
+ test/shell/writecache-large.sh | 153 ++++++++++++++++++++
+ test/shell/writecache-split.sh |   1 -
+ test/shell/writecache.sh       | 315 +++++++++++++++++++++++++++--------------
+ 3 files changed, 360 insertions(+), 109 deletions(-)
 
-diff --git a/tools/lvconvert.c b/tools/lvconvert.c
-index b25fa1704..94ea70fa5 100644
---- a/tools/lvconvert.c
-+++ b/tools/lvconvert.c
-@@ -5352,7 +5352,7 @@ static int _lvconvert_detach_writecache(struct cmd_context *cmd,
- 
- 	backup(lv->vg);
- 
--	log_print_unless_silent("Logical volume %s write cache has been detached.",
-+	log_print_unless_silent("Logical volume %s writecache has been detached.",
- 				display_lvname(lv));
- 	return 1;
- }
-@@ -5499,14 +5499,17 @@ static int _set_writecache_block_size(struct cmd_context *cmd,
- 		goto_bad;
- 	}
- 
--	if (dm_snprintf(pathname, sizeof(pathname), "%s%s/%s", cmd->dev_dir,
-+	if (dm_snprintf(pathname, sizeof(pathname), "%s/%s/%s", cmd->dev_dir,
- 			lv->vg->name, lv->name) < 0) {
- 		log_error("Path name too long to get LV block size %s", display_lvname(lv));
- 		goto_bad;
- 	}
- 
-+	if (!sync_local_dev_names(cmd))
-+		stack;
+diff --git a/test/shell/writecache-large.sh b/test/shell/writecache-large.sh
+new file mode 100644
+index 000000000..b52eaf6ab
+--- /dev/null
++++ b/test/shell/writecache-large.sh
+@@ -0,0 +1,153 @@
++#!/usr/bin/env bash
 +
- 	if (!(fs_dev = dev_cache_get(cmd, pathname, NULL))) {
--		log_error("Device for LV not found to check block size %s", display_lvname(lv));
-+		log_error("Device for LV not found to check block size %s", pathname);
- 		goto_bad;
- 	}
- 
-@@ -5608,6 +5611,7 @@ static int _lvconvert_writecache_attach_single(struct cmd_context *cmd,
- 	char *lockd_fast_name = NULL;
- 	struct id lockd_fast_id;
- 	char cvol_name[NAME_LEN];
-+	int is_active;
- 
- 	fast_name = arg_str_value(cmd, cachevol_ARG, "");
- 
-@@ -5637,6 +5641,8 @@ static int _lvconvert_writecache_attach_single(struct cmd_context *cmd,
- 		goto bad;
- 	}
- 
-+	is_active = lv_is_active(lv);
++# Copyright (C) 2018 Red Hat, Inc. All rights reserved.
++#
++# This copyrighted material is made available to anyone wishing to use,
++# modify, copy, or redistribute it subject to the terms and conditions
++# of the GNU General Public License v.2.
++#
++# You should have received a copy of the GNU General Public License
++# along with this program; if not, write to the Free Software Foundation,
++# Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 +
- 	memset(&settings, 0, sizeof(settings));
- 
- 	if (!get_writecache_settings(cmd, &settings, &block_size_sectors)) {
-@@ -5644,8 +5650,26 @@ static int _lvconvert_writecache_attach_single(struct cmd_context *cmd,
- 		goto bad;
- 	}
- 
--	if (!_set_writecache_block_size(cmd, lv, &block_size_sectors))
-+	if (!is_active) {
-+		/* checking block size of fs on the lv requires the lv to be active */
-+		if (!activate_lv(cmd, lv)) {
-+			log_error("Failed to activate LV to check block size %s", display_lvname(lv));
-+			goto bad;
-+		}
-+	}
++# Test writecache usage
 +
-+	if (!_set_writecache_block_size(cmd, lv, &block_size_sectors)) {
-+		if (!is_active && !deactivate_lv(cmd, lv))
-+			stack;
- 		goto_bad;
-+	}
++SKIP_WITH_LVMPOLLD=1
 +
-+	if (!is_active) {
-+		if (!deactivate_lv(cmd, lv)) {
-+			log_error("Failed to deactivate LV after checking block size %s", display_lvname(lv));
-+			goto bad;
-+		}
-+	}
++. lib/inittest
++
++aux have_writecache 1 0 0 || skip
++which mkfs.xfs || skip
++
++# scsi_debug devices with 512 LBS 512 PBS
++aux prepare_scsi_debug_dev 1200
++check sysfs "$(< SCSI_DEBUG_DEV)" queue/logical_block_size "512"
++check sysfs "$(< SCSI_DEBUG_DEV)" queue/physical_block_size "512"
++
++aux prepare_devs 2 600
++blockdev --getss "$dev1"
++blockdev --getpbsz "$dev1"
++blockdev --getss "$dev2"
++blockdev --getpbsz "$dev2"
++
++mnt="mnt"
++mkdir -p $mnt
++
++for i in `seq 1 16384`; do echo -n "A" >> fileA; done
++for i in `seq 1 16384`; do echo -n "B" >> fileB; done
++for i in `seq 1 16384`; do echo -n "C" >> fileC; done
++
++# generate random data
++dd if=/dev/urandom of=randA bs=512K count=2
++dd if=/dev/urandom of=randB bs=512K count=3
++dd if=/dev/urandom of=randC bs=512K count=4
++
++_add_new_data_to_mnt() {
++	mkfs.xfs -f "$DM_DEV_DIR/$vg/$lv1"
++
++	mount "$DM_DEV_DIR/$vg/$lv1" $mnt
++
++	# add original data
++	cp randA $mnt
++	cp randB $mnt
++	cp randC $mnt
++	mkdir $mnt/1
++	cp fileA $mnt/1
++	cp fileB $mnt/1
++	cp fileC $mnt/1
++	mkdir $mnt/2
++	cp fileA $mnt/2
++	cp fileB $mnt/2
++	cp fileC $mnt/2
++	sync
++}
++
++_add_more_data_to_mnt() {
++	mkdir $mnt/more
++	cp fileA $mnt/more
++	cp fileB $mnt/more
++	cp fileC $mnt/more
++	cp randA $mnt/more
++	cp randB $mnt/more
++	cp randC $mnt/more
++	sync
++}
++
++_verify_data_on_mnt() {
++	diff randA $mnt/randA
++	diff randB $mnt/randB
++	diff randC $mnt/randC
++	diff fileA $mnt/1/fileA
++	diff fileB $mnt/1/fileB
++	diff fileC $mnt/1/fileC
++	diff fileA $mnt/2/fileA
++	diff fileB $mnt/2/fileB
++	diff fileC $mnt/2/fileC
++}
++
++_verify_more_data_on_mnt() {
++	diff randA $mnt/more/randA
++	diff randB $mnt/more/randB
++	diff randC $mnt/more/randC
++	diff fileA $mnt/more/fileA
++	diff fileB $mnt/more/fileB
++	diff fileC $mnt/more/fileC
++}
++
++_verify_data_on_lv() {
++	lvchange -ay $vg/$lv1
++	mount "$DM_DEV_DIR/$vg/$lv1" $mnt
++	_verify_data_on_mnt
++	rm $mnt/randA
++	rm $mnt/randB
++	rm $mnt/randC
++	rm -rf $mnt/1
++	rm -rf $mnt/2
++	umount $mnt
++	lvchange -an $vg/$lv1
++}
++
++vgcreate $SHARED $vg "$dev1"
++vgextend $vg "$dev2"
++
++# Use a large enough size so that the cleaner will not
++# finish immediately when detaching, and will require
++# a secondary check from command top level.
++
++lvcreate -n $lv1 -L 560M -an $vg "$dev1"
++lvcreate -n $lv2 -L 500M -an $vg "$dev2"
++
++lvchange -ay $vg/$lv1
++blockdev --getss "$DM_DEV_DIR/$vg/$lv1" 
++blockdev --getpbsz "$DM_DEV_DIR/$vg/$lv1" 
++
++lvconvert --yes --type writecache --cachevol $lv2 $vg/$lv1
++dmsetup table $vg-$lv1
++blockdev --getss "$DM_DEV_DIR/$vg/$lv1" 
++blockdev --getpbsz "$DM_DEV_DIR/$vg/$lv1" 
++
++_add_new_data_to_mnt
++_add_more_data_to_mnt
++_verify_data_on_mnt
++
++dd if=/dev/zero of=$mnt/big1 bs=1M count=100 oflag=sync
++dd if=/dev/zero of=$mnt/big2 bs=1M count=100 oflag=sync
++dd if=/dev/zero of=$mnt/big3 bs=1M count=100 oflag=sync
++dd if=/dev/zero of=$mnt/big4 bs=1M count=100 oflag=sync
++
++lvconvert --splitcache $vg/$lv1
++check lv_field $vg/$lv1 segtype linear
++check lv_field $vg/$lv2 segtype linear
++dmsetup table $vg-$lv1
++_verify_data_on_mnt
++_verify_more_data_on_mnt
++dd if=$mnt/big4 of=/dev/null bs=1M count=100
++umount $mnt
++lvchange -an $vg/$lv1
++_verify_data_on_lv
++lvchange -an $vg/$lv2
++lvremove $vg/$lv1
++lvremove $vg/$lv2
++
++vgremove -ff $vg
++
+diff --git a/test/shell/writecache-split.sh b/test/shell/writecache-split.sh
+index 9553ade0c..e615e2a13 100644
+--- a/test/shell/writecache-split.sh
++++ b/test/shell/writecache-split.sh
+@@ -84,7 +84,6 @@ lvconvert --splitcache $vg/$lv1
+ lvs -o segtype $vg/$lv1 | grep linear
+ lvs -o segtype $vg/$lv2 | grep linear
  
- 	if (!arg_is_set(cmd, yes_ARG) &&
- 	    yes_no_prompt("Erase all existing data on %s? [y/n]: ", display_lvname(lv_fast)) == 'n') {
-@@ -5723,7 +5747,7 @@ static int _lvconvert_writecache_attach_single(struct cmd_context *cmd,
- 			log_error("Failed to unlock fast LV %s/%s", vg->name, lockd_fast_name);
- 	}
+-lvchange -ay $vg/$lv1
+ mount_umount $lv1
+ lvchange -an $vg/$lv1
  
--	log_print_unless_silent("Logical volume %s now has write cache.",
-+	log_print_unless_silent("Logical volume %s now has writecache.",
- 				display_lvname(lv));
- 	return ECMD_PROCESSED;
- bad:
+diff --git a/test/shell/writecache.sh b/test/shell/writecache.sh
+index 8852e93f4..39ef31930 100644
+--- a/test/shell/writecache.sh
++++ b/test/shell/writecache.sh
+@@ -19,152 +19,251 @@ SKIP_WITH_LVMPOLLD=1
+ aux have_writecache 1 0 0 || skip
+ which mkfs.xfs || skip
+ 
+-mount_dir="mnt"
+-mkdir -p $mount_dir
++# scsi_debug devices with 512 LBS 512 PBS
++aux prepare_scsi_debug_dev 256
++check sysfs "$(< SCSI_DEBUG_DEV)" queue/logical_block_size "512"
++check sysfs "$(< SCSI_DEBUG_DEV)" queue/physical_block_size "512"
++aux prepare_devs 2 64
++
++# scsi_debug devices with 512 LBS and 4K PBS
++#aux prepare_scsi_debug_dev 256 sector_size=512 physblk_exp=3
++#check sysfs "$(< SCSI_DEBUG_DEV)" queue/logical_block_size "512"
++#check sysfs "$(< SCSI_DEBUG_DEV)" queue/physical_block_size "4096"
++#aux prepare_devs 2 64
++
++# loop devs with 512 LBS and 512 PBS
++#dd if=/dev/zero of=loopa bs=$((1024*1024)) count=64 2> /dev/null
++#dd if=/dev/zero of=loopb bs=$((1024*1024)) count=64 2> /dev/null
++#LOOP1=$(losetup -f loopa --show)
++#LOOP2=$(losetup -f loopb --show)
++#aux extend_filter "a|$LOOP1|"
++#aux extend_filter "a|$LOOP2|"
++#aux lvmconf 'devices/scan = "/dev"'
++#dev1=$LOOP1
++#dev2=$LOOP2
++
++# loop devs with 4096 LBS and 4096 PBS
++#dd if=/dev/zero of=loopa bs=$((1024*1024)) count=64 2> /dev/null
++#dd if=/dev/zero of=loopb bs=$((1024*1024)) count=64 2> /dev/null
++#LOOP1=$(losetup -f loopa --sector-size 4096 --show)
++#LOOP2=$(losetup -f loopb --sector-size 4096 --show)
++#aux extend_filter "a|$LOOP1|"
++#aux extend_filter "a|$LOOP2|"
++#aux lvmconf 'devices/scan = "/dev"'
++#dev1=$LOOP1
++#dev2=$LOOP2
++
++# the default is brd ram devs with 512 LBS 4K PBS
++# aux prepare_devs 2 64
++
++blockdev --getss "$dev1"
++blockdev --getpbsz "$dev1"
++blockdev --getss "$dev2"
++blockdev --getpbsz "$dev2"
++
++
++mnt="mnt"
++mkdir -p $mnt
++
++for i in `seq 1 16384`; do echo -n "A" >> fileA; done
++for i in `seq 1 16384`; do echo -n "B" >> fileB; done
++for i in `seq 1 16384`; do echo -n "C" >> fileC; done
+ 
+ # generate random data
+-dd if=/dev/urandom of=pattern1 bs=512K count=1
++dd if=/dev/urandom of=randA bs=512K count=2
++dd if=/dev/urandom of=randB bs=512K count=3
++dd if=/dev/urandom of=randC bs=512K count=4
++
++_add_new_data_to_mnt() {
++	mkfs.xfs -f "$DM_DEV_DIR/$vg/$lv1"
++
++	mount "$DM_DEV_DIR/$vg/$lv1" $mnt
++
++	# add original data
++	cp randA $mnt
++	cp randB $mnt
++	cp randC $mnt
++	mkdir $mnt/1
++	cp fileA $mnt/1
++	cp fileB $mnt/1
++	cp fileC $mnt/1
++	mkdir $mnt/2
++	cp fileA $mnt/2
++	cp fileB $mnt/2
++	cp fileC $mnt/2
++	sync
++}
++
++_add_more_data_to_mnt() {
++	mkdir $mnt/more
++	cp fileA $mnt/more
++	cp fileB $mnt/more
++	cp fileC $mnt/more
++	cp randA $mnt/more
++	cp randB $mnt/more
++	cp randC $mnt/more
++	sync
++}
++
++_verify_data_on_mnt() {
++	diff randA $mnt/randA
++	diff randB $mnt/randB
++	diff randC $mnt/randC
++	diff fileA $mnt/1/fileA
++	diff fileB $mnt/1/fileB
++	diff fileC $mnt/1/fileC
++	diff fileA $mnt/2/fileA
++	diff fileB $mnt/2/fileB
++	diff fileC $mnt/2/fileC
++}
++
++_verify_more_data_on_mnt() {
++	diff randA $mnt/more/randA
++	diff randB $mnt/more/randB
++	diff randC $mnt/more/randC
++	diff fileA $mnt/more/fileA
++	diff fileB $mnt/more/fileB
++	diff fileC $mnt/more/fileC
++}
++
++_verify_data_on_lv() {
++	lvchange -ay $vg/$lv1
++	mount "$DM_DEV_DIR/$vg/$lv1" $mnt
++	_verify_data_on_mnt
++	rm $mnt/randA
++	rm $mnt/randB
++	rm $mnt/randC
++	rm -rf $mnt/1
++	rm -rf $mnt/2
++	umount $mnt
++	lvchange -an $vg/$lv1
++}
+ 
+-aux prepare_devs 2 64
+ 
+ vgcreate $SHARED $vg "$dev1"
+-
+ vgextend $vg "$dev2"
+ 
+-lvcreate -n $lv1 -l 8 -an $vg "$dev1"
+-
+-lvcreate -n $lv2 -l 4 -an $vg "$dev2"
++blockdev --getss "$dev1"
++blockdev --getpbsz "$dev1"
++blockdev --getss "$dev2"
++blockdev --getpbsz "$dev2"
+ 
+-# test1: create fs on LV before writecache is attached
++# Test attach while inactive, detach while inactive
++# create fs on LV before writecache is attached
+ 
++lvcreate -n $lv1 -l 8 -an $vg "$dev1"
++lvcreate -n $lv2 -l 4 -an $vg "$dev2"
+ lvchange -ay $vg/$lv1
+-
+-mkfs.xfs -f -s size=4096 "$DM_DEV_DIR/$vg/$lv1"
+-
+-mount "$DM_DEV_DIR/$vg/$lv1" $mount_dir
+-
+-cp pattern1 $mount_dir/pattern1
+-
+-umount $mount_dir
++_add_new_data_to_mnt
++umount $mnt
+ lvchange -an $vg/$lv1
+-
+ lvconvert --yes --type writecache --cachevol $lv2 $vg/$lv1
+-
+ check lv_field $vg/$lv1 segtype writecache
+-
+ lvs -a $vg/${lv2}_cvol --noheadings -o segtype >out
+ grep linear out
+-
+ lvchange -ay $vg/$lv1
+-
+-mount "$DM_DEV_DIR/$vg/$lv1" $mount_dir
+-
+-diff pattern1 $mount_dir/pattern1
+-
+-cp pattern1 $mount_dir/pattern1b
+-
+-ls -l $mount_dir
+-
+-umount $mount_dir
+-
++blockdev --getss "$DM_DEV_DIR/$vg/$lv1"
++blockdev --getpbsz "$DM_DEV_DIR/$vg/$lv1"
++mount "$DM_DEV_DIR/$vg/$lv1" $mnt
++_add_more_data_to_mnt
++_verify_data_on_mnt
++_verify_more_data_on_mnt
++umount $mnt
+ lvchange -an $vg/$lv1
+-
+ lvconvert --splitcache $vg/$lv1
+-
+ check lv_field $vg/$lv1 segtype linear
+ check lv_field $vg/$lv2 segtype linear
+-
+ lvchange -ay $vg/$lv1
+-lvchange -ay $vg/$lv2
+-
+-mount "$DM_DEV_DIR/$vg/$lv1" $mount_dir
+-
+-ls -l $mount_dir
+-
+-diff pattern1 $mount_dir/pattern1
+-diff pattern1 $mount_dir/pattern1b
+-
+-umount $mount_dir
++blockdev --getss "$DM_DEV_DIR/$vg/$lv1"
++blockdev --getpbsz "$DM_DEV_DIR/$vg/$lv1"
+ lvchange -an $vg/$lv1
++_verify_data_on_lv
+ lvchange -an $vg/$lv2
++lvremove $vg/$lv1
++lvremove $vg/$lv2
+ 
+-# test2: create fs on LV after writecache is attached
++# Test attach while inactive, detach while inactive
++# create fs on LV after writecache is attached
+ 
++lvcreate -n $lv1 -l 8 -an $vg "$dev1"
++lvcreate -n $lv2 -l 4 -an $vg "$dev2"
+ lvconvert --yes --type writecache --cachevol $lv2 $vg/$lv1
+-
+ check lv_field $vg/$lv1 segtype writecache
+-
+ lvs -a $vg/${lv2}_cvol --noheadings -o segtype >out
+ grep linear out
+-
+ lvchange -ay $vg/$lv1
+-
+-mkfs.xfs -f -s size=4096 "$DM_DEV_DIR/$vg/$lv1"
+-
+-mount "$DM_DEV_DIR/$vg/$lv1" $mount_dir
+-
+-cp pattern1 $mount_dir/pattern1
+-ls -l $mount_dir
+-
+-umount $mount_dir
++blockdev --getss "$DM_DEV_DIR/$vg/$lv1"
++blockdev --getpbsz "$DM_DEV_DIR/$vg/$lv1"
++_add_new_data_to_mnt
++umount $mnt
+ lvchange -an $vg/$lv1
+-
+ lvconvert --splitcache $vg/$lv1
+-
+-check lv_field $vg/$lv1 segtype linear
+-check lv_field $vg/$lv2 segtype linear
+-
+ lvchange -ay $vg/$lv1
+-lvchange -ay $vg/$lv2
+-
+-mount "$DM_DEV_DIR/$vg/$lv1" $mount_dir
+-
+-ls -l $mount_dir
+-
+-diff pattern1 $mount_dir/pattern1
+-
+-umount $mount_dir
++blockdev --getss "$DM_DEV_DIR/$vg/$lv1"
++blockdev --getpbsz "$DM_DEV_DIR/$vg/$lv1"
++mount "$DM_DEV_DIR/$vg/$lv1" $mnt
++_add_more_data_to_mnt
++_verify_data_on_mnt
++_verify_more_data_on_mnt
++umount $mnt
+ lvchange -an $vg/$lv1
+-lvchange -an $vg/$lv2
+-
+-
+-# test3: attach writecache to an active LV
+-
+-lvchange -ay $vg/$lv1
+-
+-mkfs.xfs -f -s size=4096 "$DM_DEV_DIR/$vg/$lv1"
+-
+-mount "$DM_DEV_DIR/$vg/$lv1" $mount_dir
+-
+-cp pattern1 $mount_dir/pattern1
+-ls -l $mount_dir
+-
+-# TODO BZ 1808012 - can not convert active volume to writecache:
+-not lvconvert --yes --type writecache --cachevol $lv2 $vg/$lv1
+-
+-if false; then
+-check lv_field $vg/$lv1 segtype writecache
+-
+-lvs -a $vg/${lv2}_cvol --noheadings -o segtype >out
+-grep linear out
+-
+-cp pattern1 $mount_dir/pattern1.after
++_verify_data_on_lv
++lvremove $vg/$lv1
++lvremove $vg/$lv2
+ 
+-diff pattern1 $mount_dir/pattern1
+-diff pattern1 $mount_dir/pattern1.after
++# Test attach while active, detach while active
+ 
+-umount $mount_dir
+-lvchange -an $vg/$lv1
++lvcreate -n $lv1 -l 8 -an $vg "$dev1"
++lvcreate -n $lv2 -l 4 -an $vg "$dev2"
+ lvchange -ay $vg/$lv1
+-mount "$DM_DEV_DIR/$vg/$lv1" $mount_dir
+-
+-diff pattern1 $mount_dir/pattern1
+-diff pattern1 $mount_dir/pattern1.after
+-fi
+-
+-umount $mount_dir
++_add_new_data_to_mnt
++lvconvert --yes --type writecache --cachevol $lv2 $vg/$lv1
++blockdev --getss "$DM_DEV_DIR/$vg/$lv1"
++blockdev --getpbsz "$DM_DEV_DIR/$vg/$lv1"
++_add_more_data_to_mnt
++_verify_data_on_mnt
++lvconvert --splitcache $vg/$lv1
++check lv_field $vg/$lv1 segtype linear
++check lv_field $vg/$lv2 segtype linear
++blockdev --getss "$DM_DEV_DIR/$vg/$lv1"
++blockdev --getpbsz "$DM_DEV_DIR/$vg/$lv1"
++_verify_data_on_mnt
++_verify_more_data_on_mnt
++umount $mnt
+ lvchange -an $vg/$lv1
++lvchange -an $vg/$lv2
++_verify_data_on_lv
+ lvremove $vg/$lv1
++lvremove $vg/$lv2
+ 
++# FIXME: test depends on unpushed commit
++# that enables two stage flush using cleaner
++#
++# Test attach while active, detach while active,
++# skip cleaner so flush message is used instead
++# 
++# lvcreate -n $lv1 -l 8 -an $vg "$dev1"
++# lvcreate -n $lv2 -l 4 -an $vg "$dev2"
++# lvchange -ay $vg/$lv1
++# _add_new_data_to_mnt
++# lvconvert --yes --type writecache --cachevol $lv2 $vg/$lv1
++# blockdev --getss "$DM_DEV_DIR/$vg/$lv1"
++# blockdev --getpbsz "$DM_DEV_DIR/$vg/$lv1"
++# _add_more_data_to_mnt
++# _verify_data_on_mnt
++# lvconvert --splitcache --cachesettings cleaner=0 $vg/$lv1
++# check lv_field $vg/$lv1 segtype linear
++# check lv_field $vg/$lv2 segtype linear
++# blockdev --getss "$DM_DEV_DIR/$vg/$lv1"
++# blockdev --getpbsz "$DM_DEV_DIR/$vg/$lv1"
++# _verify_data_on_mnt
++# _verify_more_data_on_mnt
++# umount $mnt
++# lvchange -an $vg/$lv1
++# lvchange -an $vg/$lv2
++# _verify_data_on_lv
++# lvremove $vg/$lv1
++# lvremove $vg/$lv2
++ 
+ vgremove -ff $vg
+-
++ 
 
 
