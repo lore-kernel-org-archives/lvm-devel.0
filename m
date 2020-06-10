@@ -1,258 +1,244 @@
 From: David Teigland <teigland@sourceware.org>
-Date: Wed, 10 Jun 2020 17:31:42 +0000 (GMT)
-Subject: master - writecache: add settings cleaner and max_age
-Message-ID: <20200610173142.B749C3858D35@sourceware.org>
+Date: Wed, 10 Jun 2020 17:31:41 +0000 (GMT)
+Subject: master - writecache: attach while active using fs block size
+Message-ID: <20200610173141.95186388F070@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=a7b2fc8f5791747ff3326997a07743eeebbd3ef7
-Commit:        a7b2fc8f5791747ff3326997a07743eeebbd3ef7
-Parent:        d15c466f9557004fa003b8986b82deca25cc5aaf
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=d15c466f9557004fa003b8986b82deca25cc5aaf
+Commit:        d15c466f9557004fa003b8986b82deca25cc5aaf
+Parent:        1ee42f13915d852008b1e7b777edee766413ef89
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Tue Mar 31 14:14:50 2020 -0500
+AuthorDate:    Mon Mar 30 16:25:15 2020 -0500
 Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Wed Jun 10 12:15:50 2020 -0500
+CommitterDate: Wed Jun 10 12:15:34 2020 -0500
 
-writecache: add settings cleaner and max_age
+writecache: attach while active using fs block size
 
-available in dm-writecache 1.2
+Use libblkid to detect sector/block size of the fs on the LV.
+Use this to choose a compatible writecache block size.
+Enable attaching writecache to an active LV.
 ---
- device_mapper/all.h             |  4 ++++
- device_mapper/libdm-deptree.c   | 12 ++++++++++
- lib/metadata/writecache_manip.c |  8 +++++++
- lib/report/report.c             |  2 +-
- lib/writecache/writecache.c     | 49 +++++++++++++++++++++++++++++++++++++++++
- tools/lvchange.c                | 10 +++++++++
- tools/toollib.c                 | 14 ++++++++++++
- 7 files changed, 98 insertions(+), 1 deletion(-)
+ tools/lvconvert.c | 177 ++++++++++++++++++++++++++++++++++++++++++++++++++----
+ 1 file changed, 164 insertions(+), 13 deletions(-)
 
-diff --git a/device_mapper/all.h b/device_mapper/all.h
-index f00b6a5dc..c3c6219e3 100644
---- a/device_mapper/all.h
-+++ b/device_mapper/all.h
-@@ -951,6 +951,8 @@ struct writecache_settings {
- 	uint64_t autocommit_time; /* in milliseconds */
- 	uint32_t fua;
- 	uint32_t nofua;
-+	uint32_t cleaner;
-+	uint32_t max_age;
+diff --git a/tools/lvconvert.c b/tools/lvconvert.c
+index 757e708ff..b25fa1704 100644
+--- a/tools/lvconvert.c
++++ b/tools/lvconvert.c
+@@ -5433,7 +5433,166 @@ static struct logical_volume *_lv_writecache_create(struct cmd_context *cmd,
+ 	return lv_wcorig;
+ }
  
- 	/*
- 	 * Allow an unrecognized key and its val to be passed to the kernel for
-@@ -970,6 +972,8 @@ struct writecache_settings {
- 	unsigned autocommit_time_set:1;
- 	unsigned fua_set:1;
- 	unsigned nofua_set:1;
-+	unsigned cleaner_set:1;
-+	unsigned max_age_set:1;
- };
- 
- int dm_tree_node_add_writecache_target(struct dm_tree_node *node,
-diff --git a/device_mapper/libdm-deptree.c b/device_mapper/libdm-deptree.c
-index 9ba24cbbf..2722a2c3b 100644
---- a/device_mapper/libdm-deptree.c
-+++ b/device_mapper/libdm-deptree.c
-@@ -2670,6 +2670,10 @@ static int _writecache_emit_segment_line(struct dm_task *dmt,
- 		count += 1;
- 	if (seg->writecache_settings.nofua_set)
- 		count += 1;
-+	if (seg->writecache_settings.cleaner_set && seg->writecache_settings.cleaner)
-+		count += 1;
-+	if (seg->writecache_settings.max_age_set)
-+		count += 2;
- 	if (seg->writecache_settings.new_key)
- 		count += 2;
- 
-@@ -2713,6 +2717,14 @@ static int _writecache_emit_segment_line(struct dm_task *dmt,
- 		EMIT_PARAMS(pos, " nofua");
- 	}
- 
-+	if (seg->writecache_settings.cleaner_set && seg->writecache_settings.cleaner) {
-+		EMIT_PARAMS(pos, " cleaner");
+-#define DEFAULT_WRITECACHE_BLOCK_SIZE_SECTORS 8 /* 4K */
++/*
++ * Currently only supports writecache block sizes 512 and 4096.
++ * This could be expanded later.
++ */
++static int _set_writecache_block_size(struct cmd_context *cmd,
++				      struct logical_volume *lv,
++				      uint32_t *block_size_sectors)
++{
++	char pathname[PATH_MAX];
++	struct device *fs_dev;
++	struct dm_list pvs;
++	struct pv_list *pvl;
++	uint32_t fs_block_size = 0;
++	uint32_t block_size_setting = 0;
++	uint32_t block_size = 0;
++	int lbs_unknown = 0, lbs_4k = 0, lbs_512 = 0;
++	int pbs_unknown = 0, pbs_4k = 0, pbs_512 = 0;
++	int rv;
++
++	/* This is set if the user specified a writecache block size on the command line. */
++	if (*block_size_sectors)
++		block_size_setting = *block_size_sectors * 512;
++
++	dm_list_init(&pvs);
++
++	if (!get_pv_list_for_lv(cmd->mem, lv, &pvs)) {
++		log_error("Failed to build list of PVs for %s.", display_lvname(lv));
++		goto_bad;
 +	}
 +
-+	if (seg->writecache_settings.max_age_set) {
-+		EMIT_PARAMS(pos, " max_age %u", seg->writecache_settings.max_age);
-+	}
++	dm_list_iterate_items(pvl, &pvs) {
++		unsigned int pbs = 0;
++		unsigned int lbs = 0;
 +
- 	if (seg->writecache_settings.new_key) {
- 		EMIT_PARAMS(pos, " %s %s",
- 			seg->writecache_settings.new_key,
-diff --git a/lib/metadata/writecache_manip.c b/lib/metadata/writecache_manip.c
-index e24bcb76b..7ad8c75e7 100644
---- a/lib/metadata/writecache_manip.c
-+++ b/lib/metadata/writecache_manip.c
-@@ -454,6 +454,14 @@ int writecache_settings_to_str_list(struct writecache_settings *settings, struct
- 		if (!_writecache_setting_str_list_add("nofua", (uint64_t)settings->nofua, NULL, result, mem))
- 			errors++;
- 
-+	if (settings->cleaner_set && settings->cleaner)
-+		if (!_writecache_setting_str_list_add("cleaner", (uint64_t)settings->cleaner, NULL, result, mem))
-+			errors++;
-+
-+	if (settings->max_age_set)
-+		if (!_writecache_setting_str_list_add("max_age", (uint64_t)settings->max_age, NULL, result, mem))
-+			errors++;
-+
- 	if (settings->new_key && settings->new_val)
- 		if (!_writecache_setting_str_list_add(settings->new_key, 0, settings->new_val, result, mem))
- 			errors++;
-diff --git a/lib/report/report.c b/lib/report/report.c
-index 268bed61b..74ec74cf7 100644
---- a/lib/report/report.c
-+++ b/lib/report/report.c
-@@ -1434,7 +1434,7 @@ static int _cache_settings_disp(struct dm_report *rh, struct dm_pool *mem,
- 		if (!(result = str_list_create(mem)))
- 			return_0;
- 
--		if (!writecache_settings_to_str_list(&seg->writecache_settings, result, mem))
-+		if (!writecache_settings_to_str_list((struct writecache_settings *)&seg->writecache_settings, result, mem))
- 			return_0;
- 
- 		return _field_set_string_list(rh, field, result, private, 0, NULL);
-diff --git a/lib/writecache/writecache.c b/lib/writecache/writecache.c
-index 130922a54..c7aea286d 100644
---- a/lib/writecache/writecache.c
-+++ b/lib/writecache/writecache.c
-@@ -26,6 +26,9 @@
- #include "lib/metadata/lv_alloc.h"
- #include "lib/config/defaults.h"
- 
-+static int _writecache_cleaner_supported;
-+static int _writecache_max_age_supported;
-+
- #define SEG_LOG_ERROR(t, p...) \
-         log_error(t " segment %s of logical volume %s.", ## p,	\
-                   dm_config_parent_name(sn), seg->lv->name), 0;
-@@ -120,6 +123,18 @@ static int _writecache_text_import(struct lv_segment *seg,
- 		seg->writecache_settings.nofua_set = 1;
- 	}
- 
-+	if (dm_config_has_node(sn, "cleaner")) {
-+		if (!dm_config_get_uint32(sn, "cleaner", &seg->writecache_settings.cleaner))
-+			return SEG_LOG_ERROR("Unknown writecache_setting in");
-+		seg->writecache_settings.cleaner_set = 1;
-+	}
-+
-+	if (dm_config_has_node(sn, "max_age")) {
-+		if (!dm_config_get_uint32(sn, "max_age", &seg->writecache_settings.max_age))
-+			return SEG_LOG_ERROR("Unknown writecache_setting in");
-+		seg->writecache_settings.max_age_set = 1;
-+	}
-+
- 	if (dm_config_has_node(sn, "writecache_setting_key")) {
- 		const char *key;
- 		const char *val;
-@@ -184,6 +199,14 @@ static int _writecache_text_export(const struct lv_segment *seg,
- 	        outf(f, "nofua = %u", seg->writecache_settings.nofua);
- 	}
- 
-+	if (seg->writecache_settings.cleaner_set && seg->writecache_settings.cleaner) {
-+	        outf(f, "cleaner = %u", seg->writecache_settings.cleaner);
-+	}
-+
-+	if (seg->writecache_settings.max_age_set) {
-+	        outf(f, "max_age = %u", seg->writecache_settings.max_age);
-+	}
-+
- 	if (seg->writecache_settings.new_key && seg->writecache_settings.new_val) {
- 	        outf(f, "writecache_setting_key = \"%s\"",
- 	                seg->writecache_settings.new_key);
-@@ -208,6 +231,7 @@ static int _target_present(struct cmd_context *cmd,
- {
- 	static int _writecache_checked = 0;
- 	static int _writecache_present = 0;
-+	uint32_t maj, min, patchlevel;
- 
- 	if (!activation())
- 		return 0;
-@@ -215,6 +239,19 @@ static int _target_present(struct cmd_context *cmd,
- 	if (!_writecache_checked) {
- 		_writecache_checked = 1;
- 		_writecache_present =  target_present(cmd, TARGET_NAME_WRITECACHE, 1);
-+
-+		if (!target_version(TARGET_NAME_WRITECACHE, &maj, &min, &patchlevel))
-+			return_0;
-+
-+		if (maj < 1) {
-+			log_error("writecache target version older than minimum 1.0.0");
-+			return 0;
++		if (!dev_get_direct_block_sizes(pvl->pv->dev, &pbs, &lbs)) {
++			lbs_unknown++;
++			pbs_unknown++;
++			continue;
 +		}
 +
-+		if (min >= 2) {
-+			_writecache_cleaner_supported = 1;
-+			_writecache_max_age_supported = 1;
++		if (lbs == 4096)
++			lbs_4k++;
++		else if (lbs == 512)
++			lbs_512++;
++		else
++			lbs_unknown++;
++
++		if (pbs == 4096)
++			pbs_4k++;
++		else if (pbs == 512)
++			pbs_512++;
++		else
++			pbs_unknown++;
++	}
++
++	if (lbs_4k && lbs_512) {
++		log_error("Writecache requires consistent logical block size for LV devices.");
++		goto_bad;
++	}
++
++	if (lbs_4k && block_size_setting && (block_size_setting < 4096)) {
++		log_error("Writecache block size %u not allowed with device logical block size 4096.",
++			  block_size_setting);
++		goto_bad;
++	}
++
++	if (dm_snprintf(pathname, sizeof(pathname), "%s%s/%s", cmd->dev_dir,
++			lv->vg->name, lv->name) < 0) {
++		log_error("Path name too long to get LV block size %s", display_lvname(lv));
++		goto_bad;
++	}
++
++	if (!(fs_dev = dev_cache_get(cmd, pathname, NULL))) {
++		log_error("Device for LV not found to check block size %s", display_lvname(lv));
++		goto_bad;
++	}
++
++	/*
++	 * get_fs_block_size() returns the libblkid BLOCK_SIZE value,
++	 * where libblkid has fs-specific code to set BLOCK_SIZE to the
++	 * value we need here.
++	 *
++	 * The term "block size" here may not equate directly to what the fs
++	 * calls the block size, e.g. xfs calls this the sector size (and
++	 * something different the block size); while ext4 does call this
++	 * value the block size, but it's possible values are not the same
++	 * as xfs's, and do not seem to relate directly to the device LBS.
++	 *
++	 * With 512 LBS and 4K PBS, mkfs.xfs will use xfs sector size 4K.
++	 */
++	rv = get_fs_block_size(fs_dev, &fs_block_size);
++	if (!rv || !fs_block_size) {
++		if (lbs_4k && pbs_4k && !pbs_512) {
++			block_size = 4096;
++		} else if (lbs_512 && pbs_512 && !pbs_4k) {
++			block_size = 512;
++		} else if (lbs_512 && pbs_4k) {
++			if (block_size_setting == 4096)
++				block_size = 4096;
++			else
++				block_size = 512;
++		} else {
++			block_size = 512;
 +		}
- 	}
- 
- 	return _writecache_present;
-@@ -257,6 +294,18 @@ static int _writecache_add_target_line(struct dev_manager *dm,
- 		return 0;
- 	}
- 
-+	if (!_writecache_cleaner_supported && seg->writecache_settings.cleaner_set && seg->writecache_settings.cleaner) {
-+		log_warn("WARNING: ignoring writecache setting \"cleaner\" which is not supported by kernel for LV %s.", seg->lv->name);
-+		seg->writecache_settings.cleaner = 0;
-+		seg->writecache_settings.cleaner_set = 0;
++
++		if (block_size_setting && (block_size_setting != block_size)) {
++			log_error("Cannot use writecache block size %u with unknown file system block size, logical block size %u, physical block size %u.",
++				  block_size_setting, lbs_4k ? 4096 : 512, pbs_4k ? 4096 : 512);
++			goto bad;
++		}
++
++		if (block_size != 512) {
++			log_warn("WARNING: unable to detect a file system block size on %s", display_lvname(lv));
++			log_warn("WARNING: using a writecache block size larger than the file system block size may corrupt the file system.");
++			if (!arg_is_set(cmd, yes_ARG) &&
++			    yes_no_prompt("Use writecache block size %u? [y/n]: ", block_size) == 'n')  {
++				log_error("Conversion aborted.");
++				goto bad;
++			}
++		}
++
++		log_print("Using writecache block size %u for unknown file system block size, logical block size %u, physical block size %u.",
++			 block_size, lbs_4k ? 4096 : 512, pbs_4k ? 4096 : 512);
++		goto out;
 +	}
 +
-+	if (!_writecache_max_age_supported && seg->writecache_settings.max_age_set) {
-+		log_warn("WARNING: ignoring writecache setting \"max_age\" which is not supported by kernel for LV %s.", seg->lv->name);
-+		seg->writecache_settings.max_age = 0;
-+		seg->writecache_settings.max_age_set = 0;
-+	}
-+
- 	if ((pmem = lv_on_pmem(seg->writecache)) < 0)
- 		return_0;
- 
-diff --git a/tools/lvchange.c b/tools/lvchange.c
-index ba24e8239..c0adadf8d 100644
---- a/tools/lvchange.c
-+++ b/tools/lvchange.c
-@@ -658,6 +658,16 @@ static int _lvchange_writecache(struct cmd_context *cmd,
- 		seg->writecache_settings.nofua = settings.nofua;
- 		set_count++;
- 	}
-+	if (settings.cleaner_set) {
-+		seg->writecache_settings.cleaner_set = settings.cleaner_set;
-+		seg->writecache_settings.cleaner = settings.cleaner;
-+		set_count++;
-+	}
-+	if (settings.max_age_set) {
-+		seg->writecache_settings.max_age_set = settings.max_age_set;
-+		seg->writecache_settings.max_age = settings.max_age;
-+		set_count++;
-+	}
- 
- 	if (!set_count) {
- 		/*
-diff --git a/tools/toollib.c b/tools/toollib.c
-index 94e6e6c44..eb0de5501 100644
---- a/tools/toollib.c
-+++ b/tools/toollib.c
-@@ -1262,6 +1262,20 @@ static int _get_one_writecache_setting(struct cmd_context *cmd, struct writecach
- 		return 1;
- 	}
- 
-+	if (!strncmp(key, "cleaner", strlen("cleaner"))) {
-+		if (sscanf(val, "%u", &settings->cleaner) != 1)
++	if (!block_size_setting) {
++		/* User did not specify a block size, so choose according to fs block size. */
++		if (fs_block_size == 4096)
++			block_size = 4096;
++		else if (fs_block_size == 512)
++			block_size = 512;
++		else if (fs_block_size > 4096)
++			block_size = 4096;
++		else if (fs_block_size < 4096)
++			block_size = 512;
++		else
 +			goto_bad;
-+		settings->cleaner_set = 1;
-+		return 1;
-+	}
-+
-+	if (!strncmp(key, "max_age", strlen("max_age"))) {
-+		if (sscanf(val, "%u", &settings->max_age) != 1)
++	} else {
++		if (block_size_setting <= fs_block_size)
++			block_size = block_size_setting;
++		else {
++			log_error("Writecache block size %u cannot be larger than file system block size %u.",
++				  block_size_setting, fs_block_size);
 +			goto_bad;
-+		settings->max_age_set = 1;
-+		return 1;
++		}
 +	}
 +
- 	if (settings->new_key) {
- 		log_error("Setting %s is not recognized. Only one unrecognized setting is allowed.", key);
- 		return 0;
++out:
++	if (block_size == 512)
++		*block_size_sectors = 1;
++	else if (block_size == 4096)
++		*block_size_sectors = 8;
++	else
++		goto_bad;
++
++	return 1;
++bad:
++	return 0;
++}
+ 
+ static int _lvconvert_writecache_attach_single(struct cmd_context *cmd,
+ 					struct logical_volume *lv,
+@@ -5444,7 +5603,7 @@ static int _lvconvert_writecache_attach_single(struct cmd_context *cmd,
+ 	struct logical_volume *lv_fast;
+ 	struct writecache_settings settings;
+ 	const char *fast_name;
+-	uint32_t block_size_sectors;
++	uint32_t block_size_sectors = 0;
+ 	char *lockd_fast_args = NULL;
+ 	char *lockd_fast_name = NULL;
+ 	struct id lockd_fast_id;
+@@ -5472,16 +5631,6 @@ static int _lvconvert_writecache_attach_single(struct cmd_context *cmd,
+ 		goto bad;
+ 	}
+ 
+-	/*
+-	 * To permit this we need to check the block size of the fs using lv
+-	 * (recently in libblkid) so that we can use a matching writecache
+-	 * block size.  We also want to do that if the lv is inactive.
+-	 */
+-	if (lv_is_active(lv)) {
+-		log_error("LV %s must be inactive to attach writecache.", display_lvname(lv));
+-		goto bad;
+-	}
+-
+ 	/* fast LV shouldn't generally be active by itself, but just in case. */
+ 	if (lv_info(cmd, lv_fast, 1, NULL, 0, 0)) {
+ 		log_error("LV %s must be inactive to attach.", display_lvname(lv_fast));
+@@ -5489,13 +5638,15 @@ static int _lvconvert_writecache_attach_single(struct cmd_context *cmd,
+ 	}
+ 
+ 	memset(&settings, 0, sizeof(settings));
+-	block_size_sectors = DEFAULT_WRITECACHE_BLOCK_SIZE_SECTORS;
+ 
+ 	if (!get_writecache_settings(cmd, &settings, &block_size_sectors)) {
+ 		log_error("Invalid writecache settings.");
+ 		goto bad;
+ 	}
+ 
++	if (!_set_writecache_block_size(cmd, lv, &block_size_sectors))
++		goto_bad;
++
+ 	if (!arg_is_set(cmd, yes_ARG) &&
+ 	    yes_no_prompt("Erase all existing data on %s? [y/n]: ", display_lvname(lv_fast)) == 'n') {
+ 		log_error("Conversion aborted.");
 
 
