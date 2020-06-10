@@ -1,588 +1,605 @@
 From: David Teigland <teigland@sourceware.org>
-Date: Wed, 10 Jun 2020 17:31:38 +0000 (GMT)
-Subject: master - writecache: remove from an active lv
-Message-ID: <20200610173138.2CFD73858D35@sourceware.org>
+Date: Wed, 10 Jun 2020 17:31:40 +0000 (GMT)
+Subject: master - writecache: cachesettings in lvchange and lvs
+Message-ID: <20200610173140.7471C388C030@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=240062a18365a7f6725ebcf1b035a6e0a3b12803
-Commit:        240062a18365a7f6725ebcf1b035a6e0a3b12803
-Parent:        8806f2d5ed4792042b246b930fb44f24b9ee45c2
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=1ee42f13915d852008b1e7b777edee766413ef89
+Commit:        1ee42f13915d852008b1e7b777edee766413ef89
+Parent:        ce772bfab976d89f6a35a442434d1a49ceb634c7
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Mon Feb 24 13:52:12 2020 -0600
+AuthorDate:    Wed Feb 26 14:47:29 2020 -0600
 Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Wed Jun 10 12:13:31 2020 -0500
+CommitterDate: Wed Jun 10 12:14:00 2020 -0500
 
-writecache: remove from an active lv
+writecache: cachesettings in lvchange and lvs
 
+lvchange --cachesettings
+lvs -o+cache_settings
 ---
- lib/metadata/lv_manip.c          |  17 ++-
- lib/metadata/metadata-exported.h |   3 +-
- lib/metadata/writecache_manip.c  | 288 +++++++++++++++++++++++++++++++++------
- test/shell/writecache-split.sh   |  35 +++--
- tools/lvconvert.c                |  42 ++----
- 5 files changed, 294 insertions(+), 91 deletions(-)
+ lib/metadata/metadata-exported.h |   1 +
+ lib/metadata/writecache_manip.c  |  70 ++++++++++++++++++
+ lib/report/report.c              |  10 +++
+ tools/command-lines.in           |   2 +-
+ tools/lvchange.c                 |  75 +++++++++++++++++++
+ tools/lvconvert.c                | 153 +--------------------------------------
+ tools/toollib.c                  | 150 ++++++++++++++++++++++++++++++++++++++
+ tools/toollib.h                  |   3 +
+ 8 files changed, 311 insertions(+), 153 deletions(-)
 
-diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
-index 1311f70bd..c1c86aa4c 100644
---- a/lib/metadata/lv_manip.c
-+++ b/lib/metadata/lv_manip.c
-@@ -6568,7 +6568,20 @@ int lv_remove_single(struct cmd_context *cmd, struct logical_volume *lv,
- 		}
- 	}
- 
--	if (lv_is_used_cache_pool(lv) || lv_is_cache_vol(lv)) {
-+	if (lv_is_cache_vol(lv)) {
-+		if ((cache_seg = get_only_segment_using_this_lv(lv))) {
-+			/* When used with cache, lvremove on cachevol also removes the cache! */
-+		       	if (seg_is_cache(cache_seg)) {
-+				if (!lv_cache_remove(cache_seg->lv))
-+					return_0;
-+			} else if (seg_is_writecache(cache_seg)) {
-+				log_error("Detach cachevol before removing.");
-+				return 0;
-+			}
-+		}
-+	}
-+
-+	if (lv_is_used_cache_pool(lv)) {
- 		/* Cache pool removal drops cache layer
- 		 * If the cache pool is not linked, we can simply remove it. */
- 		if (!(cache_seg = get_only_segment_using_this_lv(lv)))
-@@ -6832,7 +6845,7 @@ static int _lv_update_and_reload(struct logical_volume *lv, int origin_only)
- 	}
- 
- 	if (!(origin_only ? suspend_lv_origin(vg->cmd, lock_lv) : suspend_lv(vg->cmd, lock_lv))) {
--		log_error("Failed to lock logical volume %s.",
-+		log_error("Failed to suspend logical volume %s.",
- 			  display_lvname(lock_lv));
- 		vg_revert(vg);
- 	} else if (!(r = vg_commit(vg)))
 diff --git a/lib/metadata/metadata-exported.h b/lib/metadata/metadata-exported.h
-index 083f74a28..9de088437 100644
+index 9de088437..0d6be136b 100644
 --- a/lib/metadata/metadata-exported.h
 +++ b/lib/metadata/metadata-exported.h
-@@ -89,8 +89,7 @@
- #define PARTIAL_LV		UINT64_C(0x0000000001000000)	/* LV - derived flag, not
- 							   written out in metadata*/
+@@ -1096,6 +1096,7 @@ int lv_is_cow(const struct logical_volume *lv);
+ int lv_is_cache_origin(const struct logical_volume *lv);
+ int lv_is_writecache_origin(const struct logical_volume *lv);
+ int lv_is_writecache_cachevol(const struct logical_volume *lv);
++int writecache_settings_to_str_list(struct writecache_settings *settings, struct dm_list *result, struct dm_pool *mem);
  
--//#define POSTORDER_FLAG	UINT64_C(0x0000000002000000) /* Not real flags, reserved for
--//#define POSTORDER_OPEN_FLAG	UINT64_C(0x0000000004000000)    temporary use inside vg_read_internal. */
-+#define WRITECACHE_ORIGIN	UINT64_C(0x0000000002000000)
- #define INTEGRITY_METADATA	UINT64_C(0x0000000004000000)    /* LV - Internal use only */
- #define VIRTUAL_ORIGIN		UINT64_C(0x0000000008000000)	/* LV - internal use only */
+ int lv_is_integrity_origin(const struct logical_volume *lv);
  
 diff --git a/lib/metadata/writecache_manip.c b/lib/metadata/writecache_manip.c
-index 31d069edb..4f09e69cf 100644
+index 4f09e69cf..e24bcb76b 100644
 --- a/lib/metadata/writecache_manip.c
 +++ b/lib/metadata/writecache_manip.c
-@@ -19,6 +19,7 @@
- #include "lib/commands/toolcontext.h"
- #include "lib/display/display.h"
- #include "lib/metadata/segtype.h"
-+#include "lib/metadata/lv_alloc.h"
+@@ -22,6 +22,7 @@
+ #include "lib/metadata/lv_alloc.h"
  #include "lib/activate/activate.h"
  #include "lib/config/defaults.h"
++#include "lib/datastruct/str_list.h"
  
-@@ -26,6 +27,15 @@ int lv_is_writecache_origin(const struct logical_volume *lv)
+ int lv_is_writecache_origin(const struct logical_volume *lv)
  {
- 	struct lv_segment *seg;
- 
-+	/*
-+	 * This flag is needed when removing writecache from an origin
-+	 * in which case the lv connections have been destroyed and
-+	 * identifying a writecache origin by these connections doesn't
-+	 * work.
-+	 */
-+	if (lv->status & WRITECACHE_ORIGIN)
-+		return 1;
-+
- 	/* Make sure there's exactly one segment in segs_using_this_lv! */
- 	if (dm_list_empty(&lv->segs_using_this_lv) ||
- 	    (dm_list_size(&lv->segs_using_this_lv) > 1))
-@@ -48,46 +58,6 @@ int lv_is_writecache_cachevol(const struct logical_volume *lv)
- 	return 0;
+@@ -394,3 +395,72 @@ int lv_detach_writecache_cachevol(struct logical_volume *lv, int noflush)
+ 		return _lv_detach_writecache_cachevol_inactive(lv, noflush);
  }
  
--static int _lv_writecache_detach(struct cmd_context *cmd, struct logical_volume *lv,
--				 struct logical_volume *lv_fast)
--{
--	struct lv_segment *seg = first_seg(lv);
--	struct logical_volume *origin;
--
--	if (!seg_is_writecache(seg)) {
--		log_error("LV %s segment is not writecache.", display_lvname(lv));
--		return 0;
--	}
--
--	if (!seg->writecache) {
--		log_error("LV %s writecache segment has no writecache.", display_lvname(lv));
--		return 0;
--	}
--
--	if (!(origin = seg_lv(seg, 0))) {
--		log_error("LV %s writecache segment has no origin", display_lvname(lv));
--		return 0;
--	}
--
--	if (!remove_seg_from_segs_using_this_lv(seg->writecache, seg))
--		return_0;
--
--	lv_set_visible(seg->writecache);
--
--	lv->status &= ~WRITECACHE;
--	seg->writecache = NULL;
--
--	lv_fast->status &= ~LV_CACHE_VOL;
--
--	if (!remove_layer_from_lv(lv, origin))
--		return_0;
--
--	if (!lv_remove(origin))
--		return_0;
--
--	return 1;
--}
--
- static int _get_writecache_kernel_error(struct cmd_context *cmd,
- 					struct logical_volume *lv,
- 					uint32_t *kernel_error)
-@@ -131,13 +101,64 @@ fail:
- 	return 0;
- }
- 
--int lv_detach_writecache_cachevol(struct logical_volume *lv, int noflush)
-+static void _rename_detached_cvol(struct cmd_context *cmd, struct logical_volume *lv_fast)
++static int _writecache_setting_str_list_add(const char *field, uint64_t val, char *val_str, struct dm_list *result, struct dm_pool *mem)
 +{
-+	struct volume_group *vg = lv_fast->vg;
-+	char cvol_name[NAME_LEN];
-+	char *suffix, *cvol_name_dup;
++	char buf[128];
++	char *list_item;
++	int len;
 +
-+	/*
-+	 * Rename lv_fast back to its original name, without the _cvol
-+	 * suffix that was added when lv_fast was attached for caching.
-+	 * If the name is in use, generate new lvol%d.
-+	 * Failing to rename is not really a problem, so we intentionally
-+	 * do not consider some things here as errors.
-+	 */
-+	if (!dm_strncpy(cvol_name, lv_fast->name, sizeof(cvol_name)) ||
-+	    !(suffix  = strstr(cvol_name, "_cvol"))) {
-+		log_debug("LV %s has no suffix for cachevol (skipping rename).",
-+			display_lvname(lv_fast));
-+		return;
++	if (val_str) {
++		if (dm_snprintf(buf, sizeof(buf), "%s=%s", field, val_str) < 0)
++			return_0;
++	} else {
++		if (dm_snprintf(buf, sizeof(buf), "%s=%llu", field, (unsigned long long)val) < 0)
++			return_0;
 +	}
 +
-+	*suffix = 0;
-+	if (lv_name_is_used_in_vg(vg, cvol_name, NULL) &&
-+	    !generate_lv_name(vg, "lvol%d", cvol_name, sizeof(cvol_name))) {
-+		log_warn("Failed to generate new unique name for unused LV %s", lv_fast->name);
-+		return;
-+	}
++	len = strlen(buf) + 1;
 +
-+	if (!(cvol_name_dup = dm_pool_strdup(vg->vgmem, cvol_name))) {
-+		stack;
-+		return;
-+	}
-+
-+	lv_fast->name = cvol_name_dup;
-+}
-+
-+static int _lv_detach_writecache_cachevol_inactive(struct logical_volume *lv, int noflush)
- {
- 	struct cmd_context *cmd = lv->vg->cmd;
-+	struct volume_group *vg = lv->vg;
- 	struct logical_volume *lv_fast;
-+	struct logical_volume *lv_wcorig;
-+	struct lv_segment *seg = first_seg(lv);
- 	uint32_t kernel_error = 0;
- 
--	lv_fast = first_seg(lv)->writecache;
-+	if (!seg_is_writecache(seg)) {
-+		log_error("LV %s segment is not writecache.", display_lvname(lv));
-+		return 0;
-+	}
-+
-+	if (!(lv_fast = seg->writecache)) {
-+		log_error("LV %s writecache segment has no writecache.", display_lvname(lv));
-+		return 0;
-+	}
-+
-+	if (!(lv_wcorig = seg_lv(seg, 0))) {
-+		log_error("LV %s writecache segment has no origin", display_lvname(lv));
-+		return 0;
-+	}
- 
- 	if (noflush)
- 		goto detach;
-@@ -157,6 +178,8 @@ int lv_detach_writecache_cachevol(struct logical_volume *lv, int noflush)
- 
- 	if (!sync_local_dev_names(cmd)) {
- 		log_error("Failed to sync local devices before detaching writecache.");
-+		if (!deactivate_lv(cmd, lv))
-+			log_error("Failed to deactivate %s.", display_lvname(lv));
- 		return 0;
- 	}
- 
-@@ -176,7 +199,8 @@ int lv_detach_writecache_cachevol(struct logical_volume *lv, int noflush)
- 
- 	if (kernel_error) {
- 		log_error("Failed to flush writecache (error %u) for %s.", kernel_error, display_lvname(lv));
--		deactivate_lv(cmd, lv);
-+		if (!deactivate_lv(cmd, lv))
-+			log_error("Failed to deactivate %s.", display_lvname(lv));
- 		return 0;
- 	}
- 
-@@ -188,11 +212,185 @@ int lv_detach_writecache_cachevol(struct logical_volume *lv, int noflush)
- 	lv->status &= ~LV_TEMPORARY;
- 
-  detach:
--	if (!_lv_writecache_detach(cmd, lv, lv_fast)) {
--		log_error("Failed to detach writecache from %s", display_lvname(lv));
-+	if (!remove_seg_from_segs_using_this_lv(lv_fast, seg))
++	if (!(list_item = dm_pool_zalloc(mem, len)))
 +		return_0;
 +
-+	lv->status &= ~WRITECACHE;
-+	seg->writecache = NULL;
++	memcpy(list_item, buf, len);
 +
-+	if (!remove_layer_from_lv(lv, lv_wcorig))
-+		return_0;
-+
-+	if (!lv_remove(lv_wcorig))
-+		return_0;
-+
-+	lv_set_visible(lv_fast);
-+	lv_fast->status &= ~LV_CACHE_VOL;
-+
-+	_rename_detached_cvol(cmd, lv_fast);
-+
-+	if (!vg_write(vg) || !vg_commit(vg))
++	if (!str_list_add_no_dup_check(mem, result, list_item))
 +		return_0;
 +
 +	return 1;
 +}
 +
-+static int _lv_detach_writecache_cachevol_active(struct logical_volume *lv, int noflush)
++int writecache_settings_to_str_list(struct writecache_settings *settings, struct dm_list *result, struct dm_pool *mem)
 +{
-+	struct cmd_context *cmd = lv->vg->cmd;
-+	struct volume_group *vg = lv->vg;
-+	struct logical_volume *lv_fast;
-+	struct logical_volume *lv_wcorig;
-+	struct logical_volume *lv_old;
-+	struct lv_segment *seg = first_seg(lv);
-+	uint32_t kernel_error = 0;
++	int errors = 0;
 +
-+	if (!seg_is_writecache(seg)) {
-+		log_error("LV %s segment is not writecache.", display_lvname(lv));
-+		return 0;
-+	}
++	if (settings->high_watermark_set)
++		if (!_writecache_setting_str_list_add("high_watermark", settings->high_watermark, NULL, result, mem))
++			errors++;
 +
-+	if (!(lv_fast = seg->writecache)) {
-+		log_error("LV %s writecache segment has no writecache.", display_lvname(lv));
-+		return 0;
-+	}
++	if (settings->low_watermark_set)
++		if (!_writecache_setting_str_list_add("low_watermark", settings->low_watermark, NULL, result, mem))
++			errors++;
 +
-+	if (!(lv_wcorig = seg_lv(seg, 0))) {
-+		log_error("LV %s writecache segment has no origin", display_lvname(lv));
-+		return 0;
-+	}
++	if (settings->writeback_jobs_set)
++		if (!_writecache_setting_str_list_add("writeback_jobs", settings->writeback_jobs, NULL, result, mem))
++			errors++;
 +
-+	if (noflush)
-+		goto detach;
++	if (settings->autocommit_blocks_set)
++		if (!_writecache_setting_str_list_add("autocommit_blocks", settings->autocommit_blocks, NULL, result, mem))
++			errors++;
 +
-+	if (!lv_writecache_message(lv, "flush_on_suspend")) {
-+		log_error("Failed to set flush_on_suspend in writecache detach %s.", display_lvname(lv));
-+		return 0;
-+	}
++	if (settings->autocommit_time_set)
++		if (!_writecache_setting_str_list_add("autocommit_time", settings->autocommit_time, NULL, result, mem))
++			errors++;
 +
-+ detach:
-+	if (!remove_seg_from_segs_using_this_lv(lv_fast, seg)) {
-+		log_error("Failed to remove seg in writecache detach.");
-+		return 0;
-+	}
++	if (settings->fua_set)
++		if (!_writecache_setting_str_list_add("fua", (uint64_t)settings->fua, NULL, result, mem))
++			errors++;
 +
-+	lv->status &= ~WRITECACHE;
-+	seg->writecache = NULL;
++	if (settings->nofua_set)
++		if (!_writecache_setting_str_list_add("nofua", (uint64_t)settings->nofua, NULL, result, mem))
++			errors++;
 +
-+	if (!remove_layer_from_lv(lv, lv_wcorig)) {
-+		log_error("Failed to remove lv layer in writecache detach.");
-+		return 0;
-+	}
++	if (settings->new_key && settings->new_val)
++		if (!_writecache_setting_str_list_add(settings->new_key, 0, settings->new_val, result, mem))
++			errors++;
 +
-+	/*
-+	 * vg_write(), suspend_lv(), vg_commit(), resume_lv().
-+	 * usually done by lv_update_and_reload for an active lv,
-+	 * but in this case we need to check for writecache errors
-+	 * after suspend.
-+	 */
++	if (errors)
++		log_warn("Failed to create list of writecache settings.");
 +
-+	if (!vg_write(vg)) {
-+		log_error("Failed to write VG in writecache detach.");
-+		return 0;
-+	}
++	return 1;
++}
 +
-+	/*
-+	 * The version of LV before removal of writecache.  When need to
-+	 * check for kernel errors based on the old version of LV which
-+	 * is still present in the kernel.
-+	 */
-+	if (!(lv_old = (struct logical_volume *)lv_committed(lv))) {
-+		log_error("Failed to get lv_committed in writecache detach.");
-+		return 0;
-+	}
-+
-+	/*
-+	 * suspend does not use 'lv' as we know it here, but grabs the
-+	 * old (precommitted) version of 'lv' using lv_committed(),
-+	 * which is from vg->vg_comitted.
-+	 */
-+	log_debug("Suspending writecache to detach %s", display_lvname(lv));
-+
-+	if (!suspend_lv(cmd, lv)) {
-+		log_error("Failed to suspend LV in writecache detach.");
-+		vg_revert(vg);
-+		return 0;
-+	}
-+
-+	log_debug("Checking writecache errors to detach.");
-+
-+	if (!_get_writecache_kernel_error(cmd, lv_old, &kernel_error)) {
-+		log_error("Failed to get writecache error status for %s.", display_lvname(lv_old));
-+		return 0;
-+	}
-+
-+	if (kernel_error) {
-+		log_error("Failed to flush writecache (error %u) for %s.", kernel_error, display_lvname(lv));
-+		return 0;
-+	}
-+
-+	if (!vg_commit(vg)) {
-+		log_error("Failed to commit VG in writecache detach.");
-+		return 0;
-+	}
-+
-+	/*
-+	 * Since vg_commit has happened, vg->vg_committed is now the
-+	 * newest copy of lv, so resume uses the 'lv' that we know
-+	 * here.
-+	 */
-+	log_debug("Resuming after writecache detached %s", display_lvname(lv));
-+
-+	if (!resume_lv(cmd, lv)) {
-+		log_error("Failed to resume LV in writecache detach.");
-+		return 0;
-+	}
-+
-+	log_debug("Deactivating previous cachevol %s", display_lvname(lv_fast));
-+
-+	if (!deactivate_lv(cmd, lv_fast))
-+		log_error("Failed to deactivate previous cachevol in writecache detach.");
-+
-+	/*
-+	 * Needed for lv_is_writecache_origin to know lv_wcorig was
-+	 * a writecache origin, which is needed so that the -real
-+	 * dm uuid suffix is applied, which is needed for deactivate to
-+	 * work. This is a hacky roundabout way of setting the -real
-+	 * uuid suffix (it would be nice to have a deactivate command
-+	 * that accepts a dm uuid.)
-+	 */
-+	lv_wcorig->status |= WRITECACHE_ORIGIN;
-+
-+	log_debug("Deactivating previous wcorig %s", display_lvname(lv_wcorig));
-+
-+	if (!lv_deactivate(cmd, NULL, lv_wcorig))
-+		log_error("Failed to deactivate previous wcorig LV in writecache detach.");
-+
-+	log_debug("Removing previous wcorig %s", display_lvname(lv_wcorig));
-+
-+	if (!lv_remove(lv_wcorig)) {
-+		log_error("Failed to remove previous wcorig LV in writecache detach.");
-+		return 0;
-+	}
-+
-+	lv_set_visible(lv_fast);
-+	lv_fast->status &= ~LV_CACHE_VOL;
-+
-+	_rename_detached_cvol(cmd, lv_fast);
-+
-+	if (!vg_write(vg) || !vg_commit(vg)) {
-+		log_error("Failed to write and commit VG in writecache detach.");
- 		return 0;
- 	}
+diff --git a/lib/report/report.c b/lib/report/report.c
+index e1c630576..268bed61b 100644
+--- a/lib/report/report.c
++++ b/lib/report/report.c
+@@ -1430,6 +1430,16 @@ static int _cache_settings_disp(struct dm_report *rh, struct dm_pool *mem,
+ 	struct _str_list_append_baton baton;
+ 	struct dm_list dummy_list; /* dummy list to display "nothing" */
  
++	if (seg_is_writecache(seg)) {
++		if (!(result = str_list_create(mem)))
++			return_0;
++
++		if (!writecache_settings_to_str_list(&seg->writecache_settings, result, mem))
++			return_0;
++
++		return _field_set_string_list(rh, field, result, private, 0, NULL);
++	}
++
+ 	if (seg_is_cache(seg) && lv_is_cache_vol(seg->pool_lv))
+ 		setting_seg = seg;
+ 
+diff --git a/tools/command-lines.in b/tools/command-lines.in
+index ed3d0413a..98044a918 100644
+--- a/tools/command-lines.in
++++ b/tools/command-lines.in
+@@ -247,7 +247,7 @@ RULE: --profile not --detachprofile
+ RULE: --metadataprofile not --detachprofile
+ RULE: --minrecoveryrate --maxrecoveryrate and LV_raid
+ RULE: --writebehind --writemostly and LV_raid1
+-RULE: --cachemode --cachepolicy --cachesettings and LV_cache LV_cachepool
++RULE: --cachemode --cachepolicy --cachesettings and LV_cache LV_cachepool LV_writecache
+ RULE: --errorwhenfull --discards --zero and LV_thinpool
+ RULE: --permission not lv_is_external_origin lv_is_raid_metadata lv_is_raid_image LV_thinpool
+ RULE: --alloc --contiguous --metadataprofile --permission --persistent --profile --readahead not lv_is_thick_origin
+diff --git a/tools/lvchange.c b/tools/lvchange.c
+index 2d5bb32be..ba24e8239 100644
+--- a/tools/lvchange.c
++++ b/tools/lvchange.c
+@@ -606,6 +606,78 @@ static int _lvchange_persistent(struct cmd_context *cmd,
  	return 1;
  }
  
-+int lv_detach_writecache_cachevol(struct logical_volume *lv, int noflush)
++static int _lvchange_writecache(struct cmd_context *cmd,
++			   struct logical_volume *lv,
++			   uint32_t *mr)
 +{
-+	if (lv_is_active(lv))
-+		return _lv_detach_writecache_cachevol_active(lv, noflush);
-+	else
-+		return _lv_detach_writecache_cachevol_inactive(lv, noflush);
++	struct writecache_settings settings = { 0 };
++	uint32_t block_size_sectors = 0;
++	struct lv_segment *seg = first_seg(lv);
++	int set_count = 0;
++
++	if (!get_writecache_settings(cmd, &settings, &block_size_sectors))
++		return_0;
++
++	if (block_size_sectors && (seg->writecache_block_size != (block_size_sectors * 512))) {
++		log_error("Cannot change existing block size %u bytes.", seg->writecache_block_size);
++		return 0;
++	}
++
++	if (settings.high_watermark_set) {
++		seg->writecache_settings.high_watermark_set = settings.high_watermark_set;
++		seg->writecache_settings.high_watermark = settings.high_watermark;
++		set_count++;
++	}
++	if (settings.low_watermark_set) {
++		seg->writecache_settings.low_watermark_set = settings.low_watermark_set;
++		seg->writecache_settings.low_watermark = settings.low_watermark;
++		set_count++;
++	}
++	if (settings.writeback_jobs_set) {
++		seg->writecache_settings.writeback_jobs_set = settings.writeback_jobs_set;
++		seg->writecache_settings.writeback_jobs = settings.writeback_jobs;
++		set_count++;
++	}
++	if (settings.autocommit_blocks_set) {
++		seg->writecache_settings.autocommit_blocks_set = settings.autocommit_blocks_set;
++		seg->writecache_settings.autocommit_blocks = settings.autocommit_blocks;
++		set_count++;
++	}
++	if (settings.autocommit_time_set) {
++		seg->writecache_settings.autocommit_time_set = settings.autocommit_time_set;
++		seg->writecache_settings.autocommit_time = settings.autocommit_time;
++		set_count++;
++	}
++	if (settings.fua_set) {
++		seg->writecache_settings.fua_set = settings.fua_set;
++		seg->writecache_settings.fua = settings.fua;
++		set_count++;
++	}
++	if (settings.nofua_set) {
++		seg->writecache_settings.nofua_set = settings.nofua_set;
++		seg->writecache_settings.nofua = settings.nofua;
++		set_count++;
++	}
++
++	if (!set_count) {
++		/*
++		 * Empty settings can be used to clear all current settings,
++		 * lvchange --cachesettings "" vg/lv
++		 */
++		if (!arg_count(cmd, yes_ARG) &&
++		    yes_no_prompt("Clear all writecache settings? ") == 'n') {
++			log_print("No settings changed.");
++			return 1;
++		}
++		memset(&seg->writecache_settings, 0, sizeof(struct writecache_settings));
++	}
++
++	/* Request caller to commit and reload metadata */
++	*mr |= MR_RELOAD;
++
++	return 1;
 +}
 +
-diff --git a/test/shell/writecache-split.sh b/test/shell/writecache-split.sh
-index 0f2dc4729..9553ade0c 100644
---- a/test/shell/writecache-split.sh
-+++ b/test/shell/writecache-split.sh
-@@ -20,29 +20,21 @@ mkfs_mount_umount()
- {
-         lvt=$1
+ static int _lvchange_cache(struct cmd_context *cmd,
+ 			   struct logical_volume *lv,
+ 			   uint32_t *mr)
+@@ -619,6 +691,9 @@ static int _lvchange_cache(struct cmd_context *cmd,
+ 	int r = 0, is_clean;
+ 	uint32_t chunk_size = 0; /* FYI: lvchange does NOT support its change */
  
--        lvchange -ay $vg/$lvt
--
-         mkfs.xfs -f -s size=4096 "$DM_DEV_DIR/$vg/$lvt"
-         mount "$DM_DEV_DIR/$vg/$lvt" "$mount_dir"
-         cp pattern1 "$mount_dir/pattern1"
-         dd if=/dev/zero of="$mount_dir/zeros2M" bs=1M count=32 conv=fdatasync
-         umount "$mount_dir"
--
--        lvchange -an $vg/$lvt
- }
- 
- mount_umount()
- {
-         lvt=$1
- 
--        lvchange -ay $vg/$lvt
--
-         mount "$DM_DEV_DIR/$vg/$lvt" "$mount_dir"
-         diff pattern1 "$mount_dir/pattern1"
-         dd if="$mount_dir/zeros2M" of=/dev/null bs=1M count=32
-         umount "$mount_dir"
--
--        lvchange -an $vg/$lvt
- }
- 
- aux have_writecache 1 0 0 || skip
-@@ -62,18 +54,39 @@ lvcreate -n $lv1 -l 16 -an $vg "$dev1" "$dev4"
- lvcreate -n $lv2 -l 4 -an $vg "$dev2"
- 
- #
--# split when no devs are missing
-+# split while inactive
-+#
++	if (lv_is_writecache(lv))
++		return _lvchange_writecache(cmd, lv, mr);
 +
-+lvconvert -y --type writecache --cachevol $lv2 $vg/$lv1
-+
-+lvchange -ay $vg/$lv1
-+mkfs_mount_umount $lv1
-+lvchange -an $vg/$lv1
-+
-+lvconvert --splitcache $vg/$lv1
-+lvs -o segtype $vg/$lv1 | grep linear
-+lvs -o segtype $vg/$lv2 | grep linear
-+
-+lvchange -ay $vg/$lv1
-+mount_umount $lv1
-+lvchange -an $vg/$lv1
-+
-+#
-+# split while active
- #
+ 	seg = first_seg(lv);
  
- lvconvert -y --type writecache --cachevol $lv2 $vg/$lv1
- 
-+lvchange -ay $vg/$lv1
- mkfs_mount_umount $lv1
- 
- lvconvert --splitcache $vg/$lv1
- lvs -o segtype $vg/$lv1 | grep linear
- lvs -o segtype $vg/$lv2 | grep linear
- 
-+lvchange -ay $vg/$lv1
- mount_umount $lv1
-+lvchange -an $vg/$lv1
- 
- #
- # split while cachevol is missing
-@@ -81,7 +94,9 @@ mount_umount $lv1
- 
- lvconvert -y --type writecache --cachevol $lv2 $vg/$lv1
- 
-+lvchange -ay $vg/$lv1
- mkfs_mount_umount $lv1
-+lvchange -an $vg/$lv1
- 
- aux disable_dev "$dev2"
- 
-@@ -108,7 +123,9 @@ lvcreate -n $lv2 -l 14 -an $vg "$dev2" "$dev3"
- 
- lvconvert -y --type writecache --cachevol $lv2 $vg/$lv1
- 
-+lvchange -ay $vg/$lv1
- mkfs_mount_umount $lv1
-+lvchange -an $vg/$lv1
- 
- aux disable_dev "$dev3"
- 
+ 	if (seg_is_cache(seg) && lv_is_cache_vol(seg->pool_lv))
 diff --git a/tools/lvconvert.c b/tools/lvconvert.c
-index 76e00f0a2..7935eb74e 100644
+index 7935eb74e..757e708ff 100644
 --- a/tools/lvconvert.c
 +++ b/tools/lvconvert.c
-@@ -5311,19 +5311,8 @@ static int _lvconvert_detach_writecache(struct cmd_context *cmd,
- 					struct logical_volume *lv,
- 					struct logical_volume *lv_fast)
- {
--	char cvol_name[NAME_LEN];
--	char *c;
- 	int noflush = 0;
+@@ -5389,157 +5389,6 @@ static int _writecache_zero(struct cmd_context *cmd, struct logical_volume *lv)
+ 	return ret;
+ }
  
--	/*
--	 * LV must be inactive externally before detaching cache.
--	 */
+-static int _get_one_writecache_setting(struct cmd_context *cmd, struct writecache_settings *settings,
+-				       char *key, char *val, uint32_t *block_size_sectors)
+-{
+-	/* special case: block_size is not a setting but is set with the --cachesettings option */
+-	if (!strncmp(key, "block_size", strlen("block_size"))) {
+-		uint32_t block_size = 0;
+-		if (sscanf(val, "%u", &block_size) != 1)
+-			goto_bad;
+-		if (block_size == 512)
+-			*block_size_sectors = 1;
+-		else if (block_size == 4096)
+-			*block_size_sectors = 8;
+-		else
+-			goto_bad;
+-		return 1;
+-	}
 -
--	if (lv_info(cmd, lv, 1, NULL, 0, 0)) {
--		log_error("LV %s must be inactive to detach writecache.", display_lvname(lv));
+-	if (!strncmp(key, "high_watermark", strlen("high_watermark"))) {
+-		if (sscanf(val, "%llu", (unsigned long long *)&settings->high_watermark) != 1)
+-			goto_bad;
+-		if (settings->high_watermark > 100)
+-			goto_bad;
+-		settings->high_watermark_set = 1;
+-		return 1;
+-	}
+-
+-	if (!strncmp(key, "low_watermark", strlen("low_watermark"))) {
+-		if (sscanf(val, "%llu", (unsigned long long *)&settings->low_watermark) != 1)
+-			goto_bad;
+-		if (settings->low_watermark > 100)
+-			goto_bad;
+-		settings->low_watermark_set = 1;
+-		return 1;
+-	}
+-
+-	if (!strncmp(key, "writeback_jobs", strlen("writeback_jobs"))) {
+-		if (sscanf(val, "%llu", (unsigned long long *)&settings->writeback_jobs) != 1)
+-			goto_bad;
+-		settings->writeback_jobs_set = 1;
+-		return 1;
+-	}
+-
+-	if (!strncmp(key, "autocommit_blocks", strlen("autocommit_blocks"))) {
+-		if (sscanf(val, "%llu", (unsigned long long *)&settings->autocommit_blocks) != 1)
+-			goto_bad;
+-		settings->autocommit_blocks_set = 1;
+-		return 1;
+-	}
+-
+-	if (!strncmp(key, "autocommit_time", strlen("autocommit_time"))) {
+-		if (sscanf(val, "%llu", (unsigned long long *)&settings->autocommit_time) != 1)
+-			goto_bad;
+-		settings->autocommit_time_set = 1;
+-		return 1;
+-	}
+-
+-	if (!strncmp(key, "fua", strlen("fua"))) {
+-		if (settings->nofua_set) {
+-			log_error("Setting fua and nofua cannot both be set.");
+-			return 0;
+-		}
+-		if (sscanf(val, "%u", &settings->fua) != 1)
+-			goto_bad;
+-		settings->fua_set = 1;
+-		return 1;
+-	}
+-
+-	if (!strncmp(key, "nofua", strlen("nofua"))) {
+-		if (settings->fua_set) {
+-			log_error("Setting fua and nofua cannot both be set.");
+-			return 0;
+-		}
+-		if (sscanf(val, "%u", &settings->nofua) != 1)
+-			goto_bad;
+-		settings->nofua_set = 1;
+-		return 1;
+-	}
+-
+-	if (settings->new_key) {
+-		log_error("Setting %s is not recognized. Only one unrecognized setting is allowed.", key);
 -		return 0;
 -	}
 -
- 	if (!archive(lv->vg))
- 		return_0;
- 
-@@ -5347,31 +5336,18 @@ static int _lvconvert_detach_writecache(struct cmd_context *cmd,
- 		noflush = 1;
- 	}
- 
--	if (!lv_detach_writecache_cachevol(lv, noflush))
--		return_0;
--
- 	/*
--	 * Rename lv_fast back to its original name, without the _cvol
--	 * suffix that was added when lv_fast was attached for caching.
-+	 * TODO: send a message to writecache in the kernel to start writing
-+	 * back cache data to the origin.  Then release the vg lock and monitor
-+	 * the progress of that writeback.  When it's complete we can reacquire
-+	 * the vg lock, rescan the vg (ensure it hasn't changed), and do the
-+	 * detach which should be quick since the writeback is complete.  If
-+	 * this command is canceled while monitoring writeback, it should just
-+	 * be rerun.  The LV will continue to have the writecache until this
-+	 * command is run to completion.
- 	 */
--	if (!dm_strncpy(cvol_name, lv_fast->name, sizeof(cvol_name)) ||
--	    !(c = strstr(cvol_name, "_cvol"))) {
--		log_debug("LV %s has no suffix for cachevol (skipping rename).",
--			display_lvname(lv_fast));
--	} else {
--		*c = 0;
--		/* If the name is in use, generate new lvol%d */
--		if (lv_name_is_used_in_vg(lv->vg, cvol_name, NULL) &&
--		    !generate_lv_name(lv->vg, "lvol%d", cvol_name, sizeof(cvol_name))) {
--			log_error("Failed to generate unique name for unused logical volume.");
--			return 0;
--		}
- 
--		if (!lv_rename_update(cmd, lv_fast, cvol_name, 0))
--			return_0;
+-	log_warn("Unrecognized writecache setting \"%s\" may cause activation failure.", key);
+-	if (yes_no_prompt("Use unrecognized writecache setting? [y/n]: ") == 'n') {
+-		log_error("Aborting writecache conversion.");
+-		return 0;
 -	}
 -
--	if (!vg_write(lv->vg) || !vg_commit(lv->vg))
-+	if (!lv_detach_writecache_cachevol(lv, noflush))
- 		return_0;
+-	log_warn("Using unrecognized writecache setting: %s = %s.", key, val);
+-
+-	settings->new_key = dm_pool_strdup(cmd->mem, key);
+-	settings->new_val = dm_pool_strdup(cmd->mem, val);
+-	return 1;
+-
+- bad:
+-	log_error("Invalid setting: %s", key);
+-	return 0;
+-}
+-
+-static int _get_writecache_settings(struct cmd_context *cmd, struct writecache_settings *settings,
+-				    uint32_t *block_size_sectors)
+-{
+-	struct arg_value_group_list *group;
+-	const char *str;
+-	char key[64];
+-	char val[64];
+-	int num;
+-	int pos;
+-
+-	/*
+-	 * "grouped" means that multiple --cachesettings options can be used.
+-	 * Each option is also allowed to contain multiple key = val pairs.
+-	 */
+-
+-	dm_list_iterate_items(group, &cmd->arg_value_groups) {
+-		if (!grouped_arg_is_set(group->arg_values, cachesettings_ARG))
+-			continue;
+-
+-		if (!(str = grouped_arg_str_value(group->arg_values, cachesettings_ARG, NULL)))
+-			break;
+-
+-		pos = 0;
+-
+-		while (pos < strlen(str)) {
+-			/* scan for "key1=val1 key2 = val2  key3= val3" */
+-
+-			memset(key, 0, sizeof(key));
+-			memset(val, 0, sizeof(val));
+-
+-			if (sscanf(str + pos, " %63[^=]=%63s %n", key, val, &num) != 2) {
+-				log_error("Invalid setting at: %s", str+pos);
+-				return 0;
+-			}
+-
+-			pos += num;
+-
+-			if (!_get_one_writecache_setting(cmd, settings, key, val, block_size_sectors))
+-				return_0;
+-		}
+-	}
+-
+-	if (settings->high_watermark_set && settings->low_watermark_set &&
+-	    (settings->high_watermark <= settings->low_watermark)) {
+-		log_error("High watermark must be greater than low watermark.");
+-		return 0;
+-	}
+-
+-	return 1;
+-}
+-
+ static struct logical_volume *_lv_writecache_create(struct cmd_context *cmd,
+ 					    struct logical_volume *lv,
+ 					    struct logical_volume *lv_fast,
+@@ -5642,7 +5491,7 @@ static int _lvconvert_writecache_attach_single(struct cmd_context *cmd,
+ 	memset(&settings, 0, sizeof(settings));
+ 	block_size_sectors = DEFAULT_WRITECACHE_BLOCK_SIZE_SECTORS;
  
- 	backup(lv->vg);
+-	if (!_get_writecache_settings(cmd, &settings, &block_size_sectors)) {
++	if (!get_writecache_settings(cmd, &settings, &block_size_sectors)) {
+ 		log_error("Invalid writecache settings.");
+ 		goto bad;
+ 	}
+diff --git a/tools/toollib.c b/tools/toollib.c
+index 89b637407..94e6e6c44 100644
+--- a/tools/toollib.c
++++ b/tools/toollib.c
+@@ -1184,6 +1184,156 @@ out:
+ 	return ok;
+ }
+ 
++static int _get_one_writecache_setting(struct cmd_context *cmd, struct writecache_settings *settings,
++				       char *key, char *val, uint32_t *block_size_sectors)
++{
++	/* special case: block_size is not a setting but is set with the --cachesettings option */
++	if (!strncmp(key, "block_size", strlen("block_size"))) {
++		uint32_t block_size = 0;
++		if (sscanf(val, "%u", &block_size) != 1)
++			goto_bad;
++		if (block_size == 512)
++			*block_size_sectors = 1;
++		else if (block_size == 4096)
++			*block_size_sectors = 8;
++		else
++			goto_bad;
++		return 1;
++	}
++
++	if (!strncmp(key, "high_watermark", strlen("high_watermark"))) {
++		if (sscanf(val, "%llu", (unsigned long long *)&settings->high_watermark) != 1)
++			goto_bad;
++		if (settings->high_watermark > 100)
++			goto_bad;
++		settings->high_watermark_set = 1;
++		return 1;
++	}
++
++	if (!strncmp(key, "low_watermark", strlen("low_watermark"))) {
++		if (sscanf(val, "%llu", (unsigned long long *)&settings->low_watermark) != 1)
++			goto_bad;
++		if (settings->low_watermark > 100)
++			goto_bad;
++		settings->low_watermark_set = 1;
++		return 1;
++	}
++
++	if (!strncmp(key, "writeback_jobs", strlen("writeback_jobs"))) {
++		if (sscanf(val, "%llu", (unsigned long long *)&settings->writeback_jobs) != 1)
++			goto_bad;
++		settings->writeback_jobs_set = 1;
++		return 1;
++	}
++
++	if (!strncmp(key, "autocommit_blocks", strlen("autocommit_blocks"))) {
++		if (sscanf(val, "%llu", (unsigned long long *)&settings->autocommit_blocks) != 1)
++			goto_bad;
++		settings->autocommit_blocks_set = 1;
++		return 1;
++	}
++
++	if (!strncmp(key, "autocommit_time", strlen("autocommit_time"))) {
++		if (sscanf(val, "%llu", (unsigned long long *)&settings->autocommit_time) != 1)
++			goto_bad;
++		settings->autocommit_time_set = 1;
++		return 1;
++	}
++
++	if (!strncmp(key, "fua", strlen("fua"))) {
++		if (settings->nofua_set) {
++			log_error("Setting fua and nofua cannot both be set.");
++			return 0;
++		}
++		if (sscanf(val, "%u", &settings->fua) != 1)
++			goto_bad;
++		settings->fua_set = 1;
++		return 1;
++	}
++
++	if (!strncmp(key, "nofua", strlen("nofua"))) {
++		if (settings->fua_set) {
++			log_error("Setting fua and nofua cannot both be set.");
++			return 0;
++		}
++		if (sscanf(val, "%u", &settings->nofua) != 1)
++			goto_bad;
++		settings->nofua_set = 1;
++		return 1;
++	}
++
++	if (settings->new_key) {
++		log_error("Setting %s is not recognized. Only one unrecognized setting is allowed.", key);
++		return 0;
++	}
++
++	log_warn("Unrecognized writecache setting \"%s\" may cause activation failure.", key);
++	if (yes_no_prompt("Use unrecognized writecache setting? [y/n]: ") == 'n') {
++		log_error("Aborting writecache conversion.");
++		return 0;
++	}
++
++	log_warn("Using unrecognized writecache setting: %s = %s.", key, val);
++
++	settings->new_key = dm_pool_strdup(cmd->mem, key);
++	settings->new_val = dm_pool_strdup(cmd->mem, val);
++	return 1;
++
++ bad:
++	log_error("Invalid setting: %s", key);
++	return 0;
++}
++
++int get_writecache_settings(struct cmd_context *cmd, struct writecache_settings *settings,
++			    uint32_t *block_size_sectors)
++{
++	struct arg_value_group_list *group;
++	const char *str;
++	char key[64];
++	char val[64];
++	int num;
++	int pos;
++
++	/*
++	 * "grouped" means that multiple --cachesettings options can be used.
++	 * Each option is also allowed to contain multiple key = val pairs.
++	 */
++
++	dm_list_iterate_items(group, &cmd->arg_value_groups) {
++		if (!grouped_arg_is_set(group->arg_values, cachesettings_ARG))
++			continue;
++
++		if (!(str = grouped_arg_str_value(group->arg_values, cachesettings_ARG, NULL)))
++			break;
++
++		pos = 0;
++
++		while (pos < strlen(str)) {
++			/* scan for "key1=val1 key2 = val2  key3= val3" */
++
++			memset(key, 0, sizeof(key));
++			memset(val, 0, sizeof(val));
++
++			if (sscanf(str + pos, " %63[^=]=%63s %n", key, val, &num) != 2) {
++				log_error("Invalid setting at: %s", str+pos);
++				return 0;
++			}
++
++			pos += num;
++
++			if (!_get_one_writecache_setting(cmd, settings, key, val, block_size_sectors))
++				return_0;
++		}
++	}
++
++	if (settings->high_watermark_set && settings->low_watermark_set &&
++	    (settings->high_watermark <= settings->low_watermark)) {
++		log_error("High watermark must be greater than low watermark.");
++		return 0;
++	}
++
++	return 1;
++}
+ 
+ /* FIXME move to lib */
+ static int _pv_change_tag(struct physical_volume *pv, const char *tag, int addtag)
+diff --git a/tools/toollib.h b/tools/toollib.h
+index 53a5e5b4f..f3a60fbc4 100644
+--- a/tools/toollib.h
++++ b/tools/toollib.h
+@@ -217,6 +217,9 @@ int get_cache_params(struct cmd_context *cmd,
+ 		     const char **name,
+ 		     struct dm_config_tree **settings);
+ 
++int get_writecache_settings(struct cmd_context *cmd, struct writecache_settings *settings,
++                            uint32_t *block_size_sectors);
++
+ int change_tag(struct cmd_context *cmd, struct volume_group *vg,
+ 	       struct logical_volume *lv, struct physical_volume *pv, int arg);
+ 
 
 
