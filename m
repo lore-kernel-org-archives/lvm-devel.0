@@ -1,268 +1,468 @@
-From: Joe Thornber <thornber@redhat.com>
-Date: Fri, 19 Jun 2020 11:06:20 +0100
-Subject: Reg dm-cache-policy-smq
-In-Reply-To: <CAHFy8gDzCn8UKTQhAv+9FsgMDzdSjPj5w1g6cA-v4O84VKwprw@mail.gmail.com>
-References: <CAHFy8gB2RdbJx_S-krDcQ91+qhGQkt_TUYwyeCGfCg9c2quTFw@mail.gmail.com>
-	<20200617091845.6jeooa5llthuvimo@reti>
-	<CAHFy8gDzCn8UKTQhAv+9FsgMDzdSjPj5w1g6cA-v4O84VKwprw@mail.gmail.com>
-Message-ID: <20200619100620.uwtfxwrjobpzazav@reti>
+From: David Teigland <teigland@sourceware.org>
+Date: Mon, 22 Jun 2020 16:40:09 +0000 (GMT)
+Subject: master - lvconvert: single step cachevol creation and attachment
+Message-ID: <20200622164009.D884A3851C07@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On Fri, Jun 19, 2020 at 01:20:42PM +0530, Lakshmi Narasimhan Sundararajan wrote:
-> Hi Joe,
-> Thank you for your reply.
-> 
-> I have a few followup questions, please do help me with my understanding.
-> 1/ Does configured migration threshold account for active IO migration
-> of dirty cache blocks in addition to cache block migration to/from
-> cache device?
-> My understanding is migration threshold only control promotion and
-> demotion IO, and does not affect dirty IO writeback.
-
-Yes, looking at the code this seems to be the case.
-
-> Although all of these get queued to background worker thread, which
-> can only actively do 4K max requests, so there is a max limit to the
-> migration bandwidth at any point in time from the origin device.
-
-One confusing aspect of the migration threshold is it's talking about
-the max queued migration io at any particular time,  _not_ IO per second.
-I think this makes it very unintuitive for the sys admins to set.  If
-I ever do any more work on dm-cache then removing migration_threshold
-would be my priority.
-
-> 
-> 2/ Reading the smq caching policy, I see that the cache policy is slow
-> to cache and has no sense to track sequential or random traffic.
-> So the initial IO may never be cached. But one does rely on cache hit
-> ratio to be poor, and so the threshold for promotion is likely to be
-> lower, thereby enabling hotspots to promote faster even on random
-> access? Do you have any simulation results you can share with me over
-> dm-cache-smq to help understand smq behavior for random/sequential
-> traffic patterns?
-
-See below, in particular the FIO tests are essentially random IO.
-dm-cache used to have an io-tracker component that was used to assess
-how sequential or random io was and weight the promotion chances based
-on that (spindles being good at sequential io).  But I took it out in the
-end; benchmarks didn't show particular benefit.
-
-
-> 
-> 3/ How does dm-writeboost compare for stability, I do not see it yet
-> integrated to the mainline. How are lvm supporting it?
-
-
-Sorry, I meant writecache, there have been so many similarly named targets
-over the years.  See below.
-
-> 4/ There exists also a dm-writecache, is it stable? Is lvm ready to
-> use dm-writecache? Any idea which distro has it integrated and
-> available for use?
-
-I believe LVM support will be in the next release of RHEL8.  It's coming
-out of experimental state.  I did some benchmarking a few months ago
-comparing it with dm-cache (see below).  My impressions are that it's
-a solid implementation, and a lot simpler than dm-cache (so possibly
-more predictable).  It's main drawback is being focussed on writes only.
-I think there are still some features lacking in the LVM support compared
-to dm-cache (Dave Teigland can give more info).
-
-
-- Joe
-
-
-Here's an internal email discussing benchmark results from Feb 2020:
-
-
-
-
-More test results for writecache and dm-cache.
-
-I'd hoped that we'd be able to give clear advise to our customers
-about how to choose which cache to use.  But the results are mixed;
-more discussion at the end of the email.
-
-Git extract test
-================
-
-A simple test that completely killed the previous third party attempts
-to write a 'writecache' target.
-
-It creates a new fs on the cached device.  No discard is used by the mkfs,
-because dm-cache tracks discarded regions and can get more performance
-when writing data to a discarded region, which I feel is not indicative
-of general performance.
-
-Then a v. large git repo is cloned to the cached device.  This part is
-purely write based (as far as the cache is concerned).
-
-Then 20 different tags are checked out in the git repo.  This part is mixed
-read/write load.  All reads are to areas that have been written to earlier 
-in the test.
-
-I like to repeat the same test with a range of different 'fast' device
-sizes given in meg.  Starting well below the working set for the task,
-and ending up larger.
-
-	writecache		dm-cache		
-	clone	checkout	clone	checkout
-64	31	366		37.2	359.6
-256	33	353		36.2	339.8
-512	34	291		35	351.1
-1024	30	244		30.9	212.6
-1536	28	242		26.6	147.4
-2048	25	240		23.7	118.1
-4096	21	110		20.8	79.6
-8192	22	88				
-16384	21	90			
-							
-		clone	checkout					
-raw NVMe	23	76					
-
-
-The dm-cache results are as I would expect.  If the fast device is tiny
-compared the the working set then we get poor performance (which could
-be tweaked by reducing the migration_threshold tunable).  But as the
-available fast device goes up we see real value.
-
-I'd expected writecache to do better here, since we only ever read what's
-just been written.  But I think the volume of writes is such that the fast
-device is filling up and forcing writecache to writeback before it can cache
-any more writes.  It's rare (artificial) for writecache to need more space
-than dm-thin. 
-
-
-
-Git extract only
-================
-
-Like the previous test except the mkfs and git clone are performed on the
-origin, and then the caches are attached.  This means the reads are generally
-not to areas that have previously been written to.
-
-I've run the checkout part twice to see how the caches adapt (dm-cache is a
-slow moving cache after all).
-
-
-	writecache		dm-cache	
-	Pass 1	Pass 2		Pass 1	Pass 2
-256	355	365		335.8	351.1
-512	290	305		320.8	345.4
-1024	242	254		190	170.4
-1536	241	242		150.6	98.6
-2048	240	238		150.1	100.1
-4096	240	239		154.5	101.1
-
-You can see dm-cache adapting nicely here.
-
-
-
-FIO benchmarks
-==============
-
-I also have some standard FIO tests that I run.  One profile was given
-to me by the perf team and is meant to simulate a database workload
-(random 8k io, biased to some regions).
-
-dm-cache uses a 32k block size, so the 8k ios will force a full copy when
-a block is promoted to the fast device.
-
-I run fio twice to see how the caches warm up.
-
-
-100% read
----------
-
-	writecache (s)		dm-cache (s)	
-	Pass 1	Pass 2		Pass 1	Pass 2
-128	241	230		190	162
-256	239	230		169	146
-512	230	230		159	111
-1024	230	230		110	13.4
-2048	230	230		103	4.8
-4096	230	230		103	4.4
-8192	230	230		104	4.7
-
-Obviously this it totally unfair to writecache.
-
-
-50% read/write
----------------
-
-	writecache (s)		dm-cache (s)	
-	Pass 1	Pass 2		Pass 1	Pass 2
-128	127	131		213	181
-256	101	108		211	189
-512	71	71		173	108
-1024	62	46		130	19
-2048	62	46		111	6
-4096	62	46		109	5.8
-8192	62	46		110	6.1
-
-writecache wins on the first pass while dm-cache has been frantically
-promoting blocks to the fast device.  dm-cache gets it's payoff
-on the second pass.
-
-
-100% write
-----------
-
-	writecache (s)		dm-cache (s)	
-	Pass 1	Pass 2		Pass 1	Pass 2
-128	88.7	107		232	201
-256	59	96		225	209
-512	9.6	72		185	112
-1024	2.3	2.5		127	24
-2048	2.6	2.4		113	2.7
-4096	2.4	2.4		113	2.6
-8192	2.4	2.6		114	2.7
-
-writecache's time to shine.
-
-
-How do you decide which cache to use?
-=====================================
-
-This isn't easy to answer.  Let's play 20 questions instead (questions
-should be answered in order).
-
-
-1. Do you need writethrough mode?   --- Yes --->    Use dm-cache
-
-2. Do you repeatedly do IO to the same parts of the disk?   --- Yes --->   Use dm-cache
-
-  For instance your server may be constantly hitting the same database
-  tables.
-
-  Hot spots are really dm-cache's thing.  For instance, if I set up a
-  cache with 8G NVME and a 16G origin and then repeatedly zero the first
-  1G of the cache.  You'd think that this is playing to writecache's strengths,
-  but the timings for JT machine are:
-
-    writecache: 0.88, 1.37, 1.37, 1.37 ...
-    dm-cache:   0.91, 0.86, 0.86, 0.87 ...
-
-  writecache is doing great here (spindle would be ~5 seconds).  But it can't
-  compete with dm-cache which has just moved the first gig to the fast dev.
-
-3. Is the READ working set small enough to fit in the page cache?  --- Yes --->   Use writecache  
-
-  writecache and the page cache work together.  If the page cache is supplying all your
-  read caching needs then you're just left with write io.
-
-
-Other things to consider:
-
-- Do you use applications that skip the page cache?
-
-  For instance databases often use O_DIRECT, libaio and manage their own read
-  caches.
-
-
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=21b37964eb88d404998e37acae5530ec102a2116
+Commit:        21b37964eb88d404998e37acae5530ec102a2116
+Parent:        950d2d59c140c82fea35e56d34c92289562d4d6f
+Author:        David Teigland <teigland@redhat.com>
+AuthorDate:    Wed Feb 5 13:42:36 2020 -0600
+Committer:     David Teigland <teigland@redhat.com>
+CommitterDate: Tue Jun 16 13:46:51 2020 -0500
+
+lvconvert: single step cachevol creation and attachment
+
+To add a cache or writecache to a main LV with a single command:
+
+lvconvert --type cache|writecache --cachedevice /dev/ssd vg/main
+
+A cachevol LV will be allocated from the specified cache device,
+then attached to the main LV.  Include --cachesize to specify the
+size of cachevol to create, otherwise the entire cachedevice is
+used.  The cachedevice option can be repeated to create a cachevol
+from multiple devices.
+
+Example
+-------
+
+A user has an existing main LV that they want to speed up
+using a new ssd.
+
+user adds the new ssd to the VG:
+
+$ vgextend vg /dev/ssd
+
+user attaches the new ssd their main LV:
+
+$ lvconvert --type writecache --cachedevice /dev/ssd vg/main
+
+Example
+-------
+
+A user has two existing main LVs that they want to speed up
+with a new ssd.
+
+user adds the new 16G ssd to the VG:
+
+$ vgextend vg /dev/ssd
+
+user attaches some of the new ssd to the first main LV,
+using half of the space:
+
+$ lvconvert --type writecache --cachedevice /dev/ssd
+    --cachesize 8G vg/main1
+
+user attaches some of the new ssd to the second main LV,
+using the other half of the space:
+
+$ lvconvert --type writecache --cachedevice /dev/ssd
+    --cachesize 8G vg/main2
+
+Example
+-------
+
+A user has an existing main LV that they want to speed up using
+two new ssds.
+
+user adds the new two ssds the VG:
+
+$ vgextend vg /dev/ssd1
+$ vgextend vg /dev/ssd2
+
+user attaches both ssds their main LV:
+
+$ lvconvert --type writecache
+    --cachedevice /dev/ssd1 --cachedevice /dev/ssd2 vg/main
+---
+ tools/args.h           |   6 ++
+ tools/command-lines.in |  14 +++
+ tools/lvconvert.c      | 250 +++++++++++++++++++++++++++++++++++++------------
+ tools/lvmcmdline.c     |   2 +
+ 4 files changed, 211 insertions(+), 61 deletions(-)
+
+diff --git a/tools/args.h b/tools/args.h
+index 5fae21abb..c69a0ecce 100644
+--- a/tools/args.h
++++ b/tools/args.h
+@@ -126,6 +126,12 @@ arg(cachepool_ARG, '\0', "cachepool", lv_VAL, 0, 0,
+ arg(cachevol_ARG, '\0', "cachevol", lv_VAL, 0, 0,
+     "The name of a cache volume.\n")
+ 
++arg(cachedevice_ARG, '\0', "cachedevice", pv_VAL, 0, 0,
++    "The name of a device to use for a cache.\n")
++
++arg(cachesize_ARG, '\0', "cachesize", sizemb_VAL, 0, 0,
++    "The size of cache to use.\n")
++
+ arg(commandprofile_ARG, '\0', "commandprofile", string_VAL, 0, 0,
+     "The command profile to use for command configuration.\n"
+     "See \\fBlvm.conf\\fP(5) for more information about profiles.\n")
+diff --git a/tools/command-lines.in b/tools/command-lines.in
+index 98044a918..8d389b665 100644
+--- a/tools/command-lines.in
++++ b/tools/command-lines.in
+@@ -497,6 +497,20 @@ FLAGS: SECONDARY_SYNTAX
+ 
+ ---
+ 
++lvconvert --type writecache --cachedevice PV LV
++OO: OO_LVCONVERT, --cachesize SizeMB, --cachesettings String
++ID: lvconvert_to_writecache_with_device
++DESC: Add a writecache to an LV, using a specified cache device.
++RULE: all and lv_is_visible
++
++lvconvert --type cache --cachedevice PV LV
++OO: OO_LVCONVERT, --cachesize SizeMB, --cachesettings String
++ID: lvconvert_to_cache_with_device
++DESC: Add a cache to an LV, using a specified cache device.
++RULE: all and lv_is_visible
++
++---
++
+ lvconvert --type thin-pool LV_linear_striped_raid_cache
+ OO: --stripes_long Number, --stripesize SizeKB,
+ --discards Discards, OO_LVCONVERT_POOL, OO_LVCONVERT
+diff --git a/tools/lvconvert.c b/tools/lvconvert.c
+index 94ea70fa5..76a9160f3 100644
+--- a/tools/lvconvert.c
++++ b/tools/lvconvert.c
+@@ -4248,51 +4248,159 @@ int lvconvert_to_pool_cmd(struct cmd_context *cmd, int argc, char **argv)
+ 			       NULL, NULL, &_lvconvert_to_pool_single);
+ }
+ 
++static int _lv_create_cachevol(struct cmd_context *cmd,
++			       struct volume_group *vg,
++			       struct logical_volume *lv,
++			       const char *dev_name,
++			       struct logical_volume **cachevol_lv)
++{
++	char cvname[NAME_LEN];
++	struct device *dev_fast;
++	struct dm_list *use_pvh;
++	uint64_t cache_size_sectors;
++	struct logical_volume *cachevol;
++	struct pv_list *pvl;
++	struct lvcreate_params lp = {
++		.activate = CHANGE_AN,
++		.alloc = ALLOC_INHERIT,
++		.major = -1,
++		.minor = -1,
++		.permission = LVM_READ | LVM_WRITE,
++		.pvh = &vg->pvs,
++		.read_ahead = DM_READ_AHEAD_NONE,
++		.stripes = 1,
++		.vg_name = vg->name,
++		.zero = 0,
++		.wipe_signatures = 0,
++		.suppress_zero_warn = 1,
++	};
++
++	if (dm_snprintf(cvname, NAME_LEN, "%s_cache", lv->name) < 0) {
++		log_error("Failed to create cachevol LV name.");
++		return 0;
++	}
++
++	if (!(dev_fast = dev_cache_get(cmd, dev_name, cmd->filter))) {
++		log_error("Device %s not found.", dev_name);
++		return 0;
++	}
++
++	if (!(pvl = find_pv_in_vg(vg, dev_name))) {
++		log_error("PV %s not found in VG.", dev_name);
++		return 0;
++	}
++
++	/*
++	 * If fast_dev is used in the VG, then require a cachesize to allocate
++	 * from it.  If fast_dev is not used in the VG, then prompt asking if
++	 * the entire dev should be used.
++	 */
++	if (!(cache_size_sectors = arg_uint64_value(cmd, cachesize_ARG, 0))) {
++		if (pvl->pv->pe_alloc_count) {
++			log_error("PV %s is in use, --cachesize is required.", dev_name);
++			return 0;
++		}
++
++		cache_size_sectors = (pvl->pv->pe_count * vg->extent_size);
++
++		if (!arg_is_set(cmd, yes_ARG) &&
++		    yes_no_prompt("Use all %s from %s for cache? [y/n]: ",
++				  display_size(cmd, cache_size_sectors), dev_name) == 'n') {
++			log_print("Use --cachesize SizeMB to use a part of the cachedevice.");
++			log_error("Conversion aborted.");
++			return 0;
++		}
++	}
++
++	if (!(use_pvh = create_pv_list(cmd->mem, vg, 1, (char **)&dev_name, 1))) {
++		log_error("cachedevice not found in VG %s.", dev_name);
++		return 0;
++	}
++
++	lp.lv_name = cvname;
++	lp.pvh = use_pvh;
++	lp.extents = cache_size_sectors / vg->extent_size;
++
++	log_print("Creating cachevol LV %s with size %s.",
++		  cvname, display_size(cmd, cache_size_sectors));
++
++	dm_list_init(&lp.tags);
++
++	if (!(lp.segtype = get_segtype_from_string(cmd, SEG_TYPE_NAME_STRIPED)))
++		return_0;
++
++	if (!(cachevol = lv_create_single(vg, &lp))) {
++		log_error("Failed to create cachevol LV");
++		return 0;
++	}
++
++	*cachevol_lv = cachevol;
++	return 1;
++}
++
+ static int _lvconvert_cachevol_attach_single(struct cmd_context *cmd,
+ 					  struct logical_volume *lv,
+ 					  struct processing_handle *handle)
+ {
+ 	struct volume_group *vg = lv->vg;
+-	struct logical_volume *cachevol_lv;
+-	const char *cachevol_name;
++	struct logical_volume *lv_fast;
++	const char *fast_name, *dev_name;
+ 
+-	if (!(cachevol_name = arg_str_value(cmd, cachevol_ARG, NULL)))
+-		goto_out;
++	fast_name = arg_str_value(cmd, cachevol_ARG, NULL);
++	dev_name = arg_str_value(cmd, cachedevice_ARG, NULL);
+ 
+-	if (!validate_lvname_param(cmd, &vg->name, &cachevol_name))
+-		goto_out;
++	if (!fast_name && !dev_name)
++		goto_bad;
+ 
+-	if (!(cachevol_lv = find_lv(vg, cachevol_name))) {
+-		log_error("Cache single %s not found.", cachevol_name);
+-		goto out;
+-	}
++	if (fast_name && dev_name)
++		goto_bad;
+ 
+-	if (lv_is_cache_vol(cachevol_lv)) {
+-		log_error("LV %s is already used as a cachevol.", display_lvname(cachevol_lv));
+-		goto out;
+-	}
++	/*
++	 * User specifies an existing cachevol to use.
++	 */
++	if (fast_name) {
++		if (!validate_lvname_param(cmd, &vg->name, &fast_name))
++			goto_bad;
+ 
+-	/* Ensure the LV is not active elsewhere. */
+-	if (!lockd_lv(cmd, lv, "ex", 0))
+-		goto_out;
++		if (!(lv_fast = find_lv(vg, fast_name))) {
++			log_error("LV %s not found.", fast_name);
++			goto bad;
++		}
+ 
+-	if (!dm_list_empty(&cachevol_lv->segs_using_this_lv)) {
+-		log_error("LV %s is already in use.", display_lvname(cachevol_lv));
+-		goto out;
++		if (lv_is_cache_vol(lv_fast)) {
++			log_error("LV %s is already used as a cachevol.", display_lvname(lv_fast));
++			goto bad;
++		}
++
++		if (!dm_list_empty(&lv_fast->segs_using_this_lv)) {
++			log_error("LV %s is already in use.", display_lvname(lv_fast));
++			goto bad;
++		}
++
++		if (!arg_is_set(cmd, yes_ARG) &&
++		    yes_no_prompt("Erase all existing data on %s? [y/n]: ", display_lvname(lv_fast)) == 'n') {
++			log_error("Conversion aborted.");
++			goto bad;
++		}
++
++		if (!lockd_lv(cmd, lv_fast, "ex", 0))
++			goto_bad;
+ 	}
+ 
+-	if (!arg_is_set(cmd, yes_ARG) &&
+-	    yes_no_prompt("Erase all existing data on %s? [y/n]: ", display_lvname(cachevol_lv)) == 'n') {
+-		log_error("Conversion aborted.");
+-		goto out;
++	/*
++	 * User specifies a device and lvm creates a cachevol on it.
++	 */
++	if (dev_name) {
++		if (!_lv_create_cachevol(cmd, vg, lv, dev_name, &lv_fast))
++			goto_bad;
+ 	}
+ 
+ 	/* Ensure the LV is not active elsewhere. */
+-	if (!lockd_lv(cmd, cachevol_lv, "ex", LDLV_PERSISTENT))
+-		goto_out;
++	if (!lockd_lv(cmd, lv, "ex", 0))
++		goto_bad;
+ 
+-	if (!wipe_cache_pool(cachevol_lv))
+-		goto_out;
++	if (!wipe_cache_pool(lv_fast))
++		goto_bad;
+ 
+ 	/* When the lv arg is a thinpool, redirect command to data sub lv. */
+ 
+@@ -4302,17 +4410,17 @@ static int _lvconvert_cachevol_attach_single(struct cmd_context *cmd,
+ 	}
+ 
+ 	if (_raid_split_image_conversion(lv))
+-		goto_out;
++		goto_bad;
+ 
+ 	/* Attach the cache to the main LV. */
+ 
+-	if (!_cache_vol_attach(cmd, lv, cachevol_lv))
+-		goto_out;
++	if (!_cache_vol_attach(cmd, lv, lv_fast))
++		goto_bad;
+ 
+ 	log_print_unless_silent("Logical volume %s is now cached.", display_lvname(lv));
+ 
+ 	return ECMD_PROCESSED;
+- out:
++ bad:
+ 	return ECMD_FAILED;
+ }
+ 
+@@ -5605,7 +5713,7 @@ static int _lvconvert_writecache_attach_single(struct cmd_context *cmd,
+ 	struct logical_volume *lv_wcorig;
+ 	struct logical_volume *lv_fast;
+ 	struct writecache_settings settings;
+-	const char *fast_name;
++	const char *fast_name, *dev_name;
+ 	uint32_t block_size_sectors = 0;
+ 	char *lockd_fast_args = NULL;
+ 	char *lockd_fast_name = NULL;
+@@ -5613,32 +5721,58 @@ static int _lvconvert_writecache_attach_single(struct cmd_context *cmd,
+ 	char cvol_name[NAME_LEN];
+ 	int is_active;
+ 
+-	fast_name = arg_str_value(cmd, cachevol_ARG, "");
++	fast_name = arg_str_value(cmd, cachevol_ARG, NULL);
++	dev_name = arg_str_value(cmd, cachedevice_ARG, NULL);
+ 
+-	if (!(lv_fast = find_lv(vg, fast_name))) {
+-		log_error("LV %s not found.", fast_name);
+-		goto bad;
+-	}
++	if (!fast_name && !dev_name)
++		goto_bad;
+ 
+-	if (lv_fast == lv) {
+-		log_error("Invalid cachevol LV.");
+-		goto bad;
+-	}
++	/*
++	 * User specifies an existing cachevol to use.
++	 */
++	if (fast_name) {
++		if (!validate_lvname_param(cmd, &vg->name, &fast_name))
++			goto_bad;
+ 
+-	if (!seg_is_linear(first_seg(lv_fast))) {
+-		log_error("LV %s must be linear to use as a writecache.", display_lvname(lv_fast));
+-		goto bad;
+-	}
++		if (!(lv_fast = find_lv(vg, fast_name))) {
++			log_error("LV %s not found.", fast_name);
++			goto bad;
++		}
+ 
+-	if (lv_is_cache_vol(lv_fast)) {
+-		log_error("LV %s is already used as a cachevol.", display_lvname(lv_fast));
+-		goto bad;
++		if (lv_fast == lv) {
++			log_error("Invalid cachevol LV.");
++			goto bad;
++		}
++
++		if (lv_is_cache_vol(lv_fast)) {
++			log_error("LV %s is already used as a cachevol.", display_lvname(lv_fast));
++			goto bad;
++		}
++
++		if (!seg_is_linear(first_seg(lv_fast))) {
++			log_error("LV %s must be linear to use as a writecache.", display_lvname(lv_fast));
++			goto bad;
++		}
++
++		/* fast LV shouldn't generally be active by itself, but just in case. */
++		if (lv_is_active(lv_fast)) {
++			log_error("LV %s must be inactive to attach.", display_lvname(lv_fast));
++			goto bad;
++		}
++
++		if (!arg_is_set(cmd, yes_ARG) &&
++		     yes_no_prompt("Erase all existing data on %s? [y/n]: ", display_lvname(lv_fast)) == 'n') {
++			log_error("Conversion aborted.");
++			goto bad;
++		}
+ 	}
+ 
+-	/* fast LV shouldn't generally be active by itself, but just in case. */
+-	if (lv_info(cmd, lv_fast, 1, NULL, 0, 0)) {
+-		log_error("LV %s must be inactive to attach.", display_lvname(lv_fast));
+-		goto bad;
++	/*
++	 * User specifies a device and lvm creates a cachevol on it.
++	 */
++	if (dev_name) {
++		if (!_lv_create_cachevol(cmd, vg, lv, dev_name, &lv_fast))
++			goto_bad;
+ 	}
+ 
+ 	is_active = lv_is_active(lv);
+@@ -5671,16 +5805,10 @@ static int _lvconvert_writecache_attach_single(struct cmd_context *cmd,
+ 		}
+ 	}
+ 
+-	if (!arg_is_set(cmd, yes_ARG) &&
+-	    yes_no_prompt("Erase all existing data on %s? [y/n]: ", display_lvname(lv_fast)) == 'n') {
+-		log_error("Conversion aborted.");
+-		goto bad;
+-	}
+-
+-	/* Ensure the two LVs are not active elsewhere. */
++	/* Ensure the LV is not active elsewhere. */
+ 	if (!lockd_lv(cmd, lv, "ex", 0))
+ 		goto_bad;
+-	if (!lockd_lv(cmd, lv_fast, "ex", 0))
++	if (!dev_name && !lockd_lv(cmd, lv_fast, "ex", 0))
+ 		goto_bad;
+ 
+ 	if (!archive(vg))
+diff --git a/tools/lvmcmdline.c b/tools/lvmcmdline.c
+index d87a8f053..9c345bd99 100644
+--- a/tools/lvmcmdline.c
++++ b/tools/lvmcmdline.c
+@@ -124,8 +124,10 @@ static const struct command_function _command_functions[CMD_COUNT] = {
+ 	{ lvconvert_to_cachepool_CMD,			lvconvert_to_pool_cmd },
+ 	{ lvconvert_to_thin_with_external_CMD,		lvconvert_to_thin_with_external_cmd },
+ 	{ lvconvert_to_cache_with_cachevol_CMD,		lvconvert_to_cache_with_cachevol_cmd },
++	{ lvconvert_to_cache_with_device_CMD,		lvconvert_to_cache_with_cachevol_cmd },
+ 	{ lvconvert_to_cache_with_cachepool_CMD,	lvconvert_to_cache_with_cachepool_cmd },
+ 	{ lvconvert_to_writecache_CMD,			lvconvert_to_writecache_cmd },
++	{ lvconvert_to_writecache_with_device_CMD,	lvconvert_to_writecache_cmd },
+ 	{ lvconvert_swap_pool_metadata_CMD,		lvconvert_swap_pool_metadata_cmd },
+ 	{ lvconvert_to_thinpool_or_swap_metadata_CMD,   lvconvert_to_pool_or_swap_metadata_cmd },
+ 	{ lvconvert_to_cachepool_or_swap_metadata_CMD,  lvconvert_to_pool_or_swap_metadata_cmd },
 
 
