@@ -1,43 +1,54 @@
-From: Heinz Mauelshagen <heinzm@sourceware.org>
-Date: Wed, 24 Jun 2020 12:04:51 +0000 (GMT)
-Subject: stable-2.02 - lv{resize, extend, reduce}: also check for 2-legged raid4
-Message-ID: <20200624120451.367CF3870872@sourceware.org>
+From: Zdenek Kabelac <zkabelac@sourceware.org>
+Date: Wed, 24 Jun 2020 13:02:40 +0000 (GMT)
+Subject: master - bcache: support longer writes
+Message-ID: <20200624130240.5A56D3938C10@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=e7e2288ff4ac34d825dd13dd45b0418723a7da84
-Commit:        e7e2288ff4ac34d825dd13dd45b0418723a7da84
-Parent:        d17780c6b85a0f136e0ed395d5722d82bd8c7464
-Author:        Heinz Mauelshagen <heinzm@redhat.com>
-AuthorDate:    Wed Jun 24 14:02:29 2020 +0200
-Committer:     Heinz Mauelshagen <heinzm@redhat.com>
-CommitterDate: Wed Jun 24 14:04:36 2020 +0200
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=6eb9eba59bf53101b5148ace3ddaf4140592495f
+Commit:        6eb9eba59bf53101b5148ace3ddaf4140592495f
+Parent:        04bba5ea421b02275197bfb16b4d1bbf8879b240
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Wed Jun 24 13:37:23 2020 +0200
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Wed Jun 24 15:01:03 2020 +0200
 
-lv{resize,extend,reduce}: also check for 2-legged raid4
+bcache: support longer writes
 
-Users can also convert 2-legged raid1 to raid4 thus causing 'Bus error'
-on resize requests.
-
-Related: https://bugzilla.redhat.com/show_bug.cgi?id=1784351
+When initiated larger write request, it may have happened, bcache
+got out of free chunks - fix the loop, that is supposed to wait
+until next free chunk becomes avain available.
 ---
- lib/metadata/lv_manip.c | 2 +-
- 1 file changed, 1 insertion(+), 1 deletion(-)
+ WHATS_NEW           | 1 +
+ lib/device/bcache.c | 2 +-
+ 2 files changed, 2 insertions(+), 1 deletion(-)
 
-diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
-index d35eb5e0a..0b1fdce27 100644
---- a/lib/metadata/lv_manip.c
-+++ b/lib/metadata/lv_manip.c
-@@ -4797,7 +4797,7 @@ static int _lvresize_check(struct logical_volume *lv,
- 		return 0;
- 	}
+diff --git a/WHATS_NEW b/WHATS_NEW
+index c0267b7a3..c6dad99e2 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.03.10 - 
+ =================================
++  Fix running out of free buffers for async writing for larger writes.
+   Add integrity with raid capability.
+   Fix support for lvconvert --repair used by foreign apps (i.e. Docker).
  
--	if (seg && seg_is_any_raid5(seg) && seg->area_count < 3) {
-+	if (seg && (seg_is_raid4(seg) || seg_is_any_raid5(seg)) && seg->area_count < 3) {
- 		log_error("Cannot resize %s LV %s. Convert to more stripes first.",
- 			  lvseg_name(seg), display_lvname(lv));
- 		return 0;
+diff --git a/lib/device/bcache.c b/lib/device/bcache.c
+index a7d805526..7e7e18542 100644
+--- a/lib/device/bcache.c
++++ b/lib/device/bcache.c
+@@ -950,7 +950,7 @@ static struct block *_new_block(struct bcache *cache, int fd, block_address i, b
+ 	struct block *b;
+ 
+ 	b = _alloc_block(cache);
+-	while (!b && !dm_list_empty(&cache->clean)) {
++	while (!b) {
+ 		b = _find_unused_clean_block(cache);
+ 		if (!b) {
+ 			if (can_wait) {
 
 
