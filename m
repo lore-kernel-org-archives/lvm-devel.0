@@ -1,80 +1,63 @@
 From: Leo Yan <leo.yan@linaro.org>
-Date: Fri, 26 Jun 2020 18:32:32 +0800
-Subject: Question: LVM2 testing with sanlock lock manager
-In-Reply-To: <20200625145523.GA23434@redhat.com>
-References: <20200625093411.GB19777@leoy-ThinkPad-X240s>
-	<20200625145523.GA23434@redhat.com>
-Message-ID: <20200626103232.GB28664@leoy-ThinkPad-X240s>
+Date: Fri, 26 Jun 2020 19:16:14 +0800
+Subject: Question: build and install LVM2 on Centos7
+Message-ID: <20200626111614.GC28664@leoy-ThinkPad-X240s>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On Thu, Jun 25, 2020 at 09:55:23AM -0500, David Teigland wrote:
-> On Thu, Jun 25, 2020 at 05:34:12PM +0800, Leo Yan wrote:
-> > Hi there,
-> > 
-> > I have one question for LVM test suites with sanlock locking manager.
-> > After tried both the master branch and with the LVM v2 (with the tag
-> > 'v2_02_187'), the testing seems to me is fragile.
-> 
-> Hi, we switched to using check_lvmlockd_test (running lvmlockd in test
-> mode without a lock manager backend) because it accomplished most of what
-> we needed in a much simpler way.  Also, a forcable cleanup of the lock
-> managers after a test failure had problems I never fully resolved.  And,
-> the value of check_lvmlockd_sanlock and check_lvmlockd_dlm is limited
-> since these are local tests.  As you've seen, I left the old methods
-> around in case someone found a use for them.
+Hi there,
 
-Thanks a lot for the info.
+When built and installed LVM2 (with tag v2_02_187) on Centos7, I used
+below commands:
 
-I noted check_lvmlockd_test, this feature is more related for testing
-lvmlockd + LVM and in the middle to hijack so disallow LVM tools to talk
-to lock managers.
+  # ./configure --prefix=/usr --includedir=/include --mandir=/share/man \
+    --infodir=/share/info --sysconfdir=/etc --localstatedir=/var \
+    --disable-silent-rules --sbindir=/sbin --enable-blkid_wiping \
+    --enable-cmdlib --enable-dmeventd --enable-dbus-service \
+    --enable-lvmlockd-sanlock --enable-lvmpolld --enable-notify-dbus \
+    --enable-pkgconfig --enable-readline --enable-udev_rules \
+    --enable-udev_sync --with-thin-check=/usr/sbin/thin_check \
+    --with-thin-dump=/usr/sbin/thin_dump \
+    --with-thin-repair=/usr/sbin/thin_repair \
+    --with-cache=internal --with-thin=internal
+  # make
+  # make install
 
-> > I observed some below issues:
-> > 
-> > - The sanlock daemon preparation script
-> >   test/shell/aa-lvmlockd-sanlock-prepare.sh has several issues, e.g.
-> >   the dmsetup command cannot work well for global lock; the
-> >   gl_file.img is stored in the temporary folder and it will be removed
-> >   after the script aa-lvmlockd-sanlock-prepare.sh is finished, so
-> >   gl_file.img cannot be used cross all sequential test cases.  Thus
-> >   the global lock will malfunction for this case.
-> > 
-> >   Have sent related patches to lvm-devel mailing list for this.
-> > 
-> > - I also compared the testing result between DLM and sanlock, if I
-> >   using DLM as the locking scheme, the testing result is quite
-> >   reliable.  But for sanlock related testing, the testing cases have
-> >   many failures, even after fixed the observed issues in
-> >   aa-lvmlockd-sanlock-prepare.sh, still can see many failures.
-> > 
-> >   I used the command as below:
-> >   make check_lvmlockd_sanlock LVM_TEST_BACKING_DEVICE=/dev/sdj3 S=component-cache.sh
-> > 
-> >   From the testing I found, component-cache.sh is easily cause stuck
-> >   at the last command to remove VG and after the testing case
-> >   lvconvert-cache-chunks.sh the almost later cases fail.  So the final
-> >   testing result is:
-> >   ### 330 tests: 34 passed, 98 skipped, 0 timed out, 1 warned, 197 failed
-> > 
-> > Could you kindly confirm if I miss something (configurations, or
-> > should co-work with DLM) for sanlock related testing?
-> 
-> Thanks for the patches.  There are some issues that prevent a number of
-> tests from being used with check_sanlock, the main one being the internal
-> lvmlock LV that holds the sanlock locks and keeps one of the PVs in use.
+I found the libs will be installed into /usr/lib/ rather than into
+/usr/lib64:
 
-Understood, I do see some logs like below:
+  # make V=1 install | grep "\/usr\/lib"
+  /usr/bin/install -c -m 555  -D libdevmapper-event-lvm2.so /usr/lib/libdevmapper-event-lvm2.so.2.02                         
+  /usr/bin/install -c -m 755 -d /usr/lib
+  ln -s -f libdevmapper-event-lvm2.so.2.02 /usr/lib/libdevmapper-event-lvm2.so                                               
+  /usr/bin/install -c -m 555  -D libdevmapper-event-lvm2snapshot.so /usr/lib/device-mapper/libdevmapper-event-lvm2snapshot.so
+  ln -s -f device-mapper/libdevmapper-event-lvm2snapshot.so /usr/lib/libdevmapper-event-lvm2snapshot.so                      
+  /usr/bin/install -c -m 555  -D libdevmapper-event-lvm2raid.so /usr/lib/device-mapper/libdevmapper-event-lvm2raid.so        
+  ln -s -f device-mapper/libdevmapper-event-lvm2raid.so /usr/lib/libdevmapper-event-lvm2raid.so                              
+  /usr/bin/install -c -m 555  -D libdevmapper-event-lvm2thin.so /usr/lib/device-mapper/libdevmapper-event-lvm2thin.so        
+  ln -s -f device-mapper/libdevmapper-event-lvm2thin.so /usr/lib/libdevmapper-event-lvm2thin.so                              
+  /usr/bin/install -c -m 555  -D libdevmapper-event-lvm2mirror.so /usr/lib/device-mapper/libdevmapper-event-lvm2mirror.so    
+  ln -s -f device-mapper/libdevmapper-event-lvm2mirror.so /usr/lib/libdevmapper-event-lvm2mirror.so                          
+  /usr/bin/install -c -m 555  -D libdevmapper-event-lvm2vdo.so /usr/lib/device-mapper/libdevmapper-event-lvm2vdo.so          
+  ln -s -f device-mapper/libdevmapper-event-lvm2vdo.so /usr/lib/libdevmapper-event-lvm2vdo.so                                
+  /usr/bin/install -c -m 555  -D libdevmapper-event.so /usr/lib/libdevmapper-event.so.1.02                                   
 
-udev-lvmlockd-sanlock:shell_zero-usage.sh.txt:[ 0:14] device-mapper: remove ioctl on LVMTEST7803vg-lvmlock  failed: Device or resource busy  
-udev-lvmlockd-sanlock:shell_zero-usage.sh.txt:[ 0:14] device-mapper: remove ioctl on LVMTEST27669vg_1-lvmlock  failed: Device or resource bus
-udev-lvmlockd-sanlock:shell_zero-usage.sh.txt:[ 0:14] device-mapper: remove ioctl on LVMTEST22552vg-lvmlock  failed: Device or resource busy 
-udev-lvmlockd-sanlock:shell_zero-usage.sh.txt:[ 0:14] device-mapper: remove ioctl on LVMTEST5984vg-lvmlock  failed: Device or resource busy  
-udev-lvmlockd-sanlock:shell_zero-usage.sh.txt:[ 0:14] device-mapper: remove ioctl on LVMTEST9398vg-lvmlock  failed: Device or resource busy  
-udev-lvmlockd-sanlock:shell_zero-usage.sh.txt:[ 0:14] device-mapper: remove ioctl on LVMTEST4978vg-lvmlock  failed: Device or resource busy  
+  [...]
+
+So at the end, if my Centos7's rootFS is logical volumes, this will
+lead to booting failure.  The reason is at the booting time, the lvm
+tool (should also include dmeventd) have been updated with myself built
+binaries, the default lib path should be /usr/lib64 but not the folder
+/usr/lib, so the upgraded binaries cannot find the appropriate libs.
+This is why we rescured the system by copying libdevmapper related libs
+from /usr/lib to /usr/lib64.
+
+I can manually copy libs from /usr/lib to /usr/lib64 for libdevmapper-*,
+but seems to me this is not the formal way to do.  My question is how I
+can smoothly upgrade self built LVM tools on Centos7?
 
 Thanks,
 Leo
