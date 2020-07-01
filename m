@@ -1,154 +1,135 @@
-From: Lukas Czerner <lczerner@redhat.com>
-Date: Tue, 27 Sep 2011 15:42:51 +0200
-Subject: [PATCH v3 18/18] test: Add test for fsadm remove command
-In-Reply-To: <1317130971-24173-1-git-send-email-lczerner@redhat.com>
-References: <1317130971-24173-1-git-send-email-lczerner@redhat.com>
-Message-ID: <1317130971-24173-19-git-send-email-lczerner@redhat.com>
+From: Vojtech Trefny <vtrefny@redhat.com>
+Date: Wed,  1 Jul 2020 13:27:46 +0200
+Subject: [PATCH 1/2] lvmdbusd: Add support for LVM writecache
+Message-ID: <20200701112747.61278-1-vtrefny@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-The tests exercises the fsadm "remove" functionality, by trying various
-combinations of arguments and checking the desired results.
-
-Signed-off-by: Lukas Czerner <lczerner@redhat.com>
 ---
- test/t-fsadm-remove.sh |  123 ++++++++++++++++++++++++++++++++++++++++++++++++
- 1 files changed, 123 insertions(+), 0 deletions(-)
- create mode 100644 test/t-fsadm-remove.sh
+ daemons/lvmdbusd/cmdhandler.py |  9 +++++++
+ daemons/lvmdbusd/lv.py         | 43 ++++++++++++++++++++++++++++++++++
+ test/dbus/lvmdbustest.py       | 30 ++++++++++++++++++++++++
+ 3 files changed, 82 insertions(+)
 
-diff --git a/test/t-fsadm-remove.sh b/test/t-fsadm-remove.sh
-new file mode 100644
-index 0000000..c7f71fb
---- /dev/null
-+++ b/test/t-fsadm-remove.sh
-@@ -0,0 +1,123 @@
-+#!/bin/bash
-+# Copyright 2011 (C) Red Hat, Inc., Lukas Czerner <lczerner@redhat.com>
-+#
-+# This copyrighted material is made available to anyone wishing to use,
-+# modify, copy, or redistribute it subject to the terms and conditions
-+# of the GNU General Public License v.2.
-+#
-+# You should have received a copy of the GNU General Public License
-+# along with this program; if not, write to the Free Software Foundation,
-+# Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
-+
-+test_description='Exercise fsadm remove'
-+
-+. lib/test
-+
-+DEV_COUNT=10
-+DEV_SIZE=10
-+TEST_MAX_SIZE=$(($DEV_COUNT*$DEV_SIZE))
-+aux prepare_devs $DEV_COUNT $DEV_SIZE
-+TEST_DEVS=$(cat DEVICES)
-+export DEFAULT_DEVICE_POOL=$vg1
-+export LVOL_PREFIX="lvol"
-+lvol1=${LVOL_PREFIX}001
-+lvol2=${LVOL_PREFIX}002
-+lvol3=${LVOL_PREFIX}003
-+
-+pool1=$vg2
-+pool2=$vg3
-+DEFAULT_VOLUME=${DEFAULT_DEVICE_POOL}/$lvol1
-+
-+_FS=
-+which mkfs.ext2 && _FS="ext2"
-+which mkfs.ext3 && _FS="ext3"
-+which mkfs.ext4 && _FS="ext4"
-+which mkfs.xfs  && _FS="xfs"
+diff --git a/daemons/lvmdbusd/cmdhandler.py b/daemons/lvmdbusd/cmdhandler.py
+index 7d2f4c4ba..1c15b7888 100644
+--- a/daemons/lvmdbusd/cmdhandler.py
++++ b/daemons/lvmdbusd/cmdhandler.py
+@@ -453,6 +453,15 @@ def lv_cache_lv(cache_pool_full_name, lv_full_name, cache_options):
+ 	return call(cmd)
+ 
+ 
++def lv_writecache_lv(cache_lv_full_name, lv_full_name, cache_options):
++	# lvconvert --type writecache --cachevol VG/CacheLV VG/OriginLV
++	cmd = ['lvconvert']
++	cmd.extend(options_to_cli_args(cache_options))
++	cmd.extend(['-y', '--type', 'writecache', '--cachevol',
++				cache_lv_full_name, lv_full_name])
++	return call(cmd)
 +
 +
-+TEST_MNT=$TESTDIR/mnt
+ def lv_detach_cache(lv_full_name, detach_options, destroy_cache):
+ 	cmd = ['lvconvert']
+ 	if destroy_cache:
+diff --git a/daemons/lvmdbusd/lv.py b/daemons/lvmdbusd/lv.py
+index fd46f348b..f21a332a3 100644
+--- a/daemons/lvmdbusd/lv.py
++++ b/daemons/lvmdbusd/lv.py
+@@ -743,6 +743,49 @@ class Lv(LvCommon):
+ 			cb, cbe, return_tuple=False)
+ 		cfg.worker_q.put(r)
+ 
++	@staticmethod
++	def _writecache_lv(lv_uuid, lv_name, lv_object_path, cache_options):
++		# Make sure we have a dbus object representing it
++		dbo = LvCommon.validate_dbus_object(lv_uuid, lv_name)
 +
-+# Remove logical volume
-+fsadm create $TEST_DEVS
-+check lv_field $DEFAULT_VOLUME lv_name $lvol1
-+fsadm -f remove $DEFAULT_VOLUME
-+not check lv_field $DEFAULT_VOLUME lv_name $lvol1
++		# Make sure we have dbus object representing lv to cache
++		lv_to_cache = cfg.om.get_object_by_path(lv_object_path)
 +
-+# Remove volume group
-+fsadm create $TEST_DEVS
-+check vg_field $DEFAULT_DEVICE_POOL vg_name $DEFAULT_DEVICE_POOL
-+fsadm -f remove $DEFAULT_DEVICE_POOL
-+not check vg_field $DEFAULT_DEVICE_POOL vg_name $DEFAULT_DEVICE_POOL
++		if lv_to_cache:
++			fcn = lv_to_cache.lv_full_name()
++			rc, out, err = cmdhandler.lv_writecache_lv(
++				dbo.lv_full_name(), fcn, cache_options)
++			if rc == 0:
++				# When we cache an LV, the cache pool and the lv that is getting
++				# cached need to be removed from the object manager and
++				# re-created as their interfaces have changed!
++				mt_remove_dbus_objects((dbo, lv_to_cache))
++				cfg.load()
 +
-+if [ "$_FS" ]; then
-+	[ ! -d $TEST_MNT ] && mkdir $TEST_MNT &> /dev/null
-+	# Remove mounted logical volume by mount point
-+	fsadm create fs=$_FS $TEST_DEVS
-+	mount ${DM_DEV_DIR}/$DEFAULT_VOLUME $TEST_MNT
-+	check lv_field $DEFAULT_VOLUME lv_name $lvol1
-+	fsadm -f remove $TEST_MNT
-+	not check lv_field $DEFAULT_VOLUME lv_name $lvol1
-+	fsadm -f remove $DEFAULT_DEVICE_POOL
++				lv_converted = cfg.om.get_object_path_by_lvm_id(fcn)
++			else:
++				raise dbus.exceptions.DBusException(
++					LV_INTERFACE,
++					'Exit code %s, stderr = %s' % (str(rc), err))
++		else:
++			raise dbus.exceptions.DBusException(
++				LV_INTERFACE, 'LV to cache with object path %s not present!' %
++				lv_object_path)
++		return lv_converted
 +
-+	# Remove mounted logical volume by lv
-+	fsadm create fs=$_FS $TEST_DEVS
-+	mount ${DM_DEV_DIR}/$DEFAULT_VOLUME $TEST_MNT
-+	check lv_field $DEFAULT_VOLUME lv_name $lvol1
-+	fsadm -f remove $DEFAULT_VOLUME
-+	not check lv_field $DEFAULT_VOLUME lv_name $lvol1
-+	fsadm -f remove $DEFAULT_DEVICE_POOL
-+fi
++	@dbus.service.method(
++		dbus_interface=LV_INTERFACE,
++		in_signature='oia{sv}',
++		out_signature='(oo)',
++		async_callbacks=('cb', 'cbe'))
++	def WriteCacheLv(self, lv_object, tmo, cache_options, cb, cbe):
++		r = RequestEntry(
++			tmo, Lv._writecache_lv,
++			(self.Uuid, self.lvm_id, lv_object,
++			cache_options), cb, cbe)
++		cfg.worker_q.put(r)
 +
-+# Remove unused devices from the pool
-+fsadm create $dev1 $dev2 $dev3
-+fsadm add $TEST_DEVS
-+check vg_field $DEFAULT_DEVICE_POOL pv_count $DEV_COUNT
-+fsadm -f remove $TEST_DEVS
-+check vg_field $DEFAULT_DEVICE_POOL pv_count 3
-+fsadm -f remove --all
 +
-+# Remove multiple things
-+fsadm add $dev1 $dev2 $pool1
-+fsadm add $dev3 $dev4 $pool2
-+fsadm create $pool2
-+fsadm create $dev5 $dev6
-+fsadm create $dev7 $dev8
-+fsadm add $dev9
-+check vg_field $pool1 pv_count 2
-+check vg_field $pool2 pv_count 2
-+check vg_field $pool2 lv_count 1
-+check vg_field $DEFAULT_DEVICE_POOL pv_count 5
-+check vg_field $DEFAULT_DEVICE_POOL lv_count 2
-+check vg_field $pool1 vg_name $pool1
-+check lv_field ${pool2}/$lvol1 lv_name $lvol1
-+fsadm -f remove $pool1 ${pool2}/$lvol1 $DEFAULT_VOLUME $dev9
-+not check vg_field $pool1 vg_name $pool1
-+not check lv_field ${pool2}/$lvol1 lv_name $lvol1
-+not check lv_field $DEFAULT_VOLUME lv_name $lvol1
-+check vg_field $DEFAULT_DEVICE_POOL pv_count 4
-+fsadm -f remove --all
+ # noinspection PyPep8Naming
+ @utils.dbus_property(VDO_POOL_INTERFACE, 'OperatingMode', 's')
+ @utils.dbus_property(VDO_POOL_INTERFACE, 'CompressionState', 's')
+diff --git a/test/dbus/lvmdbustest.py b/test/dbus/lvmdbustest.py
+index 8753e65d0..efa1afb26 100755
+--- a/test/dbus/lvmdbustest.py
++++ b/test/dbus/lvmdbustest.py
+@@ -1558,6 +1558,36 @@ class TestDbusService(unittest.TestCase):
+ 			cached_lv.Lv.Rename(dbus.String(new_name), dbus.Int32(g_tmo), EOD))
+ 		verify_cache_lv_count()
+ 
++	def test_writecache_lv(self):
++		vg = self._vg_create().Vg
++		data_lv = self._create_lv(size=mib(16), vg=vg)
++		cache_lv = self._create_lv(size=mib(16), vg=vg)
 +
-+# Remove all
-+fsadm add $dev1 $dev2 $pool1
-+fsadm add $dev3 $dev4 $pool2
-+fsadm create $pool2
-+fsadm create $dev5 $dev6
-+fsadm create $dev7 $dev8
-+fsadm add $dev9
-+check vg_field $pool1 pv_count 2
-+check vg_field $pool2 pv_count 2
-+check vg_field $pool2 lv_count 1
-+check vg_field $DEFAULT_DEVICE_POOL pv_count 5
-+check vg_field $DEFAULT_DEVICE_POOL lv_count 2
-+check vg_field $pool1 vg_name $pool1
-+check vg_field $pool2 vg_name $pool2
-+check vg_field $DEFAULT_DEVICE_POOL vg_name $DEFAULT_DEVICE_POOL
-+fsadm -f remove --all
-+not check vg_field $pool1 vg_name $pool1
-+not check vg_field $pool2 vg_name $pool2
-+not check vg_field $DEFAULT_DEVICE_POOL vg_name $DEFAULT_DEVICE_POOL
++		# both LVs need to be inactive
++		self.handle_return(data_lv.Lv.Deactivate(
++			dbus.UInt64(0), dbus.Int32(g_tmo), EOD))
++		data_lv.update()
++		self.handle_return(cache_lv.Lv.Deactivate(
++			dbus.UInt64(0), dbus.Int32(g_tmo), EOD))
++		cache_lv.update()
 +
-+fsadm remove --help
++		cached_lv_path = self.handle_return(
++			cache_lv.Lv.WriteCacheLv(
++				dbus.ObjectPath(data_lv.object_path),
++				dbus.Int32(g_tmo),
++				EOD))
 +
-+# Some cases which should fail
-+not fsadm remove
++		intf = (LV_COMMON_INT, LV_INT, CACHE_LV_INT)
++		cached_lv = ClientProxy(self.bus, cached_lv_path, interfaces=intf)
++		self.assertEqual(cached_lv.LvCommon.SegType, ["writecache"])
++
++		uncached_lv_path = self.handle_return(
++				cached_lv.CachedLv.DetachCachePool(
++					dbus.Boolean(True),
++					dbus.Int32(g_tmo),
++					EOD))
++		self.assertTrue('/com/redhat/lvmdbus1/Lv' in uncached_lv_path)
++
+ 	def test_vg_change(self):
+ 		vg_proxy = self._vg_create()
+ 
 -- 
-1.7.4.4
+2.25.4
 
 
