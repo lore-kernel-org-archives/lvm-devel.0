@@ -1,64 +1,71 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Wed,  8 Jul 2020 09:45:25 +0000 (GMT)
-Subject: master - lvconvert: more support for yes conversion
-Message-ID: <20200708094525.24314385E444@sourceware.org>
+Date: Wed,  8 Jul 2020 09:45:26 +0000 (GMT)
+Subject: master - raid: no wiping when zeroing raid metadata device
+Message-ID: <20200708094526.450D13851C27@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=b7f3667ce20b731bbda9b1d61df49abbcd1bd20e
-Commit:        b7f3667ce20b731bbda9b1d61df49abbcd1bd20e
-Parent:        fe78cd4082cb9af10580180d61898fcef93dc624
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=9b9bf8786fb423a4430cc676301edadf2310098d
+Commit:        9b9bf8786fb423a4430cc676301edadf2310098d
+Parent:        b7f3667ce20b731bbda9b1d61df49abbcd1bd20e
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed Jul 8 10:57:52 2020 +0200
+AuthorDate:    Wed Jul 8 10:59:51 2020 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Wed Jul 8 11:37:33 2020 +0200
+CommitterDate: Wed Jul 8 11:40:55 2020 +0200
 
-lvconvert: more support for yes conversion
+raid: no wiping when zeroing raid metadata device
 
-When converting volume to pool LV use also wiping of other signatures.
-For writecache & pool conversion support --yet and --force
-to bypass prompting for signature wiping.
-For writecache drop unneded zero_sectors.
+Currently lvm2 is not wiping signatures when creating 'metadata' volumes
+and raid _rmeta was the only exception - so make the behavior consistent
+with other metadata devices and drop wiping ATM.
+Drop also some extra debug since they are now more explanatory in
+wipe_lv() function.
+Also note - although lvm2 now does not wipe signatures - the error
+from such wipping used to be actually 'ignored' before wipe_lv()
+started to return error (with recent commit) and raid creation
+continued with 'unzeroed' metadata device.
 
-Note: currently we have lvconvert doing convertion and prompting
-for confirmation of conversion - and then again wipe_lv() prompts
-for removing i.e. filesystem signature - we should unify this
-prompting into 1 message  - althought the 'filesystem' discovery
-needs active volume - while the 1st. conversion prompt can
-work without active converted volume.
+TODO: Several issues to resolve:
+
+1. We may want to flip to wipping with all LVs (in that case we need to
+support passing --yet & --force).
+
+2. Also we may want to clear whole metadata device - however current
+function is also used for wipping i.e. snapshot COW device which
+is likely not a good candidate for full device zeroing.
+We may also need to think about better logic when extent size is
+enforcing very large LVs, when only a small portion of LV is ever
+being used.
+
+3. Using TRIM instead of zeroing metadata device might be worth to
+implement.
+
+mm
 ---
- tools/lvconvert.c | 9 +++++++--
- 1 file changed, 7 insertions(+), 2 deletions(-)
+ lib/metadata/lv_manip.c | 6 ++----
+ 1 file changed, 2 insertions(+), 4 deletions(-)
 
-diff --git a/tools/lvconvert.c b/tools/lvconvert.c
-index 61256c698..0dcc77689 100644
---- a/tools/lvconvert.c
-+++ b/tools/lvconvert.c
-@@ -3279,7 +3279,11 @@ static int _lvconvert_to_pool(struct cmd_context *cmd,
- 			}
- 			metadata_lv->status &= ~LV_ACTIVATION_SKIP;
+diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
+index 5956d032c..f0ba3f0db 100644
+--- a/lib/metadata/lv_manip.c
++++ b/lib/metadata/lv_manip.c
+@@ -7731,12 +7731,10 @@ int activate_and_wipe_lvlist(struct dm_list *lv_list, int commit)
+ 		}
  
--			if (!wipe_lv(metadata_lv, (struct wipe_params) { .do_zero = 1 })) {
-+			if (!wipe_lv(metadata_lv, (struct wipe_params) {
-+						  .do_wipe_signatures = 1,
-+						  .is_metadata = 1,
-+						  .yes = arg_count(cmd, yes_ARG),
-+						  .force = arg_count(cmd, force_ARG) } )) {
- 				log_error("Aborting. Failed to wipe metadata lv.");
- 				goto bad;
- 			}
-@@ -5502,7 +5506,8 @@ static int _writecache_zero(struct cmd_context *cmd, struct logical_volume *lv)
- 	struct wipe_params wp = {
- 		.do_wipe_signatures = 1, /* optional, to print warning if clobbering something */
- 		.do_zero = 1,            /* required for dm-writecache to work */
--		.zero_sectors = 1
-+		.yes = arg_count(cmd, yes_ARG),
-+		.force = arg_count(cmd, force_ARG)
- 	};
- 	int ret;
- 
+ 	dm_list_iterate_items(lvl, lv_list) {
+-		log_verbose("Wiping metadata area %s.", display_lvname(lvl->lv));
+ 		/* Wipe any know signatures */
+-		if (!wipe_lv(lvl->lv, (struct wipe_params) { .do_wipe_signatures = 1, .do_zero = 1, .zero_sectors = 1 })) {
+-			log_error("Failed to wipe %s.", display_lvname(lvl->lv));
++		if (!wipe_lv(lvl->lv, (struct wipe_params) { .do_zero = 1 /* TODO: is_metadata = 1 */ })) {
+ 			r = 0;
+-			goto out;
++			goto_out;
+ 		}
+ 	}
+ out:
 
 
