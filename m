@@ -1,51 +1,43 @@
-From: David Teigland <teigland@sourceware.org>
-Date: Tue,  7 Jul 2020 18:21:48 +0000 (GMT)
-Subject: master - writecache: skip fs block size check in test mode
-Message-ID: <20200707182148.23926385ED4B@sourceware.org>
+From: Zdenek Kabelac <zkabelac@sourceware.org>
+Date: Wed,  8 Jul 2020 09:45:24 +0000 (GMT)
+Subject: master - wipe_lv: always zero at least 4K
+Message-ID: <20200708094524.033DF385E444@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=40266faaab07f5578d137f9e400fbc9190edabcd
-Commit:        40266faaab07f5578d137f9e400fbc9190edabcd
-Parent:        ad773511c59aea239592c014a2dab4161ed92214
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Tue Jul 7 13:20:18 2020 -0500
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Tue Jul 7 13:20:18 2020 -0500
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=fe78cd4082cb9af10580180d61898fcef93dc624
+Commit:        fe78cd4082cb9af10580180d61898fcef93dc624
+Parent:        40266faaab07f5578d137f9e400fbc9190edabcd
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Wed Jul 8 10:38:36 2020 +0200
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Wed Jul 8 11:12:54 2020 +0200
 
-writecache: skip fs block size check in test mode
+wipe_lv: always zero at least 4K
 
-if doing so requires activating the LV
+When zero_sectors passed value like 1 - we could zero only 1 sector.
+Reinstantiate we always zero at least 4K block.
 ---
- tools/lvconvert.c | 6 ++++++
- 1 file changed, 6 insertions(+)
+ lib/metadata/lv_manip.c | 4 +++-
+ 1 file changed, 3 insertions(+), 1 deletion(-)
 
-diff --git a/tools/lvconvert.c b/tools/lvconvert.c
-index 0155fdbf9..61256c698 100644
---- a/tools/lvconvert.c
-+++ b/tools/lvconvert.c
-@@ -5649,6 +5649,11 @@ static int _set_writecache_block_size(struct cmd_context *cmd,
- 		stack;
+diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
+index d96137aff..5956d032c 100644
+--- a/lib/metadata/lv_manip.c
++++ b/lib/metadata/lv_manip.c
+@@ -7642,7 +7642,9 @@ int wipe_lv(struct logical_volume *lv, struct wipe_params wp)
+ 			if (wp.is_metadata) /* Verbosely notify metadata will not be fully zeroed */
+ 				log_verbose("Metadata logical volume %s not fully zeroed and may contain stale data.",
+ 					    display_lvname(lv));
+-			zero_sectors = wp.zero_sectors ? : UINT64_C(4096) >> SECTOR_SHIFT;
++			zero_sectors = UINT64_C(4096) >> SECTOR_SHIFT;
++			if (wp.zero_sectors > zero_sectors)
++				zero_sectors = wp.zero_sectors;
  
- 	if (!(fs_dev = dev_cache_get(cmd, pathname, NULL))) {
-+		if (test_mode()) {
-+			log_print("Test mode skips checking fs block size.");
-+			fs_block_size = 0;
-+			goto skip_fs;
-+		}
- 		log_error("Device for LV not found to check block size %s", pathname);
- 		goto_bad;
- 	}
-@@ -5667,6 +5672,7 @@ static int _set_writecache_block_size(struct cmd_context *cmd,
- 	 * With 512 LBS and 4K PBS, mkfs.xfs will use xfs sector size 4K.
- 	 */
- 	rv = get_fs_block_size(fs_dev, &fs_block_size);
-+skip_fs:
- 	if (!rv || !fs_block_size) {
- 		if (lbs_4k && pbs_4k && !pbs_512) {
- 			block_size = 4096;
+ 			if (zero_sectors > lv->size)
+ 				zero_sectors = lv->size;
 
 
