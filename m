@@ -1,20 +1,20 @@
 From: Heinz Mauelshagen <heinzm@sourceware.org>
-Date: Thu,  9 Jul 2020 12:40:11 +0000 (GMT)
-Subject: master - lvconvert: fix conversion to 'mirrored' mirror log with larger regionsize
-Message-ID: <20200709124011.9126C384407D@sourceware.org>
+Date: Thu,  9 Jul 2020 12:44:07 +0000 (GMT)
+Subject: stable-2.02 - lvconvert: fix conversion to 'mirrored' mirror log with larger regionsize
+Message-ID: <20200709124407.BEC31384404C@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=286a793c12aac1fde17cb9768bacad660e1dfeb3
-Commit:        286a793c12aac1fde17cb9768bacad660e1dfeb3
-Parent:        d0faad0db38fe733cae42d7df136d7ed4f7bcba6
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=7ebe1bc901c3ed9404f92c7415c7c491593aed47
+Commit:        7ebe1bc901c3ed9404f92c7415c7c491593aed47
+Parent:        e7e2288ff4ac34d825dd13dd45b0418723a7da84
 Author:        Heinz Mauelshagen <heinzm@redhat.com>
 AuthorDate:    Thu Jul 9 14:09:46 2020 +0200
 Committer:     Heinz Mauelshagen <heinzm@redhat.com>
-CommitterDate: Thu Jul 9 14:39:50 2020 +0200
+CommitterDate: Thu Jul 9 14:43:23 2020 +0200
 
 lvconvert: fix conversion to 'mirrored' mirror log with larger regionsize
 
@@ -36,21 +36,21 @@ Resolves: https://bugzilla.redhat.com/show_bug.cgi?id=1712983
  2 files changed, 3 insertions(+), 1 deletion(-)
 
 diff --git a/WHATS_NEW b/WHATS_NEW
-index 2e2e6d919..89656a341 100644
+index 0e65ff172..846510b28 100644
 --- a/WHATS_NEW
 +++ b/WHATS_NEW
 @@ -1,5 +1,6 @@
- Version 2.03.10 - 
- =================================
+ Version 2.02.188 - 
+ ==================================
 +  Fix conversion to 'mirrored' mirror log with larger regionsize.
-   Zero pool metadata on allocation (disable with allocation/zero_metadata=0).
-   Failure in zeroing or wiping will fail command (bypass with -Zn, -Wn).
-   Fix running out of free buffers for async writing for larger writes.
+   Fix support for lvconvert --repair used by foreign apps (i.e. Docker).
+ 
+ Version 2.02.187 - 24th March 2020
 diff --git a/lib/metadata/merge.c b/lib/metadata/merge.c
-index ecd55efdd..1d47449db 100644
+index a024877a3..054f1855f 100644
 --- a/lib/metadata/merge.c
 +++ b/lib/metadata/merge.c
-@@ -441,7 +441,8 @@ static void _check_lv_segment(struct logical_volume *lv, struct lv_segment *seg,
+@@ -424,7 +424,8 @@ static void _check_lv_segment(struct logical_volume *lv, struct lv_segment *seg,
  		if (seg_is_mirror(seg)) {
  			if (!seg->region_size)
  				seg_error("region size is zero");
