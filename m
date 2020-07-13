@@ -1,20 +1,20 @@
 From: Heinz Mauelshagen <heinzm@sourceware.org>
-Date: Mon, 13 Jul 2020 17:05:08 +0000 (GMT)
+Date: Mon, 13 Jul 2020 17:07:43 +0000 (GMT)
 Subject: master - lvconvert: preset raid1 in case of striped conversions
-Message-ID: <20200713170508.5E7C83858D37@sourceware.org>
+Message-ID: <20200713170743.C01F1386190E@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=a33156365fe59f84c588a714ecbd4d24305d6521
-Commit:        a33156365fe59f84c588a714ecbd4d24305d6521
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=8f421bdd7ae926ab95921fb36aedc5d35fc894cc
+Commit:        8f421bdd7ae926ab95921fb36aedc5d35fc894cc
 Parent:        00c9a788cc617e5e40746dee2e17287d61ee5c81
 Author:        Heinz Mauelshagen <heinzm@redhat.com>
 AuthorDate:    Thu Jul 9 18:51:33 2020 +0200
 Committer:     Heinz Mauelshagen <heinzm@redhat.com>
-CommitterDate: Mon Jul 13 19:04:41 2020 +0200
+CommitterDate: Mon Jul 13 19:07:26 2020 +0200
 
 lvconvert: preset raid1 in case of striped conversions
 
@@ -23,9 +23,21 @@ Fixed invoking "lvconvert -m+1 $StripedLV" to cause errors
 
 Resolves: https://bugzilla.redhat.com/show_bug.cgi?id=1781406
 ---
+ WHATS_NEW         |  1 +
  tools/lvconvert.c | 13 ++++++++++---
- 1 file changed, 10 insertions(+), 3 deletions(-)
+ 2 files changed, 11 insertions(+), 3 deletions(-)
 
+diff --git a/WHATS_NEW b/WHATS_NEW
+index 89656a341..562b1765b 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.03.10 - 
+ =================================
++  Fix conversion to raid from striped lagging type.
+   Fix conversion to 'mirrored' mirror log with larger regionsize.
+   Zero pool metadata on allocation (disable with allocation/zero_metadata=0).
+   Failure in zeroing or wiping will fail command (bypass with -Zn, -Wn).
 diff --git a/tools/lvconvert.c b/tools/lvconvert.c
 index 2896c67c3..b6505c1a9 100644
 --- a/tools/lvconvert.c
