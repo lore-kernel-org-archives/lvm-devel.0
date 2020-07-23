@@ -1,26 +1,47 @@
-From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Tue, 27 Sep 2011 17:41:58 +0200
-Subject: [PATCH v3 02/18] fsadm: Make all internal math in kilobytes
-In-Reply-To: <1317130971-24173-3-git-send-email-lczerner@redhat.com>
-References: <1317130971-24173-1-git-send-email-lczerner@redhat.com>
-	<1317130971-24173-3-git-send-email-lczerner@redhat.com>
-Message-ID: <4E81EEC6.1010904@redhat.com>
+From: David Teigland <teigland@sourceware.org>
+Date: Thu, 23 Jul 2020 20:12:08 +0000 (GMT)
+Subject: master - cachevol: add LV type restrictions to command defs
+Message-ID: <20200723201208.09E723857C5B@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Dne 27.9.2011 15:42, Lukas Czerner napsal(a):
-> We should make all math in fsadm to count with kilobytes (if possible)
-> because it will bypass the problem of having too big numbers. Also the
-> smaller granularity might have troubles with 512B alignment.
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=7a507583d97c1f4b11d5f1a94958f65cf42b6f9f
+Commit:        7a507583d97c1f4b11d5f1a94958f65cf42b6f9f
+Parent:        085760992dc68efbda8fe8e1ad4a5a2eccef9139
+Author:        David Teigland <teigland@redhat.com>
+AuthorDate:    Thu Jul 23 15:10:35 2020 -0500
+Committer:     David Teigland <teigland@redhat.com>
+CommitterDate: Thu Jul 23 15:10:35 2020 -0500
 
+cachevol: add LV type restrictions to command defs
 
-I don't like this one -  if you have problems with big numbers - bugreport
-bash. You are probably covering up different bug here.
+LV type restrictions were missed on the command definitions.
+---
+ tools/command-lines.in | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
 
-
-Zdenek
+diff --git a/tools/command-lines.in b/tools/command-lines.in
+index e38b6e62f..1b0ca2227 100644
+--- a/tools/command-lines.in
++++ b/tools/command-lines.in
+@@ -498,13 +498,13 @@ FLAGS: SECONDARY_SYNTAX
+ 
+ ---
+ 
+-lvconvert --type writecache --cachedevice PV LV
++lvconvert --type writecache --cachedevice PV LV_linear_striped_raid
+ OO: OO_LVCONVERT, --cachesize SizeMB, --cachesettings String
+ ID: lvconvert_to_writecache_with_device
+ DESC: Add a writecache to an LV, using a specified cache device.
+ RULE: all and lv_is_visible
+ 
+-lvconvert --type cache --cachedevice PV LV
++lvconvert --type cache --cachedevice PV LV_linear_striped_raid_thinpool
+ OO: OO_LVCONVERT, --cachesize SizeMB, --cachesettings String
+ ID: lvconvert_to_cache_with_device
+ DESC: Add a cache to an LV, using a specified cache device.
 
 
