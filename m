@@ -1,25 +1,16 @@
 From: Marian Csontos <mcsontos@sourceware.org>
-Date: Sun,  9 Aug 2020 15:01:42 +0000 (GMT)
-Subject: v2_03_10 annotated tag has been created
-Message-ID: <20200809150142.29E3F3857C4A@sourceware.org>
+Date: Sun,  9 Aug 2020 15:17:10 +0000 (GMT)
+Subject: v2_03_10 tag - deleted
+Message-ID: <20200809151710.27A1A3857C4A@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=1b70d52b67f2577ff5563dfb2076385d7959a6dc
-Commit:        1b70d52b67f2577ff5563dfb2076385d7959a6dc
-Parent:        0000000000000000000000000000000000000000
-Author:        Marian Csontos <mcsontos@redhat.com>
-AuthorDate:    2020-08-09 14:57 +0000
-Committer:     Marian Csontos <mcsontos@redhat.com>
-CommitterDate: 2020-08-09 14:57 +0000
+tag: v2_03_10 - deleted with refnum:
 
-annotated tag: v2_03_10 has been created
-	    at 1b70d52b67f2577ff5563dfb2076385d7959a6dc (tag)
-       tagging f540a18fd7f5f65599a6c85c0bd3ba84e54f1cc8 (commit)
-      replaces v2_03_09
+tag v2_03_10
 
 Release 2.03.10
 
@@ -45,30 +36,6 @@ v4IVFmJzTvXRv25IDF3rf3XNxXw6s+qQGTELfC48jHCiEVZrZqOZBtWBFRmEPDxA
 U2SlwUXoXpzPt+992FI+
 =DUfj
 -----END PGP SIGNATURE-----
-
-David Teigland (3):
-      move pv_list code into lib
-      Allow dm-integrity to be used for raid images
-      WHATS_NEW: integrity with raid
-
-Marian Csontos (7):
-      lvm2-rhel8
-      lvm2: set default preferred_names
-      lvm2: test: skip-problematic-tests
-      test: warn only on unexpected pass of a known bug
-      build: make generate
-      Merge master up to commit 53803821de16
-      Merge master up to commit be61bd6ff5c6
-
-Maxim Plotnikov (1):
-      Fix scripts/lvmlocks.service.in using nonexistent --lock-opt autowait
-
-Peter Rajnoha (1):
-      blkdeactivate: add support for VDO in blkdeactivate script
-
-Zdenek Kabelac (3):
-      lvconvert: no validation for thin-pools not used by lvm2
-      test: repair of thin-pool used by foreign apps
-      WHATS_NEWS: update
+f540a18fd7f5f65599a6c85c0bd3ba84e54f1cc8 Merge master up to commit be61bd6ff5c6
 
 
