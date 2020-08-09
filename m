@@ -1,117 +1,74 @@
-From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Wed, 15 Jul 2015 14:03:21 +0000 (UTC)
-Subject: master - config: also log the value used if defined in config, not just defaults
-Message-ID: <20150715140321.ECBFD60EDC@fedorahosted.org>
+From: Marian Csontos <mcsontos@sourceware.org>
+Date: Sun,  9 Aug 2020 15:01:42 +0000 (GMT)
+Subject: v2_03_10 annotated tag has been created
+Message-ID: <20200809150142.29E3F3857C4A@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=d10fb73f63649baec3cec28e1ee573c2ef6b95d6
-Commit:        d10fb73f63649baec3cec28e1ee573c2ef6b95d6
-Parent:        64c41062191e3bd487374837ff6d21a077129c98
-Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Wed Jul 15 15:57:29 2015 +0200
-Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Wed Jul 15 16:02:20 2015 +0200
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=1b70d52b67f2577ff5563dfb2076385d7959a6dc
+Commit:        1b70d52b67f2577ff5563dfb2076385d7959a6dc
+Parent:        0000000000000000000000000000000000000000
+Author:        Marian Csontos <mcsontos@redhat.com>
+AuthorDate:    2020-08-09 14:57 +0000
+Committer:     Marian Csontos <mcsontos@redhat.com>
+CommitterDate: 2020-08-09 14:57 +0000
 
-config: also log the value used if defined in config, not just defaults
+annotated tag: v2_03_10 has been created
+	    at 1b70d52b67f2577ff5563dfb2076385d7959a6dc (tag)
+       tagging f540a18fd7f5f65599a6c85c0bd3ba84e54f1cc8 (commit)
+      replaces v2_03_09
 
-Commit 7e728fe1a164cc5d4f64e46fcfcbb224c22b2457 added a log call
-directly in find_config_tree_array when defaults are used.
+Release 2.03.10
 
-This patch also adds the log for the value which is found in
-existing configuration and for which defaults are not used.
+- Add integrity with raid capability.
+- Add writecache and integrity support to lvmdbusd.
+- Zero pool metadata on allocation (disable with allocation/zero_metadata=0).
+- Failure in zeroing or wiping will fail command (bypass with -Zn, -Wn).
+- Bug fixes.
+-----BEGIN PGP SIGNATURE-----
+Version: GnuPG v2.0.22 (GNU/Linux)
 
-For example:
+iQIcBAABAgAGBQJfMA7qAAoJELkRJDHlCQOf9oMQAMbyK53xgJ6iz65LwiZgdeS7
+4G5Z7ITBs7A1xBZLGNtzkAavaRTi/dyH8Ib2HdW4wh86b7C0Lvn0lhuaWgl4DbzU
+qi0Rf+G280i0G2yDjmuhlVjLZDlpDAclJXdlHZD5Wrblqn2Ovqwwe3ZcY+iUuvwo
+0N5UE0JpOiC74eLstn3vf/HqJSTbP79ezG8HPUba1sQQJBC+XQdsc1I1FENLOxIx
+/RORvDzrswNfbYBalgCye5DxZLxRPdh9H5Y3LsKTDpdA6WIRpcwCWRLibgp+l7FL
+1oO6qQkUhcM0P4TabvN9Ev7Kx+WihFwlGkeOl5PXQgak+AvjhejToCyDB8SB32Df
+zm4Fr96tdmRnsmQ1EEcayP7jnzCPJuzW6kpR3CI8hW2QJcRI73UIzBURLpGHpu89
+SgT1b4H765MQIeEH108PbqRJe9u22BgSzQZJ4XBH0Jk3ImePpI6MKWjYNXNnz+F3
+Od9Yfn+GffcmgECxXrOJE5NHxsTRD3UVoSH2PWNSaUf0xb6bNh1ESKU5k0yf/y9K
+xanU0VzBNHeQdEhtp2M2skoyywJP24NRQvMwNzzxhJUZ9g18oV76zySVJmsAPksi
+v4IVFmJzTvXRv25IDF3rf3XNxXw6s+qQGTELfC48jHCiEVZrZqOZBtWBFRmEPDxA
+U2SlwUXoXpzPt+992FI+
+=DUfj
+-----END PGP SIGNATURE-----
 
-Defaults used:
-config/config.c:1428   devices/scan not found in config: defaulting to scan = [ "/dev" ]
+David Teigland (3):
+      move pv_list code into lib
+      Allow dm-integrity to be used for raid images
+      WHATS_NEW: integrity with raid
 
-Value defined in configuration used:
-config/config.c:1431   Setting devices/scan to scan = [ "/dev", "/mydev", "/abc" ]
+Marian Csontos (7):
+      lvm2-rhel8
+      lvm2: set default preferred_names
+      lvm2: test: skip-problematic-tests
+      test: warn only on unexpected pass of a known bug
+      build: make generate
+      Merge master up to commit 53803821de16
+      Merge master up to commit be61bd6ff5c6
 
-This makes the logging consistent with the other find_config_tree_* functions.
----
- lib/config/config.c |   53 +++++++++++++++++++++++++++++++++++---------------
- 1 files changed, 37 insertions(+), 16 deletions(-)
+Maxim Plotnikov (1):
+      Fix scripts/lvmlocks.service.in using nonexistent --lock-opt autowait
 
-diff --git a/lib/config/config.c b/lib/config/config.c
-index a447de7..35ee3ac 100644
---- a/lib/config/config.c
-+++ b/lib/config/config.c
-@@ -1403,15 +1403,44 @@ static int _config_array_line(const struct dm_config_node *cn, const char *line,
- 	return 1;
- }
- 
-+static void _log_array_value_used(struct dm_pool *mem, const struct dm_config_node *cn,
-+				  const char *path, int default_used)
-+{
-+	struct _config_array_out_handle out_handle = { 0 };
-+	struct dm_config_node_out_spec out_spec = { 0 };
-+	uint32_t old_format_flags;
-+
-+	out_handle.mem = mem;
-+	out_spec.line_fn = _config_array_line;
-+
-+	old_format_flags = dm_config_value_get_format_flags(cn->v);
-+	dm_config_value_set_format_flags(cn->v,
-+		DM_CONFIG_VALUE_FMT_COMMON_EXTRA_SPACES |
-+		DM_CONFIG_VALUE_FMT_COMMON_ARRAY);
-+
-+	if (!dm_config_write_one_node_out(cn, &out_spec, &out_handle)) {
-+		log_error("_log_array_value_used: failed to write node value");
-+		out_handle.mem = NULL;
-+	}
-+
-+	if (default_used)
-+		log_very_verbose("%s not found in config: defaulting to %s",
-+				 path, out_handle.mem ? out_handle.str : "<unknown>");
-+	else
-+		log_very_verbose("Setting %s to %s",
-+				 path, out_handle.mem ? out_handle.str : "<unknown>");
-+
-+	if (out_handle.mem)
-+		dm_pool_free(out_handle.mem, out_handle.str);
-+	dm_config_value_set_format_flags(cn->v, old_format_flags);
-+}
-+
- const struct dm_config_node *find_config_tree_array(struct cmd_context *cmd, int id, struct profile *profile)
- {
- 	cfg_def_item_t *item = cfg_def_get_item_p(id);
- 	char path[CFG_PATH_MAX_LEN];
- 	int profile_applied;
--	const struct dm_config_node *cn, *cn_def = NULL;
--	struct _config_array_out_handle out_handle = { 0 };
--	struct dm_config_node_out_spec out_spec = { 0 };
--
-+	const struct dm_config_node *cn = NULL, *cn_def = NULL;
- 	profile_applied = _apply_local_profile(cmd, profile);
- 	_cfg_def_make_path(path, sizeof(path), item->id, item, 0);
- 
-@@ -1422,18 +1451,10 @@ const struct dm_config_node *find_config_tree_array(struct cmd_context *cmd, int
- 	    !(cn = find_config_tree_node(cmd, id, profile)))
- 		cn_def = _get_array_def_node(cmd, item, profile);
- 
--	if (cn_def) {
--		out_handle.mem = cmd->cft->mem;
--		out_spec.line_fn = _config_array_line;
--		dm_config_value_set_format_flags(cn_def->v,
--			DM_CONFIG_VALUE_FMT_COMMON_EXTRA_SPACES |
--			DM_CONFIG_VALUE_FMT_COMMON_ARRAY);
--		if (!dm_config_write_one_node_out(cn_def, &out_spec, &out_handle))
--			out_handle.mem = NULL;
--		log_very_verbose("%s not found in config: defaulting to %s",
--				 path, out_handle.mem ? out_handle.str : "<unknown>");
--		if (out_handle.mem)
--			dm_pool_free(out_handle.mem, out_handle.str);
-+	if (cn)
-+		_log_array_value_used(cmd->cft->mem, cn, path, 0);
-+	else if (cn_def) {
-+		_log_array_value_used(cmd->cft->mem, cn_def, path, 1);
- 		cn = cn_def;
- 	}
- 
+Peter Rajnoha (1):
+      blkdeactivate: add support for VDO in blkdeactivate script
+
+Zdenek Kabelac (3):
+      lvconvert: no validation for thin-pools not used by lvm2
+      test: repair of thin-pool used by foreign apps
+      WHATS_NEWS: update
 
 
