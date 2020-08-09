@@ -1,40 +1,73 @@
-From: Tony Asleson <tasleson@sourceware.org>
-Date: Thu,  6 Aug 2020 20:44:15 +0000 (GMT)
-Subject: master - lvmdbusd: Bump LVM DBus API version
-Message-ID: <20200806204415.6DB613857C40@sourceware.org>
+From: Marian Csontos <mcsontos@sourceware.org>
+Date: Sun,  9 Aug 2020 15:01:22 +0000 (GMT)
+Subject: master - build: make generate
+Message-ID: <20200809150122.E58A43857C50@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=d4d060acd5e35ca052dd4ba0743732ed4fb46f86
-Commit:        d4d060acd5e35ca052dd4ba0743732ed4fb46f86
-Parent:        8f1068c02d06e9104c47db0131617c8f98d31718
-Author:        Vojtech Trefny <vtrefny@redhat.com>
-AuthorDate:    Wed Jul 1 13:27:47 2020 +0200
-Committer:     Tony Asleson <tasleson@redhat.com>
-CommitterDate: Thu Aug 6 13:54:45 2020 -0500
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=9f8c331760c08d4da0bb03c4fce4946b0236c0ac
+Commit:        9f8c331760c08d4da0bb03c4fce4946b0236c0ac
+Parent:        4f44841045ec9420a4bb9a141fab55cb95260b45
+Author:        Marian Csontos <mcsontos@redhat.com>
+AuthorDate:    Sun Aug 9 15:20:22 2020 +0200
+Committer:     Marian Csontos <mcsontos@redhat.com>
+CommitterDate: Sun Aug 9 15:20:22 2020 +0200
 
-lvmdbusd: Bump LVM DBus API version
+build: make generate
 
-So users can check for writecache support.
 ---
- daemons/lvmdbusd/manager.py | 2 +-
- 1 file changed, 1 insertion(+), 1 deletion(-)
+ include/configure.h.in | 6 +++---
+ man/lvconvert.8_pregen | 4 ++--
+ 2 files changed, 5 insertions(+), 5 deletions(-)
 
-diff --git a/daemons/lvmdbusd/manager.py b/daemons/lvmdbusd/manager.py
-index 2857e9a10..573a3966f 100644
---- a/daemons/lvmdbusd/manager.py
-+++ b/daemons/lvmdbusd/manager.py
-@@ -27,7 +27,7 @@ class Manager(AutomatedProperties):
+diff --git a/include/configure.h.in b/include/configure.h.in
+index 57736cc3b..540cee7cf 100644
+--- a/include/configure.h.in
++++ b/include/configure.h.in
+@@ -531,6 +531,9 @@
+ /* Define to 1 if the system has the `__builtin_clzll' built-in function */
+ #undef HAVE___BUILTIN_CLZLL
  
- 	@property
- 	def Version(self):
--		return dbus.String('1.0.0')
-+		return dbus.String('1.1.0')
++/* Define to 1 to include built-in support for integrity. */
++#undef INTEGRITY_INTERNAL
++
+ /* Internalization package */
+ #undef INTL_PACKAGE
  
- 	@staticmethod
- 	def handle_execute(rc, out, err):
+@@ -678,9 +681,6 @@
+ /* Define to 1 to include built-in support for writecache. */
+ #undef WRITECACHE_INTERNAL
+ 
+-/* Define to 1 to include built-in support for integrity. */
+-#undef INTEGRITY_INTERNAL
+-
+ /* Define to get access to GNU/Linux extension */
+ #undef _GNU_SOURCE
+ 
+diff --git a/man/lvconvert.8_pregen b/man/lvconvert.8_pregen
+index 37b0a47d2..b3902a51c 100644
+--- a/man/lvconvert.8_pregen
++++ b/man/lvconvert.8_pregen
+@@ -749,7 +749,7 @@ Attach a cache to an LV, converts the LV to type cache.
+ Add a writecache to an LV, using a specified cache device.
+ .br
+ .P
+-\fBlvconvert\fP \fB--type\fP \fBwritecache\fP \fB--cachedevice\fP \fIPV\fP \fILV\fP
++\fBlvconvert\fP \fB--type\fP \fBwritecache\fP \fB--cachedevice\fP \fIPV\fP \fILV\fP\fI_linear_striped_raid\fP
+ .br
+ .RS 4
+ .ad l
+@@ -768,7 +768,7 @@ Add a writecache to an LV, using a specified cache device.
+ Add a cache to an LV, using a specified cache device.
+ .br
+ .P
+-\fBlvconvert\fP \fB--type\fP \fBcache\fP \fB--cachedevice\fP \fIPV\fP \fILV\fP
++\fBlvconvert\fP \fB--type\fP \fBcache\fP \fB--cachedevice\fP \fIPV\fP \fILV\fP\fI_linear_striped_thinpool_raid\fP
+ .br
+ .RS 4
+ .ad l
 
 
