@@ -1,53 +1,44 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Fri, 28 Aug 2020 19:59:14 +0000 (GMT)
-Subject: master - gcc: avoid stack alloc arithmetic
-Message-ID: <20200828195914.3591B3948804@sourceware.org>
+Date: Fri, 28 Aug 2020 19:59:16 +0000 (GMT)
+Subject: master - tools: move struct element before variable lenght list
+Message-ID: <20200828195916.7A3733948A51@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=fd8d926fc52badc93f7985b5db2f4cb6a75e81e4
-Commit:        fd8d926fc52badc93f7985b5db2f4cb6a75e81e4
-Parent:        ce202c3b1c018a001015fa2ff69a01f06d84a6fa
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=b918afb693a62938e8189a5d07b13df8007ae062
+Commit:        b918afb693a62938e8189a5d07b13df8007ae062
+Parent:        7880896f0dbe730e7b47aa8040544434813eacc4
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Aug 28 18:46:06 2020 +0200
+AuthorDate:    Fri Aug 28 19:15:42 2020 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Fri Aug 28 21:43:02 2020 +0200
 
-gcc: avoid stack alloc arithmetic
+tools: move struct element before variable lenght list
 
+Move prio field before 'variable' struct array field.
+Interesting why this has not been catched yet.
+
+TODO: think about test case
 ---
- tools/lvconvert.c | 9 +++------
- 1 file changed, 3 insertions(+), 6 deletions(-)
+ tools/tools.h | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
 
-diff --git a/tools/lvconvert.c b/tools/lvconvert.c
-index 524ed5a33..afc581377 100644
---- a/tools/lvconvert.c
-+++ b/tools/lvconvert.c
-@@ -1161,6 +1161,8 @@ static int _lvconvert_validate_thin(struct logical_volume *lv,
- static int _raid_split_image_conversion(struct logical_volume *lv)
- {
- 	const char *s;
-+	char raidlv_name[NAME_LEN];
-+	const struct logical_volume *tmp_lv;
+diff --git a/tools/tools.h b/tools/tools.h
+index c3d780d36..4b944e2fd 100644
+--- a/tools/tools.h
++++ b/tools/tools.h
+@@ -109,8 +109,8 @@ struct arg_values {
  
- 	if (lv_is_raid_with_tracking(lv)) {
- 		log_error("Conversion of tracking raid1 LV %s is not supported.",
-@@ -1170,12 +1172,7 @@ static int _raid_split_image_conversion(struct logical_volume *lv)
+ struct arg_value_group_list {
+         struct dm_list list;
+-        struct arg_values arg_values[0];
+ 	uint32_t prio;
++        struct arg_values arg_values[0];
+ };
  
- 	if (lv_is_raid_image(lv) &&
- 	    (s = strstr(lv->name, "_rimage_"))) {
--		size_t len = s - lv->name;
--		char raidlv_name[len + 1];
--		const struct logical_volume *tmp_lv;
--
--		strncpy(raidlv_name, lv->name, len);
--		raidlv_name[len] = '\0';
-+		(void) dm_strncpy(raidlv_name, lv->name, s - lv->name);
- 
- 		if (!(tmp_lv = find_lv(lv->vg, raidlv_name))) {
- 			log_error(INTERNAL_ERROR "Failed to find RaidLV of RAID subvolume %s.",
+ #define PERMITTED_READ_ONLY 	0x00000002
 
 
