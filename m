@@ -1,50 +1,61 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Tue,  1 Sep 2020 21:41:30 +0000 (GMT)
-Subject: master - pvck: use array of bytes
-Message-ID: <20200901214130.664E8386F823@sourceware.org>
+Date: Tue,  1 Sep 2020 21:41:31 +0000 (GMT)
+Subject: master - pvck: add simple check for fwrite
+Message-ID: <20200901214131.8BFC93870874@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=66803586ef6d7ef7bcf4260b66e85ef2fa8c7022
-Commit:        66803586ef6d7ef7bcf4260b66e85ef2fa8c7022
-Parent:        1ff1e86debe29abc0ac706e5e7b89fc5192f191f
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=11f08dacc920dba49d932ccdf378331a32bad9d9
+Commit:        11f08dacc920dba49d932ccdf378331a32bad9d9
+Parent:        66803586ef6d7ef7bcf4260b66e85ef2fa8c7022
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Sep 1 21:08:12 2020 +0200
+AuthorDate:    Tue Sep 1 21:14:39 2020 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Tue Sep 1 23:40:24 2020 +0200
 
-pvck: use array of bytes
+pvck: add simple check for fwrite
 
-Fix typo in use array of pointers instead of array of bytes.
-This fixes 'break strict-aliasing rules' warning printed with older gcc.
+Add at least very light check for result code of fwrite().
 ---
- tools/pvck.c | 4 ++--
- 1 file changed, 2 insertions(+), 2 deletions(-)
+ tools/pvck.c | 9 +++++++--
+ 1 file changed, 7 insertions(+), 2 deletions(-)
 
 diff --git a/tools/pvck.c b/tools/pvck.c
-index 3895b7dd9..73ef6ceff 100644
+index 73ef6ceff..302c74621 100644
 --- a/tools/pvck.c
 +++ b/tools/pvck.c
-@@ -2498,7 +2498,7 @@ fail:
- static int _update_mda(struct cmd_context *cmd, struct metadata_file *mf, struct device *dev,
- 		       int mda_num, uint64_t mda_offset, uint64_t mda_size)
+@@ -846,6 +846,7 @@ static int _dump_meta_area(struct device *dev, struct devicefile *def, const cha
  {
--	char *buf[512];
-+	char buf[512];
- 	struct mda_header *mh;
- 	struct raw_locn *rlocn0, *rlocn1;
- 	uint64_t max_size;
-@@ -2514,7 +2514,7 @@ static int _update_mda(struct cmd_context *cmd, struct metadata_file *mf, struct
- 		goto fail;
+ 	FILE *fp;
+ 	char *meta_buf;
++	int ret = 1;
+ 
+ 	if (!tofile)
+ 		return_0;
+@@ -866,7 +867,11 @@ static int _dump_meta_area(struct device *dev, struct devicefile *def, const cha
+ 		return 0;
  	}
  
--	if (!dev_read_bytes(dev, mda_offset, 512, buf)) {
-+	if (!dev_read_bytes(dev, mda_offset, sizeof(buf), buf)) {
- 		log_print("CHECK: failed to read mda_header_%d at %llu",
- 			  mda_num, (unsigned long long)mda_offset);
- 		goto fail;
+-	fwrite(meta_buf, mda_size - 512, 1, fp);
++	if (fwrite(meta_buf, mda_size - 512, 1, fp) != 1) {
++		log_error("Failed to write file %s metadata area size %llu.",
++			  tofile, (unsigned long long)mda_size);
++		ret = 0;
++	}
+ 
+ 	free(meta_buf);
+ 
+@@ -874,7 +879,7 @@ static int _dump_meta_area(struct device *dev, struct devicefile *def, const cha
+ 		stack;
+ 	if (fclose(fp))
+ 		stack;
+-	return 1;
++	return ret;
+ }
+ 
+ /* all sizes and offsets in bytes */
 
 
