@@ -1,145 +1,43 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Tue,  1 Sep 2020 21:41:36 +0000 (GMT)
-Subject: master - tests: set skipping autoactivation
-Message-ID: <20200901214136.25D643870874@sourceware.org>
+Date: Tue,  1 Sep 2020 21:41:38 +0000 (GMT)
+Subject: master - tests: skip this test for current 5.8 5.9 kernels
+Message-ID: <20200901214138.67ECE385E005@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=38d460ed6eb386325b708aa3668ffd8899947450
-Commit:        38d460ed6eb386325b708aa3668ffd8899947450
-Parent:        ada5728c72e4620c54e4786f31ca5e45cf75d1b0
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=9a06700017bd2d97ff96854f7acbe4b1c74c2ab3
+Commit:        9a06700017bd2d97ff96854f7acbe4b1c74c2ab3
+Parent:        fa1290f40e17c82030d23c21af1f318688631759
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Sep 1 22:45:17 2020 +0200
+AuthorDate:    Tue Sep 1 23:14:47 2020 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Tue Sep 1 23:40:24 2020 +0200
 
-tests: set skipping autoactivation
+tests: skip this test for current 5.8 5.9 kernels
 
-On test system with 'default' filter  (aka accept all) test
-after enabling device can suffer from automatic system
-activation - so for created LVs setup skipping this automatic
-activation. This should prevent getting LVs into table
-with pvscan service.
+Kernel is hitting not yet fixed kernel bug.
+Skip the test to avoid killing testing machine.
 ---
- test/shell/duplicate-vgrename.sh | 32 ++++++++++++++++----------------
- 1 file changed, 16 insertions(+), 16 deletions(-)
+ test/shell/lvconvert-raid-reshape-stripes-load-reload.sh | 4 ++++
+ 1 file changed, 4 insertions(+)
 
-diff --git a/test/shell/duplicate-vgrename.sh b/test/shell/duplicate-vgrename.sh
-index 86282206f..873195713 100644
---- a/test/shell/duplicate-vgrename.sh
-+++ b/test/shell/duplicate-vgrename.sh
-@@ -16,7 +16,7 @@ aux prepare_devs 4
- # a. 0 local, 1 foreign
- # setup
- vgcreate $vg1 "$dev1"
--lvcreate -n $lv1 -l1 -an $vg1
-+lvcreate -n $lv1 -l1 -ky -an $vg1
- UUID1=$(vgs --noheading -o vg_uuid $vg1 | xargs)
- vgchange -y --systemid "other" $vg1
+diff --git a/test/shell/lvconvert-raid-reshape-stripes-load-reload.sh b/test/shell/lvconvert-raid-reshape-stripes-load-reload.sh
+index a38d9287b..414445244 100644
+--- a/test/shell/lvconvert-raid-reshape-stripes-load-reload.sh
++++ b/test/shell/lvconvert-raid-reshape-stripes-load-reload.sh
+@@ -21,6 +21,10 @@ which md5sum || skip
+ which mkfs.ext4 || skip
+ aux have_raid 1 13 2 || skip
  
-@@ -34,12 +34,12 @@ aux wipefs_a "$dev1"
- # b. 0 local, 2 foreign
- # setup
- vgcreate $vg1 "$dev1"
--lvcreate -n $lv1 -l1 -an $vg1
-+lvcreate -n $lv1 -l1 -ky -an $vg1
- UUID1=$(vgs --noheading -o vg_uuid $vg1 | xargs)
- vgchange -y --systemid "other" $vg1
- aux disable_dev "$dev1"
- vgcreate $vg1 "$dev2"
--lvcreate -n $lv1 -l1 -an $vg1
-+lvcreate -n $lv1 -l1 -ky -an $vg1
- UUID2=$(vgs --noheading -o vg_uuid $vg1 | xargs)
- vgchange -y --systemid "other2" $vg1
- aux enable_dev "$dev1"
-@@ -67,11 +67,11 @@ aux wipefs_a "$dev2"
- # c. 1 local, 1 foreign
- # setup
- vgcreate $vg1 "$dev1"
--lvcreate -n $lv1 -l1 -an $vg1
-+lvcreate -n $lv1 -l1 -ky -an $vg1
- UUID1=$(vgs --noheading -o vg_uuid $vg1 | xargs)
- aux disable_dev "$dev1"
- vgcreate $vg1 "$dev2"
--lvcreate -n $lv1 -l1 -an $vg1
-+lvcreate -n $lv1 -l1 -ky -an $vg1
- UUID2=$(vgs --noheading -o vg_uuid $vg1 | xargs)
- vgchange -y --systemid "other" $vg1
- aux enable_dev "$dev1"
-@@ -99,16 +99,16 @@ aux wipefs_a "$dev2"
- # d. 1 local, 2 foreign
- # setup
- vgcreate $vg1 "$dev1"
--lvcreate -n $lv1 -l1 -an $vg1
-+lvcreate -n $lv1 -l1 -ky -an $vg1
- UUID1=$(vgs --noheading -o vg_uuid $vg1 | xargs)
- aux disable_dev "$dev1"
- vgcreate $vg1 "$dev2"
--lvcreate -n $lv1 -l1 -an $vg1
-+lvcreate -n $lv1 -l1 -ky -an $vg1
- UUID2=$(vgs --noheading -o vg_uuid $vg1 | xargs)
- vgchange -y --systemid "other" $vg1
- aux disable_dev "$dev2"
- vgcreate $vg1 "$dev3"
--lvcreate -n $lv1 -l1 -an $vg1
-+lvcreate -n $lv1 -l1 -ky -an $vg1
- UUID3=$(vgs --noheading -o vg_uuid $vg1 | xargs)
- vgchange -y --systemid "other2" $vg1
- aux enable_dev "$dev1"
-@@ -140,11 +140,11 @@ aux wipefs_a "$dev3"
- # e. 2 local, 0 foreign
- # setup
- vgcreate $vg1 "$dev1"
--lvcreate -n $lv1 -l1 -an $vg1
-+lvcreate -n $lv1 -l1 -ky -an $vg1
- UUID1=$(vgs --noheading -o vg_uuid $vg1 | xargs)
- aux disable_dev "$dev1"
- vgcreate $vg1 "$dev2"
--lvcreate -n ${lv1}_b -l1 -an $vg1
-+lvcreate -n ${lv1}_b -l1 -ky -an $vg1
- UUID2=$(vgs --noheading -o vg_uuid $vg1 | xargs)
- aux enable_dev "$dev1"
++case "$(uname -r)" in
++  5.[89]*) skip "Unfixed kernel" ;;
++esac
++
+ mount_dir="mnt"
  
-@@ -178,15 +178,15 @@ aux wipefs_a "$dev2"
- # f. 2 local, 1 foreign
- # setup
- vgcreate $vg1 "$dev1"
--lvcreate -n $lv1 -l1 -an $vg1
-+lvcreate -n $lv1 -l1 -ky -an $vg1
- UUID1=$(vgs --noheading -o vg_uuid $vg1 | xargs)
- aux disable_dev "$dev1"
- vgcreate $vg1 "$dev2"
--lvcreate -n ${lv1}_b -l1 -an $vg1
-+lvcreate -n ${lv1}_b -l1 -ky -an $vg1
- UUID2=$(vgs --noheading -o vg_uuid $vg1 | xargs)
- aux disable_dev "$dev2"
- vgcreate $vg1 "$dev3"
--lvcreate -n $lv1 -l1 -an $vg1
-+lvcreate -n $lv1 -l1 -ky -an $vg1
- UUID3=$(vgs --noheading -o vg_uuid $vg1 | xargs)
- vgchange -y --systemid "other" $vg1
- aux enable_dev "$dev1"
-@@ -246,15 +246,15 @@ aux wipefs_a "$dev3"
- # g. 3 local, 0 foreign
- # setup
- vgcreate $vg1 "$dev1"
--lvcreate -n $lv1 -l1 -an $vg1
-+lvcreate -n $lv1 -l1 -ky -an $vg1
- UUID1=$(vgs --noheading -o vg_uuid $vg1 | xargs)
- aux disable_dev "$dev1"
- vgcreate $vg1 "$dev2"
--lvcreate -n ${lv1}_b -l1 -an $vg1
-+lvcreate -n ${lv1}_b -l1 -ky -an $vg1
- UUID2=$(vgs --noheading -o vg_uuid $vg1 | xargs)
- aux disable_dev "$dev2"
- vgcreate $vg1 "$dev3"
--lvcreate -n ${lv1}_c -l1 -an $vg1
-+lvcreate -n ${lv1}_c -l1 -ky -an $vg1
- UUID3=$(vgs --noheading -o vg_uuid $vg1 | xargs)
- aux enable_dev "$dev1"
- aux enable_dev "$dev2"
+ cleanup_mounted_and_teardown()
 
 
