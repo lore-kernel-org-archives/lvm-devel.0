@@ -1,64 +1,41 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Tue,  1 Sep 2020 17:02:03 +0000 (GMT)
-Subject: master - gcc: preserve constness of buffer
-Message-ID: <20200901170203.1030B3951821@sourceware.org>
+Date: Tue,  1 Sep 2020 17:02:05 +0000 (GMT)
+Subject: master - cov: always sure we end with '0'
+Message-ID: <20200901170205.53ECE3951C06@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=534760398c54aaa67144ddd7303456da8758674a
-Commit:        534760398c54aaa67144ddd7303456da8758674a
-Parent:        fd96f1014b11d073d775ea4777f3b3ba2eb93520
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=1705b439b1babfcae75b1d54d45eb7909cbccfb9
+Commit:        1705b439b1babfcae75b1d54d45eb7909cbccfb9
+Parent:        de837c15a55f4951f0b3181f4835fed2d824698b
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Sat Aug 29 22:02:41 2020 +0200
+AuthorDate:    Sat Aug 29 19:56:37 2020 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Tue Sep 1 17:57:50 2020 +0200
 
-gcc: preserve constness of buffer
+cov: always sure we end with '0'
 
+Use easier dm_strncpy().
 ---
- tools/pvck.c | 10 +++++-----
- 1 file changed, 5 insertions(+), 5 deletions(-)
+ lib/label/hints.c | 3 +--
+ 1 file changed, 1 insertion(+), 2 deletions(-)
 
-diff --git a/tools/pvck.c b/tools/pvck.c
-index a0f567eeb..3895b7dd9 100644
---- a/tools/pvck.c
-+++ b/tools/pvck.c
-@@ -66,9 +66,9 @@ struct metadata_file {
- 	char vgid_str[ID_STR_SIZE];
- };
- 
--static char *_chars_to_str(void *in, void *out, int num, int max, const char *field)
-+static char *_chars_to_str(const void *in, void *out, int num, int max, const char *field)
- {
--	char *i = in;
-+	const char *i = in;
- 	char *o = out;
- 	int n;
- 
-@@ -95,10 +95,10 @@ static char *_chars_to_str(void *in, void *out, int num, int max, const char *fi
-  * This is used to print mda_header.magic as a series of hex values
-  * since it only contains some printable chars.
-  */
--static char *_chars_to_hexstr(void *in, void *out, int num, int max, const char *field)
-+static char *_chars_to_hexstr(const void *in, void *out, int num, int max, const char *field)
- {
- 	char *tmp;
--	char *i = in;
-+	const char *i = in;
- 	int n;
- 	int off = 0;
- 	int ret;
-@@ -732,7 +732,7 @@ static int _check_mda_header(struct mda_header *mh, int mda_num, uint64_t mda_of
- 	}
- 
- 	if (memcmp(mh->magic, FMTT_MAGIC, sizeof(mh->magic))) {
--		log_print("CHECK: mda_header_%d.magic expected 0x%s", mda_num, _chars_to_hexstr((void *)&FMTT_MAGIC, str, 16, 256, "mda_header.magic"));
-+		log_print("CHECK: mda_header_%d.magic expected 0x%s", mda_num, _chars_to_hexstr((const void *)&FMTT_MAGIC, str, 16, 256, "mda_header.magic"));
- 		good_magic = 0;
- 		bad++;
+diff --git a/lib/label/hints.c b/lib/label/hints.c
+index 3125ae01d..c9d339861 100644
+--- a/lib/label/hints.c
++++ b/lib/label/hints.c
+@@ -818,8 +818,7 @@ static int _read_hint_file(struct cmd_context *cmd, struct dm_list *hints, int *
+ 	while ((dev = dev_iter_get(cmd, iter))) {
+ 		if (!_dev_in_hint_hash(cmd, dev))
+ 			continue;
+-		memset(devpath, 0, sizeof(devpath));
+-		strncpy(devpath, dev_name(dev), PATH_MAX);
++		(void) dm_strncpy(devpath, dev_name(dev), sizeof(devpath));
+ 		calc_hash = calc_crc(calc_hash, (const uint8_t *)devpath, strlen(devpath));
+ 		calc_count++;
  	}
 
 
