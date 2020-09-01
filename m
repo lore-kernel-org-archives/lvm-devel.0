@@ -1,157 +1,174 @@
 From: David Teigland <teigland@sourceware.org>
-Date: Tue,  1 Sep 2020 22:14:28 +0000 (GMT)
-Subject: master - integrity: report raidintegritymode randintegrityblocksize
-Message-ID: <20200901221428.794D1385E005@sourceware.org>
+Date: Tue,  1 Sep 2020 22:14:30 +0000 (GMT)
+Subject: master - tests: add new integrity reporting fields
+Message-ID: <20200901221430.BC8E3385E005@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=47b5fb138cef3e49357af99004275f36d346b0f2
-Commit:        47b5fb138cef3e49357af99004275f36d346b0f2
-Parent:        f2c1de783cd1afc522b65f5deb45567c6cb2ffbf
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=739827ef1c1a256114aa0b2a385baa0983fac289
+Commit:        739827ef1c1a256114aa0b2a385baa0983fac289
+Parent:        ed249a2c539098aa4451b475cbf461212a93f77d
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Tue Sep 1 14:39:34 2020 -0500
+AuthorDate:    Tue Sep 1 17:07:36 2020 -0500
 Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Tue Sep 1 17:12:36 2020 -0500
+CommitterDate: Tue Sep 1 17:13:46 2020 -0500
 
-integrity: report raidintegritymode randintegrityblocksize
+tests: add new integrity reporting fields
 
-reported for the raid lv and the integrity images
 ---
- lib/report/columns.h    |  2 ++
- lib/report/properties.c | 34 ++++++++++++++++++++++++++++++++
- lib/report/report.c     | 52 +++++++++++++++++++++++++++++++++++++++++++++++++
- 3 files changed, 88 insertions(+)
+ test/shell/integrity-blocksize.sh |  3 +++
+ test/shell/integrity-misc.sh      |  2 ++
+ test/shell/integrity.sh           | 31 +++++++++++++++++++++++++++++++
+ 3 files changed, 36 insertions(+)
 
-diff --git a/lib/report/columns.h b/lib/report/columns.h
-index 31a1d1702..f784de5cf 100644
---- a/lib/report/columns.h
-+++ b/lib/report/columns.h
-@@ -84,6 +84,8 @@ FIELD(LVS, lv, STR, "SyncAction", lvid, 0, raidsyncaction, raid_sync_action, "Fo
- FIELD(LVS, lv, NUM, "WBehind", lvid, 0, raidwritebehind, raid_write_behind, "For RAID1, the number of outstanding writes allowed to writemostly devices.", 0)
- FIELD(LVS, lv, NUM, "MinSync", lvid, 0, raidminrecoveryrate, raid_min_recovery_rate, "For RAID1, the minimum recovery I/O load in kiB/sec/disk.", 0)
- FIELD(LVS, lv, NUM, "MaxSync", lvid, 0, raidmaxrecoveryrate, raid_max_recovery_rate, "For RAID1, the maximum recovery I/O load in kiB/sec/disk.", 0)
-+FIELD(LVS, lv, STR, "IntegMode", lvid, 0, raidintegritymode, raidintegritymode, "The integrity mode", 0)
-+FIELD(LVS, lv, NUM, "IntegBlkSize", lvid, 0, raidintegrityblocksize, raidintegrityblocksize, "The integrity block size", 0)
- FIELD(LVS, lv, STR, "Move", lvid, 0, movepv, move_pv, "For pvmove, Source PV of temporary LV created by pvmove.", 0)
- FIELD(LVS, lv, STR, "Move UUID", lvid, 38, movepvuuid, move_pv_uuid, "For pvmove, the UUID of Source PV of temporary LV created by pvmove.", 0)
- FIELD(LVS, lv, STR, "Convert", lvid, 0, convertlv, convert_lv, "For lvconvert, Name of temporary LV created by lvconvert.", 0)
-diff --git a/lib/report/properties.c b/lib/report/properties.c
-index 325750559..baf841434 100644
---- a/lib/report/properties.c
-+++ b/lib/report/properties.c
-@@ -91,6 +91,36 @@ static uint32_t _raidmaxrecoveryrate(const struct logical_volume *lv)
- 	return first_seg(lv)->max_recovery_rate;
- }
+diff --git a/test/shell/integrity-blocksize.sh b/test/shell/integrity-blocksize.sh
+index eb6a364f2..61d58e2a3 100644
+--- a/test/shell/integrity-blocksize.sh
++++ b/test/shell/integrity-blocksize.sh
+@@ -81,6 +81,7 @@ not lvcreate --type raid1 -m1 --raidintegrity y --raidintegrityblocksize 512 -l
  
-+static const char *_raidintegritymode(const struct logical_volume *lv)
-+{
-+	struct integrity_settings *settings;
-+
-+	if (lv_raid_has_integrity((struct logical_volume *)lv))
-+		lv_get_raid_integrity_settings((struct logical_volume *)lv, &settings);
-+	else if (lv_is_integrity(lv))
-+		settings = &first_seg(lv)->integrity_settings;
-+
-+	if (settings->mode[0] == 'B')
-+		return "bitmap";
-+	if (settings->mode[0] == 'J')
-+		return "journal";
-+	return "unknown";
-+}
-+
-+static uint32_t _raidintegrityblocksize(const struct logical_volume *lv)
-+{
-+	struct integrity_settings *settings;
-+
-+	if (lv_raid_has_integrity((struct logical_volume *)lv))
-+		lv_get_raid_integrity_settings((struct logical_volume *)lv, &settings);
-+	else if (lv_is_integrity(lv))
-+		settings = &first_seg(lv)->integrity_settings;
-+	else
-+		return 0;
-+
-+	return settings->block_size;
-+}
-+
- static dm_percent_t _snap_percent(const struct logical_volume *lv)
- {
- 	dm_percent_t percent;
-@@ -400,6 +430,10 @@ GET_LV_NUM_PROPERTY_FN(raid_max_recovery_rate, _raidmaxrecoveryrate(lv))
- #define _raid_max_recovery_rate_set prop_not_implemented_set
- GET_LV_STR_PROPERTY_FN(raid_sync_action, _raidsyncaction(lv))
- #define _raid_sync_action_set prop_not_implemented_set
-+GET_LV_STR_PROPERTY_FN(raidintegritymode, _raidintegritymode(lv))
-+#define _raidintegritymode_set prop_not_implemented_set
-+GET_LV_NUM_PROPERTY_FN(raidintegrityblocksize, _raidintegrityblocksize(lv))
-+#define _raidintegrityblocksize_set prop_not_implemented_set
- GET_LV_STR_PROPERTY_FN(move_pv, lv_move_pv_dup(lv->vg->vgmem, lv))
- #define _move_pv_set prop_not_implemented_set
- GET_LV_STR_PROPERTY_FN(move_pv_uuid, lv_move_pv_uuid_dup(lv->vg->vgmem, lv))
-diff --git a/lib/report/report.c b/lib/report/report.c
-index b0d514202..dae797dee 100644
---- a/lib/report/report.c
-+++ b/lib/report/report.c
-@@ -3271,6 +3271,58 @@ static int _raidmaxrecoveryrate_disp(struct dm_report *rh __attribute__((unused)
- 	return _field_set_value(field, "", &GET_TYPE_RESERVED_VALUE(num_undef_64));
- }
+ # lvcreate --bs 4096 on dev512, result 4k
+ lvcreate --type raid1 -m1 --raidintegrity y --raidintegrityblocksize 4096 -l 8 -n $lv1 $vg1
++lvs -o raidintegrityblocksize $vg1/$lv1 | grep 4096
+ pvck --dump metadata $LOOP1 | grep 'block_size = 4096'
+ lvremove -y $vg1/$lv1
  
-+static int _raidintegritymode_disp(struct dm_report *rh __attribute__((unused)),
-+				   struct dm_pool *mem,
-+				   struct dm_report_field *field,
-+				   const void *data,
-+				   void *private __attribute__((unused)))
-+{
-+	struct logical_volume *lv = (struct logical_volume *) data;
-+	struct integrity_settings *settings;
-+	const char *mode = NULL;
-+	char *repstr;
+@@ -184,6 +185,7 @@ aux wipefs_a /dev/$vg1/$lv1
+ mkfs.xfs -f -s size=4096 "$DM_DEV_DIR/$vg1/$lv1"
+ blkid "$DM_DEV_DIR/$vg1/$lv1" | grep BLOCK_SIZE=\"4096\"
+ lvconvert --raidintegrity y --raidintegrityblocksize 512 $vg1/$lv1
++lvs -o raidintegrityblocksize $vg1/$lv1 | grep 512
+ blkid "$DM_DEV_DIR/$vg1/$lv1" | grep BLOCK_SIZE=\"4096\"
+ mount "$DM_DEV_DIR/$vg1/$lv1" $mnt
+ umount $mnt
+@@ -198,6 +200,7 @@ blkid "$DM_DEV_DIR/$vg1/$lv1" | grep BLOCK_SIZE=\"4096\"
+ lvchange -an $vg1/$lv1
+ # lv needs to be inactive to increase LBS from 512
+ lvconvert --raidintegrity y --raidintegrityblocksize 1024 $vg1/$lv1
++lvs -o raidintegrityblocksize $vg1/$lv1 | grep 1024
+ lvchange -ay $vg1/$lv1
+ blkid "$DM_DEV_DIR/$vg1/$lv1" | grep BLOCK_SIZE=\"4096\"
+ mount "$DM_DEV_DIR/$vg1/$lv1" $mnt
+diff --git a/test/shell/integrity-misc.sh b/test/shell/integrity-misc.sh
+index 2dae25f59..c8ec3bf49 100644
+--- a/test/shell/integrity-misc.sh
++++ b/test/shell/integrity-misc.sh
+@@ -145,6 +145,7 @@ lvcreate --type raid1 -m1 --raidintegrity y -n $lv1 -l 8 $vg "$dev1" "$dev2"
+ _wait_sync $vg/${lv1}_rimage_0
+ _wait_sync $vg/${lv1}_rimage_1
+ _wait_sync $vg/$lv1
++lvs -o raidintegritymode $vg/$lv1 | grep journal
+ _add_new_data_to_mnt
+ lvconvert --replace "$dev1" $vg/$lv1 "$dev3"
+ lvs -a -o+devices $vg > out
+@@ -167,6 +168,7 @@ lvcreate --type raid1 -m1 --raidintegrity y --raidintegritymode bitmap -n $lv1 -
+ _wait_sync $vg/${lv1}_rimage_0
+ _wait_sync $vg/${lv1}_rimage_1
+ _wait_sync $vg/$lv1
++lvs -o raidintegritymode $vg/$lv1 | grep bitmap
+ _add_new_data_to_mnt
+ lvconvert --replace "$dev1" $vg/$lv1 "$dev3"
+ lvs -a -o+devices $vg > out
+diff --git a/test/shell/integrity.sh b/test/shell/integrity.sh
+index 0143129e6..f8740bc4f 100644
+--- a/test/shell/integrity.sh
++++ b/test/shell/integrity.sh
+@@ -104,6 +104,10 @@ _test_fs_with_raid() {
+ 	umount $mnt
+ 	lvchange -an $vg/$lv1
+ 
++	# FIXME: this is only finding/corrupting the bit with raid1
++	# other raid levels may require looking at a different dev.
++	# (Attempt this xxd/tac/sed/xxd on each dev in the LV?)
 +
-+	if (lv_raid_has_integrity(lv))
-+		lv_get_raid_integrity_settings(lv, &settings);
-+	else if (lv_is_integrity(lv))
-+		settings = &first_seg(lv)->integrity_settings;
-+
-+	if (settings->mode[0]) {
-+		if (settings->mode[0] == 'B')
-+			mode = "bitmap";
-+		else if (settings->mode[0] == 'J')
-+			mode = "journal";
-+
-+		if (mode) {
-+			if (!(repstr = dm_pool_strdup(mem, mode))) {
-+				log_error("Failed to allocate buffer for mode.");
-+				return 0;
-+			}
-+			return _field_set_value(field, repstr, NULL);
-+		}
-+	}
-+	return _field_set_value(field, "", NULL);
-+}
-+
-+static int _raidintegrityblocksize_disp(struct dm_report *rh __attribute__((unused)),
-+				   struct dm_pool *mem,
-+				   struct dm_report_field *field,
-+				   const void *data,
-+				   void *private __attribute__((unused)))
-+{
-+	struct logical_volume *lv = (struct logical_volume *) data;
-+	struct integrity_settings *settings;
-+
-+	if (lv_raid_has_integrity(lv))
-+		lv_get_raid_integrity_settings(lv, &settings);
-+	else if (lv_is_integrity(lv))
-+		settings = &first_seg(lv)->integrity_settings;
-+	else
-+		return dm_report_field_int32(rh, field, &GET_TYPE_RESERVED_VALUE(num_undef_32));
-+
-+	return dm_report_field_uint32(rh, field, &settings->block_size);
-+}
-+
- static int _datapercent_disp(struct dm_report *rh, struct dm_pool *mem,
- 			     struct dm_report_field *field,
- 			     const void *data, void *private)
+ 	xxd "$dev1" > dev1.txt
+ 	tac dev1.txt > dev1.rev
+ 	sed -e '0,/4242 4242 4242 4242 4242 4242 4242 4242/ s/4242 4242 4242 4242 4242 4242 4242 4242/4242 4242 4242 4242 4242 4242 4242 4243/' dev1.rev > dev1.rev.bad
+@@ -224,6 +228,8 @@ lvcreate --type raid1 -m1 --raidintegrity y -n $lv1 -l 8 $vg
+ _wait_recalc $vg/${lv1}_rimage_0
+ _wait_recalc $vg/${lv1}_rimage_1
+ _test_fs_with_raid
++lvs -o integritymismatches $vg/${lv1}_rimage_0
++lvs -o integritymismatches $vg/${lv1}_rimage_1
+ lvchange -an $vg/$lv1
+ lvconvert --raidintegrity n $vg/$lv1
+ lvremove $vg/$lv1
+@@ -235,6 +241,9 @@ _wait_recalc $vg/${lv1}_rimage_0
+ _wait_recalc $vg/${lv1}_rimage_1
+ _wait_recalc $vg/${lv1}_rimage_2
+ _test_fs_with_raid
++lvs -o integritymismatches $vg/${lv1}_rimage_0
++lvs -o integritymismatches $vg/${lv1}_rimage_1
++lvs -o integritymismatches $vg/${lv1}_rimage_2
+ lvchange -an $vg/$lv1
+ lvconvert --raidintegrity n $vg/$lv1
+ lvremove $vg/$lv1
+@@ -246,6 +255,9 @@ _wait_recalc $vg/${lv1}_rimage_0
+ _wait_recalc $vg/${lv1}_rimage_1
+ _wait_recalc $vg/${lv1}_rimage_2
+ _test_fs_with_raid
++lvs -o integritymismatches $vg/${lv1}_rimage_0
++lvs -o integritymismatches $vg/${lv1}_rimage_1
++lvs -o integritymismatches $vg/${lv1}_rimage_2
+ lvchange -an $vg/$lv1
+ lvconvert --raidintegrity n $vg/$lv1
+ lvremove $vg/$lv1
+@@ -257,6 +269,9 @@ _wait_recalc $vg/${lv1}_rimage_0
+ _wait_recalc $vg/${lv1}_rimage_1
+ _wait_recalc $vg/${lv1}_rimage_2
+ _test_fs_with_raid
++lvs -o integritymismatches $vg/${lv1}_rimage_0
++lvs -o integritymismatches $vg/${lv1}_rimage_1
++lvs -o integritymismatches $vg/${lv1}_rimage_2
+ lvchange -an $vg/$lv1
+ lvconvert --raidintegrity n $vg/$lv1
+ lvremove $vg/$lv1
+@@ -270,6 +285,11 @@ _wait_recalc $vg/${lv1}_rimage_2
+ _wait_recalc $vg/${lv1}_rimage_3
+ _wait_recalc $vg/${lv1}_rimage_4
+ _test_fs_with_raid
++lvs -o integritymismatches $vg/${lv1}_rimage_0
++lvs -o integritymismatches $vg/${lv1}_rimage_1
++lvs -o integritymismatches $vg/${lv1}_rimage_2
++lvs -o integritymismatches $vg/${lv1}_rimage_3
++lvs -o integritymismatches $vg/${lv1}_rimage_4
+ lvchange -an $vg/$lv1
+ lvconvert --raidintegrity n $vg/$lv1
+ lvremove $vg/$lv1
+@@ -282,6 +302,10 @@ _wait_recalc $vg/${lv1}_rimage_1
+ _wait_recalc $vg/${lv1}_rimage_2
+ _wait_recalc $vg/${lv1}_rimage_3
+ _test_fs_with_raid
++lvs -o integritymismatches $vg/${lv1}_rimage_0
++lvs -o integritymismatches $vg/${lv1}_rimage_1
++lvs -o integritymismatches $vg/${lv1}_rimage_2
++lvs -o integritymismatches $vg/${lv1}_rimage_3
+ lvchange -an $vg/$lv1
+ lvconvert --raidintegrity n $vg/$lv1
+ lvremove $vg/$lv1
+@@ -607,6 +631,8 @@ vgremove -ff $vg
+ _prepare_vg
+ lvcreate --type raid1 -m1 --raidintegrity y --raidintegritymode bitmap -n $lv1 -l 8 $vg
+ _test_fs_with_raid
++lvs -o integritymismatches $vg/${lv1}_rimage_0
++lvs -o integritymismatches $vg/${lv1}_rimage_1
+ lvchange -an $vg/$lv1
+ lvconvert --raidintegrity n $vg/$lv1
+ lvremove $vg/$lv1
+@@ -615,6 +641,11 @@ vgremove -ff $vg
+ _prepare_vg
+ lvcreate --type raid6 --raidintegrity y --raidintegritymode bitmap -n $lv1 -l 8 $vg
+ _test_fs_with_raid
++lvs -o integritymismatches $vg/${lv1}_rimage_0
++lvs -o integritymismatches $vg/${lv1}_rimage_1
++lvs -o integritymismatches $vg/${lv1}_rimage_2
++lvs -o integritymismatches $vg/${lv1}_rimage_3
++lvs -o integritymismatches $vg/${lv1}_rimage_4
+ lvchange -an $vg/$lv1
+ lvconvert --raidintegrity n $vg/$lv1
+ lvremove $vg/$lv1
 
 
