@@ -1,98 +1,39 @@
-From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Fri,  4 Sep 2020 16:13:50 +0000 (GMT)
-Subject: master - tests: add aux delayzero_dev support
-Message-ID: <20200904161350.BCCF5385141D@sourceware.org>
+From: David Teigland <teigland@sourceware.org>
+Date: Fri,  4 Sep 2020 16:23:40 +0000 (GMT)
+Subject: master - tests: fix pvck repair in hints.sh
+Message-ID: <20200904162340.A3E043857833@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=76b1f43e812189ea325eed979786a07b4cf7d684
-Commit:        76b1f43e812189ea325eed979786a07b4cf7d684
-Parent:        d8bb85d9638e1b0cad96c654a1e4a61b6d33aa97
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Sep 4 13:50:05 2020 +0200
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Fri Sep 4 18:11:42 2020 +0200
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=dddf63ebc397705dc04a548c7a80ad9cad5ce4c2
+Commit:        dddf63ebc397705dc04a548c7a80ad9cad5ce4c2
+Parent:        10fc3610c46be494c6d15c845b2b85a3ca955d79
+Author:        David Teigland <teigland@redhat.com>
+AuthorDate:    Fri Sep 4 11:22:42 2020 -0500
+Committer:     David Teigland <teigland@redhat.com>
+CommitterDate: Fri Sep 4 11:23:25 2020 -0500
 
-tests: add aux delayzero_dev  support
+tests: fix pvck repair in hints.sh
 
-Just like we have 'writeerror_dev' supporting creation of device
-which 'readable' segment and segments where write will fail we
-have now support for delay zero mappings.
-
-This is useful if we want to 'fake' large writing areas where we do
-not really care about the actual 'disk' content - since we test
-operation logic and it doesn't matter we read and write zeroes.
-With combination with 'delay' target we can create specific mappings
-and avoid using large memory areas of ramdisk.
 ---
- test/lib/aux.sh | 31 +++++++++++++++++++++++++++++++
- 1 file changed, 31 insertions(+)
+ test/shell/hints.sh | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
 
-diff --git a/test/lib/aux.sh b/test/lib/aux.sh
-index 17e7935ee..d5509a763 100644
---- a/test/lib/aux.sh
-+++ b/test/lib/aux.sh
-@@ -517,6 +517,7 @@ teardown() {
- 	unset LVM_LOG_FILE_EPOCH
- 
- 	test ! -f ERR_DEV || should dmsetup remove $(cat ERR_DEV_NAME)
-+	test ! -f ZERO_DEV || should dmsetup remove $(cat ZERO_DEV_NAME)
- 
- 	if test -f TESTNAME ; then
- 
-@@ -926,6 +927,11 @@ common_dev_() {
- 		}
- 		shift 2
- 		;;
-+	delayzero)
-+		shift 2
-+		# zero delay is just equivalent to 'zero_dev'
-+		test "$read_ms" -eq 0 && test "$write_ms" -eq 0 && tgtype="zero"
-+		;;
- 	# error|zero target does not take read_ms & write_ms only offset list
- 	esac
- 
-@@ -958,6 +964,8 @@ common_dev_() {
- 			echo "$from $len delay $pvdev $(( pos + offset )) $read_ms $pvdev $(( pos + offset )) $write_ms" ;;
- 		writeerror)
- 			echo "$from $len delay $pvdev $(( pos + offset )) 0 $(cat ERR_DEV) 0 0" ;;
-+		delayzero)
-+			echo "$from $len delay $(cat ZERO_DEV) 0 $read_ms $(cat ZERO_DEV) 0 $write_ms" ;;
- 		error|zero)
- 			echo "$from $len $tgtype" ;;
- 		esac
-@@ -1108,6 +1116,29 @@ writeerror_dev() {
- 	common_dev_ writeerror "$@"
- }
- 
-+#
-+# Convert device to device with sections of delayed zero read and writes.
-+# For this 'delay' dev will use extra new TEST-zerodev (huge zero target)
-+# and reroutes reads and writes
-+# i.e.  delayzero_dev "$dev1" 8:32
-+delayzero_dev() {
-+	local name=${PREFIX}-zerodev
-+
-+	if test ! -e ZERO_DEV; then
-+		# delay target is used for error mapping
-+		if test ! -f HAVE_DM_DELAY ; then
-+			target_at_least dm-delay 1 1 0 || return 0
-+			touch HAVE_DM_DELAY
-+		fi
-+		dmsetup create -u "TEST-$name" "$name" --table "0 4611686018427387904 zero"
-+		# Take major:minor of our error device
-+		echo "$name" > ZERO_DEV_NAME
-+		dmsetup info -c  --noheadings -o major,minor "$name" > ZERO_DEV
-+	fi
-+
-+	common_dev_ delayzero "$@"
-+}
-+
- #
- # Convert existing device to a device with zero segments
- # Takes the list of pairs of zero segment from:len
+diff --git a/test/shell/hints.sh b/test/shell/hints.sh
+index 176ee2176..5ac72282b 100644
+--- a/test/shell/hints.sh
++++ b/test/shell/hints.sh
+@@ -345,7 +345,7 @@ not diff $HINTS $PREV
+ rm $HINTS $PREV
+ pvs
+ cp $HINTS $PREV
+-pvck --repairtype label_header -y "$dev5"
++pvck --repairtype label_header -y "$dev3"
+ cat $NEWHINTS
+ grep 'Created empty by pvck' $HINTS
+ # this next pvs creates new hints
 
 
