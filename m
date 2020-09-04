@@ -1,39 +1,40 @@
-From: David Teigland <teigland@sourceware.org>
-Date: Fri,  4 Sep 2020 16:23:40 +0000 (GMT)
-Subject: master - tests: fix pvck repair in hints.sh
-Message-ID: <20200904162340.A3E043857833@sourceware.org>
+From: Eric Wheeler <lvm-devel@lists.ewheeler.net>
+Date: Fri, 4 Sep 2020 20:00:47 +0000 (UTC)
+Subject: Regression: 9e20465fd1f71 [thin-repair, thin_dump] When repairing we now hunt for the best btree roots.
+Message-ID: <alpine.LRH.2.11.2009041949440.19705@mail.ewheeler.net>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=dddf63ebc397705dc04a548c7a80ad9cad5ce4c2
-Commit:        dddf63ebc397705dc04a548c7a80ad9cad5ce4c2
-Parent:        10fc3610c46be494c6d15c845b2b85a3ca955d79
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Fri Sep 4 11:22:42 2020 -0500
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Fri Sep 4 11:23:25 2020 -0500
+Hello Joe,
 
-tests: fix pvck repair in hints.sh
+It used to be that flags.opts was passed into metadata_dump even when 
+--repair was specified. Now that metadata_dump and metadata_repair are 
+split into different functions, flags.opts is not passed to 
+metadata_repair so options like --dev-id are ignored when --repair is 
+specified.
 
----
- test/shell/hints.sh | 2 +-
- 1 file changed, 1 insertion(+), 1 deletion(-)
+Looking at the difference in metadata_dump and metadata_repair, these 
+functions are basically the same except the superblock recognition and 
+mapping/details_damage_policy(true) which used to be handled by 
+opts.repair_ (instead of true/false).
 
-diff --git a/test/shell/hints.sh b/test/shell/hints.sh
-index 176ee2176..5ac72282b 100644
---- a/test/shell/hints.sh
-+++ b/test/shell/hints.sh
-@@ -345,7 +345,7 @@ not diff $HINTS $PREV
- rm $HINTS $PREV
- pvs
- cp $HINTS $PREV
--pvck --repairtype label_header -y "$dev5"
-+pvck --repairtype label_header -y "$dev3"
- cat $NEWHINTS
- grep 'Created empty by pvck' $HINTS
- # this next pvs creates new hints
+What do you think about reducing the code duplication in metadata_repair 
+and metadata_dump by factoring out the common code into a function like 
+_metadata_dump and then always passing in flags.opts?
+
+We would like to retain the ability to run a repair on a metadata snapshot 
+for a single dev_id. At the moment we used a customer emitter 
+(contrib/ewheeler_emitter.cc) which works fine on metadata snapshots 
+without --repair enabled, but when --repair is enabled we get metadata for 
+every volume in the tree which ends up being huge (and invalid) because we 
+have so many snapshots.
+
+-Eric
+
+--
+Eric Wheeler
 
 
