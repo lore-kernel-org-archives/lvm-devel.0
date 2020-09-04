@@ -1,92 +1,98 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Fri,  4 Sep 2020 16:13:51 +0000 (GMT)
-Subject: master - tests: use delayzero_dev
-Message-ID: <20200904161351.DBA9039874AC@sourceware.org>
+Date: Fri,  4 Sep 2020 16:13:50 +0000 (GMT)
+Subject: master - tests: add aux delayzero_dev support
+Message-ID: <20200904161350.BCCF5385141D@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=10fc3610c46be494c6d15c845b2b85a3ca955d79
-Commit:        10fc3610c46be494c6d15c845b2b85a3ca955d79
-Parent:        76b1f43e812189ea325eed979786a07b4cf7d684
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=76b1f43e812189ea325eed979786a07b4cf7d684
+Commit:        76b1f43e812189ea325eed979786a07b4cf7d684
+Parent:        d8bb85d9638e1b0cad96c654a1e4a61b6d33aa97
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Sep 4 18:05:01 2020 +0200
+AuthorDate:    Fri Sep 4 13:50:05 2020 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Fri Sep 4 18:11:42 2020 +0200
 
-tests: use delayzero_dev
+tests: add aux delayzero_dev  support
 
-Speed-up a bit the first synchronization with just 50ms write delay,
-but later set also delay on read to slowdown lvextend.
+Just like we have 'writeerror_dev' supporting creation of device
+which 'readable' segment and segments where write will fail we
+have now support for delay zero mappings.
 
-FIXME: there are still things to look at:
-
-0 229376 raid raid1 2 AA 229376/229376 idle 0 0
-0 229376 raid raid1 2 AA 0/229376 frozen 0 0 -
-0 262144 raid raid1 2 AA 229376/262144 repair 0 0 -
-0 262144 raid raid1 2 AA 229376/262144 repair 0 0 -
-0 262144 raid raid1 2 AA 245888/262144 repair 0 0 -
+This is useful if we want to 'fake' large writing areas where we do
+not really care about the actual 'disk' content - since we test
+operation logic and it doesn't matter we read and write zeroes.
+With combination with 'delay' target we can create specific mappings
+and avoid using large memory areas of ramdisk.
 ---
- test/shell/lvextend-raid.sh | 23 ++++++++++++++++++++---
- 1 file changed, 20 insertions(+), 3 deletions(-)
+ test/lib/aux.sh | 31 +++++++++++++++++++++++++++++++
+ 1 file changed, 31 insertions(+)
 
-diff --git a/test/shell/lvextend-raid.sh b/test/shell/lvextend-raid.sh
-index e38634ba7..abd4cc508 100644
---- a/test/shell/lvextend-raid.sh
-+++ b/test/shell/lvextend-raid.sh
-@@ -20,7 +20,7 @@ v1_15_0=0
- aux have_raid 1 15 0 && v1_15_0=1
+diff --git a/test/lib/aux.sh b/test/lib/aux.sh
+index 17e7935ee..d5509a763 100644
+--- a/test/lib/aux.sh
++++ b/test/lib/aux.sh
+@@ -517,6 +517,7 @@ teardown() {
+ 	unset LVM_LOG_FILE_EPOCH
  
- # Use smallest regionsize to save VG space
--regionsize=`getconf PAGESIZE` # in bytes
-+regionsize=$(getconf PAGESIZE) # in bytes
- let pageregions=regionsize*8  # number of regions per MD bitmap page
+ 	test ! -f ERR_DEV || should dmsetup remove $(cat ERR_DEV_NAME)
++	test ! -f ZERO_DEV || should dmsetup remove $(cat ZERO_DEV_NAME)
  
- # in KiB
-@@ -34,7 +34,14 @@ aux prepare_pvs 2 $(($lvsz + 3 * $lvext))
- get_devs
- vgcreate -s 4k $vg ${DEVICES[@]}
+ 	if test -f TESTNAME ; then
  
--aux delay_dev "$dev1"  0 150
-+# Keep $dev1 & $dev2 always open via small active LVs.
-+# This trick avoids race on system with scanning udev service
-+# when device is 'in-use' and we cleared _rimage & _rmeta.
-+lvcreate -l1 $vg "$dev1"
-+lvcreate -l1 $vg "$dev2"
+@@ -926,6 +927,11 @@ common_dev_() {
+ 		}
+ 		shift 2
+ 		;;
++	delayzero)
++		shift 2
++		# zero delay is just equivalent to 'zero_dev'
++		test "$read_ms" -eq 0 && test "$write_ms" -eq 0 && tgtype="zero"
++		;;
+ 	# error|zero target does not take read_ms & write_ms only offset list
+ 	esac
+ 
+@@ -958,6 +964,8 @@ common_dev_() {
+ 			echo "$from $len delay $pvdev $(( pos + offset )) $read_ms $pvdev $(( pos + offset )) $write_ms" ;;
+ 		writeerror)
+ 			echo "$from $len delay $pvdev $(( pos + offset )) 0 $(cat ERR_DEV) 0 0" ;;
++		delayzero)
++			echo "$from $len delay $(cat ZERO_DEV) 0 $read_ms $(cat ZERO_DEV) 0 $write_ms" ;;
+ 		error|zero)
+ 			echo "$from $len $tgtype" ;;
+ 		esac
+@@ -1108,6 +1116,29 @@ writeerror_dev() {
+ 	common_dev_ writeerror "$@"
+ }
+ 
++#
++# Convert device to device with sections of delayed zero read and writes.
++# For this 'delay' dev will use extra new TEST-zerodev (huge zero target)
++# and reroutes reads and writes
++# i.e.  delayzero_dev "$dev1" 8:32
++delayzero_dev() {
++	local name=${PREFIX}-zerodev
 +
-+sector=$(( $(get first_extent_sector "$dev2") + 2048 ))
-+aux delayzero_dev "$dev2"  0 50 "${sector}:"
- 
- # Create raid1 LV consuming 1 MD bitmap page
- lvcreate --yes --type raid1 --regionsize ${regionsize}K -L$(($lvsz-$lvext))M -n $lv1 $vg
-@@ -44,10 +51,17 @@ aux wait_for_sync $vg $lv1
- check lv_field $vg/$lv1 sync_percent "100.00"
- check lv_field $vg/$lv1 region_size "4.00k"
- 
-+# to slow down extension - slowdown readings
-+aux delayzero_dev "$dev1"  50 0 "${sector}:"
++	if test ! -e ZERO_DEV; then
++		# delay target is used for error mapping
++		if test ! -f HAVE_DM_DELAY ; then
++			target_at_least dm-delay 1 1 0 || return 0
++			touch HAVE_DM_DELAY
++		fi
++		dmsetup create -u "TEST-$name" "$name" --table "0 4611686018427387904 zero"
++		# Take major:minor of our error device
++		echo "$name" > ZERO_DEV_NAME
++		dmsetup info -c  --noheadings -o major,minor "$name" > ZERO_DEV
++	fi
 +
-+dmsetup table
-+dmsetup info -c
-+dmsetup status
- # Extend so that full MD bitmap page is consumed
--lvextend -y -L+${lvext}M $vg/$lv1
-+lvextend -vvvv -y -L+${lvext}M $vg/$lv1
- not check lv_field $vg/$lv1 sync_percent "100.00"
- check lv_field $vg/$lv1 size "$(($lvsz)).00m" $vg/$lv1
-+lvs -a $vg
- aux wait_for_sync $vg $lv1
- check lv_field $vg/$lv1 sync_percent "100.00"
- 
-@@ -63,4 +77,7 @@ aux wait_for_sync $vg $lv1
- check lv_field $vg/$lv1 sync_percent "100.00"
- check lv_field $vg/$lv1 size "$(($lvsz+$lvext)).00m" $vg/$lv1
- 
-+aux enable_dev "$dev1"
-+aux enable_dev "$dev2"
++	common_dev_ delayzero "$@"
++}
 +
- vgremove -ff $vg
+ #
+ # Convert existing device to a device with zero segments
+ # Takes the list of pairs of zero segment from:len
 
 
