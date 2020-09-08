@@ -1,90 +1,53 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Tue,  8 Sep 2020 22:03:46 +0000 (GMT)
-Subject: master - tests: tune extend test
-Message-ID: <20200908220346.2B3DD385702B@sourceware.org>
+Date: Tue,  8 Sep 2020 22:59:30 +0000 (GMT)
+Subject: master - Revert "raid: do not enforce flushing of raids when it is not required"
+Message-ID: <20200908225930.1E0EA384BC14@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=bb62af5b3db82e6558afd564acd3bcc0f2b94b50
-Commit:        bb62af5b3db82e6558afd564acd3bcc0f2b94b50
-Parent:        676ce4775464dbc2efbcfe09951c55991dc5be3d
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=a8ea1817abccbd6acba83fb1ceb075830e747279
+Commit:        a8ea1817abccbd6acba83fb1ceb075830e747279
+Parent:        bb62af5b3db82e6558afd564acd3bcc0f2b94b50
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Sep 8 00:22:16 2020 +0200
+AuthorDate:    Wed Sep 9 00:58:32 2020 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Tue Sep 8 21:23:03 2020 +0200
+CommitterDate: Wed Sep 9 00:58:32 2020 +0200
 
-tests: tune extend test
+Revert "raid: do not enforce flushing of raids when it is not required"
 
-For proper checking of extension progress require version 1.15
-
-It looks with older versoin extension happens during very slow
-resume within lvm command - although speed is still somewhat slow
-with latest version.
+This reverts commit ce5ea07411d57a2bd276d8d29e46ce30b957f657.
+More thinking needed.
 ---
- test/shell/lvextend-raid.sh | 25 +++++++++++++++----------
- 1 file changed, 15 insertions(+), 10 deletions(-)
+ WHATS_NEW               | 1 -
+ lib/activate/activate.c | 2 +-
+ 2 files changed, 1 insertion(+), 2 deletions(-)
 
-diff --git a/test/shell/lvextend-raid.sh b/test/shell/lvextend-raid.sh
-index abd4cc508..054f436ba 100644
---- a/test/shell/lvextend-raid.sh
-+++ b/test/shell/lvextend-raid.sh
-@@ -41,10 +41,14 @@ lvcreate -l1 $vg "$dev1"
- lvcreate -l1 $vg "$dev2"
- 
- sector=$(( $(get first_extent_sector "$dev2") + 2048 ))
--aux delayzero_dev "$dev2"  0 50 "${sector}:"
-+aux zero_dev "$dev1" "${sector}:"
-+aux delayzero_dev "$dev2"  0 30 "${sector}:"
- 
- # Create raid1 LV consuming 1 MD bitmap page
- lvcreate --yes --type raid1 --regionsize ${regionsize}K -L$(($lvsz-$lvext))M -n $lv1 $vg
-+
-+lvs -a $vg
-+
- not check lv_field $vg/$lv1 sync_percent "100.00"
- check lv_field $vg/$lv1 size "$(($lvsz-$lvext)).00m" $vg/$lv1
- aux wait_for_sync $vg $lv1
-@@ -52,16 +56,16 @@ check lv_field $vg/$lv1 sync_percent "100.00"
- check lv_field $vg/$lv1 region_size "4.00k"
- 
- # to slow down extension - slowdown readings
--aux delayzero_dev "$dev1"  50 0 "${sector}:"
-+aux delayzero_dev "$dev1"  100 0 "${sector}:"
-+aux delayzero_dev "$dev2"  0 100 "${sector}:"
- 
--dmsetup table
--dmsetup info -c
--dmsetup status
- # Extend so that full MD bitmap page is consumed
--lvextend -vvvv -y -L+${lvext}M $vg/$lv1
-+lvextend -y -L+${lvext}M $vg/$lv1
-+if [ $v1_15_0 -eq 1 ]
-+then
- not check lv_field $vg/$lv1 sync_percent "100.00"
- check lv_field $vg/$lv1 size "$(($lvsz)).00m" $vg/$lv1
--lvs -a $vg
-+fi
- aux wait_for_sync $vg $lv1
- check lv_field $vg/$lv1 sync_percent "100.00"
- 
-@@ -73,11 +77,12 @@ then
- else
- 	check lv_field $vg/$lv1 sync_percent "100.00"
- fi
--aux wait_for_sync $vg $lv1
--check lv_field $vg/$lv1 sync_percent "100.00"
--check lv_field $vg/$lv1 size "$(($lvsz+$lvext)).00m" $vg/$lv1
- 
- aux enable_dev "$dev1"
- aux enable_dev "$dev2"
- 
-+aux wait_for_sync $vg $lv1
-+check lv_field $vg/$lv1 sync_percent "100.00"
-+check lv_field $vg/$lv1 size "$(($lvsz+$lvext)).00m" $vg/$lv1
-+
- vgremove -ff $vg
+diff --git a/WHATS_NEW b/WHATS_NEW
+index 0aa23046d..aa3960b31 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,6 +1,5 @@
+ Version 2.03.11 - 
+ ==================================
+-  Allow raid extension without flushing raid LV first.
+   Use _rmeta and _rimage as origin only devices for table loading.
+   Switch code base to use flexible array syntax.
+   Fix 64bit math when calculation cachevol size.
+diff --git a/lib/activate/activate.c b/lib/activate/activate.c
+index c5adc5065..0c6bd1a9a 100644
+--- a/lib/activate/activate.c
++++ b/lib/activate/activate.c
+@@ -2177,7 +2177,7 @@ static int _lv_suspend(struct cmd_context *cmd, const char *lvid_s,
+ 	 * TODO: Relax this limiting condition further */
+ 	if (!flush_required &&
+ 	    (lv_is_pvmove(lv) || pvmove_lv ||
+-	     (!lv_is_raid(lv) && !lv_is_mirror(lv) && !lv_is_thin_pool(lv) && !lv_is_thin_volume(lv)))) {
++	     (!lv_is_mirror(lv) && !lv_is_thin_pool(lv) && !lv_is_thin_volume(lv)))) {
+ 		log_debug("Requiring flush for LV %s.", display_lvname(lv));
+ 		flush_required = 1;
+ 	}
 
 
