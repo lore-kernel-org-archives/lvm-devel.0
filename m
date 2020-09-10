@@ -1,54 +1,39 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Thu, 10 Sep 2020 21:56:17 +0000 (GMT)
-Subject: master - lv_manip: relocate check to proper function
-Message-ID: <20200910215617.E74A53985444@sourceware.org>
+Date: Thu, 10 Sep 2020 21:56:20 +0000 (GMT)
+Subject: master - cleanup: comment typo
+Message-ID: <20200910215620.3B9AD398544B@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=bc0980362895ab64fb9f11811dc72937fe92c8a7
-Commit:        bc0980362895ab64fb9f11811dc72937fe92c8a7
-Parent:        e7f5acdfa674af473f31b23413afb1875cb3e078
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=678951f635616fc54896717af1183092a0556a3f
+Commit:        678951f635616fc54896717af1183092a0556a3f
+Parent:        e7bd3ba22dc6736654bbfe235924a64a511bcf8d
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu Sep 10 17:39:43 2020 +0200
+AuthorDate:    Thu Sep 10 22:38:13 2020 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Thu Sep 10 23:54:33 2020 +0200
+CommitterDate: Thu Sep 10 23:55:03 2020 +0200
 
-lv_manip: relocate check to proper function
+cleanup: comment typo
 
 ---
- lib/metadata/lv_manip.c | 10 +++++-----
- 1 file changed, 5 insertions(+), 5 deletions(-)
+ lib/metadata/thin_manip.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
 
-diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
-index ba143075d..e2c0f957b 100644
---- a/lib/metadata/lv_manip.c
-+++ b/lib/metadata/lv_manip.c
-@@ -5068,6 +5068,11 @@ static int _lvresize_check(struct logical_volume *lv,
- 	struct volume_group *vg = lv->vg;
- 	struct lv_segment *seg = first_seg(lv);
- 
-+	if (lv_is_writecache(lv)) {
-+		log_error("Resize not yet allowed on LVs with writecache attached.");
-+		return 0;
-+	}
-+
- 	if (lv_is_external_origin(lv)) {
- 		/*
- 		 * Since external-origin can be activated read-only,
-@@ -5792,11 +5797,6 @@ int lv_resize(struct logical_volume *lv,
- 	struct device *dev;
- 	char name[PATH_MAX];
- 
--	if (lv_is_writecache(lv)) {
--		log_error("Resize not yet allowed on LVs with writecache attached.");
--		return 0;
--	}
--
- 	if (!_lvresize_check(lv, lp))
- 		return_0;
- 
+diff --git a/lib/metadata/thin_manip.c b/lib/metadata/thin_manip.c
+index 0704f2bc3..588707961 100644
+--- a/lib/metadata/thin_manip.c
++++ b/lib/metadata/thin_manip.c
+@@ -224,7 +224,7 @@ int thin_pool_feature_supported(const struct logical_volume *lv, int feature)
+ int pool_metadata_min_threshold(const struct lv_segment *pool_seg)
+ {
+ 	/*
+-	 * Hardcoded minimal requirment for thin pool target.
++	 * Hardcoded minimal requirement for thin pool target.
+ 	 *
+ 	 * In the metadata LV there should be minimum from either 4MiB of free space
+ 	 * or at least 25% of free space, which applies when the size of thin pool's
 
 
