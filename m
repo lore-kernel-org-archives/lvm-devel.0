@@ -1,60 +1,47 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Fri, 11 Sep 2020 19:53:46 +0000 (GMT)
-Subject: master - pvmove: check return value of top_level_lv_name()
-Message-ID: <20200911195346.30358386F027@sourceware.org>
+Date: Fri, 11 Sep 2020 19:53:45 +0000 (GMT)
+Subject: master - gitignore: ignore all cscope generated files
+Message-ID: <20200911195345.0D749386F024@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=d71199920fe3a43582c0f2ca629ad502cfb189b5
-Commit:        d71199920fe3a43582c0f2ca629ad502cfb189b5
-Parent:        c38c4d9d36d765bbbe839c00b9580f6b1b8a0ef4
-Author:        Wu Guanghao <wuguanghao3@huawei.com>
-AuthorDate:    Fri Sep 11 17:40:09 2020 +0800
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=c38c4d9d36d765bbbe839c00b9580f6b1b8a0ef4
+Commit:        c38c4d9d36d765bbbe839c00b9580f6b1b8a0ef4
+Parent:        9f78acfee9e1f50ea58b532880c5e3e2f6161105
+Author:        Zhao Heming <heming.zhao@suse.com>
+AuthorDate:    Thu Sep 10 23:38:07 2020 +0800
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Fri Sep 11 21:43:08 2020 +0200
+CommitterDate: Fri Sep 11 21:42:38 2020 +0200
 
-pvmove: check return value of top_level_lv_name()
+gitignore: ignore all cscope generated files
 
-The return value of top_level_lv_name() may be NULL, so we should
-check return value of top_level_lv_name before calling
-strcmp(lv->name, top_level_lv_name(vg, lv_name)).
+When using cscope to read code, it will generate below 3 files for speedup
+cross-refer: cscope.files, cscope.in.out, cscope.po.out
 
-Signed-off-by: Wu Guanghao <wuguanghao3@huawei.com>
-Signed-off-by: Zhiqiang Liu <liuzhiqiang26@huawei.com>
+The .gitignore only contains "/cscope.out". It a little bit messy when
+executing 'git status', and other git commands.
+This patch add all cscope generated files in .gitignore.
+
+Signed-off-by: Zhao Heming <heming.zhao@suse.com>
 ---
- tools/pvmove.c | 10 ++++++++--
- 1 file changed, 8 insertions(+), 2 deletions(-)
+ .gitignore | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
 
-diff --git a/tools/pvmove.c b/tools/pvmove.c
-index cc512b9de..da635a662 100644
---- a/tools/pvmove.c
-+++ b/tools/pvmove.c
-@@ -326,6 +326,7 @@ static struct logical_volume *_set_up_pvmove_lv(struct cmd_context *cmd,
- 	int lv_skipped = 0;
- 	int needs_exclusive = *exclusive;
- 	const struct logical_volume *holder;
-+	const char *new_lv_name;
- 
- 	/* FIXME Cope with non-contiguous => splitting existing segments */
- 	if (!(lv_mirr = lv_create_empty("pvmove%d", NULL,
-@@ -363,8 +364,13 @@ static struct logical_volume *_set_up_pvmove_lv(struct cmd_context *cmd,
- 		if (lv == lv_mirr)
- 			continue;
- 
--		if (lv_name && strcmp(lv->name, top_level_lv_name(vg, lv_name)))
--			continue;
-+		if (lv_name) {
-+			if (!(new_lv_name = top_level_lv_name(vg, lv_name)))
-+				return_NULL;
-+
-+			if (strcmp(lv->name, new_lv_name))
-+				continue;
-+		}
- 
- 		if (!lv_is_on_pvs(lv, source_pvl))
- 			continue;
+diff --git a/.gitignore b/.gitignore
+index 7ebb8bb3b..cfd5bee1c 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -30,7 +30,7 @@ make.tmpl
+ /config.log
+ /config.status
+ /configure.scan
+-/cscope.out
++/cscope.*
+ /html/
+ /reports/
+ /tags
 
 
