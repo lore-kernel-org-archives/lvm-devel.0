@@ -1,37 +1,37 @@
 From: Wu Guanghao <wuguanghao3@huawei.com>
-Date: Fri, 11 Sep 2020 17:41:01 +0800
-Subject: [PATCH 2/4] lvconvert_poll: check whether lv is a snapshot type in poll_thin_merge_progress
+Date: Fri, 11 Sep 2020 17:42:16 +0800
+Subject: [PATCH 3/4] lvconvert: _lvconvert_splitsnapshot check if lv is snapshot type
 In-Reply-To: <2c9f8715-4b9e-d39c-34db-358912c62167@huawei.com>
 References: <2c9f8715-4b9e-d39c-34db-358912c62167@huawei.com>
-Message-ID: <4f0c1766-448a-8821-73f8-235665e73661@huawei.com>
+Message-ID: <f9fb4cf0-39e0-fe0d-803a-1105e358a7f5@huawei.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-lv may not be a snapshot type, the return value of find_snapshot(lv) may be NULL.
-Here, we will call stack if lv is not a snapshot type.
+cow may not be a snapshot type, the return value of origin_from_cow(cow) may be NULL
 
 Signed-off-by: Wu Guanghao <wuguanghao3@huawei.com>
 Signed-off-by: Zhiqiang Liu <liuzhiqiang26@huawei.com>
 ---
- tools/lvconvert_poll.c | 2 +-
- 1 file changed, 1 insertion(+), 1 deletion(-)
+ tools/lvconvert.c | 3 +++
+ 1 file changed, 3 insertions(+)
 
-diff --git a/tools/lvconvert_poll.c b/tools/lvconvert_poll.c
-index b9ec316e1..d0831cfd8 100644
---- a/tools/lvconvert_poll.c
-+++ b/tools/lvconvert_poll.c
-@@ -176,7 +176,7 @@ progress_t poll_thin_merge_progress(struct cmd_context *cmd,
- {
- 	uint32_t device_id;
+diff --git a/tools/lvconvert.c b/tools/lvconvert.c
+index 0adc61e36..f6a5572c7 100644
+--- a/tools/lvconvert.c
++++ b/tools/lvconvert.c
+@@ -1825,6 +1825,9 @@ static int _lvconvert_splitsnapshot(struct cmd_context *cmd, struct logical_volu
+ 	struct volume_group *vg = cow->vg;
+ 	const char *cow_name = display_lvname(cow);
 
--	if (!lv_thin_device_id(lv, &device_id)) {
-+	if (!lv_thin_device_id(lv, &device_id) || !lv_is_snapshot(lv)) {
- 		stack;
- 		return PROGRESS_CHECK_FAILED;
- 	}
++	if (!lv_is_snapshot(cow))
++		return 0;
++
+ 	if (lv_is_virtual_origin(origin_from_cow(cow))) {
+ 		log_error("Unable to split off snapshot %s with virtual origin.", cow_name);
+ 		return 0;
 -- 
 
 
