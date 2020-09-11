@@ -1,44 +1,40 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Fri, 11 Sep 2020 19:53:47 +0000 (GMT)
-Subject: master - lvconvert_poll: ensure LV has snapshot type
-Message-ID: <20200911195347.5409B386F024@sourceware.org>
+Date: Fri, 11 Sep 2020 19:53:50 +0000 (GMT)
+Subject: master - tests: have_cache function checks for cache-pool
+Message-ID: <20200911195350.DA4B0386F027@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=223b75ee91cdd820d384ce281780c36a9e055b76
-Commit:        223b75ee91cdd820d384ce281780c36a9e055b76
-Parent:        d71199920fe3a43582c0f2ca629ad502cfb189b5
-Author:        Wu Guanghao <wuguanghao3@huawei.com>
-AuthorDate:    Fri Sep 11 17:41:01 2020 +0800
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=f233d9a909a233c5147065bb5b17a2693622b281
+Commit:        f233d9a909a233c5147065bb5b17a2693622b281
+Parent:        77fdc17d70e62cab75efaaf0dad02493b948610d
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Fri Sep 11 11:59:55 2020 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Fri Sep 11 21:47:34 2020 +0200
+CommitterDate: Fri Sep 11 21:52:55 2020 +0200
 
-lvconvert_poll: ensure LV has snapshot type
+tests: have_cache function checks for cache-pool
 
-LV may not be a snapshot type, the return value of find_snapshot(lv) may be NULL.
-Here, we will call stack if LV is not a snapshot type.
-
-Signed-off-by: Wu Guanghao <wuguanghao3@huawei.com>
-Signed-off-by: Zhiqiang Liu <liuzhiqiang26@huawei.com>
+Check for cache-pool segment as plain cache can match writecache.
 ---
- tools/lvconvert_poll.c | 2 +-
+ test/lib/aux.sh | 2 +-
  1 file changed, 1 insertion(+), 1 deletion(-)
 
-diff --git a/tools/lvconvert_poll.c b/tools/lvconvert_poll.c
-index b9ec316e1..0eae74616 100644
---- a/tools/lvconvert_poll.c
-+++ b/tools/lvconvert_poll.c
-@@ -176,7 +176,7 @@ progress_t poll_thin_merge_progress(struct cmd_context *cmd,
- {
- 	uint32_t device_id;
+diff --git a/test/lib/aux.sh b/test/lib/aux.sh
+index 1418bb473..364b80a5c 100644
+--- a/test/lib/aux.sh
++++ b/test/lib/aux.sh
+@@ -1625,7 +1625,7 @@ have_raid4 () {
+ }
  
--	if (!lv_thin_device_id(lv, &device_id)) {
-+	if (!lv_thin_device_id(lv, &device_id) && !lv_is_snapshot(lv)) {
- 		stack;
- 		return PROGRESS_CHECK_FAILED;
+ have_cache() {
+-	lvm segtypes 2>/dev/null | grep cache$ >/dev/null || {
++	lvm segtypes 2>/dev/null | grep ' cache-pool$' >/dev/null || {
+ 		echo "Cache is not built-in." >&2
+ 		return 1
  	}
 
 
