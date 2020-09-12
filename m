@@ -1,68 +1,44 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Fri, 11 Sep 2020 19:53:54 +0000 (GMT)
-Subject: master - tests: check for boundary allocation sizes
-Message-ID: <20200911195354.504AB386F024@sourceware.org>
+Date: Sat, 12 Sep 2020 11:24:44 +0000 (GMT)
+Subject: master - revert "lvconvert: check if LV has snapshot type"
+Message-ID: <20200912112444.6414338708A2@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=93e252c4a30eddd642a0b2e2e9c00161f4895a0a
-Commit:        93e252c4a30eddd642a0b2e2e9c00161f4895a0a
-Parent:        f84a7266bc991d22572381671ced88e93dcb0a68
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=463a61e62e32aa81391f40468d48d19948cd5062
+Commit:        463a61e62e32aa81391f40468d48d19948cd5062
+Parent:        93e252c4a30eddd642a0b2e2e9c00161f4895a0a
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Sep 11 21:15:42 2020 +0200
+AuthorDate:    Sat Sep 12 12:07:12 2020 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Fri Sep 11 21:52:55 2020 +0200
+CommitterDate: Sat Sep 12 12:55:17 2020 +0200
 
-tests: check for boundary allocation sizes
+revert "lvconvert: check if LV has snapshot type"
 
+This reverts commit 7db124774a2b79105e7c9c6b42df88219fc070ca.
+Actually we need to check for lv_is_cow().
 ---
- test/shell/lvcreate-thin-limits.sh | 36 ++++++++++++++++++++++++++++++++++++
- 1 file changed, 36 insertions(+)
+ tools/lvconvert.c | 5 -----
+ 1 file changed, 5 deletions(-)
 
-diff --git a/test/shell/lvcreate-thin-limits.sh b/test/shell/lvcreate-thin-limits.sh
-new file mode 100644
-index 000000000..101132b9c
---- /dev/null
-+++ b/test/shell/lvcreate-thin-limits.sh
-@@ -0,0 +1,36 @@
-+#!/usr/bin/env bash
-+
-+# Copyright (C) 2020 Red Hat, Inc. All rights reserved.
-+#
-+# This copyrighted material is made available to anyone wishing to use,
-+# modify, copy, or redistribute it subject to the terms and conditions
-+# of the GNU General Public License v.2.
-+#
-+# You should have received a copy of the GNU General Public License
-+# along with this program; if not, write to the Free Software Foundation,
-+# Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
-+
-+# test allocation of thin-pool on limiting extents number
-+
-+SKIP_WITH_LVMPOLLD=1
-+
-+export LVM_TEST_THIN_REPAIR_CMD=${LVM_TEST_THIN_REPAIR_CMD-/bin/false}
-+
-+. lib/inittest
-+
-+#
-+# Main
-+#
-+aux have_thin 1 0 0 || skip
-+which mkfs.ext4 || skip
-+
-+aux prepare_pvs 1 16777216
-+get_devs
-+
-+vgcreate $SHARED -s 4K "$vg" "${DEVICES[@]}"
-+
-+not lvcreate -T -L15.995T -vvvv --poolmetadatasize 5G $vg/pool
-+
-+lvs -ao+seg_pe_ranges $vg
-+
-+vgremove -ff $vg
+diff --git a/tools/lvconvert.c b/tools/lvconvert.c
+index 6ab8f6d2c..d420eb52f 100644
+--- a/tools/lvconvert.c
++++ b/tools/lvconvert.c
+@@ -1825,11 +1825,6 @@ static int _lvconvert_splitsnapshot(struct cmd_context *cmd, struct logical_volu
+ 	struct volume_group *vg = cow->vg;
+ 	const char *cow_name = display_lvname(cow);
+ 
+-	if (!lv_is_snapshot(cow)) {
+-		log_error(INTERNAL_ERROR "Cow volume %s is not a snapshot.", cow_name);
+-		return 0;
+-	}
+-
+ 	if (lv_is_virtual_origin(origin_from_cow(cow))) {
+ 		log_error("Unable to split off snapshot %s with virtual origin.", cow_name);
+ 		return 0;
 
 
