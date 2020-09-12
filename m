@@ -1,41 +1,46 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Sat, 12 Sep 2020 11:24:47 +0000 (GMT)
-Subject: master - cov: check sscanf result
-Message-ID: <20200912112447.D3A59383F86C@sourceware.org>
+Date: Sat, 12 Sep 2020 11:24:46 +0000 (GMT)
+Subject: master - cov: drop model for origin_from_cow
+Message-ID: <20200912112446.AD83638708A2@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=740d5bf6cd39015aac086ddca98a089ba6028d72
-Commit:        740d5bf6cd39015aac086ddca98a089ba6028d72
-Parent:        a5d45b237dbb6d9c1984fd98ba84bce9bde0ea99
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=a5d45b237dbb6d9c1984fd98ba84bce9bde0ea99
+Commit:        a5d45b237dbb6d9c1984fd98ba84bce9bde0ea99
+Parent:        a9cb96f146377ff59a34a40792a9d8537ec89755
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Sat Sep 12 13:03:07 2020 +0200
+AuthorDate:    Sat Sep 12 09:45:52 2020 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Sat Sep 12 13:24:03 2020 +0200
+CommitterDate: Sat Sep 12 13:23:49 2020 +0200
 
-cov: check sscanf result
+cov: drop model for origin_from_cow
 
 ---
- daemons/lvmlockd/lvmlockd-core.c | 4 ++--
- 1 file changed, 2 insertions(+), 2 deletions(-)
+ coverity/coverity_model.c | 2 ++
+ 1 file changed, 2 insertions(+)
 
-diff --git a/daemons/lvmlockd/lvmlockd-core.c b/daemons/lvmlockd/lvmlockd-core.c
-index a0803de39..fea8ee6cf 100644
---- a/daemons/lvmlockd/lvmlockd-core.c
-+++ b/daemons/lvmlockd/lvmlockd-core.c
-@@ -887,8 +887,8 @@ static int read_adopt_file(struct list_head *vg_lockd)
- 			continue;
- 		else if (!strncmp(adopt_line, "lvmlockd", 8)) {
- 			unsigned int v_major = 0, v_minor = 0;
--			sscanf(adopt_line, "lvmlockd adopt_version %u.%u", &v_major, &v_minor);
--			if (v_major != ADOPT_VERSION_MAJOR)
-+			if ((sscanf(adopt_line, "lvmlockd adopt_version %u.%u", &v_major, &v_minor) != 2) ||
-+			    (v_major != ADOPT_VERSION_MAJOR))
- 				goto fail;
+diff --git a/coverity/coverity_model.c b/coverity/coverity_model.c
+index 24a6afeef..a6840a6ed 100644
+--- a/coverity/coverity_model.c
++++ b/coverity/coverity_model.c
+@@ -46,6 +46,7 @@ const char *find_config_tree_str(struct cmd_context *cmd, int id, struct profile
+ 	return "STRING";
+ }
  
- 		} else if (!strncmp(adopt_line, "VG:", 3)) {
++/*
+ struct logical_volume *origin_from_cow(const struct logical_volume *lv)
+ {
+ 	if (lv)
+@@ -53,6 +54,7 @@ struct logical_volume *origin_from_cow(const struct logical_volume *lv)
+ 
+ 	__coverity_panic__();
+ }
++*/
+ 
+ /* simple_memccpy() from glibc */
+ void *memccpy(void *dest, const void *src, int c, size_t n)
 
 
