@@ -1,46 +1,41 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Sat, 12 Sep 2020 11:24:45 +0000 (GMT)
-Subject: master - lvconvert: check if LV has cow type
-Message-ID: <20200912112445.89D2D3870907@sourceware.org>
+Date: Sat, 12 Sep 2020 11:24:47 +0000 (GMT)
+Subject: master - cov: check sscanf result
+Message-ID: <20200912112447.D3A59383F86C@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=a9cb96f146377ff59a34a40792a9d8537ec89755
-Commit:        a9cb96f146377ff59a34a40792a9d8537ec89755
-Parent:        463a61e62e32aa81391f40468d48d19948cd5062
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=740d5bf6cd39015aac086ddca98a089ba6028d72
+Commit:        740d5bf6cd39015aac086ddca98a089ba6028d72
+Parent:        a5d45b237dbb6d9c1984fd98ba84bce9bde0ea99
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Sat Sep 12 12:08:15 2020 +0200
+AuthorDate:    Sat Sep 12 13:03:07 2020 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Sat Sep 12 12:55:20 2020 +0200
+CommitterDate: Sat Sep 12 13:24:03 2020 +0200
 
-lvconvert: check if LV has cow type
+cov: check sscanf result
 
-Cow may not be a COW type, the return value of origin_from_cow(cow) may be NULL.
-
-Reported-by: Wu Guanghao <wuguanghao3@huawei.com>
-Reported-by: Zhiqiang Liu <liuzhiqiang26@huawei.com>
 ---
- tools/lvconvert.c | 5 +++++
- 1 file changed, 5 insertions(+)
+ daemons/lvmlockd/lvmlockd-core.c | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
 
-diff --git a/tools/lvconvert.c b/tools/lvconvert.c
-index d420eb52f..780a81567 100644
---- a/tools/lvconvert.c
-+++ b/tools/lvconvert.c
-@@ -1825,6 +1825,11 @@ static int _lvconvert_splitsnapshot(struct cmd_context *cmd, struct logical_volu
- 	struct volume_group *vg = cow->vg;
- 	const char *cow_name = display_lvname(cow);
+diff --git a/daemons/lvmlockd/lvmlockd-core.c b/daemons/lvmlockd/lvmlockd-core.c
+index a0803de39..fea8ee6cf 100644
+--- a/daemons/lvmlockd/lvmlockd-core.c
++++ b/daemons/lvmlockd/lvmlockd-core.c
+@@ -887,8 +887,8 @@ static int read_adopt_file(struct list_head *vg_lockd)
+ 			continue;
+ 		else if (!strncmp(adopt_line, "lvmlockd", 8)) {
+ 			unsigned int v_major = 0, v_minor = 0;
+-			sscanf(adopt_line, "lvmlockd adopt_version %u.%u", &v_major, &v_minor);
+-			if (v_major != ADOPT_VERSION_MAJOR)
++			if ((sscanf(adopt_line, "lvmlockd adopt_version %u.%u", &v_major, &v_minor) != 2) ||
++			    (v_major != ADOPT_VERSION_MAJOR))
+ 				goto fail;
  
-+	if (!lv_is_cow(cow)) {
-+		log_error(INTERNAL_ERROR "Volume %s is not a COW.", cow_name);
-+		return 0;
-+	}
-+
- 	if (lv_is_virtual_origin(origin_from_cow(cow))) {
- 		log_error("Unable to split off snapshot %s with virtual origin.", cow_name);
- 		return 0;
+ 		} else if (!strncmp(adopt_line, "VG:", 3)) {
 
 
