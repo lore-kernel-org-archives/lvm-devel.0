@@ -1,66 +1,51 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Sun, 13 Sep 2020 22:16:42 +0000 (GMT)
-Subject: master - cache: simplier signal handling
-Message-ID: <20200913221642.CCF6739518AA@sourceware.org>
+Date: Sun, 13 Sep 2020 22:16:41 +0000 (GMT)
+Subject: master - headers: remove unused headers
+Message-ID: <20200913221641.A8AA53865491@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=b2978efbff3a0700254f8f206e662312c21a03d3
-Commit:        b2978efbff3a0700254f8f206e662312c21a03d3
-Parent:        c285bf2f3794629161e55111f9a076cb9852dd26
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=c285bf2f3794629161e55111f9a076cb9852dd26
+Commit:        c285bf2f3794629161e55111f9a076cb9852dd26
+Parent:        27383a4b3d621e6c2497c8b1f55e2a700a6ef39a
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Sun Sep 13 11:33:39 2020 +0200
+AuthorDate:    Sun Sep 13 11:32:29 2020 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Mon Sep 14 00:15:14 2020 +0200
 
-cache: simplier signal handling
+headers: remove unused headers
 
-Use just single sigint_allow()/restore() within flushing loop
-and void one extra signal manipulation.
 ---
- lib/metadata/cache_manip.c | 12 +++++-------
- 1 file changed, 5 insertions(+), 7 deletions(-)
+ tools/lvmcmdlib.c  | 1 -
+ tools/lvmcmdline.c | 1 -
+ 2 files changed, 2 deletions(-)
 
-diff --git a/lib/metadata/cache_manip.c b/lib/metadata/cache_manip.c
-index a786e8bac..2c4cc92fb 100644
---- a/lib/metadata/cache_manip.c
-+++ b/lib/metadata/cache_manip.c
-@@ -480,7 +480,7 @@ int lv_cache_wait_for_clean(struct logical_volume *cache_lv, int *is_clean)
- 	const struct logical_volume *lock_lv = lv_lock_holder(cache_lv);
- 	struct lv_segment *cache_seg = first_seg(cache_lv);
- 	struct lv_status_cache *status;
--	int cleaner_policy, writeback;
-+	int cleaner_policy = 0, writeback;
- 	uint64_t dirty_blocks;
+diff --git a/tools/lvmcmdlib.c b/tools/lvmcmdlib.c
+index 695d4dda6..aa85c9ccd 100644
+--- a/tools/lvmcmdlib.c
++++ b/tools/lvmcmdlib.c
+@@ -21,7 +21,6 @@
  
- 	*is_clean = 0;
-@@ -488,6 +488,9 @@ int lv_cache_wait_for_clean(struct logical_volume *cache_lv, int *is_clean)
- 	//FIXME: use polling to do this...
- 	for (;;) {
- 		sigint_allow();
-+		if (cleaner_policy)
-+			/* TODO: Use centralized place */
-+			usleep(500000);
- 		sigint_restore();
- 		if (sigint_caught()) {
- 			sigint_clear();
-@@ -523,13 +526,8 @@ int lv_cache_wait_for_clean(struct logical_volume *cache_lv, int *is_clean)
- 		log_print_unless_silent("Flushing " FMTu64 " blocks for cache %s.",
- 					dirty_blocks, display_lvname(cache_lv));
+ #include "tools/lvm2cmd.h"
  
--		if (cleaner_policy) {
--			/* TODO: Use centralized place */
--			sigint_allow();
--			usleep(500000);
--			sigint_restore();
-+		if (cleaner_policy)
- 			continue;
--		}
+-#include <signal.h>
+ #include <sys/stat.h>
+ #include <time.h>
+ #include <sys/resource.h>
+diff --git a/tools/lvmcmdline.c b/tools/lvmcmdline.c
+index 7cf4e3ff0..8dd38e51d 100644
+--- a/tools/lvmcmdline.c
++++ b/tools/lvmcmdline.c
+@@ -23,7 +23,6 @@
+ #include "stub.h"
+ #include "lib/misc/last-path-component.h"
  
- 		if (!(cache_lv->status & LVM_WRITE)) {
- 			log_warn("WARNING: Dirty blocks found on read-only cache volume %s.",
+-#include <signal.h>
+ #include <sys/stat.h>
+ #include <time.h>
+ #include <sys/resource.h>
 
 
