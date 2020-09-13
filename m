@@ -1,95 +1,40 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Sun, 13 Sep 2020 22:16:45 +0000 (GMT)
-Subject: master - tests: improve cache abort test
-Message-ID: <20200913221645.1EAFC3951883@sourceware.org>
+Date: Sun, 13 Sep 2020 22:16:48 +0000 (GMT)
+Subject: master - tests: protect this test for another kernel
+Message-ID: <20200913221648.887A939518AD@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=57e1e037b63426a5fd73641bcc7078d80b66c50b
-Commit:        57e1e037b63426a5fd73641bcc7078d80b66c50b
-Parent:        64c8827cf3cab006b4221dea24413bb31edabf78
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=18a60c634094273b92182734ceb2013817c497ab
+Commit:        18a60c634094273b92182734ceb2013817c497ab
+Parent:        9c0d11ecc952ff32b3b5746478d9c76de761775e
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Sun Sep 13 11:33:13 2020 +0200
+AuthorDate:    Sat Sep 12 19:08:24 2020 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Mon Sep 14 00:15:14 2020 +0200
 
-tests: improve cache abort test
+tests: protect this test for another kernel
 
-Use bigger volume and slowdown writing to cache device.
-This allows more simple to reach 'dirty' state.
-Also document exactly 1 SIGINT has to fire aborting of flushing.
+Thisi 3.10.0-862 kernel also dies with this test.
 ---
- test/shell/lvconvert-cache-abort.sh | 25 ++++++++++++++++---------
- 1 file changed, 16 insertions(+), 9 deletions(-)
+ test/shell/lvconvert-raid-reshape-stripes-load-reload.sh | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
 
-diff --git a/test/shell/lvconvert-cache-abort.sh b/test/shell/lvconvert-cache-abort.sh
-index 404f44269..652c9f421 100644
---- a/test/shell/lvconvert-cache-abort.sh
-+++ b/test/shell/lvconvert-cache-abort.sh
-@@ -21,24 +21,28 @@ aux have_cache 1 3 0 || skip
+diff --git a/test/shell/lvconvert-raid-reshape-stripes-load-reload.sh b/test/shell/lvconvert-raid-reshape-stripes-load-reload.sh
+index 59e147436..b79561fbb 100644
+--- a/test/shell/lvconvert-raid-reshape-stripes-load-reload.sh
++++ b/test/shell/lvconvert-raid-reshape-stripes-load-reload.sh
+@@ -22,7 +22,7 @@ which mkfs.ext4 || skip
+ aux have_raid 1 13 2 || skip
  
- aux prepare_vg 2
+ case "$(uname -r)" in
+-  5.[89]*) die "Cannot run this test on unfixed kernel." ;;
++  5.[89]*|3.10.0-862*) die "Cannot run this test on unfixed kernel." ;;
+ esac
  
-+SIZE_MB=4
-+
- # Data device on later delayed dev1
- lvcreate -L4 -n cpool $vg "$dev1"
- lvconvert -y --type cache-pool $vg/cpool "$dev2"
--lvcreate -H -L 4 -n $lv1 --chunksize 32k --cachemode writeback --cachepool $vg/cpool $vg "$dev2"
-+lvcreate -H -L $SIZE_MB -n $lv1 --chunksize 32k --cachemode writeback --cachepool $vg/cpool $vg "$dev2"
- 
- #
- # Ensure cache gets promoted blocks
- #
--for i in $(seq 1 10) ; do
-+for i in $(seq 1 3) ; do
- echo 3 >/proc/sys/vm/drop_caches
--dd if=/dev/zero of="$DM_DEV_DIR/$vg/$lv1" bs=64K count=20 conv=fdatasync || true
-+dd if=/dev/zero of="$DM_DEV_DIR/$vg/$lv1" bs=1M count=$SIZE_MB conv=fdatasync || true
- echo 3 >/proc/sys/vm/drop_caches
--dd if="$DM_DEV_DIR/$vg/$lv1" of=/dev/null bs=64K count=20 || true
-+dd if="$DM_DEV_DIR/$vg/$lv1" of=/dev/null bs=1M count=$SIZE_MB || true
- done
- 
-+aux delay_dev "$dev2" 0 300 "$(get first_extent_sector "$dev2"):"
-+dd if=/dev/zero of="$DM_DEV_DIR/$vg/$lv1" bs=1M count=$SIZE_MB
- 
-+lvdisplay --maps $vg
- # Delay dev to ensure we have some time to 'capture' interrupt in flush
--aux delay_dev "$dev1" 100 0 "$(get first_extent_sector "$dev1"):"
- 
- # TODO, how to make writeback cache dirty
- test "$(get lv_field $vg/$lv1 cache_dirty_blocks)" -gt 0 || {
-@@ -46,9 +50,6 @@ test "$(get lv_field $vg/$lv1 cache_dirty_blocks)" -gt 0 || {
- 	skip "Cannot make a dirty writeback cache LV."
- }
- 
--sync
--dd if=/dev/zero of="$DM_DEV_DIR/$vg/$lv1" bs=4k count=100 conv=fdatasync
--
- LVM_TEST_TAG="kill_me_$PREFIX" lvconvert -v --splitcache $vg/$lv1 >logconvert 2>&1 &
- PID_CONVERT=$!
- for i in {1..50}; do
-@@ -57,10 +58,16 @@ for i in {1..50}; do
- 	echo "Waiting for cleaner policy on $vg/$lv1"
- 	sleep .05
- done
-+
-+# While lvconvert updated table to 'cleaner' policy now it 
-+# should be running in 'Flushing' loop and just 1 KILL should
-+# cause abortion of flushing
- kill -INT $PID_CONVERT
--aux enable_dev "$dev1"
-+aux enable_dev "$dev2"
- wait
- 
-+#cat logconvert || true
-+
- grep -E "Flushing.*aborted" logconvert || {
- 	cat logconvert || true
- 	vgremove -f $vg
+ mount_dir="mnt"
 
 
