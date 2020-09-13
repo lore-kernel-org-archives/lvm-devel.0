@@ -1,63 +1,40 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Sun, 13 Sep 2020 22:16:43 +0000 (GMT)
-Subject: master - tests: check in_sync prints also dm status
-Message-ID: <20200913221643.F194F39518AD@sourceware.org>
+Date: Sun, 13 Sep 2020 22:16:46 +0000 (GMT)
+Subject: master - tests: raise needed target version
+Message-ID: <20200913221646.4569D3865491@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=64c8827cf3cab006b4221dea24413bb31edabf78
-Commit:        64c8827cf3cab006b4221dea24413bb31edabf78
-Parent:        b2978efbff3a0700254f8f206e662312c21a03d3
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=1005fd7b067320d03067229912bf4844d1a54836
+Commit:        1005fd7b067320d03067229912bf4844d1a54836
+Parent:        57e1e037b63426a5fd73641bcc7078d80b66c50b
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Sat Sep 12 19:04:56 2020 +0200
+AuthorDate:    Sat Sep 12 19:09:41 2020 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Mon Sep 14 00:15:14 2020 +0200
 
-tests: check in_sync prints also dm status
+tests: raise needed target version
 
-It's more useful to see how the progress of status checking is moving.
+Require higher version to avoid early bugs.
 ---
- test/lib/check.sh | 8 ++++----
- 1 file changed, 4 insertions(+), 4 deletions(-)
+ test/shell/lvconvert-raid-reshape-load.sh | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
 
-diff --git a/test/lib/check.sh b/test/lib/check.sh
-index 8637619f4..4deb78a74 100644
---- a/test/lib/check.sh
-+++ b/test/lib/check.sh
-@@ -216,7 +216,7 @@ in_sync() {
- 		idx=6
- 		type=${a[3]}
- 		if [ "${a[$(( idx + 1 ))]}" != "idle" ]; then
--			echo "$lvm_name ($type$snap) is not in-sync"
-+			echo "$lvm_name ($type$snap) is not in-sync    " "${a[@]}"
- 			return 1
- 		fi
- 		;;
-@@ -234,19 +234,19 @@ in_sync() {
- 	c=${a[$idx]##*/}
+diff --git a/test/shell/lvconvert-raid-reshape-load.sh b/test/shell/lvconvert-raid-reshape-load.sh
+index 8fcbf545f..14b5dfdde 100644
+--- a/test/shell/lvconvert-raid-reshape-load.sh
++++ b/test/shell/lvconvert-raid-reshape-load.sh
+@@ -18,7 +18,7 @@ SKIP_WITH_LVMPOLLD=1
+ # Test reshaping under io load
  
- 	if [ "$b" -eq 0 ] || [ "$b" != "$c" ]; then
--		echo "$lvm_name ($type$snap) is not in-sync"
-+		echo "$lvm_name ($type$snap) is not in-sync    " "${a[@]}"
- 		return 1
- 	fi
+ which mkfs.ext4 || skip
+-aux have_raid 1 13 2 || skip
++aux have_raid 1 14 0 || skip
  
- 	if [[ ${a[$(( idx - 1 ))]} =~ a ]] ; then
- 		[ "$ignore_a" = 0 ] && \
- 			die "$lvm_name ($type$snap) in-sync, but 'a' characters in health status"
--		echo "$lvm_name ($type$snap) is not in-sync"
-+		echo "$lvm_name ($type$snap) is not in-sync    " "${a[@]}"
- 		[ "$ignore_a" = 1 ] && return 0
- 		return 1
- 	fi
+ mount_dir="mnt"
  
--	echo "$lvm_name ($type$snap) is in-sync" "${a[@]}"
-+	echo "$lvm_name ($type$snap) is in-sync    " "${a[@]}"
- }
- 
- active() {
 
 
