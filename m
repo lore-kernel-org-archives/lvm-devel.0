@@ -1,42 +1,57 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Tue, 15 Sep 2020 21:21:21 +0000 (GMT)
-Subject: master - tests: skip kernel for this test
-Message-ID: <20200915212121.E678F3983A76@sourceware.org>
+Date: Tue, 15 Sep 2020 21:21:23 +0000 (GMT)
+Subject: master - tests: switch for checking version of installed tools
+Message-ID: <20200915212123.1510F3984041@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=cf4fed37617c71f6fd3f00f80beafb4737d53ced
-Commit:        cf4fed37617c71f6fd3f00f80beafb4737d53ced
-Parent:        d0ccb2521ba4f34455078f87f46cc41f5761ffc0
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=2c6bd480b28bec43c7c2652938233d8850f00928
+Commit:        2c6bd480b28bec43c7c2652938233d8850f00928
+Parent:        cf4fed37617c71f6fd3f00f80beafb4737d53ced
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Mon Sep 14 21:23:16 2020 +0200
+AuthorDate:    Mon Sep 14 21:25:04 2020 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Tue Sep 15 23:07:06 2020 +0200
 
-tests: skip kernel for this test
+tests: switch for checking version of installed tools
 
-Kills this kernel ATM
+It looks like older tools were compacting metadata more.
 ---
- test/shell/lvconvert-raid-reshape-stripes-load.sh | 4 ++++
- 1 file changed, 4 insertions(+)
+ test/shell/lvextend-thin-metadata-dmeventd.sh | 12 ++++++------
+ 1 file changed, 6 insertions(+), 6 deletions(-)
 
-diff --git a/test/shell/lvconvert-raid-reshape-stripes-load.sh b/test/shell/lvconvert-raid-reshape-stripes-load.sh
-index ad8f37351..6184e9d64 100644
---- a/test/shell/lvconvert-raid-reshape-stripes-load.sh
-+++ b/test/shell/lvconvert-raid-reshape-stripes-load.sh
-@@ -15,6 +15,10 @@ SKIP_WITH_LVMPOLLD=1
- 
+diff --git a/test/shell/lvextend-thin-metadata-dmeventd.sh b/test/shell/lvextend-thin-metadata-dmeventd.sh
+index ccdf9e853..db4f7c156 100644
+--- a/test/shell/lvextend-thin-metadata-dmeventd.sh
++++ b/test/shell/lvextend-thin-metadata-dmeventd.sh
+@@ -20,12 +20,6 @@ export LVM_TEST_THIN_REPAIR_CMD=${LVM_TEST_THIN_REPAIR_CMD-/bin/false}
  . lib/inittest
  
-+case "$(uname -r)" in
-+  3.10.0-862*) die "Cannot run this test on unfixed kernel." ;;
+ 
+-# With thin-pool version >= 1.19 and kernel >= 4.18
+-# slightly less metadata can fit.
+-BIG_DATA="generate_more_metadata"
+-aux target_at_least dm-thin-pool 1 19 0 && \
+-	aux kernel_at_least 4 18 0 && BIG_DATA=""
+-
+ meta_percent_() {
+ 	get lv_field $vg/pool metadata_percent | cut -d. -f1
+ }
+@@ -66,6 +60,12 @@ test -n "$LVM_TEST_THIN_RESTORE_CMD" || LVM_TEST_THIN_RESTORE_CMD=$(which thin_r
+ "$LVM_TEST_THIN_RESTORE_CMD" -V || skip
+ aux have_thin 1 10 0 || skip
+ 
++BIG_DATA=""
++case $("$LVM_TEST_THIN_RESTORE_CMD" -V) in
++	# With older version of thin-tool we got slightly more compact metadata
++	0.[0..6]*) BIG_DATA="generate_more_metadata" ;;
 +esac
 +
- # Test reshaping under io load
+ aux prepare_dmeventd
  
- which mkfs.ext4 || skip
+ aux prepare_pvs 3 256
 
 
