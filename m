@@ -1,79 +1,42 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Thu, 17 Sep 2020 22:36:05 +0000 (GMT)
-Subject: master - tests: resolve missing removal of loopdevice on error path
-Message-ID: <20200917223605.761BF39450FE@sourceware.org>
+Date: Thu, 17 Sep 2020 22:36:06 +0000 (GMT)
+Subject: master - tests: also use sed to shorten log output
+Message-ID: <20200917223606.9A41C393C843@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=8d40859e29c03c867c788c4927076b4192192214
-Commit:        8d40859e29c03c867c788c4927076b4192192214
-Parent:        a5e867139d31b42e3bd084ecd0aefe1eabfa380c
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=a4137412bf64843578fd116f443d6586a0cffbed
+Commit:        a4137412bf64843578fd116f443d6586a0cffbed
+Parent:        8d40859e29c03c867c788c4927076b4192192214
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Sep 18 00:31:11 2020 +0200
+AuthorDate:    Fri Sep 18 00:31:59 2020 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Fri Sep 18 00:31:11 2020 +0200
+CommitterDate: Fri Sep 18 00:31:59 2020 +0200
 
-tests: resolve missing removal of loopdevice on error path
+tests: also use sed to shorten log output
 
-In case of test failure, loop device leaked and occupied space forever.
 ---
- test/shell/integrity-blocksize.sh | 30 ++++++++++++++++++------------
- 1 file changed, 18 insertions(+), 12 deletions(-)
+ test/shell/integrity-dmeventd.sh | 5 +++--
+ 1 file changed, 3 insertions(+), 2 deletions(-)
 
-diff --git a/test/shell/integrity-blocksize.sh b/test/shell/integrity-blocksize.sh
-index 61d58e2a3..60513e516 100644
---- a/test/shell/integrity-blocksize.sh
-+++ b/test/shell/integrity-blocksize.sh
-@@ -18,6 +18,21 @@ aux have_integrity 1 5 0 || skip
+diff --git a/test/shell/integrity-dmeventd.sh b/test/shell/integrity-dmeventd.sh
+index 0a081599f..a8c41803e 100644
+--- a/test/shell/integrity-dmeventd.sh
++++ b/test/shell/integrity-dmeventd.sh
+@@ -23,8 +23,9 @@ mkdir -p $mnt
+ aux prepare_devs 6 64
  
- losetup -h | grep sector-size || skip
+ printf "%0.sA" {1..16384} >> fileA
+-printf "%0.sB" {1..16384} >> fileB
+-printf "%0.sC" {1..16384} >> fileC
++# instead of long debug 'printf' log use 'sed' and just replace A->B|C
++sed -e 's,A,B,g' fileA > fileB
++sed -e 's,A,C,g' fileA > fileC
  
-+
-+cleanup_mounted_and_teardown()
-+{
-+	umount "$mnt" || true
-+	vgremove -ff $vg1 $vg2 || true
-+	losetup -d $LOOP1 || true
-+	losetup -d $LOOP2 || true
-+	losetup -d $LOOP3 || true
-+	losetup -d $LOOP4 || true
-+
-+	rm -f loop{abcd}
-+	aux teardown
-+}
-+
-+
- # Tests with fs block sizes require a libblkid version that shows BLOCK_SIZE
- aux prepare_devs 1
- vgcreate $vg "$dev1"
-@@ -27,6 +42,8 @@ blkid "$DM_DEV_DIR/$vg/$lv1" | grep BLOCK_SIZE || skip
- lvchange -an $vg
- vgremove -ff $vg
- 
-+trap 'cleanup_mounted_and_teardown' EXIT
-+
- dd if=/dev/zero of=loopa bs=$((1024*1024)) count=64 2> /dev/null
- dd if=/dev/zero of=loopb bs=$((1024*1024)) count=64 2> /dev/null
- dd if=/dev/zero of=loopc bs=$((1024*1024)) count=64 2> /dev/null
-@@ -270,15 +287,4 @@ pvck --dump metadata $LOOP3 | grep 'block_size = 4096'
- lvchange -an $vg2/$lv1
- lvremove -y $vg2/$lv1
- 
--vgremove -ff $vg1
--vgremove -ff $vg2
--
--losetup -d $LOOP1
--losetup -d $LOOP2
--losetup -d $LOOP3
--losetup -d $LOOP4
--rm loopa
--rm loopb
--rm loopc
--rm loopd
--
-+# remove of $vg1, $vg2 and loops in cleanup_mounted_and_teardown()
+ # generate random data
+ dd if=/dev/urandom of=randA bs=512K count=2
 
 
