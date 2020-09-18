@@ -1,49 +1,57 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Fri, 18 Sep 2020 15:31:10 +0000 (GMT)
-Subject: master - tests: aux better handle invalid table
-Message-ID: <20200918153110.12A71395445A@sourceware.org>
+Date: Fri, 18 Sep 2020 15:31:12 +0000 (GMT)
+Subject: master - tests: inittest supports SKIP_WITH_LOW_SPACE
+Message-ID: <20200918153112.576303954C16@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=b77595ac8b69fc699c35577e6dbe1322f8c915a0
-Commit:        b77595ac8b69fc699c35577e6dbe1322f8c915a0
-Parent:        a4137412bf64843578fd116f443d6586a0cffbed
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=206620018eaac4b8b771cebfe9707022864bb53b
+Commit:        206620018eaac4b8b771cebfe9707022864bb53b
+Parent:        048e04e4176e62e5c9196c662497d18dc19483a9
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Sep 18 14:23:20 2020 +0200
+AuthorDate:    Fri Sep 18 14:25:50 2020 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Fri Sep 18 14:23:20 2020 +0200
+CommitterDate: Fri Sep 18 17:30:31 2020 +0200
 
-tests: aux better handle invalid table
+tests: inittest supports SKIP_WITH_LOW_SPACE
 
-In cases where internal functions like zero_dev, delay_dev pass-in
-invalid parameter so resulting table can't work, resume at least
-previous table line before failing out - so the cleaning process
-later on is not stuck waiting on a suspended device.
+Test can set individually a higher value for required free space on
+storage.
+
+Note: it is not fully reliable since when 'brd' (ramdisk) device is used
+this free space value is rather meanigul, but it might help
+in case where a real filesystem is doing back-end for test devices.
 ---
- test/lib/aux.sh | 8 +++++++-
- 1 file changed, 7 insertions(+), 1 deletion(-)
+ test/lib/inittest.sh | 6 +++---
+ 1 file changed, 3 insertions(+), 3 deletions(-)
 
-diff --git a/test/lib/aux.sh b/test/lib/aux.sh
-index 364b80a5c..a17bf846c 100644
---- a/test/lib/aux.sh
-+++ b/test/lib/aux.sh
-@@ -1078,7 +1078,13 @@ restore_from_devtable() {
- 	for dev in "$@"; do
- 		local name=${dev##*/}
- 		dmsetup load "$name" "$name.devtable"
--		dmsetup resume "$name"
-+		if not dmsetup resume "$name" ; then
-+			dmsetup clear $name
-+			dmsetup resume $name
-+			finish_udev_transaction
-+			echo "Device $name has unusable table \"$(cat $name.devtable)\""
-+			return 1
-+		fi
- 	done
- 	finish_udev_transaction
- }
+diff --git a/test/lib/inittest.sh b/test/lib/inittest.sh
+index a6cefa861..44000b951 100644
+--- a/test/lib/inittest.sh
++++ b/test/lib/inittest.sh
+@@ -46,6 +46,7 @@ SKIP_WITH_CLVMD=${SKIP_WITH_CLVMD-}
+ SKIP_WITH_LVMPOLLD=${SKIP_WITH_LVMPOLLD-}
+ SKIP_WITH_LVMLOCKD=${SKIP_WITH_LVMLOCKD-}
+ SKIP_ROOT_DM_CHECK=${SKIP_ROOT_DM_CHECK-}
++SKIP_WITH_LOW_SPACE=${SKIP_WITH_LOW_SPACE-50}
+ 
+ test -n "$LVM_TEST_FLAVOUR" || { echo "NOTE: Empty flavour">&2; initskip; }
+ test -f "lib/flavour-$LVM_TEST_FLAVOUR" || { echo "NOTE: Flavour '$LVM_TEST_FLAVOUR' does not exist">&2; initskip; }
+@@ -127,10 +128,9 @@ elif test -z "$SKIP_ROOT_DM_CHECK" ; then
+ fi
+ 
+ echo "$TESTNAME" >TESTNAME
+-
+ # Require 50M of free space in testdir
+-test "$(df -k -P . | awk '/\// {print $4}')" -gt 51200 || \
+-	skip "Testing requires more then 50M of free space in directory $TESTDIR!\\n$(df -H | sed -e 's,^,## DF:   ,')"
++test "$(df -k -P . | awk '/\// {print $4}')" -gt $(( SKIP_WITH_LOW_SPACE * 1024 )) || \
++	skip "Testing requires more then ${SKIP_WITH_LOW_SPACE}M of free space in directory $TESTDIR!\\n$(df -H | sed -e 's,^,## DF:   ,')"
+ 
+ echo "Kernel is $(uname -a)"
+ # Report SELinux mode
 
 
