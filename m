@@ -1,45 +1,86 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Sat, 19 Sep 2020 15:39:13 +0000 (GMT)
-Subject: master - tests: reduce disk usage
-Message-ID: <20200919153913.C29B03857C40@sourceware.org>
+Date: Sat, 19 Sep 2020 15:39:16 +0000 (GMT)
+Subject: master - tests: use faster awk generator
+Message-ID: <20200919153916.1188838708AA@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=530fc17b38b5363d5258d7ff5bc38f7863a585d6
-Commit:        530fc17b38b5363d5258d7ff5bc38f7863a585d6
-Parent:        1404e5ee61bdaddeb07a5e9ecfe1aad477cc9bf9
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=f7c58c636debe351ddd97371c8d32c3f79cdbf79
+Commit:        f7c58c636debe351ddd97371c8d32c3f79cdbf79
+Parent:        8e3e2c74edb4d7644a20cd832590d4a90f72f0c4
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Sep 18 21:59:02 2020 +0200
+AuthorDate:    Sat Sep 19 15:57:29 2020 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Sat Sep 19 17:30:51 2020 +0200
 
-tests: reduce disk usage
+tests: use faster awk generator
 
+Shortens log length.
 ---
- test/shell/integrity.sh | 5 ++++-
- 1 file changed, 4 insertions(+), 1 deletion(-)
+ test/shell/writecache-blocksize.sh | 8 +++-----
+ test/shell/writecache-large.sh     | 6 +++---
+ test/shell/writecache.sh           | 6 +++---
+ 3 files changed, 9 insertions(+), 11 deletions(-)
 
-diff --git a/test/shell/integrity.sh b/test/shell/integrity.sh
-index 6af12f23f..be435976e 100644
---- a/test/shell/integrity.sh
-+++ b/test/shell/integrity.sh
-@@ -115,10 +115,13 @@ _test_fs_with_raid() {
+diff --git a/test/shell/writecache-blocksize.sh b/test/shell/writecache-blocksize.sh
+index 13001760a..523d4ab80 100644
+--- a/test/shell/writecache-blocksize.sh
++++ b/test/shell/writecache-blocksize.sh
+@@ -32,9 +32,9 @@ aux cleanup_scsi_debug_dev
+ mnt="mnt"
+ mkdir -p $mnt
  
- 	xxd "$dev1" > dev1.txt
- 	tac dev1.txt > dev1.rev
-+	rm -f dev1.txt
- 	sed -e '0,/4242 4242 4242 4242 4242 4242 4242 4242/ s/4242 4242 4242 4242 4242 4242 4242 4242/4242 4242 4242 4242 4242 4242 4242 4243/' dev1.rev > dev1.rev.bad
-+	rm -f dev1.rev
- 	tac dev1.rev.bad > dev1.bad
-+	rm -f dev1.rev.bad
- 	xxd -r dev1.bad > "$dev1"
--	rm dev1.txt dev1.rev dev1.rev.bad dev1.bad
-+	rm -f dev1.bad
+-for i in `seq 1 16384`; do echo -n "A" >> fileA; done
+-for i in `seq 1 16384`; do echo -n "B" >> fileB; done
+-for i in `seq 1 16384`; do echo -n "C" >> fileC; done
++awk 'BEGIN { while (z++ < 16384) printf "A" }' > fileA
++awk 'BEGIN { while (z++ < 16384) printf "B" }' > fileB
++awk 'BEGIN { while (z++ < 16384) printf "C" }' > fileC
  
- 	lvchange -ay $vg/$lv1
- 	mount "$DM_DEV_DIR/$vg/$lv1" $mnt
+ # generate random data
+ dd if=/dev/urandom of=randA bs=512K count=2
+@@ -338,5 +338,3 @@ lvremove $vg/$lv2
+ vgremove $vg
+ 
+ aux cleanup_scsi_debug_dev
+-
+-
+diff --git a/test/shell/writecache-large.sh b/test/shell/writecache-large.sh
+index b52eaf6ab..fc8f379cf 100644
+--- a/test/shell/writecache-large.sh
++++ b/test/shell/writecache-large.sh
+@@ -33,9 +33,9 @@ blockdev --getpbsz "$dev2"
+ mnt="mnt"
+ mkdir -p $mnt
+ 
+-for i in `seq 1 16384`; do echo -n "A" >> fileA; done
+-for i in `seq 1 16384`; do echo -n "B" >> fileB; done
+-for i in `seq 1 16384`; do echo -n "C" >> fileC; done
++awk 'BEGIN { while (z++ < 16384) printf "A" }' > fileA
++awk 'BEGIN { while (z++ < 16384) printf "B" }' > fileB
++awk 'BEGIN { while (z++ < 16384) printf "C" }' > fileC
+ 
+ # generate random data
+ dd if=/dev/urandom of=randA bs=512K count=2
+diff --git a/test/shell/writecache.sh b/test/shell/writecache.sh
+index 39ef31930..99be31e6b 100644
+--- a/test/shell/writecache.sh
++++ b/test/shell/writecache.sh
+@@ -65,9 +65,9 @@ blockdev --getpbsz "$dev2"
+ mnt="mnt"
+ mkdir -p $mnt
+ 
+-for i in `seq 1 16384`; do echo -n "A" >> fileA; done
+-for i in `seq 1 16384`; do echo -n "B" >> fileB; done
+-for i in `seq 1 16384`; do echo -n "C" >> fileC; done
++awk 'BEGIN { while (z++ < 16384) printf "A" }' > fileA
++awk 'BEGIN { while (z++ < 16384) printf "B" }' > fileB
++awk 'BEGIN { while (z++ < 16384) printf "C" }' > fileC
+ 
+ # generate random data
+ dd if=/dev/urandom of=randA bs=512K count=2
 
 
