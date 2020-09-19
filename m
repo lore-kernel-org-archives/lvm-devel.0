@@ -1,49 +1,41 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Sat, 19 Sep 2020 15:39:14 +0000 (GMT)
-Subject: master - tests: ensure mnt is defined before trap install
-Message-ID: <20200919153914.E4ACF3870879@sourceware.org>
+Date: Sat, 19 Sep 2020 15:39:17 +0000 (GMT)
+Subject: master - tests: use zero backend
+Message-ID: <20200919153917.30EFF386191C@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=8e3e2c74edb4d7644a20cd832590d4a90f72f0c4
-Commit:        8e3e2c74edb4d7644a20cd832590d4a90f72f0c4
-Parent:        530fc17b38b5363d5258d7ff5bc38f7863a585d6
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=f63aac5309e10335c3a53477b3838fe1821934e1
+Commit:        f63aac5309e10335c3a53477b3838fe1821934e1
+Parent:        f7c58c636debe351ddd97371c8d32c3f79cdbf79
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Sep 18 21:59:24 2020 +0200
+AuthorDate:    Sat Sep 19 15:58:11 2020 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Sat Sep 19 17:30:51 2020 +0200
 
-tests: ensure mnt is defined before trap install
+tests: use zero backend
 
+Since we are not reading read - just use zero device as backend for
+test, so we do not eat real disk space.
 ---
- test/shell/integrity-blocksize.sh | 5 ++---
- 1 file changed, 2 insertions(+), 3 deletions(-)
+ test/shell/lvcreate-large-raid.sh | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
 
-diff --git a/test/shell/integrity-blocksize.sh b/test/shell/integrity-blocksize.sh
-index 60513e516..03410c204 100644
---- a/test/shell/integrity-blocksize.sh
-+++ b/test/shell/integrity-blocksize.sh
-@@ -32,6 +32,8 @@ cleanup_mounted_and_teardown()
- 	aux teardown
- }
+diff --git a/test/shell/lvcreate-large-raid.sh b/test/shell/lvcreate-large-raid.sh
+index b66cfd26e..a7af9cb48 100644
+--- a/test/shell/lvcreate-large-raid.sh
++++ b/test/shell/lvcreate-large-raid.sh
+@@ -38,7 +38,7 @@ aux lvmconf 'devices/issue_discards = 1'
+ # Delay PVs so that resynchronization doesn't fill too much space
+ for device in "${DEVICES[@]}"
+ do
+-	aux delay_dev "$device" 0 10  "$(get first_extent_sector "$device")"
++	aux zero_dev "$device" "$(( $(get first_extent_sector "$device") + 8192 )):"
+ done
  
-+mnt="mnt"
-+mkdir -p $mnt
- 
- # Tests with fs block sizes require a libblkid version that shows BLOCK_SIZE
- aux prepare_devs 1
-@@ -65,9 +67,6 @@ aux extend_filter "a|$LOOP4|"
- 
- aux lvmconf 'devices/scan = "/dev"'
- 
--mnt="mnt"
--mkdir -p $mnt
--
- vgcreate $vg1 $LOOP1 $LOOP2
- vgcreate $vg2 $LOOP3 $LOOP4
- 
+ # bz837927 START
 
 
