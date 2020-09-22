@@ -1,68 +1,96 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Tue, 29 Sep 2020 08:45:25 +0000 (GMT)
-Subject: master - thin: remove unneeded code test
-Message-ID: <20200929084525.35A6F384B010@sourceware.org>
+Date: Tue, 22 Sep 2020 21:46:51 +0000 (GMT)
+Subject: master - tests: update test
+Message-ID: <20200922214651.96FE1385780B@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=4cd356b26b85e075490be29b9e1e40b3aafe2d5b
-Commit:        4cd356b26b85e075490be29b9e1e40b3aafe2d5b
-Parent:        18c74666ee668c5d4569c868f38c3d8ae950dda1
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=adead83dc2763a12f2f0e711793b5fd8c446b3f9
+Commit:        adead83dc2763a12f2f0e711793b5fd8c446b3f9
+Parent:        cbed63eeb9d06958a42721dcd2093ff80582f47d
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Sun Sep 27 02:20:50 2020 +0200
+AuthorDate:    Tue Sep 22 23:26:28 2020 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Tue Sep 29 10:43:56 2020 +0200
+CommitterDate: Tue Sep 22 23:28:43 2020 +0200
 
-thin: remove unneeded code test
+tests: update test
 
-Since we detect already transaction if before starting
-to build dm tree - this extra check is a duplicate
-that would only capture very tiny 'race' and we later
-validate transaction_id with suspended snapshot origin.
+Shorten running time of the test.
+Fix some issues in invoked resizing script to it returns
+correct return code and dmeventd can be a little bit quicker
+in this test.
 ---
- lib/thin/thin.c | 20 --------------------
- 1 file changed, 20 deletions(-)
+ test/shell/vdo-autoumount-dmeventd.sh | 18 ++++++++++++------
+ 1 file changed, 12 insertions(+), 6 deletions(-)
 
-diff --git a/lib/thin/thin.c b/lib/thin/thin.c
-index 9c4bfb39c..ba0da712d 100644
---- a/lib/thin/thin.c
-+++ b/lib/thin/thin.c
-@@ -265,8 +265,6 @@ static int _thin_pool_add_target_line(struct dev_manager *dm,
- 	char *metadata_dlid, *pool_dlid;
- 	const struct lv_thin_message *lmsg;
- 	const struct logical_volume *origin;
--	struct lvinfo info;
--	uint64_t transaction_id = 0;
- 	unsigned attr;
- 	uint64_t low_water_mark;
- 	int threshold;
-@@ -351,24 +349,6 @@ static int _thin_pool_add_target_line(struct dev_manager *dm,
- 		case DM_THIN_MESSAGE_CREATE_THIN:
- 			origin = first_seg(lmsg->u.lv)->origin;
- 			/* Check if the origin is suspended */
--			if (origin && lv_info(cmd, origin, 1, &info, 0, 0) &&
--			    info.exists && !info.suspended) {
--				/* Origin is not suspended, but the transaction may have been
--				 * already transfered, so test for transaction_id and
--				 * allow to pass in the message for dmtree processing
--				 * so it will skip all messages later.
--				 */
--				if (!lv_thin_pool_transaction_id(seg->lv, &transaction_id))
--					return_0; /* Thin pool should exist and work */
--				if ((transaction_id + 1) != seg->transaction_id) {
--					log_error("Omitting suspend of thin snapshot origin %s with expected "
--						  "transaction_id " FMTu64 ", but active pool has " FMTu64 ".",
--						  display_lvname(origin),
--						  !seg->transaction_id ? 0 : seg->transaction_id - 1,
--						  transaction_id);
--					return 0;
--				}
--			}
- 			log_debug_activation("Thin pool create_%s %s.", (!origin) ? "thin" : "snap", lmsg->u.lv->name);
- 			if (!dm_tree_node_add_thin_pool_message(node,
- 								(!origin) ? lmsg->type : DM_THIN_MESSAGE_CREATE_SNAP,
+diff --git a/test/shell/vdo-autoumount-dmeventd.sh b/test/shell/vdo-autoumount-dmeventd.sh
+index 0d0747a32..e0449ffe8 100644
+--- a/test/shell/vdo-autoumount-dmeventd.sh
++++ b/test/shell/vdo-autoumount-dmeventd.sh
+@@ -42,19 +42,21 @@ export MKE2FS_CONFIG="$TESTDIR/lib/mke2fs.conf"
+ aux have_vdo 6 2 0 || skip
+ 
+ # Simple implementation of umount when lvextend fails
++# Script enforces failin exit, so dmeventd tries several times
++# repeatedly to invoke this for given percentage
+ cat <<- EOF >testcmd.sh
+ #!/bin/sh
+ 
+ echo "VDO Pool: \$DMEVENTD_VDO_POOL"
+ 
+ "$TESTDIR/lib/lvextend" --use-policies \$1 || {
+-	umount "$mntdir"  || true
+-	return 0
++	umount "$mntdir" && exit 0
++	touch $PWD/TRIED_UMOUNT
+ }
+ test "\$($TESTDIR/lib/lvs -o selected -S "data_percent>=$PERCENT" --noheadings \$1)" -eq 0 || {
+-	umount "$mntdir"  || true
+-	return 0
++	echo "Percentage still above $PERCENT"
+ }
++exit 1
+ EOF
+ chmod +x testcmd.sh
+ # Show prepared script
+@@ -63,7 +65,7 @@ cat testcmd.sh
+ # Use autoextend percent 0 - so extension fails and triggers umount...
+ aux lvmconf "activation/vdo_pool_autoextend_percent = 0" \
+ 	    "activation/vdo_pool_autoextend_threshold = $PERCENT" \
+-	    "dmeventd/vdo_command = \"/$PWD/testcmd.sh\"" \
++	    "dmeventd/vdo_command = \"$PWD/testcmd.sh\"" \
+             "allocation/vdo_slab_size_mb = 128"
+ 
+ aux prepare_dmeventd
+@@ -92,7 +94,7 @@ PID_SLEEP=$!
+ 
+ lvs -a $vg
+ # Fill pool above 95%  (to cause 'forced lazy umount)
+-dd if=/dev/urandom of="$mntdir/file$$" bs=256K count=200 conv=fdatasync
++dd if=/dev/urandom of="$mntdir/file$$" bs=256K count=200 oflag=direct
+ 
+ lvs -a $vg
+ 
+@@ -100,9 +102,11 @@ lvs -a $vg
+ # In the worst case check only happens every 10 seconds :(
+ for i in $(seq 1 12) ; do
+ 	is_lv_opened_ "$vg/$lv1" || break
++	test ! -f "TRIED_UMOUNT" || continue  # finish loop quickly
+ 	sleep 1
+ done
+ 
++rm -f "TRIED_UMOUNT"
+ test "$i" -eq 12 || die "$mntdir should NOT have been unmounted by dmeventd!"
+ 
+ lvs -a $vg
+@@ -119,3 +123,5 @@ for i in $(seq 1 12) ; do
+ 	test "$i" -lt 12 || die "$mntdir should have been unmounted by dmeventd!"
+ 	sleep 1
+ done
++
++# vgremove is managed through cleanup_mounted_and_teardown()
 
 
