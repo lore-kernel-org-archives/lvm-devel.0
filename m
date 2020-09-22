@@ -1,92 +1,93 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Wed, 23 Sep 2020 12:59:33 +0000 (GMT)
-Subject: master - vdo: allow passing renamed vdopool name to kernel
-Message-ID: <20200923125933.51C44398E478@sourceware.org>
+Date: Tue, 22 Sep 2020 21:46:48 +0000 (GMT)
+Subject: master - vdo: extend vdo segment validation
+Message-ID: <20200922214648.35EE639450F9@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=50a37948b5b2245a8f5d7d78aa88fa0679dfe0e5
-Commit:        50a37948b5b2245a8f5d7d78aa88fa0679dfe0e5
-Parent:        7c19186271d3bf37412b7e7dcc271bc9b79f9f4a
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=f38b7afd62533041ec68b10349169efb70c37d82
+Commit:        f38b7afd62533041ec68b10349169efb70c37d82
+Parent:        642ef5439962c721da37343a51468872027407c1
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed Sep 23 13:20:28 2020 +0200
+AuthorDate:    Tue Sep 22 23:17:54 2020 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Wed Sep 23 13:20:28 2020 +0200
+CommitterDate: Tue Sep 22 23:25:16 2020 +0200
 
-vdo: allow passing renamed vdopool name to kernel
+vdo: extend vdo segment validation
 
-Although kernel does not allow to load a new dm table
-with renamed vdopool, at least make lvm2 code ready
-it it every will get supported.
+Try to catch all suspicious VDO segments in metadata early.
 ---
- device_mapper/all.h           | 1 +
- device_mapper/libdm-deptree.c | 3 ++-
- lib/vdo/vdo.c                 | 6 ++++--
- 3 files changed, 7 insertions(+), 3 deletions(-)
+ lib/metadata/merge.c | 50 ++++++++++++++++++++++++++++++++++++++++++++++++++
+ 1 file changed, 50 insertions(+)
 
-diff --git a/device_mapper/all.h b/device_mapper/all.h
-index df47d1a5a..1080d25ad 100644
---- a/device_mapper/all.h
-+++ b/device_mapper/all.h
-@@ -1019,6 +1019,7 @@ int dm_tree_node_add_integrity_target(struct dm_tree_node *node,
-  */
- int dm_tree_node_add_vdo_target(struct dm_tree_node *node,
- 				uint64_t size,
-+				const char *vdo_pool_name,
- 				const char *data_uuid,
- 				uint64_t data_size,
- 				const struct dm_vdo_target_params *param);
-diff --git a/device_mapper/libdm-deptree.c b/device_mapper/libdm-deptree.c
-index 2722a2c3b..653dd0959 100644
---- a/device_mapper/libdm-deptree.c
-+++ b/device_mapper/libdm-deptree.c
-@@ -4360,6 +4360,7 @@ int dm_tree_node_add_cache_target_base(struct dm_tree_node *node,
- 
- int dm_tree_node_add_vdo_target(struct dm_tree_node *node,
- 				uint64_t size,
-+				const char *vdo_pool_name,
- 				const char *data_uuid,
- 				uint64_t data_size,
- 				const struct dm_vdo_target_params *vtp)
-@@ -4381,7 +4382,7 @@ int dm_tree_node_add_vdo_target(struct dm_tree_node *node,
- 		return_0;
- 
- 	seg->vdo_params = *vtp;
--	seg->vdo_name = node->name;
-+	seg->vdo_name = vdo_pool_name;
- 	seg->vdo_data_size = data_size;
- 
- 	node->props.send_messages = 2;
-diff --git a/lib/vdo/vdo.c b/lib/vdo/vdo.c
-index ab6d00825..c43a5dc26 100644
---- a/lib/vdo/vdo.c
-+++ b/lib/vdo/vdo.c
-@@ -362,19 +362,21 @@ static int _vdo_pool_add_target_line(struct dev_manager *dm,
- 				     struct dm_tree_node *node, uint64_t len,
- 				     uint32_t *pvmove_mirror_count __attribute__((unused)))
- {
--	char *data_uuid;
-+	char *vdo_pool_name, *data_uuid;
- 
- 	if (!seg_is_vdo_pool(seg)) {
- 		log_error(INTERNAL_ERROR "Passed segment is not VDO pool.");
- 		return 0;
+diff --git a/lib/metadata/merge.c b/lib/metadata/merge.c
+index 1d47449db..0aa2293eb 100644
+--- a/lib/metadata/merge.c
++++ b/lib/metadata/merge.c
+@@ -541,11 +541,61 @@ static void _check_lv_segment(struct logical_volume *lv, struct lv_segment *seg,
+ 			seg_error("is missing a VDO pool data LV");
+ 		} else if (!lv_is_vdo_pool_data(seg_lv(seg, 0)))
+ 			seg_error("is not VDO pool data LV");
++		if ((seg->vdo_params.minimum_io_size != (512 >> SECTOR_SHIFT)) &&
++		    (seg->vdo_params.minimum_io_size != (4096 >> SECTOR_SHIFT)))
++			seg_error("sets unsupported VDO minimum io size");
++		if ((seg->vdo_params.block_map_cache_size_mb < DM_VDO_BLOCK_MAP_CACHE_SIZE_MINIMUM_MB) ||
++		    (seg->vdo_params.block_map_cache_size_mb > DM_VDO_BLOCK_MAP_CACHE_SIZE_MAXIMUM_MB))
++			seg_error("sets unsupported VDO block map cache size");
++		if ((seg->vdo_params.block_map_era_length < DM_VDO_BLOCK_MAP_ERA_LENGTH_MINIMUM) ||
++		    (seg->vdo_params.block_map_era_length > DM_VDO_BLOCK_MAP_ERA_LENGTH_MAXIMUM))
++			seg_error("sets unsupported VDO block map era length");
++		if ((seg->vdo_params.index_memory_size_mb < DM_VDO_INDEX_MEMORY_SIZE_MINIMUM_MB) ||
++		    (seg->vdo_params.index_memory_size_mb > DM_VDO_INDEX_MEMORY_SIZE_MAXIMUM_MB))
++			seg_error("sets unsupported VDO index memory size");
++		if ((seg->vdo_params.slab_size_mb < DM_VDO_SLAB_SIZE_MINIMUM_MB) ||
++		    (seg->vdo_params.slab_size_mb > DM_VDO_SLAB_SIZE_MAXIMUM_MB))
++			seg_error("sets unsupported VDO slab size");
++		if ((seg->vdo_params.max_discard < DM_VDO_MAX_DISCARD_MINIMUM) ||
++		    (seg->vdo_params.max_discard > DM_VDO_MAX_DISCARD_MAXIMUM))
++			seg_error("sets unsupported VDO max discard");
++		if (seg->vdo_params.ack_threads > DM_VDO_ACK_THREADS_MAXIMUM)
++			seg_error("sets unsupported VDO ack threads");
++		if ((seg->vdo_params.bio_threads < DM_VDO_BIO_THREADS_MINIMUM) ||
++		    (seg->vdo_params.bio_threads > DM_VDO_BIO_THREADS_MAXIMUM))
++			seg_error("sets unsupported VDO bio threads");
++		if ((seg->vdo_params.bio_rotation < DM_VDO_BIO_ROTATION_MINIMUM) ||
++		    (seg->vdo_params.bio_rotation > DM_VDO_BIO_ROTATION_MAXIMUM))
++			seg_error("sets unsupported VDO bio rotation");
++		if ((seg->vdo_params.cpu_threads < DM_VDO_CPU_THREADS_MINIMUM) ||
++		    (seg->vdo_params.cpu_threads > DM_VDO_CPU_THREADS_MAXIMUM))
++			seg_error("sets unsupported VDO cpu threads");
++		if (seg->vdo_params.hash_zone_threads > DM_VDO_HASH_ZONE_THREADS_MAXIMUM)
++			seg_error("sets unsupported VDO hash zone threads");
++		if (seg->vdo_params.logical_threads > DM_VDO_LOGICAL_THREADS_MAXIMUM)
++			seg_error("sets unsupported VDO logical threads");
++		if (seg->vdo_params.physical_threads > DM_VDO_PHYSICAL_THREADS_MAXIMUM)
++			seg_error("sets unsupported VDO physical threads");
+ 	} else { /* !VDO pool */
+ 		if (seg->vdo_pool_header_size)
+ 			seg_error("sets vdo_pool_header_size");
+ 		if (seg->vdo_pool_virtual_extents)
+ 			seg_error("sets vdo_pool_virtual_extents");
++		if (seg->vdo_params.minimum_io_size |
++		    seg->vdo_params.block_map_cache_size_mb |
++		    seg->vdo_params.block_map_era_length |
++		    seg->vdo_params.check_point_frequency |
++		    seg->vdo_params.index_memory_size_mb |
++		    seg->vdo_params.slab_size_mb |
++		    seg->vdo_params.max_discard |
++		    seg->vdo_params.ack_threads |
++		    seg->vdo_params.bio_threads |
++		    seg->vdo_params.bio_rotation |
++		    seg->vdo_params.cpu_threads |
++		    seg->vdo_params.hash_zone_threads |
++		    seg->vdo_params.logical_threads |
++		    seg->vdo_params.physical_threads)
++			seg_error("sets vdo_params");
  	}
-+	if (!(vdo_pool_name = dm_build_dm_name(mem, seg->lv->vg->name, seg->lv->name, lv_layer(seg->lv))))
-+		return_0;
  
- 	if (!(data_uuid = build_dm_uuid(mem, seg_lv(seg, 0), lv_layer(seg_lv(seg, 0)))))
- 		return_0;
- 
- 	/* VDO uses virtual size instead of its physical size */
- 	if (!dm_tree_node_add_vdo_target(node, get_vdo_pool_virtual_size(seg),
--					 data_uuid, seg_lv(seg, 0)->size,
-+					 vdo_pool_name, data_uuid, seg_lv(seg, 0)->size,
- 					 &seg->vdo_params))
- 		return_0;
- 
+ 	if (seg_is_vdo(seg)) {
 
 
