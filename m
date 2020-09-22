@@ -1,62 +1,80 @@
-From: David Teigland <teigland@sourceware.org>
-Date: Tue, 30 Apr 2019 16:00:21 -0400
-Subject: master - lvmcache: remove unused flag
-Message-ID: <201904302000.x3UK0L9v020181@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: Zdenek Kabelac <zkabelac@sourceware.org>
+Date: Tue, 22 Sep 2020 21:46:49 +0000 (GMT)
+Subject: master - vdo: enhance vdo pool extension
+Message-ID: <20200922214649.55A1C385780B@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=90b94ead12d739a3221e179bdcf1c482978f0f0f
-Commit:        90b94ead12d739a3221e179bdcf1c482978f0f0f
-Parent:        d7054cd28ae6bb2fad216f8756ab030de3e8e65e
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Tue Apr 30 14:59:27 2019 -0500
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Tue Apr 30 14:59:27 2019 -0500
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=3a3307c0d8029f545a31d305a23a0dec2ece65f2
+Commit:        3a3307c0d8029f545a31d305a23a0dec2ece65f2
+Parent:        f38b7afd62533041ec68b10349169efb70c37d82
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Tue Sep 22 23:25:58 2020 +0200
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Tue Sep 22 23:28:43 2020 +0200
 
-lvmcache: remove unused flag
+vdo: enhance vdo pool extension
 
-The new label scan design is never called recursively,
-so we don't need a flag to check for that.
+When user tries to extend vdo pool - he needs to go always
+at least by 1 full VDO slab  (defined as  vdo_slab_size_mb).
+
+To avoid all trouble around find 'workable' size - lvm2 automatically
+increases the passed (or by --use-policies calculated) extension size
+(and informs a user about sometimes possibly large increase as slab
+size can go upto 32GiB)
+
+With VDO users need to always 'think-big' anyway and expect such
+operation to be in GiB domain range.
 ---
- lib/cache/lvmcache.c |    9 ---------
- 1 files changed, 0 insertions(+), 9 deletions(-)
+ WHATS_NEW               |  1 +
+ lib/metadata/lv_manip.c | 21 +++++++++++++++++++++
+ 2 files changed, 22 insertions(+)
 
-diff --git a/lib/cache/lvmcache.c b/lib/cache/lvmcache.c
-index f0b1d56..7d0c60d 100644
---- a/lib/cache/lvmcache.c
-+++ b/lib/cache/lvmcache.c
-@@ -66,7 +66,6 @@ static struct dm_hash_table *_vgname_hash = NULL;
- static DM_LIST_INIT(_vginfos);
- static DM_LIST_INIT(_found_duplicate_devs);
- static DM_LIST_INIT(_unused_duplicate_devs);
--static int _scanning_in_progress = 0;
- static int _vgs_locked = 0;
- static int _found_duplicate_pvs = 0;	/* If we never see a duplicate PV we can skip checking for them later. */
- static int _found_duplicate_vgnames = 0;
-@@ -855,12 +854,6 @@ int lvmcache_label_scan(struct cmd_context *cmd)
+diff --git a/WHATS_NEW b/WHATS_NEW
+index 4be9b8bad..ad3cbde6a 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.03.11 - 
+ ==================================
++  Lvextend of vdo pool volumes ensure at least 1 new VDO slab is added.
+   Use revert_lv() on reload error path after vg_revert().
+   Configure --with-integrity enabled.
+   Restore lost signal blocking while VG lock is held.
+diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
+index fc0acd6ee..9f15e9f21 100644
+--- a/lib/metadata/lv_manip.c
++++ b/lib/metadata/lv_manip.c
+@@ -5465,6 +5465,27 @@ static int _lvresize_adjust_extents(struct logical_volume *lv,
+ 		else
+ 			seg_size = lp->extents - existing_extents;
  
- 	log_debug_cache("Finding VG info");
- 
--	/* Avoid recursion when a PVID can't be found! */
--	if (_scanning_in_progress)
--		return 0;
--
--	_scanning_in_progress = 1;
--
- 	/* FIXME: can this happen? */
- 	if (!cmd->filter) {
- 		log_error("label scan is missing filter");
-@@ -941,8 +934,6 @@ int lvmcache_label_scan(struct cmd_context *cmd)
- 	r = 1;
- 
-       out:
--	_scanning_in_progress = 0;
--
- 	dm_list_iterate_items(vginfo, &_vginfos) {
- 		if (is_orphan_vg(vginfo->vgname))
- 			continue;
++		if (lv_is_vdo_pool_data(lv)) {
++			if (!(seg = get_only_segment_using_this_lv(lv)))
++				return_0;
++			/* Min growth is defined this way:  max(1 slab, 128M + 128K (recovery journal + slab summary)) */
++			new_extents = max(seg->vdo_params.slab_size_mb * 1024, UINT32_C(128 * 1024 + 128));
++			new_extents *= (1024 >> SECTOR_SHIFT); /* minimal growth (~128MiB..32GiB) in sectors */
++
++			if (new_extents > vg->extent_size) {
++				/* Minimal growth in extent size units */
++				new_extents = (new_extents + vg->extent_size - 1) / vg->extent_size;
++
++				if (new_extents > seg_size) {
++					/* Notify user about extra increase of extension */
++					log_print_unless_silent("Increasing incremention size from %s to %s to fit new VDO slab.",
++								display_size(cmd, (uint64_t)seg_size * vg->extent_size),
++								display_size(cmd, (uint64_t)new_extents * vg->extent_size));
++					seg_size = new_extents;
++				}
++			}
++		}
++
+ 		/* Convert PEs to LEs */
+ 		if (lp->extents_are_pes && !seg_is_striped(seg_last) && !seg_is_virtual(seg_last)) {
+ 			area_multiple = _calc_area_multiple(seg_last->segtype, seg_last->area_count, 0);
 
 
