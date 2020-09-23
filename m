@@ -1,46 +1,50 @@
-From: David Teigland <teigland@sourceware.org>
-Date: Mon, 8 Apr 2019 11:39:38 -0400
-Subject: master - pvscan: don't print warning about lvmlockd not running
-Message-ID: <201904081539.x38FdchG023012@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: Zdenek Kabelac <zkabelac@sourceware.org>
+Date: Wed, 23 Sep 2020 12:59:34 +0000 (GMT)
+Subject: master - lvconvert: suppport vdo raid conversion also through vpool
+Message-ID: <20200923125934.73879398E477@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=f58a70c168f8ac225b0e4e40c2f0e1d1c98357fa
-Commit:        f58a70c168f8ac225b0e4e40c2f0e1d1c98357fa
-Parent:        0ba316f102ac3fcea48a6e60dfb8c0ddef8d197e
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Thu Mar 14 16:25:55 2019 -0500
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Fri Apr 5 14:04:42 2019 -0500
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=90c50c1b537dd89b62dad3047e27420d411293f5
+Commit:        90c50c1b537dd89b62dad3047e27420d411293f5
+Parent:        50a37948b5b2245a8f5d7d78aa88fa0679dfe0e5
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Wed Sep 23 14:44:44 2020 +0200
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Wed Sep 23 14:47:30 2020 +0200
 
-pvscan: don't print warning about lvmlockd not running
+lvconvert: suppport vdo raid conversion also through vpool
 
-pvscan --cache ignores shared VGs, so it doesn't need to
-consider lvmlockd, and shouldn't include a warning about it.
+User could directly use 'vdopool' LV name for conversion into raid.
+(lvconvert --type raid1 vg/vdopool)
 ---
- tools/lvmcmdline.c |    7 +++++++
- 1 files changed, 7 insertions(+), 0 deletions(-)
+ tools/lvconvert.c | 4 ++++
+ 1 file changed, 4 insertions(+)
 
-diff --git a/tools/lvmcmdline.c b/tools/lvmcmdline.c
-index 44b7724..1e3b1e3 100644
---- a/tools/lvmcmdline.c
-+++ b/tools/lvmcmdline.c
-@@ -2714,6 +2714,13 @@ static int _init_lvmlockd(struct cmd_context *cmd)
- 	const char *lvmlockd_socket;
- 	int use_lvmlockd = find_config_tree_bool(cmd, global_use_lvmlockd_CFG, NULL);
+diff --git a/tools/lvconvert.c b/tools/lvconvert.c
+index 780a81567..60c0fca21 100644
+--- a/tools/lvconvert.c
++++ b/tools/lvconvert.c
+@@ -1790,6 +1790,9 @@ static int _lvconvert_raid_types(struct cmd_context *cmd, struct logical_volume
+ 	if (lv_is_cache(lv))
+ 		lv = seg_lv(first_seg(lv), 0);
  
-+	if (cmd->command->command_enum == pvscan_cache_CMD) {
-+		/* pvscan cache ignores shared vgs, it only activates local vgs. */
-+		if (use_lvmlockd)
-+			log_debug("Ignore lvmlockd for pvscan cache.");
-+		return 1;
-+	}
++	if (lv_is_vdo_pool(lv))
++		return _lvconvert_raid_types(cmd, seg_lv(first_seg(lv), 0), lp);
 +
- 	/*
- 	 * Think about when/how to enable hints with lvmlockd.
- 	 */
+ 	if (lv_is_mirror(lv)) {
+ 		ret = _convert_mirror(cmd, lv, lp);
+ 		goto out;
+@@ -5064,6 +5067,7 @@ static int _lvconvert_raid_types_check(struct cmd_context *cmd, struct logical_v
+ 		    !lv_is_cache_pool_data(lv) &&
+ 		    !lv_is_thin_pool_metadata(lv) &&
+ 		    !lv_is_thin_pool_data(lv) &&
++		    !lv_is_vdo_pool_data(lv) &&
+ 		    !lv_is_used_cache_pool(lv) &&
+ 		    !lv_is_mirrored(lv) &&
+ 		    !lv_is_raid(lv))
 
 
