@@ -1,52 +1,49 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Wed, 3 Apr 2019 07:30:02 -0400
-Subject: master - tests: check auto-growth of thin-pool meta
-Message-ID: <201904031130.x33BU2uK027584@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Wed, 23 Sep 2020 12:59:35 +0000 (GMT)
+Subject: master - tests: a bit bigger mirrors
+Message-ID: <20200923125935.93566398E478@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=5d6fe796bd03a49b44e387dc8026996292505f27
-Commit:        5d6fe796bd03a49b44e387dc8026996292505f27
-Parent:        fcec6691f074f1123b9c04c3130f84e35d195b01
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=cfc4dd4c7cb39354525866c9cd1b3c6442a6f558
+Commit:        cfc4dd4c7cb39354525866c9cd1b3c6442a6f558
+Parent:        90c50c1b537dd89b62dad3047e27420d411293f5
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed Apr 3 13:25:54 2019 +0200
+AuthorDate:    Wed Sep 23 14:06:19 2020 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Wed Apr 3 13:28:56 2019 +0200
+CommitterDate: Wed Sep 23 14:47:30 2020 +0200
 
-tests: check auto-growth of thin-pool meta
+tests: a bit bigger mirrors
 
+Seems even with throttling we occasinally need slightly more.
 ---
- test/shell/lvextend-thin-full.sh |    8 +++++++-
- 1 files changed, 7 insertions(+), 1 deletions(-)
+ test/shell/lvconvert-mirror.sh | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
 
-diff --git a/test/shell/lvextend-thin-full.sh b/test/shell/lvextend-thin-full.sh
-index e23eca8..263ab2f 100644
---- a/test/shell/lvextend-thin-full.sh
-+++ b/test/shell/lvextend-thin-full.sh
-@@ -28,7 +28,7 @@ test -n "$LVM_TEST_THIN_RESTORE_CMD" || LVM_TEST_THIN_RESTORE_CMD=$(which thin_r
+diff --git a/test/shell/lvconvert-mirror.sh b/test/shell/lvconvert-mirror.sh
+index 7cf498de4..160b086f6 100644
+--- a/test/shell/lvconvert-mirror.sh
++++ b/test/shell/lvconvert-mirror.sh
+@@ -323,7 +323,7 @@ SHOULD=
+ aux throttle_dm_mirror || SHOULD=should
  
- aux have_thin 1 10 0 || skip
+ # Use large enough mirror that takes time to sychronize with small regionsize
+-lvcreate -aey -L20 -Zn -Wn --type mirror --regionsize 16k -m2 -n $lv1 $vg "$dev1" "$dev2" "$dev4" "$dev3:$DEVRANGE"
++lvcreate -aey -L30 -Zn -Wn --type mirror --regionsize 16k -m2 -n $lv1 $vg "$dev1" "$dev2" "$dev4" "$dev3:$DEVRANGE"
+ $SHOULD not lvconvert -m-1 $vg/$lv1 "$dev1" 2>&1 | tee out
+ aux restore_dm_mirror
+ grep "not in-sync" out
+@@ -341,7 +341,7 @@ lvremove -ff $vg
+ aux throttle_dm_mirror || :
+ # No parallel lvconverts on a single LV please
+ # Use big enough mirror size and small regionsize to run on all test machines succesfully
+-lvcreate -aey -Zn -Wn -L20 --type mirror --regionsize 16k -m1 -n $lv1 $vg "$dev1" "$dev2" "$dev3:0-8"
++lvcreate -aey -Zn -Wn -L30 --type mirror --regionsize 16k -m1 -n $lv1 $vg "$dev1" "$dev2" "$dev3:0-8"
+ check mirror $vg $lv1
+ check mirror_legs $vg $lv1 2
  
--aux prepare_vg 3 256
-+aux prepare_vg 3 4096
- 
- aux lvmconf 'activation/thin_pool_autoextend_percent = 30' \
- 	    'activation/thin_pool_autoextend_threshold = 70'
-@@ -58,6 +58,12 @@ not lvcreate -V10 $vg/pool
- lvextend --use-policies $vg/pool "$dev2" "$dev3"
- #should lvextend -l+100%FREE $vg/pool2
- 
-+check lv_field $vg/pool_tmeta size "3.00m"
-+
-+lvextend -L+3G $vg/pool
-+
-+check lv_field $vg/pool_tmeta size "3.50m"
-+
- lvs -a $vg
- 
- vgremove -ff $vg
 
 
