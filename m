@@ -1,36 +1,55 @@
-From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Thu, 11 Apr 2019 13:23:03 +0200
-Subject: lvm snapshot creation ends with the error message
-In-Reply-To: <5CAEFF6D020000F90005EF6C@prv1-mh.provo.novell.com>
-References: <5CAC7071020000F90005E796@prv1-mh.provo.novell.com>
-	<6fdd4655-4d3a-f12f-aa57-b97b752e437c@redhat.com>
-	<5CAEFF6D020000F90005EF6C@prv1-mh.provo.novell.com>
-Message-ID: <436c0cec-21c1-593e-8095-c4fe1d5cff71@redhat.com>
+From: Zdenek Kabelac <zkabelac@sourceware.org>
+Date: Wed, 23 Sep 2020 12:59:36 +0000 (GMT)
+Subject: master - tests: add check for rename of cached vdopool
+Message-ID: <20200923125936.B5985398E490@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Dne 11. 04. 19 v 10:48 Gang He napsal(a):
-> Hi Zdenek,
-> 
-> The LVM2 version is as below,
->    rpm -V lvm2-2.02.120-78.16.1.x86_64
-> The other information is attached, see lvm.txt.
-> My question is, how do we disable this intermediate error message printing?
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=39cdc1469d192e48bf5e1b39fc51a42c64e46ab6
+Commit:        39cdc1469d192e48bf5e1b39fc51a42c64e46ab6
+Parent:        cfc4dd4c7cb39354525866c9cd1b3c6442a6f558
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Wed Sep 23 13:22:08 2020 +0200
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Wed Sep 23 14:47:30 2020 +0200
 
+tests: add check for rename of cached vdopool
 
-Hi
+---
+ test/shell/lvcreate-vdo-cache.sh | 16 ++++++++++++++--
+ 1 file changed, 14 insertions(+), 2 deletions(-)
 
-Why is anyone using lvm2 version 2.02.120 ?
-
-Are you able to reproduce the error with more recent version of lvm2.
-(As there has been quite a long list of bug fixed).
-
-Regards
-
-
-Zdenek
+diff --git a/test/shell/lvcreate-vdo-cache.sh b/test/shell/lvcreate-vdo-cache.sh
+index b502986b4..c31ccccda 100644
+--- a/test/shell/lvcreate-vdo-cache.sh
++++ b/test/shell/lvcreate-vdo-cache.sh
+@@ -32,10 +32,22 @@ export MKE2FS_CONFIG="$TESTDIR/lib/mke2fs.conf"
+ 
+ aux prepare_vg 1 9000
+ 
+-lvcreate --vdo -L4G -V2G --name $lv1 $vg/vpool
++lvcreate --vdo -L4G -V2G --name $lv1 $vg/vpool1
+ 
+ # Test caching VDOPoolLV
+-lvcreate -H -L10 $vg/vpool
++lvcreate -H -L10 $vg/vpool1
++
++# Current VDO target driver cannot handle online rename
++# once this will be supported - update this test
++not lvrename $vg/vpool1 $vg/vpool 2>&1 | tee out
++grep "Cannot rename" out
++
++lvchange -an $vg
++
++# Ofline should work
++lvrename $vg/vpool1 $vg/vpool
++
++lvchange -ay $vg
+ 
+ mkfs.ext4 -E nodiscard "$DM_DEV_DIR/$vg/$lv1"
+ 
 
 
