@@ -1,45 +1,45 @@
-From: David Teigland <teigland@sourceware.org>
-Date: Tue, 23 Apr 2019 10:44:45 -0400
-Subject: stable-2.02 - devices: drop open error message
-Message-ID: <201904231444.x3NEij6u018823@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: Zdenek Kabelac <zkabelac@sourceware.org>
+Date: Fri, 25 Sep 2020 21:07:04 +0000 (GMT)
+Subject: master - thin: improve error message
+Message-ID: <20200925210704.E77DA385782E@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=559cf0cd1e226baf63a98c39572264fbf5c3f6b4
-Commit:        559cf0cd1e226baf63a98c39572264fbf5c3f6b4
-Parent:        228e331e270451e16126659655905a583a03a0d3
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Tue Apr 23 09:39:42 2019 -0500
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Tue Apr 23 09:42:25 2019 -0500
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=8b22e3808772601725c0e253f4aa5bed24905271
+Commit:        8b22e3808772601725c0e253f4aa5bed24905271
+Parent:        ef59c83f2df61b0f0263b0e32dac66eb0cb75488
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Fri Sep 25 22:42:22 2020 +0200
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Fri Sep 25 22:59:35 2020 +0200
 
-devices: drop open error message
+thin: improve error message
 
-This open error is being printed in more common,
-non-error circumstances than expected.  After a
-number of complaints make it only a debug message.
+Add more info, explaing why the suspend of thin snapshot origin was omitted.
 ---
- lib/device/dev-io.c |    5 +----
- 1 files changed, 1 insertions(+), 4 deletions(-)
+ lib/thin/thin.c | 7 +++++--
+ 1 file changed, 5 insertions(+), 2 deletions(-)
 
-diff --git a/lib/device/dev-io.c b/lib/device/dev-io.c
-index 2a83a96..6996a44 100644
---- a/lib/device/dev-io.c
-+++ b/lib/device/dev-io.c
-@@ -572,10 +572,7 @@ int dev_open_flags(struct device *dev, int flags, int direct, int quiet)
+diff --git a/lib/thin/thin.c b/lib/thin/thin.c
+index d759b76e4..9c4bfb39c 100644
+--- a/lib/thin/thin.c
++++ b/lib/thin/thin.c
+@@ -361,8 +361,11 @@ static int _thin_pool_add_target_line(struct dev_manager *dm,
+ 				if (!lv_thin_pool_transaction_id(seg->lv, &transaction_id))
+ 					return_0; /* Thin pool should exist and work */
+ 				if ((transaction_id + 1) != seg->transaction_id) {
+-					log_error("Can't create snapshot %s as origin %s is not suspended.",
+-						  lmsg->u.lv->name, origin->name);
++					log_error("Omitting suspend of thin snapshot origin %s with expected "
++						  "transaction_id " FMTu64 ", but active pool has " FMTu64 ".",
++						  display_lvname(origin),
++						  !seg->transaction_id ? 0 : seg->transaction_id - 1,
++						  transaction_id);
+ 					return 0;
+ 				}
  			}
- 		}
- #endif
--		if (quiet)
--			log_sys_debug("open", name);
--		else
--			log_sys_error("open", name);
-+		log_sys_debug("open", name);
- 
- 		dev->flags |= DEV_OPEN_FAILURE;
- 		return 0;
 
 
