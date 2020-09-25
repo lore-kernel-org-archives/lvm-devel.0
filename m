@@ -1,33 +1,36 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Fri, 25 Sep 2020 21:07:09 +0000 (GMT)
-Subject: master - tests: vgsplit of vdo volumes
-Message-ID: <20200925210709.7D2043947C02@sourceware.org>
+Date: Fri, 25 Sep 2020 21:07:10 +0000 (GMT)
+Subject: master - tests: check some common errors
+Message-ID: <20200925210710.9D84C3971C6F@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=3e003320a7fed71c203ae833edce38b30a7d06fd
-Commit:        3e003320a7fed71c203ae833edce38b30a7d06fd
-Parent:        e2577c037da84442d5afa125772882c6d5caf8de
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=ccb58c109ffab7a073e1630e48babf5eae052ee8
+Commit:        ccb58c109ffab7a073e1630e48babf5eae052ee8
+Parent:        3e003320a7fed71c203ae833edce38b30a7d06fd
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu Sep 24 21:50:50 2020 +0200
+AuthorDate:    Fri Sep 25 22:47:19 2020 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Fri Sep 25 22:59:35 2020 +0200
 
-tests: vgsplit of vdo volumes
+tests: check some common errors
 
+Collect some cases users are hitting when working
+with thin-pools which has mismatching kernel metadata content with
+lvm2 metadata.
 ---
- test/shell/vgsplit-vdo.sh | 56 +++++++++++++++++++++++++++++++++++++++++++++++
- 1 file changed, 56 insertions(+)
+ test/shell/thin-errors.sh | 79 +++++++++++++++++++++++++++++++++++++++++++++++
+ 1 file changed, 79 insertions(+)
 
-diff --git a/test/shell/vgsplit-vdo.sh b/test/shell/vgsplit-vdo.sh
+diff --git a/test/shell/thin-errors.sh b/test/shell/thin-errors.sh
 new file mode 100644
-index 000000000..1d5ddf83e
+index 000000000..7bdf268e1
 --- /dev/null
-+++ b/test/shell/vgsplit-vdo.sh
-@@ -0,0 +1,56 @@
++++ b/test/shell/thin-errors.sh
+@@ -0,0 +1,79 @@
 +#!/usr/bin/env bash
 +
 +# Copyright (C) 2020 Red Hat, Inc. All rights reserved.
@@ -40,48 +43,71 @@ index 000000000..1d5ddf83e
 +# along with this program; if not, write to the Free Software Foundation,
 +# Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 +
-+# Test vgsplit command options with vdo volumes
++# Test various error conditions user may hit with thin volumes
 +
 +SKIP_WITH_LVMLOCKD=1
 +SKIP_WITH_LVMPOLLD=1
 +
++export LVM_TEST_THIN_REPAIR_CMD=${LVM_TEST_THIN_REPAIR_CMD-/bin/false}
++
 +. lib/inittest
 +
-+aux have_vdo 6 2 0 || skip
++#
++# Main
++#
++aux have_thin 1 3 0 || skip
++aux thin_pool_error_works_32 || skip
 +
-+aux lvmconf "allocation/vdo_slab_size_mb = 128"
++aux prepare_vg 2
 +
-+aux prepare_vg 4 2200
++###############################################
++#  Testing failing thin-pool metadata device  #
++###############################################
 +
-+lvcreate --vdo -L4G -n $lv1 $vg "$dev1" "$dev2"
-+lvcreate --vdo -L4G -n $lv2 $vg "$dev3" "$dev4"
++lvcreate -T -L1M --errorwhenfull y $vg/pool
++lvcreate -V2 -n $lv1 $vg/pool
++lvcreate -s -n $lv2 $vg/$lv1
 +
-+# Cannot move only part of VDO _vdata
-+not vgsplit $vg $vg2 "$dev3" |& tee out
-+grep "split" out
++# Prepare old metadata with transaction_id 2
++vgcfgbackup -f mda_tid_2 $vg
 +
-+# Cannot move active VDO
-+not vgsplit $vg $vg2 "$dev3" "$dev4" |& tee out
-+grep "inactive" out
++lvcreate -s -n $lv3 $vg/$lv1
++lvcreate -s -n $lv4 $vg/$lv1
++lvcreate -s -n $lv5 $vg/$lv1
 +
-+lvchange -an $vg/$lv2
++vgcfgbackup -f mda_tid_5 $vg
 +
-+vgsplit $vg $vg2 "$dev3" "$dev4"
++# Restore mismatching old metadata with different transaction_id
++vgcfgrestore -f mda_tid_2 --force --yes $vg
 +
-+lvchange -ay $vg2/$lv2
-+lvs -ao+devices $vg $vg2
 +
-+# Cannot merge active VDO
-+not vgmerge $vg $vg2 |& tee out
-+grep "inactive" out
++not lvcreate -s -n $lv5 $vg/$lv1
 +
-+lvchange -an $vg2/$lv2
++sed -e 's/transaction_id = 2/transaction_id = 5/g' mda_tid_2 > mda_tid_2_5
 +
-+vgmerge $vg $vg2
++# Restore metadata with matching transaction_id, 
++# but already existing device in kernel, unknown to lvm2
++vgcfgrestore -f mda_tid_2_5 --force --yes $vg
 +
-+lvs -ao+devices $vg
++not lvcreate -s -n $lv5 $vg/$lv1
++# can be tried repeatedly
++not lvcreate -s -n $lv5 $vg/$lv1
 +
-+lvchange -ay $vg/$lv2
++
++# Restore matching metadata and check all works
++# and no kernel thin device was lost
++vgcfgrestore -f mda_tid_5 --force --yes $vg
++
++lvcreate -s -n $lv6 $vg/$lv1
++
++lvchange -ay -K $vg
++
++check active $vg $lv1
++check active $vg $lv2
++check active $vg $lv3
++check active $vg $lv4
++check active $vg $lv5
++check active $vg $lv6
 +
 +vgremove -ff $vg
 
