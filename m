@@ -1,46 +1,50 @@
-From: Heinz Mauelshagen <heinzm@sourceware.org>
-Date: Mon, 28 Sep 2020 15:18:29 +0000 (GMT)
-Subject: stable-2.02 - Revert "lvconvert: display warning if raid1 LV image count does not change"
-Message-ID: <20200928151829.A81D9394CC3F@sourceware.org>
+From: David Teigland <teigland@sourceware.org>
+Date: Mon, 28 Sep 2020 18:29:27 +0000 (GMT)
+Subject: master - devices: fix reopen for unopened device
+Message-ID: <20200928182927.71827386101B@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=7e2ceba2fb6ea6769608858f7ce9a88e5ff3eb68
-Commit:        7e2ceba2fb6ea6769608858f7ce9a88e5ff3eb68
-Parent:        7f41d49f497e2b886f197121551db585dff29b6e
-Author:        Heinz Mauelshagen <heinzm@redhat.com>
-AuthorDate:    Mon Sep 28 17:17:26 2020 +0200
-Committer:     Heinz Mauelshagen <heinzm@redhat.com>
-CommitterDate: Mon Sep 28 17:17:26 2020 +0200
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=890c7ef451809a498978651a1802f65606a7c16b
+Commit:        890c7ef451809a498978651a1802f65606a7c16b
+Parent:        8952dcbff0c1ca9bfaa2f8fe8b6da78a10319e6b
+Author:        David Teigland <teigland@redhat.com>
+AuthorDate:    Fri Sep 25 11:59:49 2020 -0500
+Committer:     David Teigland <teigland@redhat.com>
+CommitterDate: Mon Sep 28 13:25:57 2020 -0500
 
-Revert "lvconvert: display warning if raid1 LV image count does not change"
+devices: fix reopen for unopened device
 
-This reverts commit 7f41d49f497e2b886f197121551db585dff29b6e as
-_lv_raid_change_image_count() already checks for non-changed image count.
-
-Resolves: https://bugzilla.redhat.com/show_bug.cgi?id=1872130
+If there's a request to reopen rw a device that's not
+open, then just call the normal open function.
 ---
- lib/metadata/raid_manip.c | 5 -----
- 1 file changed, 5 deletions(-)
+ lib/label/label.c | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
 
-diff --git a/lib/metadata/raid_manip.c b/lib/metadata/raid_manip.c
-index b805d956c..f51e9c401 100644
---- a/lib/metadata/raid_manip.c
-+++ b/lib/metadata/raid_manip.c
-@@ -3234,11 +3234,6 @@ int lv_raid_change_image_count(struct logical_volume *lv, int yes, uint32_t new_
- 	const char *level = seg->area_count == 1 ? "raid1 with " : "";
- 	const char *resil = new_count < seg->area_count ? "reducing" : "enhancing";
+diff --git a/lib/label/label.c b/lib/label/label.c
+index 0090fd0a5..27d06d783 100644
+--- a/lib/label/label.c
++++ b/lib/label/label.c
+@@ -1460,7 +1460,8 @@ int label_scan_reopen_rw(struct device *dev)
+ 				  dev_name(dev), dev->bcache_fd, dev->bcache_di);
+ 			return 0;
+ 		}
+-		goto do_open;
++		dev->flags |= DEV_BCACHE_WRITE;
++		return _scan_dev_open(dev);
+ 	}
  
--	if (new_count == seg->area_count) {
--		log_warn("Type %s LV %s already has %u images.", lvseg_name(seg), display_lvname(lv), new_count);
--		return 1;
--	}
--
- 	/* LV must be active to perform raid conversion operations */
- 	if (!lv_is_active(lv)) {
- 		log_error("%s must be active to perform this operation.",
+ 	if ((dev->flags & DEV_BCACHE_WRITE))
+@@ -1477,7 +1478,6 @@ int label_scan_reopen_rw(struct device *dev)
+ 		return 0;
+ 	}
+ 
+- do_open:
+ 	flags |= O_DIRECT;
+ 	flags |= O_NOATIME;
+ 	flags |= O_RDWR;
 
 
