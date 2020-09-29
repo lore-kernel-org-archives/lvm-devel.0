@@ -1,223 +1,222 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Tue, 29 Sep 2020 08:45:16 +0000 (GMT)
-Subject: master - lvm: add readline alternative editline
-Message-ID: <20200929084516.1B7663861812@sourceware.org>
+Date: Tue, 29 Sep 2020 08:45:17 +0000 (GMT)
+Subject: master - configure: editline updates
+Message-ID: <20200929084517.3C510384B010@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=168e2ffbcd8c8cf20711be36059bfcf999a95012
-Commit:        168e2ffbcd8c8cf20711be36059bfcf999a95012
-Parent:        fb96e9ab217641ec3a967d9aa2be01fc936ee038
-Author:        Bastian Germann <bastiangermann@fishpost.de>
-AuthorDate:    Sat Sep 26 21:32:55 2020 +0200
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=655342427da621174f04506fb7002f54af832e07
+Commit:        655342427da621174f04506fb7002f54af832e07
+Parent:        168e2ffbcd8c8cf20711be36059bfcf999a95012
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Tue Sep 29 10:15:45 2020 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Tue Sep 29 10:13:24 2020 +0200
+CommitterDate: Tue Sep 29 10:43:45 2020 +0200
 
-lvm: add readline alternative editline
+configure: editline updates
 
-LVM2 is distributed under GPLv2 only. The readline library changed its
-license long ago to GPLv3. Given that those licenses are incompatible
-and you follow the FSF in their interpretation that dynamically linking
-creates a derivative work, distributing LVM2 linked against a current
-readline version might be legally problematic.
-
-Add support for the BSD licensed editline library as an alternative for
-readline.
-
-Link: https://thrysoee.dk/editline
+Update configure file.
 ---
- configure.ac           | 23 +++++++++++++++++++++++
- include/configure.h.in |  9 +++++++++
- lib/mm/memlock.c       |  1 +
- libdm/make.tmpl.in     |  1 +
- make.tmpl.in           |  1 +
- tools/Makefile.in      |  2 +-
- tools/lvm.c            | 21 +++++++++++++--------
- tools/lvmcmdline.c     |  2 +-
- 8 files changed, 50 insertions(+), 10 deletions(-)
+ WHATS_NEW |   1 +
+ configure | 123 +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++-
+ 2 files changed, 123 insertions(+), 1 deletion(-)
 
-diff --git a/configure.ac b/configure.ac
-index c2a72abf2..3b06e472b 100644
---- a/configure.ac
-+++ b/configure.ac
-@@ -691,6 +691,12 @@ AC_ARG_ENABLE([readline],
- 	      AC_HELP_STRING([--disable-readline], [disable readline support]),
- 	      READLINE=$enableval, READLINE=maybe)
+diff --git a/WHATS_NEW b/WHATS_NEW
+index d50ba762a..a8639ff65 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.03.11 - 
+ ==================================
++  Add configure --enable-editline support as an alternative to readline.
+   Enhance reporting and error handling when creating thin volumes.
+   Enable vgsplit for VDO volumes.
+   Lvextend of vdo pool volumes ensure at least 1 new VDO slab is added.
+diff --git a/configure b/configure
+index f7b681cad..d39ce1b98 100755
+--- a/configure
++++ b/configure
+@@ -753,6 +753,8 @@ BUILD_CMIRRORD
+ BLKID_PC
+ MODPROBE_CMD
+ MSGFMT
++EDITLINE_LIBS
++EDITLINE_CFLAGS
+ PYTHON3_CONFIG
+ pkgpyexecdir
+ pyexecdir
+@@ -920,6 +922,7 @@ with_vdo_format
+ with_writecache
+ with_integrity
+ enable_readline
++enable_editline
+ enable_realtime
+ enable_ocf
+ with_ocfdir
+@@ -1015,7 +1018,9 @@ SYSTEMD_CFLAGS
+ SYSTEMD_LIBS
+ UDEV_CFLAGS
+ UDEV_LIBS
+-PYTHON'
++PYTHON
++EDITLINE_CFLAGS
++EDITLINE_LIBS'
+ 
+ 
+ # Initialize some variables set by options.
+@@ -1638,6 +1643,7 @@ Optional Features:
+   --disable-cache_check_needs_check
+                           required if cache_check version is < 0.5
+   --disable-readline      disable readline support
++  --enable-editline       enable editline support
+   --disable-realtime      disable realtime clock support
+   --enable-ocf            enable Open Cluster Framework (OCF) compliant
+                           resource agents
+@@ -1816,6 +1822,10 @@ Some influential environment variables:
+   UDEV_CFLAGS C compiler flags for UDEV, overriding pkg-config
+   UDEV_LIBS   linker flags for UDEV, overriding pkg-config
+   PYTHON      the Python interpreter
++  EDITLINE_CFLAGS
++              C compiler flags for EDITLINE, overriding pkg-config
++  EDITLINE_LIBS
++              linker flags for EDITLINE, overriding pkg-config
+ 
+ Use these variables to override the choices made by `configure' or to help
+ it to find libraries and programs with nonstandard names/locations.
+@@ -9797,6 +9807,15 @@ else
+ fi
+ 
  
 +################################################################################
-+dnl -- Disable editline
-+AC_ARG_ENABLE([editline],
-+	      AC_HELP_STRING([--enable-editline], [enable editline support]),
-+	      EDITLINE=$enableval, EDITLINE=no)
++# Check whether --enable-editline was given.
++if test "${enable_editline+set}" = set; then :
++  enableval=$enable_editline; EDITLINE=$enableval
++else
++  EDITLINE=no
++fi
++
 +
  ################################################################################
- dnl -- Disable realtime clock support
- AC_MSG_CHECKING(whether to enable realtime support)
-@@ -1378,6 +1384,16 @@ AC_IF_YES(ac_cv_stat_st_ctim,
- dnl -- Check for getopt
- AC_CHECK_HEADERS(getopt.h, AC_DEFINE([HAVE_GETOPTLONG], 1, [Define to 1 if getopt_long is available.]))
+ { $as_echo "$as_me:${as_lineno-$LINENO}: checking whether to enable realtime support" >&5
+ $as_echo_n "checking whether to enable realtime support... " >&6; }
+@@ -12808,6 +12827,86 @@ fi
+ done
+ 
  
 +################################################################################
-+dnl -- Check for editline
 +if test "$EDITLINE" == yes; then
-+	PKG_CHECK_MODULES([EDITLINE], [libedit], [
-+		AC_DEFINE([EDITLINE_SUPPORT], 1,
-+			[Define to 1 to include the LVM editline shell.])], AC_MSG_ERROR(
-+[libedit could not be found which is required for the --enable-readline option.])
-+	)
++
++pkg_failed=no
++{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for EDITLINE" >&5
++$as_echo_n "checking for EDITLINE... " >&6; }
++
++if test -n "$EDITLINE_CFLAGS"; then
++    pkg_cv_EDITLINE_CFLAGS="$EDITLINE_CFLAGS"
++ elif test -n "$PKG_CONFIG"; then
++    if test -n "$PKG_CONFIG" && \
++    { { $as_echo "$as_me:${as_lineno-$LINENO}: \$PKG_CONFIG --exists --print-errors \"libedit\""; } >&5
++  ($PKG_CONFIG --exists --print-errors "libedit") 2>&5
++  ac_status=$?
++  $as_echo "$as_me:${as_lineno-$LINENO}: \$? = $ac_status" >&5
++  test $ac_status = 0; }; then
++  pkg_cv_EDITLINE_CFLAGS=`$PKG_CONFIG --cflags "libedit" 2>/dev/null`
++		      test "x$?" != "x0" && pkg_failed=yes
++else
++  pkg_failed=yes
++fi
++ else
++    pkg_failed=untried
++fi
++if test -n "$EDITLINE_LIBS"; then
++    pkg_cv_EDITLINE_LIBS="$EDITLINE_LIBS"
++ elif test -n "$PKG_CONFIG"; then
++    if test -n "$PKG_CONFIG" && \
++    { { $as_echo "$as_me:${as_lineno-$LINENO}: \$PKG_CONFIG --exists --print-errors \"libedit\""; } >&5
++  ($PKG_CONFIG --exists --print-errors "libedit") 2>&5
++  ac_status=$?
++  $as_echo "$as_me:${as_lineno-$LINENO}: \$? = $ac_status" >&5
++  test $ac_status = 0; }; then
++  pkg_cv_EDITLINE_LIBS=`$PKG_CONFIG --libs "libedit" 2>/dev/null`
++		      test "x$?" != "x0" && pkg_failed=yes
++else
++  pkg_failed=yes
++fi
++ else
++    pkg_failed=untried
++fi
++
++
++
++if test $pkg_failed = yes; then
++   	{ $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
++$as_echo "no" >&6; }
++
++if $PKG_CONFIG --atleast-pkgconfig-version 0.20; then
++        _pkg_short_errors_supported=yes
++else
++        _pkg_short_errors_supported=no
++fi
++        if test $_pkg_short_errors_supported = yes; then
++	        EDITLINE_PKG_ERRORS=`$PKG_CONFIG --short-errors --print-errors --cflags --libs "libedit" 2>&1`
++        else
++	        EDITLINE_PKG_ERRORS=`$PKG_CONFIG --print-errors --cflags --libs "libedit" 2>&1`
++        fi
++	# Put the nasty error message in config.log where it belongs
++	echo "$EDITLINE_PKG_ERRORS" >&5
++
++	as_fn_error $? "libedit could not be found which is required for the --enable-readline option." "$LINENO" 5
++
++elif test $pkg_failed = untried; then
++     	{ $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
++$as_echo "no" >&6; }
++	as_fn_error $? "libedit could not be found which is required for the --enable-readline option." "$LINENO" 5
++
++else
++	EDITLINE_CFLAGS=$pkg_cv_EDITLINE_CFLAGS
++	EDITLINE_LIBS=$pkg_cv_EDITLINE_LIBS
++        { $as_echo "$as_me:${as_lineno-$LINENO}: result: yes" >&5
++$as_echo "yes" >&6; }
++
++
++$as_echo "#define EDITLINE_SUPPORT 1" >>confdefs.h
++
++fi
 +fi
 +
  ################################################################################
- dnl -- Check for readline (Shamelessly copied from parted 1.4.17)
  if test "$READLINE" != no; then
-@@ -1510,6 +1526,12 @@ fi
- AC_MSG_CHECKING(whether to enable readline)
- AC_MSG_RESULT($READLINE)
+ 	lvm_saved_libs=$LIBS
+@@ -13246,6 +13345,28 @@ $as_echo_n "checking whether to enable readline... " >&6; }
+ { $as_echo "$as_me:${as_lineno-$LINENO}: result: $READLINE" >&5
+ $as_echo "$READLINE" >&6; }
  
 +if test "$EDITLINE" = yes; then
-+	AC_CHECK_HEADERS(editline/readline.h editline/history.h,,hard_bailout)
++	for ac_header in editline/readline.h editline/history.h
++do :
++  as_ac_Header=`$as_echo "ac_cv_header_$ac_header" | $as_tr_sh`
++ac_fn_c_check_header_mongrel "$LINENO" "$ac_header" "$as_ac_Header" "$ac_includes_default"
++if eval test \"x\$"$as_ac_Header"\" = x"yes"; then :
++  cat >>confdefs.h <<_ACEOF
++#define `$as_echo "HAVE_$ac_header" | $as_tr_cpp` 1
++_ACEOF
++
++else
++  hard_bailout
 +fi
-+AC_MSG_CHECKING(whether to enable editline)
-+AC_MSG_RESULT($EDITLINE)
++
++done
++
++fi
++{ $as_echo "$as_me:${as_lineno-$LINENO}: checking whether to enable editline" >&5
++$as_echo_n "checking whether to enable editline... " >&6; }
++{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $EDITLINE" >&5
++$as_echo "$EDITLINE" >&6; }
 +
  if test "$BUILD_CMIRRORD" = yes; then
- 	AC_CHECK_FUNCS(atexit,,hard_bailout)
- fi
-@@ -1765,6 +1787,7 @@ AC_SUBST(QUORUM_CFLAGS)
- AC_SUBST(QUORUM_LIBS)
- AC_SUBST(RT_LIBS)
- AC_SUBST(READLINE_LIBS)
-+AC_SUBST(EDITLINE_LIBS)
- AC_SUBST(REPLICATORS)
- AC_SUBST(SACKPT_CFLAGS)
- AC_SUBST(SACKPT_LIBS)
-diff --git a/include/configure.h.in b/include/configure.h.in
-index 540cee7cf..46d5aef20 100644
---- a/include/configure.h.in
-+++ b/include/configure.h.in
-@@ -126,6 +126,9 @@
- /* Library version */
- #undef DM_LIB_VERSION
- 
-+/* Define to 1 to include the LVM editline shell. */
-+#undef EDITLINE_SUPPORT
-+
- /* Path to fsadm binary. */
- #undef FSADM_PATH
- 
-@@ -176,6 +179,12 @@
- /* Define to 1 if you don't have `vprintf' but do have `_doprnt.' */
- #undef HAVE_DOPRNT
- 
-+/* Define to 1 if you have the <editline/history.h> header file. */
-+#undef HAVE_EDITLINE_HISTORY_H
-+
-+/* Define to 1 if you have the <editline/readline.h> header file. */
-+#undef HAVE_EDITLINE_READLINE_H
-+
- /* Define to 1 if you have the <errno.h> header file. */
- #undef HAVE_ERRNO_H
- 
-diff --git a/lib/mm/memlock.c b/lib/mm/memlock.c
-index b06bbc82c..883795d28 100644
---- a/lib/mm/memlock.c
-+++ b/lib/mm/memlock.c
-@@ -122,6 +122,7 @@ static const char * const _blacklist_maps[] = {
- 	"/libpcre.so.",		/* not using pcre during mlock (selinux) */
- 	"/libpcre2-",		/* not using pcre during mlock (selinux) */
- 	"/libreadline.so.",	/* not using readline during mlock */
-+	"/libedit.so.",		/* not using editline during mlock */
- 	"/libresolv-",		/* not using during mlock (udev) */
- 	"/libselinux.so.",	/* not using selinux during mlock */
- 	"/libsepol.so.",	/* not using sepol during mlock */
-diff --git a/libdm/make.tmpl.in b/libdm/make.tmpl.in
-index 9041da52e..aaf8a5e77 100644
---- a/libdm/make.tmpl.in
-+++ b/libdm/make.tmpl.in
-@@ -71,6 +71,7 @@ RT_LIBS = @RT_LIBS@
- M_LIBS = @M_LIBS@
- PTHREAD_LIBS = @PTHREAD_LIBS@
- READLINE_LIBS = @READLINE_LIBS@
-+EDITLINE_LIBS = @EDITLINE_LIBS@
- SELINUX_LIBS = @SELINUX_LIBS@
- UDEV_CFLAGS = @UDEV_CFLAGS@
- UDEV_LIBS = @UDEV_LIBS@
-diff --git a/make.tmpl.in b/make.tmpl.in
-index 8a2081897..4549746ab 100644
---- a/make.tmpl.in
-+++ b/make.tmpl.in
-@@ -77,6 +77,7 @@ RT_LIBS = @RT_LIBS@
- M_LIBS = @M_LIBS@
- PTHREAD_LIBS = @PTHREAD_LIBS@
- READLINE_LIBS = @READLINE_LIBS@
-+EDITLINE_LIBS = @EDITLINE_LIBS@
- SELINUX_LIBS = @SELINUX_LIBS@
- UDEV_CFLAGS = @UDEV_CFLAGS@
- UDEV_LIBS = @UDEV_LIBS@
-diff --git a/tools/Makefile.in b/tools/Makefile.in
-index 2620daa17..11160e655 100644
---- a/tools/Makefile.in
-+++ b/tools/Makefile.in
-@@ -122,7 +122,7 @@ CFLAGS_lvm.o += $(EXTRA_EXEC_CFLAGS)
- lvm: $(OBJECTS) lvm.o $(LVMINTERNAL_LIBS)
- 	@echo "    [CC] $@"
- 	$(Q) $(CC) $(CFLAGS) $(LDFLAGS) $(EXTRA_EXEC_LDFLAGS) $(ELDFLAGS) -o $@ $+ \
--		$(DMEVENT_LIBS) $(READLINE_LIBS) $(LVMLIBS)
-+		$(DMEVENT_LIBS) $(READLINE_LIBS) $(EDITLINE_LIBS) $(LVMLIBS)
- 
- DEFS_man-generator.o += -DMAN_PAGE_GENERATOR
- 
-diff --git a/tools/lvm.c b/tools/lvm.c
-index 4bfa6f5c2..79b1210af 100644
---- a/tools/lvm.c
-+++ b/tools/lvm.c
-@@ -22,13 +22,18 @@ int main(int argc, char **argv)
- 	return lvm2_main(argc, argv);
- }
- 
--#ifdef READLINE_SUPPORT
--
--#  include <readline/readline.h>
--#  include <readline/history.h>
--#  ifndef HAVE_RL_COMPLETION_MATCHES
--#    define rl_completion_matches(a, b) completion_matches((char *)a, b)
--#    define rl_completion_func_t CPPFunction
-+#if defined(READLINE_SUPPORT) || defined(EDITLINE_SUPPORT)
-+
-+#  ifdef READLINE_SUPPORT
-+#    include <readline/readline.h>
-+#    include <readline/history.h>
-+#    ifndef HAVE_RL_COMPLETION_MATCHES
-+#      define rl_completion_matches(a, b) completion_matches((char *)a, b)
-+#      define rl_completion_func_t CPPFunction
-+#    endif
-+#  elif defined(EDITLINE_SUPPORT)
-+#    include <editline/readline.h>
-+#    include <editline/history.h>
- #  endif
- 
- static struct cmdline_context *_cmdline;
-@@ -348,4 +353,4 @@ int lvm_shell(struct cmd_context *cmd, struct cmdline_context *cmdline)
- 	return 0;
- }
- 
--#endif	/* READLINE_SUPPORT */
-+#endif	/* READLINE_SUPPORT || EDITLINE_SUPPORT */
-diff --git a/tools/lvmcmdline.c b/tools/lvmcmdline.c
-index 8dd38e51d..e8d732878 100644
---- a/tools/lvmcmdline.c
-+++ b/tools/lvmcmdline.c
-@@ -3646,7 +3646,7 @@ int lvm2_main(int argc, char **argv)
- 	}
- 
- 	if (run_shell) {
--#ifdef READLINE_SUPPORT
-+#if defined(READLINE_SUPPORT) || defined(EDITLINE_SUPPORT)
- 		_nonroot_warning();
- 		if (!_prepare_profiles(cmd)) {
- 			ret = ECMD_FAILED;
+ 	for ac_func in atexit
+ do :
 
 
