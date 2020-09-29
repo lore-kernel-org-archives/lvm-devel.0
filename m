@@ -1,31 +1,39 @@
-From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Tue, 29 Sep 2020 12:43:33 +0200
-Subject: [PATCH] Add readline alternative editline
-In-Reply-To: <20200926193255.3708-1-bastiangermann@fishpost.de>
-References: <20200926193255.3708-1-bastiangermann@fishpost.de>
-Message-ID: <27d6f869-0933-fe5b-d9be-3d669d051d0a@redhat.com>
+From: David Teigland <teigland@sourceware.org>
+Date: Tue, 29 Sep 2020 19:43:34 +0000 (GMT)
+Subject: master - lvmlockd vdo: disallow use of shared lock on LV
+Message-ID: <20200929194334.B03033857C57@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Dne 26. 09. 20 v 21:32 Bastian Germann napsal(a):
-> LVM2 is distributed under GPLv2 only. The readline library changed its
-> license long ago to GPLv3. Given that those licenses are incompatible
-> and you follow the FSF in their interpretation that dynamically linking
-> creates a derivative work, distributing LVM2 linked against a current
-> readline version might be legally problematic.
-> 
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=82e270c18a76d68e2efc28a194bca2e428c18fae
+Commit:        82e270c18a76d68e2efc28a194bca2e428c18fae
+Parent:        af8044da3ab6891495f4d96b51a52bc4ae457ffb
+Author:        David Teigland <teigland@redhat.com>
+AuthorDate:    Mon Sep 28 13:48:46 2020 -0500
+Committer:     David Teigland <teigland@redhat.com>
+CommitterDate: Tue Sep 29 14:43:26 2020 -0500
 
-Hi
+lvmlockd vdo: disallow use of shared lock on LV
 
-Thanks for this nice extending patch and it's now pushed upstream here:
+vdo cannot be active on multiple hosts concurrently
+---
+ lib/locking/lvmlockd.c | 1 +
+ 1 file changed, 1 insertion(+)
 
-https://www.redhat.com/archives/lvm-devel/2020-September/msg00167.html
-
-Regards
-
-Zdenek
+diff --git a/lib/locking/lvmlockd.c b/lib/locking/lvmlockd.c
+index dca7954ab..9d11077e3 100644
+--- a/lib/locking/lvmlockd.c
++++ b/lib/locking/lvmlockd.c
+@@ -2374,6 +2374,7 @@ int lockd_lv(struct cmd_context *cmd, struct logical_volume *lv,
+ 	    lv_is_thin_type(lv) ||
+ 	    lv_is_mirror_type(lv) ||
+ 	    lv_is_raid_type(lv) ||
++	    lv_is_vdo_type(lv) ||
+ 	    lv_is_cache_type(lv)) {
+ 		flags |= LDLV_MODE_NO_SH;
+ 	}
 
 
