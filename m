@@ -1,48 +1,68 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Tue, 29 Sep 2020 08:45:24 +0000 (GMT)
-Subject: master - thin: validate thin-pool state before sending messages
-Message-ID: <20200929084524.137343844008@sourceware.org>
+Date: Tue, 29 Sep 2020 08:45:25 +0000 (GMT)
+Subject: master - thin: remove unneeded code test
+Message-ID: <20200929084525.35A6F384B010@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=18c74666ee668c5d4569c868f38c3d8ae950dda1
-Commit:        18c74666ee668c5d4569c868f38c3d8ae950dda1
-Parent:        4de6f58085c533c79ce2e0db6cdeb6ed06fe05f8
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=4cd356b26b85e075490be29b9e1e40b3aafe2d5b
+Commit:        4cd356b26b85e075490be29b9e1e40b3aafe2d5b
+Parent:        18c74666ee668c5d4569c868f38c3d8ae950dda1
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Mon Sep 28 23:12:48 2020 +0200
+AuthorDate:    Sun Sep 27 02:20:50 2020 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Tue Sep 29 10:43:56 2020 +0200
 
-thin: validate thin-pool state before sending messages
+thin: remove unneeded code test
 
-Alhtough lvm2 does validation on its side, ensure DM code
-is not sending messages to failed thin pool.
+Since we detect already transaction if before starting
+to build dm tree - this extra check is a duplicate
+that would only capture very tiny 'race' and we later
+validate transaction_id with suspended snapshot origin.
 ---
- device_mapper/libdm-deptree.c | 9 +++++++++
- 1 file changed, 9 insertions(+)
+ lib/thin/thin.c | 20 --------------------
+ 1 file changed, 20 deletions(-)
 
-diff --git a/device_mapper/libdm-deptree.c b/device_mapper/libdm-deptree.c
-index a98b1fcdd..d9e1683ca 100644
---- a/device_mapper/libdm-deptree.c
-+++ b/device_mapper/libdm-deptree.c
-@@ -1666,6 +1666,15 @@ static int _thin_pool_node_send_messages(struct dm_tree_node *dnode,
- 	if (!have_messages || !send)
- 		return 1; /* transaction_id is matching */
- 
-+	if (stp.fail || stp.read_only || stp.needs_check) {
-+		log_error("Cannot send messages to thin pool %s%s%s%s.",
-+			  _node_name(dnode),
-+			  stp.fail ? " in failed state" : "",
-+			  stp.read_only ? " with read only metadata" : "",
-+			  stp.needs_check ? " which needs check first" : "");
-+		return 0;
-+	}
-+
- 	dm_list_iterate_items(tmsg, &seg->thin_messages) {
- 		if (!(_thin_pool_node_message(dnode, tmsg)))
- 			return_0;
+diff --git a/lib/thin/thin.c b/lib/thin/thin.c
+index 9c4bfb39c..ba0da712d 100644
+--- a/lib/thin/thin.c
++++ b/lib/thin/thin.c
+@@ -265,8 +265,6 @@ static int _thin_pool_add_target_line(struct dev_manager *dm,
+ 	char *metadata_dlid, *pool_dlid;
+ 	const struct lv_thin_message *lmsg;
+ 	const struct logical_volume *origin;
+-	struct lvinfo info;
+-	uint64_t transaction_id = 0;
+ 	unsigned attr;
+ 	uint64_t low_water_mark;
+ 	int threshold;
+@@ -351,24 +349,6 @@ static int _thin_pool_add_target_line(struct dev_manager *dm,
+ 		case DM_THIN_MESSAGE_CREATE_THIN:
+ 			origin = first_seg(lmsg->u.lv)->origin;
+ 			/* Check if the origin is suspended */
+-			if (origin && lv_info(cmd, origin, 1, &info, 0, 0) &&
+-			    info.exists && !info.suspended) {
+-				/* Origin is not suspended, but the transaction may have been
+-				 * already transfered, so test for transaction_id and
+-				 * allow to pass in the message for dmtree processing
+-				 * so it will skip all messages later.
+-				 */
+-				if (!lv_thin_pool_transaction_id(seg->lv, &transaction_id))
+-					return_0; /* Thin pool should exist and work */
+-				if ((transaction_id + 1) != seg->transaction_id) {
+-					log_error("Omitting suspend of thin snapshot origin %s with expected "
+-						  "transaction_id " FMTu64 ", but active pool has " FMTu64 ".",
+-						  display_lvname(origin),
+-						  !seg->transaction_id ? 0 : seg->transaction_id - 1,
+-						  transaction_id);
+-					return 0;
+-				}
+-			}
+ 			log_debug_activation("Thin pool create_%s %s.", (!origin) ? "thin" : "snap", lmsg->u.lv->name);
+ 			if (!dm_tree_node_add_thin_pool_message(node,
+ 								(!origin) ? lmsg->type : DM_THIN_MESSAGE_CREATE_SNAP,
 
 
