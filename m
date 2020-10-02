@@ -1,54 +1,66 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Fri,  2 Oct 2020 20:27:54 +0000 (GMT)
-Subject: master - wipe_lv: drop label_scan_invalidate on error path
-Message-ID: <20201002202754.7C96C3945C25@sourceware.org>
+Date: Fri,  2 Oct 2020 20:27:53 +0000 (GMT)
+Subject: master - bcache: use flexible arrays
+Message-ID: <20201002202753.5BBC6398E493@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=7396f1cfee0399237aee1ed41f5930746ee31716
-Commit:        7396f1cfee0399237aee1ed41f5930746ee31716
-Parent:        b44db5d1a7ecc2e8e3cef0852c4397b64ddf0a09
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=b44db5d1a7ecc2e8e3cef0852c4397b64ddf0a09
+Commit:        b44db5d1a7ecc2e8e3cef0852c4397b64ddf0a09
+Parent:        b3c7a2b3f0bc761a14cfe1c8fc768e265a183204
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Oct 2 19:26:58 2020 +0200
+AuthorDate:    Wed Sep 30 23:28:44 2020 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Fri Oct 2 21:02:04 2020 +0200
+CommitterDate: Fri Oct 2 21:00:26 2020 +0200
 
-wipe_lv: drop label_scan_invalidate on error path
+bcache: use flexible arrays
 
-Since dev_set_bytes() now closes  dev on error path itself,
-remove this unneeded call now (introduced few commits back
-in history thus removing comment from WHATS_NEW)
+Cleanup, allocate whole struct with a single malloc call.
 ---
- WHATS_NEW               | 1 -
- lib/metadata/lv_manip.c | 1 -
- 2 files changed, 2 deletions(-)
+ lib/device/bcache.c | 13 +++----------
+ 1 file changed, 3 insertions(+), 10 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index a93a61b32..d4cf61d71 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -20,7 +20,6 @@ Version 2.03.11 -
-   Fix 64bit math when calculation cachevol size.
-   Preserve uint32_t for seqno handling.
-   Switch from mmap to plain read when loading regular files.
--  Fix missing device closing on wiping error path.
-   Update lvmvdo man page and better explain DISCARD usage.
+diff --git a/lib/device/bcache.c b/lib/device/bcache.c
+index d1749d9ab..2451eda2b 100644
+--- a/lib/device/bcache.c
++++ b/lib/device/bcache.c
+@@ -66,23 +66,17 @@ struct control_block {
+ struct cb_set {
+ 	struct dm_list free;
+ 	struct dm_list allocated;
+-	struct control_block *vec;
++	struct control_block vec[];
+ } control_block_set;
  
- Version 2.03.10 - 09th August 2020
-diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
-index a907130ff..f61705909 100644
---- a/lib/metadata/lv_manip.c
-+++ b/lib/metadata/lv_manip.c
-@@ -7706,7 +7706,6 @@ int wipe_lv(struct logical_volume *lv, struct wipe_params wp)
- 			    display_lvname(lv), wp.zero_value);
+ static struct cb_set *_cb_set_create(unsigned nr)
+ {
+ 	unsigned i;
+-	struct cb_set *cbs = malloc(sizeof(*cbs));
++	struct cb_set *cbs = malloc(sizeof(*cbs) + nr * sizeof(*cbs->vec));
  
- 		if (!dev_set_bytes(dev, UINT64_C(0), (size_t) zero_sectors << SECTOR_SHIFT, wp.zero_value)) {
--			label_scan_invalidate(dev);
- 			log_error("Failed to initialize %s of logical volume %s with value %d.",
- 				  display_size(lv->vg->cmd, zero_sectors),
- 				  display_lvname(lv), wp.zero_value);
+-	if (!cbs)
++	if (!cbs->vec)
+ 		return NULL;
+ 
+-	cbs->vec = malloc(nr * sizeof(*cbs->vec));
+-	if (!cbs->vec) {
+-		free(cbs);
+-		return NULL;
+-	}
+-
+ 	dm_list_init(&cbs->free);
+ 	dm_list_init(&cbs->allocated);
+ 
+@@ -102,7 +96,6 @@ static void _cb_set_destroy(struct cb_set *cbs)
+ 		return;
+ 	}
+ 
+-	free(cbs->vec);
+ 	free(cbs);
+ }
+ 
 
 
