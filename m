@@ -1,42 +1,49 @@
 From: David Teigland <teigland@sourceware.org>
-Date: Thu,  1 Oct 2020 17:36:48 +0000 (GMT)
-Subject: master - improve message for invalid device arg in process_each_pv
-Message-ID: <20201001173648.7F2603857C41@sourceware.org>
+Date: Fri,  2 Oct 2020 14:25:13 +0000 (GMT)
+Subject: master - lvconvert: move log message to fix segfault
+Message-ID: <20201002142513.162B7388EC0E@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=0143c7aebe2389ceada6ca0a314a3ff0fd9cdfef
-Commit:        0143c7aebe2389ceada6ca0a314a3ff0fd9cdfef
-Parent:        74ed6e8a9969bb7d20c21f88b53e6134d81eab1d
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=91f869e43c8f3161d8bcc54477dfab4024a73a58
+Commit:        91f869e43c8f3161d8bcc54477dfab4024a73a58
+Parent:        0143c7aebe2389ceada6ca0a314a3ff0fd9cdfef
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Thu Oct 1 12:34:36 2020 -0500
+AuthorDate:    Fri Oct 2 09:23:25 2020 -0500
 Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Thu Oct 1 12:34:36 2020 -0500
+CommitterDate: Fri Oct 2 09:23:25 2020 -0500
 
-improve message for invalid device arg in process_each_pv
+lvconvert: move log message to fix segfault
 
-Multiple commands process pvs by name using process_each_pv()
-and will now have an improved error message for a device
-that's excluded by filters.
+log message was printing lv name from released vg
 ---
- tools/toollib.c | 2 +-
- 1 file changed, 1 insertion(+), 1 deletion(-)
+ tools/lvconvert.c | 5 +++--
+ 1 file changed, 3 insertions(+), 2 deletions(-)
 
-diff --git a/tools/toollib.c b/tools/toollib.c
-index f6879745b..f2372e095 100644
---- a/tools/toollib.c
-+++ b/tools/toollib.c
-@@ -3839,7 +3839,7 @@ static int _get_arg_devices(struct cmd_context *cmd,
- 		}
+diff --git a/tools/lvconvert.c b/tools/lvconvert.c
+index a4ec48ede..7d5a541d0 100644
+--- a/tools/lvconvert.c
++++ b/tools/lvconvert.c
+@@ -5774,14 +5774,15 @@ static int _lvconvert_detach_writecache_when_clean(struct cmd_context *cmd,
+ 	backup(vg);
  
- 		if (!(dil->dev = dev_cache_get(cmd, sl->str, cmd->filter))) {
--			log_error("Failed to find device for physical volume \"%s\".", sl->str);
-+			log_error("Cannot use %s: %s", sl->str, devname_error_reason(sl->str));
- 			ret_max = ECMD_FAILED;
- 		} else {
- 			strncpy(dil->pvid, dil->dev->pvid, ID_LEN);
+ out_release:
++	if (ret)
++		log_print_unless_silent("Logical volume %s write cache has been detached.", display_lvname(lv));
++
+ 	unlock_and_release_vg(cmd, vg, vg->name);
+ 
+ out_lockd:
+ 	if (!lockd_vg(cmd, id->vg_name, "un", 0, &lockd_state))
+ 		stack;
+ 
+-	if (ret)
+-		log_print_unless_silent("Logical volume %s write cache has been detached.", display_lvname(lv));
+ 	return ret;
+ }
+ 
 
 
