@@ -1,52 +1,78 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Fri,  2 Oct 2020 20:28:04 +0000 (GMT)
-Subject: master - tests: aux hides zero and error device
-Message-ID: <20201002202804.C1FA3398E4B4@sourceware.org>
+Date: Fri,  2 Oct 2020 20:28:05 +0000 (GMT)
+Subject: master - tests: enable tests for lvmlockd
+Message-ID: <20201002202805.E46CD398E4B7@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=5e26a2b74d14bebeeba20ec5b082fac752cc7236
-Commit:        5e26a2b74d14bebeeba20ec5b082fac752cc7236
-Parent:        8d9b4c624f5738035ef9a7af19cb85b6960ca080
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=99b6173f10fe7e2dbd54bb8734667ca8df69905e
+Commit:        99b6173f10fe7e2dbd54bb8734667ca8df69905e
+Parent:        5e26a2b74d14bebeeba20ec5b082fac752cc7236
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Oct 2 19:19:30 2020 +0200
+AuthorDate:    Fri Oct 2 21:35:44 2020 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Fri Oct 2 22:27:00 2020 +0200
 
-tests: aux hides zero and error device
+tests: enable tests for lvmlockd
 
-When ERR_DEV and ZERO_DEV are used, they are automatically
-taken down when the last user no longer needs them,
-so hide them from 'forgotten' device check.
 ---
- test/lib/aux.sh | 8 ++++----
- 1 file changed, 4 insertions(+), 4 deletions(-)
+ test/shell/lvconvert-snapshot.sh | 3 +--
+ test/shell/lvconvert-thin.sh     | 5 ++---
+ 2 files changed, 3 insertions(+), 5 deletions(-)
 
-diff --git a/test/lib/aux.sh b/test/lib/aux.sh
-index 02989c5cb..5dbb580be 100644
---- a/test/lib/aux.sh
-+++ b/test/lib/aux.sh
-@@ -516,14 +516,14 @@ teardown() {
- 	echo -n "## teardown..."
- 	unset LVM_LOG_FILE_EPOCH
+diff --git a/test/shell/lvconvert-snapshot.sh b/test/shell/lvconvert-snapshot.sh
+index 9a32776e9..15299dff0 100644
+--- a/test/shell/lvconvert-snapshot.sh
++++ b/test/shell/lvconvert-snapshot.sh
+@@ -12,7 +12,6 @@
  
--	test ! -f ERR_DEV || should dmsetup remove $(cat ERR_DEV_NAME)
--	test ! -f ZERO_DEV || should dmsetup remove $(cat ZERO_DEV_NAME)
--
- 	if test -f TESTNAME ; then
+ # Test various supported conversion of snapshot
  
- 	if test ! -f SKIP_THIS_TEST ; then
- 		# Evaluate left devices only for non-skipped tests
--		TEST_LEAKED_DEVICES=$(dmsetup table | grep "$PREFIX" | grep -Ev "${PREFIX}(pv|[0-9])") || true
-+		TEST_LEAKED_DEVICES=$(dmsetup table | grep "$PREFIX" | \
-+			grep -Ev "${PREFIX}(pv|[0-9])" | \
-+			grep -v "$(cat ERR_DEV_NAME 2>/dev/null)" | \
-+			grep -v "$(cat ZERO_DEV_NAME 2>/dev/null)") || true
- 	fi
+-SKIP_WITH_LVMLOCKD=1
+ SKIP_WITH_LVMPOLLD=1
  
- 	kill_tagged_processes
+ . lib/inittest
+@@ -20,7 +19,7 @@ SKIP_WITH_LVMPOLLD=1
+ aux prepare_pvs 2
+ get_devs
+ 
+-vgcreate -s 4k "$vg" "${DEVICES[@]}"
++vgcreate $SHARED -s 4k "$vg" "${DEVICES[@]}"
+ 
+ lvcreate --type snapshot -V50 -L1 -n $lv1 -s $vg
+ 
+diff --git a/test/shell/lvconvert-thin.sh b/test/shell/lvconvert-thin.sh
+index 1f8d2edb9..131965508 100644
+--- a/test/shell/lvconvert-thin.sh
++++ b/test/shell/lvconvert-thin.sh
+@@ -10,7 +10,6 @@
+ # along with this program; if not, write to the Free Software Foundation,
+ # Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
+ 
+-SKIP_WITH_LVMLOCKD=1
+ SKIP_WITH_LVMPOLLD=1
+ 
+ export LVM_TEST_THIN_REPAIR_CMD=${LVM_TEST_THIN_REPAIR_CMD-/bin/false}
+@@ -32,7 +31,7 @@ aux prepare_pvs 4 64
+ get_devs
+ 
+ # build one large PV
+-vgcreate $vg1 "$dev1" "$dev2" "$dev3"
++vgcreate $SHARED $vg1 "$dev1" "$dev2" "$dev3"
+ 
+ # 32bit linux kernels are fragille with device size >= 16T
+ # maybe  uname -m    [ x86_64 | i686 ]
+@@ -42,7 +41,7 @@ lvcreate --type snapshot -l 100%FREE -n $lv $vg1 --virtualsize $TSIZE
+ aux extend_filter_LVMTEST
+ 
+ pvcreate "$DM_DEV_DIR/$vg1/$lv"
+-vgcreate $vg -s 64K "$dev4" "$DM_DEV_DIR/$vg1/$lv"
++vgcreate $SHARED -s 64K $vg "$dev4" "$DM_DEV_DIR/$vg1/$lv"
+ 
+ lvcreate -L1T -n $lv1 $vg
+ invalid lvconvert --yes -c 8M --type thin --poolmetadatasize 1G $vg/$lv1
 
 
