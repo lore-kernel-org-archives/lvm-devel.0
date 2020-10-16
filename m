@@ -1,46 +1,44 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Fri, 16 Oct 2020 19:11:21 +0000 (GMT)
-Subject: stable-2.02 - lvconvert: check if LV has cow type
-Message-ID: <20201016191121.4B6F9396EC8D@sourceware.org>
+Date: Fri, 16 Oct 2020 19:11:22 +0000 (GMT)
+Subject: stable-2.02 - lvconvert_poll: ensure LV has snapshot type
+Message-ID: <20201016191122.6B4FC396EC88@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=a83e1536704c028b96b91b74fcf8e5809cdf0014
-Commit:        a83e1536704c028b96b91b74fcf8e5809cdf0014
-Parent:        d7131ab4399b3dde28a97e6423622805c6b3bd00
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Sat Sep 12 12:08:15 2020 +0200
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=9c6089b2d0472a6e212ad0838009f47d611ac1b2
+Commit:        9c6089b2d0472a6e212ad0838009f47d611ac1b2
+Parent:        a83e1536704c028b96b91b74fcf8e5809cdf0014
+Author:        Wu Guanghao <wuguanghao3@huawei.com>
+AuthorDate:    Fri Sep 11 17:41:01 2020 +0800
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Fri Oct 16 17:07:58 2020 +0200
 
-lvconvert: check if LV has cow type
+lvconvert_poll: ensure LV has snapshot type
 
-Cow may not be a COW type, the return value of origin_from_cow(cow) may be NULL.
+LV may not be a snapshot type, the return value of find_snapshot(lv) may be NULL.
+Here, we will call stack if LV is not a snapshot type.
 
-Reported-by: Wu Guanghao <wuguanghao3@huawei.com>
-Reported-by: Zhiqiang Liu <liuzhiqiang26@huawei.com>
+Signed-off-by: Wu Guanghao <wuguanghao3@huawei.com>
+Signed-off-by: Zhiqiang Liu <liuzhiqiang26@huawei.com>
 ---
- tools/lvconvert.c | 5 +++++
- 1 file changed, 5 insertions(+)
+ tools/lvconvert_poll.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
 
-diff --git a/tools/lvconvert.c b/tools/lvconvert.c
-index 4da9655e8..4dc2eed59 100644
---- a/tools/lvconvert.c
-+++ b/tools/lvconvert.c
-@@ -1815,6 +1815,11 @@ static int _lvconvert_splitsnapshot(struct cmd_context *cmd, struct logical_volu
- 	struct volume_group *vg = cow->vg;
- 	const char *cow_name = display_lvname(cow);
+diff --git a/tools/lvconvert_poll.c b/tools/lvconvert_poll.c
+index b9ec316e1..0eae74616 100644
+--- a/tools/lvconvert_poll.c
++++ b/tools/lvconvert_poll.c
+@@ -176,7 +176,7 @@ progress_t poll_thin_merge_progress(struct cmd_context *cmd,
+ {
+ 	uint32_t device_id;
  
-+	if (!lv_is_cow(cow)) {
-+		log_error(INTERNAL_ERROR "Volume %s is not a COW.", cow_name);
-+		return 0;
-+	}
-+
- 	if (lv_is_virtual_origin(origin_from_cow(cow))) {
- 		log_error("Unable to split off snapshot %s with virtual origin.", cow_name);
- 		return 0;
+-	if (!lv_thin_device_id(lv, &device_id)) {
++	if (!lv_thin_device_id(lv, &device_id) && !lv_is_snapshot(lv)) {
+ 		stack;
+ 		return PROGRESS_CHECK_FAILED;
+ 	}
 
 
