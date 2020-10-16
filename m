@@ -1,44 +1,83 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Fri, 16 Oct 2020 19:12:08 +0000 (GMT)
-Subject: stable-2.02 - debug: show actually reason for taking this code path
-Message-ID: <20201016191208.1FEAC396EC9B@sourceware.org>
+Date: Fri, 16 Oct 2020 19:12:11 +0000 (GMT)
+Subject: stable-2.02 - tests: use aux wrapper and add more notes
+Message-ID: <20201016191211.84DD5396EC9D@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=b97440290c952c33e32f86f7d4b0e47ed6e30d4d
-Commit:        b97440290c952c33e32f86f7d4b0e47ed6e30d4d
-Parent:        03bddd7d41bc644dfe6498c3b2d0d412190f2e5e
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=d76b5f43083cd0667c3f55b5dd72edd134144a3d
+Commit:        d76b5f43083cd0667c3f55b5dd72edd134144a3d
+Parent:        de1b894337759c574f5e1cf11dcd40ef765d6ad2
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Oct 2 11:12:49 2020 +0200
+AuthorDate:    Tue Sep 22 16:27:21 2020 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Fri Oct 16 18:09:55 2020 +0200
 
-debug: show actually reason for taking this code path
+tests: use aux wrapper and add more notes
 
-Instead of not so useful backtrace, report what was the reason.
+This test seems to be hitting some corner case in handling
+out-of-metadata space condintion in thin-pool.
+
+Add few more aid notes and functionality.
+
+Also add missing '|| true' with now direct-IO dd command.
 ---
- lib/format_text/format-text.c | 6 ++++--
- 1 file changed, 4 insertions(+), 2 deletions(-)
+ test/shell/thin-flags.sh | 20 ++++++++++++++++----
+ 1 file changed, 16 insertions(+), 4 deletions(-)
 
-diff --git a/lib/format_text/format-text.c b/lib/format_text/format-text.c
-index 225d6424c..20eeb0854 100644
---- a/lib/format_text/format-text.c
-+++ b/lib/format_text/format-text.c
-@@ -2075,8 +2075,10 @@ static int _create_vg_text_instance(struct format_instance *fid,
- 		}
+diff --git a/test/shell/thin-flags.sh b/test/shell/thin-flags.sh
+index df139b211..78a4b2cd7 100644
+--- a/test/shell/thin-flags.sh
++++ b/test/shell/thin-flags.sh
+@@ -47,7 +47,7 @@ lvchange -an $vg
  
- 		if (type & FMT_INSTANCE_MDAS) {
--			if (!(vginfo = lvmcache_vginfo_from_vgname(vg_name, vg_id)))
--				goto_out;
-+			if (!(vginfo = lvmcache_vginfo_from_vgname(vg_name, vg_id))) {
-+				log_debug("No cached vginfo for VG %s and ID %s.", vg_name, vg_id);
-+				goto out;
-+			}
- 			if (!lvmcache_fid_add_mdas_vg(vginfo, fid))
- 				goto_out;
- 		}
+ # Overfill data area
+ lvchange -ay $vg
+-dd if=/dev/zero of="$DM_DEV_DIR/mapper/$vg-$lv2" bs=1M count=2 oflag=direct
++dd if=/dev/zero of="$DM_DEV_DIR/mapper/$vg-$lv2" bs=1M count=2 oflag=direct || true
+ check lv_attr_bit health $vg/pool "D"
+ # TODO use spaces ??
+ check lv_field $vg/pool lv_health_status "out_of_data"
+@@ -67,8 +67,15 @@ lvchange -an $vg
+ aux lvmconf 'global/thin_check_executable = ""'
+ 
+ # Prepare some fake metadata prefilled to ~100%
+-lvcreate -L2 -n $lv1 $vg # tmp for metadata
+-aux prepare_thin_metadata 490 1 | tee data
++lvcreate -L2 -n $lv1 $vg "$dev2" # tmp for metadata
++
++VOLS=490
++aux thin_restore_needs_more_volumes || VOLS=445
++aux prepare_thin_metadata $VOLS 1 | tee data
++
++# Note: we like want to test BOTH sizes (445 & 490) as ATM it gives
++# different errors (5.9-rc5 kernel does not handle it as expected by this test)
++
+ "$LVM_TEST_THIN_RESTORE_CMD" -i data -o "$DM_DEV_DIR/mapper/$vg-$lv1"
+ 
+ # Swap volume with restored fake metadata
+@@ -78,13 +85,18 @@ lvchange -ay $vg
+ 
+ lvchange -ay $vg/$lv2
+ # Provisiong and last free bits in metadata
+-dd if=/dev/zero of="$DM_DEV_DIR/mapper/$vg-$lv2" bs=32K count=1 oflag=direct
++dd if=/dev/zero of="$DM_DEV_DIR/mapper/$vg-$lv2" bs=1M count=1 oflag=direct || true
+ 
+ check lv_attr_bit health $vg/pool "M"
+ # TODO - use spaces ??
+ check lv_field $vg/pool lv_health_status "metadata_read_only"
+ check lv_attr_bit health $vg/$lv2 "-"
+ 
++not lvcreate -s $vg/$lv2
++not lvcreate -V10 -n $lv3 $vg/pool
++
++lvs -ao+seg_pe_ranges $vg
++
+ # needs_check needs newer version
+ if aux have_thin 1 16 0 ; then
+ 	check lv_attr_bit state $vg/pool "c"
 
 
