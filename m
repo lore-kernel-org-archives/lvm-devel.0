@@ -1,186 +1,204 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Fri, 16 Oct 2020 19:11:57 +0000 (GMT)
-Subject: stable-2.02 - active: fix compilation without devmapper
-Message-ID: <20201016191157.D4F6F396E814@sourceware.org>
+Date: Fri, 16 Oct 2020 19:12:00 +0000 (GMT)
+Subject: stable-2.02 - configure: update with latest AM_PATH_PYTHON
+Message-ID: <20201016191200.24AD5396E83D@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=7d6dfe901984aeeed23299ab3e6271432061f3be
-Commit:        7d6dfe901984aeeed23299ab3e6271432061f3be
-Parent:        0a825734161d2c90a5dfea091bf5e94e7002382a
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=305e80fe85e9fbc4fa30cdb70dc1576aebc80eec
+Commit:        305e80fe85e9fbc4fa30cdb70dc1576aebc80eec
+Parent:        3b5d51e821143202742c5ed7b1c57d48fe305913
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Mon Sep 28 18:56:58 2020 +0200
+AuthorDate:    Fri Oct 16 15:39:54 2020 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Fri Oct 16 18:09:54 2020 +0200
+CommitterDate: Fri Oct 16 18:09:55 2020 +0200
 
-active: fix compilation without devmapper
+configure: update with latest AM_PATH_PYTHON
 
-Better support for compilation without device-mapper.
+World has moved towards python3.9.
+Although we still don't like path ordering.
 ---
- lib/activate/activate.c   | 22 ++++++++--------------
- lib/metadata/lv_manip.c   |  8 ++++----
- lib/metadata/thin_manip.c |  6 +++---
- lib/raid/raid.c           | 34 +++++++++++++++++-----------------
- 4 files changed, 32 insertions(+), 38 deletions(-)
+ aclocal.m4 | 95 ++++++++++++++++++++++++++++++++++++++++++++++++++++++--------
+ configure  |  4 +--
+ 2 files changed, 85 insertions(+), 14 deletions(-)
 
-diff --git a/lib/activate/activate.c b/lib/activate/activate.c
-index 97486ebf0..0e06e358f 100644
---- a/lib/activate/activate.c
-+++ b/lib/activate/activate.c
-@@ -186,8 +186,8 @@ void set_activation(int act, int silent)
- 	if (warned || !act)
- 		return;
+diff --git a/aclocal.m4 b/aclocal.m4
+index 07ea0b664..3e0fbd38d 100644
+--- a/aclocal.m4
++++ b/aclocal.m4
+@@ -1,6 +1,6 @@
+-# generated automatically by aclocal 1.15 -*- Autoconf -*-
++# generated automatically by aclocal 1.16.2 -*- Autoconf -*-
  
--	log_error("Compiled without libdevmapper support. "
--		  "Can't enable activation.");
-+	log_warn("WARNING: Compiled without libdevmapper support. "
-+		 "Can't enable activation.");
+-# Copyright (C) 1996-2014 Free Software Foundation, Inc.
++# Copyright (C) 1996-2020 Free Software Foundation, Inc.
  
- 	warned = 1;
- }
-@@ -222,23 +222,13 @@ int lv_info(struct cmd_context *cmd, const struct logical_volume *lv, int use_la
- {
- 	return 0;
- }
--int lv_info_by_lvid(struct cmd_context *cmd, const char *lvid_s, int use_layer,
--		    struct lvinfo *info, int with_open_count, int with_read_ahead)
--{
--	return 0;
--}
--int lv_info_with_seg_status(struct cmd_context *cmd, const struct logical_volume *lv,
--			    const struct lv_segment *lv_seg, int use_layer,
-+int lv_info_with_seg_status(struct cmd_context *cmd,
-+			    const struct lv_segment *lv_seg,
- 			    struct lv_with_info_and_seg_status *status,
- 			    int with_open_count, int with_read_ahead)
- {
- 	return 0;
- }
--int lv_status(struct cmd_context *cmd, const struct lv_segment *lv_seg,
--	      int use_layer, struct lv_seg_status *lv_seg_status)
--{
--	return 0;
--}
- int lv_cache_status(const struct logical_volume *cache_lv,
- 		    struct lv_status_cache **status)
- {
-@@ -285,6 +275,10 @@ int lv_raid_message(const struct logical_volume *lv, const char *msg)
- {
- 	return 0;
- }
-+int lv_writecache_message(const struct logical_volume *lv, const char *msg)
-+{
-+	return 0;
-+}
- int lv_thin_pool_status(const struct logical_volume *lv, int flush,
- 			struct lv_status_thin_pool **thin_pool_status)
- {
-diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
-index 399ac0774..e4ea30d12 100644
---- a/lib/metadata/lv_manip.c
-+++ b/lib/metadata/lv_manip.c
-@@ -7559,10 +7559,10 @@ static struct logical_volume *_lv_create_an_lv(struct volume_group *vg,
- 			return NULL;
- 		}
- 		/* Does LV need to be zeroed? */
--		if (lp->zero && !seg_is_thin(lp)) {
--			log_error("Can't wipe start of new LV without using "
--				  "device-mapper kernel driver.");
--			return NULL;
-+		if (lp->zero) {
-+			log_warn("WARNING: Skipping zeroing and wipping, compiled without activation support.");
-+			lp->zero = 0;
-+			lp->wipe_signatures = 0;
- 		}
- 	}
+ # This file is free software; the Free Software Foundation
+ # gives unlimited permission to copy and/or distribute it,
+@@ -13,7 +13,7 @@
  
-diff --git a/lib/metadata/thin_manip.c b/lib/metadata/thin_manip.c
-index 9fb12cfa7..695aff101 100644
---- a/lib/metadata/thin_manip.c
-+++ b/lib/metadata/thin_manip.c
-@@ -544,9 +544,9 @@ int update_pool_lv(struct logical_volume *lv, int activate)
- 				return_0;
- 			}
- 			if (!lv_is_active(lv)) {
--				init_dmeventd_monitor(monitored);
--				log_error("Cannot activate thin pool %s, perhaps skipped in lvm.conf volume_list?",
--					  display_lvname(lv));
-+				(void) init_dmeventd_monitor(monitored);
-+				log_error("Cannot activate thin pool %s%s", display_lvname(lv),
-+					  activation() ? ", perhaps skipped in lvm.conf volume_list?" : ".");
- 				return 0;
- 			}
- 		} else
-diff --git a/lib/raid/raid.c b/lib/raid/raid.c
-index e926ae116..28340a0ca 100644
---- a/lib/raid/raid.c
-+++ b/lib/raid/raid.c
-@@ -24,10 +24,6 @@
- #include "metadata.h"
- #include "lv_alloc.h"
+ m4_ifndef([AC_CONFIG_MACRO_DIRS], [m4_defun([_AM_CONFIG_MACRO_DIRS], [])m4_defun([AC_CONFIG_MACRO_DIRS], [_AM_CONFIG_MACRO_DIRS($@)])])
+ # ===========================================================================
+-#     http://www.gnu.org/software/autoconf-archive/ax_python_module.html
++#     https://www.gnu.org/software/autoconf-archive/ax_python_module.html
+ # ===========================================================================
+ #
+ # SYNOPSIS
+@@ -37,7 +37,7 @@ m4_ifndef([AC_CONFIG_MACRO_DIRS], [m4_defun([_AM_CONFIG_MACRO_DIRS], [])m4_defun
+ #   and this notice are preserved. This file is offered as-is, without any
+ #   warranty.
  
--static int _raid_target_present(struct cmd_context *cmd,
--				const struct lv_segment *seg __attribute__((unused)),
--				unsigned *attributes);
--
- static void _raid_display(const struct lv_segment *seg)
- {
- 	unsigned s;
-@@ -239,6 +235,22 @@ static int _raid_text_export(const struct lv_segment *seg, struct formatter *f)
- 	return _raid_text_export_raid(seg, f);
- }
+-#serial 8
++#serial 9
  
-+static int _raid_target_status_compatible(const char *type)
-+{
-+	return (strstr(type, "raid") != NULL);
-+}
+ AU_ALIAS([AC_PYTHON_MODULE], [AX_PYTHON_MODULE])
+ AC_DEFUN([AX_PYTHON_MODULE],[
+@@ -69,9 +69,9 @@ AC_DEFUN([AX_PYTHON_MODULE],[
+     fi
+ ])
+ 
+-dnl pkg.m4 - Macros to locate and utilise pkg-config.   -*- Autoconf -*-
+-dnl serial 11 (pkg-config-0.29)
+-dnl
++# pkg.m4 - Macros to locate and utilise pkg-config.   -*- Autoconf -*-
++# serial 11 (pkg-config-0.29.1)
 +
-+static void _raid_destroy(struct segment_type *segtype)
-+{
-+	dm_free((void *) segtype->dso);
-+	dm_free(segtype);
-+}
-+
-+#ifdef DEVMAPPER_SUPPORT
-+static int _raid_target_present(struct cmd_context *cmd,
-+				const struct lv_segment *seg __attribute__((unused)),
-+				unsigned *attributes);
-+
- static int _raid_add_target_line(struct dev_manager *dm __attribute__((unused)),
- 				 struct dm_pool *mem __attribute__((unused)),
- 				 struct cmd_context *cmd __attribute__((unused)),
-@@ -356,18 +368,6 @@ static int _raid_add_target_line(struct dev_manager *dm __attribute__((unused)),
- 	return add_areas_line(dm, seg, node, 0u, seg->area_count);
- }
+ dnl Copyright ???? 2004 Scott James Remnant <scott@netsplit.com>.
+ dnl Copyright ???? 2012-2015 Dan Nicholson <dbn.lists@gmail.com>
+ dnl
+@@ -112,7 +112,7 @@ dnl
+ dnl See the "Since" comment for each macro you use to see what version
+ dnl of the macros you require.
+ m4_defun([PKG_PREREQ],
+-[m4_define([PKG_MACROS_VERSION], [0.29])
++[m4_define([PKG_MACROS_VERSION], [0.29.1])
+ m4_if(m4_version_compare(PKG_MACROS_VERSION, [$1]), -1,
+     [m4_fatal([pkg.m4 version $1 or higher is required but ]PKG_MACROS_VERSION[ found])])
+ ])dnl PKG_PREREQ
+@@ -345,7 +345,75 @@ AS_VAR_COPY([$1], [pkg_cv_][$1])
+ AS_VAR_IF([$1], [""], [$5], [$4])dnl
+ ])dnl PKG_CHECK_VAR
  
--static int _raid_target_status_compatible(const char *type)
--{
--	return (strstr(type, "raid") != NULL);
--}
--
--static void _raid_destroy(struct segment_type *segtype)
--{
--	dm_free((void *) segtype->dso);
--	dm_free(segtype);
--}
--
--#ifdef DEVMAPPER_SUPPORT
- static int _raid_target_percent(void **target_state,
- 				dm_percent_t *percent,
- 				struct dm_pool *mem,
-@@ -568,9 +568,9 @@ static struct segtype_handler _raid_ops = {
- 	.text_import_area_count = _raid_text_import_area_count,
- 	.text_import = _raid_text_import,
- 	.text_export = _raid_text_export,
--	.add_target_line = _raid_add_target_line,
- 	.target_status_compatible = _raid_target_status_compatible,
- #ifdef DEVMAPPER_SUPPORT
-+	.add_target_line = _raid_add_target_line,
- 	.target_percent = _raid_target_percent,
- 	.target_present = _raid_target_present,
- 	.check_transient_status = _raid_transient_status,
+-# Copyright (C) 1999-2014 Free Software Foundation, Inc.
++dnl PKG_WITH_MODULES(VARIABLE-PREFIX, MODULES,
++dnl   [ACTION-IF-FOUND],[ACTION-IF-NOT-FOUND],
++dnl   [DESCRIPTION], [DEFAULT])
++dnl ------------------------------------------
++dnl
++dnl Prepare a "--with-" configure option using the lowercase
++dnl [VARIABLE-PREFIX] name, merging the behaviour of AC_ARG_WITH and
++dnl PKG_CHECK_MODULES in a single macro.
++AC_DEFUN([PKG_WITH_MODULES],
++[
++m4_pushdef([with_arg], m4_tolower([$1]))
++
++m4_pushdef([description],
++           [m4_default([$5], [build with ]with_arg[ support])])
++
++m4_pushdef([def_arg], [m4_default([$6], [auto])])
++m4_pushdef([def_action_if_found], [AS_TR_SH([with_]with_arg)=yes])
++m4_pushdef([def_action_if_not_found], [AS_TR_SH([with_]with_arg)=no])
++
++m4_case(def_arg,
++            [yes],[m4_pushdef([with_without], [--without-]with_arg)],
++            [m4_pushdef([with_without],[--with-]with_arg)])
++
++AC_ARG_WITH(with_arg,
++     AS_HELP_STRING(with_without, description[ @<:@default=]def_arg[@:>@]),,
++    [AS_TR_SH([with_]with_arg)=def_arg])
++
++AS_CASE([$AS_TR_SH([with_]with_arg)],
++            [yes],[PKG_CHECK_MODULES([$1],[$2],$3,$4)],
++            [auto],[PKG_CHECK_MODULES([$1],[$2],
++                                        [m4_n([def_action_if_found]) $3],
++                                        [m4_n([def_action_if_not_found]) $4])])
++
++m4_popdef([with_arg])
++m4_popdef([description])
++m4_popdef([def_arg])
++
++])dnl PKG_WITH_MODULES
++
++dnl PKG_HAVE_WITH_MODULES(VARIABLE-PREFIX, MODULES,
++dnl   [DESCRIPTION], [DEFAULT])
++dnl -----------------------------------------------
++dnl
++dnl Convenience macro to trigger AM_CONDITIONAL after PKG_WITH_MODULES
++dnl check._[VARIABLE-PREFIX] is exported as make variable.
++AC_DEFUN([PKG_HAVE_WITH_MODULES],
++[
++PKG_WITH_MODULES([$1],[$2],,,[$3],[$4])
++
++AM_CONDITIONAL([HAVE_][$1],
++               [test "$AS_TR_SH([with_]m4_tolower([$1]))" = "yes"])
++])dnl PKG_HAVE_WITH_MODULES
++
++dnl PKG_HAVE_DEFINE_WITH_MODULES(VARIABLE-PREFIX, MODULES,
++dnl   [DESCRIPTION], [DEFAULT])
++dnl ------------------------------------------------------
++dnl
++dnl Convenience macro to run AM_CONDITIONAL and AC_DEFINE after
++dnl PKG_WITH_MODULES check. HAVE_[VARIABLE-PREFIX] is exported as make
++dnl and preprocessor variable.
++AC_DEFUN([PKG_HAVE_DEFINE_WITH_MODULES],
++[
++PKG_HAVE_WITH_MODULES([$1],[$2],[$3],[$4])
++
++AS_IF([test "$AS_TR_SH([with_]m4_tolower([$1]))" = "yes"],
++        [AC_DEFINE([HAVE_][$1], 1, [Enable ]m4_tolower([$1])[ support])])
++])dnl PKG_HAVE_DEFINE_WITH_MODULES
++
++# Copyright (C) 1999-2020 Free Software Foundation, Inc.
+ #
+ # This file is free software; the Free Software Foundation
+ # gives unlimited permission to copy and/or distribute it,
+@@ -379,8 +447,11 @@ AC_DEFUN([AM_PATH_PYTHON],
+   dnl Find a Python interpreter.  Python versions prior to 2.0 are not
+   dnl supported. (2.0 was released on October 16, 2000).
+   m4_define_default([_AM_PYTHON_INTERPRETER_LIST],
+-[python python2 python3 python3.3 python3.2 python3.1 python3.0 python2.7 dnl
+- python2.6 python2.5 python2.4 python2.3 python2.2 python2.1 python2.0])
++[python python2 python3 dnl
++ python3.9 python3.8 python3.7 python3.6 python3.5 python3.4 python3.3 dnl
++ python3.2 python3.1 python3.0 dnl
++ python2.7 python2.6 python2.5 python2.4 python2.3 python2.2 python2.1 dnl
++ python2.0])
+ 
+   AC_ARG_VAR([PYTHON], [the Python interpreter])
+ 
+@@ -580,7 +651,7 @@ for i in list(range(0, 4)): minverhex = (minverhex << 8) + minver[[i]]
+ sys.exit(sys.hexversion < minverhex)"
+   AS_IF([AM_RUN_LOG([$1 -c "$prog"])], [$3], [$4])])
+ 
+-# Copyright (C) 2001-2014 Free Software Foundation, Inc.
++# Copyright (C) 2001-2020 Free Software Foundation, Inc.
+ #
+ # This file is free software; the Free Software Foundation
+ # gives unlimited permission to copy and/or distribute it,
+diff --git a/configure b/configure
+index df27701ab..c2b65d5a8 100755
+--- a/configure
++++ b/configure
+@@ -12688,7 +12688,7 @@ if ${am_cv_pathless_PYTHON+:} false; then :
+   $as_echo_n "(cached) " >&6
+ else
+ 
+-	for am_cv_pathless_PYTHON in python python2 python3 python3.5 python3.4 python3.3 python3.2 python3.1 python3.0 python2.7  python2.6 python2.5 python2.4 python2.3 python2.2 python2.1 python2.0 none; do
++	for am_cv_pathless_PYTHON in python python2 python3  python3.9 python3.8 python3.7 python3.6 python3.5 python3.4 python3.3  python3.2 python3.1 python3.0  python2.7 python2.6 python2.5 python2.4 python2.3 python2.2 python2.1  python2.0 none; do
+ 	  test "$am_cv_pathless_PYTHON" = none && break
+ 	  prog="import sys
+ # split strings by '.' and convert to numeric.  Append some zeros
+@@ -13256,7 +13256,7 @@ if ${am_cv_pathless_PYTHON+:} false; then :
+   $as_echo_n "(cached) " >&6
+ else
+ 
+-	for am_cv_pathless_PYTHON in python python2 python3 python3.5 python3.4 python3.3 python3.2 python3.1 python3.0 python2.7  python2.6 python2.5 python2.4 python2.3 python2.2 python2.1 python2.0 none; do
++	for am_cv_pathless_PYTHON in python python2 python3  python3.9 python3.8 python3.7 python3.6 python3.5 python3.4 python3.3  python3.2 python3.1 python3.0  python2.7 python2.6 python2.5 python2.4 python2.3 python2.2 python2.1  python2.0 none; do
+ 	  test "$am_cv_pathless_PYTHON" = none && break
+ 	  prog="import sys
+ # split strings by '.' and convert to numeric.  Append some zeros
 
 
