@@ -1,58 +1,66 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Fri, 16 Oct 2020 19:12:04 +0000 (GMT)
-Subject: stable-2.02 - bcache: support interrupts when waiting on IO
-Message-ID: <20201016191204.B0815396EC99@sourceware.org>
+Date: Fri, 16 Oct 2020 19:12:05 +0000 (GMT)
+Subject: stable-2.02 - bcache: use flexible arrays
+Message-ID: <20201016191205.D157038618E8@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=479f0822ad1074cab4bcb1b5404257618cce14b3
-Commit:        479f0822ad1074cab4bcb1b5404257618cce14b3
-Parent:        5e64aa222b106ef3bd091346ebba807e10dc449e
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=e8df5038853b927fefc83e4ae75a38411cc2d865
+Commit:        e8df5038853b927fefc83e4ae75a38411cc2d865
+Parent:        479f0822ad1074cab4bcb1b5404257618cce14b3
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Oct 2 17:16:14 2020 +0200
+AuthorDate:    Wed Sep 30 23:28:44 2020 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Fri Oct 16 18:09:55 2020 +0200
 
-bcache: support interrupts when waiting on IO
+bcache: use flexible arrays
 
-Since lvm2 normally block signals during protected
-phase where it does not want to be interrupted.
-Support interruptible processing when allowed
-in section between sigint_allow() ... sigint_restore())
-and let the 'io_getenvents()'  finish with EINTR.
+Cleanup, allocate whole struct with a single malloc call.
 ---
- WHATS_NEW           | 1 +
- lib/device/bcache.c | 4 +---
- 2 files changed, 2 insertions(+), 3 deletions(-)
+ lib/device/bcache.c | 13 +++----------
+ 1 file changed, 3 insertions(+), 10 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index 2cfb79ba0..dfaec8c53 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.02.188 - 
- ==================================
-+  Support interruption for bcache waiting.
-   Fix bcache when device has too many failing writes.
-   Fix bcache waiting for IO completion with failing disks.
-   Configure use own python path name order to prefer using python3.
 diff --git a/lib/device/bcache.c b/lib/device/bcache.c
-index e173129fe..f68576a55 100644
+index f68576a55..28fb42133 100644
 --- a/lib/device/bcache.c
 +++ b/lib/device/bcache.c
-@@ -318,9 +318,7 @@ static bool _async_wait(struct io_engine *ioe, io_complete_fn fn)
- 	struct async_engine *e = _to_async(ioe);
+@@ -61,23 +61,17 @@ struct control_block {
+ struct cb_set {
+ 	struct dm_list free;
+ 	struct dm_list allocated;
+-	struct control_block *vec;
++	struct control_block vec[];
+ } control_block_set;
  
- 	memset(&event, 0, sizeof(event));
--	do {
--		r = io_getevents(e->aio_context, 1, MAX_EVENT, event, NULL);
--	} while (r == -EINTR);
-+	r = io_getevents(e->aio_context, 1, MAX_EVENT, event, NULL);
+ static struct cb_set *_cb_set_create(unsigned nr)
+ {
+ 	unsigned i;
+-	struct cb_set *cbs = malloc(sizeof(*cbs));
++	struct cb_set *cbs = malloc(sizeof(*cbs) + nr * sizeof(*cbs->vec));
  
- 	if (r < 0) {
- 		log_sys_warn("io_getevents");
+-	if (!cbs)
++	if (!cbs->vec)
+ 		return NULL;
+ 
+-	cbs->vec = malloc(nr * sizeof(*cbs->vec));
+-	if (!cbs->vec) {
+-		free(cbs);
+-		return NULL;
+-	}
+-
+ 	dm_list_init(&cbs->free);
+ 	dm_list_init(&cbs->allocated);
+ 
+@@ -97,7 +91,6 @@ static void _cb_set_destroy(struct cb_set *cbs)
+ 		return;
+ 	}
+ 
+-	free(cbs->vec);
+ 	free(cbs);
+ }
+ 
 
 
