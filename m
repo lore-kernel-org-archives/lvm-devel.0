@@ -1,78 +1,104 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Fri, 16 Oct 2020 19:11:37 +0000 (GMT)
-Subject: stable-2.02 - tests: switch for checking version of installed tools
-Message-ID: <20201016191137.3751E396EC06@sourceware.org>
+Date: Fri, 16 Oct 2020 19:11:39 +0000 (GMT)
+Subject: stable-2.02 - tests: smaller delay and lowered version
+Message-ID: <20201016191139.799E538618E8@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=b490cddfbcd6f4add64303fcd81751f98f086d4c
-Commit:        b490cddfbcd6f4add64303fcd81751f98f086d4c
-Parent:        844037ecdf64be306310ba48f4ae593cc8fde970
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=f9327d040c4a9b525117b40adea796a8072a25c7
+Commit:        f9327d040c4a9b525117b40adea796a8072a25c7
+Parent:        238da8ddd9c7dd9e9c9413564d67e8bd7055b4ec
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Sep 11 13:35:30 2020 +0200
+AuthorDate:    Fri Oct 16 13:33:28 2020 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Fri Oct 16 17:07:59 2020 +0200
 
-tests: switch for checking version of installed tools
+tests: smaller delay and lowered version
 
-It looks like older tools were compacting metadata more.
+See if this will still work. Some boxes are delayed too much.
+Also try to check for raid extend progress from version 1.13.
 ---
- test/shell/lvextend-thin-metadata-dmeventd.sh | 13 ++++++++++---
- 1 file changed, 10 insertions(+), 3 deletions(-)
+ test/shell/lvextend-raid.sh | 32 ++++++++++++++++++--------------
+ 1 file changed, 18 insertions(+), 14 deletions(-)
 
-diff --git a/test/shell/lvextend-thin-metadata-dmeventd.sh b/test/shell/lvextend-thin-metadata-dmeventd.sh
-index 2f16d48b5..5f6db994a 100644
---- a/test/shell/lvextend-thin-metadata-dmeventd.sh
-+++ b/test/shell/lvextend-thin-metadata-dmeventd.sh
-@@ -1,6 +1,6 @@
- #!/usr/bin/env bash
- 
--# Copyright (C) 2014-2016 Red Hat, Inc. All rights reserved.
-+# Copyright (C) 2014-2020 Red Hat, Inc. All rights reserved.
- #
- # This copyrighted material is made available to anyone wishing to use,
- # modify, copy, or redistribute it subject to the terms and conditions
-@@ -19,6 +19,7 @@ export LVM_TEST_THIN_REPAIR_CMD=${LVM_TEST_THIN_REPAIR_CMD-/bin/false}
+diff --git a/test/shell/lvextend-raid.sh b/test/shell/lvextend-raid.sh
+index 04e9adf87..e8bd7deea 100644
+--- a/test/shell/lvextend-raid.sh
++++ b/test/shell/lvextend-raid.sh
+@@ -15,10 +15,9 @@ SKIP_WITH_LVMPOLLD=1
  
  . lib/inittest
  
+-aux have_raid 1 7 0 || skip
+-
+-v1_15_0=0
+-aux have_raid 1 15 0 && v1_15_0=1
++aux have_raid 1 3 0 || skip
++PROGRESS=0
++aux have_raid 1 13 0 && PROGRESS=1
+ 
+ # Use smallest regionsize to save VG space
+ regionsize=$(getconf PAGESIZE) # in bytes
+@@ -42,10 +41,14 @@ lvcreate -l1 $vg "$dev1"
+ lvcreate -l1 $vg "$dev2"
+ 
+ sector=$(( $(get first_extent_sector "$dev2") + 2048 ))
+-aux delayzero_dev "$dev2"  0 50 "${sector}:"
++aux zero_dev "$dev1" "${sector}:"
++aux delayzero_dev "$dev2"  0 10 "${sector}:"
+ 
+ # Create raid1 LV consuming 1 MD bitmap page
+ lvcreate --yes --type raid1 --regionsize ${regionsize}K -L$(($lvsz-$lvext))M -n $lv1 $vg
 +
- meta_percent_() {
- 	get lv_field $vg/pool metadata_percent | cut -d. -f1
- }
-@@ -59,6 +60,12 @@ test -n "$LVM_TEST_THIN_RESTORE_CMD" || LVM_TEST_THIN_RESTORE_CMD=$(which thin_r
- "$LVM_TEST_THIN_RESTORE_CMD" -V || skip
- aux have_thin 1 10 0 || skip
- 
-+BIG_DATA=""
-+case $("$LVM_TEST_THIN_RESTORE_CMD" -V) in
-+	# With older version of thin-tool we got slightly more compact metadata
-+	0.[0-6]*|0.7.0*) BIG_DATA="generate_more_metadata" ;;
-+esac
++lvs -a $vg
 +
- aux prepare_dmeventd
+ not check lv_field $vg/$lv1 sync_percent "100.00"
+ check lv_field $vg/$lv1 size "$(($lvsz-$lvext)).00m" $vg/$lv1
+ aux wait_for_sync $vg $lv1
+@@ -54,31 +57,32 @@ check lv_field $vg/$lv1 region_size "4.00k"
  
- aux prepare_pvs 3 256
-@@ -91,7 +98,7 @@ lvchange -an $vg/pool
- # Consume more then (100% - 4MiB) out of 32MiB metadata volume  (>87.5%)
- # (Test for less than 4MiB free space in metadata, which is less than 25%)
- DATA=7200  # Newer version of thin-pool have hidden reserve, so use lower value
--aux target_at_least dm-thin-pool 1 20 0 || DATA=7400
-+test -z "$BIG_DATA" || DATA=7400
- fake_metadata_ "$DATA" 2 >data
- "$LVM_TEST_THIN_RESTORE_CMD" -i data -o "$DM_DEV_DIR/mapper/$vg-$lv2"
- # Swap volume with restored fake metadata
-@@ -177,7 +184,7 @@ lvchange -an $vg
+ # to slow down extension - slowdown readings
+ aux delayzero_dev "$dev1"  50 0 "${sector}:"
++aux delayzero_dev "$dev2"  0 50 "${sector}:"
  
- #
- DATA=300  # Newer version of thin-pool have hidden reserve, so use lower value
--aux target_at_least dm-thin-pool 1 20 0 || DATA=350
-+test -z "$BIG_DATA" || DATA=350
- fake_metadata_ $DATA 2 >data
- lvchange -ay $vg/$lv1
- "$LVM_TEST_THIN_RESTORE_CMD" -i data -o "$DM_DEV_DIR/mapper/$vg-$lv1"
+-dmsetup table
+-dmsetup info -c
+-dmsetup status
+ # Extend so that full MD bitmap page is consumed
+-lvextend -vvvv -y -L+${lvext}M $vg/$lv1
++lvextend -y -L+${lvext}M $vg/$lv1
++if [ $PROGRESS -eq 1 ]
++then
+ not check lv_field $vg/$lv1 sync_percent "100.00"
+ check lv_field $vg/$lv1 size "$(($lvsz)).00m" $vg/$lv1
+-lvs -a $vg
++fi
+ aux wait_for_sync $vg $lv1
+ check lv_field $vg/$lv1 sync_percent "100.00"
+ 
+ # Extend so that another MD bitmap page is allocated
+ lvextend -y -L+${lvext}M $vg/$lv1
+-if [ $v1_15_0 -eq 1 ]
++if [ $PROGRESS -eq 1 ]
+ then
+ 	not check lv_field $vg/$lv1 sync_percent "100.00"
+ else
+ 	check lv_field $vg/$lv1 sync_percent "100.00"
+ fi
+-aux wait_for_sync $vg $lv1
+-check lv_field $vg/$lv1 sync_percent "100.00"
+-check lv_field $vg/$lv1 size "$(($lvsz+$lvext)).00m" $vg/$lv1
+ 
+ aux enable_dev "$dev1"
+ aux enable_dev "$dev2"
+ 
++aux wait_for_sync $vg $lv1
++check lv_field $vg/$lv1 sync_percent "100.00"
++check lv_field $vg/$lv1 size "$(($lvsz+$lvext)).00m" $vg/$lv1
++
+ vgremove -ff $vg
 
 
