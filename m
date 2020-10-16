@@ -1,40 +1,44 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Fri, 16 Oct 2020 19:12:09 +0000 (GMT)
-Subject: stable-2.02 - debug: no backtrace
-Message-ID: <20201016191209.40CB0396EC88@sourceware.org>
+Date: Fri, 16 Oct 2020 19:12:08 +0000 (GMT)
+Subject: stable-2.02 - debug: show actually reason for taking this code path
+Message-ID: <20201016191208.1FEAC396EC9B@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=c68380746ab82a5c2517c71435daf830fa158a6f
-Commit:        c68380746ab82a5c2517c71435daf830fa158a6f
-Parent:        b97440290c952c33e32f86f7d4b0e47ed6e30d4d
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=b97440290c952c33e32f86f7d4b0e47ed6e30d4d
+Commit:        b97440290c952c33e32f86f7d4b0e47ed6e30d4d
+Parent:        03bddd7d41bc644dfe6498c3b2d0d412190f2e5e
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Oct 2 11:14:18 2020 +0200
+AuthorDate:    Fri Oct 2 11:12:49 2020 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Fri Oct 16 18:09:55 2020 +0200
 
-debug: no backtrace
+debug: show actually reason for taking this code path
 
-As the path already printed verbose message drop backtrace.
+Instead of not so useful backtrace, report what was the reason.
 ---
- lib/label/label.c | 2 +-
- 1 file changed, 1 insertion(+), 1 deletion(-)
+ lib/format_text/format-text.c | 6 ++++--
+ 1 file changed, 4 insertions(+), 2 deletions(-)
 
-diff --git a/lib/label/label.c b/lib/label/label.c
-index 7cebbdcf9..019fd09ca 100644
---- a/lib/label/label.c
-+++ b/lib/label/label.c
-@@ -412,7 +412,7 @@ static int _process_block(struct cmd_context *cmd, struct dev_filter *f,
- 		lvmcache_del_dev(dev); /* FIXME: if this is needed, fix it. */
+diff --git a/lib/format_text/format-text.c b/lib/format_text/format-text.c
+index 225d6424c..20eeb0854 100644
+--- a/lib/format_text/format-text.c
++++ b/lib/format_text/format-text.c
+@@ -2075,8 +2075,10 @@ static int _create_vg_text_instance(struct format_instance *fid,
+ 		}
  
- 		*is_lvm_device = 0;
--		goto_out;
-+		goto out;
- 	}
- 
- 	*is_lvm_device = 1;
+ 		if (type & FMT_INSTANCE_MDAS) {
+-			if (!(vginfo = lvmcache_vginfo_from_vgname(vg_name, vg_id)))
+-				goto_out;
++			if (!(vginfo = lvmcache_vginfo_from_vgname(vg_name, vg_id))) {
++				log_debug("No cached vginfo for VG %s and ID %s.", vg_name, vg_id);
++				goto out;
++			}
+ 			if (!lvmcache_fid_add_mdas_vg(vginfo, fid))
+ 				goto_out;
+ 		}
 
 
