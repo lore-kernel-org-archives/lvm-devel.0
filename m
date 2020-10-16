@@ -1,42 +1,42 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Fri, 16 Oct 2020 19:12:16 +0000 (GMT)
-Subject: stable-2.02 - tests: add small delay
-Message-ID: <20201016191216.1C0F8384640D@sourceware.org>
+Date: Fri, 16 Oct 2020 19:12:17 +0000 (GMT)
+Subject: stable-2.02 - tests: rename shown debug trace
+Message-ID: <20201016191217.3F7DE396EC89@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=1d7d3db571e09a25aa7329056f5e052932519212
-Commit:        1d7d3db571e09a25aa7329056f5e052932519212
-Parent:        2de99760f7a3364a3a33373b6d28782c4423e4fd
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=bd860802d4cfabaef1da46140895826a80932d6e
+Commit:        bd860802d4cfabaef1da46140895826a80932d6e
+Parent:        1d7d3db571e09a25aa7329056f5e052932519212
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed Sep 23 22:09:37 2020 +0200
+AuthorDate:    Fri Oct 2 19:17:36 2020 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Fri Oct 16 18:09:55 2020 +0200
 
-tests: add small delay
+tests: rename shown debug trace
 
-Prevent there is no i.e. udev trying to open our device.
+As there could be few invokes of stacktrace, avoid
+repeatedly display logs from commands.
+So after first display rename  debug.log* -> debug_log
+so the file still can remain for reading in test dir.
 ---
- test/shell/snapshot-remove-dmsetup.sh | 4 +++-
- 1 file changed, 3 insertions(+), 1 deletion(-)
+ test/lib/utils.sh | 1 +
+ 1 file changed, 1 insertion(+)
 
-diff --git a/test/shell/snapshot-remove-dmsetup.sh b/test/shell/snapshot-remove-dmsetup.sh
-index a7925d5d5..55957eb0c 100644
---- a/test/shell/snapshot-remove-dmsetup.sh
-+++ b/test/shell/snapshot-remove-dmsetup.sh
-@@ -61,7 +61,9 @@ dmsetup resume $vg1-snap
- wait $DMPID
- 
- 
--# Try how force removal works
-+# Try how force removal works (and wait till there is no user)
-+sync
-+sleep .5
- dmsetup suspend $vg-$lv1
- # needs to fail as device is still open
- not dmsetup remove --force $vg1-snap &
+diff --git a/test/lib/utils.sh b/test/lib/utils.sh
+index 4f4bf9a21..f01f5bdb0 100644
+--- a/test/lib/utils.sh
++++ b/test/lib/utils.sh
+@@ -171,6 +171,7 @@ STACKTRACE() {
+ 			test "$name" = "DEBUG" && { name="$name$idx" ; idx=$(( idx + 1 )) ; }
+ 			echo "<======== Debug log $i ========>"
+ 			sed -e "s,^,## $name: ," "$i"
++			mv -f "$i" "debug_${i#debug.}"
+ 		done
+ 		if test -e strace.log ; then
+ 			echo "<======== Strace debug log ========>"
 
 
