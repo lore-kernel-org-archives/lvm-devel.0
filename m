@@ -1,50 +1,63 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Fri, 16 Oct 2020 19:11:25 +0000 (GMT)
-Subject: stable-2.02 - README: update
-Message-ID: <20201016191125.CCCEC396EC45@sourceware.org>
+Date: Fri, 16 Oct 2020 19:11:28 +0000 (GMT)
+Subject: stable-2.02 - tests: check in_sync prints also dm status
+Message-ID: <20201016191128.225EC396EC6B@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=de17c273de8e3b139cd694d76f9bde9154cc3aa2
-Commit:        de17c273de8e3b139cd694d76f9bde9154cc3aa2
-Parent:        ff75d40298dfe8dcfa222e2c0842d413dc68b228
-Author:        Marian Csontos <mcsontos@redhat.com>
-AuthorDate:    Wed Aug 12 12:05:36 2020 +0200
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=4ebc8875d3f09cd446d1001361dc81af4cb8ded3
+Commit:        4ebc8875d3f09cd446d1001361dc81af4cb8ded3
+Parent:        0881ba9e9f32144d5a538b9920367c494513d23a
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Sat Sep 12 19:04:56 2020 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Fri Oct 16 17:07:58 2020 +0200
+CommitterDate: Fri Oct 16 17:07:59 2020 +0200
 
-README: update
+tests: check in_sync prints also dm status
 
+It's more useful to see how the progress of status checking is moving.
 ---
- README | 8 +++++---
- 1 file changed, 5 insertions(+), 3 deletions(-)
+ test/lib/check.sh | 8 ++++----
+ 1 file changed, 4 insertions(+), 4 deletions(-)
 
-diff --git a/README b/README
-index 9fe0a0d4e..31e5f318d 100644
---- a/README
-+++ b/README
-@@ -7,7 +7,6 @@ There is no warranty - see COPYING and COPYING.LIB.
+diff --git a/test/lib/check.sh b/test/lib/check.sh
+index 8637619f4..4deb78a74 100644
+--- a/test/lib/check.sh
++++ b/test/lib/check.sh
+@@ -216,7 +216,7 @@ in_sync() {
+ 		idx=6
+ 		type=${a[3]}
+ 		if [ "${a[$(( idx + 1 ))]}" != "idle" ]; then
+-			echo "$lvm_name ($type$snap) is not in-sync"
++			echo "$lvm_name ($type$snap) is not in-sync    " "${a[@]}"
+ 			return 1
+ 		fi
+ 		;;
+@@ -234,19 +234,19 @@ in_sync() {
+ 	c=${a[$idx]##*/}
  
- Tarballs are available from:
-   ftp://sourceware.org/pub/lvm2/
--  ftp://sources.redhat.com/pub/lvm2/
-   https://github.com/lvmteam/lvm2/releases
+ 	if [ "$b" -eq 0 ] || [ "$b" != "$c" ]; then
+-		echo "$lvm_name ($type$snap) is not in-sync"
++		echo "$lvm_name ($type$snap) is not in-sync    " "${a[@]}"
+ 		return 1
+ 	fi
  
- The source code is stored in git:
-@@ -42,6 +41,9 @@ Report upstream bugs at:
- or open issues at:
-   https://github.com/lvmteam/lvm2/issues
+ 	if [[ ${a[$(( idx - 1 ))]} =~ a ]] ; then
+ 		[ "$ignore_a" = 0 ] && \
+ 			die "$lvm_name ($type$snap) in-sync, but 'a' characters in health status"
+-		echo "$lvm_name ($type$snap) is not in-sync"
++		echo "$lvm_name ($type$snap) is not in-sync    " "${a[@]}"
+ 		[ "$ignore_a" = 1 ] && return 0
+ 		return 1
+ 	fi
  
--The source code repository used until 7th June 2012 is accessible here:
--  http://sources.redhat.com/cgi-bin/cvsweb.cgi/LVM2/?cvsroot=lvm2.
-+The source code repository used until 7th June 2012 is accessible using CVS:
+-	echo "$lvm_name ($type$snap) is in-sync" "${a[@]}"
++	echo "$lvm_name ($type$snap) is in-sync    " "${a[@]}"
+ }
  
-+  cvs -d :pserver:cvs at sourceware.org:/cvs/lvm2 login cvs
-+  cvs -d :pserver:cvs at sourceware.org:/cvs/lvm2 checkout LVM2
-+
-+The password is cvs.
+ active() {
 
 
