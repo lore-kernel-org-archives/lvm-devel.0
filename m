@@ -1,57 +1,58 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Fri, 16 Oct 2020 19:12:02 +0000 (GMT)
-Subject: stable-2.02 - bcache: fix waiting problem for completed IO
-Message-ID: <20201016191202.6BB32396EC96@sourceware.org>
+Date: Fri, 16 Oct 2020 19:12:04 +0000 (GMT)
+Subject: stable-2.02 - bcache: support interrupts when waiting on IO
+Message-ID: <20201016191204.B0815396EC99@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=d32ee355c75d1adcc01e4d14c06c4ddcfab16fc6
-Commit:        d32ee355c75d1adcc01e4d14c06c4ddcfab16fc6
-Parent:        1ed9cfad0954cb2e7c4445fd7ff2105aa044ccf1
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=479f0822ad1074cab4bcb1b5404257618cce14b3
+Commit:        479f0822ad1074cab4bcb1b5404257618cce14b3
+Parent:        5e64aa222b106ef3bd091346ebba807e10dc449e
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Oct 2 17:18:12 2020 +0200
+AuthorDate:    Fri Oct 2 17:16:14 2020 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Fri Oct 16 18:09:55 2020 +0200
 
-bcache: fix waiting problem for completed IO
+bcache: support interrupts when waiting on IO
 
-Call _wait_all() which does check whether there is still
-some pending IO before sleep. Otherwise it may happen
-our submitted IO operations have been already dispatched
-and this call then endlessly waits for IO which are all done.
-This can be reproduced when device returns quickly errors
-on write requests.
+Since lvm2 normally block signals during protected
+phase where it does not want to be interrupted.
+Support interruptible processing when allowed
+in section between sigint_allow() ... sigint_restore())
+and let the 'io_getenvents()'  finish with EINTR.
 ---
  WHATS_NEW           | 1 +
- lib/device/bcache.c | 2 +-
- 2 files changed, 2 insertions(+), 1 deletion(-)
+ lib/device/bcache.c | 4 +---
+ 2 files changed, 2 insertions(+), 3 deletions(-)
 
 diff --git a/WHATS_NEW b/WHATS_NEW
-index 3112105d7..7dae2ec5e 100644
+index 2cfb79ba0..dfaec8c53 100644
 --- a/WHATS_NEW
 +++ b/WHATS_NEW
 @@ -1,5 +1,6 @@
  Version 2.02.188 - 
  ==================================
-+  Fix bcache waiting for IO completion with failing disks.
++  Support interruption for bcache waiting.
+   Fix bcache when device has too many failing writes.
+   Fix bcache waiting for IO completion with failing disks.
    Configure use own python path name order to prefer using python3.
-   Enhance reporting and error handling when creating thin volumes.
-   Use revert_lv() on reload error path after vg_revert().
 diff --git a/lib/device/bcache.c b/lib/device/bcache.c
-index e4e72b6fb..9d4ef90a9 100644
+index e173129fe..f68576a55 100644
 --- a/lib/device/bcache.c
 +++ b/lib/device/bcache.c
-@@ -956,7 +956,7 @@ static struct block *_new_block(struct bcache *cache, int fd, block_address i, b
- 			if (can_wait) {
- 				if (dm_list_empty(&cache->io_pending))
- 					_writeback(cache, 16);  // FIXME: magic number
--				_wait_io(cache);
-+				_wait_all(cache);
- 			} else {
- 				log_error("bcache no new blocks for fd %d index %u",
- 					  fd, (uint32_t) i);
+@@ -318,9 +318,7 @@ static bool _async_wait(struct io_engine *ioe, io_complete_fn fn)
+ 	struct async_engine *e = _to_async(ioe);
+ 
+ 	memset(&event, 0, sizeof(event));
+-	do {
+-		r = io_getevents(e->aio_context, 1, MAX_EVENT, event, NULL);
+-	} while (r == -EINTR);
++	r = io_getevents(e->aio_context, 1, MAX_EVENT, event, NULL);
+ 
+ 	if (r < 0) {
+ 		log_sys_warn("io_getevents");
 
 
