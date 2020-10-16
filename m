@@ -1,39 +1,40 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Fri, 16 Oct 2020 19:11:17 +0000 (GMT)
-Subject: stable-2.02 - tests: aux collects stack trace when stuck is assumed
-Message-ID: <20201016191117.D66ED396E83D@sourceware.org>
+Date: Fri, 16 Oct 2020 19:11:19 +0000 (GMT)
+Subject: stable-2.02 - tests: have_cache function checks for cache-pool
+Message-ID: <20201016191119.085D6396EC06@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=c563af047643b18b6ebc369a77ecf094dd2a5f11
-Commit:        c563af047643b18b6ebc369a77ecf094dd2a5f11
-Parent:        57585ebacd54d7d0f4e80cf11e062e652d019539
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=81538e6e50e66ba59eb39f42188b53e589dd6e7f
+Commit:        81538e6e50e66ba59eb39f42188b53e589dd6e7f
+Parent:        c563af047643b18b6ebc369a77ecf094dd2a5f11
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu Sep 10 17:05:02 2020 +0200
+AuthorDate:    Fri Sep 11 11:59:55 2020 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Fri Oct 16 17:07:58 2020 +0200
 
-tests: aux collects stack trace when stuck is assumed
+tests: have_cache function checks for cache-pool
 
-Automatically collect traces in this case.
+Check for cache-pool segment as plain cache can match writecache.
 ---
- test/lib/aux.sh | 1 +
- 1 file changed, 1 insertion(+)
+ test/lib/aux.sh | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
 
 diff --git a/test/lib/aux.sh b/test/lib/aux.sh
-index 3c39151ae..b5f81dc74 100644
+index b5f81dc74..75dcbc41d 100644
 --- a/test/lib/aux.sh
 +++ b/test/lib/aux.sh
-@@ -1517,6 +1517,7 @@ wait_for_sync() {
- 	done
- 
- 	echo "Sync is taking too long - assume stuck"
-+	echo t >/proc/sysrq-trigger 2>/dev/null
- 	return 1
+@@ -1637,7 +1637,7 @@ have_raid4 () {
  }
  
+ have_cache() {
+-	lvm segtypes 2>/dev/null | grep cache$ >/dev/null || {
++	lvm segtypes 2>/dev/null | grep ' cache-pool$' >/dev/null || {
+ 		echo "Cache is not built-in." >&2
+ 		return 1
+ 	}
 
 
