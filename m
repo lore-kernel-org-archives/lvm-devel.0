@@ -1,68 +1,58 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Fri, 16 Oct 2020 19:12:01 +0000 (GMT)
-Subject: stable-2.02 - configure: use our ordered list of python names
-Message-ID: <20201016191201.454B4396EC06@sourceware.org>
+Date: Fri, 16 Oct 2020 19:12:03 +0000 (GMT)
+Subject: stable-2.02 - bcache: fix busy loop with too many errors
+Message-ID: <20201016191203.8FF67396EC8C@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=1ed9cfad0954cb2e7c4445fd7ff2105aa044ccf1
-Commit:        1ed9cfad0954cb2e7c4445fd7ff2105aa044ccf1
-Parent:        305e80fe85e9fbc4fa30cdb70dc1576aebc80eec
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=5e64aa222b106ef3bd091346ebba807e10dc449e
+Commit:        5e64aa222b106ef3bd091346ebba807e10dc449e
+Parent:        d32ee355c75d1adcc01e4d14c06c4ddcfab16fc6
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Oct 2 20:40:52 2020 +0200
+AuthorDate:    Fri Oct 2 17:42:50 2020 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Fri Oct 16 18:09:55 2020 +0200
 
-configure: use our ordered list of python names
+bcache: fix busy loop with too many errors
 
-Since it seems it's prefered now to use python3 in path name,
-prefer this name as first in the list.
+When bcache tries to write data to a faulty device,
+it may get out of caching blocks and then just busy-loops
+on a CPU - so this check protects this by checking
+if there is already max_io (~64) errored blocks.
 ---
- WHATS_NEW    | 1 +
- configure    | 2 +-
- configure.ac | 3 +++
- 3 files changed, 5 insertions(+), 1 deletion(-)
+ WHATS_NEW           | 1 +
+ lib/device/bcache.c | 5 +++++
+ 2 files changed, 6 insertions(+)
 
 diff --git a/WHATS_NEW b/WHATS_NEW
-index fe1093201..3112105d7 100644
+index 7dae2ec5e..2cfb79ba0 100644
 --- a/WHATS_NEW
 +++ b/WHATS_NEW
 @@ -1,5 +1,6 @@
  Version 2.02.188 - 
  ==================================
-+  Configure use own python path name order to prefer using python3.
++  Fix bcache when device has too many failing writes.
+   Fix bcache waiting for IO completion with failing disks.
+   Configure use own python path name order to prefer using python3.
    Enhance reporting and error handling when creating thin volumes.
-   Use revert_lv() on reload error path after vg_revert().
-   Improve estimation of needed extents when creating thin-pool.
-diff --git a/configure b/configure
-index c2b65d5a8..b6658b908 100755
---- a/configure
-+++ b/configure
-@@ -13256,7 +13256,7 @@ if ${am_cv_pathless_PYTHON+:} false; then :
-   $as_echo_n "(cached) " >&6
- else
- 
--	for am_cv_pathless_PYTHON in python python2 python3  python3.9 python3.8 python3.7 python3.6 python3.5 python3.4 python3.3  python3.2 python3.1 python3.0  python2.7 python2.6 python2.5 python2.4 python2.3 python2.2 python2.1  python2.0 none; do
-+	for am_cv_pathless_PYTHON in  python3 python2 python 	python3.9 python3.8 python3.7 python3.6 python3.5 python3.4 python3.3 python3.2 python3.1 python3.0 	python2.7 python2.6 python2.5 python2.4 python2.3 python2.2 python2.1 python2.0  none; do
- 	  test "$am_cv_pathless_PYTHON" = none && break
- 	  prog="import sys
- # split strings by '.' and convert to numeric.  Append some zeros
-diff --git a/configure.ac b/configure.ac
-index 0e9de09f9..4aee76542 100644
---- a/configure.ac
-+++ b/configure.ac
-@@ -1445,6 +1445,9 @@ if test "$PYTHON3_BINDINGS" = yes -o "$BUILD_LVMDBUSD" = yes; then
- 	unset am_cv_pathless_PYTHON ac_cv_path_PYTHON am_cv_python_platform
- 	unset am_cv_python_pythondir am_cv_python_version am_cv_python_pyexecdir
- 	unset ac_cv_path_PYTHON_CONFIG ac_cv_path_ac_pt_PYTHON_CONFIG
-+	m4_define_default([_AM_PYTHON_INTERPRETER_LIST],[ python3 python2 python dnl
-+	python3.9 python3.8 python3.7 python3.6 python3.5 python3.4 python3.3 python3.2 python3.1 python3.0 dnl
-+	python2.7 python2.6 python2.5 python2.4 python2.3 python2.2 python2.1 python2.0 ])
- 	AM_PATH_PYTHON([3])
- 	PYTHON3=$PYTHON
- 	test -z "$PYTHON3" && AC_MSG_ERROR([python3 is required for --enable-python3_bindings or --enable-dbus-service but cannot be found])
+diff --git a/lib/device/bcache.c b/lib/device/bcache.c
+index 9d4ef90a9..e173129fe 100644
+--- a/lib/device/bcache.c
++++ b/lib/device/bcache.c
+@@ -957,6 +957,11 @@ static struct block *_new_block(struct bcache *cache, int fd, block_address i, b
+ 				if (dm_list_empty(&cache->io_pending))
+ 					_writeback(cache, 16);  // FIXME: magic number
+ 				_wait_all(cache);
++				if (dm_list_size(&cache->errored) >= cache->max_io) {
++					log_debug("bcache no new blocks for di %d index %u with >%d errors.",
++						  fd, (uint32_t) i, cache->max_io);
++					return NULL;
++				}
+ 			} else {
+ 				log_error("bcache no new blocks for fd %d index %u",
+ 					  fd, (uint32_t) i);
 
 
