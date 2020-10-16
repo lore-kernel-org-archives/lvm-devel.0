@@ -1,98 +1,65 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Fri, 16 Oct 2020 19:11:14 +0000 (GMT)
-Subject: stable-2.02 - tests: add aux delayzero_dev support
-Message-ID: <20201016191114.6EA793857824@sourceware.org>
+Date: Fri, 16 Oct 2020 19:11:09 +0000 (GMT)
+Subject: stable-2.02 - lvextend: improve percentage estimation
+Message-ID: <20201016191109.D7517396EC45@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=5ac48c0655c9b0da6846dca30e1250f9a1f78f70
-Commit:        5ac48c0655c9b0da6846dca30e1250f9a1f78f70
-Parent:        8744d97c7b974a1ad990a0b7e61fa496a9500a52
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=5190e16c30dcf3ed76a756ff0a5e54342f477abd
+Commit:        5190e16c30dcf3ed76a756ff0a5e54342f477abd
+Parent:        68f94a2dd38da38d705051b055caf231ad6fb100
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Sep 4 13:50:05 2020 +0200
+AuthorDate:    Thu Sep 10 22:38:34 2020 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Fri Oct 16 17:07:58 2020 +0200
 
-tests: add aux delayzero_dev  support
+lvextend: improve percentage estimation
 
-Just like we have 'writeerror_dev' supporting creation of device
-which 'readable' segment and segments where write will fail we
-have now support for delay zero mappings.
+Correcting rounding rules for percentage evaluation.
 
-This is useful if we want to 'fake' large writing areas where we do
-not really care about the actual 'disk' content - since we test
-operation logic and it doesn't matter we read and write zeroes.
-With combination with 'delay' target we can create specific mappings
-and avoid using large memory areas of ramdisk.
+Validate supported range of percentage.
+(although ranges are already validated earlier on code path)
 ---
- test/lib/aux.sh | 31 +++++++++++++++++++++++++++++++
- 1 file changed, 31 insertions(+)
+ WHATS_NEW               | 1 +
+ lib/metadata/lv_manip.c | 5 +++--
+ 2 files changed, 4 insertions(+), 2 deletions(-)
 
-diff --git a/test/lib/aux.sh b/test/lib/aux.sh
-index 7a8d054e9..3c39151ae 100644
---- a/test/lib/aux.sh
-+++ b/test/lib/aux.sh
-@@ -565,6 +565,7 @@ teardown() {
- 	unset LVM_LOG_FILE_EPOCH
+diff --git a/WHATS_NEW b/WHATS_NEW
+index 32dcd5f34..86c0274b3 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.188 - 
+ ==================================
++  Enhance --use-policy percentage rounding.
+   Switch code base to use flexible array syntax.
+   Preserve uint32_t for seqno handling.
+   Switch from mmap to plain read when loading regular files.
+diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
+index 945f5cb60..affce9433 100644
+--- a/lib/metadata/lv_manip.c
++++ b/lib/metadata/lv_manip.c
+@@ -4652,7 +4652,7 @@ static int _fsadm_cmd(enum fsadm_cmd_e fcmd,
  
- 	test ! -f ERR_DEV || should dmsetup remove $(cat ERR_DEV_NAME)
-+	test ! -f ZERO_DEV || should dmsetup remove $(cat ZERO_DEV_NAME)
+ static uint32_t _adjust_amount(dm_percent_t percent, int policy_threshold, int policy_amount)
+ {
+-	if (!(DM_PERCENT_0 < percent && percent <= DM_PERCENT_100) ||
++	if (!((50 * DM_PERCENT_1) < percent && percent <= DM_PERCENT_100) ||
+ 	    percent <= (policy_threshold * DM_PERCENT_1))
+ 		return 0; /* nothing to do */
+ 	/*
+@@ -4660,7 +4660,8 @@ static uint32_t _adjust_amount(dm_percent_t percent, int policy_threshold, int p
+ 	 * Keep using DM_PERCENT_1 units for better precision.
+ 	 * Round-up to needed percentage value
+ 	 */
+-	percent = (percent / policy_threshold + (DM_PERCENT_1 - 1) / 100) / (DM_PERCENT_1 / 100) - 100;
++	policy_threshold *= (DM_PERCENT_1 / 100);
++	percent = (percent + policy_threshold - 1) / policy_threshold - 100;
  
- 	if test -f TESTNAME ; then
- 
-@@ -957,6 +958,11 @@ common_dev_() {
- 		}
- 		shift 2
- 		;;
-+	delayzero)
-+		shift 2
-+		# zero delay is just equivalent to 'zero_dev'
-+		test "$read_ms" -eq 0 && test "$write_ms" -eq 0 && tgtype="zero"
-+		;;
- 	# error|zero target does not take read_ms & write_ms only offset list
- 	esac
- 
-@@ -989,6 +995,8 @@ common_dev_() {
- 			echo "$from $len delay $pvdev $(( pos + offset )) $read_ms $pvdev $(( pos + offset )) $write_ms" ;;
- 		writeerror)
- 			echo "$from $len delay $pvdev $(( pos + offset )) 0 $(cat ERR_DEV) 0 0" ;;
-+		delayzero)
-+			echo "$from $len delay $(cat ZERO_DEV) 0 $read_ms $(cat ZERO_DEV) 0 $write_ms" ;;
- 		error|zero)
- 			echo "$from $len $tgtype" ;;
- 		esac
-@@ -1151,6 +1159,29 @@ writeerror_dev() {
- 	common_dev_ writeerror "$@"
- }
- 
-+#
-+# Convert device to device with sections of delayed zero read and writes.
-+# For this 'delay' dev will use extra new TEST-zerodev (huge zero target)
-+# and reroutes reads and writes
-+# i.e.  delayzero_dev "$dev1" 8:32
-+delayzero_dev() {
-+	local name=${PREFIX}-zerodev
-+
-+	if test ! -e ZERO_DEV; then
-+		# delay target is used for error mapping
-+		if test ! -f HAVE_DM_DELAY ; then
-+			target_at_least dm-delay 1 1 0 || return 0
-+			touch HAVE_DM_DELAY
-+		fi
-+		dmsetup create -u "TEST-$name" "$name" --table "0 4611686018427387904 zero"
-+		# Take major:minor of our error device
-+		echo "$name" > ZERO_DEV_NAME
-+		dmsetup info -c  --noheadings -o major,minor "$name" > ZERO_DEV
-+	fi
-+
-+	common_dev_ delayzero "$@"
-+}
-+
- #
- # Convert existing device to a device with zero segments
- # Takes the list of pairs of zero segment from:len
+ 	/* Use it if current policy amount is smaller */
+ 	return (policy_amount < percent) ? (uint32_t) percent : (uint32_t) policy_amount;
 
 
