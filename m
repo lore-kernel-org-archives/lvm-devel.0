@@ -1,162 +1,95 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Sun, 18 Oct 2020 21:02:41 +0000 (GMT)
-Subject: stable-2.02 - configure: check for BLKZEROOUT support
-Message-ID: <20201018210241.CFE0B38618DF@sourceware.org>
+Date: Sun, 18 Oct 2020 21:02:43 +0000 (GMT)
+Subject: stable-2.02 - wipe_lv: use BLKZEROOUT when possible
+Message-ID: <20201018210243.00B62384B061@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=ac5cf1544efef5a585f7e66edf2d3cfbf7bbbe8d
-Commit:        ac5cf1544efef5a585f7e66edf2d3cfbf7bbbe8d
-Parent:        e9241860a85df1fc42cd958ca4109be850c1f8fd
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=b8454b59e1901404d184f6198c87307711f35471
+Commit:        b8454b59e1901404d184f6198c87307711f35471
+Parent:        ac5cf1544efef5a585f7e66edf2d3cfbf7bbbe8d
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Oct 2 18:39:19 2020 +0200
+AuthorDate:    Fri Oct 2 19:32:28 2020 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Sun Oct 18 21:28:13 2020 +0200
 
-configure: check for BLKZEROOUT support
+wipe_lv: use BLKZEROOUT when possible
 
+Since BLKZEROOUT ioctl should be supposedly fastest
+way how to clear block device start using this ioctl
+for zeroing a device. Commonly we do zero typically
+small portion of a device (8KiB) - however since we now
+also started to zero metadata devices, in the case
+of i.e. thin-pool metadata this can go upto ~16GiB
+and here the performance starts to be noticable.
 ---
- configure              | 57 ++++++++++++++++++++++++++++++++++++++++++++++++++
- configure.ac           | 27 ++++++++++++++++++++++++
- include/configure.h.in |  3 +++
- 3 files changed, 87 insertions(+)
+ WHATS_NEW               |  1 +
+ lib/metadata/lv_manip.c | 32 ++++++++++++++++++++++++++++++++
+ 2 files changed, 33 insertions(+)
 
-diff --git a/configure b/configure
-index 6859d51b1..bb8d50220 100755
---- a/configure
-+++ b/configure
-@@ -978,6 +978,7 @@ enable_fsadm
- enable_blkdeactivate
- enable_dmeventd
- enable_selinux
-+enable_blkzeroout
- enable_nls
- with_localedir
- with_confdir
-@@ -1731,6 +1732,7 @@ Optional Features:
-   --disable-blkdeactivate disable blkdeactivate
-   --enable-dmeventd       enable the device-mapper event daemon
-   --disable-selinux       disable selinux support
-+  --disable-blkzeroout    do not use BLKZEROOUT for device zeroing
-   --enable-nls            enable Native Language Support
+diff --git a/WHATS_NEW b/WHATS_NEW
+index e4a61dcbc..31f21ce4f 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.188 - 
+ ==================================
++  Support using BLKZEROOUT for clearing devices.
+   Support interruption when wipping LVs.
+   Add configure --enable-editline support as an alternative to readline.
+   Zero pool metadata on allocation (disable with allocation/zero_metadata=0).
+diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
+index d24c1984f..4b1b4de61 100644
+--- a/lib/metadata/lv_manip.c
++++ b/lib/metadata/lv_manip.c
+@@ -33,6 +33,11 @@
+ #include "label.h"
+ #include "lvm-signal.h"
  
- Optional Packages:
-@@ -14113,6 +14115,61 @@ fi
- 
- fi
- 
-+################################################################################
-+
-+{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for BLKZEROOUT in sys/ioctl.h." >&5
-+$as_echo_n "checking for BLKZEROOUT in sys/ioctl.h.... " >&6; }
-+if ${ac_cv_have_blkzeroout+:} false; then :
-+  $as_echo_n "(cached) " >&6
-+else
-+  cat confdefs.h - <<_ACEOF >conftest.$ac_ext
-+/* end confdefs.h.  */
++#ifdef HAVE_BLKZEROOUT
 +#include <sys/ioctl.h>
 +#include <linux/fs.h>
-+int bar(void) { return ioctl(0, BLKZEROOUT, 0); }
++#endif
 +
-+int
-+main ()
-+{
-+
-+  ;
-+  return 0;
-+}
-+_ACEOF
-+if ac_fn_c_try_compile "$LINENO"; then :
-+  ac_cv_have_blkzeroout=yes
-+else
-+  ac_cv_have_blkzeroout=no
-+fi
-+rm -f core conftest.err conftest.$ac_objext conftest.$ac_ext
-+fi
-+{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $ac_cv_have_blkzeroout" >&5
-+$as_echo "$ac_cv_have_blkzeroout" >&6; }
-+
-+
-+# Check whether --enable-blkzeroout was given.
-+if test "${enable_blkzeroout+set}" = set; then :
-+  enableval=$enable_blkzeroout; BLKZEROOUT=$enableval
-+else
-+  BLKZEROOUT=yes
-+fi
-+
-+
-+{ $as_echo "$as_me:${as_lineno-$LINENO}: checking whether to use BLKZEROOUT for device zeroing" >&5
-+$as_echo_n "checking whether to use BLKZEROOUT for device zeroing... " >&6; }
-+if test "$BLKZEROOUT" = yes; then
-+	if test $ac_cv_have_blkzeroout = yes; then :
-+
-+$as_echo "#define HAVE_BLKZEROOUT 1" >>confdefs.h
-+
-+else
-+  BLKZEROOUT=no
-+fi
-+fi
-+{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $BLKZEROOUT" >&5
-+$as_echo "$BLKZEROOUT" >&6; }
-+
-+
- ################################################################################
- RT_LIBS=
- HAVE_REALTIME=no
-diff --git a/configure.ac b/configure.ac
-index 9d90ff062..f040a5a71 100644
---- a/configure.ac
-+++ b/configure.ac
-@@ -1588,6 +1588,33 @@ if test "$SELINUX" = yes; then
- 		HAVE_SELINUX=no ])
- fi
+ typedef enum {
+ 	PREFERRED,
+ 	USE_AREA,
+@@ -7270,6 +7275,33 @@ int wipe_lv(struct logical_volume *lv, struct wipe_params wp)
+ 			    display_size(lv->vg->cmd, zero_sectors),
+ 			    display_lvname(lv), wp.zero_value);
  
-+################################################################################
-+dnl -- Check BLKZEROOUT support
++#ifdef HAVE_BLKZEROOUT
++		if (!test_mode() && !wp.zero_value) {
++			/* TODO: maybe integrate with bcache_zero_set() */
++			const uint64_t end = zero_sectors << SECTOR_SHIFT;
++			uint64_t range[2] = { 0, 1024 * 1024 }; /* zeroing with 1M steps (for better ^C support) */
++			for (/* empty */ ; range[0] < end; range[0] += range[1]) {
++				if ((range[0] + range[1]) > end)
++					range[1] = end - range[0];
 +
-+AC_CACHE_CHECK([for BLKZEROOUT in sys/ioctl.h.],
-+	[ac_cv_have_blkzeroout],
-+	[AC_COMPILE_IFELSE([AC_LANG_PROGRAM(
-+[#include <sys/ioctl.h>
-+#include <linux/fs.h>
-+int bar(void) { return ioctl(0, BLKZEROOUT, 0); }]
-+	 )], [ac_cv_have_blkzeroout=yes], [ac_cv_have_blkzeroout=no])])
-+
-+
-+AC_ARG_ENABLE(blkzeroout,
-+	      AC_HELP_STRING([--disable-blkzeroout],
-+			     [do not use BLKZEROOUT for device zeroing]),
-+	      BLKZEROOUT=$enableval, BLKZEROOUT=yes)
-+
-+AC_MSG_CHECKING(whether to use BLKZEROOUT for device zeroing)
-+if test "$BLKZEROOUT" = yes; then
-+	AC_IF_YES(ac_cv_have_blkzeroout,
-+		  AC_DEFINE(HAVE_BLKZEROOUT, 1,
-+			    [Define if ioctl BLKZEROOUT can be used for device zeroing.]),
-+		  BLKZEROOUT=no)
-+fi
-+AC_MSG_RESULT($BLKZEROOUT)
-+
-+
- ################################################################################
- dnl -- Check for realtime clock support
- RT_LIBS=
-diff --git a/include/configure.h.in b/include/configure.h.in
-index 94f755c82..49663e484 100644
---- a/include/configure.h.in
-+++ b/include/configure.h.in
-@@ -172,6 +172,9 @@
- /* Define to 1 if you have the `atexit' function. */
- #undef HAVE_ATEXIT
- 
-+/* Define if ioctl BLKZEROOUT can be used for device zeroing. */
-+#undef HAVE_BLKZEROOUT
-+
- /* Define to 1 if canonicalize_file_name is available. */
- #undef HAVE_CANONICALIZE_FILE_NAME
- 
++				if (ioctl(dev->bcache_fd, BLKZEROOUT, &range)) {
++					if (errno == EINVAL)
++						goto retry_with_dev_set; /* Kernel without support for BLKZEROOUT */
++					log_sys_debug("ioctl", "BLKZEROOUT");
++					sigint_restore();
++					label_scan_invalidate(dev);
++					if (sigint_caught())
++						log_error("Interrupted initialization logical volume %s.",
++							  display_lvname(lv));
++					else
++						log_error("Failed to initialize logical volume %s at position " FMTu64 " and size " FMTu64 ".",
++							  display_lvname(lv), range[0], range[1]);
++					return 0;
++				}
++			}
++		} else
++retry_with_dev_set:
++#endif
+ 		if (!dev_set_bytes(dev, UINT64_C(0), (size_t) zero_sectors << SECTOR_SHIFT, wp.zero_value)) {
+ 			sigint_restore();
+ 			if (sigint_caught()) {
 
 
