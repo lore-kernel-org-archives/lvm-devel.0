@@ -1,57 +1,43 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Sun, 18 Oct 2020 21:02:44 +0000 (GMT)
-Subject: stable-2.02 - debug: update messages
-Message-ID: <20201018210244.27371384A87E@sourceware.org>
+Date: Sun, 18 Oct 2020 21:02:45 +0000 (GMT)
+Subject: stable-2.02 - tests: extend area covered by error target
+Message-ID: <20201018210245.498A7384A881@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=5ad30c57b3415150f6b71b0828eedc3d92ea49a8
-Commit:        5ad30c57b3415150f6b71b0828eedc3d92ea49a8
-Parent:        b8454b59e1901404d184f6198c87307711f35471
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=e5af7bef223881134209b71f90240cdbf59d9ec1
+Commit:        e5af7bef223881134209b71f90240cdbf59d9ec1
+Parent:        5ad30c57b3415150f6b71b0828eedc3d92ea49a8
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Sep 29 23:48:45 2020 +0200
+AuthorDate:    Tue Oct 6 15:45:19 2020 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Sun Oct 18 21:28:13 2020 +0200
 
-debug: update messages
+tests: extend area covered by error target
 
+Since 'BLKZEROOUT' streams out more block at once, at can easily
+zero-out larger set of blocks after 1st. failing one.
+
+So the test is adapted to fully 'hide' swap header under error target.
 ---
- lib/device/dev-io.c | 6 +++---
- 1 file changed, 3 insertions(+), 3 deletions(-)
+ test/shell/lvcreate-signature-wiping.sh | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
 
-diff --git a/lib/device/dev-io.c b/lib/device/dev-io.c
-index 0289a1768..0c9829a03 100644
---- a/lib/device/dev-io.c
-+++ b/lib/device/dev-io.c
-@@ -412,7 +412,7 @@ static int _dev_get_size_dev(struct device *dev, uint64_t *size)
- 	if (ioctl(fd, BLKGETSIZE64, size) < 0) {
- 		log_sys_error("ioctl BLKGETSIZE64", name);
- 		if (do_close && !dev_close_immediate(dev))
--			log_sys_error("close", name);
-+			stack;
- 		return 0;
- 	}
+diff --git a/test/shell/lvcreate-signature-wiping.sh b/test/shell/lvcreate-signature-wiping.sh
+index 18d7a2f7e..4893d9a66 100644
+--- a/test/shell/lvcreate-signature-wiping.sh
++++ b/test/shell/lvcreate-signature-wiping.sh
+@@ -43,7 +43,7 @@ test_blkid_ || skip
+ lvremove -f $vg/$lv1
  
-@@ -423,7 +423,7 @@ static int _dev_get_size_dev(struct device *dev, uint64_t *size)
- 	log_very_verbose("%s: size is %" PRIu64 " sectors", name, *size);
- 
- 	if (do_close && !dev_close_immediate(dev))
--		log_sys_error("close", name);
-+		stack;
- 
- 	return 1;
- }
-@@ -713,7 +713,7 @@ int dev_test_excl(struct device *dev)
- static void _close(struct device *dev)
- {
- 	if (close(dev->fd))
--		log_sys_error("close", dev_name(dev));
-+		log_sys_debug("close", dev_name(dev));
- 	dev->fd = -1;
- 	dev->phys_block_size = -1;
- 	dev->block_size = -1;
+ # Zeroing stops the command when there is a failure (write error in this case)
+-aux error_dev "$dev1" "$(get first_extent_sector "$dev1"):2"
++aux error_dev "$dev1" "$(get first_extent_sector "$dev1"):8"
+ not lvcreate -l1 -n $lv1 $vg 2>&1 | tee out
+ grep "Failed to initialize" out
+ aux enable_dev "$dev1"
 
 
