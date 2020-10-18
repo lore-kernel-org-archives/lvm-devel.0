@@ -1,79 +1,93 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Sun, 18 Oct 2020 21:02:39 +0000 (GMT)
-Subject: stable-2.02 - label: cleanup set_byte error exit
-Message-ID: <20201018210239.8CD43385041B@sourceware.org>
+Date: Sun, 18 Oct 2020 21:02:40 +0000 (GMT)
+Subject: stable-2.02 - wipe_lv: interruptible wiping
+Message-ID: <20201018210240.ADEB23858D35@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=e94e0cd0206044780bdde19b833d818da8f3f651
-Commit:        e94e0cd0206044780bdde19b833d818da8f3f651
-Parent:        35104f7ba5c5318b059ed0fd76f47fdd1c04285b
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Wed Sep 16 13:54:16 2020 -0500
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=e9241860a85df1fc42cd958ca4109be850c1f8fd
+Commit:        e9241860a85df1fc42cd958ca4109be850c1f8fd
+Parent:        e94e0cd0206044780bdde19b833d818da8f3f651
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Fri Oct 2 19:31:05 2020 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Sun Oct 18 21:28:13 2020 +0200
 
-label: cleanup set_byte error exit
+wipe_lv: interruptible wiping
 
+Since we now block signals and wiping may take unexpectedly long
+time - support breaking command while wipe is in progress.
 ---
- lib/label/label.c | 25 ++++++++++++++++---------
- 1 file changed, 16 insertions(+), 9 deletions(-)
+ WHATS_NEW               |  1 +
+ lib/metadata/lv_manip.c | 16 ++++++++++++++++
+ 2 files changed, 17 insertions(+)
 
-diff --git a/lib/label/label.c b/lib/label/label.c
-index 065da1282..e05b18a9e 100644
---- a/lib/label/label.c
-+++ b/lib/label/label.c
-@@ -1414,6 +1414,8 @@ bool dev_write_zeros(struct device *dev, uint64_t start, size_t len)
+diff --git a/WHATS_NEW b/WHATS_NEW
+index 764af0da4..e4a61dcbc 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.188 - 
+ ==================================
++  Support interruption when wipping LVs.
+   Add configure --enable-editline support as an alternative to readline.
+   Zero pool metadata on allocation (disable with allocation/zero_metadata=0).
+   Failure in zeroing or wiping will fail command (bypass with -Zn, -Wn).
+diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
+index 7576eaeba..d24c1984f 100644
+--- a/lib/metadata/lv_manip.c
++++ b/lib/metadata/lv_manip.c
+@@ -31,6 +31,7 @@
+ #include "memlock.h"
+ #include "lvmlockd.h"
+ #include "label.h"
++#include "lvm-signal.h"
  
- bool dev_set_bytes(struct device *dev, uint64_t start, size_t len, uint8_t val)
- {
-+	bool rv;
-+
- 	if (test_mode())
- 		return true;
- 
-@@ -1444,25 +1446,30 @@ bool dev_set_bytes(struct device *dev, uint64_t start, size_t len, uint8_t val)
- 
- 	dev_set_last_byte(dev, start + len);
- 
--	if ((!val && !bcache_zero_bytes(scan_bcache, dev->bcache_fd, start, len)) ||
--	    !bcache_set_bytes(scan_bcache, dev->bcache_fd, start, len, val)) {
--		log_error("Error writing device %s at %llu length %u.",
-+	if (!val)
-+		rv = bcache_zero_bytes(scan_bcache, dev->bcache_fd, start, len);
-+	else
-+		rv = bcache_set_bytes(scan_bcache, dev->bcache_fd, start, len, val);
-+
-+	if (!rv) {
-+		log_error("Error writing device value %s at %llu length %u.",
- 			  dev_name(dev), (unsigned long long)start, (uint32_t)len);
--		dev_unset_last_byte(dev);
--		label_scan_invalidate(dev);
--		return false;
-+		goto fail;
+ typedef enum {
+ 	PREFERRED,
+@@ -7225,12 +7226,20 @@ int wipe_lv(struct logical_volume *lv, struct wipe_params wp)
+ 		return 0;
  	}
  
- 	if (!bcache_flush(scan_bcache)) {
- 		log_error("Error writing device %s at %llu length %u.",
- 			  dev_name(dev), (unsigned long long)start, (uint32_t)len);
--		dev_unset_last_byte(dev);
--		label_scan_invalidate(dev);
--		return false;
-+		goto fail;
++	sigint_allow();
+ 	if (wp.do_wipe_signatures) {
+ 		log_verbose("Wiping known signatures on logical volume %s.",
+ 			    display_lvname(lv));
+ 		if (!wipe_known_signatures(lv->vg->cmd, dev, name, 0,
+ 					   TYPE_DM_SNAPSHOT_COW,
+ 					   wp.yes, wp.force, NULL)) {
++			sigint_restore();
++			label_scan_invalidate(dev);
++			if (sigint_caught()) {
++				log_error("Interrupted initialization logical volume %s.",
++					  display_lvname(lv));
++				return 0;
++			}
+ 			log_error("Filed to wipe signatures of logical volume %s.",
+ 				  display_lvname(lv));
+ 			return 0;
+@@ -7262,12 +7271,19 @@ int wipe_lv(struct logical_volume *lv, struct wipe_params wp)
+ 			    display_lvname(lv), wp.zero_value);
+ 
+ 		if (!dev_set_bytes(dev, UINT64_C(0), (size_t) zero_sectors << SECTOR_SHIFT, wp.zero_value)) {
++			sigint_restore();
++			if (sigint_caught()) {
++				log_error("Interrupted initialization logical volume %s.",
++					  display_lvname(lv));
++				return 0;
++			}
+ 			log_error("Failed to initialize %s of logical volume %s with value %d.",
+ 				  display_size(lv->vg->cmd, zero_sectors),
+ 				  display_lvname(lv), wp.zero_value);
+ 			return 0;
+ 		}
  	}
++	sigint_restore();
  
- 	dev_unset_last_byte(dev);
- 	return true;
-+
-+fail:
-+	dev_unset_last_byte(dev);
-+	label_scan_invalidate(dev);
-+	return false;
- }
+ 	label_scan_invalidate(dev);
  
- void dev_set_last_byte(struct device *dev, uint64_t offset)
 
 
