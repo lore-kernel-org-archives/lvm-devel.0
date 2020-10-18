@@ -1,53 +1,79 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Sun, 18 Oct 2020 21:02:38 +0000 (GMT)
-Subject: stable-2.02 - wipe: dev_set_bytes resolves zeroing
-Message-ID: <20201018210238.6B49C3850429@sourceware.org>
+Date: Sun, 18 Oct 2020 21:02:39 +0000 (GMT)
+Subject: stable-2.02 - label: cleanup set_byte error exit
+Message-ID: <20201018210239.8CD43385041B@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=35104f7ba5c5318b059ed0fd76f47fdd1c04285b
-Commit:        35104f7ba5c5318b059ed0fd76f47fdd1c04285b
-Parent:        0559ce6be098253fecb8d2cc42d391b270e75894
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Sep 15 20:35:48 2020 +0200
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=e94e0cd0206044780bdde19b833d818da8f3f651
+Commit:        e94e0cd0206044780bdde19b833d818da8f3f651
+Parent:        35104f7ba5c5318b059ed0fd76f47fdd1c04285b
+Author:        David Teigland <teigland@redhat.com>
+AuthorDate:    Wed Sep 16 13:54:16 2020 -0500
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Sun Oct 18 21:28:13 2020 +0200
 
-wipe: dev_set_bytes resolves zeroing
+label: cleanup set_byte error exit
 
-Since dev_write_zeros() is just subset of dev_set_bytes()
-use it directly and simplify code.
 ---
- lib/metadata/lv_manip.c | 7 ++-----
- 1 file changed, 2 insertions(+), 5 deletions(-)
+ lib/label/label.c | 25 ++++++++++++++++---------
+ 1 file changed, 16 insertions(+), 9 deletions(-)
 
-diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
-index 660e742dd..7576eaeba 100644
---- a/lib/metadata/lv_manip.c
-+++ b/lib/metadata/lv_manip.c
-@@ -7244,6 +7244,7 @@ int wipe_lv(struct logical_volume *lv, struct wipe_params wp)
- 			log_debug("Metadata logical volume %s will be fully zeroed.",
- 				  display_lvname(lv));
- 			zero_sectors = lv->size;
-+			wp.zero_value = 0;
- 		} else {
- 			if (wp.is_metadata) /* Verbosely notify metadata will not be fully zeroed */
- 				log_verbose("Metadata logical volume %s not fully zeroed and may contain stale data.",
-@@ -7260,11 +7261,7 @@ int wipe_lv(struct logical_volume *lv, struct wipe_params wp)
- 			    display_size(lv->vg->cmd, zero_sectors),
- 			    display_lvname(lv), wp.zero_value);
+diff --git a/lib/label/label.c b/lib/label/label.c
+index 065da1282..e05b18a9e 100644
+--- a/lib/label/label.c
++++ b/lib/label/label.c
+@@ -1414,6 +1414,8 @@ bool dev_write_zeros(struct device *dev, uint64_t start, size_t len)
  
--		if ((!wp.is_metadata &&
--		     wp.zero_value && !dev_set_bytes(dev, UINT64_C(0),
--						     (size_t) zero_sectors << SECTOR_SHIFT,
--						     (uint8_t)wp.zero_value)) ||
--		    !dev_write_zeros(dev, UINT64_C(0), (size_t) zero_sectors << SECTOR_SHIFT)) {
-+		if (!dev_set_bytes(dev, UINT64_C(0), (size_t) zero_sectors << SECTOR_SHIFT, wp.zero_value)) {
- 			log_error("Failed to initialize %s of logical volume %s with value %d.",
- 				  display_size(lv->vg->cmd, zero_sectors),
- 				  display_lvname(lv), wp.zero_value);
+ bool dev_set_bytes(struct device *dev, uint64_t start, size_t len, uint8_t val)
+ {
++	bool rv;
++
+ 	if (test_mode())
+ 		return true;
+ 
+@@ -1444,25 +1446,30 @@ bool dev_set_bytes(struct device *dev, uint64_t start, size_t len, uint8_t val)
+ 
+ 	dev_set_last_byte(dev, start + len);
+ 
+-	if ((!val && !bcache_zero_bytes(scan_bcache, dev->bcache_fd, start, len)) ||
+-	    !bcache_set_bytes(scan_bcache, dev->bcache_fd, start, len, val)) {
+-		log_error("Error writing device %s at %llu length %u.",
++	if (!val)
++		rv = bcache_zero_bytes(scan_bcache, dev->bcache_fd, start, len);
++	else
++		rv = bcache_set_bytes(scan_bcache, dev->bcache_fd, start, len, val);
++
++	if (!rv) {
++		log_error("Error writing device value %s at %llu length %u.",
+ 			  dev_name(dev), (unsigned long long)start, (uint32_t)len);
+-		dev_unset_last_byte(dev);
+-		label_scan_invalidate(dev);
+-		return false;
++		goto fail;
+ 	}
+ 
+ 	if (!bcache_flush(scan_bcache)) {
+ 		log_error("Error writing device %s at %llu length %u.",
+ 			  dev_name(dev), (unsigned long long)start, (uint32_t)len);
+-		dev_unset_last_byte(dev);
+-		label_scan_invalidate(dev);
+-		return false;
++		goto fail;
+ 	}
+ 
+ 	dev_unset_last_byte(dev);
+ 	return true;
++
++fail:
++	dev_unset_last_byte(dev);
++	label_scan_invalidate(dev);
++	return false;
+ }
+ 
+ void dev_set_last_byte(struct device *dev, uint64_t offset)
 
 
