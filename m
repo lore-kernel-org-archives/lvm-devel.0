@@ -1,97 +1,98 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Sun, 18 Oct 2020 21:02:25 +0000 (GMT)
-Subject: stable-2.02 - label: deduplicate dev_set_bytes
-Message-ID: <20201018210225.D48DF3857C6F@sourceware.org>
+Date: Sun, 18 Oct 2020 21:02:24 +0000 (GMT)
+Subject: stable-2.02 - label: code deduplication
+Message-ID: <20201018210224.B16A93850423@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=0c8f160fb2a020b4dba719e5d340f550b58d8f8c
-Commit:        0c8f160fb2a020b4dba719e5d340f550b58d8f8c
-Parent:        1998825e12c431855b87314d1430d24e37526548
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=1998825e12c431855b87314d1430d24e37526548
+Commit:        1998825e12c431855b87314d1430d24e37526548
+Parent:        ba7740df50e93d9a7a2ec919511ba2541e9cc52c
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Sep 15 16:29:12 2020 +0200
+AuthorDate:    Tue Sep 15 16:20:16 2020 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Sun Oct 18 21:27:51 2020 +0200
 
-label: deduplicate dev_set_bytes
+label: code deduplication
 
-As dev_write_zeros() is same as dev_set_bytes() reused the code
-directly.
 ---
- lib/label/label.c | 51 +++------------------------------------------------
- 1 file changed, 3 insertions(+), 48 deletions(-)
+ lib/label/label.c | 29 ++++++-----------------------
+ 1 file changed, 6 insertions(+), 23 deletions(-)
 
 diff --git a/lib/label/label.c b/lib/label/label.c
-index 91f456b62..065da1282 100644
+index 019fd09ca..91f456b62 100644
 --- a/lib/label/label.c
 +++ b/lib/label/label.c
-@@ -1409,53 +1409,7 @@ bool dev_invalidate_bytes(struct device *dev, uint64_t start, size_t len)
+@@ -888,10 +888,7 @@ int label_scan(struct cmd_context *cmd)
+ 		 * label_scan should not generally be called a second time,
+ 		 * so this will usually not be true.
+ 		 */
+-		if (_in_bcache(dev)) {
+-			_invalidate_fd(scan_bcache, dev->bcache_fd);
+-			_scan_dev_close(dev);
+-		}
++		label_scan_invalidate(dev);
  
- bool dev_write_zeros(struct device *dev, uint64_t start, size_t len)
- {
--	if (test_mode())
--		return true;
--
--	if (!scan_bcache) {
--		log_error("dev_write_zeros bcache not set up %s", dev_name(dev));
--		return false;
--	}
--
--	if (_in_bcache(dev) && !(dev->flags & DEV_BCACHE_WRITE)) {
--		/* FIXME: avoid tossing out bcache blocks just to replace fd. */
--		log_debug("Close and reopen to write %s", dev_name(dev));
--		_invalidate_fd(scan_bcache, dev->bcache_fd);
--		_scan_dev_close(dev);
--
--		dev->flags |= DEV_BCACHE_WRITE;
--		label_scan_open(dev);
--	}
--
--	if (dev->bcache_fd <= 0) {
--		/* This is not often needed, perhaps only with lvmetad. */
--		dev->flags |= DEV_BCACHE_WRITE;
--		if (!label_scan_open(dev)) {
--			log_error("Error opening device %s for writing at %llu length %u.",
--				  dev_name(dev), (unsigned long long)start, (uint32_t)len);
--			return false;
+ 		/*
+ 		 * When md devices exist that use the old superblock at the
+@@ -1072,12 +1069,8 @@ int label_scan_devs(struct cmd_context *cmd, struct dev_filter *f, struct dm_lis
+ 			return 0;
+ 	}
+ 
+-	dm_list_iterate_items(devl, devs) {
+-		if (_in_bcache(devl->dev)) {
+-			_invalidate_fd(scan_bcache, devl->dev->bcache_fd);
+-			_scan_dev_close(devl->dev);
 -		}
 -	}
--
--	dev_set_last_byte(dev, start + len);
--
--	if (!bcache_zero_bytes(scan_bcache, dev->bcache_fd, start, len)) {
--		log_error("Error writing device %s at %llu length %u.",
--			  dev_name(dev), (unsigned long long)start, (uint32_t)len);
--		dev_unset_last_byte(dev);
--		label_scan_invalidate(dev);
--		return false;
++	dm_list_iterate_items(devl, devs)
++		label_scan_invalidate(devl->dev);
+ 
+ 	_scan_list(cmd, f, devs, NULL);
+ 
+@@ -1092,10 +1085,7 @@ int label_scan_devs_rw(struct cmd_context *cmd, struct dev_filter *f, struct dm_
+ 	int failed = 0;
+ 
+ 	dm_list_iterate_items(devl, devs) {
+-		if (_in_bcache(devl->dev)) {
+-			_invalidate_fd(scan_bcache, devl->dev->bcache_fd);
+-			_scan_dev_close(devl->dev);
+-		}
++		label_scan_invalidate(devl->dev);
+ 
+ 		/* _scan_dev_open will open(RDWR) when this flag is set */
+ 		devl->dev->flags |= DEV_BCACHE_WRITE;
+@@ -1114,10 +1104,7 @@ int label_scan_devs_excl(struct dm_list *devs)
+ 	int failed = 0;
+ 
+ 	dm_list_iterate_items(devl, devs) {
+-		if (_in_bcache(devl->dev)) {
+-			_invalidate_fd(scan_bcache, devl->dev->bcache_fd);
+-			_scan_dev_close(devl->dev);
+-		}
++		label_scan_invalidate(devl->dev);
+ 		/*
+ 		 * With this flag set, _scan_dev_open() done by
+ 		 * _scan_list() will do open EXCL
+@@ -1215,10 +1202,7 @@ int label_read(struct device *dev)
+ 	dm_list_init(&one_dev);
+ 	dm_list_add(&one_dev, &devl->list);
+ 
+-	if (_in_bcache(dev)) {
+-		_invalidate_fd(scan_bcache, dev->bcache_fd);
+-		_scan_dev_close(dev);
 -	}
--
--	if (!bcache_flush(scan_bcache)) {
--		log_error("Error writing device %s at %llu length %u.",
--			  dev_name(dev), (unsigned long long)start, (uint32_t)len);
--		dev_unset_last_byte(dev);
--		label_scan_invalidate(dev);
--		return false;
--	}
--	dev_unset_last_byte(dev);
--	return true;
-+	return dev_set_bytes(dev, start, len, 0);
++	label_scan_invalidate(dev);
+ 
+ 	_scan_list(NULL, NULL, &one_dev, &failed);
+ 
+@@ -1562,4 +1546,3 @@ void dev_unset_last_byte(struct device *dev)
+ {
+ 	bcache_unset_last_byte(scan_bcache, dev->bcache_fd);
  }
- 
- bool dev_set_bytes(struct device *dev, uint64_t start, size_t len, uint8_t val)
-@@ -1490,7 +1444,8 @@ bool dev_set_bytes(struct device *dev, uint64_t start, size_t len, uint8_t val)
- 
- 	dev_set_last_byte(dev, start + len);
- 
--	if (!bcache_set_bytes(scan_bcache, dev->bcache_fd, start, len, val)) {
-+	if ((!val && !bcache_zero_bytes(scan_bcache, dev->bcache_fd, start, len)) ||
-+	    !bcache_set_bytes(scan_bcache, dev->bcache_fd, start, len, val)) {
- 		log_error("Error writing device %s at %llu length %u.",
- 			  dev_name(dev), (unsigned long long)start, (uint32_t)len);
- 		dev_unset_last_byte(dev);
+-
 
 
