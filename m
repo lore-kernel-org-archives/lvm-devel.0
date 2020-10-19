@@ -1,48 +1,44 @@
-From: David Teigland <teigland@sourceware.org>
-Date: Wed, 21 Oct 2020 17:48:26 +0000 (GMT)
-Subject: master - tests: writecache-misc disable with lvmlockd
-Message-ID: <20201021174826.A3A6C3857C5E@sourceware.org>
+From: Marian Csontos <mcsontos@sourceware.org>
+Date: Mon, 19 Oct 2020 15:56:32 +0000 (GMT)
+Subject: stable-2.02 - blkdeactivate: add missing VDO_AVAILABLE check in deactivate_vdo
+Message-ID: <20201019155632.74FC7388EC0D@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=83d08185234748f1837436d83cbf6817180551fd
-Commit:        83d08185234748f1837436d83cbf6817180551fd
-Parent:        6be29e1179725bcee19ff263635bb2927ef928bc
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Wed Oct 21 12:47:28 2020 -0500
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Wed Oct 21 12:47:28 2020 -0500
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=aa4f1f117a355c7046a348fd217fdfab20242ae6
+Commit:        aa4f1f117a355c7046a348fd217fdfab20242ae6
+Parent:        2c048bd77d669f77825455b8e5110c80beff7da5
+Author:        Peter Rajnoha <prajnoha@redhat.com>
+AuthorDate:    Mon Jun 8 15:41:35 2020 +0200
+Committer:     Marian Csontos <mcsontos@redhat.com>
+CommitterDate: Mon Oct 19 16:02:20 2020 +0200
 
-tests: writecache-misc disable with lvmlockd
+blkdeactivate: add missing VDO_AVAILABLE check in deactivate_vdo
 
-in a shared vg pvmove requires a named lv
+(cherry picked from commit 8806f2d5ed4792042b246b930fb44f24b9ee45c2)
 ---
- test/shell/writecache-misc.sh | 3 ++-
- 1 file changed, 2 insertions(+), 1 deletion(-)
+ scripts/blkdeactivate.sh.in | 6 ++++++
+ 1 file changed, 6 insertions(+)
 
-diff --git a/test/shell/writecache-misc.sh b/test/shell/writecache-misc.sh
-index 4f4c125fb..75364e5b3 100644
---- a/test/shell/writecache-misc.sh
-+++ b/test/shell/writecache-misc.sh
-@@ -13,6 +13,7 @@
- # Test single lv cache options
+diff --git a/scripts/blkdeactivate.sh.in b/scripts/blkdeactivate.sh.in
+index 57b3e58bf..7c517b87b 100644
+--- a/scripts/blkdeactivate.sh.in
++++ b/scripts/blkdeactivate.sh.in
+@@ -330,6 +330,12 @@ deactivate_vdo() {
+         test -b "$DEV_DIR/mapper/$xname" || return 0
+         test -z "${SKIP_DEVICE_LIST["$kname"]}" || return 1
  
- SKIP_WITH_LVMPOLLD=1
-+SKIP_WITH_LVMLOCKD=1
++	# Skip VDO device deactivation if VDO tools missing.
++	test "$VDO_AVAILABLE" -eq 0 && {
++		add_device_to_skip_list
++		return 1
++	}
++
+         deactivate_holders "$DEV_DIR/mapper/$xname" || return 1
  
- . lib/inittest
- 
-@@ -48,7 +49,7 @@ dd if=/dev/urandom of=pattern1 bs=512K count=1
- 
- aux prepare_devs 4
- 
--vgcreate $SHARED $vg "$dev1" "$dev2" "$dev3" "$dev4"
-+vgcreate $vg "$dev1" "$dev2" "$dev3" "$dev4"
- 
- 
- #
+         echo -n "  [VDO]: deactivating VDO volume $xname... "
 
 
