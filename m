@@ -1,43 +1,209 @@
-From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Sun, 18 Oct 2020 21:02:30 +0000 (GMT)
-Subject: stable-2.02 - wipe_lv: always zero at least 4K
-Message-ID: <20201018210230.6C45C3857C6F@sourceware.org>
+From: Marian Csontos <mcsontos@sourceware.org>
+Date: Mon, 19 Oct 2020 15:56:31 +0000 (GMT)
+Subject: stable-2.02 - blkdeactivate: add support for VDO in blkdeactivate script
+Message-ID: <20201019155631.541D0386101F@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=9c746f153e351a806592554cf1d90ddb03879933
-Commit:        9c746f153e351a806592554cf1d90ddb03879933
-Parent:        8ee2479dd0547ee6451da5b3e2ffca2f808c09a9
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed Jul 8 10:38:36 2020 +0200
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Sun Oct 18 21:27:51 2020 +0200
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=2c048bd77d669f77825455b8e5110c80beff7da5
+Commit:        2c048bd77d669f77825455b8e5110c80beff7da5
+Parent:        e5af7bef223881134209b71f90240cdbf59d9ec1
+Author:        Peter Rajnoha <prajnoha@redhat.com>
+AuthorDate:    Thu Apr 9 15:23:58 2020 +0200
+Committer:     Marian Csontos <mcsontos@redhat.com>
+CommitterDate: Mon Oct 19 16:02:20 2020 +0200
 
-wipe_lv: always zero at least 4K
+blkdeactivate: add support for VDO in blkdeactivate script
 
-When zero_sectors passed value like 1 - we could zero only 1 sector.
-Reinstantiate we always zero at least 4K block.
+Make it possible to tear down VDO volumes with blkdeactivate if VDO is
+part of a device stack (and if VDO binary is installed). Also, support
+optional -o|--vdooptions configfile=file.
+
+(cherry picked from commit 0dd905c959a8f36ea627027336b6d5dafb015001)
+
+Conflicts:
+	WHATS_NEW_DM
 ---
- lib/metadata/lv_manip.c | 4 +++-
- 1 file changed, 3 insertions(+), 1 deletion(-)
+ WHATS_NEW_DM                |  1 +
+ man/blkdeactivate.8_main    | 11 +++++++++++
+ scripts/blkdeactivate.sh.in | 48 ++++++++++++++++++++++++++++++++++++++++++++-
+ 3 files changed, 59 insertions(+), 1 deletion(-)
 
-diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
-index 0e58d4fa9..660e742dd 100644
---- a/lib/metadata/lv_manip.c
-+++ b/lib/metadata/lv_manip.c
-@@ -7248,7 +7248,9 @@ int wipe_lv(struct logical_volume *lv, struct wipe_params wp)
- 			if (wp.is_metadata) /* Verbosely notify metadata will not be fully zeroed */
- 				log_verbose("Metadata logical volume %s not fully zeroed and may contain stale data.",
- 					    display_lvname(lv));
--			zero_sectors = wp.zero_sectors ? : UINT64_C(4096) >> SECTOR_SHIFT;
-+			zero_sectors = UINT64_C(4096) >> SECTOR_SHIFT;
-+			if (wp.zero_sectors > zero_sectors)
-+				zero_sectors = wp.zero_sectors;
+diff --git a/WHATS_NEW_DM b/WHATS_NEW_DM
+index 56d9e0684..06e65b7d3 100644
+--- a/WHATS_NEW_DM
++++ b/WHATS_NEW_DM
+@@ -1,5 +1,6 @@
+ Version 1.02.172 - 
+ ==================================
++  Add support for VDO in blkdeactivate script.
+   Try to remove all created devices on dm preload tree error path.
+   Fix dm_list interators with gcc 10 optimization (-ftree-pta).
+   Dmeventd handles timer without looping on short intervals.
+diff --git a/man/blkdeactivate.8_main b/man/blkdeactivate.8_main
+index f3c19a8c3..06af52e52 100644
+--- a/man/blkdeactivate.8_main
++++ b/man/blkdeactivate.8_main
+@@ -9,6 +9,7 @@ blkdeactivate \(em utility to deactivate block devices
+ .RB [ -l \  \fIlvm_options\fP ]
+ .RB [ -m \  \fImpath_options\fP ]
+ .RB [ -r \  \fImdraid_options\fP ]
++.RB [ -o \  \fIvdo_options\fP ]
+ .RB [ -u ]
+ .RB [ -v ]
+ .RI [ device ]
+@@ -70,6 +71,15 @@ Comma-separated list of MD RAID specific options:
+ Wait MD device's resync, recovery or reshape action to complete
+ before deactivation.
+ .RE
++
++.TP
++.BR -o ", " --vdooptions \ \fIvdo_options\fP
++Comma-separated list of VDO specific options:
++.RS
++.IP \fIconfigfile=file\fP
++Use specified VDO configuration file.
++.RE
++
+ .TP
+ .BR -u ", " --umount
+ Unmount a mounted device before trying to deactivate it.
+@@ -120,4 +130,5 @@ of a device-mapper device fails, retry it and force removal.
+ .BR lvm (8),
+ .BR mdadm (8),
+ .BR multipathd (8),
++.BR vdo (8),
+ .BR umount (8)
+diff --git a/scripts/blkdeactivate.sh.in b/scripts/blkdeactivate.sh.in
+index a4b8a8fb5..57b3e58bf 100644
+--- a/scripts/blkdeactivate.sh.in
++++ b/scripts/blkdeactivate.sh.in
+@@ -1,6 +1,6 @@
+ #!/bin/bash
+ #
+-# Copyright (C) 2012-2017 Red Hat, Inc. All rights reserved.
++# Copyright (C) 2012-2020 Red Hat, Inc. All rights reserved.
+ #
+ # This file is part of LVM2.
+ #
+@@ -38,6 +38,7 @@ MDADM="/sbin/mdadm"
+ MOUNTPOINT="/bin/mountpoint"
+ MPATHD="/sbin/multipathd"
+ UMOUNT="/bin/umount"
++VDO="/bin/vdo"
  
- 			if (zero_sectors > lv->size)
- 				zero_sectors = lv->size;
+ sbindir="@SBINDIR@"
+ DMSETUP="$sbindir/dmsetup"
+@@ -54,6 +55,7 @@ DMSETUP_OPTS=""
+ LVM_OPTS=""
+ MDADM_OPTS=""
+ MPATHD_OPTS=""
++VDO_OPTS=""
+ 
+ LSBLK="/bin/lsblk -r --noheadings -o TYPE,KNAME,NAME,MOUNTPOINT"
+ LSBLK_VARS="local devtype local kname local name local mnt"
+@@ -124,6 +126,7 @@ usage() {
+ 	echo "    -l | --lvmoptions    LVM_OPTIONS    Comma separated LVM specific options"
+ 	echo "    -m | --mpathoptions  MPATH_OPTIONS  Comma separated DM-multipath specific options"
+ 	echo "    -r | --mdraidoptions MDRAID_OPTIONS Comma separated MD RAID specific options"
++        echo "    -o | --vdooptions    VDO_OPTIONS    Comma separated VDO specific options"
+ 	echo "    -u | --umount                       Unmount the device if mounted"
+ 	echo "    -v | --verbose                      Verbose mode (also implies -e)"
+ 	echo
+@@ -138,6 +141,8 @@ usage() {
+ 	echo "      wait            wait for resync, recovery or reshape to complete first"
+ 	echo "    MPATH_OPTIONS:"
+ 	echo "      disablequeueing disable queueing on all DM-multipath devices first"
++        echo "    VDO_OPTIONS:"
++        echo "      configfile=file use specified VDO configuration file"
+ 
+ 	exit
+ }
+@@ -319,6 +324,23 @@ deactivate_md () {
+ 	fi
+ }
+ 
++deactivate_vdo() {
++        local xname
++        xname=$(printf "%s" "$name")
++        test -b "$DEV_DIR/mapper/$xname" || return 0
++        test -z "${SKIP_DEVICE_LIST["$kname"]}" || return 1
++
++        deactivate_holders "$DEV_DIR/mapper/$xname" || return 1
++
++        echo -n "  [VDO]: deactivating VDO volume $xname... "
++        if eval "$VDO" stop $VDO_OPTS --name="$xname" "$OUT" "$ERR"; then
++                echo "done"
++        else
++                echo "skipping"
++                add_device_to_skip_list
++        fi
++}
++
+ deactivate () {
+ 	######################################################################
+ 	# DEACTIVATION HOOKS FOR NEW DEVICE TYPES GO HERE!                   #
+@@ -335,6 +357,8 @@ deactivate () {
+ 	######################################################################
+ 	if test "$devtype" = "lvm"; then
+ 		deactivate_lvm
++        elif test "$devtype" = "vdo"; then
++                deactivate_vdo
+ 	elif test "${kname:0:3}" = "dm-"; then
+ 		deactivate_dm
+ 	elif test "${kname:0:2}" = "md"; then
+@@ -479,6 +503,20 @@ get_mpathopts() {
+ 	IFS=$ORIG_IFS
+ }
+ 
++get_vdoopts() {
++        ORIG_IFS=$IFS; IFS=','
++
++        for opt in $1; do
++                case "$opt" in
++                        "") ;;
++                        configfile=*) tmp=${opt#*=}; VDO_OPTS+="--confFile=${tmp%%,*} " ;;
++                        *) echo "$opt: unknown VDO option"
++                esac
++        done
++
++        IFS=$ORIG_IFS
++}
++
+ set_env() {
+ 	if test "$ERRORS" -eq "1"; then
+ 		unset ERR
+@@ -493,6 +531,7 @@ set_env() {
+ 		LVM_OPTS+="-vvvv"
+ 		MDADM_OPTS+="-vv"
+ 		MPATHD_OPTS+="-v 3"
++                VDO_OPTS+="--verbose "
+ 	else
+ 		OUT="1>$DEV_DIR/null"
+ 	fi
+@@ -509,6 +548,12 @@ set_env() {
+ 		MDADM_AVAILABLE=0
+ 	fi
+ 
++        if test -f $VDO; then
++                VDO_AVAILABLE=1
++        else
++                VDO_AVAILABLE=0
++        fi
++
+ 	MPATHD_RUNNING=0
+ 	test "$MPATHD_DO_DISABLEQUEUEING" -eq 1 && {
+ 		if test -f "$MPATHD"; then
+@@ -528,6 +573,7 @@ while test $# -ne 0; do
+ 		"-l"|"--lvmoptions") get_lvmopts "$2" ; shift ;;
+ 		"-m"|"--mpathoptions") get_mpathopts "$2" ; shift ;;
+ 		"-r"|"--mdraidoptions") get_mdraidopts "$2"; shift ;;
++                "-o"|"--vdooptions") get_vdoopts "$2"; shift ;;
+ 		"-u"|"--umount") DO_UMOUNT=1 ;;
+ 		"-v"|"--verbose") VERBOSE=1 ; ERRORS=1 ;;
+ 		"-vv") VERBOSE=1 ; ERRORS=1 ; set -x ;;
 
 
