@@ -1,70 +1,78 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Tue, 20 Oct 2020 20:34:09 +0000 (GMT)
-Subject: master - libdm: enhance error message
-Message-ID: <20201020203409.252F83861893@sourceware.org>
+Date: Tue, 20 Oct 2020 21:25:08 +0000 (GMT)
+Subject: stable-2.02 - debug: shorten error message
+Message-ID: <20201020212508.CB7A3385DC37@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=4b0565b82f9f2bab0d9fdbc23c63e63cbddba61d
-Commit:        4b0565b82f9f2bab0d9fdbc23c63e63cbddba61d
-Parent:        4c1caa7e26b6f8011ca083395650d11943a42a8a
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=f0913c6482c8be53221540f6fa4b82f0eda264ff
+Commit:        f0913c6482c8be53221540f6fa4b82f0eda264ff
+Parent:        b9d2aa9488931203f851d93324485b26375b9742
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Sep 25 19:10:30 2020 +0200
+AuthorDate:    Mon Oct 19 14:28:58 2020 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Mon Oct 19 16:53:18 2020 +0200
+CommitterDate: Tue Oct 20 22:48:02 2020 +0200
 
-libdm: enhance error message
+debug: shorten error message
 
+Just check for sigint during log_error().
 ---
- libdm/libdm-deptree.c | 33 +++++++++++++++++++++++++++++++--
- 1 file changed, 31 insertions(+), 2 deletions(-)
+ lib/metadata/lv_manip.c | 26 ++++++++------------------
+ 1 file changed, 8 insertions(+), 18 deletions(-)
 
-diff --git a/libdm/libdm-deptree.c b/libdm/libdm-deptree.c
-index 887e8f275..ffd084e52 100644
---- a/libdm/libdm-deptree.c
-+++ b/libdm/libdm-deptree.c
-@@ -1503,8 +1503,37 @@ static int _thin_pool_node_message(struct dm_tree_node *dnode, struct thin_messa
- 	}
- 
- 	if (!_node_message(dnode->info.major, dnode->info.minor,
--			   tm->expected_errno, buf))
--		return_0;
-+			   tm->expected_errno, buf)) {
-+		switch (m->type) {
-+		case DM_THIN_MESSAGE_CREATE_SNAP:
-+		case DM_THIN_MESSAGE_CREATE_THIN:
-+			if (errno == EEXIST) {
-+				/*
-+				 * ATM errno from ioctl() is preserved through code error path chain
-+				 * If this would ever change, another way need to be used to
-+				 * obtain result from failed DM message
-+				 */
-+				log_error("Thin pool %s already contain thin device with device_id %u.",
-+					  _node_name(dnode), m->u.m_create_snap.device_id);
-+				/*
-+				 * TODO:
-+				 *
-+				 * Give some useful advice how to solve this problem,
-+				 * until lvconvert --repair can handle this automatically
-+				 */
-+				log_error("Manual intervention may be required to remove device dev_id=%u in thin pool metadata.",
-+					  m->u.m_create_snap.device_id);
-+				log_error("Optionally new thin volume with device_id=%u can be manually added into a volume group.",
-+					  m->u.m_create_snap.device_id);
-+				log_warn("WARNING: When uncertain how to do this, contact support!");
-+				return 0;
-+			}
-+			/* fall through */
-+		default:
-+			return_0;
-+		}
-+
-+	}
- 
- 	return 1;
- }
+diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
+index 42d18abb8..7fc20b2fc 100644
+--- a/lib/metadata/lv_manip.c
++++ b/lib/metadata/lv_manip.c
+@@ -7240,12 +7240,9 @@ int wipe_lv(struct logical_volume *lv, struct wipe_params wp)
+ 					   wp.yes, wp.force, NULL)) {
+ 			sigint_restore();
+ 			label_scan_invalidate(dev);
+-			if (sigint_caught()) {
+-				log_error("Interrupted initialization logical volume %s.",
+-					  display_lvname(lv));
+-				return 0;
+-			}
+-			log_error("Filed to wipe signatures of logical volume %s.",
++			log_error("%s logical volume %s.",
++				  sigint_caught() ?
++				  "Interrupted initialization of" : "Failed to wipe signatures on",
+ 				  display_lvname(lv));
+ 			return 0;
+ 		}
+@@ -7290,12 +7287,9 @@ int wipe_lv(struct logical_volume *lv, struct wipe_params wp)
+ 					log_sys_debug("ioctl", "BLKZEROOUT");
+ 					sigint_restore();
+ 					label_scan_invalidate(dev);
+-					if (sigint_caught())
+-						log_error("Interrupted initialization logical volume %s.",
+-							  display_lvname(lv));
+-					else
+-						log_error("Failed to initialize logical volume %s at position " FMTu64 " and size " FMTu64 ".",
+-							  display_lvname(lv), range[0], range[1]);
++					log_error("%s logical volume %s at position " FMTu64 " and size " FMTu64 ".",
++						  sigint_caught() ? "Interrupted initialization of" : "Failed to initialize",
++						  display_lvname(lv), range[0], range[1]);
+ 					return 0;
+ 				}
+ 			}
+@@ -7304,12 +7298,8 @@ retry_with_dev_set:
+ #endif
+ 		if (!dev_set_bytes(dev, UINT64_C(0), (size_t) zero_sectors << SECTOR_SHIFT, wp.zero_value)) {
+ 			sigint_restore();
+-			if (sigint_caught()) {
+-				log_error("Interrupted initialization logical volume %s.",
+-					  display_lvname(lv));
+-				return 0;
+-			}
+-			log_error("Failed to initialize %s of logical volume %s with value %d.",
++			log_error("%s %s of logical volume %s with value %d.",
++				  sigint_caught() ? "Interrupted initialization" : "Failed to initialize",
+ 				  display_size(lv->vg->cmd, zero_sectors),
+ 				  display_lvname(lv), wp.zero_value);
+ 			return 0;
 
 
