@@ -1,102 +1,112 @@
-From: David Teigland <teigland@sourceware.org>
-Date: Thu, 22 Oct 2020 20:43:16 +0000 (GMT)
-Subject: master - add label_read_pvid
-Message-ID: <20201022204316.B4623385783D@sourceware.org>
+From: Zdenek Kabelac <zkabelac@sourceware.org>
+Date: Tue, 20 Oct 2020 20:34:08 +0000 (GMT)
+Subject: master - libdm: split code for sending message
+Message-ID: <20201020203408.03155385782B@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=677f829e540ef0f2fa2781f4facc7571dee1fb83
-Commit:        677f829e540ef0f2fa2781f4facc7571dee1fb83
-Parent:        c7311d472203614b229cf17606d14fb53df85945
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Thu Oct 15 14:05:45 2020 -0500
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Wed Oct 21 16:24:16 2020 -0500
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=4c1caa7e26b6f8011ca083395650d11943a42a8a
+Commit:        4c1caa7e26b6f8011ca083395650d11943a42a8a
+Parent:        58976ccc34f9c60471e630666417a1fcef4d9799
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Sat Jun 23 21:00:40 2018 +0200
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Mon Oct 19 16:53:18 2020 +0200
 
-add label_read_pvid
+libdm: split code for sending message
 
-To read the lvm headers and set dev->pvid if the
-device is a PV.  Difference from label_scan_ functions
-is this does not read any vg metadata or add any info
-to lvmcache.
+Move message sending from _thin_pool_node_message to
+new _node_message for possible better code sharing.
 ---
- lib/label/label.c | 48 ++++++++++++++++++++++++++++++++++++++++++++++++
- lib/label/label.h |  1 +
- 2 files changed, 49 insertions(+)
+ libdm/libdm-deptree.c | 62 ++++++++++++++++++++++++++++++---------------------
+ 1 file changed, 36 insertions(+), 26 deletions(-)
 
-diff --git a/lib/label/label.c b/lib/label/label.c
-index a47cd1731..bc8e60fc9 100644
---- a/lib/label/label.c
-+++ b/lib/label/label.c
-@@ -1254,6 +1254,54 @@ int label_scan(struct cmd_context *cmd)
- 	return 1;
+diff --git a/libdm/libdm-deptree.c b/libdm/libdm-deptree.c
+index ee12da2b2..887e8f275 100644
+--- a/libdm/libdm-deptree.c
++++ b/libdm/libdm-deptree.c
+@@ -1428,9 +1428,41 @@ out:
+ 	return r;
  }
  
-+/*
-+ * Read the header of the disk and if it's a PV
-+ * save the pvid in dev->pvid.
-+ */
-+int label_read_pvid(struct device *dev)
-+{
-+	char buf[4096] __attribute__((aligned(8)));
-+	struct label_header *lh;
-+	struct pv_header *pvh;
+-static int _thin_pool_node_message(struct dm_tree_node *dnode, struct thin_message *tm)
++static int _node_message(uint32_t major, uint32_t minor,
++			 int expected_errno, const char *message)
+ {
+ 	struct dm_task *dmt;
++	int r = 0;
 +
-+	memset(buf, 0, sizeof(buf));
-+
-+	if (!label_scan_open(dev))
++	if (!(dmt = dm_task_create(DM_DEVICE_TARGET_MSG)))
 +		return_0;
 +
-+	/*
-+	 * We could do:
-+	 * dev_read_bytes(dev, 512, LABEL_SIZE, buf);
-+	 * which works, but there's a bcache issue that
-+	 * prevents proper invalidation after that.
-+	 */
-+	if (!dev_read_bytes(dev, 0, 4096, buf)) {
-+		label_scan_invalidate(dev);
-+		return 0;
++	if (!dm_task_set_major(dmt, major) ||
++	    !dm_task_set_minor(dmt, minor)) {
++		log_error("Failed to set message major minor.");
++		goto out;
 +	}
 +
-+	lh = (struct label_header *)(buf + 512);
-+	if (memcmp(lh->id, LABEL_ID, sizeof(lh->id))) {
-+		/* Not an lvm deice */
-+		label_scan_invalidate(dev);
-+		return 0;
++	if (!dm_task_set_message(dmt, message))
++		goto_out;
++
++	/* Internal functionality of dm_task */
++	dmt->expected_errno = expected_errno;
++
++	if (!dm_task_run(dmt)) {
++		log_error("Failed to process message \"%s\".", message);
++		goto out;
 +	}
 +
-+	/*
-+	 * wipefs -a just clears the type field, leaving the
-+	 * rest of the label_header intact.
-+	 */
-+	if (memcmp(lh->type, LVM2_LABEL, sizeof(lh->type))) {
-+		/* Not an lvm deice */
-+		label_scan_invalidate(dev);
-+		return 0;
-+	}
++	r = 1;
++out:
++	dm_task_destroy(dmt);
 +
-+	pvh = (struct pv_header *)(buf + 512 + 32);
-+	memcpy(dev->pvid, pvh->pv_uuid, ID_LEN);
-+	return 1;
++	return r;
 +}
 +
- /*
-  * Scan and cache lvm data from the listed devices.  If a device is already
-  * scanned and cached, this replaces the previously cached lvm data for the
-diff --git a/lib/label/label.h b/lib/label/label.h
-index 8778c17a8..ddfb34af5 100644
---- a/lib/label/label.h
-+++ b/lib/label/label.h
-@@ -117,6 +117,7 @@ int label_scan_open(struct device *dev);
- int label_scan_open_excl(struct device *dev);
- int label_scan_open_rw(struct device *dev);
- int label_scan_reopen_rw(struct device *dev);
-+int label_read_pvid(struct device *dev);
++static int _thin_pool_node_message(struct dm_tree_node *dnode, struct thin_message *tm)
++{
+ 	struct dm_thin_message *m = &tm->message;
+ 	char buf[64];
+ 	int r;
+@@ -1470,33 +1502,11 @@ static int _thin_pool_node_message(struct dm_tree_node *dnode, struct thin_messa
+ 		return 0;
+ 	}
  
- int label_scan_for_pvid(struct cmd_context *cmd, char *pvid, struct device **dev_out);
+-	r = 0;
+-
+-	if (!(dmt = dm_task_create(DM_DEVICE_TARGET_MSG)))
++	if (!_node_message(dnode->info.major, dnode->info.minor,
++			   tm->expected_errno, buf))
+ 		return_0;
  
+-	if (!dm_task_set_major(dmt, dnode->info.major) ||
+-	    !dm_task_set_minor(dmt, dnode->info.minor)) {
+-		log_error("Failed to set message major minor.");
+-		goto out;
+-	}
+-
+-	if (!dm_task_set_message(dmt, buf))
+-		goto_out;
+-
+-	/* Internal functionality of dm_task */
+-	dmt->expected_errno = tm->expected_errno;
+-
+-	if (!dm_task_run(dmt)) {
+-		log_error("Failed to process thin pool message \"%s\".", buf);
+-		goto out;
+-	}
+-
+-	r = 1;
+-out:
+-	dm_task_destroy(dmt);
+-
+-	return r;
++	return 1;
+ }
+ 
+ static struct load_segment *_get_last_load_segment(struct dm_tree_node *node)
 
 
