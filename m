@@ -1,50 +1,67 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Tue, 20 Oct 2020 20:34:13 +0000 (GMT)
-Subject: master - cov: split check for type assignment
-Message-ID: <20201020203413.ACA08395182E@sourceware.org>
+Date: Tue, 20 Oct 2020 20:34:14 +0000 (GMT)
+Subject: master - libdm: relocate code for sending messages
+Message-ID: <20201020203414.CE5953951832@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=3e06061d82dbcc2f464f0fdcd6610f25177bfa1f
-Commit:        3e06061d82dbcc2f464f0fdcd6610f25177bfa1f
-Parent:        a17ec7e0baa737b45900cc4f97823c95f9dd8c56
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=756066a2e85062be5e406d9139fc1033746d7ff9
+Commit:        756066a2e85062be5e406d9139fc1033746d7ff9
+Parent:        3e06061d82dbcc2f464f0fdcd6610f25177bfa1f
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Mon Oct 19 16:43:50 2020 +0200
+AuthorDate:    Mon Oct 19 16:48:04 2020 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Mon Oct 19 16:53:19 2020 +0200
 
-cov: split check for type assignment
+libdm: relocate code for sending messages
 
-Check that type is always defined, if not make it explicit internal
-error (although logged as debug - so catched only with proper lvm.conf
-setting).
-This ensures later type being NULL can't be dereferenced with coredump.
+To be able to send messages for recently resumed devices,
+move code into inner loop.
+Matching commit c1a6b10d09aae6179e4f08c7d8c03d5e3068ad94.
 ---
- device_mapper/libdm-report.c | 9 +++++----
- 1 file changed, 5 insertions(+), 4 deletions(-)
+ libdm/libdm-deptree.c | 22 +++++++++++-----------
+ 1 file changed, 11 insertions(+), 11 deletions(-)
 
-diff --git a/device_mapper/libdm-report.c b/device_mapper/libdm-report.c
-index 85d3d0f82..9279e3370 100644
---- a/device_mapper/libdm-report.c
-+++ b/device_mapper/libdm-report.c
-@@ -749,10 +749,11 @@ static void _display_fields_more(struct dm_report *rh,
- 			id_len = strlen(type->prefix) + 3;
+diff --git a/libdm/libdm-deptree.c b/libdm/libdm-deptree.c
+index e784cbc9c..f16db8568 100644
+--- a/libdm/libdm-deptree.c
++++ b/libdm/libdm-deptree.c
+@@ -1966,22 +1966,22 @@ int dm_tree_activate_children(struct dm_tree_node *dnode,
+ 				r = 0;
+ 				continue;
+ 			}
++
++			/*
++			 * FIXME: Implement delayed error reporting
++			 * activation should be stopped only in the case,
++			 * the submission of transation_id message fails,
++			 * resume should continue further, just whole command
++			 * has to report failure.
++			 */
++			if (r && (child->props.send_messages > 1) &&
++			    !(r = _node_send_messages(child, uuid_prefix, uuid_prefix_len, 1)))
++				stack;
+ 		}
+ 		if (awaiting_peer_rename)
+ 			priority--; /* redo priority level */
+ 	}
  
- 	for (f = 0; fields[f].report_fn; f++) {
--		if ((type = _find_type(rh, fields[f].type)) && type->desc)
--			desc = type->desc;
--		else
--			desc = " ";
-+		if (!(type = _find_type(rh, fields[f].type))) {
-+			log_debug(INTERNAL_ERROR "Field type undefined.");
-+			continue;
-+		}
-+		desc = (type->desc) ? : " ";
- 		if (desc != last_desc) {
- 			if (*last_desc)
- 				log_warn(" ");
+-	/*
+-	 * FIXME: Implement delayed error reporting
+-	 * activation should be stopped only in the case,
+-	 * the submission of transation_id message fails,
+-	 * resume should continue further, just whole command
+-	 * has to report failure.
+-	 */
+-	if (r && (dnode->props.send_messages > 1) &&
+-	    !(r = _node_send_messages(dnode, uuid_prefix, uuid_prefix_len, 1)))
+-		stack;
+-
+ 	return r;
+ }
+ 
 
 
