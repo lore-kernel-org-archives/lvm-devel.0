@@ -1,49 +1,37 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Tue, 20 Oct 2020 21:25:12 +0000 (GMT)
-Subject: stable-2.02 - tests: check dmevent with bigger reserved_stack
-Message-ID: <20201020212512.3F6103951832@sourceware.org>
+Date: Tue, 20 Oct 2020 21:25:13 +0000 (GMT)
+Subject: stable-2.02 - WHATS_NEW: update
+Message-ID: <20201020212513.5FA93394D8D1@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=df9eba82632d5ce0eaf267b412160e9b9c4c03e9
-Commit:        df9eba82632d5ce0eaf267b412160e9b9c4c03e9
-Parent:        9690193ce08854c56663bcbbe7da4c720c78be07
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=e8cd4e2057eecfc5c0b68658a7c8ac601a70949b
+Commit:        e8cd4e2057eecfc5c0b68658a7c8ac601a70949b
+Parent:        df9eba82632d5ce0eaf267b412160e9b9c4c03e9
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Oct 20 22:28:58 2020 +0200
+AuthorDate:    Tue Oct 20 22:52:21 2020 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Tue Oct 20 22:50:05 2020 +0200
+CommitterDate: Tue Oct 20 22:52:21 2020 +0200
 
-tests: check dmevent with bigger reserved_stack
+WHATS_NEW: update
 
-Check dmeventd remains working when reserved_stack
-is above 300KiB.
 ---
- test/shell/lvextend-thin-data-dmeventd.sh | 9 ++++++---
- 1 file changed, 6 insertions(+), 3 deletions(-)
+ WHATS_NEW | 1 +
+ 1 file changed, 1 insertion(+)
 
-diff --git a/test/shell/lvextend-thin-data-dmeventd.sh b/test/shell/lvextend-thin-data-dmeventd.sh
-index 7dfec4acc..7d37f16b3 100644
---- a/test/shell/lvextend-thin-data-dmeventd.sh
-+++ b/test/shell/lvextend-thin-data-dmeventd.sh
-@@ -30,10 +30,13 @@ test_equal_() {
- 
- aux have_thin 1 10 0 || skip
- 
--aux prepare_dmeventd
--
-+# set reserved stack size above dmeventd 300KiB stack
-+# ATM such value should be simply ignored
- aux lvmconf "activation/thin_pool_autoextend_percent = 10" \
--	    "activation/thin_pool_autoextend_threshold = 75"
-+	    "activation/thin_pool_autoextend_threshold = 75" \
-+	    "activation/reserved_stack = 512"
-+
-+aux prepare_dmeventd
- 
- aux prepare_pvs 3 256
- get_devs
+diff --git a/WHATS_NEW b/WHATS_NEW
+index 31f21ce4f..73167aca6 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.02.188 - 
+ ==================================
++  Dmevend lvm plugin ignores higher reserved_stack lvm.conf values.
+   Support using BLKZEROOUT for clearing devices.
+   Support interruption when wipping LVs.
+   Add configure --enable-editline support as an alternative to readline.
 
 
