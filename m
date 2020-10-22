@@ -1,51 +1,85 @@
 From: David Teigland <teigland@sourceware.org>
-Date: Thu, 22 Oct 2020 20:43:17 +0000 (GMT)
-Subject: master - add label_scan_devs_cached
-Message-ID: <20201022204317.D80F33851C09@sourceware.org>
+Date: Thu, 22 Oct 2020 20:43:16 +0000 (GMT)
+Subject: master - add label_read_pvid
+Message-ID: <20201022204316.B4623385783D@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=a7f195b7e8f27c292761c604c1697c1d97cd5c1d
-Commit:        a7f195b7e8f27c292761c604c1697c1d97cd5c1d
-Parent:        677f829e540ef0f2fa2781f4facc7571dee1fb83
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=677f829e540ef0f2fa2781f4facc7571dee1fb83
+Commit:        677f829e540ef0f2fa2781f4facc7571dee1fb83
+Parent:        c7311d472203614b229cf17606d14fb53df85945
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Wed Oct 21 12:20:17 2020 -0500
+AuthorDate:    Thu Oct 15 14:05:45 2020 -0500
 Committer:     David Teigland <teigland@redhat.com>
 CommitterDate: Wed Oct 21 16:24:16 2020 -0500
 
-add label_scan_devs_cached
+add label_read_pvid
 
-label_scan_devs without invalidating data first
-for cases where the caller wants to use any
-bcache data they have already read.
+To read the lvm headers and set dev->pvid if the
+device is a PV.  Difference from label_scan_ functions
+is this does not read any vg metadata or add any info
+to lvmcache.
 ---
- lib/label/label.c | 15 +++++++++++++++
+ lib/label/label.c | 48 ++++++++++++++++++++++++++++++++++++++++++++++++
  lib/label/label.h |  1 +
- 2 files changed, 16 insertions(+)
+ 2 files changed, 49 insertions(+)
 
 diff --git a/lib/label/label.c b/lib/label/label.c
-index bc8e60fc9..36eab19f3 100644
+index a47cd1731..bc8e60fc9 100644
 --- a/lib/label/label.c
 +++ b/lib/label/label.c
-@@ -1302,6 +1302,21 @@ int label_read_pvid(struct device *dev)
+@@ -1254,6 +1254,54 @@ int label_scan(struct cmd_context *cmd)
  	return 1;
  }
  
 +/*
-+ * label_scan_devs without invalidating data for the devs first,
-+ * when the caller wants to make use of any bcache data that
-+ * they may have already read.
++ * Read the header of the disk and if it's a PV
++ * save the pvid in dev->pvid.
 + */
-+int label_scan_devs_cached(struct cmd_context *cmd, struct dev_filter *f, struct dm_list *devs)
++int label_read_pvid(struct device *dev)
 +{
-+	if (!scan_bcache)
++	char buf[4096] __attribute__((aligned(8)));
++	struct label_header *lh;
++	struct pv_header *pvh;
++
++	memset(buf, 0, sizeof(buf));
++
++	if (!label_scan_open(dev))
++		return_0;
++
++	/*
++	 * We could do:
++	 * dev_read_bytes(dev, 512, LABEL_SIZE, buf);
++	 * which works, but there's a bcache issue that
++	 * prevents proper invalidation after that.
++	 */
++	if (!dev_read_bytes(dev, 0, 4096, buf)) {
++		label_scan_invalidate(dev);
 +		return 0;
++	}
 +
-+	_scan_list(cmd, f, devs, NULL);
++	lh = (struct label_header *)(buf + 512);
++	if (memcmp(lh->id, LABEL_ID, sizeof(lh->id))) {
++		/* Not an lvm deice */
++		label_scan_invalidate(dev);
++		return 0;
++	}
 +
++	/*
++	 * wipefs -a just clears the type field, leaving the
++	 * rest of the label_header intact.
++	 */
++	if (memcmp(lh->type, LVM2_LABEL, sizeof(lh->type))) {
++		/* Not an lvm deice */
++		label_scan_invalidate(dev);
++		return 0;
++	}
++
++	pvh = (struct pv_header *)(buf + 512 + 32);
++	memcpy(dev->pvid, pvh->pv_uuid, ID_LEN);
 +	return 1;
 +}
 +
@@ -53,16 +87,16 @@ index bc8e60fc9..36eab19f3 100644
   * Scan and cache lvm data from the listed devices.  If a device is already
   * scanned and cached, this replaces the previously cached lvm data for the
 diff --git a/lib/label/label.h b/lib/label/label.h
-index ddfb34af5..a98ba32e3 100644
+index 8778c17a8..ddfb34af5 100644
 --- a/lib/label/label.h
 +++ b/lib/label/label.h
-@@ -104,6 +104,7 @@ extern struct bcache *scan_bcache;
+@@ -117,6 +117,7 @@ int label_scan_open(struct device *dev);
+ int label_scan_open_excl(struct device *dev);
+ int label_scan_open_rw(struct device *dev);
+ int label_scan_reopen_rw(struct device *dev);
++int label_read_pvid(struct device *dev);
  
- int label_scan(struct cmd_context *cmd);
- int label_scan_devs(struct cmd_context *cmd, struct dev_filter *f, struct dm_list *devs);
-+int label_scan_devs_cached(struct cmd_context *cmd, struct dev_filter *f, struct dm_list *devs);
- int label_scan_devs_rw(struct cmd_context *cmd, struct dev_filter *f, struct dm_list *devs);
- int label_scan_devs_excl(struct dm_list *devs);
- int label_scan_dev(struct device *dev);
+ int label_scan_for_pvid(struct cmd_context *cmd, char *pvid, struct device **dev_out);
+ 
 
 
