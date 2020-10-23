@@ -1,83 +1,40 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Fri, 23 Oct 2020 23:38:06 +0000 (GMT)
-Subject: stable-2.02 - fsadm: handle fsck return 1 for corrected fs
-Message-ID: <20201023233806.6C7153858003@sourceware.org>
+Date: Fri, 23 Oct 2020 23:38:09 +0000 (GMT)
+Subject: stable-2.02 - WHATS_NEW: update
+Message-ID: <20201023233809.D7A6C386EC0B@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=ab99382d7a614c299e765ea4d1f02fe7282502a1
-Commit:        ab99382d7a614c299e765ea4d1f02fe7282502a1
-Parent:        ee2c80133cad75275be3d19f8c7dd6ad3b1ebd30
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=f5a2607bb194933caea62a88bd7fcc766efcd5cd
+Commit:        f5a2607bb194933caea62a88bd7fcc766efcd5cd
+Parent:        67dc22b95e7edfc3c0a96d96af313e7384908546
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Sat Oct 24 00:42:31 2020 +0200
+AuthorDate:    Sat Oct 24 01:37:10 2020 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Sat Oct 24 01:33:39 2020 +0200
+CommitterDate: Sat Oct 24 01:37:10 2020 +0200
 
-fsadm: handle fsck return 1 for corrected fs
+WHATS_NEW: update
 
 ---
- scripts/fsadm.sh | 25 ++++++++++++++++++-------
- 1 file changed, 18 insertions(+), 7 deletions(-)
+ WHATS_NEW | 4 +++-
+ 1 file changed, 3 insertions(+), 1 deletion(-)
 
-diff --git a/scripts/fsadm.sh b/scripts/fsadm.sh
-index b84412d92..5ca80b4dd 100755
---- a/scripts/fsadm.sh
-+++ b/scripts/fsadm.sh
-@@ -1,6 +1,6 @@
- #!/bin/bash
- #
--# Copyright (C) 2007-2017 Red Hat, Inc. All rights reserved.
-+# Copyright (C) 2007-2020 Red Hat, Inc. All rights reserved.
- #
- # This file is part of LVM2.
- #
-@@ -130,7 +130,15 @@ dry() {
- 		return 0
- 	fi
- 	verbose "Executing" "$@"
--	"$@"
-+	$@
-+}
-+
-+# Accept as succss also return code 1 with fsck
-+accept_0_1() {
-+	$@
-+	local ret="$?"
-+	test "$ret" -eq 1 || return "$ret"
-+	# Filesystem was corrected
- }
- 
- cleanup() {
-@@ -455,9 +463,10 @@ resize_ext() {
- 		if test -n "$MOUNTED" ; then
- 			# Forced fsck -f for umounted extX filesystem.
- 			case "$-" in
--			  *i*) dry "$FSCK" $YES -f "$VOLUME" ;;
--			  *) dry "$FSCK" -f -p "$VOLUME" ;;
-+			*i*) FLAG=$YES ;;
-+			*)   FLAG="-p" ;;
- 			esac
-+			accept_0_1 dry "$FSCK" -f $FLAG "$VOLUME" || error "Failed to fsck $VOLUME"
- 		fi
- 	fi
- 
-@@ -742,9 +751,11 @@ check() {
- 	  "ext2"|"ext3"|"ext4"|"reiserfs")
- 	        # check if executed from interactive shell environment
- 		case "$-" in
--		  *i*) dry "$FSCK" $YES $FORCE "$VOLUME" ;;
--		  *) dry "$FSCK" $FORCE -p "$VOLUME" ;;
--		esac ;;
-+		  *i*) FLAG=$YES ;;
-+		  *)   FLAG="-p" ;;
-+		esac
-+		accept_0_1 dry "$FSCK" $FORCE $FLAG "$VOLUME" || error "Fsck $FSTYPE failed."
-+		;;
- 	  "crypto_LUKS")
- 		which "$CRYPTSETUP" >"$NULL" 2>&1 || error "$CRYPTSETUP utility required."
- 		check_luks ;;
+diff --git a/WHATS_NEW b/WHATS_NEW
+index 73167aca6..2a745dbdd 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,6 +1,8 @@
+ Version 2.02.188 - 
+ ==================================
+-  Dmevend lvm plugin ignores higher reserved_stack lvm.conf values.
++  Enhance error handling for fsadm and hanled correct fsck result.
++  Stop logging rename errors from persintent filter.
++  Dmeventd lvm plugin ignores higher reserved_stack lvm.conf values.
+   Support using BLKZEROOUT for clearing devices.
+   Support interruption when wipping LVs.
+   Add configure --enable-editline support as an alternative to readline.
 
 
