@@ -1,108 +1,83 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Fri, 23 Oct 2020 23:38:05 +0000 (GMT)
-Subject: stable-2.02 - fsadm: use NULL
-Message-ID: <20201023233805.4AC31386EC0B@sourceware.org>
+Date: Fri, 23 Oct 2020 23:38:06 +0000 (GMT)
+Subject: stable-2.02 - fsadm: handle fsck return 1 for corrected fs
+Message-ID: <20201023233806.6C7153858003@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=ee2c80133cad75275be3d19f8c7dd6ad3b1ebd30
-Commit:        ee2c80133cad75275be3d19f8c7dd6ad3b1ebd30
-Parent:        e478ef2f59da65ebf47ca7a1534f112669858d5a
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=ab99382d7a614c299e765ea4d1f02fe7282502a1
+Commit:        ab99382d7a614c299e765ea4d1f02fe7282502a1
+Parent:        ee2c80133cad75275be3d19f8c7dd6ad3b1ebd30
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Sat Oct 24 00:40:34 2020 +0200
+AuthorDate:    Sat Oct 24 00:42:31 2020 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Sat Oct 24 01:33:39 2020 +0200
 
-fsadm: use NULL
+fsadm: handle fsck return 1 for corrected fs
 
-Use consistently $NULL as in other places.
 ---
- scripts/fsadm.sh | 20 ++++++++++----------
- 1 file changed, 10 insertions(+), 10 deletions(-)
+ scripts/fsadm.sh | 25 ++++++++++++++++++-------
+ 1 file changed, 18 insertions(+), 7 deletions(-)
 
 diff --git a/scripts/fsadm.sh b/scripts/fsadm.sh
-index 28ca6709f..b84412d92 100755
+index b84412d92..5ca80b4dd 100755
 --- a/scripts/fsadm.sh
 +++ b/scripts/fsadm.sh
-@@ -233,8 +233,8 @@ validate_mounted_major_minor() {
- 	test "$1" = "$MAJORMINOR" || {
- 		local REFNAME
- 		local CURNAME
--		REFNAME=$(dmsetup info -c -j "${1%%:*}" -m "${1##*:}" -o name --noheadings 2>/dev/null)
--		CURNAME=$(dmsetup info -c -j "$MAJOR" -m "$MINOR" -o name --noheadings 2>/dev/null)
-+		REFNAME=$(dmsetup info -c -j "${1%%:*}" -m "${1##*:}" -o name --noheadings 2>"$NULL")
-+		CURNAME=$(dmsetup info -c -j "$MAJOR" -m "$MINOR" -o name --noheadings 2>"$NULL")
- 		error "Cannot ${CHECK+CHECK}${RESIZE+RESIZE} device \"$VOLUME\" without umounting filesystem $MOUNTED first." \
- 		      "Mounted filesystem is using device $CURNAME, but referenced device is $REFNAME." \
- 		      "Filesystem utilities currently do not support renamed devices."
-@@ -279,7 +279,7 @@ check_valid_mounted_device() {
- detect_mounted_with_proc_self_mountinfo() {
- 	# Check self mountinfo
- 	# grab major:minor mounted_device mount_point
--	MOUNTED=$("$GREP" "^[0-9]* [0-9]* $MAJORMINOR " "$PROCSELFMOUNTINFO" 2>/dev/null | head -1)
-+	MOUNTED=$("$GREP" "^[0-9]* [0-9]* $MAJORMINOR " "$PROCSELFMOUNTINFO" 2>"$NULL" | head -1)
+@@ -1,6 +1,6 @@
+ #!/bin/bash
+ #
+-# Copyright (C) 2007-2017 Red Hat, Inc. All rights reserved.
++# Copyright (C) 2007-2020 Red Hat, Inc. All rights reserved.
+ #
+ # This file is part of LVM2.
+ #
+@@ -130,7 +130,15 @@ dry() {
+ 		return 0
+ 	fi
+ 	verbose "Executing" "$@"
+-	"$@"
++	$@
++}
++
++# Accept as succss also return code 1 with fsck
++accept_0_1() {
++	$@
++	local ret="$?"
++	test "$ret" -eq 1 || return "$ret"
++	# Filesystem was corrected
+ }
  
- 	# If device is opened and not yet found as self mounted
- 	# check all other mountinfos (since it can be mounted in cgroups)
-@@ -287,7 +287,7 @@ detect_mounted_with_proc_self_mountinfo() {
- 	# only 1st. line is needed
- 	test -z "$MOUNTED" &&
- 		test "$(dmsetup info -c --noheading -o open -j "$MAJOR" -m "$MINOR")" -gt 0 &&
--		MOUNTED=$(find "$PROCDIR" -maxdepth 2 -name mountinfo -print0 |  xargs -0 "$GREP" "^[0-9]* [0-9]* $MAJORMINOR " 2>/dev/null | head -1 2>/dev/null)
-+		MOUNTED=$(find "$PROCDIR" -maxdepth 2 -name mountinfo -print0 |  xargs -0 "$GREP" "^[0-9]* [0-9]* $MAJORMINOR " 2>"$NULL" | head -1 2>"$NULL")
+ cleanup() {
+@@ -455,9 +463,10 @@ resize_ext() {
+ 		if test -n "$MOUNTED" ; then
+ 			# Forced fsck -f for umounted extX filesystem.
+ 			case "$-" in
+-			  *i*) dry "$FSCK" $YES -f "$VOLUME" ;;
+-			  *) dry "$FSCK" -f -p "$VOLUME" ;;
++			*i*) FLAG=$YES ;;
++			*)   FLAG="-p" ;;
+ 			esac
++			accept_0_1 dry "$FSCK" -f $FLAG "$VOLUME" || error "Failed to fsck $VOLUME"
+ 		fi
+ 	fi
  
- 	# TODO: for performance compare with sed and stop with 1st. match:
- 	# sed -n "/$MAJORMINOR/ {;p;q;}"
-@@ -532,7 +532,7 @@ detect_luks_device() {
- 	CRYPT_NAME=""
- 	CRYPT_DATA_OFFSET=""
- 
--	_LUKS_VERSION=$("$CRYPTSETUP" luksDump "$VOLUME" 2> /dev/null | "$GREP" "Version:")
-+	_LUKS_VERSION=$("$CRYPTSETUP" luksDump "$VOLUME" 2>"$NULL" | "$GREP" "Version:")
- 
- 	if [ -z "$_LUKS_VERSION" ]; then
- 		verbose "Failed to parse LUKS version on volume \"$VOLUME\""
-@@ -541,7 +541,7 @@ detect_luks_device() {
- 
- 	_LUKS_VERSION=${_LUKS_VERSION//[Version:[:space:]]/}
- 
--	_LUKS_UUID=$("$CRYPTSETUP" luksDump "$VOLUME" 2> /dev/null | "$GREP" "UUID:")
-+	_LUKS_UUID=$("$CRYPTSETUP" luksDump "$VOLUME" 2>"$NULL" | "$GREP" "UUID:")
- 
- 	if [ -z "$_LUKS_UUID" ]; then
- 		verbose "Failed to parse LUKS UUID on volume \"$VOLUME\""
-@@ -612,9 +612,9 @@ detect_crypt_device() {
- 	local L_NEWSIZE
- 	local TMP
- 
--	which "$CRYPTSETUP" > /dev/null 2>&1 || error "$CRYPTSETUP utility required to resize crypt device"
-+	which "$CRYPTSETUP" >"$NULL" 2>&1 || error "$CRYPTSETUP utility required to resize crypt device"
- 
--	CRYPT_TYPE=$("$CRYPTSETUP" status "$1" 2> /dev/null | "$GREP" "type:")
-+	CRYPT_TYPE=$("$CRYPTSETUP" status "$1" 2>"$NULL" | "$GREP" "type:")
- 
- 	test -n "$CRYPT_TYPE" || error "$CRYPTSETUP failed to detect device type on $1."
- 
-@@ -674,7 +674,7 @@ resize() {
- 	  "reiserfs") resize_reiser $NEWSIZE ;;
- 	  "xfs") resize_xfs $NEWSIZE ;;
+@@ -742,9 +751,11 @@ check() {
+ 	  "ext2"|"ext3"|"ext4"|"reiserfs")
+ 	        # check if executed from interactive shell environment
+ 		case "$-" in
+-		  *i*) dry "$FSCK" $YES $FORCE "$VOLUME" ;;
+-		  *) dry "$FSCK" $FORCE -p "$VOLUME" ;;
+-		esac ;;
++		  *i*) FLAG=$YES ;;
++		  *)   FLAG="-p" ;;
++		esac
++		accept_0_1 dry "$FSCK" $FORCE $FLAG "$VOLUME" || error "Fsck $FSTYPE failed."
++		;;
  	  "crypto_LUKS")
--		which "$CRYPTSETUP" > /dev/null 2>&1 || error "$CRYPTSETUP utility required to resize LUKS volume"
-+		which "$CRYPTSETUP" >"$NULL" 2>&1 || error "$CRYPTSETUP utility required to resize LUKS volume"
- 		resize_luks $NEWSIZE ;;
- 	  *) error "Filesystem \"$FSTYPE\" on device \"$VOLUME\" is not supported by this tool." ;;
- 	esac || error "Resize $FSTYPE failed."
-@@ -746,7 +746,7 @@ check() {
- 		  *) dry "$FSCK" $FORCE -p "$VOLUME" ;;
- 		esac ;;
- 	  "crypto_LUKS")
--		which "$CRYPTSETUP" > /dev/null 2>&1 || error "$CRYPTSETUP utility required."
-+		which "$CRYPTSETUP" >"$NULL" 2>&1 || error "$CRYPTSETUP utility required."
+ 		which "$CRYPTSETUP" >"$NULL" 2>&1 || error "$CRYPTSETUP utility required."
  		check_luks ;;
- 	  *)
- 		error "Filesystem \"$FSTYPE\" on device \"$VOLUME\" is not supported by this tool." ;;
 
 
