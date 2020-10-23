@@ -1,40 +1,74 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Fri, 23 Oct 2020 23:43:27 +0000 (GMT)
-Subject: master - lv_manip: add space into message
-Message-ID: <20201023234327.7D06D3858003@sourceware.org>
+Date: Fri, 23 Oct 2020 23:43:26 +0000 (GMT)
+Subject: master - tests: fsadm test continue after fs repair
+Message-ID: <20201023234326.5ABCC384A881@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=9740e98cbdba114457dc20bf43ad4c4b8994876f
-Commit:        9740e98cbdba114457dc20bf43ad4c4b8994876f
-Parent:        be94410446d381ab0512d347421a921c7966a10e
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=be94410446d381ab0512d347421a921c7966a10e
+Commit:        be94410446d381ab0512d347421a921c7966a10e
+Parent:        8c2779ba349e5ced3c9ea440929a6808ca443bf4
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Mon Oct 19 10:28:06 2020 +0200
+AuthorDate:    Sat Oct 24 00:29:45 2020 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Sat Oct 24 01:42:16 2020 +0200
 
-lv_manip: add space into message
+tests: fsadm test continue after fs repair
 
-Just add space between %s(.
+Test case where filesystem has been corrected via fsck.
+In such case fsck returns '1' as success and should be
+handled in a same way as '0' since fs is correct.
 ---
- lib/metadata/lv_manip.c | 2 +-
- 1 file changed, 1 insertion(+), 1 deletion(-)
+ test/shell/fsadm.sh | 27 ++++++++++++++++++++++++++-
+ 1 file changed, 26 insertions(+), 1 deletion(-)
 
-diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
-index 72c85914d..e66342022 100644
---- a/lib/metadata/lv_manip.c
-+++ b/lib/metadata/lv_manip.c
-@@ -1022,7 +1022,7 @@ static uint32_t _round_to_stripe_boundary(struct volume_group *vg, uint32_t exte
- 	/* Round up extents to stripe divisible amount */
- 	if ((size_rest = extents % stripes)) {
- 		new_extents += extend ? stripes - size_rest : -size_rest;
--		log_print_unless_silent("Rounding size %s (%u extents) %s to stripe boundary size %s(%u extents).",
-+		log_print_unless_silent("Rounding size %s (%u extents) %s to stripe boundary size %s (%u extents).",
- 					display_size(vg->cmd, (uint64_t) extents * vg->extent_size), extents,
- 					new_extents < extents ? "down" : "up",
- 					display_size(vg->cmd, (uint64_t) new_extents * vg->extent_size), new_extents);
+diff --git a/test/shell/fsadm.sh b/test/shell/fsadm.sh
+index 8141da42c..3e7f9083c 100644
+--- a/test/shell/fsadm.sh
++++ b/test/shell/fsadm.sh
+@@ -61,7 +61,8 @@ cleanup_mounted_and_teardown()
+ 
+ fscheck_ext3()
+ {
+-	fsck.ext3 -p -F -f "$dev_vg_lv"
++	# fsck with result code '1' is success
++	fsck.ext3 -p -F -f "$dev_vg_lv" || test "$?" -eq 1
+ }
+ 
+ fscheck_xfs()
+@@ -113,6 +114,30 @@ if check_missing ext2; then
+ 	fscheck_ext3
+ 
+ 	lvresize -f -L20M $vg_lv
++
++	if which debugfs ; then
++		mkfs.ext2 -b4096 -j "$dev_vg_lv"
++		mount "$dev_vg_lv" "$mount_dir"
++		touch "$mount_dir/file"
++		umount "$mount_dir"
++		# generate a 'repariable' corruption
++		# so fsck returns code 1  (fs repaired)
++		debugfs -R "clri file" -w "$dev_vg_lv"
++
++		fsadm -v -f check "$dev_vg_lv"
++
++		# corrupting again
++		mount "$dev_vg_lv" "$mount_dir"
++		touch "$mount_dir/file"
++		umount "$mount_dir"
++		debugfs -R "clri file" -w "$dev_vg_lv"
++
++		mount "$dev_vg_lv" "$mount_dir"
++		fsadm -v -y --lvresize resize $vg_lv 10M
++		lvresize -L+10M -y -r -n $vg_lv
++		umount "$mount_dir" 2>/dev/null || true
++		fscheck_ext3
++	fi
+ fi
+ 
+ if check_missing ext3; then
 
 
