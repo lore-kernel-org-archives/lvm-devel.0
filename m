@@ -1,173 +1,47 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Fri, 23 Oct 2020 23:43:25 +0000 (GMT)
-Subject: master - fsadm: enhance error handling
-Message-ID: <20201023234325.379A73858003@sourceware.org>
+Date: Fri, 23 Oct 2020 23:43:28 +0000 (GMT)
+Subject: master - man: more precise UNIT
+Message-ID: <20201023234328.9C258384A881@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=8c2779ba349e5ced3c9ea440929a6808ca443bf4
-Commit:        8c2779ba349e5ced3c9ea440929a6808ca443bf4
-Parent:        51a532719c80a91bf32339741d8df30ef593a8d4
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=413c88116dd1a2a922216fd640598812b93ae3c9
+Commit:        413c88116dd1a2a922216fd640598812b93ae3c9
+Parent:        9740e98cbdba114457dc20bf43ad4c4b8994876f
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Sat Oct 24 01:13:42 2020 +0200
+AuthorDate:    Mon Oct 19 12:32:46 2020 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Sat Oct 24 01:42:16 2020 +0200
 
-fsadm: enhance error handling
+man: more precise UNIT
 
-Set more secure bash failure mode for pipilines.
-Avoid using unset variables.
-Enhnace error reporting for failing command.
-Avoid using error via 'case..esac || error'.
+Since 'kilobytes' could be seen in 2 way - SI as '1000',
+while all programmers sees it as '1024' - switch to
+commonly acceptted  KiB, MiB....
+
+Resolves RHBZ 1496255.
 ---
- scripts/fsadm.sh | 47 ++++++++++++++++++++++++++++-------------------
- 1 file changed, 28 insertions(+), 19 deletions(-)
+ tools/command.c | 5 ++---
+ 1 file changed, 2 insertions(+), 3 deletions(-)
 
-diff --git a/scripts/fsadm.sh b/scripts/fsadm.sh
-index 5ca80b4dd..5bba5ff40 100755
---- a/scripts/fsadm.sh
-+++ b/scripts/fsadm.sh
-@@ -29,6 +29,8 @@
- #   2 break detected
- #   3 unsupported online filesystem check for given mounted fs
+diff --git a/tools/command.c b/tools/command.c
+index 4fc55e2be..dd1f94194 100644
+--- a/tools/command.c
++++ b/tools/command.c
+@@ -3292,9 +3292,8 @@ static void _print_man_all_positions_desc(struct command_name *cname)
+ 	       "capitalization, e.g. 'k' and 'K' both refer to 1024.\n"
+ 	       "The default input unit is specified by letter, followed by |UNIT.\n"
+ 	       "UNIT represents other possible input units: \\fBbBsSkKmMgGtTpPeE\\fP.\n"
+-	       "b|B is bytes, s|S is sectors of 512 bytes, k|K is kilobytes,\n"
+-	       "m|M is megabytes, g|G is gigabytes, t|T is terabytes,\n"
+-	       "p|P is petabytes, e|E is exabytes.\n"
++	       "b|B is bytes, s|S is sectors of 512 bytes, k|K is KiB,\n"
++	       "m|M is MiB, g|G is GiB, t|T is TiB, p|P is PiB, e|E is EiB.\n"
+ 	       "(This should not be confused with the output control --units, where\n"
+ 	       "capital letters mean multiple of 1000.)\n");
  
-+set -euE -o pipefail
-+
- TOOL=fsadm
- 
- _SAVEPATH=$PATH
-@@ -61,7 +63,7 @@ CRYPTSETUP=cryptsetup
- # user may override lvm location by setting LVM_BINARY
- LVM=${LVM_BINARY:-lvm}
- 
--YES=${_FSADM_YES}
-+YES="${_FSADM_YES-}"
- DRY=0
- VERB=
- FORCE=
-@@ -206,7 +208,7 @@ decode_major_minor() {
- # detect filesystem on the given device
- # dereference device name if it is symbolic link
- detect_fs() {
--	test -n "$VOLUME_ORIG" || VOLUME_ORIG=$1
-+	test -n "${VOLUME_ORIG-}" || VOLUME_ORIG=$1
- 	VOLUME=${1/#"${DM_DEV_DIR}/"/}
- 	VOLUME=$("$READLINK" $READLINK_E "$DM_DEV_DIR/$VOLUME")
- 	test -n "$VOLUME" || error "Cannot get readlink \"$1\"."
-@@ -257,11 +259,11 @@ check_valid_mounted_device() {
- 	local MOUNTEDMAJORMINOR
- 	local VOL
- 	local CURNAME
--	local SUGGEST="Possibly device \"$1\" has been renamed to \"$CURNAME\"?"
- 
- 	VOL=$("$READLINK" $READLINK_E "$1")
- 	CURNAME=$(dmsetup info -c -j "$MAJOR" -m "$MINOR" -o name --noheadings)
- 	# more confused, device is not DM....
-+	local SUGGEST="Possibly device \"$1\" has been renamed to \"$CURNAME\"?"
- 	test -n "$CURNAME" || SUGGEST="Mounted volume is not a device mapper device???"
- 
- 	test -n "$VOL" ||
-@@ -270,7 +272,7 @@ check_valid_mounted_device() {
- 		"Filesystem utilities currently do not support renamed devices."
- 
- 	case "$VOL" in
--	  # hardcoded /dev  since udev does not create these entries elsewhere
-+	  # hardcoded /dev  since kernel does not create these entries elsewhere
- 	  /dev/dm-[0-9]*)
- 		read -r <"/sys/block/${VOL#/dev/}/dev" MOUNTEDMAJORMINOR 2>&1 || error "Cannot get major:minor for \"$VOLUME\"."
- 		;;
-@@ -674,20 +676,23 @@ resize() {
- 	# if the size parameter is missing use device size
- 	#if [ -n "$NEWSIZE" -a $NEWSIZE <
- 	test -z "$NEWSIZE" && NEWSIZE=${DEVSIZE}b
--	test -n "$NEWSIZE_ORIG" || NEWSIZE_ORIG=$NEWSIZE
-+	NEWSIZE_ORIG=${NEWSIZE_ORIG:-$NEWSIZE}
- 	IFS=$NL
--	test -z "$DO_CRYPTRESIZE" || detect_crypt_device "$VOLUME_ORIG" "$NEWSIZE_ORIG"
--	test -z "$CRYPT_GROW" || resize_crypt "$VOLUME_ORIG"
-+	test -z "${DO_CRYPTRESIZE-}" || detect_crypt_device "$VOLUME_ORIG" "$NEWSIZE_ORIG"
-+	test -z "${CRYPT_GROW-}" || resize_crypt "$VOLUME_ORIG"
-+
- 	case "$FSTYPE" in
--	  "ext3"|"ext2"|"ext4") resize_ext $NEWSIZE ;;
--	  "reiserfs") resize_reiser $NEWSIZE ;;
--	  "xfs") resize_xfs $NEWSIZE ;;
-+	  ext[234])	CMD=resize_ext ;;
-+	  "reiserfs")	CMD=resize_reiser ;;
-+	  "xfs")	CMD=resize_xfs ;;
- 	  "crypto_LUKS")
- 		which "$CRYPTSETUP" >"$NULL" 2>&1 || error "$CRYPTSETUP utility required to resize LUKS volume"
--		resize_luks $NEWSIZE ;;
-+		CMD=resize_luks ;;
- 	  *) error "Filesystem \"$FSTYPE\" on device \"$VOLUME\" is not supported by this tool." ;;
--	esac || error "Resize $FSTYPE failed."
--	test -z "$CRYPT_SHRINK" || resize_crypt "$VOLUME_ORIG"
-+	esac
-+
-+	$CMD $NEWSIZE || error "$FSTYPE resize failed."
-+	test -z "${CRYPT_SHRINK-}" || resize_crypt "$VOLUME_ORIG"
- }
- 
- ####################################
-@@ -716,7 +721,7 @@ check() {
- 	fi
- 
- 	case "$FSTYPE" in
--	  "ext2"|"ext3"|"ext4")
-+	  ext[234])
- 		IFS_CHECK=$IFS
- 		IFS=$NL
- 		for i in $(LC_ALL=C "$TUNE_EXT" -l "$VOLUME"); do
-@@ -740,15 +745,15 @@ check() {
- 
- 	case "$FSTYPE" in
- 	  "xfs") if which "$XFS_CHECK" >"$NULL" 2>&1 ; then
--			dry "$XFS_CHECK" "$VOLUME"
-+			dry "$XFS_CHECK" "$VOLUME" || error "Xfs check failed."
- 		 else
- 			# Replacement for outdated xfs_check
- 			# FIXME: for small devices we need to force_geometry,
- 			# since we run in '-n' mode, it shouldn't be problem.
- 			# Think about better way....
--			dry "$XFS_REPAIR" -n -o force_geometry "$VOLUME"
-+			dry "$XFS_REPAIR" -n -o force_geometry "$VOLUME" || error "Xfs repair failed."
- 		 fi ;;
--	  "ext2"|"ext3"|"ext4"|"reiserfs")
-+	  ext[234]|"reiserfs")
- 	        # check if executed from interactive shell environment
- 		case "$-" in
- 		  *i*) FLAG=$YES ;;
-@@ -758,7 +763,8 @@ check() {
- 		;;
- 	  "crypto_LUKS")
- 		which "$CRYPTSETUP" >"$NULL" 2>&1 || error "$CRYPTSETUP utility required."
--		check_luks ;;
-+		check_luks || error "Crypto luks check failed."
-+		;;
- 	  *)
- 		error "Filesystem \"$FSTYPE\" on device \"$VOLUME\" is not supported by this tool." ;;
- 	esac
-@@ -771,7 +777,7 @@ check() {
- trap "cleanup 2" 2
- 
- # test if we are not invoked recursively
--test -n "$FSADM_RUNNING" && exit 0
-+test -n "${FSADM_RUNNING-}" && exit 0
- 
- # test some prerequisities
- for i in "$TUNE_EXT" "$RESIZE_EXT" "$TUNE_REISER" "$RESIZE_REISER" \
-@@ -793,6 +799,9 @@ if [ "$#" -eq 0 ] ; then
- 	tool_usage
- fi
- 
-+CHECK=""
-+RESIZE=""
-+
- while [ "$#" -ne 0 ]
- do
- 	 case "$1" in
 
 
