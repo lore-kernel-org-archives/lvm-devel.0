@@ -1,56 +1,88 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Sun, 25 Oct 2020 19:37:00 +0000 (GMT)
-Subject: stable-2.02 - fsadm: better check for getsize64 support
-Message-ID: <20201025193700.4B7183861845@sourceware.org>
+Date: Sun, 25 Oct 2020 19:36:59 +0000 (GMT)
+Subject: stable-2.02 - make: remove file from master
+Message-ID: <20201025193659.296A8388701C@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=4dcb35cb03021f1ae450078f3e8bf55c40751a56
-Commit:        4dcb35cb03021f1ae450078f3e8bf55c40751a56
-Parent:        66ea26131ba1f6206eafe49c9c581a02fab00395
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=66ea26131ba1f6206eafe49c9c581a02fab00395
+Commit:        66ea26131ba1f6206eafe49c9c581a02fab00395
+Parent:        bb5f81624bc03d17a7e4ec57417b6bbcc5dc8ab8
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Sun Oct 25 20:19:31 2020 +0100
+AuthorDate:    Sun Oct 25 16:02:33 2020 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Sun Oct 25 20:19:31 2020 +0100
+CommitterDate: Sun Oct 25 17:36:04 2020 +0100
 
-fsadm: better check for getsize64 support
+make: remove file from master
 
-Older blockdev tool return failure error code with --help,
-and since now the tool abort on command failure, lets
-detect missing --getsize64 support directly by running
-command and check if it returns something usable.
-
-It's likely very hard to have the system with
-such old blockdev tool and newer lvm2 compiled.
+To ensure lcov creation is not trying to pick wrong files
+when using same machine for building stable-2.02 and master branch,
+ensure the new files are being deleted even in stable-2.02
+branch for  'make clean & make distclean' targets
 ---
- scripts/fsadm.sh | 11 ++++-------
- 1 file changed, 4 insertions(+), 7 deletions(-)
+ base/Makefile     |  6 ++++++
+ lib/Makefile.in   | 12 ++++++++++++
+ libdm/Makefile.in |  5 +++++
+ 3 files changed, 23 insertions(+)
 
-diff --git a/scripts/fsadm.sh b/scripts/fsadm.sh
-index 5bba5ff40..e20401be1 100755
---- a/scripts/fsadm.sh
-+++ b/scripts/fsadm.sh
-@@ -377,14 +377,11 @@ detect_mounted() {
- # get the full size of device in bytes
- detect_device_size() {
- 	# check if blockdev supports getsize64
--	"$BLOCKDEV" --help 2>&1 | "$GREP" getsize64 >"$NULL"
--	if test $? -eq 0; then
--		DEVSIZE=$("$BLOCKDEV" --getsize64 "$VOLUME")
-+	DEVSIZE=$("$BLOCKDEV" --getsize64 "$VOLUME" 2>"$NULL" || true)
-+	if test -n "$DEVSIZE" ; then
-+		DEVSIZE=$("$BLOCKDEV" --getsize "$VOLUME" || true)
- 		test -n "$DEVSIZE" || error "Cannot read size of device \"$VOLUME\"."
--	else
--		DEVSIZE=$("$BLOCKDEV" --getsize "$VOLUME")
--		test -n "$DEVSIZE" || error "Cannot read size of device \"$VOLUME\"."
--		SSSIZE=$("$BLOCKDEV" --getss "$VOLUME")
-+		SSSIZE=$("$BLOCKDEV" --getss "$VOLUME" || true)
- 		test -n "$SSSIZE" || error "Cannot read sector size of device \"$VOLUME\"."
- 		DEVSIZE=$(("$DEVSIZE" * "$SSSIZE"))
- 	fi
+diff --git a/base/Makefile b/base/Makefile
+index 056ea5910..69ea118fc 100644
+--- a/base/Makefile
++++ b/base/Makefile
+@@ -33,6 +33,12 @@ $(BASE_TARGET): $(BASE_OBJECTS)
+ 	$(Q) $(RM) $@
+ 	$(Q) $(AR) rsv $@ $(BASE_OBJECTS) > /dev/null
+ 
++ifneq (,$(findstring $(MAKECMDGOALS),clean distclean))
++   BASE_SOURCE += \
++	base/data-struct/hash.c \
++	base/data-struct/list.c
++endif
++
+ ifeq ("$(DEPENDS)","yes")
+ -include $(BASE_DEPENDS)
+ endif
+diff --git a/lib/Makefile.in b/lib/Makefile.in
+index 1d422354c..358b7a704 100644
+--- a/lib/Makefile.in
++++ b/lib/Makefile.in
+@@ -152,6 +152,18 @@ CFLOW_LIST_TARGET = $(LIB_NAME).cflow
+ 
+ PROGS_CFLAGS = $(BLKID_CFLAGS) $(UDEV_CFLAGS)
+ 
++ifneq (,$(findstring $(MAKECMDGOALS),clean distclean))
++   SOURCES += \
++	integrity/integrity.c \
++	label/hints.c \
++	metadata/integrity_manip.c \
++	metadata/pv_list.c \
++	metadata/vdo_manip.c \
++	metadata/writecache_manip.c \
++	vdo/vdo.c \
++	writecache/writecache.c
++endif
++
+ include $(top_builddir)/make.tmpl
+ 
+ $(SUBDIRS): $(LIB_STATIC)
+diff --git a/libdm/Makefile.in b/libdm/Makefile.in
+index 66ec39513..46e55f089 100644
+--- a/libdm/Makefile.in
++++ b/libdm/Makefile.in
+@@ -36,6 +36,11 @@ SOURCES =\
+ 	regex/ttree.c \
+ 	$(interface)/libdm-iface.c
+ 
++ifneq (,$(findstring $(MAKECMDGOALS),clean distclean))
++   SOURCES += \
++	dm-tools/dmsetup.c
++endif
++
+ INCLUDES = -I$(srcdir)/$(interface)
+ 
+ ifeq ("@STATIC_LINK@", "yes")
 
 
