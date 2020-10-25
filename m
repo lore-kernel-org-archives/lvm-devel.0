@@ -1,55 +1,41 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Sun, 25 Oct 2020 19:36:58 +0000 (GMT)
-Subject: stable-2.02 - cov: dmeventd plugin fix memleak
-Message-ID: <20201025193658.092173861845@sourceware.org>
+Date: Sun, 25 Oct 2020 19:37:01 +0000 (GMT)
+Subject: stable-2.02 - tests: minor update
+Message-ID: <20201025193701.6F05C388701C@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=bb5f81624bc03d17a7e4ec57417b6bbcc5dc8ab8
-Commit:        bb5f81624bc03d17a7e4ec57417b6bbcc5dc8ab8
-Parent:        f5a2607bb194933caea62a88bd7fcc766efcd5cd
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=a12574303d282779327bc93283edc72fd1b0772e
+Commit:        a12574303d282779327bc93283edc72fd1b0772e
+Parent:        4dcb35cb03021f1ae450078f3e8bf55c40751a56
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Mon Oct 15 14:21:55 2018 +0200
+AuthorDate:    Sun Oct 25 20:23:41 2020 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Sun Oct 25 00:56:11 2020 +0200
+CommitterDate: Sun Oct 25 20:23:41 2020 +0100
 
-cov: dmeventd plugin fix memleak
+tests: minor update
 
-Fix memory leak when policy command fails too frequently and
-plugin decided to skip it.
 ---
- daemons/dmeventd/plugins/thin/dmeventd_thin.c | 2 +-
- daemons/dmeventd/plugins/vdo/dmeventd_vdo.c   | 2 +-
- 2 files changed, 2 insertions(+), 2 deletions(-)
+ test/shell/fsadm.sh | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
 
-diff --git a/daemons/dmeventd/plugins/thin/dmeventd_thin.c b/daemons/dmeventd/plugins/thin/dmeventd_thin.c
-index 29b0391be..033094714 100644
---- a/daemons/dmeventd/plugins/thin/dmeventd_thin.c
-+++ b/daemons/dmeventd/plugins/thin/dmeventd_thin.c
-@@ -286,7 +286,7 @@ void process_event(struct dm_task *dmt,
- 		if (state->fails++ <= state->max_fails) {
- 			log_debug("Postponing frequently failing policy (%u <= %u).",
- 				  state->fails - 1, state->max_fails);
--			return;
-+			goto out;
- 		}
- 		if (state->max_fails < MAX_FAILS)
- 			state->max_fails <<= 1;
-diff --git a/daemons/dmeventd/plugins/vdo/dmeventd_vdo.c b/daemons/dmeventd/plugins/vdo/dmeventd_vdo.c
-index 389632c60..6b35b2fe9 100644
---- a/daemons/dmeventd/plugins/vdo/dmeventd_vdo.c
-+++ b/daemons/dmeventd/plugins/vdo/dmeventd_vdo.c
-@@ -261,7 +261,7 @@ void process_event(struct dm_task *dmt,
- 		if (state->fails++ <= state->max_fails) {
- 			log_debug("Postponing frequently failing policy (%u <= %u).",
- 				  state->fails - 1, state->max_fails);
--			return;
-+			goto out;
- 		}
- 		if (state->max_fails < MAX_FAILS)
- 			state->max_fails <<= 1;
+diff --git a/test/shell/fsadm.sh b/test/shell/fsadm.sh
+index 3e7f9083c..910edddd8 100644
+--- a/test/shell/fsadm.sh
++++ b/test/shell/fsadm.sh
+@@ -54,8 +54,8 @@ test ! -d "$mount_space_dir" && mkdir "$mount_space_dir"
+ 
+ cleanup_mounted_and_teardown()
+ {
+-	umount "$mount_dir" || true
+-	umount "$mount_space_dir" || true
++	umount "$mount_dir" 2>/dev/null || true
++	umount "$mount_space_dir" 2>/dev/null || true
+ 	aux teardown
+ }
+ 
 
 
