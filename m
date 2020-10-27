@@ -1,76 +1,93 @@
 From: David Teigland <teigland@sourceware.org>
-Date: Tue, 27 Oct 2020 19:32:51 +0000 (GMT)
-Subject: master - pvck: handle first mda at non-4096 offset
-Message-ID: <20201027193251.3592C3954085@sourceware.org>
+Date: Tue, 27 Oct 2020 20:47:38 +0000 (GMT)
+Subject: master - pvck: fix dev filtering
+Message-ID: <20201027204738.DEF323857C4D@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=c96645781ceb88c625dfae73e5baa08f1ce0e07e
-Commit:        c96645781ceb88c625dfae73e5baa08f1ce0e07e
-Parent:        020d1edaa06e5e05b58e8d39530408f86a22d1b8
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=5a94126e7a2824387c36d87f5ede97702a82cdda
+Commit:        5a94126e7a2824387c36d87f5ede97702a82cdda
+Parent:        c96645781ceb88c625dfae73e5baa08f1ce0e07e
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Tue Oct 27 14:28:54 2020 -0500
+AuthorDate:    Tue Oct 27 15:42:08 2020 -0500
 Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Tue Oct 27 14:28:54 2020 -0500
+CommitterDate: Tue Oct 27 15:43:15 2020 -0500
 
-pvck: handle first mda at non-4096 offset
+pvck: fix dev filtering
 
-It's possible for a machine with a non-4k page size
-to create a PV with an mda_header at an offset other
-than 4k.  Fix pvck --dump to work with these other
-mda offsets.  pvck --repair will write a new first
-mda at 4096 but lvm with other page sizes will work
-with this.
+filters needing io weren't being run because bcache
+wasn't set up.  Read the first 4k of the device
+before doing filtering or reading ondisk structs to
+reduce reads.
 ---
- tools/pvck.c | 11 ++++++-----
- 1 file changed, 6 insertions(+), 5 deletions(-)
+ tools/pvck.c | 31 +++++++++++++++++++++----------
+ 1 file changed, 21 insertions(+), 10 deletions(-)
 
 diff --git a/tools/pvck.c b/tools/pvck.c
-index 7ae4976e5..39692e3de 100644
+index 39692e3de..06fd01733 100644
 --- a/tools/pvck.c
 +++ b/tools/pvck.c
-@@ -1406,9 +1406,10 @@ static int _dump_headers(struct cmd_context *cmd, const char *dump, struct setti
+@@ -1039,13 +1039,6 @@ static int _dump_label_and_pv_header(struct cmd_context *cmd, uint64_t labelsect
+ 		return 0;
  	}
  
- 	/*
--	 * The first mda is always 4096 bytes from the start of the device.
-+	 * The first mda is usually 4096 bytes from the start of the device.
-+	 * (If created by a machine with larger pages it could be 8k/16k/64k.)
- 	 */
--	if (!_dump_mda_header(cmd, set, 1, 0, 0, NULL, dev, def, 4096, mda1_size, &mda1_checksum, NULL))
-+	if (!_dump_mda_header(cmd, set, 1, 0, 0, NULL, dev, def, mda1_offset, mda1_size, &mda1_checksum, NULL))
- 		bad++;
+-	/*
+-	 * Not invalidating this range can cause an error reading
+-	 * a larger range that overlaps this.
+-	 */
+-	if (dev && !dev_invalidate_bytes(dev, lh_offset, 512))
+-		stack;
+-
+ 	lh = (struct label_header *)buf;
  
- 	if (mda2_offset) {
-@@ -1463,7 +1464,7 @@ static int _dump_metadata(struct cmd_context *cmd, const char *dump, struct sett
- 	 * The first mda is always 4096 bytes from the start of the device.
- 	 */
- 	if (mda_num == 1) {
--		if (!_dump_mda_header(cmd, set, 0, print_metadata, print_area, tofile, dev, def, 4096, mda1_size, &mda1_checksum, NULL))
-+		if (!_dump_mda_header(cmd, set, 0, print_metadata, print_area, tofile, dev, def, mda1_offset, mda1_size, &mda1_checksum, NULL))
- 			bad++;
- 	} else if (mda_num == 2) {
- 		if (!mda2_offset) {
-@@ -1497,7 +1498,7 @@ static int _dump_found(struct cmd_context *cmd, struct settings *set, uint64_t l
- 		bad++;
+ 	if (print_fields) {
+@@ -3040,7 +3033,7 @@ int pvck(struct cmd_context *cmd, int argc, char **argv)
  
- 	if (found_label && mda1_offset) {
--		if (!_dump_mda_header(cmd, set, 0, 0, 0, NULL, dev, NULL, 4096, mda1_size, &mda1_checksum, &found_header1))
-+		if (!_dump_mda_header(cmd, set, 0, 0, 0, NULL, dev, NULL, mda1_offset, mda1_size, &mda1_checksum, &found_header1))
- 			bad++;
+ 		clear_hint_file(cmd);
+ 
+-		if (!(dev = dev_cache_get(cmd, pv_name, cmd->filter))) {
++		if (!(dev = dev_cache_get(cmd, pv_name, NULL))) {
+ 			log_error("Cannot use %s: %s.", pv_name, devname_error_reason(pv_name));
+ 			return ECMD_FAILED;
+ 		}
+@@ -3049,7 +3042,7 @@ int pvck(struct cmd_context *cmd, int argc, char **argv)
+ 	if (arg_is_set(cmd, dump_ARG)) {
+ 		pv_name = argv[0];
+ 
+-		dev = dev_cache_get(cmd, pv_name, cmd->filter);
++		dev = dev_cache_get(cmd, pv_name, NULL);
+ 
+ 		if (!dev)
+ 			def = get_devicefile(pv_name);
+@@ -3071,7 +3064,25 @@ int pvck(struct cmd_context *cmd, int argc, char **argv)
+ 			return ECMD_FAILED;
  	}
  
-@@ -1681,7 +1682,7 @@ static int _dump_search(struct cmd_context *cmd, const char *dump, struct settin
- 	 */
- 	if ((mda_num == 1) && found_label && mda1_offset && mda1_size) {
- 		/* use header values when available */
--		mda_offset = 4096;
-+		mda_offset = mda1_offset;
- 		mda_size = mda1_size;
+-	label_scan_setup_bcache();
++	if (dev) {
++		char buf[4096];
++
++		label_scan_setup_bcache();
++
++		/*
++		 * This buf is not used, but bcache data is used for subsequent
++		 * reads in the filters and by _read_bytes for other disk structs.
++		 */
++		if (!dev_read_bytes(dev, 0, 4096, buf)) {
++	        	log_error("Failed to read the first 4096 bytes of device %s.", dev_name(dev));
++			return ECMD_FAILED;
++		}
++
++		if (!cmd->filter->passes_filter(cmd, cmd->filter, dev, NULL)) {
++			log_error("Cannot use %s: %s.", pv_name, dev_filtered_reason(dev));
++			return ECMD_FAILED;
++		}
++	}
  
- 	} else if (mda_num == 1) {
+ 	if ((dump = arg_str_value(cmd, dump_ARG, NULL))) {
+ 		cmd->use_hints = 0;
 
 
