@@ -1,34 +1,40 @@
-From: David Teigland <teigland@redhat.com>
-Date: Mon, 16 Nov 2020 10:41:03 -0600
-Subject: [QEUSTION] VG refresh: remove disk and reinsert disk, VG not refresh
-In-Reply-To: <7b0ca534-c927-7e15-a6ce-52edc5a1805d@huawei.com>
-References: <7b0ca534-c927-7e15-a6ce-52edc5a1805d@huawei.com>
-Message-ID: <20201116164102.GA10385@redhat.com>
+From: David Teigland <teigland@sourceware.org>
+Date: Tue, 17 Nov 2020 15:24:32 +0000 (GMT)
+Subject: main - lvchange: fix error for foreign vg activation
+Message-ID: <20201117152432.9895A3858034@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On Mon, Nov 16, 2020 at 11:15:50AM +0800, Wu Guanghao wrote:
-> So I want to know how to add vg refresh function in the 2.02.187 and
-> later to keep it the same as 2.02.181, and why delete vg refresh
-> function?
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=aba9652e584b6f6a422233dea951eb59326a3de2
+Commit:        aba9652e584b6f6a422233dea951eb59326a3de2
+Parent:        1cc75317f95def9521af535f4c58fb79df816b8c
+Author:        David Teigland <teigland@redhat.com>
+AuthorDate:    Tue Nov 17 09:22:40 2020 -0600
+Committer:     David Teigland <teigland@redhat.com>
+CommitterDate: Tue Nov 17 09:22:40 2020 -0600
 
-Sorry, I don't think I quite knew what a proper use of that looked like
-when removing it.  All the cases I saw were unnecessary or were causing
-problems.  The motivation was numerous problems reported about failed
-activation during boot, some involving unwanted refreshes.  A better fix
-might have found a way to preserve it in the stable branch.
+lvchange: fix error for foreign vg activation
 
-If you're compiling your own lvm it would be simple to restore, enable the
-if 0 section in pvscan.c.
+was using ECMD_FAILED instead of 0.
+---
+ tools/lvchange.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
 
-More generally, refresh didn't fit correctly where it was implemented.  It
-depended on lvmetad (now removed), and was not really related to
-autoactivation.  If an automatic refresh feature is warranted, it should
-be designed and implemented to stand on its own.
-
-Dave
+diff --git a/tools/lvchange.c b/tools/lvchange.c
+index f9a0b54e3..f37b68381 100644
+--- a/tools/lvchange.c
++++ b/tools/lvchange.c
+@@ -202,7 +202,7 @@ static int _lvchange_activate(struct cmd_context *cmd, struct logical_volume *lv
+ 	    strcmp(lv->vg->system_id, cmd->system_id) &&
+ 	    is_change_activating(activate)) {
+ 		log_error("Cannot activate LVs in a foreign VG.");
+-		return ECMD_FAILED;
++		return 0;
+ 	}
+ 
+ 	if (lv_activation_skip(lv, activate, arg_is_set(cmd, ignoreactivationskip_ARG)))
 
 
