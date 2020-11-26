@@ -1,80 +1,59 @@
-From: David Teigland <teigland@sourceware.org>
-Date: Wed, 25 Nov 2020 22:58:35 +0000 (GMT)
-Subject: main - udev rule: remove lvmetad comments
-Message-ID: <20201125225835.89D993857022@sourceware.org>
+From: Marian Csontos <mcsontos@sourceware.org>
+Date: Thu, 26 Nov 2020 16:38:01 +0000 (GMT)
+Subject: master - build: make generate
+Message-ID: <20201126163801.38763396EC63@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=10a095a58b3c564d54ded4d59c2286546fc83b74
-Commit:        10a095a58b3c564d54ded4d59c2286546fc83b74
-Parent:        b68141a49d94db7fa98beb345bc5a583d874e9e7
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Wed Nov 25 16:57:54 2020 -0600
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Wed Nov 25 16:57:54 2020 -0600
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=205fb35b50a14f10b95bb4a47935010efe6d96e8
+Commit:        205fb35b50a14f10b95bb4a47935010efe6d96e8
+Parent:        10a095a58b3c564d54ded4d59c2286546fc83b74
+Author:        Marian Csontos <mcsontos@redhat.com>
+AuthorDate:    Thu Nov 26 17:37:32 2020 +0100
+Committer:     Marian Csontos <mcsontos@redhat.com>
+CommitterDate: Thu Nov 26 17:37:32 2020 +0100
 
-udev rule: remove lvmetad comments
+build: make generate
 
 ---
- udev/69-dm-lvm-metad.rules.in | 15 +++------------
- 1 file changed, 3 insertions(+), 12 deletions(-)
+ conf/example.conf.in | 3 +--
+ man/vgsplit.8_pregen | 7 ++++---
+ 2 files changed, 5 insertions(+), 5 deletions(-)
 
-diff --git a/udev/69-dm-lvm-metad.rules.in b/udev/69-dm-lvm-metad.rules.in
-index d51006496..78f506520 100644
---- a/udev/69-dm-lvm-metad.rules.in
-+++ b/udev/69-dm-lvm-metad.rules.in
-@@ -4,14 +4,7 @@
+diff --git a/conf/example.conf.in b/conf/example.conf.in
+index 6b0622ab9..fe17942d9 100644
+--- a/conf/example.conf.in
++++ b/conf/example.conf.in
+@@ -937,8 +937,7 @@ global {
+ 	# a volume group's metadata, instead of always granting the read-only
+ 	# requests immediately, delay them to allow the read-write requests to
+ 	# be serviced. Without this setting, write access may be stalled by a
+-	# high volume of read-only requests. This option only affects
+-	# locking_type 1 viz. local file-based locking.
++	# high volume of read-only requests. This option only affects file locks.
+ 	prioritise_write_locks = 1
  
- # Udev rules for LVM.
- #
--# Scan all block devices having a PV label for LVM metadata.
--# Store this information in LVMetaD (the LVM metadata daemon) and maintain LVM
--# metadata state for improved performance by avoiding further scans while
--# running subsequent LVM commands or while using lvm2app library.
--# Also, notify LVMetaD about any relevant block device removal.
--#
--# This rule is essential for having the information in LVMetaD up-to-date.
--# It also requires blkid to be called on block devices before so only devices
-+# This rule requires blkid to be called on block devices before so only devices
- # used as LVM PVs are processed (ID_FS_TYPE="LVM2_member" or "LVM1_member").
+ 	# Configuration option global/library_dir.
+diff --git a/man/vgsplit.8_pregen b/man/vgsplit.8_pregen
+index 3adb0510f..9731aa4fa 100644
+--- a/man/vgsplit.8_pregen
++++ b/man/vgsplit.8_pregen
+@@ -8,9 +8,10 @@ vgsplit - Move physical volumes into a new or existing volume group
+     [ \fIoption_args\fP ]
+ .br
+ .SH DESCRIPTION
+-vgsplit moves one or more PVs from a source VG to a destination VG. The
+-PVs can be specified explicitly or implicitly by naming an LV, in which
+-case on PVs underlying the LV are moved.
++vgsplit moves one or more PVs from a source VG (the first VG arg) to a
++destination VG (the second VG arg).  The PV(s) to move are named after the
++source and destination VGs, or an LV is named, in which case the PVs
++underlying the LV are moved.
  
- SUBSYSTEM!="block", GOTO="lvm_end"
-@@ -19,8 +12,7 @@ SUBSYSTEM!="block", GOTO="lvm_end"
- 
- ENV{DM_UDEV_DISABLE_OTHER_RULES_FLAG}=="1", GOTO="lvm_end"
- 
--# If the PV label got lost, inform lvmetad immediately.
--# Detect the lost PV label by comparing previous ID_FS_TYPE value with current one.
-+# Detect removed PV label by comparing previous ID_FS_TYPE value with current one.
- ENV{.ID_FS_TYPE_NEW}="$env{ID_FS_TYPE}"
- IMPORT{db}="ID_FS_TYPE"
- ENV{ID_FS_TYPE}=="LVM2_member|LVM1_member", ENV{.ID_FS_TYPE_NEW}!="LVM2_member|LVM1_member", ENV{LVM_PV_GONE}="1"
-@@ -31,7 +23,6 @@ ENV{LVM_PV_GONE}=="1", GOTO="lvm_scan"
- ENV{ID_FS_TYPE}!="LVM2_member|LVM1_member", GOTO="lvm_end"
- ENV{DM_MULTIPATH_DEVICE_PATH}=="1", GOTO="lvm_end"
- 
--# Inform lvmetad about any PV that is gone.
- ACTION=="remove", GOTO="lvm_scan"
- 
- # Create /dev/disk/by-id/lvm-pv-uuid-<PV_UUID> symlink for each PV
-@@ -69,7 +60,6 @@ ENV{LVM_LOOP_PV_ACTIVATED}!="1", ENV{SYSTEMD_READY}="0"
- GOTO="lvm_end"
- 
- # If the PV is not a special device listed above, scan only if necessary.
--# For "direct_pvscan" mode (see below), this means run rules only an ADD events.
- # For "systemd_background" mode, systemd takes care of this by activating
- # the lvm2-pvscan at .service only once.
- LABEL="next"
-@@ -113,6 +103,7 @@ ENV{SYSTEMD_ALIAS}="/dev/block/$major:$minor"
- ENV{SYSTEMD_WANTS}+="lvm2-pvscan@$major:$minor.service"
- GOTO="lvm_end"
- 
-+# FIXME: this mode is not used and should be removed.
- LABEL="direct_pvscan"
- 
- # The table below summarises the situations in which we reach the LABEL="lvm_scan"
+ If the destination VG does not exist, a new VG is created (command options
+ can be used to specify properties of the new VG, also see
 
 
