@@ -1,125 +1,47 @@
-From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 25 Jan 2012 13:10:27 -0000
-Subject: LVM2 ./WHATS_NEW lib/activate/activate.c lib/a ...
-Message-ID: <20120125131027.9786.qmail@sourceware.org>
+From: David Teigland <teigland@sourceware.org>
+Date: Wed,  2 Dec 2020 21:30:06 +0000 (GMT)
+Subject: main - man lvmcache: add writecache cleaner info
+Message-ID: <20201202213006.84C8E395C03A@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2012-01-25 13:10:26
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=9b3458d5a945302a68e4f5ed3011f01677411e9b
+Commit:        9b3458d5a945302a68e4f5ed3011f01677411e9b
+Parent:        a2affffed558899af563b790eaf5112b8c7e5bd5
+Author:        David Teigland <teigland@redhat.com>
+AuthorDate:    Wed Dec 2 15:29:21 2020 -0600
+Committer:     David Teigland <teigland@redhat.com>
+CommitterDate: Wed Dec 2 15:29:21 2020 -0600
 
-Modified files:
-	.              : WHATS_NEW 
-	lib/activate   : activate.c activate.h 
+man lvmcache: add writecache cleaner info
 
-Log message:
-	Rename  origin_only to more generic use_layer flag
-	
-	Since now we have more layered devices i.e. thin volumes - support
-	selection of layer via flag.
+---
+ man/lvmcache.7_main | 10 ++++++++++
+ 1 file changed, 10 insertions(+)
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.2239&r2=1.2240
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/activate/activate.c.diff?cvsroot=lvm2&r1=1.238&r2=1.239
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/activate/activate.h.diff?cvsroot=lvm2&r1=1.96&r2=1.97
-
---- LVM2/WHATS_NEW	2012/01/25 11:32:41	1.2239
-+++ LVM2/WHATS_NEW	2012/01/25 13:10:26	1.2240
-@@ -1,5 +1,6 @@
- Version 2.02.89 - 
- ==================================
-+  Rename origin_only parameter to more generic flag use_layer for lv_info().
-   Thin pools have segment fields thin_count, zero, transaction_id.
-   Each new created LV volume has creation lv_time and lv_host.
-   Print data_percent and metadata_percent for verbose lvs.
---- LVM2/lib/activate/activate.c	2012/01/25 09:13:10	1.238
-+++ LVM2/lib/activate/activate.c	2012/01/25 13:10:26	1.239
-@@ -151,13 +151,12 @@
- {
- 	return 0;
- }
--int lv_info(struct cmd_context *cmd, const struct logical_volume *lv, unsigned origin_only,
-+int lv_info(struct cmd_context *cmd, const struct logical_volume *lv, int use_layer,
- 	    struct lvinfo *info, int with_open_count, int with_read_ahead)
- {
- 	return 0;
- }
--int lv_info_by_lvid(struct cmd_context *cmd, const char *lvid_s,
--		    unsigned origin_only,
-+int lv_info_by_lvid(struct cmd_context *cmd, const char *lvid_s, int use_layer,
- 		    struct lvinfo *info, int with_open_count, int with_read_ahead)
- {
- 	return 0;
-@@ -532,10 +531,11 @@
- /*
-  * Returns 1 if info structure populated, else 0 on failure.
-  */
--int lv_info(struct cmd_context *cmd, const struct logical_volume *lv, unsigned origin_only,
-+int lv_info(struct cmd_context *cmd, const struct logical_volume *lv, int use_layer,
- 	    struct lvinfo *info, int with_open_count, int with_read_ahead)
- {
- 	struct dm_info dminfo;
-+	const char *layer;
+diff --git a/man/lvmcache.7_main b/man/lvmcache.7_main
+index 37d0e3359..85d4d9e34 100644
+--- a/man/lvmcache.7_main
++++ b/man/lvmcache.7_main
+@@ -303,6 +303,16 @@ afterwards.  Some underlying devices perform better with fua, some with
+ nofua.  Testing is necessary to determine which.
+ Applicable only to persistent memory.
  
- 	if (!activation())
- 		return 0;
-@@ -552,7 +552,14 @@
- 			fs_unlock(); /* For non clustered - wait if there are non-delete ops */
- 	}
- 
--	if (!dev_manager_info(lv->vg->cmd->mem, lv, (lv_is_origin(lv) && origin_only) ? "real" : NULL, with_open_count,
-+	if (use_layer && lv_is_thin_pool(lv))
-+		layer = "tpool";
-+	else if (use_layer && lv_is_origin(lv))
-+		layer = "real";
-+	else
-+		layer = NULL;
++.IP \[bu] 2
++cleaner = 0|1
 +
-+	if (!dev_manager_info(lv->vg->cmd->mem, lv, layer, with_open_count,
- 			      with_read_ahead, &dminfo, &info->read_ahead))
- 		return_0;
++Setting cleaner=1 enables the writecache cleaner mode in which data is
++gradually flushed from the cache.  If this is done prior to detaching the
++writecache, then the splitcache command will have little or no flushing to
++perform.  If not done beforehand, the splitcache command enables the
++cleaner mode and waits for flushing to complete before detaching the
++writecache.  Adding cleaner=0 to the splitcache command will skip the
++cleaner mode, and any required flushing is performed in device suspend.
  
-@@ -568,8 +575,7 @@
- 	return 1;
- }
+ .SS dm-cache with separate data and metadata LVs
  
--int lv_info_by_lvid(struct cmd_context *cmd, const char *lvid_s,
--		    unsigned origin_only,
-+int lv_info_by_lvid(struct cmd_context *cmd, const char *lvid_s, int use_layer,
- 		    struct lvinfo *info, int with_open_count, int with_read_ahead)
- {
- 	int r;
-@@ -578,10 +584,7 @@
- 	if (!(lv = lv_from_lvid(cmd, lvid_s, 0)))
- 		return 0;
- 
--	if (!lv_is_origin(lv))
--		origin_only = 0;
--
--	r = lv_info(cmd, lv, origin_only, info, with_open_count, with_read_ahead);
-+	r = lv_info(cmd, lv, use_layer, info, with_open_count, with_read_ahead);
- 	release_vg(lv->vg);
- 
- 	return r;
---- LVM2/lib/activate/activate.h	2012/01/25 09:06:43	1.96
-+++ LVM2/lib/activate/activate.h	2012/01/25 13:10:26	1.97
-@@ -79,10 +79,9 @@
- /*
-  * Returns 1 if info structure has been populated, else 0.
-  */
--int lv_info(struct cmd_context *cmd, const struct logical_volume *lv,
--	    unsigned origin_only, struct lvinfo *info,
--	    int with_open_count, int with_read_ahead);
--int lv_info_by_lvid(struct cmd_context *cmd, const char *lvid_s, unsigned origin_only,
-+int lv_info(struct cmd_context *cmd, const struct logical_volume *lv, int use_layer,
-+	    struct lvinfo *info, int with_open_count, int with_read_ahead);
-+int lv_info_by_lvid(struct cmd_context *cmd, const char *lvid_s, int use_layer,
- 		    struct lvinfo *info, int with_open_count, int with_read_ahead);
- 
- int lv_check_not_in_use(struct cmd_context *cmd, struct logical_volume *lv,
 
 
