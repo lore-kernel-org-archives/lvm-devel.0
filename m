@@ -1,20 +1,20 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Tue,  8 Dec 2020 19:35:12 +0000 (GMT)
-Subject: main - fsadm: fix unbound variable usage
-Message-ID: <20201208193512.0BCE73854809@sourceware.org>
+Date: Tue,  8 Dec 2020 21:17:46 +0000 (GMT)
+Subject: stable-2.02 - fsadm: fix unbound variable usage
+Message-ID: <20201208211746.8363B386100A@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=47608ff49b874f2a34b9d8644f53028d5ffa1fd3
-Commit:        47608ff49b874f2a34b9d8644f53028d5ffa1fd3
-Parent:        7691213a91ca7cc2d5518db31d04c8afa74622e7
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=307acb072b68956bf7c08dc88b6927f6abf3d2e4
+Commit:        307acb072b68956bf7c08dc88b6927f6abf3d2e4
+Parent:        da7ec2ec0f19dca9266ecb2a653485491cae850a
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
 AuthorDate:    Mon Dec 7 16:16:55 2020 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Tue Dec 8 20:32:34 2020 +0100
+CommitterDate: Tue Dec 8 22:17:17 2020 +0100
 
 fsadm: fix unbound variable usage
 
