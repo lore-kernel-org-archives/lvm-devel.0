@@ -1,50 +1,56 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Tue,  8 Dec 2020 19:35:13 +0000 (GMT)
-Subject: main - tests: few more fsadm checks
-Message-ID: <20201208193513.2C7903854805@sourceware.org>
+Date: Tue,  8 Dec 2020 19:35:12 +0000 (GMT)
+Subject: main - fsadm: fix unbound variable usage
+Message-ID: <20201208193512.0BCE73854809@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=57594fe673587ea33a6521733376862055ecbd65
-Commit:        57594fe673587ea33a6521733376862055ecbd65
-Parent:        47608ff49b874f2a34b9d8644f53028d5ffa1fd3
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=47608ff49b874f2a34b9d8644f53028d5ffa1fd3
+Commit:        47608ff49b874f2a34b9d8644f53028d5ffa1fd3
+Parent:        7691213a91ca7cc2d5518db31d04c8afa74622e7
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Mon Dec 7 16:20:00 2020 +0100
+AuthorDate:    Mon Dec 7 16:16:55 2020 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Tue Dec 8 20:32:34 2020 +0100
 
-tests: few more fsadm checks
+fsadm: fix unbound variable usage
 
+When 'fsadm resize vg/lv' is used without size, it should just
+resize filesystem to match device - but since we now check
+for unbound variable in bash - the previous usage no longer
+works and needs explicit check.
 ---
- test/shell/fsadm.sh | 10 ++++++++++
- 1 file changed, 10 insertions(+)
+ scripts/fsadm.sh | 8 ++++++--
+ 1 file changed, 6 insertions(+), 2 deletions(-)
 
-diff --git a/test/shell/fsadm.sh b/test/shell/fsadm.sh
-index 910edddd8..67f9660e6 100644
---- a/test/shell/fsadm.sh
-+++ b/test/shell/fsadm.sh
-@@ -96,9 +96,19 @@ lvcreate -n $lv1 -L20M $vg
- lvcreate -n ${lv1}bar -L10M $vg
- trap 'cleanup_mounted_and_teardown' EXIT
+diff --git a/scripts/fsadm.sh b/scripts/fsadm.sh
+index 9b95d318d..2cb1fc75b 100755
+--- a/scripts/fsadm.sh
++++ b/scripts/fsadm.sh
+@@ -798,6 +798,7 @@ fi
  
-+# prints help
-+fsadm
-+
-+# check needs arg
-+not fsadm check
-+
- if check_missing ext2; then
- 	mkfs.ext2 -b4096 -j "$dev_vg_lv"
+ CHECK=""
+ RESIZE=""
++NEWSIZE=""
  
-+	# Check 'check' works
-+	fsadm check $vg_lv
-+	# Check 'resize' without size parameter works
-+	fsadm resize $vg_lv
- 	fsadm --lvresize resize $vg_lv 30M
- 	# Fails - not enough space for 4M fs
- 	not fsadm -y --lvresize resize "$dev_vg_lv" 4M
+ while [ "$#" -ne 0 ]
+ do
+@@ -811,8 +812,11 @@ do
+ 	  "-y"|"--yes") YES="-y" ;;
+ 	  "-l"|"--lvresize") DO_LVRESIZE=1 ;;
+ 	  "-c"|"--cryptresize") DO_CRYPTRESIZE=1 ;;
+-	  "check") CHECK=$2 ; shift ;;
+-	  "resize") RESIZE=$2 ; NEWSIZE=$3 ; shift 2 ;;
++	  "check") test -z "${2-}" && error "Missing <device>. (see: $TOOL --help)"
++		   CHECK=$2 ; shift ;;
++	  "resize") test -z "${2-}" && error "Missing <device>. (see: $TOOL --help)"
++		    RESIZE=$2 ; shift
++		    if test -n "${2-}" ; then NEWSIZE="${2-}" ; shift ; fi ;;
+ 	  *) error "Wrong argument \"$1\". (see: $TOOL --help)"
+ 	esac
+ 	shift
 
 
