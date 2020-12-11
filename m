@@ -1,63 +1,73 @@
-From: Marian Csontos <mcsontos@sourceware.org>
-Date: Fri, 11 Dec 2020 11:16:39 +0000 (GMT)
-Subject: main - configure: update
-Message-ID: <20201211111639.8A0AE384400F@sourceware.org>
+From: David Teigland <teigland@sourceware.org>
+Date: Fri, 11 Dec 2020 22:26:08 +0000 (GMT)
+Subject: main - partial flag for writecache and integrity
+Message-ID: <20201211222608.7D09E3850425@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=23ef67776210ad6c55f4dd7475b806337140c513
-Commit:        23ef67776210ad6c55f4dd7475b806337140c513
-Parent:        5dbe2fdd9dd783c2911a5375d6fdec86118af280
-Author:        Marian Csontos <mcsontos@redhat.com>
-AuthorDate:    Fri Dec 11 12:16:16 2020 +0100
-Committer:     Marian Csontos <mcsontos@redhat.com>
-CommitterDate: Fri Dec 11 12:16:16 2020 +0100
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=b84a9927b78727efffbb257a61e9e95a648cdfab
+Commit:        b84a9927b78727efffbb257a61e9e95a648cdfab
+Parent:        23ef67776210ad6c55f4dd7475b806337140c513
+Author:        David Teigland <teigland@redhat.com>
+AuthorDate:    Fri Dec 11 15:56:04 2020 -0600
+Committer:     David Teigland <teigland@redhat.com>
+CommitterDate: Fri Dec 11 16:25:25 2020 -0600
 
-configure: update
+partial flag for writecache and integrity
 
+When a writecache sublv or an integrity metadata sublv
+are partial (missing a dev), set the partial flag on
+the upper level LV also, as is done for other sublvs.
 ---
- aclocal.m4 | 10 ++++++----
- configure  |  2 +-
- 2 files changed, 7 insertions(+), 5 deletions(-)
+ lib/metadata/metadata.c        |  4 ++++
+ test/shell/writecache-split.sh | 10 ++++++++++
+ 2 files changed, 14 insertions(+)
 
-diff --git a/aclocal.m4 b/aclocal.m4
-index 3e0fbd38d..7524c8313 100644
---- a/aclocal.m4
-+++ b/aclocal.m4
-@@ -496,12 +496,14 @@ AC_DEFUN([AM_PATH_PYTHON],
-     m4_default([$3], [AC_MSG_ERROR([no suitable Python interpreter found])])
-   else
+diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
+index d04b8d8ba..f4d07a4f7 100644
+--- a/lib/metadata/metadata.c
++++ b/lib/metadata/metadata.c
+@@ -1916,6 +1916,10 @@ static int _lv_each_dependency(struct logical_volume *lv,
+ 			return_0;
+ 		if (lvseg->metadata_lv && !fn(lvseg->metadata_lv, data))
+ 			return_0;
++		if (lvseg->writecache && !fn(lvseg->writecache, data))
++			return_0;
++		if (lvseg->integrity_meta_dev && !fn(lvseg->integrity_meta_dev, data))
++			return_0;
+ 		for (s = 0; s < lvseg->area_count; ++s) {
+ 			if (seg_type(lvseg, s) == AREA_LV && !fn(seg_lv(lvseg,s), data))
+ 				return_0;
+diff --git a/test/shell/writecache-split.sh b/test/shell/writecache-split.sh
+index d1b14bfd3..5723f7aab 100644
+--- a/test/shell/writecache-split.sh
++++ b/test/shell/writecache-split.sh
+@@ -99,6 +99,11 @@ lvchange -an $vg/$lv1
  
--  dnl Query Python for its version number.  Getting [:3] seems to be
--  dnl the best way to do this; it's what "site.py" does in the standard
--  dnl library.
-+  dnl Query Python for its version number.  Although site.py simply uses
-+  dnl sys.version[:3], printing that failed with Python 3.10, since the
-+  dnl trailing zero was eliminated. So now we output just the major
-+  dnl and minor version numbers, as numbers. Apparently the tertiary
-+  dnl version is not of interest.
+ aux disable_dev "$dev2"
  
-   AC_CACHE_CHECK([for $am_display_PYTHON version], [am_cv_python_version],
--    [am_cv_python_version=`$PYTHON -c "import sys; sys.stdout.write(sys.version[[:3]])"`])
-+    [am_cv_python_version=`$PYTHON -c "import sys; print('%u.%u' % sys.version_info[[:2]])"`])
-   AC_SUBST([PYTHON_VERSION], [$am_cv_python_version])
++lvs -a -o+lv_health_status $vg |tee out
++grep $lv1 out | grep partial
++grep $lv2 out | grep partial
++check lv_attr_bit health $vg/$lv1 "p"
++
+ not lvconvert --splitcache $vg/$lv1
+ lvconvert --splitcache --force --yes $vg/$lv1
  
-   dnl Use the values of $prefix and $exec_prefix for the corresponding
-diff --git a/configure b/configure
-index 29d19f249..4c38cbebb 100755
---- a/configure
-+++ b/configure
-@@ -11962,7 +11962,7 @@ $as_echo_n "checking for $am_display_PYTHON version... " >&6; }
- if ${am_cv_python_version+:} false; then :
-   $as_echo_n "(cached) " >&6
- else
--  am_cv_python_version=`$PYTHON -c "import sys; sys.stdout.write(sys.version[:3])"`
-+  am_cv_python_version=`$PYTHON -c "import sys; print('%u.%u' % sys.version_info[:2])"`
- fi
- { $as_echo "$as_me:${as_lineno-$LINENO}: result: $am_cv_python_version" >&5
- $as_echo "$am_cv_python_version" >&6; }
+@@ -128,6 +133,11 @@ lvchange -an $vg/$lv1
+ 
+ aux disable_dev "$dev3"
+ 
++lvs -a -o+lv_health_status $vg |tee out
++grep $lv1 out | grep partial
++grep $lv2 out | grep partial
++check lv_attr_bit health $vg/$lv1 "p"
++
+ not lvconvert --splitcache $vg/$lv1
+ lvconvert --splitcache --force --yes $vg/$lv1
+ 
 
 
