@@ -1,42 +1,64 @@
 From: David Teigland <teigland@sourceware.org>
-Date: Tue,  5 Jan 2021 16:20:09 +0000 (GMT)
-Subject: stable-2.02 - vgextend: check missing device during block size check
-Message-ID: <20210105162009.13A563857801@sourceware.org>
+Date: Thu,  7 Jan 2021 19:33:54 +0000 (GMT)
+Subject: main - lvconvert: chunksize option was missing with cachedevice
+Message-ID: <20210107193354.59F273851C35@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=b98c3346350b7c270140c1f21fda0436876e16e8
-Commit:        b98c3346350b7c270140c1f21fda0436876e16e8
-Parent:        92a67e3d3f84825c7be92d0d2259fa92b56092b9
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=e9503f257ad2e61742b0cfe2780b72739d1d3978
+Commit:        e9503f257ad2e61742b0cfe2780b72739d1d3978
+Parent:        b84a9927b78727efffbb257a61e9e95a648cdfab
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Tue Sep 3 10:07:56 2019 -0500
+AuthorDate:    Thu Jan 7 13:30:48 2021 -0600
 Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Tue Jan 5 10:19:01 2021 -0600
+CommitterDate: Thu Jan 7 13:30:48 2021 -0600
 
-vgextend: check missing device during block size check
+lvconvert: chunksize option was missing with cachedevice
 
-Checking the block size when a device is missing could
-trigger a segfault.
 ---
- lib/metadata/metadata.c | 3 +++
- 1 file changed, 3 insertions(+)
+ test/shell/cachevol-cachedevice.sh | 13 +++++++++++++
+ tools/command-lines.in             |  2 +-
+ 2 files changed, 14 insertions(+), 1 deletion(-)
 
-diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
-index fd10a02da..6c4683aa3 100644
---- a/lib/metadata/metadata.c
-+++ b/lib/metadata/metadata.c
-@@ -718,6 +718,9 @@ int vg_extend_each_pv(struct volume_group *vg, struct pvcreate_params *pp)
- 		logical_block_size = 0;
- 		physical_block_size = 0;
- 
-+		if (!pvl->pv->dev)
-+			continue;
+diff --git a/test/shell/cachevol-cachedevice.sh b/test/shell/cachevol-cachedevice.sh
+index 3831ee9d4..2695c989b 100644
+--- a/test/shell/cachevol-cachedevice.sh
++++ b/test/shell/cachevol-cachedevice.sh
+@@ -144,6 +144,19 @@ lvconvert -y --type cache --cachedevice "$dev2" $vg/$lv1
+ check lv_field $vg/$lv1 segtype cache
+ check lv_field $vg/${lv1}_cache_cvol segtype linear -a
+ check lv_field $vg/${lv1}_cache_cvol lv_size "60.00m"
++lvs -o chunksize $vg/$lv1 |tee out
++grep 64.00k out
++lvchange -ay $vg/$lv1
++lvchange -an $vg/$lv1
++lvremove $vg/$lv1
 +
- 		if (!dev_get_direct_block_sizes(pvl->pv->dev, &physical_block_size, &logical_block_size))
- 			continue;
++lvcreate -n $lv1 -l8 -an $vg "$dev1"
++lvconvert -y --type cache --cachedevice "$dev2" --chunksize 128k $vg/$lv1
++check lv_field $vg/$lv1 segtype cache
++check lv_field $vg/${lv1}_cache_cvol segtype linear -a
++check lv_field $vg/${lv1}_cache_cvol lv_size "60.00m"
++lvs -o chunksize $vg/$lv1 |tee out
++grep 128.00k out
+ lvchange -ay $vg/$lv1
+ lvchange -an $vg/$lv1
+ lvremove $vg/$lv1
+diff --git a/tools/command-lines.in b/tools/command-lines.in
+index 5a8523966..8ea65ca83 100644
+--- a/tools/command-lines.in
++++ b/tools/command-lines.in
+@@ -505,7 +505,7 @@ DESC: Add a writecache to an LV, using a specified cache device.
+ RULE: all and lv_is_visible
  
+ lvconvert --type cache --cachedevice PV LV_linear_striped_raid_thinpool
+-OO: OO_LVCONVERT, --cachesize SizeMB, --cachesettings String
++OO: OO_LVCONVERT, --cachesize SizeMB, --cachesettings String, --chunksize SizeKB
+ ID: lvconvert_to_cache_with_device
+ DESC: Add a cache to an LV, using a specified cache device.
+ RULE: all and lv_is_visible
 
 
