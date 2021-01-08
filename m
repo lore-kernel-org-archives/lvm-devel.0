@@ -1,64 +1,79 @@
-From: David Teigland <teigland@sourceware.org>
-Date: Thu,  7 Jan 2021 19:33:54 +0000 (GMT)
-Subject: main - lvconvert: chunksize option was missing with cachedevice
-Message-ID: <20210107193354.59F273851C35@sourceware.org>
+From: Marian Csontos <mcsontos@sourceware.org>
+Date: Fri,  8 Jan 2021 09:11:17 +0000 (GMT)
+Subject: main - pre-release
+Message-ID: <20210108091117.51837386F419@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=e9503f257ad2e61742b0cfe2780b72739d1d3978
-Commit:        e9503f257ad2e61742b0cfe2780b72739d1d3978
-Parent:        b84a9927b78727efffbb257a61e9e95a648cdfab
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Thu Jan 7 13:30:48 2021 -0600
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Thu Jan 7 13:30:48 2021 -0600
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=3e8bd8d1bd70691f09a170785836aeb4f83154e6
+Commit:        3e8bd8d1bd70691f09a170785836aeb4f83154e6
+Parent:        e9503f257ad2e61742b0cfe2780b72739d1d3978
+Author:        Marian Csontos <mcsontos@redhat.com>
+AuthorDate:    Thu Jan 7 17:22:29 2021 +0100
+Committer:     Marian Csontos <mcsontos@redhat.com>
+CommitterDate: Fri Jan 8 10:07:25 2021 +0100
 
-lvconvert: chunksize option was missing with cachedevice
+pre-release
 
 ---
- test/shell/cachevol-cachedevice.sh | 13 +++++++++++++
- tools/command-lines.in             |  2 +-
- 2 files changed, 14 insertions(+), 1 deletion(-)
+ VERSION      | 2 +-
+ VERSION_DM   | 2 +-
+ WHATS_NEW    | 9 +++++++--
+ WHATS_NEW_DM | 4 ++--
+ 4 files changed, 11 insertions(+), 6 deletions(-)
 
-diff --git a/test/shell/cachevol-cachedevice.sh b/test/shell/cachevol-cachedevice.sh
-index 3831ee9d4..2695c989b 100644
---- a/test/shell/cachevol-cachedevice.sh
-+++ b/test/shell/cachevol-cachedevice.sh
-@@ -144,6 +144,19 @@ lvconvert -y --type cache --cachedevice "$dev2" $vg/$lv1
- check lv_field $vg/$lv1 segtype cache
- check lv_field $vg/${lv1}_cache_cvol segtype linear -a
- check lv_field $vg/${lv1}_cache_cvol lv_size "60.00m"
-+lvs -o chunksize $vg/$lv1 |tee out
-+grep 64.00k out
-+lvchange -ay $vg/$lv1
-+lvchange -an $vg/$lv1
-+lvremove $vg/$lv1
-+
-+lvcreate -n $lv1 -l8 -an $vg "$dev1"
-+lvconvert -y --type cache --cachedevice "$dev2" --chunksize 128k $vg/$lv1
-+check lv_field $vg/$lv1 segtype cache
-+check lv_field $vg/${lv1}_cache_cvol segtype linear -a
-+check lv_field $vg/${lv1}_cache_cvol lv_size "60.00m"
-+lvs -o chunksize $vg/$lv1 |tee out
-+grep 128.00k out
- lvchange -ay $vg/$lv1
- lvchange -an $vg/$lv1
- lvremove $vg/$lv1
-diff --git a/tools/command-lines.in b/tools/command-lines.in
-index 5a8523966..8ea65ca83 100644
---- a/tools/command-lines.in
-+++ b/tools/command-lines.in
-@@ -505,7 +505,7 @@ DESC: Add a writecache to an LV, using a specified cache device.
- RULE: all and lv_is_visible
+diff --git a/VERSION b/VERSION
+index a6ba8f65a..55f5caa3f 100644
+--- a/VERSION
++++ b/VERSION
+@@ -1 +1 @@
+-2.03.11(2)-git (2020-08-09)
++2.03.11(2) (2021-01-08)
+diff --git a/VERSION_DM b/VERSION_DM
+index f44bc5f06..6b83c6cee 100644
+--- a/VERSION_DM
++++ b/VERSION_DM
+@@ -1 +1 @@
+-1.02.175-git (2020-08-09)
++1.02.175 (2021-01-08)
+diff --git a/WHATS_NEW b/WHATS_NEW
+index 452a6317e..18f503202 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,7 @@
+-Version 2.03.11 - 
+-==================================
++Version 2.03.11 - 08th January 2021
++===================================
++  Fix pvck handling MDA at offset different from 4096.
++  Partial or degraded activation of writecache is not allowed.
+   Enhance error handling for fsadm and hanled correct fsck result.
+   Dmeventd lvm plugin ignores higher reserved_stack lvm.conf values.
+   Support using BLKZEROOUT for clearing devices.
+@@ -20,6 +22,9 @@ Version 2.03.11 -
+   Enhance --use-policy percentage rounding.
+   Configure --with-vdo and --with-writecache as internal segments.
+   Improving VDO man page examples.
++  Allow pvmove of writecache origin.
++  Report integrity fields.
++  Integrity volumes defaults to journal mode.
+   Switch code base to use flexible array syntax.
+   Fix 64bit math when calculation cachevol size.
+   Preserve uint32_t for seqno handling.
+diff --git a/WHATS_NEW_DM b/WHATS_NEW_DM
+index 9624c0d78..1ba361d3a 100644
+--- a/WHATS_NEW_DM
++++ b/WHATS_NEW_DM
+@@ -1,5 +1,5 @@
+-Version 1.02.175 - 
+-===================================
++Version 1.02.175 - 08th January 2021
++====================================
  
- lvconvert --type cache --cachedevice PV LV_linear_striped_raid_thinpool
--OO: OO_LVCONVERT, --cachesize SizeMB, --cachesettings String
-+OO: OO_LVCONVERT, --cachesize SizeMB, --cachesettings String, --chunksize SizeKB
- ID: lvconvert_to_cache_with_device
- DESC: Add a cache to an LV, using a specified cache device.
- RULE: all and lv_is_visible
+ Version 1.02.173 - 09th August 2020
+ ===================================
 
 
