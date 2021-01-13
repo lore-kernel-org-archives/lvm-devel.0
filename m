@@ -1,70 +1,63 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Wed, 13 Jan 2021 10:09:19 +0000 (GMT)
-Subject: stable-2.02 - tests: check thin-pool corner case allocs
-Message-ID: <20210113100919.F09BE384A01E@sourceware.org>
+Date: Wed, 13 Jan 2021 10:09:18 +0000 (GMT)
+Subject: stable-2.02 - alloc: enhance estimation of sufficient_pes_free
+Message-ID: <20210113100918.CC65D385B805@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=b9d31664dc8272e58c4233d34dcde8ce1447314f
-Commit:        b9d31664dc8272e58c4233d34dcde8ce1447314f
-Parent:        194630be52b6459b331fcf338539c82263125162
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=194630be52b6459b331fcf338539c82263125162
+Commit:        194630be52b6459b331fcf338539c82263125162
+Parent:        b98c3346350b7c270140c1f21fda0436876e16e8
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Jan 12 23:26:16 2021 +0100
+AuthorDate:    Tue Jan 12 15:58:07 2021 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Wed Jan 13 10:41:17 2021 +0100
+CommitterDate: Wed Jan 13 10:40:46 2021 +0100
 
-tests: check thin-pool corner case allocs
+alloc: enhance estimation of sufficient_pes_free
 
+Since commit 77fdc17d70e62cab75efaaf0dad02493b948610d always include
+log_len size into needed extents - however now we may need sometimes
+more extents then necessary - mainly when multiple PVs are involved
+into allocation.
+
+Add logs_still_needed into calculation of sufficient_pes_free()
 ---
- test/shell/lvcreate-thin-limits.sh | 30 ++++++++++++++++++++++++++----
- 1 file changed, 26 insertions(+), 4 deletions(-)
+ lib/metadata/lv_manip.c | 10 +++++++---
+ 1 file changed, 7 insertions(+), 3 deletions(-)
 
-diff --git a/test/shell/lvcreate-thin-limits.sh b/test/shell/lvcreate-thin-limits.sh
-index 6a9c33d82..5dcc160dc 100644
---- a/test/shell/lvcreate-thin-limits.sh
-+++ b/test/shell/lvcreate-thin-limits.sh
-@@ -27,13 +27,35 @@ aux can_use_16T || skip
- aux have_thin 1 0 0 || skip
- which mkfs.ext4 || skip
+diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
+index e96a04a69..346ec9f77 100644
+--- a/lib/metadata/lv_manip.c
++++ b/lib/metadata/lv_manip.c
+@@ -1700,11 +1700,13 @@ static uint32_t _mirror_log_extents(uint32_t region_size, uint32_t pe_size, uint
  
--aux prepare_pvs 1 16777216
-+# 16T device
-+aux prepare_pvs 2 8388608
- get_devs
+ /* Is there enough total space or should we give up immediately? */
+ static int _sufficient_pes_free(struct alloc_handle *ah, struct dm_list *pvms,
+-				uint32_t allocated, uint32_t extents_still_needed)
++				uint32_t allocated, uint32_t log_still_needed,
++				uint32_t extents_still_needed)
+ {
+ 	uint32_t area_extents_needed = (extents_still_needed - allocated) * ah->area_count / ah->area_multiple;
+ 	uint32_t parity_extents_needed = (extents_still_needed - allocated) * ah->parity_count / ah->area_multiple;
+-	uint32_t metadata_extents_needed = ah->alloc_and_split_meta ? 0 : ah->metadata_area_count * RAID_METADATA_AREA_LEN + ah->log_len; /* One each */
++	uint32_t metadata_extents_needed = (ah->alloc_and_split_meta ? 0 : ah->metadata_area_count * RAID_METADATA_AREA_LEN) +
++	    (log_still_needed ? ah->log_len : 0); /* One each */
+ 	uint64_t total_extents_needed = (uint64_t)area_extents_needed + parity_extents_needed + metadata_extents_needed;
+ 	uint32_t free_pes = pv_maps_size(pvms);
  
--vgcreate $SHARED -s 4K "$vg" "${DEVICES[@]}"
-+# gives 16777215M device
-+vgcreate $SHARED -s 4M "$vg" "${DEVICES[@]}"
+@@ -3200,7 +3202,9 @@ static int _allocate(struct alloc_handle *ah,
+ 		old_allocated = alloc_state.allocated;
+ 		log_debug_alloc("Trying allocation using %s policy.", get_alloc_string(alloc));
  
--not lvcreate -T -L15.995T --poolmetadatasize 5G $vg/pool
-+# For 1st. pass only single PV
-+lvcreate -l100%PV --name $lv1 $vg "$dev2"
+-		if (!ah->approx_alloc && !_sufficient_pes_free(ah, pvms, alloc_state.allocated, ah->new_extents))
++		if (!ah->approx_alloc && !_sufficient_pes_free(ah, pvms, alloc_state.allocated,
++							       alloc_state.log_area_count_still_needed,
++							       ah->new_extents))
+ 			goto_out;
  
--lvs -ao+seg_pe_ranges $vg
-+for i in 1 0
-+do
-+	SIZE=$(get vg_field "$vg" vg_free --units m)
-+	SIZE=${SIZE%%\.*}
-+
-+	# ~16T - 2 * 5G + something  -> should not fit
-+	not lvcreate -Zn -T -L$(( SIZE - 2 * 5 * 1024 + 1 )) --poolmetadatasize 5G $vg/pool
-+
-+	check vg_field "$vg" lv_count "$i"
-+
-+	# Should fit  data + metadata + pmspare
-+	lvcreate -Zn -T -L$(( SIZE - 2 * 5 * 1024 )) --poolmetadatasize 5G $vg/pool
-+
-+	check vg_field "$vg" vg_free "0"
-+
-+	lvs -ao+seg_pe_ranges $vg
-+
-+        # Remove everything for 2nd. pass
-+	lvremove -ff $vg
-+done
- 
- vgremove -ff $vg
+ 		_init_alloc_parms(ah, &alloc_parms, alloc, prev_lvseg,
 
 
