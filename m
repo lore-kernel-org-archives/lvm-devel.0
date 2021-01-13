@@ -1,101 +1,53 @@
-From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Wed, 13 Jan 2021 13:18:31 +0000 (GMT)
-Subject: main - tests: check full zeroing of thin-pool metadata
-Message-ID: <20210113131831.4A498386F47E@sourceware.org>
+From: David Teigland <teigland@sourceware.org>
+Date: Wed, 13 Jan 2021 19:39:44 +0000 (GMT)
+Subject: main - integrity: fix segfault on error path when replacing images
+Message-ID: <20210113193944.5D5D4386F80B@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=ff1324d5952db6f79c2c916c4f4520b3338abf4f
-Commit:        ff1324d5952db6f79c2c916c4f4520b3338abf4f
-Parent:        71162b2b4e09c08f08457d923dcc552251bd3c83
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed Jan 13 00:19:38 2021 +0100
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Wed Jan 13 12:54:45 2021 +0100
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=0534723a2de62da913dfd88d40ee6f8b8b93ac56
+Commit:        0534723a2de62da913dfd88d40ee6f8b8b93ac56
+Parent:        ff1324d5952db6f79c2c916c4f4520b3338abf4f
+Author:        David Teigland <teigland@redhat.com>
+AuthorDate:    Wed Jan 13 13:33:19 2021 -0600
+Committer:     David Teigland <teigland@redhat.com>
+CommitterDate: Wed Jan 13 13:39:33 2021 -0600
 
-tests: check full zeroing of thin-pool metadata
+integrity: fix segfault on error path when replacing images
 
-Check zeroing works on whole thin-pool metadata device.
+When adding replacement raid+integrity images (lvconvert --repair
+after a raid image is lost), various errors can cause the function
+to exit with an error.  On this exit path, the function attempts
+to revert new images that had been created but not yet used.  The
+cleanup failed to account for the fact that not all images needed
+to be reverted.
 ---
- test/shell/thin-zero-meta.sh | 68 ++++++++++++++++++++++++++++++++++++++++++++
- 1 file changed, 68 insertions(+)
+ lib/metadata/integrity_manip.c | 10 +++++++---
+ 1 file changed, 7 insertions(+), 3 deletions(-)
 
-diff --git a/test/shell/thin-zero-meta.sh b/test/shell/thin-zero-meta.sh
-new file mode 100644
-index 000000000..6a15a7388
---- /dev/null
-+++ b/test/shell/thin-zero-meta.sh
-@@ -0,0 +1,68 @@
-+#!/usr/bin/env bash
-+
-+# Copyright (C) 2021 Red Hat, Inc. All rights reserved.
-+#
-+# This copyrighted material is made available to anyone wishing to use,
-+# modify, copy, or redistribute it subject to the terms and conditions
-+# of the GNU General Public License v.2.
-+#
-+# You should have received a copy of the GNU General Public License
-+# along with this program; if not, write to the Free Software Foundation,
-+# Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
-+
-+# Test how zeroing of thin-pool metadata works
-+
-+SKIP_WITH_LVMLOCKD=1
-+SKIP_WITH_LVMPOLLD=1
-+
-+export LVM_TEST_THIN_REPAIR_CMD=${LVM_TEST_THIN_REPAIR_CMD-/bin/false}
-+
-+. lib/inittest
-+
-+#
-+# Main
-+#
-+aux have_thin 1 3 0 || skip
-+aux have_cache 1 3 0 || skip
-+
-+aux prepare_vg 3 40000
-+
-+# Create mostly-zero devs only front of it has some 'real' back-end
-+aux zero_dev "$dev1" "$(( $(get first_extent_sector "$dev1") + 8192 )):"
-+aux zero_dev "$dev2" "$(( $(get first_extent_sector "$dev2") + 8192 )):"
-+aux zero_dev "$dev3" "$(( $(get first_extent_sector "$dev3") + 8192 )):"
-+
-+# Prepare randomly filled 4M LV on dev2
-+lvcreate -L16G -n $lv1 $vg "$dev2"
-+dd if=/dev/urandom of="$DM_DEV_DIR/$vg/$lv1" bs=1M count=4 oflag=direct  || true
-+lvremove -f $vg
-+
-+for i in 0 1
-+do
-+	aux lvmconf "allocation/zero_metadata = $i"
-+
-+	# Lvm2 should allocate metadata on dev2
-+	lvcreate -T -L10G --poolmetadatasize 16G $vg/pool "$dev1" "$dev2"
-+	lvchange -an $vg
-+
-+	lvs -ao+seg_pe_ranges $vg
-+	lvchange -ay $vg/pool_tmeta --yes
-+
-+	# Skip past 1.2M which is 'created' by  thin-pool initialization
-+	hexdump -C -n 200 -s 2000000 "$DM_DEV_DIR/$vg/pool_tmeta" | tee out
-+
-+	# When fully zeroed, it should be zero - so almost no output from hexdump
-+	case "$i" in
-+	0) test $(wc -l < out) -ge 10 ;; # should not be zeroed
-+	1) test $(wc -l < out) -le 10 ;; # should be zeroed
-+	esac
-+
-+	lvremove -f $vg/pool
-+done
-+
-+# Check lvm2 spots error during full zeroing of metadata device
-+aux error_dev "$dev2" "$(( $(get first_extent_sector "$dev2") + 32 )):"
-+not lvcreate -T -L10G --poolmetadatasize 16G $vg/pool "$dev1" "$dev2" |& tee err
-+grep "Failed to initialize logical volume" err
-+
-+vgremove -ff $vg
+diff --git a/lib/metadata/integrity_manip.c b/lib/metadata/integrity_manip.c
+index 53ab1b3fa..abf90d850 100644
+--- a/lib/metadata/integrity_manip.c
++++ b/lib/metadata/integrity_manip.c
+@@ -773,9 +773,13 @@ int lv_add_integrity_to_raid(struct logical_volume *lv, struct integrity_setting
+ bad:
+ 	log_error("Failed to add integrity.");
+ 
+-	for (s = 0; s < revert_meta_lvs; s++) {
+-		if (!lv_remove(imeta_lvs[s]))
+-			log_error("New integrity metadata LV may require manual removal.");
++	if (revert_meta_lvs) {
++		for (s = 0; s < DEFAULT_RAID_MAX_IMAGES; s++) {
++			if (!imeta_lvs[s])
++				continue;
++			if (!lv_remove(imeta_lvs[s]))
++				log_error("New integrity metadata LV may require manual removal.");
++		}
+ 	}
+ 			       
+ 	if (!vg_write(vg) || !vg_commit(vg))
 
 
