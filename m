@@ -1,52 +1,70 @@
-From: David Teigland <teigland@sourceware.org>
-Date: Fri,  8 Jan 2021 18:13:20 +0000 (GMT)
-Subject: main - lvmlockd: sscanf buffer size warnings
-Message-ID: <20210108181320.91C1038438A3@sourceware.org>
+From: Zdenek Kabelac <zkabelac@sourceware.org>
+Date: Wed, 13 Jan 2021 10:09:19 +0000 (GMT)
+Subject: stable-2.02 - tests: check thin-pool corner case allocs
+Message-ID: <20210113100919.F09BE384A01E@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=a4c56a3bc342ab42fdfc9c9538b3fa7feba49412
-Commit:        a4c56a3bc342ab42fdfc9c9538b3fa7feba49412
-Parent:        6308365d485a741d36c98060a00e95892fc3d21f
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Fri Jan 8 11:59:28 2021 -0600
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Fri Jan 8 12:13:05 2021 -0600
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=b9d31664dc8272e58c4233d34dcde8ce1447314f
+Commit:        b9d31664dc8272e58c4233d34dcde8ce1447314f
+Parent:        194630be52b6459b331fcf338539c82263125162
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Tue Jan 12 23:26:16 2021 +0100
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Wed Jan 13 10:41:17 2021 +0100
 
-lvmlockd: sscanf buffer size warnings
+tests: check thin-pool corner case allocs
 
 ---
- daemons/lvmlockd/lvmlockd-core.c | 6 ++++--
- 1 file changed, 4 insertions(+), 2 deletions(-)
+ test/shell/lvcreate-thin-limits.sh | 30 ++++++++++++++++++++++++++----
+ 1 file changed, 26 insertions(+), 4 deletions(-)
 
-diff --git a/daemons/lvmlockd/lvmlockd-core.c b/daemons/lvmlockd/lvmlockd-core.c
-index fea8ee6cf..c4abf66be 100644
---- a/daemons/lvmlockd/lvmlockd-core.c
-+++ b/daemons/lvmlockd/lvmlockd-core.c
-@@ -896,8 +896,9 @@ static int read_adopt_file(struct list_head *vg_lockd)
- 				goto fail;
+diff --git a/test/shell/lvcreate-thin-limits.sh b/test/shell/lvcreate-thin-limits.sh
+index 6a9c33d82..5dcc160dc 100644
+--- a/test/shell/lvcreate-thin-limits.sh
++++ b/test/shell/lvcreate-thin-limits.sh
+@@ -27,13 +27,35 @@ aux can_use_16T || skip
+ aux have_thin 1 0 0 || skip
+ which mkfs.ext4 || skip
  
- 			memset(vg_uuid, 0, sizeof(vg_uuid));
-+			memset(lm_type_str, 0, sizeof(lm_type_str));
+-aux prepare_pvs 1 16777216
++# 16T device
++aux prepare_pvs 2 8388608
+ get_devs
  
--			if (sscanf(adopt_line, "VG: %63s %64s %16s %64s",
-+			if (sscanf(adopt_line, "VG: %63s %64s %15s %64s",
- 				   vg_uuid, ls->vg_name, lm_type_str, ls->vg_args) != 4) {
- 				goto fail;
- 			}
-@@ -916,8 +917,9 @@ static int read_adopt_file(struct list_head *vg_lockd)
- 			r->type = LD_RT_LV;
+-vgcreate $SHARED -s 4K "$vg" "${DEVICES[@]}"
++# gives 16777215M device
++vgcreate $SHARED -s 4M "$vg" "${DEVICES[@]}"
  
- 			memset(vg_uuid, 0, sizeof(vg_uuid));
-+			memset(mode, 0, sizeof(mode));
+-not lvcreate -T -L15.995T --poolmetadatasize 5G $vg/pool
++# For 1st. pass only single PV
++lvcreate -l100%PV --name $lv1 $vg "$dev2"
  
--			if (sscanf(adopt_line, "LV: %64s %64s %s %8s %u",
-+			if (sscanf(adopt_line, "LV: %64s %64s %s %7s %u",
- 				   vg_uuid, r->name, r->lv_args, mode, &r->version) != 5) {
- 				goto fail;
- 			}
+-lvs -ao+seg_pe_ranges $vg
++for i in 1 0
++do
++	SIZE=$(get vg_field "$vg" vg_free --units m)
++	SIZE=${SIZE%%\.*}
++
++	# ~16T - 2 * 5G + something  -> should not fit
++	not lvcreate -Zn -T -L$(( SIZE - 2 * 5 * 1024 + 1 )) --poolmetadatasize 5G $vg/pool
++
++	check vg_field "$vg" lv_count "$i"
++
++	# Should fit  data + metadata + pmspare
++	lvcreate -Zn -T -L$(( SIZE - 2 * 5 * 1024 )) --poolmetadatasize 5G $vg/pool
++
++	check vg_field "$vg" vg_free "0"
++
++	lvs -ao+seg_pe_ranges $vg
++
++        # Remove everything for 2nd. pass
++	lvremove -ff $vg
++done
+ 
+ vgremove -ff $vg
 
 
