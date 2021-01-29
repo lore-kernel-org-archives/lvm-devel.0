@@ -1,129 +1,69 @@
-From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Fri, 29 Jan 2021 17:38:04 +0100
+From: David Teigland <teigland@redhat.com>
+Date: Fri, 29 Jan 2021 10:59:54 -0600
 Subject: [PATCH] config: set external_device_info_source=none if udev isn't running
-In-Reply-To: <968c9f098c342091aa041a61caadcffb3e2434d4.camel@suse.com>
+In-Reply-To: <e45a5da341edd2593dce5ef087039f84c20338f4.camel@suse.com>
 References: <20210127172859.956-1-mwilck@suse.com>
 	<f671d5ea-5cb0-a690-f393-c1f733ffdd14@redhat.com>
 	<cdf7d365c12b9cac29be22a12392e3f9860b1560.camel@suse.com>
 	<7e4ceb01-953b-abbd-cab1-f77374d9d37e@gmail.com>
 	<e45a5da341edd2593dce5ef087039f84c20338f4.camel@suse.com>
-	<fb6bb401-8641-1d3b-800b-b35fd1acf04d@redhat.com>
-	<968c9f098c342091aa041a61caadcffb3e2434d4.camel@suse.com>
-Message-ID: <1a60a927-7601-2acf-ac32-44c55a19ebd6@redhat.com>
+Message-ID: <20210129165954.GA7644@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Dne 29. 01. 21 v 14:02 Martin Wilck napsal(a):
-> On Fri, 2021-01-29 at 12:11 +0100, Zdenek Kabelac wrote:
->>
->> The reason why "udev" is not default is simply because ATM it's
->> unreliable
->> source of info. It works well only for couple device types - but for
->> lot of
->> others it is not actual (i.e. network storage) (there are even no
->> events
->> generated for updating udev)
+
+Hi Martin, thanks for the patch, it looked obviously correct on first
+glance, but with this discussion perhaps I missed something, so I'll have
+to go back and look again.
+
+On Fri, Jan 29, 2021 at 11:07:12AM +0100, Martin Wilck wrote:
+> Of course *udev* works "in my main system". But *LVM2* does not: with
+> the default setting "external_device_info_source=none", it ignores udev
+> properties of devices. This is the source of lots of subtle errors and
+> race conditions during device setup. Therefore we changed the setting
+> to "udev".
 > 
-> What kind of network storage?
-> 
->> If we would have thought for a minute that 'udev' is good generic
->> default - it would be already done....
-> 
-> The udev source (DEV_EXT_UDEV) is only used in 5 places, all in the
-> filtering code path:
-> 
->   a) dev_is_md_component()
->   b) _dev_is_mpath()
->   c) dev_is_partitioned()
->   d) _dev_is_fwraid()
->   e) check_pv_min_size()
-> 
-> I think we agree that "udev" is more reliable than "none" in case a)
-> and b). For which of the above is "udev" unreliable, why, and why can't
-> it be fixed?
+> How do you handle that in Fedora? I took the liberty to look at the
+> Fedora 33 package, and it doesn't change default from "none" to
+> "udev".?So by common sense, Fedora is going to suffer from the same
+> general problem that (open)SUSE sees: With "none", lvm can detect
+> multipath or MD components only "after the fact", i.e. after multipathd
+> or mdadm have grabbed them already. If pvscan and multipathd start up
+> simultaneously, it's anyones guess who "wins" (*). With "udev", that
+> can't happen, and that's why "udev" should be made the default.
 
-Unfortunately I can't agree.
+You're right that it's extremely fragile, and we rely on the complex
+systemd/udev/rules/etc machinery for all the components to work just
+right.  Obviously they often don't (especially with many devices), and
+it's a serious headache to sort out what happened, with few options to
+actually fix or workaround problems.  In our experience we've managed to
+get external=none to work pretty well, although not perfect.  It sounds
+like it's not working quite as well in your case, which I'd guess is due
+to slight differences in the udev-related machinery.  We usually end up
+adjusting udev rules when problems come up.  As Zdenek has mentioned,
+there are also issues with external=udev (although we don't have as much
+experience to give details).  I don't think external=udev would be a big
+improvement, at least in our case.  Given my level of disregard for udev
+overall (trying to be polite about that), I now prefer that we do
+everything we can natively, without depending on udev.  I think the best
+approach is to use native detection *plus* udev info in spots, so we get
+all possible info, without relying entirely on udev.  So I think the
+answer is to use any/all sources of info that are available at the time we
+need it, and not configure one or the other statically.
 
-Udev ONLY works well on systems without any problems. As soon as your
-devices start to be temporarily missing or you have 'duplicate' device,
-the whole udevDB becomes invalid.
+> (I'm cc'ing Ben Marzinski, as he should know this problem very well,
+> and knows Fedora, too).
 
-While with lvm2 you can filter out particular device set - with udev the
-system cannot be trusted at all.
+Quite a while ago I talked with Ben about making lvm read
+/etc/multipath/wwids to detect mpath components.  I wrote an initial patch
+which I never finished since there wasn't interest.  Now things have
+changed, and I also have a new feature (devices file) that will make it
+easier to use the mpath wwids.  Ben also mentioned a new library that we
+might also look at using to get the the mpath wwids.
 
-> 
->>> How do you handle that in Fedora?
->> Generic advice is - configure proper filters.
-> 
-> IMHO filters aren't the solution. LVM offers
-
-With good and IMHO not so hard to configure allowance filters,
-user easily solve any problems - as lvm2 will ONLY see
-valid PVs and all other devices will be ignored.
-
-IMHO every user should set 'minimal' set of visible devices to speedup all 
-lvm2 commands and avoid unnecessary access to all other devices.
-
-> "multipath_component_detection", which suggests that
-> no additional filtering is necessary. Unfortunately
-> "multipath_component_detection" is broken without
-> 'external_device_info_source="udev"'.
-
-It is not broken, it just only works with 'active' mpath devices.
-User typically doesn't want to run lvm2 command while mpath is
-not running, so problem usually happens on misconfigured system.
-With running mpath - detection works.
-Also note - lvm2 will usually report errors when it spots multiple legs with 
-duplicate info.
-
-So external info is only needed for systems which have mpath stopped/
-disable and yet the user wants/tries to manipulate with VG  - I'd not
-say this as a most common use-case.
-
-> LVM filters are hard to get right, even for experienced admins. Not
-> because of the regexes, but because of the many different names under
-> which devices appear under /dev. Telling admins that they need to
-
-Hint - only real device nodes should be used - anything based on udev created 
-symlinks is by its design broken anyway (due to missing 'duplication' handling 
-- aka last arrival with the pathname wins all).
-
-> fiddle with filter rules just to make multipath work sounds like
-> something I'd have said 10 years ago, but not in 2021.
-
-Not really a fault of lvm2 here - we would like to use some
-reliable source of info - but udev in our testings can't deliver
-correct info even on loaded system.
-There is not even existing mechanism to synchronize with udev.
-So there would need to be ton of sleeps and retries everywhere...
-
->> 1st. we should define what kind of problem you try to solve
->> and eventually open BZ (since list is not best for tracking
->> progress).
->>
->> Is is detection of 'mpath leg' while mpath is offline
->> and user is not able to set his filters properly ?
-> 
-> See above. Our aspiration is to make multipath+md+LVM setups work out-
-> of-the-box, reliably.
-
-I hope you do not think we have different goals - but the acceptable
-solution must be reliable - not something that works only on
-shiny day with few disks and as soon as something becomes invalid, the 
-returned info can be very misleading.
-We just hope SID can finally move this udev to a more usable state.
-
-But please open BZ and list cases you think are broken - and we will
-see what's the best way to handle them.
-
-But from our experience and testing - enabling udev source give us so many 
-problems, we simply could not keep it as default.
-
-Regards
-
-Zdenek
+Dave
 
 
