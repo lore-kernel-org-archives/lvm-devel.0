@@ -1,69 +1,78 @@
-From: David Teigland <teigland@redhat.com>
-Date: Fri, 29 Jan 2021 11:34:44 -0600
-Subject: [PATCH] config: set external_device_info_source=none if udev isn't running
-In-Reply-To: <968c9f098c342091aa041a61caadcffb3e2434d4.camel@suse.com>
-References: <20210127172859.956-1-mwilck@suse.com>
-	<f671d5ea-5cb0-a690-f393-c1f733ffdd14@redhat.com>
-	<cdf7d365c12b9cac29be22a12392e3f9860b1560.camel@suse.com>
-	<7e4ceb01-953b-abbd-cab1-f77374d9d37e@gmail.com>
-	<e45a5da341edd2593dce5ef087039f84c20338f4.camel@suse.com>
-	<fb6bb401-8641-1d3b-800b-b35fd1acf04d@redhat.com>
-	<968c9f098c342091aa041a61caadcffb3e2434d4.camel@suse.com>
-Message-ID: <20210129173444.GB7644@redhat.com>
+From: David Teigland <teigland@sourceware.org>
+Date: Fri, 29 Jan 2021 18:11:51 +0000 (GMT)
+Subject: main - writecache: use cleaner message instead of table reload
+Message-ID: <20210129181151.BBE40385EC58@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On Fri, Jan 29, 2021 at 02:02:11PM +0100, Martin Wilck wrote:
-> LVM filters are hard to get right, even for experienced admins. Not
-> because of the regexes, but because of the many different names under
-> which devices appear under /dev. Telling admins that they need to
-> fiddle with filter rules just to make multipath work sounds like
-> something I'd have said 10 years ago, but not in 2021.
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=a690d16d29ff7d5e0cc1adb1fed2621efd5fafa4
+Commit:        a690d16d29ff7d5e0cc1adb1fed2621efd5fafa4
+Parent:        f08ef238564a547477f18c3668c616d497d7f3f8
+Author:        David Teigland <teigland@redhat.com>
+AuthorDate:    Wed Jan 27 16:23:00 2021 -0600
+Committer:     David Teigland <teigland@redhat.com>
+CommitterDate: Thu Jan 28 15:14:25 2021 -0600
 
-I agree.
+writecache: use cleaner message instead of table reload
 
-> > There will be also a new 'filtering' introduced in a form a basic
-> > acceptance 
-> > list of devices - that may be seen in some cases as more simple to
-> > use.
-> 
-> Perhaps this will improve matters, perhaps it'll add more confusion.?
-> I don't know enough to tell.
+When detaching writecache, make the first stage send a message
+to dm-writecache to set the cleaner option.  This is instead of
+reloading the dm table with the cleaner option set.  Reloading
+the table causes udev to process/probe the dm dev, which gets
+stalled because of the writeback activity, and the stalled udev
+in turn stalls the lvconvert command when it tries to sync with
+udev events.
 
-The filter problems, among many others, were the motivation to create a
-new feature "devices file" which I'm planning to merge into lvm soon.
+When getting writecache status we do not need to get
+open_count or read_head info, which can cause extra steps.
+---
+ lib/metadata/writecache_manip.c | 10 +++++++---
+ tools/lvconvert.c               |  2 ++
+ 2 files changed, 9 insertions(+), 3 deletions(-)
 
-Latest devel branch (see latest -N suffix):
-https://sourceware.org/git/?p=lvm2.git;a=shortlog;h=refs/heads/dev-dct-devicesid-22
-
-The basic idea is that a new lvm config file (the devices file) lists the
-devices that lvm can use, and lvm will not even look at devices outside
-that list.  So the user tells lvm which devices it should use, and that's
-all lvm sees.  (With an optional allowance for pvcreate to implicitly mean
-"use this device", to make it easier for people to begin using this.)
-
-The devices are primarily identified by a WWID, or other similar
-identifier.  lvm commands are used manage that file, but it can be
-manually edited also.  It replaces filters, and will make a number of hard
-problems in lvm just go away:  the problem of unstable dev names in
-filters goes away, mpath/md component detection goes away (you wouldn't
-include component devs in the device file), the system mistakenly
-activating PVs belonging to VMs goes away.
-
-This is obviously not an immediate solution to the problems you're having,
-but it's what we have in mind as the best solution, available fairly soon.
-For immediate fixes I still think native detection supplemented with udev
-or other info is ideal.  Don't feel constrained by the old definitions of
-config settings - those config settings can be superceded by new ones.
-
-The new devices file code, even when the devices file is not enabled, will
-make it easier to consume /etc/multipath/wwids (since the devices file is
-using wwids itself).  So we can begin improving mpath component detection
-before users enable the devices file.
-
-Dave
+diff --git a/lib/metadata/writecache_manip.c b/lib/metadata/writecache_manip.c
+index 5004aa989..8150d0781 100644
+--- a/lib/metadata/writecache_manip.c
++++ b/lib/metadata/writecache_manip.c
+@@ -75,7 +75,7 @@ static int _get_writecache_kernel_status(struct cmd_context *cmd,
+ 		return 0;
+ 	}
+ 
+-	if (!lv_info_with_seg_status(cmd, first_seg(lv), &status, 1, 1)) {
++	if (!lv_info_with_seg_status(cmd, first_seg(lv), &status, 0, 0)) {
+ 		log_error("Failed to get device mapper status for %s", display_lvname(lv));
+ 		goto fail;
+ 	}
+@@ -434,8 +434,12 @@ int lv_writecache_set_cleaner(struct logical_volume *lv)
+ 	seg->writecache_settings.cleaner_set = 1;
+ 
+ 	if (lv_is_active(lv)) {
+-		if (!lv_update_and_reload(lv)) {
+-			log_error("Failed to update VG and reload LV.");
++		if (!vg_write(lv->vg) || !vg_commit(lv->vg)) {
++			log_error("Failed to update VG.");
++			return 0;
++		}
++		if (!lv_writecache_message(lv, "cleaner")) {
++			log_error("Failed to set writecache cleaner for %s.", display_lvname(lv));
+ 			return 0;
+ 		}
+ 	} else {
+diff --git a/tools/lvconvert.c b/tools/lvconvert.c
+index 432396567..7b74afbe2 100644
+--- a/tools/lvconvert.c
++++ b/tools/lvconvert.c
+@@ -5720,6 +5720,8 @@ static int _lvconvert_detach_writecache_when_clean(struct cmd_context *cmd,
+ 		return 0;
+ 	}
+ 
++	log_debug("detach writecache check clean reading vg %s", id->vg_name);
++
+ 	vg = vg_read(cmd, id->vg_name, NULL, READ_FOR_UPDATE, lockd_state, &error_flags, NULL);
+ 
+ 	if (!vg) {
 
 
