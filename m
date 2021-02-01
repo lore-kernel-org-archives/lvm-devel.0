@@ -1,68 +1,39 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Mon,  1 Feb 2021 11:47:45 +0000 (GMT)
-Subject: main - tests: check for cache support presence
-Message-ID: <20210201114745.5F9E13836C6F@sourceware.org>
+Date: Mon,  1 Feb 2021 11:47:46 +0000 (GMT)
+Subject: main - aux: update thin_restore_needs_more_volumes
+Message-ID: <20210201114746.82C983836C6F@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=b26e565ee5d27314a58cba31e0a017d927698440
-Commit:        b26e565ee5d27314a58cba31e0a017d927698440
-Parent:        19ddad12cae6b8c6a8011876302dd968ae3ddbeb
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=25b942a8acd35c44ea39ff1840d8c4af0bed12d6
+Commit:        25b942a8acd35c44ea39ff1840d8c4af0bed12d6
+Parent:        b26e565ee5d27314a58cba31e0a017d927698440
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Jan 22 18:45:00 2021 +0100
+AuthorDate:    Fri Jan 22 20:17:57 2021 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Mon Feb 1 12:13:49 2021 +0100
 
-tests: check for cache support presence
+aux: update thin_restore_needs_more_volumes
 
+Version 0.8.5-2.el7 needs to return 0;
 ---
- test/shell/dev-aliases.sh | 14 +++++++-------
- 1 file changed, 7 insertions(+), 7 deletions(-)
+ test/lib/aux.sh | 1 +
+ 1 file changed, 1 insertion(+)
 
-diff --git a/test/shell/dev-aliases.sh b/test/shell/dev-aliases.sh
-index c97cd5da2..c3e4c7c53 100644
---- a/test/shell/dev-aliases.sh
-+++ b/test/shell/dev-aliases.sh
-@@ -1,6 +1,6 @@
- #!/usr/bin/env bash
- 
--# Copyright (C) 2012 Red Hat, Inc. All rights reserved.
-+# Copyright (C) 2021 Red Hat, Inc. All rights reserved.
- #
- # This copyrighted material is made available to anyone wishing to use,
- # modify, copy, or redistribute it subject to the terms and conditions
-@@ -14,9 +14,9 @@ SKIP_WITH_LVMPOLLD=1
- 
- . lib/inittest
- 
--aux prepare_devs 3
-+aux have_cache 1 10 0 || skip
- 
--vgcreate $vg $dev1 $dev2 $dev3
-+aux prepare_vg 3
- 
- #
- # This lvconvert command will deactivate LV1, then internally create a new
-@@ -37,13 +37,13 @@ vgcreate $vg $dev1 $dev2 $dev3
- # wiping code would fail to open that stale name.
- #
- 
--lvcreate -n $lv1 -L32M $vg $dev1
--lvcreate -n $lv2 -L16M $vg $dev2
-+lvcreate -n $lv1 -L32M $vg "$dev1"
-+lvcreate -n $lv2 -L16M $vg "$dev2"
- lvconvert -y --type cache-pool --poolmetadata $lv2 --cachemode writeback $vg/$lv1 --config='devices { preferred_names=["/dev/mapper/"] }' 
- lvremove -y $vg/$lv1
- 
--lvcreate -n $lv1 -L32M $vg $dev1
--lvcreate -n $lv2 -L16M $vg $dev2
-+lvcreate -n $lv1 -L32M $vg "$dev1"
-+lvcreate -n $lv2 -L16M $vg "$dev2"
- lvconvert -y --type cache-pool --poolmetadata $lv2 $vg/$lv1
- lvremove -y $vg/$lv1
- 
+diff --git a/test/lib/aux.sh b/test/lib/aux.sh
+index 5dbb580be..31741ac74 100644
+--- a/test/lib/aux.sh
++++ b/test/lib/aux.sh
+@@ -1471,6 +1471,7 @@ thin_restore_needs_more_volumes() {
+ 	case $("$LVM_TEST_THIN_RESTORE_CMD" -V) in
+ 		# With older version of thin-tool we got slightly more compact metadata
+ 		0.[0-6]*|0.7.0*) return 0 ;;
++		0.8.5-2.el7) return 0 ;;
+ 	esac
+ 	return 1
+ }
 
 
