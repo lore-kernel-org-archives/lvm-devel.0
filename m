@@ -1,42 +1,40 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Mon,  1 Feb 2021 14:05:31 +0000 (GMT)
-Subject: main - tests: avoid killing test machines with kernel bug
-Message-ID: <20210201140531.6AB34386F448@sourceware.org>
+Date: Mon,  1 Feb 2021 20:34:53 +0000 (GMT)
+Subject: main - tests: increase required target version
+Message-ID: <20210201203453.5AA0239450E8@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=6e8a32e4fd424ef599549ac1036ce795a8ae3837
-Commit:        6e8a32e4fd424ef599549ac1036ce795a8ae3837
-Parent:        bfafd2b4e962b8b6bce3355843dec47b4842ed12
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=48dfc388f7bde964d8e4d6816f27de858c984fb3
+Commit:        48dfc388f7bde964d8e4d6816f27de858c984fb3
+Parent:        6e8a32e4fd424ef599549ac1036ce795a8ae3837
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Mon Feb 1 15:02:38 2021 +0100
+AuthorDate:    Mon Feb 1 20:10:07 2021 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Mon Feb 1 15:02:38 2021 +0100
+CommitterDate: Mon Feb 1 20:10:07 2021 +0100
 
-tests: avoid killing test machines with kernel bug
+tests: increase required target version
 
-Bug 1916891  still applies:
-
-https://bugzilla.redhat.com/show_bug.cgi?id=1916891
+Require 1.7.0 for raid0.
 ---
- test/shell/lvconvert-raid-reshape-stripes-load-reload.sh | 2 +-
+ test/shell/lvdisplay-raid.sh | 2 +-
  1 file changed, 1 insertion(+), 1 deletion(-)
 
-diff --git a/test/shell/lvconvert-raid-reshape-stripes-load-reload.sh b/test/shell/lvconvert-raid-reshape-stripes-load-reload.sh
-index b79561fbb..3920da1a5 100644
---- a/test/shell/lvconvert-raid-reshape-stripes-load-reload.sh
-+++ b/test/shell/lvconvert-raid-reshape-stripes-load-reload.sh
-@@ -22,7 +22,7 @@ which mkfs.ext4 || skip
- aux have_raid 1 13 2 || skip
+diff --git a/test/shell/lvdisplay-raid.sh b/test/shell/lvdisplay-raid.sh
+index 0c6bfba34..95205ba81 100644
+--- a/test/shell/lvdisplay-raid.sh
++++ b/test/shell/lvdisplay-raid.sh
+@@ -18,7 +18,7 @@ SKIP_WITH_LVMPOLLD=1
  
- case "$(uname -r)" in
--  5.[89]*|3.10.0-862*) die "Cannot run this test on unfixed kernel." ;;
-+  5.[891]*|3.10.0-862*) die "Cannot run this test on unfixed kernel." ;;
- esac
+ . lib/inittest
  
- mount_dir="mnt"
+-aux have_raid 1 3 0 || skip
++aux have_raid 1 7 0 || skip
+ 
+ aux prepare_vg 6
+ get_devs
 
 
