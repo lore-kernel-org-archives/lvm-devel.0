@@ -1,120 +1,101 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Mon,  1 Feb 2021 13:38:27 +0000 (GMT)
-Subject: stable-2.02 - tests: check 16G thin pool metadata size
-Message-ID: <20210201133827.655F93836C59@sourceware.org>
+Date: Mon,  1 Feb 2021 13:38:28 +0000 (GMT)
+Subject: stable-2.02 - tests: update thin and cache checked messages
+Message-ID: <20210201133828.87C283834437@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=f6025cdc733220ef8db8f3d4d7415e66a90705d7
-Commit:        f6025cdc733220ef8db8f3d4d7415e66a90705d7
-Parent:        1728f411834c20a93f465e99dedad5afbca45ea1
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=99bdbc53ba391e1f58833d0bdf3df935ce6f73f2
+Commit:        99bdbc53ba391e1f58833d0bdf3df935ce6f73f2
+Parent:        f6025cdc733220ef8db8f3d4d7415e66a90705d7
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Sat Jan 30 13:13:34 2021 +0100
+AuthorDate:    Sat Jan 30 13:13:17 2021 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Mon Feb 1 14:35:53 2021 +0100
 
-tests: check 16G thin pool metadata size
+tests: update thin and cache checked messages
 
+Slightly changed messages for allocation of pool metadata.
 ---
- test/shell/thin-16g.sh | 88 ++++++++++++++++++++++++++++++++++++++++++++++++++
- 1 file changed, 88 insertions(+)
+ test/shell/lvconvert-thin.sh    |  2 +-
+ test/shell/lvcreate-cache.sh    | 12 +++++-------
+ test/shell/lvcreate-thin-big.sh | 10 +++++-----
+ 3 files changed, 11 insertions(+), 13 deletions(-)
 
-diff --git a/test/shell/thin-16g.sh b/test/shell/thin-16g.sh
-new file mode 100644
-index 000000000..ee7e22ed2
---- /dev/null
-+++ b/test/shell/thin-16g.sh
-@@ -0,0 +1,88 @@
-+#!/usr/bin/env bash
+diff --git a/test/shell/lvconvert-thin.sh b/test/shell/lvconvert-thin.sh
+index 1f8d2edb9..bfda8e50d 100644
+--- a/test/shell/lvconvert-thin.sh
++++ b/test/shell/lvconvert-thin.sh
+@@ -129,7 +129,7 @@ lvcreate -L1T -n $lv1 $vg
+ lvcreate -L32G -n $lv2 $vg
+ # Warning about bigger then needed
+ lvconvert --yes --thinpool $vg/$lv1 --poolmetadata $vg/$lv2 2>&1 | tee err
+-grep "WARNING: Maximum" err
++grep -i "maximum" err
+ lvremove -f $vg
+ 
+ 
+diff --git a/test/shell/lvcreate-cache.sh b/test/shell/lvcreate-cache.sh
+index 066303360..f41b797df 100644
+--- a/test/shell/lvcreate-cache.sh
++++ b/test/shell/lvcreate-cache.sh
+@@ -27,7 +27,6 @@ aux prepare_vg 5 80000
+ 
+ aux lvmconf 'global/cache_disabled_features = [ "policy_smq" ]'
+ 
+-
+ #######################
+ # Cache_Pool creation #
+ #######################
+@@ -173,17 +172,16 @@ dmsetup table ${vg}-$lv1 | grep cache  # ensure it is loaded in kernel
+ 
+ lvremove -f $vg
+ 
+-
+ # Check minimum cache pool metadata size
+-lvcreate -l 1 --type cache-pool --poolmetadatasize 1 $vg 2>out
+-grep "WARNING: Minimum" out
++lvcreate -l 1 --type cache-pool --poolmetadatasize 1 $vg 2>&1 | tee out
++grep -i "minimal" out
 +
-+# Copyright (C) 2021 Red Hat, Inc. All rights reserved.
-+#
-+# This copyrighted material is made available to anyone wishing to use,
-+# modify, copy, or redistribute it subject to the terms and conditions
-+# of the GNU General Public License v.2.
-+#
-+# You should have received a copy of the GNU General Public License
-+# along with this program; if not, write to the Free Software Foundation,
-+# Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
-+
-+# Test usability of 16g thin pool metadata  LV
-+
-+
-+SKIP_WITH_LVMPOLLD=1
-+
-+. lib/inittest
-+
-+aux have_thin 1 0 0 || skip
-+
-+aux prepare_vg 1 50000
-+
-+lvcreate -T -L10 --poolmetadatasize 16g $vg/pool
-+check lv_field $vg/pool_tmeta size "<15.88g"
-+lvremove -f $vg
-+
-+# Cropped way
-+lvcreate -T -L10 --poolmetadatasize 16g --config 'allocation/thin_pool_crop_metadata=1' $vg/pool
-+check lv_field $vg/pool_tmeta size "15.81g"
-+lvremove -f $vg
-+
-+lvcreate -L16G -n meta $vg
-+lvcreate -L10  -n pool $vg
-+lvconvert --yes --thinpool $vg/pool --poolmetadata meta
-+# Uncropped size 33554432 sectors - 16GiB
-+dmsetup table ${vg}-pool_tmeta | grep 33554432
-+lvremove -f $vg
-+
-+# Uses 20G metadata volume, but crops the size in DM table
-+lvcreate -L20G -n meta $vg
-+lvcreate -L10  -n pool $vg
-+lvconvert --yes --thinpool $vg/pool --poolmetadata meta --config 'allocation/thin_pool_crop_metadata=1'
-+check lv_field $vg/lvol0_pmspare size "16.00g"
-+# Size should be cropped to 33161216 sectors  ~15.81GiB
-+dmsetup table ${vg}-pool_tmeta | grep 33161216
-+
-+# Also size remains unchanged with activation has no cropping,
-+# but metadata have no CROP_METADATA flag set
-+lvchange -an $vg
-+lvchange -ay $vg
-+# Size still stays cropped to 33161216 sectors  ~15.81GiB
-+dmsetup table ${vg}-pool_tmeta | grep 33161216
-+lvremove -f $vg
-+
-+# Minimal size is 2M
-+lvcreate -L1M -n meta $vg
-+lvcreate -L10 -n pool $vg
-+not lvconvert --yes --thinpool $vg/pool --poolmetadata meta
-+lvremove -f $vg
-+
-+# Uses 20G metadata volume, but crops the size in DM table
-+lvcreate -L1 --poolmetadatasize 10G -T $vg/pool
-+lvresize -L+10G $vg/pool_tmeta --config 'allocation/thin_pool_crop_metadata=1'
-+check lv_field $vg/lvol0_pmspare size "15.81g"
-+# Size should be cropped to 33161216 sectors  ~15.81GiB
-+dmsetup table ${vg}-pool_tmeta | grep 33161216
-+
-+# Without cropping we can grop to ~15.88GiB
-+lvresize -L+10G $vg/pool_tmeta
-+check lv_field $vg/lvol0_pmspare size "<15.88g"
-+lvremove -f $vg
-+
-+# User has already 'bigger' metadata and wants them uncropped
-+lvcreate -L16G -n meta $vg
-+lvcreate -L10  -n pool $vg
-+lvconvert --yes --thinpool $vg/pool --poolmetadata meta --config 'allocation/thin_pool_crop_metadata=1'
-+
-+# No change with cropping
-+lvresize -l+1 $vg/pool_tmeta --config 'allocation/thin_pool_crop_metadata=1'
-+dmsetup table ${vg}-pool_tmeta | grep 33161216
-+
-+# Resizes to 'uncropped' size 16GiB with ANY size
-+lvresize -l+1 $vg/pool_tmeta
-+dmsetup table ${vg}-pool_tmeta | grep 33554432
-+check lv_field $vg/pool_tmeta size "16.00g"
-+
-+vgremove -ff $vg
+ 
+ # FIXME: This test is failing in allocator with smaller VG sizes
+-lvcreate -l 1 --type cache-pool --poolmetadatasize 17G $vg 2>out
+-grep "WARNING: Maximum" out
++lvcreate -l 1 --type cache-pool --poolmetadatasize 17G $vg 2>&1 | tee out
++grep -i "maximum" out
+ 
+ lvremove -f $vg
+-
+ ########################################
+ # Cache conversion and r/w permissions #
+ ########################################
+diff --git a/test/shell/lvcreate-thin-big.sh b/test/shell/lvcreate-thin-big.sh
+index 0b622b7a9..254903548 100644
+--- a/test/shell/lvcreate-thin-big.sh
++++ b/test/shell/lvcreate-thin-big.sh
+@@ -31,14 +31,14 @@ vgcreate $SHARED -s 64K "$vg" "${DEVICES[@]}"
+ 
+ # Size 0 is not valid
+ invalid lvcreate -L4M --chunksize 128 --poolmetadatasize 0 -T $vg/pool1 2>out
+-lvcreate -Zn -L4M --chunksize 128 --poolmetadatasize 16k -T $vg/pool1 2>out
+-grep "WARNING: Minimum" out
++lvcreate -Zn -L4M --chunksize 128 --poolmetadatasize 16k -T $vg/pool1 2>&1 >out
++grep -i "minimal" out
+ # FIXME: metadata allocation fails, if PV doesn't have at least 16GB
+ # i.e. pool metadata device cannot be multisegment
+-lvcreate -Zn -L4M --chunksize 64k --poolmetadatasize 17G -T $vg/pool2 2>out
+-grep "WARNING: Maximum" out
++lvcreate -Zn -L4M --chunksize 64k --poolmetadatasize 17G -T $vg/pool2 2>&1 >out
++grep "maximum" out
+ check lv_field $vg/pool1_tmeta size "2.00m"
+-check lv_field $vg/pool2_tmeta size "15.81g"
++check lv_field $vg/pool2_tmeta size "<15.88g"
+ 
+ # Check we do report correct percent values.
+ lvcreate --type zero -L3G $vg -n pool3
 
 
