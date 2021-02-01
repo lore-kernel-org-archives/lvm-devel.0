@@ -1,58 +1,41 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Mon,  1 Feb 2021 11:47:37 +0000 (GMT)
-Subject: main - allocation: report allocation error instead of crash
-Message-ID: <20210201114737.54CFC3836C71@sourceware.org>
+Date: Mon,  1 Feb 2021 11:47:38 +0000 (GMT)
+Subject: main - WHATS_NEW: updates
+Message-ID: <20210201114738.7A9B23836C6F@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=be0bf43d742a127435962d7075608519f18d4cdc
-Commit:        be0bf43d742a127435962d7075608519f18d4cdc
-Parent:        45f0c48365457b2ca4cec163f4435327f0978bd3
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=8f5695fa71e0b293e774cfbaf7af7985896cd47a
+Commit:        8f5695fa71e0b293e774cfbaf7af7985896cd47a
+Parent:        be0bf43d742a127435962d7075608519f18d4cdc
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Mon Feb 1 10:24:19 2021 +0100
+AuthorDate:    Mon Feb 1 12:12:23 2021 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Mon Feb 1 12:13:49 2021 +0100
 
-allocation: report allocation error instead of crash
+WHATS_NEW: updates
 
-Current allocation limitation requires to fit metadata/log LV on
-a single PV. This is usually not a big problem, but since
-thin-pool and cache-pool is using this for allocating extents
-for their metadata LVs it might be eventually causing errors
-where the remaining free spaces for large metadata size is spread
-over several PV.
 ---
- lib/metadata/lv_manip.c | 9 ++++++---
- 1 file changed, 6 insertions(+), 3 deletions(-)
+ WHATS_NEW | 5 +++++
+ 1 file changed, 5 insertions(+)
 
-diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
-index 093cea464..c82038269 100644
---- a/lib/metadata/lv_manip.c
-+++ b/lib/metadata/lv_manip.c
-@@ -2109,15 +2109,18 @@ static int _alloc_parallel_area(struct alloc_handle *ah, uint32_t max_to_allocat
- 			aa[smeta].pv = pva->map->pv;
- 			aa[smeta].pe = pva->start;
- 			aa[smeta].len = ah->log_len;
--
-+			if (aa[smeta].len > pva->count) {
-+				log_error("Metadata does not fit on a single PV.");
-+				return 0;
-+			}
- 			log_debug_alloc("Allocating parallel metadata area %" PRIu32
- 					" on %s start PE %" PRIu32
- 					" length %" PRIu32 ".",
- 					(smeta - (ah->area_count + ah->parity_count)),
- 					pv_dev_name(aa[smeta].pv), aa[smeta].pe,
--					ah->log_len);
-+					aa[smeta].len);
- 
--			consume_pv_area(pva, ah->log_len);
-+			consume_pv_area(pva, aa[smeta].len);
- 			dm_list_add(&ah->alloced_areas[smeta], &aa[smeta].list);
- 		}
- 		aa[s].len = (ah->alloc_and_split_meta && !ah->split_metadata_is_allocated) ? len - ah->log_len : len;
+diff --git a/WHATS_NEW b/WHATS_NEW
+index ef1afaabd..c6be9b481 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,10 @@
+ Version 2.03.12 - 
+ ===================================
++  Allocation prints better error when metadata cannot fit on a single PV.
++  Pvmove can better resolve full thin-pool tree move.
++  Limit pool metadata spare to 16GiB.
++  Improves convertsion and allocation of pool metadata.
++  Support thin pool metadata 15.88GiB, adds 64MiB, thin_pool_crop_metadata=0.
+   Enhance lvdisplay to report raid availiable/partial.
+   Support online rename of VDO pools.
+   Imporove removal of pmspare when last pool is removed.
 
 
