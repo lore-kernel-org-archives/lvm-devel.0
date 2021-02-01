@@ -1,134 +1,114 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Mon,  1 Feb 2021 13:38:22 +0000 (GMT)
-Subject: stable-2.02 - cache: reuse code for metadata min_max
-Message-ID: <20210201133822.D35AC3834437@sourceware.org>
+Date: Mon,  1 Feb 2021 13:38:23 +0000 (GMT)
+Subject: stable-2.02 - pvmove: automatically resolve whole stacked LV
+Message-ID: <20210201133824.001603836C59@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=dd2501d64b02ae8426e501771272e9445be2ed8c
-Commit:        dd2501d64b02ae8426e501771272e9445be2ed8c
-Parent:        72b12033a9ffb45b858d738b956dc39f71782ecd
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=862a86982cef87779e361987fbcc62f15729ecef
+Commit:        862a86982cef87779e361987fbcc62f15729ecef
+Parent:        dd2501d64b02ae8426e501771272e9445be2ed8c
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Sat Jan 30 16:32:51 2021 +0100
+AuthorDate:    Mon Jan 25 01:17:14 2021 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Mon Feb 1 14:35:53 2021 +0100
 
-cache: reuse code for metadata min_max
+pvmove: automatically resolve whole stacked LV
 
-Use update_pool_metadata_min_max() which is shared with
-thin-pool metadata min-max updating.
+When passing 'pvmove --name arg' try to automatically move
+all associated dependencies with given LV.
 
-Gives improved messages when converting volumes to metadata.
+i.e. 'pvmove --name thinpool vg vgnew'
+moves all thins and data and metadata LV into a new VG vgnew.
 ---
- lib/metadata/cache_manip.c       | 40 ++++++++++++++--------------------------
- lib/metadata/metadata-exported.h |  1 +
- tools/lvconvert.c                |  1 +
- tools/lvcreate.c                 |  1 +
- 4 files changed, 17 insertions(+), 26 deletions(-)
+ lib/metadata/metadata.c | 57 ++++++++++++++++++++++++++++++-------------------
+ 1 file changed, 35 insertions(+), 22 deletions(-)
 
-diff --git a/lib/metadata/cache_manip.c b/lib/metadata/cache_manip.c
-index 05a6efdf1..ffce73761 100644
---- a/lib/metadata/cache_manip.c
-+++ b/lib/metadata/cache_manip.c
-@@ -161,6 +161,7 @@ int update_cache_pool_params(struct cmd_context *cmd,
- 			     unsigned attr,
- 			     uint32_t pool_data_extents,
- 			     uint32_t *pool_metadata_extents,
-+			     struct logical_volume *metadata_lv,
- 			     int *chunk_size_calc_method, uint32_t *chunk_size)
- {
- 	uint64_t min_meta_size;
-@@ -206,39 +207,26 @@ int update_cache_pool_params(struct cmd_context *cmd,
- 	if (!validate_cache_chunk_size(cmd, *chunk_size))
- 		return_0;
+diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
+index 6c4683aa3..da53b32ef 100644
+--- a/lib/metadata/metadata.c
++++ b/lib/metadata/metadata.c
+@@ -377,14 +377,33 @@ int move_pv(struct volume_group *vg_from, struct volume_group *vg_to,
+ 	return _move_pv(vg_from, vg_to, pv_name, 1);
+ }
  
--	min_meta_size = _cache_min_metadata_size((uint64_t) pool_data_extents * extent_size, *chunk_size);
-+	if ((uint64_t) *chunk_size > (uint64_t) pool_data_extents * extent_size) {
-+		log_error("Size of %s data volume cannot be smaller than chunk size %s.",
-+			  segtype->name, display_size(cmd, *chunk_size));
-+		return 0;
++struct vg_from_to {
++	struct volume_group *from;
++	struct volume_group *to;
++};
++
++static int _move_pvs_used_by_lv_cb(struct logical_volume *lv, void *data)
++{
++	struct vg_from_to *v = (struct vg_from_to*) data;
++	struct lv_segment *lvseg;
++	unsigned s;
++
++	dm_list_iterate_items(lvseg, &lv->segments)
++		for (s = 0; s < lvseg->area_count; s++)
++			if (seg_type(lvseg, s) == AREA_PV)
++				if (!_move_pv(v->from, v->to,
++					      pv_dev_name(seg_pv(lvseg, s)), 0))
++					return_0;
++
++	return 1;
++}
++
+ int move_pvs_used_by_lv(struct volume_group *vg_from,
+ 			struct volume_group *vg_to,
+ 			const char *lv_name)
+ {
+-	struct lv_segment *lvseg;
+-	unsigned s;
++	struct vg_from_to data = { .from = vg_from, .to = vg_to };
+ 	struct lv_list *lvl;
+-	struct logical_volume *lv;
+ 
+ 	/* FIXME: handle tags */
+ 	if (!(lvl = find_lv_in_vg(vg_from, lv_name))) {
+@@ -393,28 +412,22 @@ int move_pvs_used_by_lv(struct volume_group *vg_from,
+ 		return 0;
+ 	}
+ 
+-	if (vg_bad_status_bits(vg_from, RESIZEABLE_VG) ||
+-	    vg_bad_status_bits(vg_to, RESIZEABLE_VG))
++	if (vg_bad_status_bits(vg_from, RESIZEABLE_VG)) {
++		log_error("Cannot move PV(s) from non resize volume group %s.", vg_from->name);
+ 		return 0;
 +	}
  
--	/* Round up to extent size */
--	if (min_meta_size % extent_size)
--		min_meta_size += extent_size - min_meta_size % extent_size;
-+	min_meta_size = _cache_min_metadata_size((uint64_t) pool_data_extents * extent_size, *chunk_size);
-+	min_meta_size = dm_round_up(min_meta_size, extent_size);
+-	dm_list_iterate_items(lvseg, &lvl->lv->segments) {
+-		if (lvseg->log_lv)
+-			if (!move_pvs_used_by_lv(vg_from, vg_to,
+-						     lvseg->log_lv->name))
+-				return_0;
+-		for (s = 0; s < lvseg->area_count; s++) {
+-			if (seg_type(lvseg, s) == AREA_PV) {
+-				if (!_move_pv(vg_from, vg_to,
+-					      pv_dev_name(seg_pv(lvseg, s)), 0))
+-					return_0;
+-			} else if (seg_type(lvseg, s) == AREA_LV) {
+-				lv = seg_lv(lvseg, s);
+-				if (!move_pvs_used_by_lv(vg_from, vg_to,
+-							     lv->name))
+-				    return_0;
+-			}
+-		}
++	if (vg_bad_status_bits(vg_to, RESIZEABLE_VG)) {
++		log_error("Cannot move PV(s) to non resize volume group %s.", vg_to->name);
++		return 0;
+ 	}
++
++	if (!for_each_sub_lv(lvl->lv, _move_pvs_used_by_lv_cb, &data))
++		return_0;
++
++	if (!_move_pvs_used_by_lv_cb(lvl->lv, &data))
++		return_0;
++
+ 	return 1;
+ }
  
- 	if (!pool_metadata_size)
- 		pool_metadata_size = min_meta_size;
- 
--	if (pool_metadata_size > (2 * DEFAULT_CACHE_POOL_MAX_METADATA_SIZE)) {
--		pool_metadata_size = 2 * DEFAULT_CACHE_POOL_MAX_METADATA_SIZE;
--		if (*pool_metadata_extents)
--			log_warn("WARNING: Maximum supported pool metadata size is %s.",
--				 display_size(cmd, pool_metadata_size));
--	} else if (pool_metadata_size < min_meta_size) {
--		if (*pool_metadata_extents)
--			log_warn("WARNING: Minimum required pool metadata size is %s "
--				 "(needs extra %s).",
--				 display_size(cmd, min_meta_size),
--				 display_size(cmd, min_meta_size - pool_metadata_size));
--		pool_metadata_size = min_meta_size;
--	}
--
--	if (!(*pool_metadata_extents =
--	      extents_from_size(cmd, pool_metadata_size, extent_size)))
-+	if (!update_pool_metadata_min_max(cmd, extent_size,
-+					  min_meta_size,
-+					  (2 * DEFAULT_CACHE_POOL_MAX_METADATA_SIZE),
-+					  &pool_metadata_size,
-+					  metadata_lv,
-+					  pool_metadata_extents))
- 		return_0;
- 
--	if ((uint64_t) *chunk_size > (uint64_t) pool_data_extents * extent_size) {
--		log_error("Size of %s data volume cannot be smaller than chunk size %s.",
--			  segtype->name, display_size(cmd, *chunk_size));
--		return 0;
--	}
--
- 	log_verbose("Preferred pool metadata size %s.",
- 		    display_size(cmd, (uint64_t)*pool_metadata_extents * extent_size));
- 
-diff --git a/lib/metadata/metadata-exported.h b/lib/metadata/metadata-exported.h
-index 629b3a457..16b5e654c 100644
---- a/lib/metadata/metadata-exported.h
-+++ b/lib/metadata/metadata-exported.h
-@@ -1282,6 +1282,7 @@ int update_cache_pool_params(struct cmd_context *cmd,
- 			     unsigned attr,
- 			     uint32_t pool_data_extents,
- 			     uint32_t *pool_metadata_extents,
-+			     struct logical_volume *metadata_lv,
- 			     int *chunk_size_calc_method, uint32_t *chunk_size);
- int validate_lv_cache_chunk_size(struct logical_volume *pool_lv, uint32_t chunk_size);
- int validate_lv_cache_create_pool(const struct logical_volume *pool_lv);
-diff --git a/tools/lvconvert.c b/tools/lvconvert.c
-index 50f438672..b885f9241 100644
---- a/tools/lvconvert.c
-+++ b/tools/lvconvert.c
-@@ -3093,6 +3093,7 @@ static int _lvconvert_to_pool(struct cmd_context *cmd,
- 					      pool_segtype, target_attr,
- 					      lv->le_count,
- 					      &meta_extents,
-+					      metadata_lv,
- 					      &chunk_calc,
- 					      &chunk_size))
- 			goto_bad;
-diff --git a/tools/lvcreate.c b/tools/lvcreate.c
-index d54f152a3..0bbb03301 100644
---- a/tools/lvcreate.c
-+++ b/tools/lvcreate.c
-@@ -402,6 +402,7 @@ static int _update_extents_params(struct volume_group *vg,
- 						      lp->segtype, lp->target_attr,
- 						      lp->extents,
- 						      &lp->pool_metadata_extents,
-+						      NULL,
- 						      &lp->thin_chunk_size_calc_policy,
- 						      &lp->chunk_size))
- 				return_0;
 
 
