@@ -1,122 +1,51 @@
-From: David Teigland <teigland@sourceware.org>
-Date: Mon,  8 Feb 2021 17:25:00 +0000 (GMT)
-Subject: main - fix for md component detection changes
-Message-ID: <20210208172500.E562C385702C@sourceware.org>
+From: Zdenek Kabelac <zkabelac@sourceware.org>
+Date: Mon,  8 Feb 2021 22:44:58 +0000 (GMT)
+Subject: main - pvscan: support disabled event_activation
+Message-ID: <20210208224458.23E22384A02A@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=018bba897ca13521988eb36a89fd054e15feb231
-Commit:        018bba897ca13521988eb36a89fd054e15feb231
-Parent:        df4c50396bfce6586a063d04861f9d1d8b1aeb31
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Mon Feb 8 11:23:42 2021 -0600
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Mon Feb 8 11:23:42 2021 -0600
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=2be585b79c71b8f70c0252af5f09dbd5e6103030
+Commit:        2be585b79c71b8f70c0252af5f09dbd5e6103030
+Parent:        018bba897ca13521988eb36a89fd054e15feb231
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Mon Feb 8 16:28:18 2021 +0100
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Mon Feb 8 23:18:44 2021 +0100
 
-fix for md component detection changes
+pvscan: support disabled event_activation
 
-And some fine tuning of when the checks are applied
-in "start" mode.
+In past we had this control with use_lvmetad check for
+pvscan --cache -aay
+
+Howerer this got lost with lvmetad removal commit:
+117160b27e510dceb1ed6acf995115c040acd88d
+
+When user sets lvm.conf global/event_activation=0
+pvscan service will no longer auto activate any LVs on appeared PVs.
 ---
- lib/cache/lvmcache.c | 56 +++++++++++++++++++++++++++++++++++++---------------
- 1 file changed, 40 insertions(+), 16 deletions(-)
+ tools/pvscan.c | 6 ++++++
+ 1 file changed, 6 insertions(+)
 
-diff --git a/lib/cache/lvmcache.c b/lib/cache/lvmcache.c
-index 5c573286d..e05530a53 100644
---- a/lib/cache/lvmcache.c
-+++ b/lib/cache/lvmcache.c
-@@ -1056,7 +1056,8 @@ void lvmcache_extra_md_component_checks(struct cmd_context *cmd)
- 	struct device *dev;
- 	const char *device_hint;
- 	uint64_t devsize, pvsize;
--	int do_check;
-+	int do_check_size, do_check_name;
-+	int md_check_start;
+diff --git a/tools/pvscan.c b/tools/pvscan.c
+index dc24f4e34..f7aaf8ab9 100644
+--- a/tools/pvscan.c
++++ b/tools/pvscan.c
+@@ -1581,6 +1581,12 @@ int pvscan_cache_cmd(struct cmd_context *cmd, int argc, char **argv)
  
- 	/*
- 	 * use_full_md_check: if set then no more needs to be done here,
-@@ -1073,9 +1074,11 @@ void lvmcache_extra_md_component_checks(struct cmd_context *cmd)
- 	 * function is looking for.
- 	 */
- 	if (!cmd->md_component_detection || cmd->use_full_md_check ||
--	    !strcmp(cmd->md_component_checks, "none") || !strcmp(cmd->md_component_checks, "start"))
-+	    !strcmp(cmd->md_component_checks, "none"))
- 		return;
+ 	dm_list_init(&complete_vgnames);
  
-+	md_check_start = !strcmp(cmd->md_component_checks, "start");
++	if (do_activate &&
++	    !find_config_tree_bool(cmd, global_event_activation_CFG, NULL)) {
++		log_verbose("Ignoring pvscan --cache -aay because event_activation is disabled.");
++		return ECMD_PROCESSED;
++	}
 +
- 	/*
- 	 * We want to avoid extra scanning for end-of-device md superblocks
- 	 * whenever possible, since it can add up to a lot of extra io if we're
-@@ -1093,7 +1096,8 @@ void lvmcache_extra_md_component_checks(struct cmd_context *cmd)
- 			device_hint = _get_pvsummary_device_hint(dev->pvid);
- 			pvsize = _get_pvsummary_size(dev->pvid);
- 			devsize = dev->size;
--			do_check = 0;
-+			do_check_size = 0;
-+			do_check_name = 0;
+ 	if (arg_is_set(cmd, major_ARG) + arg_is_set(cmd, minor_ARG))
+ 		devno_args = 1;
  
- 			if (!devsize && !dev_get_size(dev, &devsize))
- 				log_debug("No size for %s.", dev_name(dev));
-@@ -1103,23 +1107,43 @@ void lvmcache_extra_md_component_checks(struct cmd_context *cmd)
- 			 * can be common, but not as often as PV larger.
- 			 */
- 			if (pvsize && devsize && (pvsize != devsize))
--				do_check = 1;
--			else if (device_hint && !strcmp(device_hint, "/dev/md"))
--				do_check = 1;
-+				do_check_size = 1;
-+			if (device_hint && !strncmp(device_hint, "/dev/md", 7))
-+				do_check_name = 1;
-+
-+			if (!do_check_size && !do_check_name)
-+				continue;
- 
--			if (do_check) {
--				log_debug("extra md component check %llu %llu device_hint %s dev %s",
-+			/*
-+			 * If only the size is different (which can be fairly
-+			 * common for non-md-component devs) and the user has
-+			 * set "start" to disable full md checks, then skip it.
-+			 * If the size is different, *and* the device name hint
-+			 * looks like an md device, then it seems very likely
-+			 * to be an md component, so do a full check on it even
-+			 * if the user has set "start".
-+			 * 
-+			 * In "auto" mode, do a full check if either the size
-+			 * or the name indicates a possible md component.
-+			 */
-+			if (do_check_size && !do_check_name && md_check_start) {
-+				log_debug("extra md component check skip %llu %llu device_hint %s dev %s",
- 					  (unsigned long long)pvsize, (unsigned long long)devsize,
- 					  device_hint ?: "none", dev_name(dev));
-+				continue;
-+			}
- 
--				if (dev_is_md_component(dev, NULL, 1)) {
--					log_debug("dropping PV from md component %s", dev_name(dev));
--					dev->flags &= ~DEV_SCAN_FOUND_LABEL;
--					/* lvmcache_del will also delete vginfo if info was last one */
--					lvmcache_del(info);
--					lvmcache_del_dev_from_duplicates(dev);
--					cmd->filter->wipe(cmd, cmd->filter, dev, NULL);
--				}
-+			log_debug("extra md component check %llu %llu device_hint %s dev %s",
-+				  (unsigned long long)pvsize, (unsigned long long)devsize,
-+				  device_hint ?: "none", dev_name(dev));
-+
-+			if (dev_is_md_component(dev, NULL, 1)) {
-+				log_debug("dropping PV from md component %s", dev_name(dev));
-+				dev->flags &= ~DEV_SCAN_FOUND_LABEL;
-+				/* lvmcache_del will also delete vginfo if info was last one */
-+				lvmcache_del(info);
-+				lvmcache_del_dev_from_duplicates(dev);
-+				cmd->filter->wipe(cmd, cmd->filter, dev, NULL);
- 			}
- 		}
- 	}
 
 
