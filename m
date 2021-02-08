@@ -1,53 +1,41 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Mon,  8 Feb 2021 22:45:00 +0000 (GMT)
-Subject: main - thin: check for overprovisioning only once
-Message-ID: <20210208224500.6A169389681C@sourceware.org>
+Date: Mon,  8 Feb 2021 22:44:59 +0000 (GMT)
+Subject: main - thinpool: use lv_config_profil for crop_metadata
+Message-ID: <20210208224459.47F2B384A02A@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=eed060f0408738eb8191ee6bcef4fa93b9b87511
-Commit:        eed060f0408738eb8191ee6bcef4fa93b9b87511
-Parent:        99e168162aeac82d8ed4634add4bdd05cf208315
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=99e168162aeac82d8ed4634add4bdd05cf208315
+Commit:        99e168162aeac82d8ed4634add4bdd05cf208315
+Parent:        2be585b79c71b8f70c0252af5f09dbd5e6103030
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Sun Feb 7 00:37:37 2021 +0100
+AuthorDate:    Thu Feb 4 23:26:08 2021 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Mon Feb 8 23:18:44 2021 +0100
 
-thin: check for overprovisioning only once
+thinpool: use lv_config_profil for crop_metadata
 
+Better support for thin-pools with individual profiles introduced
+in the recent patch b4212be2e7e8797bbf8f9a166347659cc39ba075.
 ---
- lib/metadata/lv_manip.c | 9 +++++----
- 1 file changed, 5 insertions(+), 4 deletions(-)
+ lib/metadata/lv_manip.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
 
 diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
-index 1ab9627dc..5c528a50b 100644
+index 29c95ff63..1ab9627dc 100644
 --- a/lib/metadata/lv_manip.c
 +++ b/lib/metadata/lv_manip.c
-@@ -5830,10 +5830,6 @@ static int _lvresize_volume(struct logical_volume *lv,
- 			      lp->extents - lv->le_count,
- 			      pvh, alloc, lp->approx_alloc))
- 		return_0;
--	/* Check for over provisioning only when lv_extend() passed,
--	 * ATM this check does not fail */
--	else if (!pool_check_overprovisioning(lv))
--		return_0;
+@@ -5585,7 +5585,7 @@ static int _lvresize_adjust_extents(struct logical_volume *lv,
+ 			if (!(seg = get_only_segment_using_this_lv(lv)))
+ 				return_0;
  
- 	if (old_extents == lv->le_count)
- 		log_print_unless_silent("Size of logical volume %s unchanged from %s (%" PRIu32 " extents).",
-@@ -6126,6 +6122,11 @@ int lv_resize(struct logical_volume *lv,
+-			max_metadata_size = get_thin_pool_max_metadata_size(cmd, vg->profile, &crop);
++			max_metadata_size = get_thin_pool_max_metadata_size(cmd, lv_config_profile(lv), &crop);
  
- 		backup(vg);
- 	}
-+
-+	/* Check for over provisioning when extended */
-+	if ((lp->resize == LV_EXTEND) && lv_is_thin_type(lv))
-+		pool_check_overprovisioning(lv);
-+
- out:
- 	log_print_unless_silent("Logical volume %s successfully resized.",
- 				display_lvname(lv));
+ 			if (((uint64_t)lp->extents * vg->extent_size) > max_metadata_size) {
+ 				lp->extents = (max_metadata_size + vg->extent_size - 1) / vg->extent_size;
 
 
