@@ -1,41 +1,39 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Tue,  9 Feb 2021 14:06:46 +0000 (GMT)
-Subject: stable-2.02 - thinpool: use lv_config_profil for crop_metadata
-Message-ID: <20210209140646.91BA33836C73@sourceware.org>
+Date: Tue,  9 Feb 2021 14:06:48 +0000 (GMT)
+Subject: stable-2.02 - lv_resize: use 'bad' code path for error case
+Message-ID: <20210209140648.DB79C3836C73@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=cfb9bf13c7073937591fa4dc4a0a93a975016bb1
-Commit:        cfb9bf13c7073937591fa4dc4a0a93a975016bb1
-Parent:        18677e24c1ab6e9dff36c048d9e3f6a7fe541c4b
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=619ad644ccfe08e91be98ef10f13ecd0caeb956b
+Commit:        619ad644ccfe08e91be98ef10f13ecd0caeb956b
+Parent:        6c99725261a53c6d984fa262980aab0df2ae6d62
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu Feb 4 23:26:08 2021 +0100
+AuthorDate:    Sun Feb 7 00:39:13 2021 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Tue Feb 9 14:45:29 2021 +0100
 
-thinpool: use lv_config_profil for crop_metadata
+lv_resize: use 'bad' code path for error case
 
-Better support for thin-pools with individual profiles introduced
-in the recent patch b4212be2e7e8797bbf8f9a166347659cc39ba075.
 ---
  lib/metadata/lv_manip.c | 2 +-
  1 file changed, 1 insertion(+), 1 deletion(-)
 
 diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
-index e48e5d18f..33624148c 100644
+index c37757e9a..e0bc61fa2 100644
 --- a/lib/metadata/lv_manip.c
 +++ b/lib/metadata/lv_manip.c
-@@ -5209,7 +5209,7 @@ static int _lvresize_adjust_extents(struct logical_volume *lv,
- 			if (!(seg = get_only_segment_using_this_lv(lv)))
- 				return_0;
+@@ -5712,7 +5712,7 @@ out:
  
--			max_metadata_size = get_thin_pool_max_metadata_size(cmd, vg->profile, &crop);
-+			max_metadata_size = get_thin_pool_max_metadata_size(cmd, lv_config_profile(lv), &crop);
+ 	if (lp->resizefs && (lp->resize == LV_EXTEND) &&
+ 	    !_fsadm_cmd(FSADM_CMD_RESIZE, lv, lp->extents, lp->yes, lp->force, NULL))
+-		return_0;
++		goto_bad;
  
- 			if (((uint64_t)lp->extents * vg->extent_size) > max_metadata_size) {
- 				lp->extents = (max_metadata_size + vg->extent_size - 1) / vg->extent_size;
+ 	ret = 1;
+ bad:
 
 
