@@ -1,96 +1,46 @@
-From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Tue,  9 Feb 2021 14:06:52 +0000 (GMT)
-Subject: stable-2.02 - tests: support for resized cached LVs
-Message-ID: <20210209140652.52051383543D@sourceware.org>
+From: David Teigland <teigland@sourceware.org>
+Date: Tue,  9 Feb 2021 15:56:10 +0000 (GMT)
+Subject: main - dev_get_primary_dev: fix invalid path check
+Message-ID: <20210209155610.F204E3938C31@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=0f074a4d65bb950e25b13d7ac9aa63361ea774a1
-Commit:        0f074a4d65bb950e25b13d7ac9aa63361ea774a1
-Parent:        4eeb9e76630e204eb3deff386bb0e979f1ca126c
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Sun Feb 7 18:45:43 2021 +0100
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Tue Feb 9 15:04:18 2021 +0100
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=f74f94c2ddb1d33d75d325c959344a566a621fd5
+Commit:        f74f94c2ddb1d33d75d325c959344a566a621fd5
+Parent:        427121efc76f1a11df5d06c11ea4f095305b6333
+Author:        David Teigland <teigland@redhat.com>
+AuthorDate:    Tue Feb 9 09:47:08 2021 -0600
+Committer:     David Teigland <teigland@redhat.com>
+CommitterDate: Tue Feb 9 09:52:53 2021 -0600
 
-tests: support for resized cached LVs
+dev_get_primary_dev: fix invalid path check
 
-Support for cached LVs is now enabled.
+Fix commit bee9f4efdd81 "filter-mpath: work with nvme devices"
+which removed setting the path for readlink.
 ---
- test/shell/lvextend-thin-cache.sh | 19 +++++++++++++------
- test/shell/lvextend-thin.sh       | 18 +++++++++++++++++-
- 2 files changed, 30 insertions(+), 7 deletions(-)
+ lib/device/dev-type.c | 7 ++++++-
+ 1 file changed, 6 insertions(+), 1 deletion(-)
 
-diff --git a/test/shell/lvextend-thin-cache.sh b/test/shell/lvextend-thin-cache.sh
-index f7bbfd992..40c213b21 100644
---- a/test/shell/lvextend-thin-cache.sh
-+++ b/test/shell/lvextend-thin-cache.sh
-@@ -1,6 +1,6 @@
- #!/usr/bin/env bash
- 
--# Copyright (C) 2017 Red Hat, Inc. All rights reserved.
-+# Copyright (C) 2017-2020 Red Hat, Inc. All rights reserved.
- #
- # This copyrighted material is made available to anyone wishing to use,
- # modify, copy, or redistribute it subject to the terms and conditions
-@@ -22,15 +22,22 @@ export LVM_TEST_THIN_REPAIR_CMD=${LVM_TEST_THIN_REPAIR_CMD-/bin/false}
- aux have_thin 1 0 0 || skip
- aux have_cache 1 3 0 || skip
- 
--aux prepare_vg 2
-+aux prepare_vg 2 20000
- 
--lvcreate -l2 -T $vg/pool
-+lvcreate -l1 -T $vg/pool
- # Caching of thin-pool's dataLV
- lvcreate -H -L10 $vg/pool
- 
--# Resize is unsupported
--not lvextend -l+2 $vg/pool 2>&1 | tee out
-+lvextend -l+2 $vg/pool
- 
--grep "Unable to resize" out
-+check lv_first_seg_field $vg/pool seg_size_pe "3"
-+
-+lvextend -L10G $vg/pool
-+
-+# Check data are resized and its metadata are matching data size
-+check lv_field $vg/pool size		 "10.00g"
-+check lv_field $vg/pool_tdata size	 "10.00g"
-+check lv_field $vg/pool_tdata_corig size "10.00g"
-+check lv_field $vg/pool_tmeta size "10.00m"
- 
- vgremove -ff $vg
-diff --git a/test/shell/lvextend-thin.sh b/test/shell/lvextend-thin.sh
-index 3e39ea3eb..d1efd4798 100644
---- a/test/shell/lvextend-thin.sh
-+++ b/test/shell/lvextend-thin.sh
-@@ -22,6 +22,22 @@ aux have_thin 1 0 0 || skip
- aux prepare_vg 3
- lvcreate -i2 -l2 -T $vg/pool2
- lvextend -l+2 $vg/pool2 "$dev2" "$dev3"
--should lvextend -l+100%FREE $vg/pool2
-+lvextend -l+100%FREE $vg/pool2
-+
-+lvremove -f $vg
-+
-+lvcreate -L1 -n pool $vg
-+# Does work only with thin-pools
-+not lvextend --poolmetadatasize +1 $vg/pool
-+lvconvert -y --thinpool $vg/pool --poolmetadatasize 2
-+
-+# _tdata cannot be used with --poolmetadata
-+not lvextend --poolmetadatasize +1 $vg/pool_tdata
-+lvextend --poolmetadatasize +1 $vg/pool_tmeta
-+lvextend --poolmetadatasize +1 --size +1 $vg/pool
-+check lv_field $vg/pool_tmeta size "4.00m"
-+check lv_field $vg/lvol0_pmspare size "4.00m"
-+
-+not lvresize --poolmetadatasize -1 $vg/pool
- 
- vgremove -ff $vg
+diff --git a/lib/device/dev-type.c b/lib/device/dev-type.c
+index b7bca361f..0411572fa 100644
+--- a/lib/device/dev-type.c
++++ b/lib/device/dev-type.c
+@@ -614,7 +614,12 @@ int dev_get_primary_dev(struct dev_types *dt, struct device *dev, dev_t *result)
+ 	 * - basename ../../block/md0/md0  = md0
+ 	 * Parent's 'dev' sysfs attribute  = /sys/block/md0/dev
+ 	 */
+-	if ((size = readlink(dirname(path), temp_path, sizeof(temp_path) - 1)) < 0) {
++	if (dm_snprintf(path, sizeof(path), "%s/dev/block/%d:%d",
++			dm_sysfs_dir(), major, minor) < 0) {
++		log_warn("WARNING: %s: major:minor sysfs path is too long.", dev_name(dev));
++		return 0;
++	}
++	if ((size = readlink(path, temp_path, sizeof(temp_path) - 1)) < 0) {
+ 		log_warn("WARNING: Readlink of %s failed.", path);
+ 		goto out;
+ 	}
 
 
