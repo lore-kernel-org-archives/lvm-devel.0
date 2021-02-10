@@ -1,41 +1,59 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Wed, 10 Feb 2021 14:43:53 +0000 (GMT)
-Subject: main - snapshot: create origin of virtual snap read only
-Message-ID: <20210210144353.940423857C7B@sourceware.org>
+Date: Wed, 10 Feb 2021 14:43:55 +0000 (GMT)
+Subject: main - lvconvert: read-only origin cannot be merged
+Message-ID: <20210210144355.DD0853857C7B@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=3cc9efc0ed48f7053f2e92f251586ea7d3edc06a
-Commit:        3cc9efc0ed48f7053f2e92f251586ea7d3edc06a
-Parent:        96910de4c7acbc11dc9f4c43925765847a059871
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=f90082ce8f218781ff3b9361e748dbff0ff0e2e3
+Commit:        f90082ce8f218781ff3b9361e748dbff0ff0e2e3
+Parent:        289518005834b5844f88ce1f22265df99f7072d0
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Feb 9 22:31:31 2021 +0100
+AuthorDate:    Wed Feb 10 00:40:21 2021 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Wed Feb 10 15:39:03 2021 +0100
 
-snapshot: create origin of virtual snap read only
+lvconvert: read-only origin cannot be merged
 
-When creating old fashioned way thick virtual snapshot,
-use read-only 'zero' _vorigin device.
+When user sets snapshost origin as read-only,
+lvm will not allow simple merge and user needs to
+flip permission,
 ---
- lib/metadata/lv_manip.c | 2 +-
- 1 file changed, 1 insertion(+), 1 deletion(-)
+ tools/lvconvert.c | 14 ++++++++++----
+ 1 file changed, 10 insertions(+), 4 deletions(-)
 
-diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
-index 833d7f8c5..32bdc7990 100644
---- a/lib/metadata/lv_manip.c
-+++ b/lib/metadata/lv_manip.c
-@@ -8747,7 +8747,7 @@ static struct logical_volume *_lv_create_an_lv(struct volume_group *vg,
- 		/* Create zero origin volume for spare snapshot */
- 		if (lp->virtual_extents &&
- 		    !(origin_lv = _create_virtual_origin(cmd, vg, lv->name,
--							 lp->permission,
-+							 (lp->permission & ~LVM_WRITE),
- 							 lp->virtual_extents)))
- 			goto revert_new_lv;
+diff --git a/tools/lvconvert.c b/tools/lvconvert.c
+index a72126bf4..77afaf487 100644
+--- a/tools/lvconvert.c
++++ b/tools/lvconvert.c
+@@ -2162,15 +2162,21 @@ static int _lvconvert_merge_old_snapshot(struct cmd_context *cmd,
+ 		log_error("Cannot merge snapshot %s into the origin %s "
+ 			  "with merging snapshot %s.",
+ 			  display_lvname(lv), display_lvname(origin),
+-			  display_lvname(find_snapshot(origin)->lv));
++			  display_lvname(snap_seg->lv));
+ 		return 0;
+ 	}
+ 
+-	if (lv_is_external_origin(origin_from_cow(lv))) {
++	if (lv_is_external_origin(origin)) {
+ 		log_error("Cannot merge snapshot %s into "
+ 			  "the read-only external origin %s.",
+-			  display_lvname(lv),
+-			  display_lvname(origin_from_cow(lv)));
++			  display_lvname(lv), display_lvname(origin));
++		return 0;
++	}
++
++	if (!(origin->status & LVM_WRITE)) {
++		log_error("Cannot merge snapshot %s into "
++			  "the read-only origin %s. (Use lvchange -p rw).",
++			  display_lvname(lv), display_lvname(origin));
+ 		return 0;
+ 	}
  
 
 
