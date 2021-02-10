@@ -1,59 +1,41 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Wed, 10 Feb 2021 14:43:55 +0000 (GMT)
-Subject: main - lvconvert: read-only origin cannot be merged
-Message-ID: <20210210144355.DD0853857C7B@sourceware.org>
+Date: Wed, 10 Feb 2021 14:43:54 +0000 (GMT)
+Subject: main - lvchange: snapshot thick origin permission rw/r
+Message-ID: <20210210144354.B6FEF385DC33@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=f90082ce8f218781ff3b9361e748dbff0ff0e2e3
-Commit:        f90082ce8f218781ff3b9361e748dbff0ff0e2e3
-Parent:        289518005834b5844f88ce1f22265df99f7072d0
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=289518005834b5844f88ce1f22265df99f7072d0
+Commit:        289518005834b5844f88ce1f22265df99f7072d0
+Parent:        3cc9efc0ed48f7053f2e92f251586ea7d3edc06a
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed Feb 10 00:40:21 2021 +0100
+AuthorDate:    Wed Feb 10 00:38:37 2021 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Wed Feb 10 15:39:03 2021 +0100
 
-lvconvert: read-only origin cannot be merged
+lvchange: snapshot thick origin permission rw/r
 
-When user sets snapshost origin as read-only,
-lvm will not allow simple merge and user needs to
-flip permission,
+User is allowed to change permission for thick origin.
+FIXME: it's not quite clear why few others are prohibited to change.
 ---
- tools/lvconvert.c | 14 ++++++++++----
- 1 file changed, 10 insertions(+), 4 deletions(-)
+ tools/command-lines.in | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
 
-diff --git a/tools/lvconvert.c b/tools/lvconvert.c
-index a72126bf4..77afaf487 100644
---- a/tools/lvconvert.c
-+++ b/tools/lvconvert.c
-@@ -2162,15 +2162,21 @@ static int _lvconvert_merge_old_snapshot(struct cmd_context *cmd,
- 		log_error("Cannot merge snapshot %s into the origin %s "
- 			  "with merging snapshot %s.",
- 			  display_lvname(lv), display_lvname(origin),
--			  display_lvname(find_snapshot(origin)->lv));
-+			  display_lvname(snap_seg->lv));
- 		return 0;
- 	}
+diff --git a/tools/command-lines.in b/tools/command-lines.in
+index 8ea65ca83..c5c93abd3 100644
+--- a/tools/command-lines.in
++++ b/tools/command-lines.in
+@@ -250,7 +250,7 @@ RULE: --writebehind --writemostly and LV_raid1
+ RULE: --cachemode --cachepolicy --cachesettings and LV_cache LV_cachepool LV_writecache
+ RULE: --errorwhenfull --discards --zero and LV_thinpool
+ RULE: --permission not lv_is_external_origin lv_is_raid_metadata lv_is_raid_image LV_thinpool
+-RULE: --alloc --contiguous --metadataprofile --permission --persistent --profile --readahead not lv_is_thick_origin
++RULE: --alloc --contiguous --metadataprofile --persistent --profile --readahead not lv_is_thick_origin
+ RULE: --alloc --discards --zero --cachemode --cachepolicy --cachesettings not lv_is_partial
  
--	if (lv_is_external_origin(origin_from_cow(lv))) {
-+	if (lv_is_external_origin(origin)) {
- 		log_error("Cannot merge snapshot %s into "
- 			  "the read-only external origin %s.",
--			  display_lvname(lv),
--			  display_lvname(origin_from_cow(lv)));
-+			  display_lvname(lv), display_lvname(origin));
-+		return 0;
-+	}
-+
-+	if (!(origin->status & LVM_WRITE)) {
-+		log_error("Cannot merge snapshot %s into "
-+			  "the read-only origin %s. (Use lvchange -p rw).",
-+			  display_lvname(lv), display_lvname(origin));
- 		return 0;
- 	}
- 
+ # It's unfortunate that activate needs to be optionally allowed here,
 
 
