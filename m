@@ -1,47 +1,44 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Wed, 17 Feb 2021 12:01:17 +0000 (GMT)
-Subject: stable-2.02 - lv_manip: avoid removing LV when converting
-Message-ID: <20210217120117.5F6493896839@sourceware.org>
+Date: Wed, 17 Feb 2021 12:01:15 +0000 (GMT)
+Subject: stable-2.02 - lvdisplay: fix show of merged thin snapshot
+Message-ID: <20210217120115.1A48F3896839@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=5acbd709c18eab8ae455d0002892e756ed18fa13
-Commit:        5acbd709c18eab8ae455d0002892e756ed18fa13
-Parent:        1f6c287aaca04aa1a791c341cbff7b6cbff9a29b
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=7243e32ce56c2f33fb7cfd735dc6abf27f868c00
+Commit:        7243e32ce56c2f33fb7cfd735dc6abf27f868c00
+Parent:        9344a04b3794b154b06fa44da62d088f0b057486
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed Feb 17 11:09:41 2021 +0100
+AuthorDate:    Fri Feb 12 15:11:48 2021 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Wed Feb 17 11:56:13 2021 +0100
+CommitterDate: Wed Feb 17 11:56:12 2021 +0100
 
-lv_manip: avoid removing LV when converting
+lvdisplay: fix show of merged thin snapshot
 
-In some cases we use 'creation' also during conversion.
-Here it can be actually unwanted side effect we may remove
-not just newly created layers - but also original converted LV.
+When lvdisplay was executed and thin snaphost has be merged to
+thin origin and the operation has been postponed till devices
+are closed, command crashed.
 
-So until we make clear how to properly revert from some errors
-in middle of conversion, disable removal for any 'lvconvert' commands.
+Check LV is COW before trying to check snapshot percentage.
 ---
- lib/metadata/lv_manip.c | 4 +++-
- 1 file changed, 3 insertions(+), 1 deletion(-)
+ lib/display/display.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
 
-diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
-index e9ce8cd28..8dd3e7140 100644
---- a/lib/metadata/lv_manip.c
-+++ b/lib/metadata/lv_manip.c
-@@ -8334,7 +8334,9 @@ revert_new_lv:
- 	lockd_free_lv(vg->cmd, vg, lv->name, &lv->lvid.id[1], lv->lock_args);
- 
- 	/* FIXME Better to revert to backup of metadata? */
--	if (!lv_remove(lv) || !vg_write(vg) || !vg_commit(vg))
-+	/* Do not remove anything for create during conversion operation */
-+	if (!strncmp(cmd->name, "lvconvert", 9) ||
-+	    !lv_remove(lv) || !vg_write(vg) || !vg_commit(vg))
- 		log_error("Manual intervention may be required to remove "
- 			  "abandoned LV(s) before retrying.");
- 	else
+diff --git a/lib/display/display.c b/lib/display/display.c
+index cd911feea..f6a212c7b 100644
+--- a/lib/display/display.c
++++ b/lib/display/display.c
+@@ -474,7 +474,7 @@ int lvdisplay_full(struct cmd_context *cmd,
+ 					  snap_active ? "active" : "INACTIVE");
+ 		}
+ 		snap_seg = NULL;
+-	} else if ((snap_seg = find_snapshot(lv))) {
++	} else if (lv_is_cow(lv) && (snap_seg = find_snapshot(lv))) {
+ 		if (inkernel &&
+ 		    (snap_active = lv_snapshot_percent(snap_seg->cow,
+ 						       &snap_percent)))
 
 
