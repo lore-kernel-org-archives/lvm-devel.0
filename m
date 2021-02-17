@@ -1,44 +1,45 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Wed, 17 Feb 2021 10:54:35 +0000 (GMT)
-Subject: main - lvdisplay: fix show of merged thin snapshot
-Message-ID: <20210217105435.9BAFE3857C60@sourceware.org>
+Date: Wed, 17 Feb 2021 10:54:39 +0000 (GMT)
+Subject: main - lvchange: remove unneeded call
+Message-ID: <20210217105439.0DF47382E818@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=14008ead2a42b4a5db0c81e444f9ea1a05c1a899
-Commit:        14008ead2a42b4a5db0c81e444f9ea1a05c1a899
-Parent:        3af61d8646765fea95a77618e9bfc7e1c35f7ea2
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=f87ff95e329fce701ec93888a9bea7e7da7151a1
+Commit:        f87ff95e329fce701ec93888a9bea7e7da7151a1
+Parent:        096edeee718a4c5524e91fa613f015c9061d6a84
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Feb 12 15:11:48 2021 +0100
+AuthorDate:    Sun Feb 14 17:27:45 2021 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Wed Feb 17 11:21:35 2021 +0100
 
-lvdisplay: fix show of merged thin snapshot
+lvchange: remove unneeded call
 
-When lvdisplay was executed and thin snaphost has be merged to
-thin origin and the operation has been postponed till devices
-are closed, command crashed.
-
-Check LV is COW before trying to check snapshot percentage.
+Sync is already happining in activate_and_wipe_lvlist().
 ---
- lib/display/display.c | 2 +-
- 1 file changed, 1 insertion(+), 1 deletion(-)
+ tools/lvchange.c | 7 -------
+ 1 file changed, 7 deletions(-)
 
-diff --git a/lib/display/display.c b/lib/display/display.c
-index a84695393..f0f03c0a5 100644
---- a/lib/display/display.c
-+++ b/lib/display/display.c
-@@ -475,7 +475,7 @@ int lvdisplay_full(struct cmd_context *cmd,
- 					  snap_active ? "active" : "INACTIVE");
- 		}
- 		snap_seg = NULL;
--	} else if ((snap_seg = find_snapshot(lv))) {
-+	} else if (lv_is_cow(lv) && (snap_seg = find_snapshot(lv))) {
- 		if (inkernel &&
- 		    (snap_active = lv_snapshot_percent(snap_seg->cow,
- 						       &snap_percent)))
+diff --git a/tools/lvchange.c b/tools/lvchange.c
+index f37b68381..31633987b 100644
+--- a/tools/lvchange.c
++++ b/tools/lvchange.c
+@@ -410,13 +410,6 @@ static int _lvchange_resync(struct cmd_context *cmd, struct logical_volume *lv)
+ 	if (!activate_and_wipe_lvlist(&device_list, 0))
+ 		return 0;
+ 
+-	/* Wait until devices are away */
+-	if (!sync_local_dev_names(lv->vg->cmd)) {
+-		log_error("Failed to sync local devices after updating %s.",
+-			  display_lvname(lv));
+-		return 0;
+-	}
+-
+ 	/* Put metadata sub-LVs back in place */
+ 	if (!_attach_metadata_devices(seg, &device_list)) {
+ 		log_error("Failed to reattach %s device after clearing.",
 
 
