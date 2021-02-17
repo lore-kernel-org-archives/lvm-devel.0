@@ -1,40 +1,42 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Wed, 17 Feb 2021 12:01:16 +0000 (GMT)
-Subject: stable-2.02 - tests: lvdisplay does not crash for merged thin
-Message-ID: <20210217120116.3EF3A389850A@sourceware.org>
+Date: Wed, 17 Feb 2021 12:01:23 +0000 (GMT)
+Subject: stable-2.02 - tests: avoid killing test machines with kernel bug
+Message-ID: <20210217120123.1F23D3896839@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=1f6c287aaca04aa1a791c341cbff7b6cbff9a29b
-Commit:        1f6c287aaca04aa1a791c341cbff7b6cbff9a29b
-Parent:        7243e32ce56c2f33fb7cfd735dc6abf27f868c00
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=86cd2c630944f0db3429f05cdee967b273f3dff7
+Commit:        86cd2c630944f0db3429f05cdee967b273f3dff7
+Parent:        8bc7bb2dbf7126d9e6ba92d4bc8ccbd6dc026965
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Sat Feb 13 23:10:15 2021 +0100
+AuthorDate:    Mon Feb 1 15:02:38 2021 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Wed Feb 17 11:56:13 2021 +0100
+CommitterDate: Wed Feb 17 12:09:16 2021 +0100
 
-tests: lvdisplay does not crash for merged thin
+tests: avoid killing test machines with kernel bug
 
+Bug 1916891  still applies:
+
+https://bugzilla.redhat.com/show_bug.cgi?id=1916891
 ---
- test/shell/thin-merge.sh | 3 +++
- 1 file changed, 3 insertions(+)
+ test/shell/lvconvert-raid-reshape-stripes-load-reload.sh | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
 
-diff --git a/test/shell/thin-merge.sh b/test/shell/thin-merge.sh
-index c0a022c57..34f5c7428 100644
---- a/test/shell/thin-merge.sh
-+++ b/test/shell/thin-merge.sh
-@@ -64,6 +64,9 @@ grep "Merging of thin snapshot $vg/snap will occur on next activation of $vg/${l
- not lvconvert --merge $vg/snap1 &>out
- grep "Cannot merge snapshot" out
+diff --git a/test/shell/lvconvert-raid-reshape-stripes-load-reload.sh b/test/shell/lvconvert-raid-reshape-stripes-load-reload.sh
+index b79561fbb..3920da1a5 100644
+--- a/test/shell/lvconvert-raid-reshape-stripes-load-reload.sh
++++ b/test/shell/lvconvert-raid-reshape-stripes-load-reload.sh
+@@ -22,7 +22,7 @@ which mkfs.ext4 || skip
+ aux have_raid 1 13 2 || skip
  
-+# Check lvdisplay is not crashing while merge needs to wait
-+lvdisplay -a $vg
-+
- umount mnt
+ case "$(uname -r)" in
+-  5.[89]*|3.10.0-862*) die "Cannot run this test on unfixed kernel." ;;
++  5.[891]*|3.10.0-862*) die "Cannot run this test on unfixed kernel." ;;
+ esac
  
- # Merge cannot happen
+ mount_dir="mnt"
 
 
