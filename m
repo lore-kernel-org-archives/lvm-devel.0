@@ -1,117 +1,50 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Wed, 17 Feb 2021 10:54:49 +0000 (GMT)
-Subject: main - make: generate
-Message-ID: <20210217105449.468A23857C60@sourceware.org>
+Date: Wed, 17 Feb 2021 10:54:44 +0000 (GMT)
+Subject: main - man: vdo drop resize restriction comment
+Message-ID: <20210217105444.B1F313857C60@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=2c5e034cd3cb480d79ac4cc23a6d5079bb053f28
-Commit:        2c5e034cd3cb480d79ac4cc23a6d5079bb053f28
-Parent:        b9846bdc3e420348646d26259ad57c60b6f2ebf9
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=9c0ce4daa2accbfeec2a09729f73ef7a5876c658
+Commit:        9c0ce4daa2accbfeec2a09729f73ef7a5876c658
+Parent:        19e137358008ce0a73c980d10cfdeaad7f9a5045
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Feb 16 21:30:06 2021 +0100
+AuthorDate:    Mon Feb 15 12:18:54 2021 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Wed Feb 17 11:53:19 2021 +0100
 
-make: generate
+man: vdo drop resize restriction comment
 
+lvm2 supports resize of cached vdo pool volumes.
 ---
- man/lvconvert.8_pregen | 45 +++++++++++++++++++++++++++++++++++++++++++++
- 1 file changed, 45 insertions(+)
+ man/lvmvdo.7_main | 5 -----
+ 1 file changed, 5 deletions(-)
 
-diff --git a/man/lvconvert.8_pregen b/man/lvconvert.8_pregen
-index 170eec815..01fbc7154 100644
---- a/man/lvconvert.8_pregen
-+++ b/man/lvconvert.8_pregen
-@@ -86,6 +86,10 @@ lvconvert - Change logical volume layout
-     \fB--driverloaded\fP \fBy\fP|\fBn\fP
- .ad b
- .br
-+.ad l
-+    \fB--errorwhenfull\fP \fBy\fP|\fBn\fP
-+.ad b
-+.br
- .ad l
-  \fB-f\fP|\fB--force\fP
- .ad b
-@@ -819,6 +823,10 @@ Convert LV to type thin-pool.
- .ad b
- .br
- .ad l
-+[    \fB--errorwhenfull\fP \fBy\fP|\fBn\fP ]
-+.ad b
-+.br
-+.ad l
- [    \fB--poolmetadata\fP \fILV\fP ]
- .ad b
- .br
-@@ -915,6 +923,18 @@ Convert LV to type vdopool.
- .ad b
- .br
- .ad l
-+[ \fB-r\fP|\fB--readahead\fP \fBauto\fP|\fBnone\fP|\fINumber\fP ]
-+.ad b
-+.br
-+.ad l
-+[ \fB-Z\fP|\fB--zero\fP \fBy\fP|\fBn\fP ]
-+.ad b
-+.br
-+.ad l
-+[    \fB--metadataprofile\fP \fIString\fP ]
-+.ad b
-+.br
-+.ad l
- [    \fB--compression\fP \fBy\fP|\fBn\fP ]
- .ad b
- .br
-@@ -1326,6 +1346,19 @@ For testing and debugging.
- .ad b
- .HP
- .ad l
-+\fB--errorwhenfull\fP \fBy\fP|\fBn\fP
-+.br
-+Specifies thin pool behavior when data space is exhausted.
-+When yes, device-mapper will immediately return an error
-+when a thin pool is full and an I/O request requires space.
-+When no, device-mapper will queue these I/O requests for a
-+period of time to allow the thin pool to be extended.
-+Errors are returned if no space is available after the timeout.
-+(Also see dm-thin-pool kernel module option no_space_timeout.)
-+See \fBlvmthin\fP(7) for more information.
-+.ad b
-+.HP
-+.ad l
- \fB-f\fP|\fB--force\fP ...
- .br
- Override various checks, confirmations and protections.
-@@ -1981,6 +2014,14 @@ Convert LV to type vdopool.
- .br
- .RS 4
- .ad l
-+[ \fB-r\fP|\fB--readahead\fP \fBauto\fP|\fBnone\fP|\fINumber\fP ]
-+.ad b
-+.br
-+.ad l
-+[ \fB-Z\fP|\fB--zero\fP \fBy\fP|\fBn\fP ]
-+.ad b
-+.br
-+.ad l
- [ \fB-n\fP|\fB--name\fP \fILV\fP\fI_new\fP ]
- .ad b
- .br
-@@ -1993,6 +2034,10 @@ Convert LV to type vdopool.
- .ad b
- .br
- .ad l
-+[    \fB--metadataprofile\fP \fIString\fP ]
-+.ad b
-+.br
-+.ad l
- [    \fB--compression\fP \fBy\fP|\fBn\fP ]
- .ad b
- .br
+diff --git a/man/lvmvdo.7_main b/man/lvmvdo.7_main
+index 474d6dd73..520a28ecf 100644
+--- a/man/lvmvdo.7_main
++++ b/man/lvmvdo.7_main
+@@ -206,8 +206,6 @@ with the \fBactivation/vdo_pool_autoextend_percent\fP and
+ 
+ Note: You cannot reduce the size of a VDOPoolLV.
+ 
+-Note: You cannot change the size of a cached VDOPoolLV.
+-
+ .nf
+ .B lvextend -L+AddingSize VG/VDOPoolLV
+ .fi
+@@ -265,9 +263,6 @@ VDODataLV (accepts also VDOPoolLV) caching provides a mechanism
+ to accelerate reads and writes of already compressed and deduplicated
+ data blocks together with VDO metadata.
+ 
+-A cached VDO data LV cannot be currently resized. Also, the threshold
+-based automatic resize will not work.
+-
+ .I Example
+ .nf
+ # lvcreate --type vdo -L 5G -V 10G -n vdo1 vg/vdopool
 
 
