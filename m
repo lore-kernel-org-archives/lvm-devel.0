@@ -1,45 +1,106 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Wed, 17 Feb 2021 12:01:18 +0000 (GMT)
-Subject: stable-2.02 - lvchange: remove unneeded call
-Message-ID: <20210217120118.851F0389850A@sourceware.org>
+Date: Wed, 17 Feb 2021 12:01:20 +0000 (GMT)
+Subject: stable-2.02 - libdm: simplify line emitter checking
+Message-ID: <20210217120120.CCBFA389C420@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=b6dda4ade2bbf3ec98e10860213f345d15a28971
-Commit:        b6dda4ade2bbf3ec98e10860213f345d15a28971
-Parent:        5acbd709c18eab8ae455d0002892e756ed18fa13
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=a157c9e1a145819276586b39565b8c41019932df
+Commit:        a157c9e1a145819276586b39565b8c41019932df
+Parent:        0914ce76bdca540f220800f7a00842c73d0840b8
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Sun Feb 14 17:27:45 2021 +0100
+AuthorDate:    Wed Feb 10 15:10:28 2021 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Wed Feb 17 11:56:13 2021 +0100
+CommitterDate: Wed Feb 17 12:09:16 2021 +0100
 
-lvchange: remove unneeded call
+libdm: simplify line emitter checking
 
-Sync is already happining in activate_and_wipe_lvlist().
 ---
- tools/lvchange.c | 7 -------
- 1 file changed, 7 deletions(-)
+ libdm/libdm-deptree.c | 20 ++++++++------------
+ libdm/libdm-report.c  |  2 +-
+ 2 files changed, 9 insertions(+), 13 deletions(-)
 
-diff --git a/tools/lvchange.c b/tools/lvchange.c
-index 7d0ec8ffd..e9f0f7c9a 100644
---- a/tools/lvchange.c
-+++ b/tools/lvchange.c
-@@ -436,13 +436,6 @@ static int _lvchange_resync(struct cmd_context *cmd, struct logical_volume *lv)
- 	if (!activate_and_wipe_lvlist(&device_list, 0))
- 		return 0;
+diff --git a/libdm/libdm-deptree.c b/libdm/libdm-deptree.c
+index 4f71a7008..ba1ed1991 100644
+--- a/libdm/libdm-deptree.c
++++ b/libdm/libdm-deptree.c
+@@ -2231,7 +2231,7 @@ static int _mirror_emit_segment_line(struct dm_task *dmt, struct load_segment *s
  
--	/* Wait until devices are away */
--	if (!sync_local_dev_names(lv->vg->cmd)) {
--		log_error("Failed to sync local devices after updating %s.",
--			  display_lvname(lv));
--		return 0;
--	}
--
- 	/* Put metadata sub-LVs back in place */
- 	if (!_attach_metadata_devices(seg, &device_list)) {
- 		log_error("Failed to reattach %s device after clearing.",
+ 	EMIT_PARAMS(pos, " %u ", seg->mirror_area_count);
+ 
+-	if (_emit_areas_line(dmt, seg, params, paramsize, &pos) <= 0)
++	if (!_emit_areas_line(dmt, seg, params, paramsize, &pos))
+ 		return_0;
+ 
+ 	if (handle_errors)
+@@ -2433,7 +2433,7 @@ static int _raid_emit_segment_line(struct dm_task *dmt, uint32_t major,
+ 	/* Print number of metadata/data device pairs */
+ 	EMIT_PARAMS(pos, " %u", area_count);
+ 
+-	if (_emit_areas_line(dmt, seg, params, paramsize, &pos) <= 0)
++	if (!_emit_areas_line(dmt, seg, params, paramsize, &pos))
+ 		return_0;
+ 
+ 	return 1;
+@@ -2561,7 +2561,6 @@ static int _emit_segment_line(struct dm_task *dmt, uint32_t major,
+ 			      size_t paramsize)
+ {
+ 	int pos = 0;
+-	int r;
+ 	int target_type_is_raid = 0;
+ 	char originbuf[DM_FORMAT_DEV_BUFSIZE], cowbuf[DM_FORMAT_DEV_BUFSIZE];
+ 
+@@ -2572,8 +2571,7 @@ static int _emit_segment_line(struct dm_task *dmt, uint32_t major,
+ 		break;
+ 	case SEG_MIRRORED:
+ 		/* Mirrors are pretty complicated - now in separate function */
+-		r = _mirror_emit_segment_line(dmt, seg, params, paramsize);
+-		if (!r)
++		if (!_mirror_emit_segment_line(dmt, seg, params, paramsize))
+ 			return_0;
+ 		break;
+ 	case SEG_SNAPSHOT:
+@@ -2619,9 +2617,8 @@ static int _emit_segment_line(struct dm_task *dmt, uint32_t major,
+ 	case SEG_RAID6_LA_6:
+ 	case SEG_RAID6_RA_6:
+ 		target_type_is_raid = 1;
+-		r = _raid_emit_segment_line(dmt, major, minor, seg, seg_start,
+-					    params, paramsize);
+-		if (!r)
++		if (!_raid_emit_segment_line(dmt, major, minor, seg, seg_start,
++					     params, paramsize))
+ 			return_0;
+ 
+ 		break;
+@@ -2652,10 +2649,9 @@ static int _emit_segment_line(struct dm_task *dmt, uint32_t major,
+ 	case SEG_CRYPT:
+ 	case SEG_LINEAR:
+ 	case SEG_STRIPED:
+-		if ((r = _emit_areas_line(dmt, seg, params, paramsize, &pos)) <= 0) {
+-			stack;
+-			return r;
+-		}
++		if (!_emit_areas_line(dmt, seg, params, paramsize, &pos))
++			return_0;
++
+ 		if (!params[0]) {
+ 			log_error("No parameters supplied for %s target "
+ 				  "%u:%u.", _dm_segtypes[seg->type].target,
+diff --git a/libdm/libdm-report.c b/libdm/libdm-report.c
+index b58e3fe5a..04df20120 100644
+--- a/libdm/libdm-report.c
++++ b/libdm/libdm-report.c
+@@ -491,7 +491,7 @@ static int _report_field_string_list(struct dm_report *rh,
+ 		delimiter = ",";
+ 	delimiter_len = strlen(delimiter);
+ 
+-	i = pos = len = 0;
++	i = pos = 0;
+ 	dm_list_iterate_items(sl, data) {
+ 		arr[i].str = sl->str;
+ 		if (!sort) {
 
 
