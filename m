@@ -1,39 +1,60 @@
-From: Zdenek Kabelac <zdenek.kabelac@gmail.com>
-Date: Mon, 22 Feb 2021 13:38:08 +0100
-Subject: [PATCH]unit-test: modify the test case to support systems with PAGE_SIZE of 64K
-In-Reply-To: <be093e24-7d0b-a929-d092-4854878196ec@huawei.com>
-References: <be093e24-7d0b-a929-d092-4854878196ec@huawei.com>
-Message-ID: <15f1fd31-e10f-47f8-9dda-13fb8cfb99fb@gmail.com>
+From: David Teigland <teigland@sourceware.org>
+Date: Mon, 22 Feb 2021 16:44:47 +0000 (GMT)
+Subject: main - command defs: add missing commas
+Message-ID: <20210222164447.0E795395143A@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Dne 22. 02. 21 v 9:01 Wu Guanghao napsal(a):
-> Hi
-> 
-> Now we want to compile lvm2 on a machine whose PAGE_SIZE is 64K and
-> enable unit test at the same time. However, we found that some test cases
-> cannot be executed normally, so we made some modifications.
-> 
-> 
->> -#define T_BLOCK_SIZE 4096
-> +#define T_BLOCK_SIZE 65536
->   #define NR_BLOCKS 64
->   #define INIT_PATTERN 123
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=9e836c77a0663649468af613436c210e3ba324b2
+Commit:        9e836c77a0663649468af613436c210e3ba324b2
+Parent:        12667e9897ad54f5723463b4c864c8259ba0be2a
+Author:        David Teigland <teigland@redhat.com>
+AuthorDate:    Mon Feb 22 10:44:01 2021 -0600
+Committer:     David Teigland <teigland@redhat.com>
+CommitterDate: Mon Feb 22 10:44:01 2021 -0600
 
-Hi
+command defs: add missing commas
 
-Whole patch likely needs to be based on some 'configure' discovered define
-(likely  sysconf(_SC_PAGESIZE))
+even though the parser seems to work fine without them
+---
+ tools/command-lines.in | 10 ++++------
+ 1 file changed, 4 insertions(+), 6 deletions(-)
 
-So the patch itself cannot turn everything into 64K - but should adapt 
-dynamically to system condition (so the existing coverage is not lost/changed).
-
-Regards
-
-
-Zdenek
+diff --git a/tools/command-lines.in b/tools/command-lines.in
+index 2aadd5f40..d6fd0e304 100644
+--- a/tools/command-lines.in
++++ b/tools/command-lines.in
+@@ -318,15 +318,14 @@ OO_LVCONVERT_POOL: --poolmetadata LV, --poolmetadatasize SizeMB,
+ --poolmetadataspare Bool, --readahead Readahead, --chunksize SizeKB,
+ --zero Bool, --metadataprofile String
+ 
+-OO_LVCONVERT_THIN: --discards Discards --errorwhenfull Bool
++OO_LVCONVERT_THIN: --discards Discards, --errorwhenfull Bool
+ 
+ OO_LVCONVERT_CACHE: --cachemetadataformat CacheMetadataFormat,
+ --cachemode CacheMode, --cachepolicy String,
+ --cachesettings String, --zero Bool
+ 
+-OO_LVCONVERT_VDO: --metadataprofile String --readahead Readahead,
+---compression Bool, --deduplication Bool
+---zero Bool
++OO_LVCONVERT_VDO: --metadataprofile String, --readahead Readahead,
++--compression Bool, --deduplication Bool, --zero Bool
+ 
+ OO_LVCONVERT: --alloc Alloc, --background, --force, --noudevsync
+ 
+@@ -615,8 +614,7 @@ RULE: all and lv_is_visible
+ RULE: all not lv_is_locked lv_is_origin lv_is_merging_origin lv_is_external_origin lv_is_virtual lv_is_raid_with_integrity
+ 
+ lvconvert --vdopool LV_linear_striped_raid_cache
+-OO: --type vdo-pool, OO_LVCONVERT_VDO, OO_LVCONVERT
+---name LV_new, --virtualsize SizeMB,
++OO: --type vdo-pool, OO_LVCONVERT_VDO, OO_LVCONVERT, --name LV_new, --virtualsize SizeMB,
+ ID: lvconvert_to_vdopool_param
+ DESC: Convert LV to type vdopool.
+ RULE: all and lv_is_visible
 
 
