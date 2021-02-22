@@ -1,128 +1,78 @@
-From: Wu Guanghao <wuguanghao3@huawei.com>
-Date: Mon, 22 Feb 2021 16:01:43 +0800
-Subject: [PATCH]unit-test: modify the test case to support systems with PAGE_SIZE of 64K
-Message-ID: <be093e24-7d0b-a929-d092-4854878196ec@huawei.com>
+From: Leo Yan <leo.yan@linaro.org>
+Date: Mon, 22 Feb 2021 19:33:19 +0800
+Subject: Question: the failure handling for sanlock
+In-Reply-To: <20210215163127.GA25608@redhat.com>
+References: <20210214101303.GA399193@leoy-ThinkPad-X240s>
+	<20210215163127.GA25608@redhat.com>
+Message-ID: <20210222113319.GA210803@leoy-ThinkPad-X240s>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Hi
+Hi David,
 
-Now we want to compile lvm2 on a machine whose PAGE_SIZE is 64K and
-enable unit test at the same time. However, we found that some test cases
-cannot be executed normally, so we made some modifications.
+On Mon, Feb 15, 2021 at 10:31:27AM -0600, David Teigland wrote:
+> On Sun, Feb 14, 2021 at 06:13:03PM +0800, Leo Yan wrote:
+> >  538         /*
+> >  539          * FIXME: here is where we should implement a strong form of
+> >  540          * blkdeactivate, and if it completes successfully, automatically call
+> >  541          * do_drop() afterward.  (The drop step may not always be necessary
+> >  542          * if the lvm commands run while shutting things down release all the
+> >  543          * leases.)
+> >  544          *
+> >  545          * run_strong_blkdeactivate();
+> >  546          * do_drop();
+> >  547          */
+> > 
+> > My first question is why lvmlockctl comments out the failure handling code so
+> > cannot automatically deactivate drives and cleanup VG/LV locks by default?
+> 
+> Only because that forceful deactivate has not been implemented.
+> 
+> > The second question is what's a suggested flow for failure handling for sanlock?
+> > If I understand correctly, we can rely on the command "blkdeactivate" to
+> > deactivates block devices; but if we deactivate the whole block device, it
+> > might also hurt other VGs/LVs resident on the same drive.  So should we firstly
+> > deactivate VGs or LVs with "vgchange" or "lvchange" commands rather than
+> > deactivate the whole block device?  We might consider there have no chance to
+> > access drive for the drive or fabric malfunction, so cannot make succuss for
+> > commands "vgchange" and "lvchange".
+> 
+> We only need to forcefully deactivate LVs in the failed VG.  The lvmlockd
+> man page section "sanlock lease storage failure" describes how this
+> process can work manually, and mentions doing it automatically in the
+> future.  In the manual process you'd try to stop applications using the
+> fs, unmount file systems on the LVs, then try to deactivate the LVs.
+> Since there are storage issues, the unmount and deactivate might hang, in
+> which case you could try dmsetup wipe_table on the LVs.  You might just
+> skip immediately to that last step since there's not a lot of time.
+> 
+> There was a script written in 2017 to automate that final dmsetup step.
+> It was finished or very close, but I don't remember what kept us from
+> including it.  An idea to make dmsetup do more of the work perhaps left us
+> unsure what to do.  Here is the script and some discussion:
+> https://listman.redhat.com/archives/lvm-devel/2017-September/msg00011.html
+> 
+> There was also a small lvmlockctl patch to replace the
+> run_strong_blkdeactivate() comment with running the script.
 
+Yes, I went through the two patches, one is for the script
+blkdeactivate.sh and another is for lvmlockctl.
 
->From 00acbafcdf006d9da748e404c0eed58d6675791b Mon Sep 17 00:00:00 2001
-From: root <root@localhost.localdomain>
-Date: Mon, 22 Feb 2021 15:38:49 +0800
-Subject: [PATCH] Modify the test case to support systems with PAGE_SIZE of 64K
+And I saw you suggested to use the dmsetup commands:
 
----
- test/unit/bcache_t.c       |  6 +++---
- test/unit/bcache_utils_t.c |  2 +-
- test/unit/io_engine_t.c    | 10 +++++-----
- 3 files changed, 9 insertions(+), 9 deletions(-)
+  dmsetup info -c -S "uuid=~LVM && vgname=$VG && lv_layer=\"\"" \
+        -o name --noheadings | xargs dmsetup wipe_table
 
-diff --git a/test/unit/bcache_t.c b/test/unit/bcache_t.c
-index 9c4d102..5d7077c 100644
---- a/test/unit/bcache_t.c
-+++ b/test/unit/bcache_t.c
-@@ -389,12 +389,12 @@ static void bad_create(sector_t block_size, unsigned nr_cache_blocks)
+> If you can get this to work for your case I'd like to get it included in
+> lvm.
 
- static void test_create(void *fixture)
- {
--	good_create(8, 16);
-+	good_create(128, 16);
- }
+I will verify the changes and share back the result.
 
- static void test_nr_cache_blocks_must_be_positive(void *fixture)
- {
--	bad_create(8, 0);
-+	bad_create(128, 0);
- }
+Thank you for suggestions!
 
- static void test_block_size_must_be_positive(void *fixture)
-@@ -412,7 +412,7 @@ static void test_block_size_must_be_multiple_of_page_size(void *fixture)
- 		bad_create(_bad_examples[i], 16);
-
- 	for (i = 1; i < 100; i++)
--		good_create(i * 8, 16);
-+		good_create(i * 128, 16);
- }
-
- static void test_get_triggers_read(void *context)
-diff --git a/test/unit/bcache_utils_t.c b/test/unit/bcache_utils_t.c
-index 69c5101..f81c083 100644
---- a/test/unit/bcache_utils_t.c
-+++ b/test/unit/bcache_utils_t.c
-@@ -26,7 +26,7 @@
-
- //----------------------------------------------------------------
-
--#define T_BLOCK_SIZE 4096
-+#define T_BLOCK_SIZE 65536
- #define NR_BLOCKS 64
- #define INIT_PATTERN 123
-
-diff --git a/test/unit/io_engine_t.c b/test/unit/io_engine_t.c
-index 349df25..4d3164c 100644
---- a/test/unit/io_engine_t.c
-+++ b/test/unit/io_engine_t.c
-@@ -26,7 +26,7 @@
- //----------------------------------------------------------------
-
- #define SECTOR_SIZE 512
--#define BLOCK_SIZE_SECTORS 8
-+#define BLOCK_SIZE_SECTORS 128
- #define NR_BLOCKS 64
-
- struct fixture {
-@@ -83,7 +83,7 @@ static void *_fix_init(void)
-         T_ASSERT(f);
-         f->e = create_async_io_engine();
-         T_ASSERT(f->e);
--	if (posix_memalign((void **) &f->data, 4096, SECTOR_SIZE * BLOCK_SIZE_SECTORS))
-+	if (posix_memalign((void **) &f->data, 65536, SECTOR_SIZE * BLOCK_SIZE_SECTORS))
-         	test_fail("posix_memalign failed");
-
-         snprintf(f->fname, sizeof(f->fname), "unit-test-XXXXXX");
-@@ -138,7 +138,7 @@ static void _test_read(void *fixture)
- {
- 	struct fixture *f = fixture;
- 	struct io io;
--	struct bcache *cache = bcache_create(8, BLOCK_SIZE_SECTORS, f->e);
-+	struct bcache *cache = bcache_create(128, BLOCK_SIZE_SECTORS, f->e);
- 	T_ASSERT(cache);
-
- 	f->di = bcache_set_fd(f->fd);
-@@ -156,7 +156,7 @@ static void _test_write(void *fixture)
- {
- 	struct fixture *f = fixture;
- 	struct io io;
--	struct bcache *cache = bcache_create(8, BLOCK_SIZE_SECTORS, f->e);
-+	struct bcache *cache = bcache_create(128, BLOCK_SIZE_SECTORS, f->e);
- 	T_ASSERT(cache);
-
- 	f->di = bcache_set_fd(f->fd);
-@@ -175,7 +175,7 @@ static void _test_write_bytes(void *fixture)
- 	unsigned offset = 345;
- 	char buf_out[32];
- 	char buf_in[32];
--	struct bcache *cache = bcache_create(8, BLOCK_SIZE_SECTORS, f->e);
-+	struct bcache *cache = bcache_create(128, BLOCK_SIZE_SECTORS, f->e);
- 	T_ASSERT(cache);
-
- 	f->di = bcache_set_fd(f->fd);
--- 
-2.27.0
-
-
-
-Regards
-
-Wu Guanghao
+Leo
 
 
