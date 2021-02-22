@@ -1,60 +1,50 @@
 From: David Teigland <teigland@sourceware.org>
-Date: Mon, 22 Feb 2021 16:44:47 +0000 (GMT)
-Subject: main - command defs: add missing commas
-Message-ID: <20210222164447.0E795395143A@sourceware.org>
+Date: Mon, 22 Feb 2021 16:44:45 +0000 (GMT)
+Subject: main - fix check for md raid imsm signature on 4k devices
+Message-ID: <20210222164445.E0AE93949D80@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=9e836c77a0663649468af613436c210e3ba324b2
-Commit:        9e836c77a0663649468af613436c210e3ba324b2
-Parent:        12667e9897ad54f5723463b4c864c8259ba0be2a
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=12667e9897ad54f5723463b4c864c8259ba0be2a
+Commit:        12667e9897ad54f5723463b4c864c8259ba0be2a
+Parent:        3cba07125457b82045f41bfafc67733c0dad89a2
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Mon Feb 22 10:44:01 2021 -0600
+AuthorDate:    Thu Feb 18 11:42:32 2021 -0600
 Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Mon Feb 22 10:44:01 2021 -0600
+CommitterDate: Thu Feb 18 11:42:32 2021 -0600
 
-command defs: add missing commas
+fix check for md raid imsm signature on 4k devices
 
-even though the parser seems to work fine without them
+On devices with 4k logical block size, the imsm signature
+is located 8k from the end of the device, not 1k as is
+the case for devices with 512 LBS.
 ---
- tools/command-lines.in | 10 ++++------
- 1 file changed, 4 insertions(+), 6 deletions(-)
+ lib/device/dev-md.c | 10 ++++++++++
+ 1 file changed, 10 insertions(+)
 
-diff --git a/tools/command-lines.in b/tools/command-lines.in
-index 2aadd5f40..d6fd0e304 100644
---- a/tools/command-lines.in
-+++ b/tools/command-lines.in
-@@ -318,15 +318,14 @@ OO_LVCONVERT_POOL: --poolmetadata LV, --poolmetadatasize SizeMB,
- --poolmetadataspare Bool, --readahead Readahead, --chunksize SizeKB,
- --zero Bool, --metadataprofile String
+diff --git a/lib/device/dev-md.c b/lib/device/dev-md.c
+index 36494b12b..3049b81b7 100644
+--- a/lib/device/dev-md.c
++++ b/lib/device/dev-md.c
+@@ -56,6 +56,16 @@ static int _dev_has_imsm_magic(struct device *dev, uint64_t devsize_sectors)
+ {
+ 	char imsm_signature[IMSM_SIG_LEN];
+ 	uint64_t off = (devsize_sectors * 512) - 1024;
++	unsigned int physical_block_size = 0;
++	unsigned int logical_block_size = 0;
++
++	if (!dev_get_direct_block_sizes(dev, &physical_block_size, &logical_block_size))
++		return_0;
++
++	if (logical_block_size == 4096)
++		off = (devsize_sectors * 512) - 8192;
++	else
++		off = (devsize_sectors * 512) - 1024;
  
--OO_LVCONVERT_THIN: --discards Discards --errorwhenfull Bool
-+OO_LVCONVERT_THIN: --discards Discards, --errorwhenfull Bool
- 
- OO_LVCONVERT_CACHE: --cachemetadataformat CacheMetadataFormat,
- --cachemode CacheMode, --cachepolicy String,
- --cachesettings String, --zero Bool
- 
--OO_LVCONVERT_VDO: --metadataprofile String --readahead Readahead,
----compression Bool, --deduplication Bool
----zero Bool
-+OO_LVCONVERT_VDO: --metadataprofile String, --readahead Readahead,
-+--compression Bool, --deduplication Bool, --zero Bool
- 
- OO_LVCONVERT: --alloc Alloc, --background, --force, --noudevsync
- 
-@@ -615,8 +614,7 @@ RULE: all and lv_is_visible
- RULE: all not lv_is_locked lv_is_origin lv_is_merging_origin lv_is_external_origin lv_is_virtual lv_is_raid_with_integrity
- 
- lvconvert --vdopool LV_linear_striped_raid_cache
--OO: --type vdo-pool, OO_LVCONVERT_VDO, OO_LVCONVERT
----name LV_new, --virtualsize SizeMB,
-+OO: --type vdo-pool, OO_LVCONVERT_VDO, OO_LVCONVERT, --name LV_new, --virtualsize SizeMB,
- ID: lvconvert_to_vdopool_param
- DESC: Convert LV to type vdopool.
- RULE: all and lv_is_visible
+ 	if (!dev_read_bytes(dev, off, IMSM_SIG_LEN, imsm_signature))
+ 		return_0;
 
 
