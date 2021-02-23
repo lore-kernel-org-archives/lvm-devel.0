@@ -1,87 +1,43 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Tue, 23 Feb 2021 14:04:13 +0000 (GMT)
-Subject: main - tests: remove local setting of LVM_BINARY
-Message-ID: <20210223140413.076BF389364B@sourceware.org>
+Date: Tue, 23 Feb 2021 14:04:15 +0000 (GMT)
+Subject: main - cache: fix warning test
+Message-ID: <20210223140415.4A4683938399@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=e43b5f1e3c8b445577b9aebea9afecbe0e9ab9c7
-Commit:        e43b5f1e3c8b445577b9aebea9afecbe0e9ab9c7
-Parent:        646e3280ddf5e73040e12122b8a7a2fad52668a0
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=b140bba9fe69f3bd4c89f15998b3e197fe9bf428
+Commit:        b140bba9fe69f3bd4c89f15998b3e197fe9bf428
+Parent:        ac09fa08aa7a10cc3f807830de5d625d499ed1b1
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Feb 23 14:42:47 2021 +0100
+AuthorDate:    Sat Feb 20 22:45:13 2021 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Tue Feb 23 14:56:47 2021 +0100
 
-tests: remove local setting of LVM_BINARY
+cache: fix warning test
 
-To better test actually fsadm in test suite - avoid setting
-LVM_BINARY locally - since test setup already modifies
-PATH to find test's lvm binary as the 1st. in path.
+The cache here is not 'writethough' - so print proper state
+(writeback or passthrough)
 ---
- test/shell/fsadm-crypt.sh   | 3 ---
- test/shell/fsadm-renamed.sh | 3 ---
- test/shell/fsadm.sh         | 3 ---
- test/shell/lvresize-full.sh | 2 --
- 4 files changed, 11 deletions(-)
+ tools/lvconvert.c | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
 
-diff --git a/test/shell/fsadm-crypt.sh b/test/shell/fsadm-crypt.sh
-index 4b8fc4e2d..2004db957 100644
---- a/test/shell/fsadm-crypt.sh
-+++ b/test/shell/fsadm-crypt.sh
-@@ -76,9 +76,6 @@ dev_vg_lv="$DM_DEV_DIR/$vg_lv"
- dev_vg_lv2="$DM_DEV_DIR/$vg_lv2"
- dev_vg_lv3="$DM_DEV_DIR/$vg_lv3"
- mount_dir="mnt"
--# for recursive call
--LVM_BINARY=$(which lvm)
--export LVM_BINARY
+diff --git a/tools/lvconvert.c b/tools/lvconvert.c
+index 8bd73bb53..83bdfd04b 100644
+--- a/tools/lvconvert.c
++++ b/tools/lvconvert.c
+@@ -2032,8 +2032,8 @@ static int _lvconvert_split_and_remove_cachepool(struct cmd_context *cmd,
+ 					  display_lvname(lv));
+ 				return 0;
+ 			}
+-			log_warn("WARNING: Uncaching of partially missing writethrough cache volume %s might destroy your data.",
+-				 display_lvname(lv));
++			log_warn("WARNING: Uncaching of partially missing %s cache volume %s might destroy your data.",
++				 cache_mode_num_to_str(first_seg(seg->pool_lv)->cache_mode), display_lvname(lv));
+ 		}
  
- test ! -d "$mount_dir" && mkdir "$mount_dir"
- 
-diff --git a/test/shell/fsadm-renamed.sh b/test/shell/fsadm-renamed.sh
-index 321893925..50c6d3ee5 100644
---- a/test/shell/fsadm-renamed.sh
-+++ b/test/shell/fsadm-renamed.sh
-@@ -27,9 +27,6 @@ dev_vg_lv_ren="$DM_DEV_DIR/$vg_lv_ren"
- mount_dir="mnt"
- mount_space_dir="mnt space dir"
- mount_dolar_dir="mnt \$SPACE dir"
--# for recursive call
--LVM_BINARY=$(which lvm)
--export LVM_BINARY
- 
- test ! -d "$mount_dir" && mkdir "$mount_dir"
- test ! -d "$mount_space_dir" && mkdir "$mount_space_dir"
-diff --git a/test/shell/fsadm.sh b/test/shell/fsadm.sh
-index 67f9660e6..987b1a1a9 100644
---- a/test/shell/fsadm.sh
-+++ b/test/shell/fsadm.sh
-@@ -45,9 +45,6 @@ dev_vg_lv="$DM_DEV_DIR/$vg_lv"
- dev_vg_lv2="$DM_DEV_DIR/$vg_lv2"
- mount_dir="mnt"
- mount_space_dir="mnt space dir"
--# for recursive call
--LVM_BINARY=$(which lvm)
--export LVM_BINARY
- 
- test ! -d "$mount_dir" && mkdir "$mount_dir"
- test ! -d "$mount_space_dir" && mkdir "$mount_space_dir"
-diff --git a/test/shell/lvresize-full.sh b/test/shell/lvresize-full.sh
-index 3cab52275..dcf93a7b2 100644
---- a/test/shell/lvresize-full.sh
-+++ b/test/shell/lvresize-full.sh
-@@ -21,8 +21,6 @@ SKIP_WITH_LVMPOLLD=1
- FSCK=${FSCK-fsck}
- MKFS=${MKFS-mkfs.ext3}
- RESIZEFS=${RESIZEFS-resize2fs}
--LVM_BINARY=$(which lvm)
--export LVM_BINARY
- 
- which $FSCK || skip
- which $MKFS || skip
+ 		if (!arg_count(cmd, yes_ARG) &&
 
 
