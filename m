@@ -1,46 +1,51 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Tue, 23 Feb 2021 14:04:16 +0000 (GMT)
-Subject: main - lvconvert: change errors to internal ones
-Message-ID: <20210223140416.6B8AC3938C35@sourceware.org>
+Date: Tue, 23 Feb 2021 14:04:18 +0000 (GMT)
+Subject: main - cleanup: simplify initilization
+Message-ID: <20210223140418.AA8A83939C17@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=5ecd65e6f2f5264b0ebe1177a714bc8d29e882fb
-Commit:        5ecd65e6f2f5264b0ebe1177a714bc8d29e882fb
-Parent:        b140bba9fe69f3bd4c89f15998b3e197fe9bf428
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=5237175cb6486c782589d7c9afb4f532ee5897b1
+Commit:        5237175cb6486c782589d7c9afb4f532ee5897b1
+Parent:        b5f906e984abea169209302b78bfa935869d6ea4
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Sat Feb 20 23:01:25 2021 +0100
+AuthorDate:    Sat Feb 20 22:44:06 2021 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Tue Feb 23 14:56:47 2021 +0100
+CommitterDate: Tue Feb 23 14:56:48 2021 +0100
 
-lvconvert: change errors to internal ones
+cleanup: simplify initilization
 
-Since these errors should never happen, change them to  internal errors.
+Simplier code and also drop duplicate check for active LV.
 ---
- tools/lvconvert.c | 4 ++--
- 1 file changed, 2 insertions(+), 2 deletions(-)
+ tools/lvconvert.c | 6 +-----
+ 1 file changed, 1 insertion(+), 5 deletions(-)
 
 diff --git a/tools/lvconvert.c b/tools/lvconvert.c
-index 83bdfd04b..4dee97ee0 100644
+index 4dee97ee0..a67b4ee72 100644
 --- a/tools/lvconvert.c
 +++ b/tools/lvconvert.c
-@@ -4693,12 +4693,12 @@ static int _lvconvert_to_thin_with_external_single(struct cmd_context *cmd,
- 		}
+@@ -6126,7 +6126,7 @@ int lvconvert_writecache_attach_single(struct cmd_context *cmd,
+ 	struct volume_group *vg = lv->vg;
+ 	struct logical_volume *lv_wcorig;
+ 	struct logical_volume *lv_fast;
+-	struct writecache_settings settings;
++	struct writecache_settings settings = { 0 };
+ 	const char *fast_name;
+ 	uint32_t block_size_sectors = 0;
+ 	char *lockd_fast_args = NULL;
+@@ -6181,10 +6181,6 @@ int lvconvert_writecache_attach_single(struct cmd_context *cmd,
  
- 		if (!(thinpool_lv = find_lv(vg, thinpool_name))) {
--			log_error("LV %s cannot be found.", display_lvname(thinpool_lv));
-+			log_error(INTERNAL_ERROR "LV %s cannot be found.", thinpool_name);
- 			goto out;
- 		}
+ 	is_active = lv_is_active(lv);
  
- 		if (!lv_is_thin_pool(thinpool_lv)) {
--			log_error("LV %s is not a thin pool.", display_lvname(thinpool_lv));
-+			log_error(INTERNAL_ERROR "LV %s is not a thin pool.", display_lvname(thinpool_lv));
- 			goto out;
- 		}
- 	}
+-	is_active = lv_is_active(lv);
+-
+-	memset(&settings, 0, sizeof(settings));
+-
+ 	if (!get_writecache_settings(cmd, &settings, &block_size_sectors)) {
+ 		log_error("Invalid writecache settings.");
+ 		goto bad;
 
 
