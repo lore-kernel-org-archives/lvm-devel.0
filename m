@@ -1,39 +1,39 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Tue, 23 Feb 2021 14:03:53 +0000 (GMT)
-Subject: stable-2.02 - fsadm: avoid access to unbound variable
-Message-ID: <20210223140353.DB9D3388703F@sourceware.org>
+Date: Tue, 23 Feb 2021 14:04:20 +0000 (GMT)
+Subject: main - cleanup: comment typo
+Message-ID: <20210223140420.F1000393A413@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=c94657cc2e678b0937fa770f4280507d1118ef4c
-Commit:        c94657cc2e678b0937fa770f4280507d1118ef4c
-Parent:        87e0b1a36faa54c6fc27837cac3be01a1553eaf9
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=5d820b02012bbadb07990ee20034145ab8e2fb0e
+Commit:        5d820b02012bbadb07990ee20034145ab8e2fb0e
+Parent:        0c842ee8adc4f5566e49b59abee5d43a15b85f0c
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Feb 23 14:14:16 2021 +0100
+AuthorDate:    Sat Feb 20 23:50:25 2021 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Tue Feb 23 15:01:53 2021 +0100
+CommitterDate: Tue Feb 23 14:56:48 2021 +0100
 
-fsadm: avoid access to unbound variable
+cleanup: comment typo
 
 ---
- scripts/fsadm.sh | 2 +-
+ lib/metadata/cache_manip.c | 2 +-
  1 file changed, 1 insertion(+), 1 deletion(-)
 
-diff --git a/scripts/fsadm.sh b/scripts/fsadm.sh
-index 2cb1fc75b..4f59cee13 100755
---- a/scripts/fsadm.sh
-+++ b/scripts/fsadm.sh
-@@ -163,7 +163,7 @@ cleanup() {
- 		_FSADM_EXTOFF=$EXTOFF
- 		export _FSADM_YES _FSADM_EXTOFF
- 		unset FSADM_RUNNING
--		test -n "$LVM_BINARY" && PATH=$_SAVEPATH
-+		test -n "${LVM_BINARY-}" && PATH=$_SAVEPATH
- 		dry exec "$LVM" lvresize $VERB $FORCE -r -L"${NEWSIZE_ORIG}b" "$VOLUME_ORIG"
- 	fi
+diff --git a/lib/metadata/cache_manip.c b/lib/metadata/cache_manip.c
+index f29442358..3eac736dd 100644
+--- a/lib/metadata/cache_manip.c
++++ b/lib/metadata/cache_manip.c
+@@ -656,7 +656,7 @@ int lv_cache_remove(struct logical_volume *cache_lv)
+ 	if (!remove_layer_from_lv(cache_lv, corigin_lv))
+ 		return_0;
  
+-	/* Preserve currently imortant data from original cache segment.
++	/* Preserve currently important data from original cache segment.
+ 	 * TODO: can it be done without this ? */
+ 	data_id = cache_seg->data_id;
+ 	data_len = cache_seg->data_len;
 
 
