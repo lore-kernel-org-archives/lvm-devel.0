@@ -1,39 +1,62 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Tue, 23 Feb 2021 14:04:11 +0000 (GMT)
-Subject: main - fsadm: avoid access to unbound variable
-Message-ID: <20210223140411.D750E389682C@sourceware.org>
+Date: Tue, 23 Feb 2021 14:04:17 +0000 (GMT)
+Subject: main - cleanup: simply code
+Message-ID: <20210223140417.8B7223939C01@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=646e3280ddf5e73040e12122b8a7a2fad52668a0
-Commit:        646e3280ddf5e73040e12122b8a7a2fad52668a0
-Parent:        9e836c77a0663649468af613436c210e3ba324b2
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=b5f906e984abea169209302b78bfa935869d6ea4
+Commit:        b5f906e984abea169209302b78bfa935869d6ea4
+Parent:        5ecd65e6f2f5264b0ebe1177a714bc8d29e882fb
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Feb 23 14:14:16 2021 +0100
+AuthorDate:    Sat Feb 20 22:11:30 2021 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Tue Feb 23 14:56:47 2021 +0100
+CommitterDate: Tue Feb 23 14:56:48 2021 +0100
 
-fsadm: avoid access to unbound variable
+cleanup: simply code
 
 ---
- scripts/fsadm.sh | 2 +-
- 1 file changed, 1 insertion(+), 1 deletion(-)
+ tools/lvresize.c | 18 +++++++++---------
+ 1 file changed, 9 insertions(+), 9 deletions(-)
 
-diff --git a/scripts/fsadm.sh b/scripts/fsadm.sh
-index 2cb1fc75b..4f59cee13 100755
---- a/scripts/fsadm.sh
-+++ b/scripts/fsadm.sh
-@@ -163,7 +163,7 @@ cleanup() {
- 		_FSADM_EXTOFF=$EXTOFF
- 		export _FSADM_YES _FSADM_EXTOFF
- 		unset FSADM_RUNNING
--		test -n "$LVM_BINARY" && PATH=$_SAVEPATH
-+		test -n "${LVM_BINARY-}" && PATH=$_SAVEPATH
- 		dry exec "$LVM" lvresize $VERB $FORCE -r -L"${NEWSIZE_ORIG}b" "$VOLUME_ORIG"
- 	fi
+diff --git a/tools/lvresize.c b/tools/lvresize.c
+index 0c72a81ff..a3c17a744 100644
+--- a/tools/lvresize.c
++++ b/tools/lvresize.c
+@@ -146,14 +146,6 @@ static int _lvresize_params(struct cmd_context *cmd, int argc, char **argv,
+ 	lp->argc = --argc;
+ 	lp->argv = ++argv;
  
+-	lp->alloc = (alloc_policy_t) arg_uint_value(cmd, alloc_ARG, 0);
+-	lp->yes = arg_is_set(cmd, yes_ARG);
+-	lp->force = arg_is_set(cmd, force_ARG);
+-	lp->nofsck = arg_is_set(cmd, nofsck_ARG);
+-	lp->nosync = arg_is_set(cmd, nosync_ARG);
+-	lp->resizefs = arg_is_set(cmd, resizefs_ARG);
+-	lp->lockopt = arg_str_value(cmd, lockopt_ARG, NULL);
+-
+ 	return 1;
+ }
+ 
+@@ -186,7 +178,15 @@ out:
+ int lvresize(struct cmd_context *cmd, int argc, char **argv)
+ {
+ 	struct processing_handle *handle;
+-	struct lvresize_params lp = { 0 };
++	struct lvresize_params lp = {
++		.alloc = (alloc_policy_t) arg_uint_value(cmd, alloc_ARG, 0),
++		.yes = arg_is_set(cmd, yes_ARG),
++		.force = arg_is_set(cmd, force_ARG),
++		.nofsck = arg_is_set(cmd, nofsck_ARG),
++		.nosync = arg_is_set(cmd, nosync_ARG),
++		.resizefs = arg_is_set(cmd, resizefs_ARG),
++		.lockopt = arg_str_value(cmd, lockopt_ARG, NULL),
++	};
+ 	int ret;
+ 
+ 	if (!_lvresize_params(cmd, argc, argv, &lp)) {
 
 
