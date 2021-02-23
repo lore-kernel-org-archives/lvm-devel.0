@@ -1,48 +1,37 @@
-From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Fri,  6 Jun 2014 12:03:10 +0000 (UTC)
-Subject: dev-prajnoha-report-select - tests: use get_devs
-Message-ID: <20140606120310.55F4860D8C@fedorahosted.org>
+From: David Teigland <teigland@sourceware.org>
+Date: Tue, 23 Feb 2021 22:48:53 +0000 (GMT)
+Subject: main - WHATS_NEW: devices file
+Message-ID: <20210223224853.0831C3938C38@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=54da0ea61afece94445754d3e0a8fd5e0964f1e4
-Commit:        54da0ea61afece94445754d3e0a8fd5e0964f1e4
-Parent:        77d4e317a44213baff566f6b13b4a7d930f446b4
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu Jun 5 13:01:43 2014 +0200
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Thu Jun 5 17:49:35 2014 +0200
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=91d6822534026dc9110d478d214d27d0b3a3e61b
+Commit:        91d6822534026dc9110d478d214d27d0b3a3e61b
+Parent:        b36b4b82d88181204f6cda5f0d613be77e8c1a43
+Author:        David Teigland <teigland@redhat.com>
+AuthorDate:    Tue Feb 23 15:29:23 2021 -0600
+Committer:     David Teigland <teigland@redhat.com>
+CommitterDate: Tue Feb 23 16:43:38 2021 -0600
 
-tests: use get_devs
+WHATS_NEW: devices file
 
-Check how get_devs is usable with shell array DEVICES
 ---
- test/shell/covercmd.sh |    3 ++-
- 1 files changed, 2 insertions(+), 1 deletions(-)
+ WHATS_NEW | 1 +
+ 1 file changed, 1 insertion(+)
 
-diff --git a/test/shell/covercmd.sh b/test/shell/covercmd.sh
-index a036d92..d7dde5b 100644
---- a/test/shell/covercmd.sh
-+++ b/test/shell/covercmd.sh
-@@ -17,6 +17,7 @@
- . lib/test
- 
- aux prepare_pvs 5
-+get_devs
- 
- pvcreate --metadatacopies 0 "$dev2"
- pvcreate --metadatacopies 0 "$dev3"
-@@ -24,7 +25,7 @@ pvcreate --metadatacopies 0 "$dev3"
- # FIXME takes very long time
- #pvck "$dev1"
- 
--vgcreate $vg $(cat DEVICES)
-+vgcreate $vg "${DEVICES[@]}"
- 
- lvcreate -l 5 -i5 -I256 -n $lv $vg
- lvcreate -aey -l 5 -n $lv1 $vg
+diff --git a/WHATS_NEW b/WHATS_NEW
+index ff4120a47..e65f13123 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.03.12 - 
+ ===================================
++  Add devices file feature, off by default for now.
+   Support extension of writecached volumes.
+   Fix problem with unbound variable usage within fsadm.
+   Check for presence of VDO target before starting any conversion.
 
 
