@@ -1,50 +1,87 @@
-From: David Teigland <teigland@sourceware.org>
-Date: Mon, 22 Feb 2021 16:44:45 +0000 (GMT)
-Subject: main - fix check for md raid imsm signature on 4k devices
-Message-ID: <20210222164445.E0AE93949D80@sourceware.org>
+From: Zdenek Kabelac <zkabelac@sourceware.org>
+Date: Tue, 23 Feb 2021 14:03:55 +0000 (GMT)
+Subject: stable-2.02 - tests: remove local setting of LVM_BINARY
+Message-ID: <20210223140355.0A0103893678@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=12667e9897ad54f5723463b4c864c8259ba0be2a
-Commit:        12667e9897ad54f5723463b4c864c8259ba0be2a
-Parent:        3cba07125457b82045f41bfafc67733c0dad89a2
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Thu Feb 18 11:42:32 2021 -0600
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Thu Feb 18 11:42:32 2021 -0600
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=0ab7fce2b3e11c89ac5091c919750a7f7f23ad32
+Commit:        0ab7fce2b3e11c89ac5091c919750a7f7f23ad32
+Parent:        c94657cc2e678b0937fa770f4280507d1118ef4c
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Tue Feb 23 14:42:47 2021 +0100
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Tue Feb 23 15:01:53 2021 +0100
 
-fix check for md raid imsm signature on 4k devices
+tests: remove local setting of LVM_BINARY
 
-On devices with 4k logical block size, the imsm signature
-is located 8k from the end of the device, not 1k as is
-the case for devices with 512 LBS.
+To better test actually fsadm in test suite - avoid setting
+LVM_BINARY locally - since test setup already modifies
+PATH to find test's lvm binary as the 1st. in path.
 ---
- lib/device/dev-md.c | 10 ++++++++++
- 1 file changed, 10 insertions(+)
+ test/shell/fsadm-crypt.sh   | 3 ---
+ test/shell/fsadm-renamed.sh | 3 ---
+ test/shell/fsadm.sh         | 3 ---
+ test/shell/lvresize-full.sh | 2 --
+ 4 files changed, 11 deletions(-)
 
-diff --git a/lib/device/dev-md.c b/lib/device/dev-md.c
-index 36494b12b..3049b81b7 100644
---- a/lib/device/dev-md.c
-+++ b/lib/device/dev-md.c
-@@ -56,6 +56,16 @@ static int _dev_has_imsm_magic(struct device *dev, uint64_t devsize_sectors)
- {
- 	char imsm_signature[IMSM_SIG_LEN];
- 	uint64_t off = (devsize_sectors * 512) - 1024;
-+	unsigned int physical_block_size = 0;
-+	unsigned int logical_block_size = 0;
-+
-+	if (!dev_get_direct_block_sizes(dev, &physical_block_size, &logical_block_size))
-+		return_0;
-+
-+	if (logical_block_size == 4096)
-+		off = (devsize_sectors * 512) - 8192;
-+	else
-+		off = (devsize_sectors * 512) - 1024;
+diff --git a/test/shell/fsadm-crypt.sh b/test/shell/fsadm-crypt.sh
+index 4b8fc4e2d..2004db957 100644
+--- a/test/shell/fsadm-crypt.sh
++++ b/test/shell/fsadm-crypt.sh
+@@ -76,9 +76,6 @@ dev_vg_lv="$DM_DEV_DIR/$vg_lv"
+ dev_vg_lv2="$DM_DEV_DIR/$vg_lv2"
+ dev_vg_lv3="$DM_DEV_DIR/$vg_lv3"
+ mount_dir="mnt"
+-# for recursive call
+-LVM_BINARY=$(which lvm)
+-export LVM_BINARY
  
- 	if (!dev_read_bytes(dev, off, IMSM_SIG_LEN, imsm_signature))
- 		return_0;
+ test ! -d "$mount_dir" && mkdir "$mount_dir"
+ 
+diff --git a/test/shell/fsadm-renamed.sh b/test/shell/fsadm-renamed.sh
+index 321893925..50c6d3ee5 100644
+--- a/test/shell/fsadm-renamed.sh
++++ b/test/shell/fsadm-renamed.sh
+@@ -27,9 +27,6 @@ dev_vg_lv_ren="$DM_DEV_DIR/$vg_lv_ren"
+ mount_dir="mnt"
+ mount_space_dir="mnt space dir"
+ mount_dolar_dir="mnt \$SPACE dir"
+-# for recursive call
+-LVM_BINARY=$(which lvm)
+-export LVM_BINARY
+ 
+ test ! -d "$mount_dir" && mkdir "$mount_dir"
+ test ! -d "$mount_space_dir" && mkdir "$mount_space_dir"
+diff --git a/test/shell/fsadm.sh b/test/shell/fsadm.sh
+index 67f9660e6..987b1a1a9 100644
+--- a/test/shell/fsadm.sh
++++ b/test/shell/fsadm.sh
+@@ -45,9 +45,6 @@ dev_vg_lv="$DM_DEV_DIR/$vg_lv"
+ dev_vg_lv2="$DM_DEV_DIR/$vg_lv2"
+ mount_dir="mnt"
+ mount_space_dir="mnt space dir"
+-# for recursive call
+-LVM_BINARY=$(which lvm)
+-export LVM_BINARY
+ 
+ test ! -d "$mount_dir" && mkdir "$mount_dir"
+ test ! -d "$mount_space_dir" && mkdir "$mount_space_dir"
+diff --git a/test/shell/lvresize-full.sh b/test/shell/lvresize-full.sh
+index 3cab52275..dcf93a7b2 100644
+--- a/test/shell/lvresize-full.sh
++++ b/test/shell/lvresize-full.sh
+@@ -21,8 +21,6 @@ SKIP_WITH_LVMPOLLD=1
+ FSCK=${FSCK-fsck}
+ MKFS=${MKFS-mkfs.ext3}
+ RESIZEFS=${RESIZEFS-resize2fs}
+-LVM_BINARY=$(which lvm)
+-export LVM_BINARY
+ 
+ which $FSCK || skip
+ which $MKFS || skip
 
 
