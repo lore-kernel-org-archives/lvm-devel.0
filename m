@@ -1,141 +1,55 @@
-From: Wu Guanghao <wuguanghao3@huawei.com>
-Date: Tue, 23 Feb 2021 17:39:29 +0800
-Subject: [PATCH v2]unit-test: modify the test case to support systems with PAGE_SIZE of 64K
-Message-ID: <aed6c27e-48de-c81e-88f2-a97722857b10@huawei.com>
+From: Zdenek Kabelac <zkabelac@sourceware.org>
+Date: Wed, 24 Feb 2021 11:10:39 +0000 (GMT)
+Subject: stable-2.02 - lvconvert: improve support for metadata profiles
+Message-ID: <20210224111039.4966D385800C@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Hi
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=f3babcb59123e61b0ecead3c8547a4c0ad607276
+Commit:        f3babcb59123e61b0ecead3c8547a4c0ad607276
+Parent:        e2b693fbe6139b0b991ea84a3011a74586b3b702
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Tue Feb 23 23:22:18 2021 +0100
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Tue Feb 23 23:30:46 2021 +0100
 
-This modification supports dynamically obtaining the value of PAGE_SIZE,
-which is compatible with systems with PAGE_SIZE of (4K/64K)
+lvconvert: improve support for metadata profiles
 
-
-
->From 83523866cd1a0ad2d5d0da610a622da9e28e7657 Mon Sep 17 00:00:00 2001
-From: wuguanghao <wuguanghao3@huawei.com>
-Date: Sat, 20 Feb 2021 15:03:28 +0800
-Subject: [PATCH] test case supports the case where PAGE_SIZE is 64K
-
-Signed-off-by: wuguanghao <wuguanghao3@huawei.com>
-
+lvconvert can use thin-profile just like lvcreate.
+(Added already upstream as part of VDO support).
 ---
- test/unit/bcache_t.c       |  7 ++++---
- test/unit/bcache_utils_t.c |  2 +-
- test/unit/io_engine_t.c    | 11 +++++++----
- 3 files changed, 12 insertions(+), 8 deletions(-)
+ lib/metadata/lv_manip.c | 3 +++
+ tools/lvmcmdline.c      | 1 +
+ 2 files changed, 4 insertions(+)
 
-diff --git a/test/unit/bcache_t.c b/test/unit/bcache_t.c
-index 9c4d102de..399468ad4 100644
---- a/test/unit/bcache_t.c
-+++ b/test/unit/bcache_t.c
-@@ -360,6 +360,7 @@ static void _large_fixture_exit(void *context)
-  *--------------------------------------------------------------*/
- #define MEG 2048
- #define SECTOR_SHIFT 9
-+#define PAGE_SIZE_SECTORS (sysconf(_SC_PAGE_SIZE) >> SECTOR_SHIFT)
-
- static void good_create(sector_t block_size, unsigned nr_cache_blocks)
- {
-@@ -389,12 +390,12 @@ static void bad_create(sector_t block_size, unsigned nr_cache_blocks)
-
- static void test_create(void *fixture)
- {
--	good_create(8, 16);
-+	good_create(PAGE_SIZE_SECTORS, 16);
- }
-
- static void test_nr_cache_blocks_must_be_positive(void *fixture)
- {
--	bad_create(8, 0);
-+	bad_create(PAGE_SIZE_SECTORS, 0);
- }
-
- static void test_block_size_must_be_positive(void *fixture)
-@@ -412,7 +413,7 @@ static void test_block_size_must_be_multiple_of_page_size(void *fixture)
- 		bad_create(_bad_examples[i], 16);
-
- 	for (i = 1; i < 100; i++)
--		good_create(i * 8, 16);
-+		good_create(i * PAGE_SIZE_SECTORS, 16);
- }
-
- static void test_get_triggers_read(void *context)
-diff --git a/test/unit/bcache_utils_t.c b/test/unit/bcache_utils_t.c
-index 69c510109..ecc3ebb32 100644
---- a/test/unit/bcache_utils_t.c
-+++ b/test/unit/bcache_utils_t.c
-@@ -26,7 +26,7 @@
-
- //----------------------------------------------------------------
-
--#define T_BLOCK_SIZE 4096
-+#define T_BLOCK_SIZE sysconf(_SC_PAGESIZE)
- #define NR_BLOCKS 64
- #define INIT_PATTERN 123
-
-diff --git a/test/unit/io_engine_t.c b/test/unit/io_engine_t.c
-index 349df2586..431cca6d3 100644
---- a/test/unit/io_engine_t.c
-+++ b/test/unit/io_engine_t.c
-@@ -25,8 +25,11 @@
-
- //----------------------------------------------------------------
-
-+#define SECTOR_SHIFT 9
- #define SECTOR_SIZE 512
- #define BLOCK_SIZE_SECTORS 8
-+#define PAGE_SIZE sysconf(_SC_PAGESIZE)
-+#define PAGE_SIZE_SECTORS (PAGE_SIZE >> SECTOR_SHIFT)
- #define NR_BLOCKS 64
-
- struct fixture {
-@@ -83,7 +86,7 @@ static void *_fix_init(void)
-         T_ASSERT(f);
-         f->e = create_async_io_engine();
-         T_ASSERT(f->e);
--	if (posix_memalign((void **) &f->data, 4096, SECTOR_SIZE * BLOCK_SIZE_SECTORS))
-+	if (posix_memalign((void **) &f->data, PAGE_SIZE, SECTOR_SIZE * BLOCK_SIZE_SECTORS))
-         	test_fail("posix_memalign failed");
-
-         snprintf(f->fname, sizeof(f->fname), "unit-test-XXXXXX");
-@@ -138,7 +141,7 @@ static void _test_read(void *fixture)
- {
- 	struct fixture *f = fixture;
- 	struct io io;
--	struct bcache *cache = bcache_create(8, BLOCK_SIZE_SECTORS, f->e);
-+	struct bcache *cache = bcache_create(PAGE_SIZE_SECTORS, BLOCK_SIZE_SECTORS, f->e);
- 	T_ASSERT(cache);
-
- 	f->di = bcache_set_fd(f->fd);
-@@ -156,7 +159,7 @@ static void _test_write(void *fixture)
- {
- 	struct fixture *f = fixture;
- 	struct io io;
--	struct bcache *cache = bcache_create(8, BLOCK_SIZE_SECTORS, f->e);
-+	struct bcache *cache = bcache_create(PAGE_SIZE_SECTORS, BLOCK_SIZE_SECTORS, f->e);
- 	T_ASSERT(cache);
-
- 	f->di = bcache_set_fd(f->fd);
-@@ -175,7 +178,7 @@ static void _test_write_bytes(void *fixture)
- 	unsigned offset = 345;
- 	char buf_out[32];
- 	char buf_in[32];
--	struct bcache *cache = bcache_create(8, BLOCK_SIZE_SECTORS, f->e);
-+	struct bcache *cache = bcache_create(PAGE_SIZE_SECTORS, BLOCK_SIZE_SECTORS, f->e);
- 	T_ASSERT(cache);
-
- 	f->di = bcache_set_fd(f->fd);
--- 
-2.23.0
-
-
-
-Regards
-
-Wu Guanghao
+diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
+index 11fab6d7b..0918780f1 100644
+--- a/lib/metadata/lv_manip.c
++++ b/lib/metadata/lv_manip.c
+@@ -7019,6 +7019,9 @@ struct logical_volume *insert_layer_for_lv(struct cmd_context *cmd,
+ 	lv_where->le_count = layer_lv->le_count;
+ 	lv_where->size = (uint64_t) lv_where->le_count * lv_where->vg->extent_size;
+ 
++	if (lv_where->vg->fid->fmt->features & FMT_CONFIG_PROFILE)
++		lv_where->profile = lv_where->vg->cmd->profile_params->global_metadata_profile;
++
+ 	/*
+ 	 * recuresively rename sub LVs
+ 	 *   currently supported only for thin data layer
+diff --git a/tools/lvmcmdline.c b/tools/lvmcmdline.c
+index 890aa0551..e82e4c661 100644
+--- a/tools/lvmcmdline.c
++++ b/tools/lvmcmdline.c
+@@ -2573,6 +2573,7 @@ static int _prepare_profiles(struct cmd_context *cmd)
+ 		 * The --commandprofile is assumed otherwise.
+ 		 */
+ 		if (!strcmp(cmd->command->name, "lvcreate") ||
++		    !strcmp(cmd->command->name, "lvconvert") ||
+ 		    !strcmp(cmd->command->name, "vgcreate") ||
+ 		    !strcmp(cmd->command->name, "lvchange") ||
+ 		    !strcmp(cmd->command->name, "vgchange")) {
 
 
