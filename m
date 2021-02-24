@@ -1,83 +1,60 @@
-From: David Teigland <teigland@sourceware.org>
-Date: Wed, 24 Feb 2021 16:32:40 +0000 (GMT)
-Subject: main - Revert "tests: enable tests for lvmlockd"
-Message-ID: <20210224163240.ABA57387086A@sourceware.org>
+From: David Teigland <teigland@redhat.com>
+Date: Wed, 24 Feb 2021 12:21:01 -0600
+Subject: Question: the failure handling for sanlock
+In-Reply-To: <20210224031630.GB25715@leoy-ThinkPad-X240s>
+References: <20210214101303.GA399193@leoy-ThinkPad-X240s>
+	<20210215163127.GA25608@redhat.com>
+	<20210224031630.GB25715@leoy-ThinkPad-X240s>
+Message-ID: <20210224182101.GD4136@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=aa34da6eccb4dafe0a35129ddfb8ad7fb63fb7d2
-Commit:        aa34da6eccb4dafe0a35129ddfb8ad7fb63fb7d2
-Parent:        6fad7f2eac84af60d301816dc06ef7276cd6415f
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Wed Feb 24 10:30:51 2021 -0600
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Wed Feb 24 10:30:51 2021 -0600
+On Wed, Feb 24, 2021 at 11:16:30AM +0800, Leo Yan wrote:
+> I verified the two patches you mentioned, and applied your suggestion
+> to use the command:
+> 
+>   "$DMSETUP" info -c -S "uuid=~LVM && vgname=$VG_NAME && lv_layer=\"\"" \
+>   	-o name --noheadings | xargs "$DMSETUP" wipe_table
+> 
+> At the end, I can see the device is changed to use DM "error" backend
+> driver:
+> 
+>   Broadcast message from systemd-journald at localhost.localdomain (Tue 2021-02-23 21:55:16 EST):
+>   lvmlockctl[2032]: Deactivated LVs in VG TESTVG1 successfully.
+> 
+>   Broadcast message from systemd-journald at localhost.localdomain (Tue 2021-02-23 21:55:16 EST):
+>   lvmlockctl[2032]: Runing lvmlockctl --drop TESTVG1.
+> 
+>   # dmsetup table
+>   TESTPV1: 0 163840 linear 8:146 0
+>   TESTVG1-TESTVG1LV1: 0 155648 error
+> 
+> Please be aware, to avoid misleading, I tested this with another
+> in-house locking scheme rather than sanlock, but the working flow for
+> failure handling is exactly same.
+> 
+> I have updated a bit for the two patches [1]; but want to check with you
+> how to proceed to merge these patches?  Would you directly merge patches
+> at your side or you want me to resend these two patches so you could
+> take a review before merging?  For the later case, I am glad to send the
+> patches to lvm-devel mailing list and follow up comments/suggestions as
+> needed.
+> 
+> Thanks,
+> Leo
+> 
+> [1] https://people.linaro.org/~leo.yan/lvm/
 
-Revert "tests: enable tests for lvmlockd"
+Thanks for verifying that, please send the patches to the list and I'll
+take them from there.  Another part I now remember we need to address is
+making this configurable (blkdeactivate isn't an established command.)
+I'll need to come up with a solution to that before pushing them out.  The
+possible solutions I'm seeing are somewhat ugly, and this is one of the
+reasons we didn't finish the integration last time.
 
-This reverts commit 99b6173f10fe7e2dbd54bb8734667ca8df69905e.
-
-These tests are disabled with lvmlockd because they use
-snapshots without an origin which is not permitted in a
-shared vg.
----
- test/shell/lvconvert-snapshot.sh | 3 ++-
- test/shell/lvconvert-thin.sh     | 5 +++--
- 2 files changed, 5 insertions(+), 3 deletions(-)
-
-diff --git a/test/shell/lvconvert-snapshot.sh b/test/shell/lvconvert-snapshot.sh
-index 15299dff0..9a32776e9 100644
---- a/test/shell/lvconvert-snapshot.sh
-+++ b/test/shell/lvconvert-snapshot.sh
-@@ -12,6 +12,7 @@
- 
- # Test various supported conversion of snapshot
- 
-+SKIP_WITH_LVMLOCKD=1
- SKIP_WITH_LVMPOLLD=1
- 
- . lib/inittest
-@@ -19,7 +20,7 @@ SKIP_WITH_LVMPOLLD=1
- aux prepare_pvs 2
- get_devs
- 
--vgcreate $SHARED -s 4k "$vg" "${DEVICES[@]}"
-+vgcreate -s 4k "$vg" "${DEVICES[@]}"
- 
- lvcreate --type snapshot -V50 -L1 -n $lv1 -s $vg
- 
-diff --git a/test/shell/lvconvert-thin.sh b/test/shell/lvconvert-thin.sh
-index ee8569164..bfda8e50d 100644
---- a/test/shell/lvconvert-thin.sh
-+++ b/test/shell/lvconvert-thin.sh
-@@ -10,6 +10,7 @@
- # along with this program; if not, write to the Free Software Foundation,
- # Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
- 
-+SKIP_WITH_LVMLOCKD=1
- SKIP_WITH_LVMPOLLD=1
- 
- export LVM_TEST_THIN_REPAIR_CMD=${LVM_TEST_THIN_REPAIR_CMD-/bin/false}
-@@ -31,7 +32,7 @@ aux prepare_pvs 4 64
- get_devs
- 
- # build one large PV
--vgcreate $SHARED $vg1 "$dev1" "$dev2" "$dev3"
-+vgcreate $vg1 "$dev1" "$dev2" "$dev3"
- 
- # 32bit linux kernels are fragille with device size >= 16T
- # maybe  uname -m    [ x86_64 | i686 ]
-@@ -41,7 +42,7 @@ lvcreate --type snapshot -l 100%FREE -n $lv $vg1 --virtualsize $TSIZE
- aux extend_filter_LVMTEST
- 
- pvcreate "$DM_DEV_DIR/$vg1/$lv"
--vgcreate $SHARED -s 64K $vg "$dev4" "$DM_DEV_DIR/$vg1/$lv"
-+vgcreate $vg -s 64K "$dev4" "$DM_DEV_DIR/$vg1/$lv"
- 
- lvcreate -L1T -n $lv1 $vg
- invalid lvconvert --yes -c 8M --type thin --poolmetadatasize 1G $vg/$lv1
+Dave
 
 
