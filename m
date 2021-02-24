@@ -1,59 +1,39 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Wed, 24 Feb 2021 11:10:38 +0000 (GMT)
-Subject: stable-2.02 - tests: update setting LVM_BINARY for testing
-Message-ID: <20210224111038.27FF6386103F@sourceware.org>
+Date: Wed, 24 Feb 2021 11:10:41 +0000 (GMT)
+Subject: stable-2.02 - cmdline: add missing comma in definition
+Message-ID: <20210224111041.90B26385800C@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=e2b693fbe6139b0b991ea84a3011a74586b3b702
-Commit:        e2b693fbe6139b0b991ea84a3011a74586b3b702
-Parent:        1f220e8d430f3ab94e3e85656a3f692c6dc4051f
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=844a075c01ad300439a46f2ef4c85482f83bf992
+Commit:        844a075c01ad300439a46f2ef4c85482f83bf992
+Parent:        85795593b8449d9fb4fed0eb252906c9a28b0ddd
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Feb 23 16:27:44 2021 +0100
+AuthorDate:    Tue Feb 23 23:28:41 2021 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Tue Feb 23 16:29:48 2021 +0100
+CommitterDate: Wed Feb 24 11:56:12 2021 +0100
 
-tests: update setting LVM_BINARY for testing
+cmdline: add missing comma in definition
 
-When testing is running on uninstealled system - prefer our own binary
-in tests.
 ---
- test/lib/aux.sh   | 2 +-
- test/lib/utils.sh | 3 ++-
- 2 files changed, 3 insertions(+), 2 deletions(-)
+ tools/command-lines.in | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
 
-diff --git a/test/lib/aux.sh b/test/lib/aux.sh
-index 4b303474a..9449b86cf 100644
---- a/test/lib/aux.sh
-+++ b/test/lib/aux.sh
-@@ -177,7 +177,7 @@ prepare_clvmd() {
- 	echo "<======== Starting CLVMD ========>"
- 	echo -n "## preparing clvmd..."
- 	# lvs is executed from clvmd - use our version
--	LVM_LOG_FILE_EPOCH=CLVMD LVM_LOG_FILE_MAX_LINES=1000000 LVM_BINARY=$(which lvm) $run_valgrind clvmd -Isinglenode -d 1 -f &
-+	LVM_LOG_FILE_EPOCH=CLVMD LVM_LOG_FILE_MAX_LINES=1000000 $run_valgrind clvmd -Isinglenode -d 1 -f &
- 	echo $! > LOCAL_CLVMD
+diff --git a/tools/command-lines.in b/tools/command-lines.in
+index fff3f16f9..7d0abd03f 100644
+--- a/tools/command-lines.in
++++ b/tools/command-lines.in
+@@ -309,7 +309,7 @@ OO_LVCONVERT_POOL: --poolmetadata LV, --poolmetadatasize SizeMB,
+ --poolmetadataspare Bool, --readahead Readahead, --chunksize SizeKB,
+ --zero Bool, --metadataprofile String
  
- 	for i in {200..0} ; do
-diff --git a/test/lib/utils.sh b/test/lib/utils.sh
-index f01f5bdb0..f12a87990 100644
---- a/test/lib/utils.sh
-+++ b/test/lib/utils.sh
-@@ -280,10 +280,11 @@ if test -z "${installed_testsuite+varset}"; then
-     *"$abs_top_builddir/test/lib"*) ;;
-     *)
- 	PATH="$abs_top_builddir/test/lib:$abs_top_builddir/test/api:$PATH"
-+	LVM_BINARY=$(which lvm)
- 	LD_LIBRARY_PATH=$(find -L "$abs_top_builddir/libdm/" "$abs_top_builddir/tools/"\
- 		"$abs_top_builddir/daemons/" "$abs_top_builddir/liblvm/"\
- 		-name "*.so" -printf "%h:")"$LD_LIBRARY_PATH"
--	export PATH LD_LIBRARY_PATH ;;
-+	export PATH LD_LIBRARY_PATH LVM_BINARY ;;
-     esac
- fi
+-OO_LVCONVERT_THIN: --discards Discards --errorwhenfull Bool
++OO_LVCONVERT_THIN: --discards Discards, --errorwhenfull Bool
  
+ OO_LVCONVERT_CACHE: --cachemetadataformat CacheMetadataFormat,
+ --cachemode CacheMode, --cachepolicy String,
 
 
