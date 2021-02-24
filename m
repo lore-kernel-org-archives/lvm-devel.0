@@ -1,55 +1,59 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Wed, 24 Feb 2021 11:10:39 +0000 (GMT)
-Subject: stable-2.02 - lvconvert: improve support for metadata profiles
-Message-ID: <20210224111039.4966D385800C@sourceware.org>
+Date: Wed, 24 Feb 2021 11:10:38 +0000 (GMT)
+Subject: stable-2.02 - tests: update setting LVM_BINARY for testing
+Message-ID: <20210224111038.27FF6386103F@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=f3babcb59123e61b0ecead3c8547a4c0ad607276
-Commit:        f3babcb59123e61b0ecead3c8547a4c0ad607276
-Parent:        e2b693fbe6139b0b991ea84a3011a74586b3b702
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=e2b693fbe6139b0b991ea84a3011a74586b3b702
+Commit:        e2b693fbe6139b0b991ea84a3011a74586b3b702
+Parent:        1f220e8d430f3ab94e3e85656a3f692c6dc4051f
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Feb 23 23:22:18 2021 +0100
+AuthorDate:    Tue Feb 23 16:27:44 2021 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Tue Feb 23 23:30:46 2021 +0100
+CommitterDate: Tue Feb 23 16:29:48 2021 +0100
 
-lvconvert: improve support for metadata profiles
+tests: update setting LVM_BINARY for testing
 
-lvconvert can use thin-profile just like lvcreate.
-(Added already upstream as part of VDO support).
+When testing is running on uninstealled system - prefer our own binary
+in tests.
 ---
- lib/metadata/lv_manip.c | 3 +++
- tools/lvmcmdline.c      | 1 +
- 2 files changed, 4 insertions(+)
+ test/lib/aux.sh   | 2 +-
+ test/lib/utils.sh | 3 ++-
+ 2 files changed, 3 insertions(+), 2 deletions(-)
 
-diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
-index 11fab6d7b..0918780f1 100644
---- a/lib/metadata/lv_manip.c
-+++ b/lib/metadata/lv_manip.c
-@@ -7019,6 +7019,9 @@ struct logical_volume *insert_layer_for_lv(struct cmd_context *cmd,
- 	lv_where->le_count = layer_lv->le_count;
- 	lv_where->size = (uint64_t) lv_where->le_count * lv_where->vg->extent_size;
+diff --git a/test/lib/aux.sh b/test/lib/aux.sh
+index 4b303474a..9449b86cf 100644
+--- a/test/lib/aux.sh
++++ b/test/lib/aux.sh
+@@ -177,7 +177,7 @@ prepare_clvmd() {
+ 	echo "<======== Starting CLVMD ========>"
+ 	echo -n "## preparing clvmd..."
+ 	# lvs is executed from clvmd - use our version
+-	LVM_LOG_FILE_EPOCH=CLVMD LVM_LOG_FILE_MAX_LINES=1000000 LVM_BINARY=$(which lvm) $run_valgrind clvmd -Isinglenode -d 1 -f &
++	LVM_LOG_FILE_EPOCH=CLVMD LVM_LOG_FILE_MAX_LINES=1000000 $run_valgrind clvmd -Isinglenode -d 1 -f &
+ 	echo $! > LOCAL_CLVMD
  
-+	if (lv_where->vg->fid->fmt->features & FMT_CONFIG_PROFILE)
-+		lv_where->profile = lv_where->vg->cmd->profile_params->global_metadata_profile;
-+
- 	/*
- 	 * recuresively rename sub LVs
- 	 *   currently supported only for thin data layer
-diff --git a/tools/lvmcmdline.c b/tools/lvmcmdline.c
-index 890aa0551..e82e4c661 100644
---- a/tools/lvmcmdline.c
-+++ b/tools/lvmcmdline.c
-@@ -2573,6 +2573,7 @@ static int _prepare_profiles(struct cmd_context *cmd)
- 		 * The --commandprofile is assumed otherwise.
- 		 */
- 		if (!strcmp(cmd->command->name, "lvcreate") ||
-+		    !strcmp(cmd->command->name, "lvconvert") ||
- 		    !strcmp(cmd->command->name, "vgcreate") ||
- 		    !strcmp(cmd->command->name, "lvchange") ||
- 		    !strcmp(cmd->command->name, "vgchange")) {
+ 	for i in {200..0} ; do
+diff --git a/test/lib/utils.sh b/test/lib/utils.sh
+index f01f5bdb0..f12a87990 100644
+--- a/test/lib/utils.sh
++++ b/test/lib/utils.sh
+@@ -280,10 +280,11 @@ if test -z "${installed_testsuite+varset}"; then
+     *"$abs_top_builddir/test/lib"*) ;;
+     *)
+ 	PATH="$abs_top_builddir/test/lib:$abs_top_builddir/test/api:$PATH"
++	LVM_BINARY=$(which lvm)
+ 	LD_LIBRARY_PATH=$(find -L "$abs_top_builddir/libdm/" "$abs_top_builddir/tools/"\
+ 		"$abs_top_builddir/daemons/" "$abs_top_builddir/liblvm/"\
+ 		-name "*.so" -printf "%h:")"$LD_LIBRARY_PATH"
+-	export PATH LD_LIBRARY_PATH ;;
++	export PATH LD_LIBRARY_PATH LVM_BINARY ;;
+     esac
+ fi
+ 
 
 
