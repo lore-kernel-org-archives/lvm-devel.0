@@ -1,7 +1,9 @@
 From: Leo Yan <leo.yan@linaro.org>
-Date: Thu, 25 Feb 2021 19:04:50 +0800
-Subject: [PATCH LVM2 v1 1/2] blkdeactive: Introduce option "forcevg" to forcibly deactivate VG
-Message-ID: <20210225110451.175956-1-leo.yan@linaro.org>
+Date: Thu, 25 Feb 2021 19:04:51 +0800
+Subject: [PATCH LVM2 v1 2/2] lvmlockctl: Automatically handle failure
+In-Reply-To: <20210225110451.175956-1-leo.yan@linaro.org>
+References: <20210225110451.175956-1-leo.yan@linaro.org>
+Message-ID: <20210225110451.175956-2-leo.yan@linaro.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,179 +12,182 @@ Content-Transfer-Encoding: 7bit
 
 From: Zhang Huan <zhanghuan@huayun.com>
 
-This patch introduces new option "forcevg" for LVM, the main purpose is
-to flush in-flight I/O operations and replace the LV's device mapper
-table with 'error' target, this is accomplished by using command
-"dmsetup wipe_table".
-
-To handle the failure as soon as possible, it will not deactivate
-holders and not try to use command "lvchange", thus can speed up
-wiping table.
-
-This option is supposed to be used by "lvmlockctl" command to forcibly
-deactivate volume group, this can avoid watchdog reset when detect
-drive failures.
+When the lock manager detects drive failure, it invokes command
+"lvmlockctl" to handle the faiulre; in this case, lvmlockctl
+automatically calls "blkdeactivate -l forcevg" to deactivate VG
+and calls drop_vg() to cleanup the lockspace.
 
 Signed-off-by: Zhang Huan <zhanghuan@huayun.com>
-[Refactored changes and commit log]
+[Refactored the changes and commit log]
 Signed-off-by: Leo Yan <leo.yan@linaro.org>
 ---
- man/blkdeactivate.8_main    | 17 +++++++++++
- scripts/blkdeactivate.sh.in | 71 +++++++++++++++++++++++++++++++++++++++------
- 2 files changed, 79 insertions(+), 9 deletions(-)
+ configure                     |  3 +++
+ configure.ac                  |  2 ++
+ daemons/lvmlockd/lvmlockctl.c | 40 +++++++++++++++++++++++++++-------------
+ include/configure.h.in        |  3 +++
+ man/lvmlockctl.8_main         | 11 +++++------
+ 5 files changed, 40 insertions(+), 19 deletions(-)
 
-diff --git a/man/blkdeactivate.8_main b/man/blkdeactivate.8_main
-index f3c19a8..33f410c 100644
---- a/man/blkdeactivate.8_main
-+++ b/man/blkdeactivate.8_main
-@@ -51,6 +51,17 @@ Retry removal several times in case of failure.
- Deactivate the whole LVM Volume Group when processing a Logical Volume.
- Deactivating the Volume Group as a whole is quicker than deactivating
- each Logical Volume separately.
-+.IP \fIforcevg\fP
-+Forcibly deactivate the whole LVM Volume Group as soon as possible.
-+The primary job of this option is to flush the in-flight I/O operation
-+and then replace the LV's device-mapper table with 'error' target.
-+This is accomplished by using command "dmsetup wipe_table". After that,
-+any applications on the host cannot access the device anymore, so even
-+the LV's lock is expired, it's safe for without data corruption and can
-+avoid watchdog resetting.
-+This option is usually used for sanlock's fence procedure to avoid host
-+reset. When this option is used, any other options
-+(e.g. "-d retry|force", "-u") will be ignored.
- .RE
- .TP
- .BR -m ", " --mpathoptions \ \fImpath_options\fP
-@@ -108,6 +119,12 @@ Volume Group at once when processing an LVM Logical Volume.
- .B blkdeactivate -u -d retry -l wholevg
- .BR
- .P
-+Forcibly deactivate the whole vg.
-+.BR
-+#
-+.B blkdeactivate -l forcevg testvg
-+.BR
-+.P
- Deactivate all supported block devices found in the system. If the deactivation
- of a device-mapper device fails, retry it and force removal.
- .BR
-diff --git a/scripts/blkdeactivate.sh.in b/scripts/blkdeactivate.sh.in
-index a4b8a8f..833e3f3 100644
---- a/scripts/blkdeactivate.sh.in
-+++ b/scripts/blkdeactivate.sh.in
-@@ -70,6 +70,8 @@ DO_UMOUNT=0
+diff --git a/configure b/configure
+index 7d4f337..a6cd432 100755
+--- a/configure
++++ b/configure
+@@ -684,6 +684,7 @@ MANGLING
+ LVM_RELEASE_DATE
+ LVM_RELEASE
+ LVM_PATH
++LVM_DIR
+ LVM_PATCHLEVEL
+ LVM_MINOR
+ LVM_MAJOR
+@@ -15298,9 +15299,11 @@ SYSCONFDIR="$(eval echo $(eval echo $sysconfdir))"
  
- # Deactivate each LV separately by default (not the whole VG).
- LVM_DO_WHOLE_VG=0
-+# Forcily deactivate the whole VG by wiping DM table
-+LVM_DO_FORCE_VG=0
- # Do not retry LV deactivation by default.
- LVM_CONFIG="activation{retry_deactivation=0}"
+ SBINDIR="$(eval echo $(eval echo $sbindir))"
+ LVM_PATH="$SBINDIR/lvm"
++LVM_DIR="$SBINDIR/"
  
-@@ -134,6 +136,7 @@ usage() {
- 	echo "    LVM_OPTIONS:"
- 	echo "      retry           retry removal several times in case of failure"
- 	echo "      wholevg         deactivate the whole VG when processing an LV"
-+	echo "      forcevg         force deactivate (wipe_table) the whole VG"
- 	echo "    MDRAID_OPTIONS:"
- 	echo "      wait            wait for resync, recovery or reshape to complete first"
- 	echo "    MPATH_OPTIONS:"
-@@ -282,6 +285,50 @@ deactivate_lvm () {
- 	fi
- }
+ cat >>confdefs.h <<_ACEOF
+ #define LVM_PATH "$LVM_PATH"
++#define LVM_DIR "$LVM_DIR"
+ _ACEOF
  
-+is_top_level_lv() {
-+	is_top_level_device && return 0
-+	skip=1
-+	while $LSBLK_READ; do
-+		# First line self device
-+		test "$skip" -eq 1 && skip=0 && continue
+ 
+diff --git a/configure.ac b/configure.ac
+index 99b7c88..11ffdb5 100644
+--- a/configure.ac
++++ b/configure.ac
+@@ -1820,7 +1820,9 @@ SYSCONFDIR="$(eval echo $(eval echo $sysconfdir))"
+ 
+ SBINDIR="$(eval echo $(eval echo $sbindir))"
+ LVM_PATH="$SBINDIR/lvm"
++LVM_DIR="$SBINDIR/"
+ AC_DEFINE_UNQUOTED(LVM_PATH, ["$LVM_PATH"], [Path to lvm binary.])
++AC_DEFINE_UNQUOTED(LVM_DIR, ["$LVM_DIR"], [Path to lvm binary dir.])
+ 
+ USRSBINDIR="$(eval echo $(eval echo $usrsbindir))"
+ CLVMD_PATH="$USRSBINDIR/clvmd"
+diff --git a/daemons/lvmlockd/lvmlockctl.c b/daemons/lvmlockd/lvmlockctl.c
+index 436221d..35b409d 100644
+--- a/daemons/lvmlockd/lvmlockctl.c
++++ b/daemons/lvmlockd/lvmlockctl.c
+@@ -17,6 +17,7 @@
+ #include <signal.h>
+ #include <errno.h>
+ #include <fcntl.h>
++#include <stdlib.h>
+ #include <syslog.h>
+ #include <sys/socket.h>
+ #include <sys/un.h>
+@@ -32,6 +33,7 @@ static int gl_enable = 0;
+ static int gl_disable = 0;
+ static int stop_lockspaces = 0;
+ static char *arg_vg_name = NULL;
++static int do_drop(void);
+ 
+ #define DUMP_SOCKET_NAME "lvmlockd-dump.sock"
+ #define DUMP_BUF_SIZE (1024 * 1024)
+@@ -53,6 +55,11 @@ do { \
+ #define MAX_NAME 64
+ #define MAX_ARGS 64
+ 
++#define BLKDEACTIVATE_CMD "blkdeactivate -l forcevg "
++/* The max string length for blkdeactivate command */
++#define MAX_BLKDEACTIVATE_CMD	(sizeof(LVM_DIR) + sizeof(BLKDEACTIVATE_CMD) + \
++				 MAX_NAME + 1)
 +
-+		# not top device but top lv in this VG, return 0
-+		test "$devtype" != "lvm" && return 0
-+		test ${name:0:${#DM_VG_NAME}+1} != $DM_VG_NAME"-" && return 0
-+		test ${name:0:${#DM_VG_NAME}+2} = $DM_VG_NAME"--" && return 0
-+		# the same vg, hidden lv
-+		test ${name:0:${#DM_VG_NAME}+1} = $DM_VG_NAME"-" && return 1
-+	done <<< "$($LSBLK $DEV_DIR/$kname)"
-+}
+ /*
+  * lvmlockd dumps the client info before the lockspaces,
+  * so we can look up client info when printing lockspace info.
+@@ -506,11 +513,9 @@ static int do_kill(void)
+ 	daemon_reply reply;
+ 	int result;
+ 	int rv;
++	char deactivate_cmd[MAX_BLKDEACTIVATE_CMD+1] = { 0 };
+ 
+ 	syslog(LOG_EMERG, "Lost access to sanlock lease storage in VG %s.", arg_vg_name);
+-	/* These two lines explain the manual alternative to the FIXME below. */
+-	syslog(LOG_EMERG, "Immediately deactivate LVs in VG %s.", arg_vg_name);
+-	syslog(LOG_EMERG, "Once VG is unused, run lvmlockctl --drop %s.", arg_vg_name);
+ 
+ 	/*
+ 	 * It may not be strictly necessary to notify lvmlockd of the kill, but
+@@ -534,16 +539,25 @@ static int do_kill(void)
+ 
+ 	daemon_reply_destroy(reply);
+ 
+-	/*
+-	 * FIXME: here is where we should implement a strong form of
+-	 * blkdeactivate, and if it completes successfully, automatically call
+-	 * do_drop() afterward.  (The drop step may not always be necessary
+-	 * if the lvm commands run while shutting things down release all the
+-	 * leases.)
+-	 *
+-	 * run_strong_blkdeactivate();
+-	 * do_drop();
+-	 */
++	snprintf(deactivate_cmd, MAX_BLKDEACTIVATE_CMD, "%s%s%s",
++		 LVM_DIR, BLKDEACTIVATE_CMD, arg_vg_name);
 +
-+deactivate_vg () {
-+	local VG_NAME; local LV_NAME;
-+	local DM_VG_NAME; local DM_LV_NAME;
-+	local LVS;
-+	local skip_disablequeue=0
-+
-+	VG_NAME=$name
-+	DM_VG_NAME=${name/-/--}
-+	test -z "${SKIP_VG_LIST["$DM_VG_NAME"]}" || return 1
-+	test "$LVM_AVAILABLE" -eq 0 && {
-+		add_device_to_skip_list
-+		return 1
++	syslog(LOG_EMERG, "Immediately deactivate LVs in VG %s.", arg_vg_name);
++	rv = system(deactivate_cmd);
++	if (rv) {
++		syslog(LOG_EMERG, "Deactivated LVs in VG %s failed.",
++		       arg_vg_name);
++		return rv;
++	} else {
++		syslog(LOG_EMERG, "Deactivated LVs in VG %s successfully.",
++		       arg_vg_name);
 +	}
 +
-+	# The lock manager (e.g. sanlock) only give a short time to handle failure
-+	# before reset host, so replace DM table with 'error' target.
-+	# The reason for not using command "lvchange" ahead if because it may hang
-+	# for a long time for the failed device.
-+	echo -n "  [LVM]: force deactivating Logical Volumes for $VG_NAME... "
-+	"$DMSETUP" info -c -S "uuid=~LVM && vgname=$VG_NAME && lv_layer=\"\"" \
-+		-o name --noheadings | xargs "$DMSETUP" wipe_table
-+	if [ "$?" = "0" ]; then
-+		echo "wipe table done"
++	rv = do_drop();
++	if (rv)
++		syslog(LOG_EMERG, "lvmlockctl --drop %s failed.", arg_vg_name);
 +	else
-+		echo "wipe table failed" && return 1
-+	fi
-+}
-+
- deactivate_md () {
- 	local xname
- 	xname=$(printf "%s" "$name")
-@@ -333,7 +380,9 @@ deactivate () {
- 	# deactivate_holders first to recursively deactivate any existing    #
- 	# holders it might have before deactivating the device it processes. #
- 	######################################################################
--	if test "$devtype" = "lvm"; then
-+	if test "$devtype" = "vg"; then
-+		deactivate_vg
-+	elif test "$devtype" = "lvm"; then
- 		deactivate_lvm
- 	elif test "${kname:0:3}" = "dm-"; then
- 		deactivate_dm
-@@ -395,14 +444,17 @@ deactivate_all() {
- 		##################################
++		syslog(LOG_EMERG, "lvmlockctl --drop %s success.", arg_vg_name);
  
- 		while test $# -ne 0; do
--			# Unmount all relevant mountpoints first
--			while $LSBLK_READ; do
--				device_umount
--			done <<< "$($LSBLK "$1" | $SORT_MNT)"
--
--			# Do deactivate
--			# Single dm device tree deactivation.
--			if test -b "$1"; then
-+			# Force deactivate the whole vg
-+			if test $LVM_DO_FORCE_VG -ne 0; then
-+				$LSBLK_READ <<< "vg $1 $1"
-+				deactivate || return 1
-+			elif -b "$1"; then
-+				# Single dm device tree deactivation.
-+				# Unmount all relevant mountpoints first
-+				while $LSBLK_READ; do
-+					device_umount
-+				done <<< "$($LSBLK "$1" | $SORT_MNT)"
-+
- 				$LSBLK_READ <<< "$($LSBLK --nodeps "$1")"
+ 	return rv;
+ }
+diff --git a/include/configure.h.in b/include/configure.h.in
+index 812cacc..9e7b127 100644
+--- a/include/configure.h.in
++++ b/include/configure.h.in
+@@ -643,6 +643,9 @@
+ /* Path to lvm binary. */
+ #undef LVM_PATH
  
- 				# check if the device is not on the skip list already
-@@ -444,6 +496,7 @@ get_lvmopts() {
- 			"") ;;
- 			"retry") LVM_CONFIG="activation{retry_deactivation=1}" ;;
- 			"wholevg") LVM_DO_WHOLE_VG=1 ;;
-+			"forcevg") LVM_DO_FORCE_VG=1 ;;
- 			*) echo "$opt: unknown LVM option"
- 		esac
- 	done
++/* Path to lvm binary dir. */
++#undef LVM_DIR
++
+ /* Define to 1 if `major', `minor', and `makedev' are declared in <mkdev.h>.
+    */
+ #undef MAJOR_IN_MKDEV
+diff --git a/man/lvmlockctl.8_main b/man/lvmlockctl.8_main
+index b7ac0ec..99698bc 100644
+--- a/man/lvmlockctl.8_main
++++ b/man/lvmlockctl.8_main
+@@ -65,17 +65,16 @@ and prints it.
+ .SS kill
+ 
+ This is run by sanlock when it loses access to the storage holding leases
+-for a VG.  It currently emits a syslog message stating that the VG must
+-be immediately deactivated.  In the future it may automatically attempt to
+-forcibly deactivate the VG.  For more, see
+-.BR lvmlockd (8).
++for a VG.  It will call 'deactivate -l forcevg <vgname>' to forcibly
++deactivate the whole VG.  After successful deactivate, do 'drop vg' to
++clear the stale lockspace.  For more, see
++.BR lvmlockd (8), blkdeactivate (8).
+ 
+ .SS drop
+ 
+ This should only be run after a VG has been successfully deactivated
+ following an lvmlockctl --kill command.  It clears the stale lockspace
+-from lvmlockd.  In the future, this may become automatic along with an
+-automatic handling of --kill.  For more, see
++from lvmlockd.  For more, see
+ .BR lvmlockd (8).
+ 
+ .SS gl-enable
 -- 
 1.8.3.1
 
