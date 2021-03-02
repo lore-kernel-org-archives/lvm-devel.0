@@ -1,110 +1,87 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Tue,  2 Mar 2021 21:58:31 +0000 (GMT)
-Subject: main - dev-cache: optimize dir scanning
-Message-ID: <20210302215831.5C07F3834402@sourceware.org>
+Date: Tue,  2 Mar 2021 21:58:32 +0000 (GMT)
+Subject: main - lvremove: backup at the end of loop
+Message-ID: <20210302215832.8063C3851C35@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=fa64c51428ca20e860bbe21338d916329b8aaf25
-Commit:        fa64c51428ca20e860bbe21338d916329b8aaf25
-Parent:        9dd759c6b1c0e25e785485f823b09c59ef5b2583
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=eb1160ee4230e6f37707b19eb5b46d2446257500
+Commit:        eb1160ee4230e6f37707b19eb5b46d2446257500
+Parent:        fa64c51428ca20e860bbe21338d916329b8aaf25
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Sat Feb 27 17:09:38 2021 +0100
+AuthorDate:    Fri Feb 26 01:01:29 2021 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Tue Mar 2 22:54:40 2021 +0100
 
-dev-cache: optimize dir scanning
+lvremove: backup at the end of loop
 
-Use 'C' for alphasort - there is no need to use localized and slower
-sorting for internal directory scanning.
+Taking backup with each removed LV is slowing down the process
+considerable and is largerly uneeded. We are supposed to take
+backup only on significant points and making sure the backup
+is correct when the command is finished.
 
-Ensure on all code paths allocated dirent entries are released.
-
-Optimize full path construction.
+TODO: check how many other commands can be improved.
 ---
- lib/device/dev-cache.c | 41 ++++++++++++++++++++++-------------------
- 1 file changed, 22 insertions(+), 19 deletions(-)
+ lib/format_text/archiver.c | 2 ++
+ lib/metadata/lv_manip.c    | 2 +-
+ lib/metadata/vg.h          | 1 +
+ tools/toollib.c            | 3 +++
+ 4 files changed, 7 insertions(+), 1 deletion(-)
 
-diff --git a/lib/device/dev-cache.c b/lib/device/dev-cache.c
-index 21c9ef0ea..bbf6ce833 100644
---- a/lib/device/dev-cache.c
-+++ b/lib/device/dev-cache.c
-@@ -28,6 +28,7 @@
- #endif
- #include <unistd.h>
- #include <dirent.h>
-+#include <locale.h>
+diff --git a/lib/format_text/archiver.c b/lib/format_text/archiver.c
+index 07e9b04e4..cb8fc07de 100644
+--- a/lib/format_text/archiver.c
++++ b/lib/format_text/archiver.c
+@@ -267,6 +267,8 @@ int backup_locally(struct volume_group *vg)
  
- struct dev_iter {
- 	struct btree_iter *current;
-@@ -809,16 +810,6 @@ static int _insert_dev(const char *path, dev_t d)
- 	return 0;
- }
- 
--static char *_join(const char *dir, const char *name)
--{
--	size_t len = strlen(dir) + strlen(name) + 2;
--	char *r = malloc(len);
--	if (r)
--		snprintf(r, len, "%s/%s", dir, name);
--
--	return r;
--}
--
- /*
-  * Get rid of extra slashes in the path string.
-  */
-@@ -845,27 +836,39 @@ static int _insert_dir(const char *dir)
+ int backup(struct volume_group *vg)
  {
- 	int n, dirent_count, r = 1;
- 	struct dirent **dirent;
--	char *path;
-+	char path[PATH_MAX];
-+	size_t len;
++	vg->needs_backup = 0;
 +
-+	if (!dm_strncpy(path, dir, sizeof(path) - 1)) {
-+		log_debug_devs("Dir path %s is too long", path);
-+		return 0;
-+	}
-+	_collapse_slashes(path);
-+	len = strlen(path);
-+	if (len && path[len - 1] != '/')
-+		path[len++] = '/';
+ 	/* Unlock memory if possible */
+ 	memlock_unlock(vg->cmd);
  
-+	setlocale(LC_COLLATE, "C"); /* Avoid sorting by locales */
- 	dirent_count = scandir(dir, &dirent, NULL, alphasort);
- 	if (dirent_count > 0) {
- 		for (n = 0; n < dirent_count; n++) {
--			if (dirent[n]->d_name[0] == '.') {
--				free(dirent[n]);
-+			if (dirent[n]->d_name[0] == '.')
- 				continue;
--			}
- 
--			if (!(path = _join(dir, dirent[n]->d_name)))
--				return_0;
-+			if (!dm_strncpy(path + len, dirent[n]->d_name, sizeof(path) - len)) {
-+				log_debug_devs("Path %s/%s is too long.", dir, dirent[n]->d_name);
-+				r = 0;
-+				continue;
-+			}
- 
--			_collapse_slashes(path);
- 			r &= _insert(path, NULL, 1, 0);
--			free(path);
-+		}
- 
-+		for (n = 0; n < dirent_count; n++)
- 			free(dirent[n]);
--		}
- 		free(dirent);
+diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
+index 9bcab7477..4ac95063c 100644
+--- a/lib/metadata/lv_manip.c
++++ b/lib/metadata/lv_manip.c
+@@ -6780,7 +6780,7 @@ int lv_remove_single(struct cmd_context *cmd, struct logical_volume *lv,
+ 					display_lvname(pool_lv));
  	}
-+	setlocale(LC_COLLATE, "");
  
- 	return r;
- }
+-	backup(vg);
++	vg->needs_backup = 1;
+ 
+ 	lockd_lv(cmd, lock_lv, "un", LDLV_PERSISTENT);
+ 	lockd_free_lv(cmd, vg, lv->name, &lv->lvid.id[1], lv->lock_args);
+diff --git a/lib/metadata/vg.h b/lib/metadata/vg.h
+index 2e2146169..386d5b450 100644
+--- a/lib/metadata/vg.h
++++ b/lib/metadata/vg.h
+@@ -42,6 +42,7 @@ struct volume_group {
+ 	struct lvmcache_vginfo *vginfo;
+ 	uint32_t seqno;		/* Metadata sequence number */
+ 	unsigned skip_validate_lock_args : 1;
++	unsigned needs_backup : 1;
+ 	uint32_t write_count; /* count the number of vg_write calls */
+ 
+ 	/*
+diff --git a/tools/toollib.c b/tools/toollib.c
+index 5c9ccb6f2..9c026d9e5 100644
+--- a/tools/toollib.c
++++ b/tools/toollib.c
+@@ -3214,6 +3214,9 @@ int process_each_lv_in_vg(struct cmd_context *cmd, struct volume_group *vg,
+ 		log_set_report_object_name_and_id(NULL, NULL);
+ 	}
+ 
++	if (vg->needs_backup)
++		backup(vg);
++
+ 	if (lvargs_supplied) {
+ 		/*
+ 		 * FIXME: lvm supports removal of LV with all its dependencies
 
 
