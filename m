@@ -1,48 +1,108 @@
-From: pcaulfield@sourceware.org <pcaulfield@sourceware.org>
-Date: 11 Dec 2006 13:48:42 -0000
-Subject: LVM2 ./WHATS_NEW daemons/clvmd/clvmd.c
-Message-ID: <20061211134842.21646.qmail@sourceware.org>
+From: Zdenek Kabelac <zkabelac@sourceware.org>
+Date: Tue,  2 Mar 2021 21:58:10 +0000 (GMT)
+Subject: main - tests: make test complaint to local dev dir
+Message-ID: <20210302215810.DB22C3950405@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	pcaulfield at sourceware.org	2006-12-11 13:48:41
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=8d3ce32880da0dc0e0d3b6b397cc3bddaf901dee
+Commit:        8d3ce32880da0dc0e0d3b6b397cc3bddaf901dee
+Parent:        7528a3363071b201c1f71a15e40cb9855ae169cf
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Wed Feb 24 11:54:24 2021 +0100
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Tue Mar 2 22:24:51 2021 +0100
 
-Modified files:
-	.              : WHATS_NEW 
-	daemons/clvmd  : clvmd.c 
+tests: make test complaint to local dev dir
 
-Log message:
-	Fix hang in clvmd if a pre-command failed. The pre/post thread was getting
-	out of sync in this instance and would not quit.
+For test running in 'local' dev dir we want to see loop devices there.
+Also add missing notification to lvmetad after wipefs.
+---
+ test/shell/allow-mixed-block-sizes.sh | 60 +++++++++++++++++++++--------------
+ 1 file changed, 36 insertions(+), 24 deletions(-)
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.515&r2=1.516
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/clvmd/clvmd.c.diff?cvsroot=lvm2&r1=1.32&r2=1.33
-
---- LVM2/WHATS_NEW	2006/12/01 23:29:54	1.515
-+++ LVM2/WHATS_NEW	2006/12/11 13:48:41	1.516
-@@ -1,5 +1,6 @@
- Version 2.02.17 -
- ===================================
-+  Fix hang in clvmd if a pre-command failed.
+diff --git a/test/shell/allow-mixed-block-sizes.sh b/test/shell/allow-mixed-block-sizes.sh
+index b51232a84..efab1302a 100644
+--- a/test/shell/allow-mixed-block-sizes.sh
++++ b/test/shell/allow-mixed-block-sizes.sh
+@@ -1,6 +1,6 @@
+ #!/usr/bin/env bash
  
- Version 2.02.16 - 1st December 2006
- ===================================
---- LVM2/daemons/clvmd/clvmd.c	2006/12/01 23:10:25	1.32
-+++ LVM2/daemons/clvmd/clvmd.c	2006/12/11 13:48:41	1.33
-@@ -1426,6 +1426,8 @@
- 		DEBUGLOG("Writing status %d down pipe %d\n", status, pipe_fd);
- 		/* Tell the parent process we have finished this bit */
- 		write(pipe_fd, &status, sizeof(int));
-+		if (status)
-+			continue; /* Wait for another PRE command */
+-# Copyright (C) 2019 Red Hat, Inc. All rights reserved.
++# Copyright (C) 2019-2021 Red Hat, Inc. All rights reserved.
+ #
+ # This copyrighted material is made available to anyone wishing to use,
+ # modify, copy, or redistribute it subject to the terms and conditions
+@@ -15,32 +15,44 @@ SKIP_WITH_LVMPOLLD=1
+ . lib/inittest
  
- 		/* We may need to wait for the condition variable before running the post command */
- 		pthread_mutex_lock(&client->bits.localsock.mutex);
+ losetup -h | grep sector-size || skip
++which fallocate || skip
++which wipefs || skip
+ 
+-dd if=/dev/zero of=loopa bs=$((1024*1024)) count=2 2> /dev/null
+-dd if=/dev/zero of=loopb bs=$((1024*1024)) count=2 2> /dev/null
++fallocate -l 2M loopa
++fallocate -l 2M loopb
+ LOOP1=$(losetup -f loopa --sector-size 4096 --show)
+ LOOP2=$(losetup -f loopb --show)
+ 
+-echo $LOOP1
+-echo $LOOP2
+-
+-aux extend_filter "a|$LOOP1|"
+-aux extend_filter "a|$LOOP2|"
+-
+-not vgcreate --config 'devices {allow_mixed_block_sizes=0 scan="/dev"}' $vg $LOOP1 $LOOP2
+-vgcreate --config 'devices {allow_mixed_block_sizes=1 scan="/dev"}' $vg $LOOP1 $LOOP2
+-vgs --config 'devices {allow_mixed_block_sizes=1 scan="/dev"}' $vg
+-
+-aux wipefs_a $LOOP1
+-aux wipefs_a $LOOP2
+-
+-vgcreate --config 'devices {allow_mixed_block_sizes=1 scan="/dev"}' $vg $LOOP1
+-vgs --config 'devices {allow_mixed_block_sizes=1 scan="/dev"}' $vg
+-not vgextend --config 'devices {allow_mixed_block_sizes=0 scan="/dev"}' $vg $LOOP2
+-vgextend --config 'devices {allow_mixed_block_sizes=1 scan="/dev"}' $vg $LOOP2
+-
+-losetup -d $LOOP1
+-losetup -d $LOOP2
++# prepare devX mapping so it works for real & fake dev dir
++d=1
++for i in "$LOOP1" "$LOOP2"; do
++	echo "$i"
++	m=${i##*loop}
++	test -e "$DM_DEV_DIR/loop$m" || mknod "$DM_DEV_DIR/loop$m" b 7 "$m"
++	eval "dev$d=\"$DM_DEV_DIR/loop$m\""
++	d=$(( d + 1 ))
++done
++
++aux extend_filter "a|$dev1|" "a|$dev2|"
++
++not vgcreate --config 'devices/allow_mixed_block_sizes=0' $vg "$dev1" "$dev2"
++vgcreate --config 'devices/allow_mixed_block_sizes=1' $vg "$dev1" "$dev2"
++vgs --config 'devices/allow_mixed_block_sizes=1' $vg
++
++for i in "$dev1" "$dev2" ; do
++	wipefs -a "$i"
++	# FIXME - we are not missing notification for hinting
++	# likely in more places - as the test should be able to work without
++	# system's udev working only on real /dev dir.
++	# aux notify_lvmetad "$i"
++done
++
++vgcreate --config 'devices/allow_mixed_block_sizes=1' $vg "$dev1"
++vgs --config 'devices/allow_mixed_block_sizes=1' $vg
++not vgextend --config 'devices/allow_mixed_block_sizes=0' $vg "$dev2"
++vgextend --config 'devices/allow_mixed_block_sizes=1' $vg "$dev2"
++
++losetup -d "$LOOP1"
++losetup -d "$LOOP2"
+ rm loopa
+ rm loopb
+-
 
 
