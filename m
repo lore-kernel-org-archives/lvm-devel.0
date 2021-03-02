@@ -1,100 +1,159 @@
-From: pcaulfield@sourceware.org <pcaulfield@sourceware.org>
-Date: 11 Dec 2006 14:00:29 -0000
-Subject: LVM2 ./WHATS_NEW daemons/clvmd/clvmd-command.c ...
-Message-ID: <20061211140029.28590.qmail@sourceware.org>
+From: Zdenek Kabelac <zkabelac@sourceware.org>
+Date: Tue,  2 Mar 2021 21:58:27 +0000 (GMT)
+Subject: main - cmdline: drop MAX and check NULL
+Message-ID: <20210302215827.E8B203950405@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	pcaulfield at sourceware.org	2006-12-11 14:00:27
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=589c6545627cdc5a90bf4c2e4640c42d9623bb47
+Commit:        589c6545627cdc5a90bf4c2e4640c42d9623bb47
+Parent:        e946a5e6904455284ae4eeaa1d149a9324b0f00e
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Thu Feb 25 18:09:33 2021 +0100
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Tue Mar 2 22:54:40 2021 +0100
 
-Modified files:
-	.              : WHATS_NEW 
-	daemons/clvmd  : clvmd-command.c clvmd-gulm.c clvmd-gulm.h 
-	lib/locking    : locking.h 
+cmdline: drop MAX and check NULL
 
-Log message:
-	Fix gulm operation of clvmd. including a hang when attempting to
-	exclusively lock an LV that is already locked no another node.
+Remove MAX_COMMAND_NAMES and check for the last element as NULL pointer.
+---
+ tools/command.c    | 16 ++++++----------
+ tools/command.h    |  2 --
+ tools/lvmcmdline.c | 27 ++++++++++-----------------
+ 3 files changed, 16 insertions(+), 29 deletions(-)
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.516&r2=1.517
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/clvmd/clvmd-command.c.diff?cvsroot=lvm2&r1=1.13&r2=1.14
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/clvmd/clvmd-gulm.c.diff?cvsroot=lvm2&r1=1.19&r2=1.20
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/clvmd/clvmd-gulm.h.diff?cvsroot=lvm2&r1=1.2&r2=1.3
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/locking/locking.h.diff?cvsroot=lvm2&r1=1.28&r2=1.29
-
---- LVM2/WHATS_NEW	2006/12/11 13:48:41	1.516
-+++ LVM2/WHATS_NEW	2006/12/11 14:00:26	1.517
-@@ -1,5 +1,6 @@
- Version 2.02.17 -
- ===================================
-+  Fix gulm operation of clvmd, including a hang when doing lvchange -aey
-   Fix hang in clvmd if a pre-command failed.
+diff --git a/tools/command.c b/tools/command.c
+index dd1f94194..131d2d3d3 100644
+--- a/tools/command.c
++++ b/tools/command.c
+@@ -246,19 +246,21 @@ struct cmd_name cmd_names[CMD_COUNT + 1] = {
  
- Version 2.02.16 - 1st December 2006
---- LVM2/daemons/clvmd/clvmd-command.c	2006/12/01 23:10:25	1.13
-+++ LVM2/daemons/clvmd/clvmd-command.c	2006/12/11 14:00:26	1.14
-@@ -194,7 +194,7 @@
- 	/* Read locks need to be PR; other modes get passed through */
- 	if ((lock_cmd & LCK_TYPE_MASK) == LCK_READ) {
- 	    lock_cmd &= ~LCK_TYPE_MASK;
--	    lock_cmd |= LKM_PRMODE;
-+	    lock_cmd |= LCK_PREAD;
- 	}
- 	status = sync_lock(lockname, (int)lock_cmd, (lock_flags & LCK_NONBLOCK) ? LKF_NOQUEUE : 0, &lkid);
- 	if (status)
---- LVM2/daemons/clvmd/clvmd-gulm.c	2006/10/09 14:11:57	1.19
-+++ LVM2/daemons/clvmd/clvmd-gulm.c	2006/12/11 14:00:26	1.20
-@@ -730,7 +730,7 @@
-     pthread_mutex_lock(&lwait.mutex);
+ #ifdef MAN_PAGE_GENERATOR
  
-     /* This needs to be converted from DLM/LVM2 value for GULM */
--    if (flags == LCK_NONBLOCK) flags = lg_lock_flag_Try;
-+    if (flags & LKF_NOQUEUE) flags = lg_lock_flag_Try;
+-struct command_name command_names[MAX_COMMAND_NAMES] = {
++struct command_name command_names[] = {
+ #define xx(a, b, c...) { # a, b, c },
+ #include "commands.h"
+ #undef xx
++	{ .name = NULL }
+ };
+ struct command commands[COMMAND_COUNT];
  
-     dm_hash_insert(lock_hash, resource, &lwait);
-     DEBUGLOG("lock_resource '%s', flags=%d, mode=%d\n", resource, flags, mode);
-@@ -828,6 +828,7 @@
-         }
- 	break;
+ #else /* MAN_PAGE_GENERATOR */
  
-+    case LCK_PREAD:
-     case LCK_READ:
- 	status = _lock_resource(lock1, lg_lock_state_Shared, flags, lockid);
- 	if (status)
-@@ -864,6 +865,7 @@
-     /* The held lock mode is in the lock id */
-     assert(lockid == LCK_EXCL ||
- 	   lockid == LCK_READ ||
-+	   lockid == LCK_PREAD ||
- 	   lockid == LCK_WRITE);
+-struct command_name command_names[MAX_COMMAND_NAMES] = {
++struct command_name command_names[] = {
+ #define xx(a, b, c...) { # a, b, c, a},
+ #include "commands.h"
+ #undef xx
++	{ .name = NULL }
+ };
+ extern struct command commands[COMMAND_COUNT]; /* defined in lvmcmdline.c */
  
-     status = _unlock_resource(lock1, lockid);
---- LVM2/daemons/clvmd/clvmd-gulm.h	2005/01/13 13:24:02	1.2
-+++ LVM2/daemons/clvmd/clvmd-gulm.h	2006/12/11 14:00:26	1.3
-@@ -1,5 +1,6 @@
+@@ -514,12 +516,9 @@ static struct command_name *_find_command_name(const char *name)
+ 	if (!islower(name[0]))
+ 		return NULL; /* Commands starts with lower-case */
  
+-	for (i = 0; i < MAX_COMMAND_NAMES; i++) {
+-		if (!command_names[i].name)
+-			break;
++	for (i = 0; command_names[i].name; i++)
+ 		if (!strcmp(command_names[i].name, name))
+ 			return &command_names[i];
+-	}
+ 
+ 	return NULL;
+ }
+@@ -1270,10 +1269,7 @@ void factor_common_options(void)
+ 	int cn, opt_enum, ci, oo, ro, found;
+ 	struct command *cmd;
+ 
+-	for (cn = 0; cn < MAX_COMMAND_NAMES; cn++) {
+-		if (!command_names[cn].name)
+-			break;
 -
-+/* DLM constant that clvmd uses as a generic NONBLOCK lock flag */
-+#define LKF_NOQUEUE 1
++	for (cn = 0; command_names[cn].name; cn++) {
+ 		/* already factored */
+ 		if (command_names[cn].variants)
+ 			continue;
+diff --git a/tools/command.h b/tools/command.h
+index dae3d0570..c0d7977dc 100644
+--- a/tools/command.h
++++ b/tools/command.h
+@@ -30,8 +30,6 @@ struct command_function {
+ 	command_id_fn fn;
+ };
  
- extern int get_next_node_csid(void **context, char *csid);
- extern void add_down_node(char *csid);
---- LVM2/lib/locking/locking.h	2006/05/16 16:48:30	1.28
-+++ LVM2/lib/locking/locking.h	2006/12/11 14:00:26	1.29
-@@ -50,7 +50,7 @@
- #define LCK_NULL	0x00000000	/* LCK$_NLMODE */
- #define LCK_READ	0x00000001	/* LCK$_CRMODE */
- 					/* LCK$_CWMODE */
--					/* LCK$_PRMODE */
-+#define LCK_PREAD       0x00000003      /* LCK$_PRMODE */
- #define LCK_WRITE	0x00000004	/* LCK$_PWMODE */
- #define LCK_EXCL	0x00000005	/* LCK$_EXMODE */
- #define LCK_UNLOCK      0x00000006	/* This is ours */
+-#define MAX_COMMAND_NAMES 64
+-
+ struct command_name {
+ 	const char *name;
+ 	const char *desc; /* general command description from commands.h */
+diff --git a/tools/lvmcmdline.c b/tools/lvmcmdline.c
+index b6ad66d62..8ad1f5e99 100644
+--- a/tools/lvmcmdline.c
++++ b/tools/lvmcmdline.c
+@@ -74,7 +74,7 @@ extern struct lv_type lv_types[LVT_COUNT + 1];
+ /*
+  * Table of command names
+  */
+-extern struct command_name command_names[MAX_COMMAND_NAMES];
++extern struct command_name command_names[];
+ 
+ /*
+  * Table of commands (as defined in command-lines.in)
+@@ -1278,13 +1278,11 @@ static void _set_valid_args_for_command_name(int ci)
+ static struct command_name *_find_command_name(const char *name)
+ {
+ 	int i;
+-	
+-	for (i = 0; i < MAX_COMMAND_NAMES; i++) {
+-		if (!command_names[i].name)
+-			break;
++
++	for (i = 0; command_names[i].name; i++)
+ 		if (!strcmp(command_names[i].name, name))
+ 			return &command_names[i];
+-	}
++
+ 	return NULL;
+ }
+ 
+@@ -1354,14 +1352,12 @@ int lvm_register_commands(struct cmd_context *cmd, const char *run_name)
+ 		}
+ 	}
+ 
+-	_cmdline.command_names = command_names;
+-	_cmdline.num_command_names = 0;
++	/* Check how many command entries we have */
++	for (i = 0; command_names[i].name; i++)
++		;
+ 
+-	for (i = 0; i < MAX_COMMAND_NAMES; i++) {
+-		if (!command_names[i].name)
+-			break;
+-		_cmdline.num_command_names++;
+-	}
++	_cmdline.num_command_names = i;
++	_cmdline.command_names = command_names;
+ 
+ 	for (i = 0; i < _cmdline.num_command_names; i++)
+ 		_set_valid_args_for_command_name(i);
+@@ -2074,11 +2070,8 @@ static void _usage_all(void)
+ {
+ 	int i;
+ 
+-	for (i = 0; i < MAX_COMMAND_NAMES; i++) {
+-		if (!command_names[i].name)
+-			break;
++	for (i = 0; command_names[i].name; i++)
+ 		_usage(command_names[i].name, 1, 1);
+-	}
+ 
+ 	print_usage_notes(NULL);
+ }
 
 
