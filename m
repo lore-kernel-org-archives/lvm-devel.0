@@ -1,42 +1,69 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Tue,  2 Mar 2021 21:58:19 +0000 (GMT)
-Subject: main - makefiles: cmirrord install through install_cluster
-Message-ID: <20210302215819.F1DC13851C35@sourceware.org>
+Date: Tue,  2 Mar 2021 21:58:21 +0000 (GMT)
+Subject: main - makefiles: fix pofile generation
+Message-ID: <20210302215821.1E96B3950405@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=4e976d9960f28278563ba7d0cd4c3795a4eba949
-Commit:        4e976d9960f28278563ba7d0cd4c3795a4eba949
-Parent:        e080e35c839ab7c166acfc40b03beb7c1c1b2e56
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=8bfa4439e1c9a342d8e0d9ee36932f2a89721342
+Commit:        8bfa4439e1c9a342d8e0d9ee36932f2a89721342
+Parent:        4e976d9960f28278563ba7d0cd4c3795a4eba949
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Mar 2 00:23:45 2021 +0100
+AuthorDate:    Tue Mar 2 01:10:25 2021 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Tue Mar 2 22:54:40 2021 +0100
 
-makefiles: cmirrord install through install_cluster
+makefiles: fix pofile generation
 
-There is not much left for this target...
+If there is any user of --enable-nls  and wants to get
+usable .po language file  -  use 'make pofile'
 ---
- daemons/cmirrord/Makefile.in | 6 ++++--
- 1 file changed, 4 insertions(+), 2 deletions(-)
+ libdm/make.tmpl.in | 2 +-
+ make.tmpl.in       | 2 +-
+ po/Makefile.in     | 2 +-
+ 3 files changed, 3 insertions(+), 3 deletions(-)
 
-diff --git a/daemons/cmirrord/Makefile.in b/daemons/cmirrord/Makefile.in
-index ff45225cd..301e6c6a2 100644
---- a/daemons/cmirrord/Makefile.in
-+++ b/daemons/cmirrord/Makefile.in
-@@ -33,6 +33,8 @@ cmirrord: $(OBJECTS)
- 	$(Q) $(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(OBJECTS) \
- 		$(LMLIBS) -L$(top_builddir)/libdm -ldevmapper $(LIBS)
+diff --git a/libdm/make.tmpl.in b/libdm/make.tmpl.in
+index 4a32b8f94..46916d23f 100644
+--- a/libdm/make.tmpl.in
++++ b/libdm/make.tmpl.in
+@@ -410,7 +410,7 @@ DEFS+=-D_FILE_OFFSET_BITS=64
  
--install: $(TARGETS)
-+install_cluster: $(TARGETS)
- 	@echo "    [INSTALL] $<"
--	$(Q) $(INSTALL_PROGRAM) -D cmirrord $(usrsbindir)/cmirrord
-+	$(Q) $(INSTALL_PROGRAM) -D $< $(usrsbindir)/$(<F)
-+
-+install: install_cluster
+ %.pot: %.c Makefile
+ 	@echo "    [CC] $@"
+-	$(Q) $(CC) -E $(INCLUDES) $(VALGRIND_CFLAGS) $(PROGS_CFLAGS) -include $(top_builddir)/include/pogen.h $(DEFS) $(WFLAGS) $(CFLAGS) $< >$@
++	$(Q) $(CC) -E $(INCLUDES) $(VALGRIND_CFLAGS) $(PROGS_CFLAGS) -include $(top_builddir)/po/pogen.h $(DEFS) $(WFLAGS) $(CFLAGS) $< >$@
+ 
+ %.so: %.o
+ 	@echo "    [CC] $<"
+diff --git a/make.tmpl.in b/make.tmpl.in
+index 2346bfda2..4bd089d24 100644
+--- a/make.tmpl.in
++++ b/make.tmpl.in
+@@ -449,7 +449,7 @@ DEFS+=-D_FILE_OFFSET_BITS=64
+ 
+ %.pot: %.c Makefile
+ 	@echo "    [CC] $@"
+-	$(Q) $(CC) -E $(INCLUDES) $(VALGRIND_CFLAGS) $(PROGS_CFLAGS) -include $(top_builddir)/include/pogen.h $(DEFS) $(WFLAGS) $(CFLAGS) $< >$@
++	$(Q) $(CC) -E $(INCLUDES) $(VALGRIND_CFLAGS) $(PROGS_CFLAGS) -include $(top_builddir)/po/pogen.h $(DEFS) $(WFLAGS) $(CFLAGS) $< >$@
+ 
+ %.so: %.o
+ 	@echo "    [CC] $<"
+diff --git a/po/Makefile.in b/po/Makefile.in
+index c8fa32ce7..6201f5965 100644
+--- a/po/Makefile.in
++++ b/po/Makefile.in
+@@ -19,7 +19,7 @@ LANGS=de
+ 
+ #TARGETS=$(LANGS:%=lvm2_%.mo) $(LANGS:%=dm_%.mo)
+ 
+-DM_POSOURCES = $(top_builddir)/tools/dmsetup.pot $(top_builddir)/libdm/*.pot \
++DM_POSOURCES = $(top_builddir)/libdm/dm-tools/dmsetup.pot $(top_builddir)/libdm/*.pot \
+ 	       $(top_builddir)/libdm/*/*.pot
+ 
+ LVM_POSOURCES = $(top_builddir)/tools/*.pot $(top_builddir)/lib/*/*.pot
 
 
