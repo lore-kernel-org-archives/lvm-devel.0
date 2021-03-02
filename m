@@ -1,39 +1,42 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Tue,  2 Mar 2021 21:58:18 +0000 (GMT)
-Subject: main - makefiles: sed
-Message-ID: <20210302215818.D1CCA3834402@sourceware.org>
+Date: Tue,  2 Mar 2021 21:58:19 +0000 (GMT)
+Subject: main - makefiles: cmirrord install through install_cluster
+Message-ID: <20210302215819.F1DC13851C35@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=e080e35c839ab7c166acfc40b03beb7c1c1b2e56
-Commit:        e080e35c839ab7c166acfc40b03beb7c1c1b2e56
-Parent:        520bd9356e9ecccfa824ca639c468fdcaf3b34c8
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=4e976d9960f28278563ba7d0cd4c3795a4eba949
+Commit:        4e976d9960f28278563ba7d0cd4c3795a4eba949
+Parent:        e080e35c839ab7c166acfc40b03beb7c1c1b2e56
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Mar 2 21:21:38 2021 +0100
+AuthorDate:    Tue Mar 2 00:23:45 2021 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Tue Mar 2 22:54:40 2021 +0100
 
-makefiles: sed
+makefiles: cmirrord install through install_cluster
 
+There is not much left for this target...
 ---
- Makefile.in | 2 +-
- 1 file changed, 1 insertion(+), 1 deletion(-)
+ daemons/cmirrord/Makefile.in | 6 ++++--
+ 1 file changed, 4 insertions(+), 2 deletions(-)
 
-diff --git a/Makefile.in b/Makefile.in
-index a4278cade..6bc3a9414 100644
---- a/Makefile.in
-+++ b/Makefile.in
-@@ -117,7 +117,7 @@ rpm: dist
- 	$(LN_S) -f $(abs_top_srcdir)/spec/packages.inc $(rpmbuilddir)/SOURCES
- 	DM_VER=$$(cut -d- -f1 $(top_srcdir)/VERSION_DM);\
- 	GIT_VER=$$(cd $(top_srcdir); git describe | cut -d- --output-delimiter=. -f2,3 || echo 0);\
--	sed -e "s,\(device_mapper_version\) [0-9.]*$$,\1 $$DM_VER," \
-+	$(SED) -e "s,\(device_mapper_version\) [0-9.]*$$,\1 $$DM_VER," \
- 	    -e "s,^\(Version:[^0-9%]*\)[0-9.]*$$,\1 $(LVM_VER)," \
- 	    -e "s,^\(Release:[^0-9%]*\)[0-9.]\+,\1 $$GIT_VER," \
- 	    $(top_srcdir)/spec/source.inc >$(rpmbuilddir)/SOURCES/source.inc
+diff --git a/daemons/cmirrord/Makefile.in b/daemons/cmirrord/Makefile.in
+index ff45225cd..301e6c6a2 100644
+--- a/daemons/cmirrord/Makefile.in
++++ b/daemons/cmirrord/Makefile.in
+@@ -33,6 +33,8 @@ cmirrord: $(OBJECTS)
+ 	$(Q) $(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(OBJECTS) \
+ 		$(LMLIBS) -L$(top_builddir)/libdm -ldevmapper $(LIBS)
+ 
+-install: $(TARGETS)
++install_cluster: $(TARGETS)
+ 	@echo "    [INSTALL] $<"
+-	$(Q) $(INSTALL_PROGRAM) -D cmirrord $(usrsbindir)/cmirrord
++	$(Q) $(INSTALL_PROGRAM) -D $< $(usrsbindir)/$(<F)
++
++install: install_cluster
 
 
