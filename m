@@ -1,77 +1,59 @@
-From: David Teigland <teigland@sourceware.org>
-Date: Tue,  2 Mar 2021 20:15:46 +0000 (GMT)
-Subject: main - lvmconfig: fix deprecation message
-Message-ID: <20210302201546.B918B3950402@sourceware.org>
+From: Zdenek Kabelac <zkabelac@sourceware.org>
+Date: Tue,  2 Mar 2021 21:58:09 +0000 (GMT)
+Subject: main - tests: update setting LVM_BINARY for testing
+Message-ID: <20210302215809.BAA593834402@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=db4af67b37b224171d9b2fed21f144a5e8a82496
-Commit:        db4af67b37b224171d9b2fed21f144a5e8a82496
-Parent:        aa34da6eccb4dafe0a35129ddfb8ad7fb63fb7d2
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Tue Mar 2 13:49:41 2021 -0600
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Tue Mar 2 14:14:28 2021 -0600
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=7528a3363071b201c1f71a15e40cb9855ae169cf
+Commit:        7528a3363071b201c1f71a15e40cb9855ae169cf
+Parent:        3bab1a10264bf0d546cb5f0948ca382c9c882910
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Tue Feb 23 16:27:44 2021 +0100
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Tue Mar 2 22:24:51 2021 +0100
 
-lvmconfig: fix deprecation message
+tests: update setting LVM_BINARY for testing
 
-When lvmconfig --typeconfig full printed a deprecated
-entry it would attempt to print a non-existing
-deprecation comment resulting in output like:
-  # (null)        # This setting is no longer used.
+When testing is running on uninstealled system - prefer our own binary
+in tests.
 ---
- lib/config/config.c | 10 ++++++----
- 1 file changed, 6 insertions(+), 4 deletions(-)
+ test/lib/aux.sh   | 2 +-
+ test/lib/utils.sh | 3 ++-
+ 2 files changed, 3 insertions(+), 2 deletions(-)
 
-diff --git a/lib/config/config.c b/lib/config/config.c
-index 96f2ad58d..9725dece3 100644
---- a/lib/config/config.c
-+++ b/lib/config/config.c
-@@ -1708,6 +1708,7 @@ static int _out_prefix_fn(const struct dm_config_node *cn, const char *line, voi
- 	const char *node_type_name = cn->v ? "option" : "section";
- 	char path[CFG_PATH_MAX_LEN];
- 	char commentline[MAX_COMMENT_LINE+1];
-+	int is_deprecated = 0;
+diff --git a/test/lib/aux.sh b/test/lib/aux.sh
+index c53d07b9e..1500e1f6a 100644
+--- a/test/lib/aux.sh
++++ b/test/lib/aux.sh
+@@ -177,7 +177,7 @@ prepare_clvmd() {
+ 	echo "<======== Starting CLVMD ========>"
+ 	echo -n "## preparing clvmd..."
+ 	# lvs is executed from clvmd - use our version
+-	LVM_LOG_FILE_EPOCH=CLVMD LVM_LOG_FILE_MAX_LINES=1000000 LVM_BINARY=$(which lvm) $run_valgrind clvmd -Isinglenode -d 1 -f &
++	LVM_LOG_FILE_EPOCH=CLVMD LVM_LOG_FILE_MAX_LINES=1000000 $run_valgrind clvmd -Isinglenode -d 1 -f &
+ 	echo $! > LOCAL_CLVMD
  
- 	if (cn->id <= 0)
- 		return 1;
-@@ -1721,13 +1722,14 @@ static int _out_prefix_fn(const struct dm_config_node *cn, const char *line, voi
+ 	for i in {200..0} ; do
+diff --git a/test/lib/utils.sh b/test/lib/utils.sh
+index 175d1564a..9da9a966e 100644
+--- a/test/lib/utils.sh
++++ b/test/lib/utils.sh
+@@ -296,10 +296,11 @@ if test -z "${installed_testsuite+varset}"; then
+     *"$abs_top_builddir/test/lib"*) ;;
+     *)
+ 	PATH="$abs_top_builddir/test/lib:$abs_top_builddir/test/api:$PATH"
++	LVM_BINARY=$(which lvm)
+ 	LD_LIBRARY_PATH=$(find -L "$abs_top_builddir/libdm/" "$abs_top_builddir/tools/"\
+ 		"$abs_top_builddir/daemons/" \
+ 		-name "*.so" -printf "%h:")"$LD_LIBRARY_PATH"
+-	export PATH LD_LIBRARY_PATH ;;
++	export PATH LD_LIBRARY_PATH LVM_BINARY ;;
+     esac
+ fi
  
- 	cfg_def = cfg_def_get_item_p(cn->id);
- 
-+	is_deprecated = _def_node_is_deprecated(cfg_def, out->tree_spec);
-+
- 	if (out->tree_spec->withsummary || out->tree_spec->withcomments) {
- 		_cfg_def_make_path(path, sizeof(path), cfg_def->id, cfg_def, 1);
- 		fprintf(out->fp, "\n");
- 		fprintf(out->fp, "%s# Configuration %s %s.\n", line, node_type_name, path);
- 
--		if (out->tree_spec->withcomments &&
--		    _def_node_is_deprecated(cfg_def, out->tree_spec))
-+		if (out->tree_spec->withcomments && is_deprecated && cfg_def->deprecation_comment)
- 			fprintf(out->fp, "%s# %s", line, cfg_def->deprecation_comment);
- 
- 		if (cfg_def->comment) {
-@@ -1745,7 +1747,7 @@ static int _out_prefix_fn(const struct dm_config_node *cn, const char *line, voi
- 			}
- 		}
- 
--		if (_def_node_is_deprecated(cfg_def, out->tree_spec))
-+		if (is_deprecated)
- 			fprintf(out->fp, "%s# This configuration %s is deprecated.\n", line, node_type_name);
- 
- 		if (cfg_def->flags & CFG_ADVANCED)
-@@ -1773,7 +1775,7 @@ static int _out_prefix_fn(const struct dm_config_node *cn, const char *line, voi
- 			return_0;
- 		fprintf(out->fp, "%s# Available since version %s.\n", line, version);
- 
--		if (_def_node_is_deprecated(cfg_def, out->tree_spec)) {
-+		if (is_deprecated) {
- 			if (!_get_config_node_version(cfg_def->deprecated_since_version, version))
- 				return_0;
- 			fprintf(out->fp, "%s# Deprecated since version %s.\n", line, version);
 
 
