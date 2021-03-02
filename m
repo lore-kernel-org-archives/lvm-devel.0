@@ -1,69 +1,63 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Tue,  2 Mar 2021 21:58:21 +0000 (GMT)
-Subject: main - makefiles: fix pofile generation
-Message-ID: <20210302215821.1E96B3950405@sourceware.org>
+Date: Tue,  2 Mar 2021 21:58:22 +0000 (GMT)
+Subject: main - makefiles: integrate DESTDIR
+Message-ID: <20210302215822.40FC23834402@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=8bfa4439e1c9a342d8e0d9ee36932f2a89721342
-Commit:        8bfa4439e1c9a342d8e0d9ee36932f2a89721342
-Parent:        4e976d9960f28278563ba7d0cd4c3795a4eba949
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=456b659b4edfc758b5aa0b72af25677a4f5042ea
+Commit:        456b659b4edfc758b5aa0b72af25677a4f5042ea
+Parent:        8bfa4439e1c9a342d8e0d9ee36932f2a89721342
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Mar 2 01:10:25 2021 +0100
+AuthorDate:    Tue Mar 2 16:29:07 2021 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Tue Mar 2 22:54:40 2021 +0100
 
-makefiles: fix pofile generation
+makefiles: integrate  DESTDIR
 
-If there is any user of --enable-nls  and wants to get
-usable .po language file  -  use 'make pofile'
+Always use lvmdbusdir with DESTDIR.
 ---
- libdm/make.tmpl.in | 2 +-
- make.tmpl.in       | 2 +-
- po/Makefile.in     | 2 +-
- 3 files changed, 3 insertions(+), 3 deletions(-)
+ daemons/lvmdbusd/Makefile.in | 14 +++++++-------
+ 1 file changed, 7 insertions(+), 7 deletions(-)
 
-diff --git a/libdm/make.tmpl.in b/libdm/make.tmpl.in
-index 4a32b8f94..46916d23f 100644
---- a/libdm/make.tmpl.in
-+++ b/libdm/make.tmpl.in
-@@ -410,7 +410,7 @@ DEFS+=-D_FILE_OFFSET_BITS=64
+diff --git a/daemons/lvmdbusd/Makefile.in b/daemons/lvmdbusd/Makefile.in
+index da96c344b..56d5c6602 100644
+--- a/daemons/lvmdbusd/Makefile.in
++++ b/daemons/lvmdbusd/Makefile.in
+@@ -15,7 +15,7 @@ srcdir = @srcdir@
+ top_srcdir = @top_srcdir@
+ top_builddir = @top_builddir@
  
- %.pot: %.c Makefile
- 	@echo "    [CC] $@"
--	$(Q) $(CC) -E $(INCLUDES) $(VALGRIND_CFLAGS) $(PROGS_CFLAGS) -include $(top_builddir)/include/pogen.h $(DEFS) $(WFLAGS) $(CFLAGS) $< >$@
-+	$(Q) $(CC) -E $(INCLUDES) $(VALGRIND_CFLAGS) $(PROGS_CFLAGS) -include $(top_builddir)/po/pogen.h $(DEFS) $(WFLAGS) $(CFLAGS) $< >$@
+-lvmdbusdir = $(python3dir)/lvmdbusd
++lvmdbusdir = $(DESTDIR)$(python3dir)/lvmdbusd
  
- %.so: %.o
- 	@echo "    [CC] $<"
-diff --git a/make.tmpl.in b/make.tmpl.in
-index 2346bfda2..4bd089d24 100644
---- a/make.tmpl.in
-+++ b/make.tmpl.in
-@@ -449,7 +449,7 @@ DEFS+=-D_FILE_OFFSET_BITS=64
+ LVMDBUS_SRCDIR_FILES = \
+ 	automatedproperties.py \
+@@ -53,16 +53,16 @@ include $(top_builddir)/make.tmpl
+ all:
+ 	$(Q) test -x $(LVMDBUSD) || chmod 755 $(LVMDBUSD)
  
- %.pot: %.c Makefile
- 	@echo "    [CC] $@"
--	$(Q) $(CC) -E $(INCLUDES) $(VALGRIND_CFLAGS) $(PROGS_CFLAGS) -include $(top_builddir)/include/pogen.h $(DEFS) $(WFLAGS) $(CFLAGS) $< >$@
-+	$(Q) $(CC) -E $(INCLUDES) $(VALGRIND_CFLAGS) $(PROGS_CFLAGS) -include $(top_builddir)/po/pogen.h $(DEFS) $(WFLAGS) $(CFLAGS) $< >$@
+-install_lvmdbusd:
++install_lvmdbusd: $(LVMDBUSD)
+ 	@echo "    [INSTALL] $<"
+ 	$(Q) $(INSTALL_DIR) $(sbindir)
+ 	$(Q) $(INSTALL_SCRIPT) $(LVMDBUSD) $(sbindir)
+-	$(Q) $(INSTALL_DIR) $(DESTDIR)$(lvmdbusdir)
+-	$(Q) (cd $(srcdir); $(INSTALL_DATA) $(LVMDBUS_SRCDIR_FILES) $(DESTDIR)$(lvmdbusdir))
+-	$(Q) $(INSTALL_DATA) $(LVMDBUS_BUILDDIR_FILES) $(DESTDIR)$(lvmdbusdir)
++	$(Q) $(INSTALL_DIR) $(lvmdbusdir)
++	$(Q) (cd $(srcdir); $(INSTALL_DATA) $(LVMDBUS_SRCDIR_FILES) $(lvmdbusdir))
++	$(Q) $(INSTALL_DATA) $(LVMDBUS_BUILDDIR_FILES) $(lvmdbusdir)
+ 	$(Q) PYTHON=$(PYTHON3) $(PYCOMPILE) --destdir "$(DESTDIR)" --basedir "$(lvmdbusdir)" $(LVMDBUS_SRCDIR_FILES) $(LVMDBUS_BUILDDIR_FILES)
+-	$(Q) $(CHMOD) 755 $(DESTDIR)$(lvmdbusdir)/__pycache__
+-	$(Q) $(CHMOD) 444 $(DESTDIR)$(lvmdbusdir)/__pycache__/*.py[co]
++	$(Q) $(CHMOD) 755 $(lvmdbusdir)/__pycache__
++	$(Q) $(CHMOD) 444 $(lvmdbusdir)/__pycache__/*.py[co]
  
- %.so: %.o
- 	@echo "    [CC] $<"
-diff --git a/po/Makefile.in b/po/Makefile.in
-index c8fa32ce7..6201f5965 100644
---- a/po/Makefile.in
-+++ b/po/Makefile.in
-@@ -19,7 +19,7 @@ LANGS=de
+ install_lvm2: install_lvmdbusd
  
- #TARGETS=$(LANGS:%=lvm2_%.mo) $(LANGS:%=dm_%.mo)
- 
--DM_POSOURCES = $(top_builddir)/tools/dmsetup.pot $(top_builddir)/libdm/*.pot \
-+DM_POSOURCES = $(top_builddir)/libdm/dm-tools/dmsetup.pot $(top_builddir)/libdm/*.pot \
- 	       $(top_builddir)/libdm/*/*.pot
- 
- LVM_POSOURCES = $(top_builddir)/tools/*.pot $(top_builddir)/lib/*/*.pot
 
 
