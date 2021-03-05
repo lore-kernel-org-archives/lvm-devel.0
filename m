@@ -1,45 +1,48 @@
 From: Marian Csontos <mcsontos@sourceware.org>
-Date: Fri,  5 Mar 2021 12:01:46 +0000 (GMT)
-Subject: main - man: Fix wording in lvmthin(7)
-Message-ID: <20210305120146.15AC13870900@sourceware.org>
+Date: Fri,  5 Mar 2021 12:01:47 +0000 (GMT)
+Subject: main - make: generate
+Message-ID: <20210305120147.3BCCB3870902@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=3bea8937334ab9a7852947a30862d6e457f093b6
-Commit:        3bea8937334ab9a7852947a30862d6e457f093b6
-Parent:        f5fbb1b76fc39fe968d847247b9040ff2acbadcc
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=2244a56021475179b8cc3633c8cb6534eaa18025
+Commit:        2244a56021475179b8cc3633c8cb6534eaa18025
+Parent:        3bea8937334ab9a7852947a30862d6e457f093b6
 Author:        Marian Csontos <mcsontos@redhat.com>
-AuthorDate:    Fri Mar 5 12:49:54 2021 +0100
+AuthorDate:    Fri Mar 5 12:53:35 2021 +0100
 Committer:     Marian Csontos <mcsontos@redhat.com>
-CommitterDate: Fri Mar 5 12:49:54 2021 +0100
+CommitterDate: Fri Mar 5 12:53:35 2021 +0100
 
-man: Fix wording in lvmthin(7)
+make: generate
 
 ---
- man/lvmthin.7_main | 4 ++--
- 1 file changed, 2 insertions(+), 2 deletions(-)
+ conf/example.conf.in | 11 +++++++++++
+ 1 file changed, 11 insertions(+)
 
-diff --git a/man/lvmthin.7_main b/man/lvmthin.7_main
-index 3ce34a5ee..9568eca41 100644
---- a/man/lvmthin.7_main
-+++ b/man/lvmthin.7_main
-@@ -443,12 +443,12 @@ If the repair works, the thin pool LV and its thin LVs can be activated.
- User should manually check if repaired thin pool kernel metadata
- has all data for all lvm2 known LVs by individual activation of
- every thin LV. When all works, user should continue with fsck of
--all filesystems present these such volumes.
-+all filesystems present on these volumes.
- Once the thin pool is considered fully functional user may remove ThinPoolLV_metaN
- (the LV containing the damaged thin pool metadata) for possible
- space reuse.
- For a better performance it may be useful to pvmove the new repaired metadata LV
--(written to previous pmspare volume) to a better PV (i.e. SSD)
-+(written to previous pmspare volume) to a faster PV, e.g. SSD.
+diff --git a/conf/example.conf.in b/conf/example.conf.in
+index 8ac376303..204ec82d1 100644
+--- a/conf/example.conf.in
++++ b/conf/example.conf.in
+@@ -1122,6 +1122,17 @@ global {
+ 	# This configuration option has an automatic default value.
+ 	# sanlock_lv_extend = 256
  
- If the repair operation fails, the thin pool LV and its thin LVs
- are not accessible and it may be necessary to restore their content
++	# Configuration option global/lvmlockctl_kill_command.
++	# The command that lvmlockctl --kill should use to force LVs offline.
++	# The lvmlockctl --kill command is run when a shared VG has lost
++	# access to locks (e.g. when sanlock has lost access to storage.)
++	# An empty string means that there will be no automatic attempt by
++	# lvmlockctl --kill to forcibly shut down LVs in the VG, and the user
++	# can manually intervene as described in lvmlockd(8).
++	# The VG name will be appended to the command specified here.
++	# This configuration option has an automatic default value.
++	# lvmlockctl_kill_command = ""
++
+ 	# Configuration option global/thin_check_executable.
+ 	# The full path to the thin_check command.
+ 	# LVM uses this command to check that a thin metadata device is in a
 
 
