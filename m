@@ -1,118 +1,76 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Mon,  8 Mar 2021 14:46:55 +0000 (GMT)
-Subject: main - cleanup: on stack structure instead of allocation
-Message-ID: <20210308144655.A3A873953075@sourceware.org>
+Date: Mon,  8 Mar 2021 14:46:56 +0000 (GMT)
+Subject: main - cleanup: simpler checks first
+Message-ID: <20210308144656.CABD33953420@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=f4200acac23df573717b32a44e018b30b5a90a70
-Commit:        f4200acac23df573717b32a44e018b30b5a90a70
-Parent:        dac990ae03f9517e050f8ea3a55529e944c60f4f
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=e5456c259f928c6e08ceecbd107796392e66325f
+Commit:        e5456c259f928c6e08ceecbd107796392e66325f
+Parent:        f4200acac23df573717b32a44e018b30b5a90a70
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu Mar 4 18:09:58 2021 +0100
+AuthorDate:    Thu Mar 4 17:05:10 2021 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Mon Mar 8 15:43:27 2021 +0100
 
-cleanup: on stack structure instead of allocation
+cleanup: simpler checks first
 
+Minor optimizatoins...
 ---
- lib/format_text/export.c | 59 ++++++++++++++++++++----------------------------
- 1 file changed, 25 insertions(+), 34 deletions(-)
+ lib/format_text/archiver.c    | 6 +++---
+ lib/metadata/merge.c          | 2 +-
+ lib/metadata/snapshot_manip.c | 2 +-
+ 3 files changed, 5 insertions(+), 5 deletions(-)
 
-diff --git a/lib/format_text/export.c b/lib/format_text/export.c
-index cdae8bc87..2253a80af 100644
---- a/lib/format_text/export.c
-+++ b/lib/format_text/export.c
-@@ -1040,62 +1040,53 @@ static int _text_vg_export(struct formatter *f,
- 
- int text_vg_export_file(struct volume_group *vg, const char *desc, FILE *fp)
+diff --git a/lib/format_text/archiver.c b/lib/format_text/archiver.c
+index 932f97da3..68117f7dc 100644
+--- a/lib/format_text/archiver.c
++++ b/lib/format_text/archiver.c
+@@ -103,13 +103,13 @@ static int _archive(struct volume_group *vg, int compulsory)
  {
--	struct formatter *f;
- 	int r;
-+	struct formatter f = {
-+		.indent = 0,
-+		.header = 1,
-+		.out_with_comment = &_out_with_comment_file,
-+		.nl = &_nl_file,
-+		.data.fp = fp,
-+	};
+ 	char *desc;
  
- 	_init();
++	if (vg_is_archived(vg))
++		return 1; /* VG has been already archived */
++
+ 	/* Don't archive orphan VGs. */
+ 	if (is_orphan_vg(vg->name))
+ 		return 1;
  
--	if (!(f = zalloc(sizeof(*f))))
--		return_0;
+-	if (vg_is_archived(vg))
+-		return 1; /* VG has been already archived */
 -
--	f->data.fp = fp;
--	f->indent = 0;
--	f->header = 1;
--	f->out_with_comment = &_out_with_comment_file;
--	f->nl = &_nl_file;
-+	if ((r = _text_vg_export(&f, vg, desc)))
-+		r = !ferror(f.data.fp);
- 
--	r = _text_vg_export(f, vg, desc);
--	if (r)
--		r = !ferror(f->data.fp);
--	free(f);
- 	return r;
- }
- 
- /* Returns amount of buffer used incl. terminating NUL */
- size_t text_vg_export_raw(struct volume_group *vg, const char *desc, char **buf, uint32_t *buf_size)
- {
--	struct formatter *f;
--	size_t r = 0;
-+	size_t r;
-+	struct formatter f = {
-+		.indent = 0,
-+		.header = 0,
-+		.out_with_comment = &_out_with_comment_raw,
-+		.nl = &_nl_raw,
-+		.data.buf.size = 65536,	/* Initial metadata limit */
-+	};
- 
- 	_init();
- 
--	if (!(f = zalloc(sizeof(*f))))
--		return_0;
--
--	f->data.buf.size = 65536;	/* Initial metadata limit */
--	if (!(f->data.buf.start = zalloc(f->data.buf.size))) {
-+	if (!(f.data.buf.start = zalloc(f.data.buf.size))) {
- 		log_error("text_export buffer allocation failed");
--		goto out;
-+		return 0;
+ 	if (!vg->cmd->archive_params->enabled || !vg->cmd->archive_params->dir) {
+ 		vg->status |= ARCHIVED_VG;
+ 		return 1;
+diff --git a/lib/metadata/merge.c b/lib/metadata/merge.c
+index eff59ae4b..f29cf64ec 100644
+--- a/lib/metadata/merge.c
++++ b/lib/metadata/merge.c
+@@ -371,7 +371,7 @@ static void _check_lv_segment(struct logical_volume *lv, struct lv_segment *seg,
+ 			seg_error("sets cleaner_policy");
  	}
  
--	f->indent = 0;
--	f->header = 0;
--	f->out_with_comment = &_out_with_comment_raw;
--	f->nl = &_nl_raw;
--
--	if (!_text_vg_export(f, vg, desc)) {
--		free(f->data.buf.start);
--		goto_out;
-+	if (!_text_vg_export(&f, vg, desc)) {
-+		free(f.data.buf.start);
-+		return 0;
+-	if (lv_is_cache(lv) && seg->pool_lv && lv_is_cache_vol(seg->pool_lv)) {
++	if (seg->pool_lv && lv_is_cache(lv) && lv_is_cache_vol(seg->pool_lv)) {
+ 		cache_setting_seg = seg;
+ 		no_metadata_format = 1;
  	}
- 
--	r = f->data.buf.used + 1;
--	*buf = f->data.buf.start;
-+	r = f.data.buf.used + 1;
-+	*buf = f.data.buf.start;
- 
- 	if (buf_size)
--		*buf_size = f->data.buf.size;
-+		*buf_size = f.data.buf.size;
- 
--      out:
--	free(f);
- 	return r;
+diff --git a/lib/metadata/snapshot_manip.c b/lib/metadata/snapshot_manip.c
+index 0f48e62e8..3ee5f4a86 100644
+--- a/lib/metadata/snapshot_manip.c
++++ b/lib/metadata/snapshot_manip.c
+@@ -31,7 +31,7 @@ int lv_is_origin(const struct logical_volume *lv)
+ int lv_is_cow(const struct logical_volume *lv)
+ {
+ 	/* Make sure a merging thin origin isn't confused as a cow LV */
+-	return (!lv_is_thin_volume(lv) && !lv_is_origin(lv) && lv->snapshot) ? 1 : 0;
++	return (lv->snapshot && !lv_is_thin_volume(lv) && !lv_is_origin(lv)) ? 1 : 0;
  }
  
+ struct logical_volume *find_cow(const struct logical_volume *snap)
 
 
