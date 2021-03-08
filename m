@@ -1,40 +1,52 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Mon,  8 Mar 2021 14:46:53 +0000 (GMT)
-Subject: main - libdm-config: replace check for 0
-Message-ID: <20210308144653.5C9DB3951829@sourceware.org>
+Date: Mon,  8 Mar 2021 14:46:54 +0000 (GMT)
+Subject: main - cleanup: avoid allocating memory for hash key
+Message-ID: <20210308144654.836673952035@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=d3cff64408d63dfae20e3e3b307915dc08436ef8
-Commit:        d3cff64408d63dfae20e3e3b307915dc08436ef8
-Parent:        ca12dae32b03c54509608621b9268853b030fd40
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=dac990ae03f9517e050f8ea3a55529e944c60f4f
+Commit:        dac990ae03f9517e050f8ea3a55529e944c60f4f
+Parent:        d3cff64408d63dfae20e3e3b307915dc08436ef8
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Sun Mar 7 21:52:10 2021 +0100
+AuthorDate:    Thu Mar 4 18:17:03 2021 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Mon Mar 8 15:43:27 2021 +0100
 
-libdm-config: replace check for 0
+cleanup: avoid allocating memory for hash key
 
-No need to call strlen() when checking for zero length string.
+Hash always allocates its own copy of the key so avoid
+this extra uuid copy.
 ---
- device_mapper/libdm-config.c | 2 +-
- 1 file changed, 1 insertion(+), 1 deletion(-)
+ lib/format_text/export.c | 6 +++---
+ 1 file changed, 3 insertions(+), 3 deletions(-)
 
-diff --git a/device_mapper/libdm-config.c b/device_mapper/libdm-config.c
-index 7ce5620c6..a4c79c20d 100644
---- a/device_mapper/libdm-config.c
-+++ b/device_mapper/libdm-config.c
-@@ -599,7 +599,7 @@ static struct dm_config_node *_section(struct parser *p, struct dm_config_node *
- 		match(TOK_IDENTIFIER);
- 	}
+diff --git a/lib/format_text/export.c b/lib/format_text/export.c
+index 7a95bdba4..cdae8bc87 100644
+--- a/lib/format_text/export.c
++++ b/lib/format_text/export.c
+@@ -955,7 +955,8 @@ static int _build_pv_names(struct formatter *f, struct volume_group *vg)
+ 	int count = 0;
+ 	struct pv_list *pvl;
+ 	struct physical_volume *pv;
+-	char buffer[32], *uuid, *name;
++	char buffer[32], *name;
++	char uuid[64];
  
--	if (!strlen(str)) {
-+	if (!*str) {
- 		log_error("Parse error at byte %" PRIptrdiff_t " (line %d): empty section identifier",
- 			  p->tb - p->fb + 1, p->line);
- 		return NULL;
+ 	if (!(f->mem = dm_pool_create("text pv_names", 512)))
+ 		return_0;
+@@ -973,8 +974,7 @@ static int _build_pv_names(struct formatter *f, struct volume_group *vg)
+ 		if (!(name = dm_pool_strdup(f->mem, buffer)))
+ 			return_0;
+ 
+-		if (!(uuid = dm_pool_zalloc(f->mem, 64)) ||
+-		   !id_write_format(&pv->id, uuid, 64))
++		if (!id_write_format(&pv->id, uuid, sizeof(uuid)))
+ 			return_0;
+ 
+ 		if (!dm_hash_insert(f->pv_names, uuid, name))
 
 
