@@ -1,48 +1,39 @@
 From: Marian Csontos <mcsontos@sourceware.org>
-Date: Fri,  5 Mar 2021 12:01:47 +0000 (GMT)
-Subject: main - make: generate
-Message-ID: <20210305120147.3BCCB3870902@sourceware.org>
+Date: Mon,  8 Mar 2021 13:12:33 +0000 (GMT)
+Subject: main - makefiles: make rpm respect --disable-silent-rules
+Message-ID: <20210308131233.63320394EC2D@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=2244a56021475179b8cc3633c8cb6534eaa18025
-Commit:        2244a56021475179b8cc3633c8cb6534eaa18025
-Parent:        3bea8937334ab9a7852947a30862d6e457f093b6
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=7df4a13282a32029ab51b01d0ace14c296c0e8e3
+Commit:        7df4a13282a32029ab51b01d0ace14c296c0e8e3
+Parent:        e10633394d64d5a1d2434fb0166689bbfb732bef
 Author:        Marian Csontos <mcsontos@redhat.com>
-AuthorDate:    Fri Mar 5 12:53:35 2021 +0100
+AuthorDate:    Mon Mar 8 14:10:17 2021 +0100
 Committer:     Marian Csontos <mcsontos@redhat.com>
-CommitterDate: Fri Mar 5 12:53:35 2021 +0100
+CommitterDate: Mon Mar 8 14:10:17 2021 +0100
 
-make: generate
+makefiles: make rpm respect --disable-silent-rules
 
 ---
- conf/example.conf.in | 11 +++++++++++
- 1 file changed, 11 insertions(+)
+ Makefile.in | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
 
-diff --git a/conf/example.conf.in b/conf/example.conf.in
-index 8ac376303..204ec82d1 100644
---- a/conf/example.conf.in
-+++ b/conf/example.conf.in
-@@ -1122,6 +1122,17 @@ global {
- 	# This configuration option has an automatic default value.
- 	# sanlock_lv_extend = 256
+diff --git a/Makefile.in b/Makefile.in
+index 6bc3a9414..c0915fac7 100644
+--- a/Makefile.in
++++ b/Makefile.in
+@@ -121,7 +121,7 @@ rpm: dist
+ 	    -e "s,^\(Version:[^0-9%]*\)[0-9.]*$$,\1 $(LVM_VER)," \
+ 	    -e "s,^\(Release:[^0-9%]*\)[0-9.]\+,\1 $$GIT_VER," \
+ 	    $(top_srcdir)/spec/source.inc >$(rpmbuilddir)/SOURCES/source.inc
+-	rpmbuild -v --define "_topdir $(rpmbuilddir)" -ba $(top_srcdir)/spec/lvm2.spec
++	V=$(V) rpmbuild -v --define "_topdir $(rpmbuilddir)" -ba $(top_srcdir)/spec/lvm2.spec
  
-+	# Configuration option global/lvmlockctl_kill_command.
-+	# The command that lvmlockctl --kill should use to force LVs offline.
-+	# The lvmlockctl --kill command is run when a shared VG has lost
-+	# access to locks (e.g. when sanlock has lost access to storage.)
-+	# An empty string means that there will be no automatic attempt by
-+	# lvmlockctl --kill to forcibly shut down LVs in the VG, and the user
-+	# can manually intervene as described in lvmlockd(8).
-+	# The VG name will be appended to the command specified here.
-+	# This configuration option has an automatic default value.
-+	# lvmlockctl_kill_command = ""
-+
- 	# Configuration option global/thin_check_executable.
- 	# The full path to the thin_check command.
- 	# LVM uses this command to check that a thin metadata device is in a
+ generate: conf.generate man.generate
+ 	$(MAKE) -C conf generate
 
 
