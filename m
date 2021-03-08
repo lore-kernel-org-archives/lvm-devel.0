@@ -1,202 +1,119 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Mon,  8 Mar 2021 14:46:42 +0000 (GMT)
-Subject: main - lv_remove: reduce commits for removed LVs
-Message-ID: <20210308144642.0680A3951455@sourceware.org>
+Date: Mon,  8 Mar 2021 14:46:44 +0000 (GMT)
+Subject: main - vg_read: reuse already parsed config tree
+Message-ID: <20210308144644.48E6B395200F@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=a125a3bb505cc2f0374715f850f4c1e02c7d4e3c
-Commit:        a125a3bb505cc2f0374715f850f4c1e02c7d4e3c
-Parent:        ee9488488f1b97e7e3257e6490188d7ad5afafe0
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=936c7b5104e4fb6fb489845b87d9ba2cd1a69d0a
+Commit:        936c7b5104e4fb6fb489845b87d9ba2cd1a69d0a
+Parent:        bc0cb663043bb9c67151f88061ff22c53c6883ea
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Mar 5 16:21:50 2021 +0100
+AuthorDate:    Fri Mar 5 23:04:44 2021 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Mon Mar 8 15:25:05 2021 +0100
+CommitterDate: Mon Mar 8 15:30:18 2021 +0100
 
-lv_remove: reduce commits for removed LVs
+vg_read: reuse already parsed config tree
 
-This patch postpones update of lvm metadata for each removed
-LV for later moment depending on LV type.
+When parsing VG metadata we can create from a single config tree
+also 'vg_committed' that is always created for writable VG.
 
-It also queues messages to be printed after such write & commit.
-
-As such there is some change in the behavior - although before
-prompt we do make  write&commit happens automatically in some
-other error case we rather keep 'existing' state - so there
-could be difference in amount of removed & commited LVs.
-
-IMHO introduce logic is slightly better and more save.
-
-But some cases still need the early commit - i.e. thin-removal
-and fixing this needs some more thinking.
-
-TODO: improve removal at least with the case of the whole thin-pool.
-i.e. we can simply recognize removal of 'all LVs/whole VG'.
+This avoids extra uncessary step of serializing and deserilizing
+just parsed VG.
 ---
- lib/metadata/lv_manip.c | 42 ++++++++++++++++++++++++++++++------------
- lib/metadata/metadata.c |  9 +++++++++
- lib/metadata/vg.c       |  1 +
- lib/metadata/vg.h       |  2 ++
- tools/toollib.c         |  4 ++++
- 5 files changed, 46 insertions(+), 12 deletions(-)
+ lib/format_text/import.c |  5 ++++-
+ lib/metadata/metadata.c  | 10 ++++------
+ lib/metadata/vg.c        |  2 ++
+ lib/metadata/vg.h        |  4 ++--
+ 4 files changed, 12 insertions(+), 9 deletions(-)
 
-diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
-index 4ac95063c..b93f18e6e 100644
---- a/lib/metadata/lv_manip.c
-+++ b/lib/metadata/lv_manip.c
-@@ -6538,6 +6538,7 @@ int lv_remove_single(struct cmd_context *cmd, struct logical_volume *lv,
- 	int ask_discard;
- 	struct seg_list *sl;
- 	struct lv_segment *seg = first_seg(lv);
-+	char msg[NAME_LEN + 300], *msg_dup;
+diff --git a/lib/format_text/import.c b/lib/format_text/import.c
+index 2dc80f13f..2687d172e 100644
+--- a/lib/format_text/import.c
++++ b/lib/format_text/import.c
+@@ -186,6 +186,8 @@ struct volume_group *text_read_metadata(struct format_instance *fid,
+ 			goto_out;
  
- 	vg = lv->vg;
- 
-@@ -6609,6 +6610,8 @@ int lv_remove_single(struct cmd_context *cmd, struct logical_volume *lv,
- 		if ((force == PROMPT) &&
- 		    !lv_is_pending_delete(lv) &&
- 		    lv_is_visible(lv)) {
-+			if (vg->needs_write_and_commit && (!vg_write(vg) || !vg_commit(vg)))
-+				return 0;
- 			if (yes_no_prompt("Do you really want to remove%s active "
- 					  "%slogical volume %s? [y/n]: ",
- 					  ask_discard ? " and DISCARD" : "",
-@@ -6644,12 +6647,16 @@ int lv_remove_single(struct cmd_context *cmd, struct logical_volume *lv,
- 		}
+ 		(*vsn)->read_desc(vg->vgmem, cft, when, desc);
++		vg->committed_cft = cft; /* Reuse CFT for recreation of committed VG */
++		cft = NULL;
+ 		break;
  	}
  
--	if (!lv_is_historical(lv) && (force == PROMPT) && ask_discard &&
--	    yes_no_prompt("Do you really want to remove and DISCARD "
--			  "logical volume %s? [y/n]: ",
--			  display_lvname(lv)) == 'n') {
--		log_error("Logical volume %s not removed.", display_lvname(lv));
--		return 0;
-+	if (!lv_is_historical(lv) && (force == PROMPT) && ask_discard) {
-+		/* try to store on disks already confirmed removals */
-+		if (vg->needs_write_and_commit && (!vg_write(vg) || !vg_commit(vg)))
-+			return 0;
-+		if (yes_no_prompt("Do you really want to remove and DISCARD "
-+				  "logical volume %s? [y/n]: ",
-+				  display_lvname(lv)) == 'n') {
-+			log_error("Logical volume %s not removed.", display_lvname(lv));
-+			return 0;
-+		}
- 	}
+@@ -198,7 +200,8 @@ struct volume_group *text_read_metadata(struct format_instance *fid,
+ 		*use_previous_vg = 0;
  
- 	if (lv_is_cache(lv) && !lv_is_pending_delete(lv)) {
-@@ -6765,8 +6772,11 @@ int lv_remove_single(struct cmd_context *cmd, struct logical_volume *lv,
- 		return 0;
- 	}
- 
--	/* store it on disks */
--	if (!vg_write(vg) || !vg_commit(vg))
-+	if (!pool_lv && (!strcmp(cmd->name, "lvremove") || !strcmp(cmd->name, "vgremove"))) {
-+		/* With lvremove & vgremove try to postpone commit after last such LV */
-+		vg->needs_write_and_commit = 1;
-+		log_debug_metadata("Postponing write and commit.");
-+	} else if (!vg_write(vg) || !vg_commit(vg))  /* store it on disks */
- 		return_0;
- 
- 	/* Release unneeded blocks in thin pool */
-@@ -6785,10 +6795,18 @@ int lv_remove_single(struct cmd_context *cmd, struct logical_volume *lv,
- 	lockd_lv(cmd, lock_lv, "un", LDLV_PERSISTENT);
- 	lockd_free_lv(cmd, vg, lv->name, &lv->lvid.id[1], lv->lock_args);
- 
--	if (!suppress_remove_message && (visible || historical))
--		log_print_unless_silent("%sogical volume \"%s\" successfully removed",
--					historical ? "Historical l" : "L",
--					historical ? lv->this_glv->historical->name : lv->name);
-+	if (!suppress_remove_message && (visible || historical)) {
-+		(void) dm_snprintf(msg, sizeof(msg),
-+				   "%sogical volume \"%s\" successfully removed",
-+				   historical ? "Historical l" : "L",
-+				   historical ? lv->this_glv->historical->name : lv->name);
-+		if (!vg->needs_write_and_commit)
-+			log_print_unless_silent("%s", msg);
-+		/* Keep print message for later display with next vg_write() and vg_commit() */
-+		else if (!(msg_dup = dm_pool_strdup(vg->vgmem, msg)) ||
-+			 !str_list_add_no_dup_check(vg->vgmem, &vg->msg_list, msg_dup))
-+			return_0;
-+	}
- 
- 	return 1;
+       out:
+-	config_destroy(cft);
++	if (cft)
++		config_destroy(cft);
+ 	return vg;
  }
+ 
 diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
-index 692094ec8..2915c1d07 100644
+index daf49827f..5410eac60 100644
 --- a/lib/metadata/metadata.c
 +++ b/lib/metadata/metadata.c
-@@ -3173,6 +3173,7 @@ static int _vg_commit_mdas(struct volume_group *vg)
- int vg_commit(struct volume_group *vg)
- {
- 	struct pv_list *pvl;
-+	struct dm_str_list *sl;
- 	int ret;
+@@ -5186,8 +5186,6 @@ struct volume_group *vg_read(struct cmd_context *cmd, const char *vg_name, const
+ 	 * FIXME: be specific about exactly when this works correctly.
+ 	 */
+ 	if (writing) {
+-		struct dm_config_tree *cft;
+-
+ 		if (dm_pool_locked(vg->vgmem)) {
+ 			/* FIXME: can this happen? */
+ 			log_warn("WARNING: vg_read no vg copy: pool locked.");
+@@ -5208,15 +5206,15 @@ struct volume_group *vg_read(struct cmd_context *cmd, const char *vg_name, const
+ 			vg->vg_precommitted = NULL;
+ 		}
  
- 	ret = _vg_commit_mdas(vg);
-@@ -3190,6 +3191,14 @@ int vg_commit(struct volume_group *vg)
+-		if (!(cft = export_vg_to_config_tree(vg))) {
++		if (!vg->committed_cft) {
+ 			log_warn("WARNING: vg_read no vg copy: copy export failed.");
+-			goto out;
++			if (!(vg->committed_cft = export_vg_to_config_tree(vg)))
++				goto out;
+ 		}
  
- 		/* This *is* the original now that it's commited. */
- 		_vg_move_cached_precommitted_to_committed(vg);
-+
-+		if (vg->needs_write_and_commit){
-+			/* Print buffered messages that have been finished with this commit. */
-+			dm_list_iterate_items(sl, &vg->msg_list)
-+				log_print_unless_silent("%s", sl->str);
-+			dm_list_init(&vg->msg_list);
-+			vg->needs_write_and_commit = 0;
-+		}
- 	}
+-		if (!(vg->vg_committed = import_vg_from_config_tree(cmd, vg->fid, cft)))
++		if (!(vg->vg_committed = import_vg_from_config_tree(cmd, vg->fid, vg->committed_cft)))
+ 			log_warn("WARNING: vg_read no vg copy: copy import failed.");
  
- 	/* If at least one mda commit succeeded, it was committed */
+-		dm_config_destroy(cft);
+ 	} else {
+ 		if (vg->vg_precommitted)
+ 			log_error(INTERNAL_ERROR "vg_read vg %p vg_precommitted %p", (void *)vg, (void *)vg->vg_precommitted);
 diff --git a/lib/metadata/vg.c b/lib/metadata/vg.c
-index a809115f6..9a8693c0b 100644
+index 9a8693c0b..e659579c2 100644
 --- a/lib/metadata/vg.c
 +++ b/lib/metadata/vg.c
-@@ -60,6 +60,7 @@ struct volume_group *alloc_vg(const char *pool_name, struct cmd_context *cmd,
- 	dm_list_init(&vg->removed_lvs);
- 	dm_list_init(&vg->removed_historical_lvs);
- 	dm_list_init(&vg->removed_pvs);
-+	dm_list_init(&vg->msg_list);
+@@ -79,6 +79,8 @@ static void _free_vg(struct volume_group *vg)
  
- 	log_debug_mem("Allocated VG %s at %p.", vg->name ? : "<no name>", (void *)vg);
+ 	log_debug_mem("Freeing VG %s at %p.", vg->name ? : "<no name>", (void *)vg);
  
++	if (vg->committed_cft)
++		config_destroy(vg->committed_cft);
+ 	dm_hash_destroy(vg->hostnames);
+ 	dm_pool_destroy(vg->vgmem);
+ }
 diff --git a/lib/metadata/vg.h b/lib/metadata/vg.h
-index 386d5b450..fa1b03621 100644
+index fa1b03621..36d1ed155 100644
 --- a/lib/metadata/vg.h
 +++ b/lib/metadata/vg.h
-@@ -43,6 +43,7 @@ struct volume_group {
- 	uint32_t seqno;		/* Metadata sequence number */
- 	unsigned skip_validate_lock_args : 1;
- 	unsigned needs_backup : 1;
-+	unsigned needs_write_and_commit : 1;
- 	uint32_t write_count; /* count the number of vg_write calls */
- 
- 	/*
-@@ -129,6 +130,7 @@ struct volume_group {
- 	struct dm_hash_table *hostnames; /* map of creation hostnames */
- 	struct logical_volume *pool_metadata_spare_lv; /* one per VG */
- 	struct logical_volume *sanlock_lv; /* one per VG */
-+	struct dm_list msg_list;
- };
- 
- struct volume_group *alloc_vg(const char *pool_name, struct cmd_context *cmd,
-diff --git a/tools/toollib.c b/tools/toollib.c
-index 67422e3b4..41e722c5c 100644
---- a/tools/toollib.c
-+++ b/tools/toollib.c
-@@ -3216,6 +3216,10 @@ int process_each_lv_in_vg(struct cmd_context *cmd, struct volume_group *vg,
- 		log_set_report_object_name_and_id(NULL, NULL);
- 	}
- 
-+	if (vg->needs_write_and_commit && (ret_max == ECMD_PROCESSED) &&
-+	    (!vg_write(vg) || !vg_commit(vg)))
-+		return_0;
-+
- 	if (vg->needs_backup)
- 		backup(vg);
+@@ -50,9 +50,9 @@ struct volume_group {
+ 	 * The parsed committed (on-disk) copy of this VG; is NULL if this VG is committed
+ 	 * version (i.e. vg_committed == NULL *implies* this is the committed copy,
+ 	 * there is no guarantee that if this VG is the same as the committed one
+-	 * this will be NULL). The pointer is maintained by calls to
+-	 * _vg_update_vg_committed.
++	 * this will be NULL). The pointer is maintained by calls to vg_write & vg_commit
+ 	 */
++	struct dm_config_tree *committed_cft;
+ 	struct volume_group *vg_committed;
+ 	struct volume_group *vg_precommitted;
  
 
 
