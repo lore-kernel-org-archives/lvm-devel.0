@@ -1,39 +1,48 @@
-From: David Teigland <teigland@sourceware.org>
-Date: Mon, 22 Mar 2021 15:39:18 +0000 (GMT)
-Subject: dev-next - segtypes: macros for error and zero segtypes
-Message-ID: <20210322153918.8DB45385781A@sourceware.org>
+From: Zdenek Kabelac <zkabelac@sourceware.org>
+Date: Wed, 10 Mar 2021 23:19:33 +0000 (GMT)
+Subject: main - cleanup: use already set vg_complete
+Message-ID: <20210310231933.F0B0B3858001@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=b35ef9d67cabd23f65e2ee2113af46bea095138c
-Commit:        b35ef9d67cabd23f65e2ee2113af46bea095138c
-Parent:        22554c3ff0807f62f8fa71faab153958c475028b
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=23afad824715f941ebeccc2c12aec75fc241b984
+Commit:        23afad824715f941ebeccc2c12aec75fc241b984
+Parent:        c4f5d9312283b5a096c99d4ccd28b89cbf89b1e7
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu Mar 18 13:13:38 2021 +0100
+AuthorDate:    Wed Mar 10 14:16:42 2021 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Thu Mar 18 18:34:57 2021 +0100
+CommitterDate: Thu Mar 11 00:18:01 2021 +0100
 
-segtypes: macros for error and zero segtypes
+cleanup: use already set vg_complete
 
+Already set to 0.
 ---
- lib/metadata/segtype.h | 2 ++
- 1 file changed, 2 insertions(+)
+ tools/pvscan.c | 7 ++-----
+ 1 file changed, 2 insertions(+), 5 deletions(-)
 
-diff --git a/lib/metadata/segtype.h b/lib/metadata/segtype.h
-index 676f37e3c..d7cfc2b72 100644
---- a/lib/metadata/segtype.h
-+++ b/lib/metadata/segtype.h
-@@ -115,6 +115,8 @@ struct dev_manager;
- #define SEG_TYPE_NAME_RAID6_N_6		"raid6_n_6"
+diff --git a/tools/pvscan.c b/tools/pvscan.c
+index 8bcfe311c..22cb7bc18 100644
+--- a/tools/pvscan.c
++++ b/tools/pvscan.c
+@@ -1351,14 +1351,11 @@ static int _online_devs(struct cmd_context *cmd, int do_all, struct dm_list *pvs
+ 		}
  
- #define segtype_is_linear(segtype)	(!strcmp((segtype)->name, SEG_TYPE_NAME_LINEAR))
-+#define segtype_is_error(segtype)	(!strcmp((segtype)->name, SEG_TYPE_NAME_ERROR))
-+#define segtype_is_zero(segtype)	(!strcmp((segtype)->name, SEG_TYPE_NAME_ZERO))
- #define segtype_is_striped_target(segtype)	((segtype)->flags & SEG_STRIPED_TARGET ? 1 : 0)
- #define segtype_is_cache(segtype)	((segtype)->flags & SEG_CACHE ? 1 : 0)
- #define segtype_is_cache_pool(segtype)	((segtype)->flags & SEG_CACHE_POOL ? 1 : 0)
+ 		if (pvs_unknown) {
+-			log_print("pvscan[%d] PV %s online, VG unknown.", getpid(), dev_name(dev));
+-			vg_complete = 0;
+-
++			log_print("pvscan[%d] PV %s online, VG unknown.",
++				  getpid(), dev_name(dev));
+ 		} else if (pvs_offline) {
+ 			log_print("pvscan[%d] PV %s online, VG %s incomplete (need %d).",
+ 				  getpid(), dev_name(dev), vgname, pvs_offline);
+-			vg_complete = 0;
+-
+ 		} else {
+ 			log_print("pvscan[%d] PV %s online, VG %s is complete.", getpid(), dev_name(dev), vgname);
+ 			if (!str_list_add(cmd->mem, complete_vgnames, dm_pool_strdup(cmd->mem, vgname)))
 
 
