@@ -1,112 +1,61 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Wed, 10 Mar 2021 00:36:46 +0000 (GMT)
-Subject: main - cov: ensure settings is set
-Message-ID: <20210310003646.CD1433858038@sourceware.org>
+Date: Wed, 10 Mar 2021 23:19:31 +0000 (GMT)
+Subject: main - toollib: use EINIT_FAILED for missing devs
+Message-ID: <20210310231931.AC1F93858001@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=a66380ea3ebcdb21e5b63f5991810e421092b245
-Commit:        a66380ea3ebcdb21e5b63f5991810e421092b245
-Parent:        f7912635a0698b73120adf499f335145506a8b9e
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=d86e943b80a94427bc2cd9deed151dd84c74ffbe
+Commit:        d86e943b80a94427bc2cd9deed151dd84c74ffbe
+Parent:        f4543aca15743eafdc03b4ad92084ef7343f904d
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Mar 9 16:32:36 2021 +0100
+AuthorDate:    Wed Mar 10 14:37:19 2021 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Wed Mar 10 01:35:02 2021 +0100
+CommitterDate: Thu Mar 11 00:18:01 2021 +0100
 
-cov: ensure settings is set
+toollib: use EINIT_FAILED for missing devs
 
+There is really no practical reason to continue running
+when we fail on allocation.
+
+It seems we may need further fine frained errors, as for
+some error type we simply need to exit ASAP, while
+others may still produce usable results.
 ---
- lib/report/properties.c | 17 ++++++++++-------
- lib/report/report.c     |  9 +++++----
- 2 files changed, 15 insertions(+), 11 deletions(-)
+ tools/toollib.c | 11 +++++++----
+ 1 file changed, 7 insertions(+), 4 deletions(-)
 
-diff --git a/lib/report/properties.c b/lib/report/properties.c
-index 82a6a7856..f2174b83c 100644
---- a/lib/report/properties.c
-+++ b/lib/report/properties.c
-@@ -93,23 +93,26 @@ static uint32_t _raidmaxrecoveryrate(const struct logical_volume *lv)
+diff --git a/tools/toollib.c b/tools/toollib.c
+index de51632a6..f60847b48 100644
+--- a/tools/toollib.c
++++ b/tools/toollib.c
+@@ -3853,7 +3853,7 @@ static int _get_arg_devices(struct cmd_context *cmd,
  
- static const char *_raidintegritymode(const struct logical_volume *lv)
- {
--	struct integrity_settings *settings;
-+	struct integrity_settings *settings = NULL;
+ 		if (!(dil->dev = dev_cache_get(cmd, sl->str, cmd->filter))) {
+ 			log_error("Cannot use %s: %s", sl->str, devname_error_reason(sl->str));
+-			ret_max = ECMD_FAILED;
++			ret_max = EINIT_FAILED;
+ 		} else {
+ 			strncpy(dil->pvid, dil->dev->pvid, ID_LEN);
+ 			dm_list_add(arg_devices, &dil->list);
+@@ -4458,9 +4458,12 @@ int process_each_pv(struct cmd_context *cmd,
+ 		goto_out;
+ 	}
  
- 	if (lv_raid_has_integrity((struct logical_volume *)lv))
- 		lv_get_raid_integrity_settings((struct logical_volume *)lv, &settings);
- 	else if (lv_is_integrity(lv))
- 		settings = &first_seg(lv)->integrity_settings;
- 
--	if (settings->mode[0] == 'B')
--		return "bitmap";
--	if (settings->mode[0] == 'J')
--		return "journal";
-+	if (settings) {
-+		switch (settings->mode[0]) {
-+		case 'B': return "bitmap";
-+		case 'J': return "journal";
-+		}
+-	if ((ret = _get_arg_devices(cmd, &arg_pvnames, &arg_devices)) != ECMD_PROCESSED)
+-		/* get_arg_devices reports the error for any PV names not found. */
+-		ret_max = ECMD_FAILED;
++	if ((ret = _get_arg_devices(cmd, &arg_pvnames, &arg_devices)) != ECMD_PROCESSED) {
++		/* get_arg_devices reports EINIT_FAILED for any PV names not found. */
++		ret_max = ret;
++		if (ret_max == ECMD_FAILED)
++			goto_out;
 +	}
-+
- 	return "unknown";
- }
  
- static uint32_t _raidintegrityblocksize(const struct logical_volume *lv)
- {
--	struct integrity_settings *settings;
-+	struct integrity_settings *settings = NULL;
- 
- 	if (lv_raid_has_integrity((struct logical_volume *)lv))
- 		lv_get_raid_integrity_settings((struct logical_volume *)lv, &settings);
-@@ -118,7 +121,7 @@ static uint32_t _raidintegrityblocksize(const struct logical_volume *lv)
- 	else
- 		return 0;
- 
--	return settings->block_size;
-+	return (settings) ? settings->block_size : 0;
- }
- 
- static uint64_t _integritymismatches(const struct logical_volume *lv)
-diff --git a/lib/report/report.c b/lib/report/report.c
-index 80fae2147..2f5811a96 100644
---- a/lib/report/report.c
-+++ b/lib/report/report.c
-@@ -3278,7 +3278,7 @@ static int _raidintegritymode_disp(struct dm_report *rh __attribute__((unused)),
- 				   void *private __attribute__((unused)))
- {
- 	struct logical_volume *lv = (struct logical_volume *) data;
--	struct integrity_settings *settings;
-+	struct integrity_settings *settings = NULL;
- 	const char *mode = NULL;
- 	char *repstr;
- 
-@@ -3289,7 +3289,7 @@ static int _raidintegritymode_disp(struct dm_report *rh __attribute__((unused)),
- 	else
- 		goto out;
- 
--	if (settings->mode[0]) {
-+	if (settings && settings->mode[0]) {
- 		if (settings->mode[0] == 'B')
- 			mode = "bitmap";
- 		else if (settings->mode[0] == 'J')
-@@ -3314,13 +3314,14 @@ static int _raidintegrityblocksize_disp(struct dm_report *rh __attribute__((unus
- 				   void *private __attribute__((unused)))
- {
- 	struct logical_volume *lv = (struct logical_volume *) data;
--	struct integrity_settings *settings;
-+	struct integrity_settings *settings = NULL;
- 
- 	if (lv_raid_has_integrity(lv))
- 		lv_get_raid_integrity_settings(lv, &settings);
- 	else if (lv_is_integrity(lv))
- 		settings = &first_seg(lv)->integrity_settings;
--	else
-+
-+	if (!settings)
- 		return dm_report_field_int32(rh, field, &GET_TYPE_RESERVED_VALUE(num_undef_32));
- 
- 	return dm_report_field_uint32(rh, field, &settings->block_size);
+ 	ret = _process_pvs_in_vgs(cmd, read_flags, &all_vgnameids, &all_devices,
+ 				  &arg_devices, &arg_tags,
 
 
