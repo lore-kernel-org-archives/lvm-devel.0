@@ -1,39 +1,52 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Mon, 15 Mar 2021 10:14:18 +0000 (GMT)
-Subject: main - debug: keep microseconds aligned
-Message-ID: <20210315101418.5D09D3857C52@sourceware.org>
+Date: Wed, 10 Mar 2021 00:36:45 +0000 (GMT)
+Subject: main - cov: ensure buffer is initialized
+Message-ID: <20210310003645.AC672385802B@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=6e9ccf7b6f58cd3e31a79c35d3a312560809e85a
-Commit:        6e9ccf7b6f58cd3e31a79c35d3a312560809e85a
-Parent:        bc1bc4cffc2b5faa113b5c232aa5fc2faae8771a
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=f7912635a0698b73120adf499f335145506a8b9e
+Commit:        f7912635a0698b73120adf499f335145506a8b9e
+Parent:        8a0367524182f55e7e982f0b5700d90f2a9519e2
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Mar 12 22:39:42 2021 +0100
+AuthorDate:    Tue Mar 9 16:12:38 2021 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Mon Mar 15 11:13:24 2021 +0100
+CommitterDate: Wed Mar 10 01:35:02 2021 +0100
 
-debug: keep microseconds aligned
+cov: ensure buffer is initialized
 
 ---
- lib/log/log.c | 2 +-
- 1 file changed, 1 insertion(+), 1 deletion(-)
+ lib/config/config.c      | 2 ++
+ libdm/dm-tools/dmsetup.c | 1 +
+ 2 files changed, 3 insertions(+)
 
-diff --git a/lib/log/log.c b/lib/log/log.c
-index cd676f2ae..53ff5b156 100644
---- a/lib/log/log.c
-+++ b/lib/log/log.c
-@@ -472,7 +472,7 @@ static void _set_time_prefix(char *prefix, int buflen)
- 	if (!len)
- 		goto fail;
+diff --git a/lib/config/config.c b/lib/config/config.c
+index 409555096..485063a3d 100644
+--- a/lib/config/config.c
++++ b/lib/config/config.c
+@@ -1141,6 +1141,8 @@ int config_def_check(struct cft_check_handle *handle)
+ 	 * sections and settings with full path as a key.
+ 	 * If section name is variable, use '#' as a substitute.
+ 	 */
++	*vp = 0;
++	*rp = 0;
+ 	if (!handle->cmd->cft_def_hash) {
+ 		if (!(handle->cmd->cft_def_hash = dm_hash_create(60))) {
+ 			log_error("Failed to create configuration definition hash.");
+diff --git a/libdm/dm-tools/dmsetup.c b/libdm/dm-tools/dmsetup.c
+index 46fa81069..a3d1248bc 100644
+--- a/libdm/dm-tools/dmsetup.c
++++ b/libdm/dm-tools/dmsetup.c
+@@ -5158,6 +5158,7 @@ static int _stats_group_segments(struct dm_stats *dms, uint64_t *region_ids,
+ 		return 0;
+ 	}
  
--	len = dm_snprintf(prefix + len, buflen - len, ".%ld ", ts.tv_nsec/1000);
-+	len = dm_snprintf(prefix + len, buflen - len, ".%06ld ", ts.tv_nsec/1000);
- 	if (len < 0)
- 		goto fail;
- 
++	*regions = 0;
+ 	for (i = 0; i < count; i++) {
+ 		/*
+ 		 * We don't expect large numbers of segments (compared to e.g.
 
 
