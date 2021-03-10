@@ -1,39 +1,40 @@
-From: David Teigland <teigland@sourceware.org>
-Date: Mon, 22 Mar 2021 15:39:54 +0000 (GMT)
-Subject: dev-next - config: change default use_devicesfile to 1
-Message-ID: <20210322153954.41CCD385781A@sourceware.org>
+From: Zdenek Kabelac <zkabelac@sourceware.org>
+Date: Wed, 10 Mar 2021 23:19:38 +0000 (GMT)
+Subject: main - tests: settle after wiping
+Message-ID: <20210310231938.865583858001@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=63662e2de6e19358987a495d9ad957acc92441d5
-Commit:        63662e2de6e19358987a495d9ad957acc92441d5
-Parent:        8ebfc607db62f9162f54ba3414fd52dcfafd57bc
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Tue Mar 16 09:52:13 2021 -0500
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Mon Mar 22 10:38:26 2021 -0500
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=4bbaff1fa621353d0d2adbbf86dd26284b8a11e3
+Commit:        4bbaff1fa621353d0d2adbbf86dd26284b8a11e3
+Parent:        2cbe88d6a1e9e6f637ee1b5ccdc7b78712d46998
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Wed Mar 10 23:36:03 2021 +0100
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Thu Mar 11 00:18:01 2021 +0100
 
-config: change default use_devicesfile to 1
+tests: settle after wiping
 
+Add call to settle after wiping device so there is reduced
+change to meet watch rule race during tests.
 ---
- lib/config/defaults.h | 2 +-
- 1 file changed, 1 insertion(+), 1 deletion(-)
+ test/lib/aux.sh | 1 +
+ 1 file changed, 1 insertion(+)
 
-diff --git a/lib/config/defaults.h b/lib/config/defaults.h
-index 2870dee12..8f83d35d7 100644
---- a/lib/config/defaults.h
-+++ b/lib/config/defaults.h
-@@ -323,7 +323,7 @@
+diff --git a/test/lib/aux.sh b/test/lib/aux.sh
+index 0e10a06dd..2e6191d70 100644
+--- a/test/lib/aux.sh
++++ b/test/lib/aux.sh
+@@ -837,6 +837,7 @@ wipefs_a() {
+ 		lvmdevices --adddev $dev || true
+ 	fi
  
- #define DEFAULT_MD_COMPONENT_CHECKS "auto"
++	udev_wait
+ }
  
--#define DEFAULT_USE_DEVICES_FILE 0
-+#define DEFAULT_USE_DEVICES_FILE 1
- #define DEFAULT_DEVICES_FILE "system.devices"
- 
- #define DEFAULT_SEARCH_FOR_DEVNAMES "auto"
+ prepare_backing_dev() {
 
 
