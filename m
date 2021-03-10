@@ -1,42 +1,54 @@
-From: David Teigland <teigland@sourceware.org>
-Date: Mon, 22 Mar 2021 15:39:27 +0000 (GMT)
-Subject: dev-next - WHATS_NEW: updates
-Message-ID: <20210322153927.C235A3854808@sourceware.org>
+From: Zdenek Kabelac <zkabelac@sourceware.org>
+Date: Wed, 10 Mar 2021 23:19:35 +0000 (GMT)
+Subject: main - cov: initialize value
+Message-ID: <20210310231935.1CF123857C5E@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=b4ab2a10511cba2f7679cf12929438b6d2d6232d
-Commit:        b4ab2a10511cba2f7679cf12929438b6d2d6232d
-Parent:        26fb6b5e8d61e3d3097fccf4fca5bd9582fbbb4f
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=d7bb23dd156cd059500e32a4f3966d3d1be52225
+Commit:        d7bb23dd156cd059500e32a4f3966d3d1be52225
+Parent:        23afad824715f941ebeccc2c12aec75fc241b984
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu Mar 18 16:55:20 2021 +0100
+AuthorDate:    Wed Mar 10 15:53:58 2021 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Thu Mar 18 19:12:35 2021 +0100
+CommitterDate: Thu Mar 11 00:18:01 2021 +0100
 
-WHATS_NEW: updates
+cov: initialize value
 
+Coverity can't understand conditions together, so just keep it quiet.
 ---
- WHATS_NEW | 6 ++++++
- 1 file changed, 6 insertions(+)
+ lib/mm/memlock.c | 2 +-
+ tools/command.c  | 2 +-
+ 2 files changed, 2 insertions(+), 2 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index e4ccd1b0d..5d018ef36 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,11 @@
- Version 2.03.12 - 
- ===================================
-+  Support lvconvert -Zn with thin-pool conversion.
-+  Support error and zero segtype for thin-pool data for testing.
-+  Support mixed extension for striped, error and zero segtypes.
-+  Support resize also for stacked virtual volumes.
-+  Skip dm-zero devices just like with dm-error target.
-+  Reduce ioctl() calls when checking target status.
-   Merge polling does not fail, when LV is found to be already merged.
-   Poll volumes with at least 100ms delays.
-   Do not flush dm cache when cached LV is going to be removed.
+diff --git a/lib/mm/memlock.c b/lib/mm/memlock.c
+index 0c05038fe..1e6cedc5f 100644
+--- a/lib/mm/memlock.c
++++ b/lib/mm/memlock.c
+@@ -551,7 +551,7 @@ static void _lock_mem(struct cmd_context *cmd)
+ 
+ static void _unlock_mem(struct cmd_context *cmd)
+ {
+-	size_t unlock_mstats;
++	size_t unlock_mstats = 0;
+ 
+ 	log_very_verbose("Unlocking memory");
+ 
+diff --git a/tools/command.c b/tools/command.c
+index 81720acf1..bb707d66f 100644
+--- a/tools/command.c
++++ b/tools/command.c
+@@ -3595,7 +3595,7 @@ static void _print_man_secondary(char *name)
+ 
+ int main(int argc, char *argv[])
+ {
+-	struct cmd_context cmdtool;
++	struct cmd_context cmdtool = { 0 };
+ 	char *cmdname = NULL;
+ 	char *desfile = NULL;
+ 	char *stdout_buf;
 
 
