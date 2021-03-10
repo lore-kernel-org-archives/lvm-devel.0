@@ -1,51 +1,87 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Fri, 19 Mar 2021 23:17:10 +0000 (GMT)
-Subject: main - raid: resync cannot lose primary leg
-Message-ID: <20210319231710.00F38385783D@sourceware.org>
+Date: Wed, 10 Mar 2021 23:19:28 +0000 (GMT)
+Subject: main - lvconvert: fix error path on writecache removal
+Message-ID: <20210310231928.3EE793857C62@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=cc140f68a505aad117a6e8222f65a5ea13139083
-Commit:        cc140f68a505aad117a6e8222f65a5ea13139083
-Parent:        076e1556978dfb216176d319d2498ec571fcc908
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=7a99dac9ad44f0097fb64c48f7fe14a10aea07b7
+Commit:        7a99dac9ad44f0097fb64c48f7fe14a10aea07b7
+Parent:        127c2fc6e287f0f7edb9c0a061aaaba31bf47e45
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Mar 19 01:54:06 2021 +0100
+AuthorDate:    Wed Mar 10 14:07:40 2021 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Fri Mar 19 23:19:31 2021 +0100
+CommitterDate: Wed Mar 10 23:32:12 2021 +0100
 
-raid: resync cannot lose primary leg
+lvconvert: fix error path on writecache removal
 
-Prohibity droping primary leg while resyncing.
+After setting ret=0 there was missing 'goto out_release'.
+Simplify with setting ret to 0 at front and to 1
+at succesful end.
 ---
- lib/metadata/raid_manip.c | 11 ++++++++---
- 1 file changed, 8 insertions(+), 3 deletions(-)
+ tools/lvconvert.c | 9 ++-------
+ 1 file changed, 2 insertions(+), 7 deletions(-)
 
-diff --git a/lib/metadata/raid_manip.c b/lib/metadata/raid_manip.c
-index dc3bce201..33fd017cb 100644
---- a/lib/metadata/raid_manip.c
-+++ b/lib/metadata/raid_manip.c
-@@ -2945,11 +2945,16 @@ static int _raid_allow_extraction(struct logical_volume *lv,
- 	    !lv_raid_dev_health(lv, &dev_health))
- 		return_0;
+diff --git a/tools/lvconvert.c b/tools/lvconvert.c
+index 4e27008fa..4c159b01e 100644
+--- a/tools/lvconvert.c
++++ b/tools/lvconvert.c
+@@ -5751,7 +5751,7 @@ static int _lvconvert_detach_writecache_when_clean(struct cmd_context *cmd,
+ 	struct logical_volume *lv_fast;
+ 	uint32_t lockd_state, error_flags;
+ 	uint64_t dirty;
+-	int ret;
++	int ret = 0;
  
--	if (!strcmp("resync", sync_action))
--		return 1;
-+	if (!strcmp("resync", sync_action)) {
-+		if (!lv_is_on_pvs(seg_lv(seg, 0), target_pvs) &&
-+		    !lv_is_on_pvs(seg_metalv(seg, 0), target_pvs))
-+			return 1;
-+		log_error("Unable to remove primary RAID image while array resyncing.");
-+		return 0;
-+	}
+ 	idl = dm_list_item(dm_list_first(&lr->poll_idls), struct convert_poll_id_list);
+ 	id = idl->id;
+@@ -5780,13 +5780,11 @@ static int _lvconvert_detach_writecache_when_clean(struct cmd_context *cmd,
  
- 	/* If anything other than "recover", rebuild or "idle" */
--        /* Targets reports for a while 'idle' state, before recover starts */
-+	/* Targets reports for a while 'idle' state, before recover starts */
- 	if (strcmp("recover", sync_action) &&
- 	    strcmp("rebuild", sync_action) &&
- 	    strcmp("idle", sync_action)) {
+ 	if (!vg) {
+ 		log_error("Detaching writecache interrupted - reading VG failed.");
+-		ret = 0;
+ 		goto out_lockd;
+ 	}
+ 
+ 	if (error_flags) {
+ 		log_error("Detaching writecache interrupted - reading VG error %x.", error_flags);
+-		ret = 0;
+ 		goto out_release;
+ 	}
+ 
+@@ -5797,13 +5795,11 @@ static int _lvconvert_detach_writecache_when_clean(struct cmd_context *cmd,
+ 
+ 	if (!lv) {
+ 		log_error("Detaching writecache interrupted - LV not found.");
+-		ret = 0;
+ 		goto out_release;
+ 	}
+ 
+ 	if (!lv_is_active(lv)) {
+ 		log_error("Detaching writecache interrupted - LV not active.");
+-		ret = 0;
+ 		goto out_release;
+ 	}
+ 
+@@ -5840,7 +5836,6 @@ static int _lvconvert_detach_writecache_when_clean(struct cmd_context *cmd,
+ 
+ 	if (!lv_detach_writecache_cachevol(lv, 1)) {
+ 		log_error("Detaching writecache cachevol failed.");
+-		ret = 0;
+ 		goto out_release;
+ 	}
+ 
+@@ -5851,7 +5846,7 @@ static int _lvconvert_detach_writecache_when_clean(struct cmd_context *cmd,
+ 	if (lr->remove_cache) {
+ 		if (lvremove_single(cmd, lv_fast, NULL) != ECMD_PROCESSED) {
+ 			log_error("Removing the writecache cachevol failed.");
+-			ret = 0;
++			goto out_release;
+ 		}
+ 	}
+ 
 
 
