@@ -1,62 +1,61 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Tue, 23 Mar 2021 10:37:18 +0000 (GMT)
-Subject: main - tests: use mirror throttling
-Message-ID: <20210323103718.97F54385BF9E@sourceware.org>
+Date: Wed, 10 Mar 2021 00:36:42 +0000 (GMT)
+Subject: main - cov: unused value
+Message-ID: <20210310003642.41058385802B@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=26d76d31c5251a35bc4be1c60a1066d13b1f5f1d
-Commit:        26d76d31c5251a35bc4be1c60a1066d13b1f5f1d
-Parent:        a5fc6a0fe7f7384db9a88a399d288d16d782f516
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=74936f53f7123c092d2ba6b9b7883db47bf0c61c
+Commit:        74936f53f7123c092d2ba6b9b7883db47bf0c61c
+Parent:        d95c0e977cb69b04467d650a8be9b0efa2c71688
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Mar 23 11:34:34 2021 +0100
+AuthorDate:    Tue Mar 9 15:51:11 2021 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Tue Mar 23 11:34:34 2021 +0100
+CommitterDate: Wed Mar 10 01:29:44 2021 +0100
 
-tests: use mirror throttling
+cov: unused value
 
-Combination of throttling and slowed device is a bit faster.
-
-Also add FIXME about the mutliple spawn polling processing
-when activating invidual LV for a pvmove.
 ---
- test/shell/pvmove-resume-2.sh | 9 +++++++--
- 1 file changed, 7 insertions(+), 2 deletions(-)
+ daemons/lvmlockd/lvmlockd-core.c | 2 +-
+ tools/vgimportdevices.c          | 3 +--
+ 2 files changed, 2 insertions(+), 3 deletions(-)
 
-diff --git a/test/shell/pvmove-resume-2.sh b/test/shell/pvmove-resume-2.sh
-index 803e6ef64..92b0070c0 100644
---- a/test/shell/pvmove-resume-2.sh
-+++ b/test/shell/pvmove-resume-2.sh
-@@ -26,12 +26,14 @@ vgcreate -s 128k $vg "$dev1"
- pvcreate --metadatacopies 0 "$dev2"
- vgextend $vg "$dev2"
+diff --git a/daemons/lvmlockd/lvmlockd-core.c b/daemons/lvmlockd/lvmlockd-core.c
+index b271a9aee..094491029 100644
+--- a/daemons/lvmlockd/lvmlockd-core.c
++++ b/daemons/lvmlockd/lvmlockd-core.c
+@@ -2682,7 +2682,7 @@ out_rem:
  
-+aux throttle_dm_mirror 50 || :
-+
- test_pvmove_resume() {
- 	# 2 LVs on same device
- 	lvcreate -an -Zn -l15 -n $lv1 $vg "$dev1"
- 	lvcreate -an -Zn -l15 -n $lv2 $vg "$dev1"
+ 	log_debug("S %s clearing locks", ls->name);
  
--	aux delay_dev "$dev2" 0 1000 "$(get first_extent_sector "$dev2"):"
-+	aux delay_dev "$dev2" 0 200 "$(get first_extent_sector "$dev2"):"
+-	rv = clear_locks(ls, free_vg, drop_vg);
++	(void) clear_locks(ls, free_vg, drop_vg);
  
- 	pvmove -i5 "$dev1" &
- 	PVMOVE=$!
-@@ -108,7 +110,10 @@ lvchange_all() {
- 		aux lvmpolld_dump | tee lvmpolld_dump.txt
- 		aux check_lvmpolld_init_rq_count 1 "$vg/pvmove0" || should false
- 	elif test -e HAVE_DM_DELAY; then
--		test "$(aux count_processes_with_tag)" -eq "$1" || should false
-+		test "$(aux count_processes_with_tag)" -eq "$1" || {
-+			# FIXME: currently lvm2 is spawning polling process for each LV
-+			echo "Lvchange spawns pvmove per activated LV"
-+		}
- 	fi
- }
+ 	/*
+ 	 * Tell any other hosts in the lockspace to leave it
+diff --git a/tools/vgimportdevices.c b/tools/vgimportdevices.c
+index 88435af92..af0e618aa 100644
+--- a/tools/vgimportdevices.c
++++ b/tools/vgimportdevices.c
+@@ -113,7 +113,7 @@ int vgimportdevices(struct cmd_context *cmd, int argc, char **argv)
+ {
+ 	struct vgimportdevices_params vp = { 0 };
+ 	struct processing_handle *handle;
+-	int ret = ECMD_PROCESSED;
++	int ret = ECMD_FAILED;
  
+ 	if (arg_is_set(cmd, foreign_ARG))
+ 		cmd->include_foreign_vgs = 1;
+@@ -152,7 +152,6 @@ int vgimportdevices(struct cmd_context *cmd, int argc, char **argv)
+ 
+ 	if (!(handle = init_processing_handle(cmd, NULL))) {
+ 		log_error("Failed to initialize processing handle.");
+-		ret = ECMD_FAILED;
+ 		goto out;
+ 	}
+ 	handle->custom_handle = &vp;
 
 
