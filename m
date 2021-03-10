@@ -1,45 +1,56 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Wed, 10 Mar 2021 00:36:23 +0000 (GMT)
-Subject: main - bcache: fix incorrect pointer check
-Message-ID: <20210310003623.E1A7D385802B@sourceware.org>
+Date: Wed, 10 Mar 2021 00:36:25 +0000 (GMT)
+Subject: main - vg_write: shift check for exported metadata
+Message-ID: <20210310003625.12C8D3858038@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=17802084c90df4ced26ae395292f0fc8466e72b7
-Commit:        17802084c90df4ced26ae395292f0fc8466e72b7
-Parent:        d5f3239de4aa33f51cc8db7fc2e29db41cab9152
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=d2a3bfe6ca75f151a9fa37276dc0f8e3e6dc4ba4
+Commit:        d2a3bfe6ca75f151a9fa37276dc0f8e3e6dc4ba4
+Parent:        17802084c90df4ced26ae395292f0fc8466e72b7
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Mar 9 19:35:53 2021 +0100
+AuthorDate:    Tue Mar 9 17:45:42 2021 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Wed Mar 10 00:59:05 2021 +0100
+CommitterDate: Wed Mar 10 01:00:18 2021 +0100
 
-bcache: fix incorrect pointer check
+vg_write: shift check for exported metadata
 
-With commit b44db5d1a7ecc2e8e3cef0852c4397b64ddf0a09
-needs to check allocated pointer for failed malloc().
-
-Existing check was actually no checking anything so failing
-malloc here would result in segfault (although with very
-low chance to ever happen).
+Since we now immediatelly use created buffer for CFT creation,
+the result needs to be validate before such use.
 ---
- lib/device/bcache.c | 2 +-
- 1 file changed, 1 insertion(+), 1 deletion(-)
+ lib/format_text/format-text.c | 10 +++++-----
+ 1 file changed, 5 insertions(+), 5 deletions(-)
 
-diff --git a/lib/device/bcache.c b/lib/device/bcache.c
-index a3803befb..a5f2a5a86 100644
---- a/lib/device/bcache.c
-+++ b/lib/device/bcache.c
-@@ -74,7 +74,7 @@ static struct cb_set *_cb_set_create(unsigned nr)
- 	unsigned i;
- 	struct cb_set *cbs = malloc(sizeof(*cbs) + nr * sizeof(*cbs->vec));
+diff --git a/lib/format_text/format-text.c b/lib/format_text/format-text.c
+index 3ed6aa54a..64ad4677c 100644
+--- a/lib/format_text/format-text.c
++++ b/lib/format_text/format-text.c
+@@ -661,6 +661,11 @@ static int _vg_write_raw(struct format_instance *fid, struct volume_group *vg,
+ 			(void) dm_snprintf(desc, sizeof(desc), "Write[%u] from %s.", vg->write_count, vg->cmd->cmd_line);
  
--	if (!cbs->vec)
-+	if (!cbs)
- 		return NULL;
+ 		new_size = text_vg_export_raw(vg, desc, &write_buf, &write_buf_size);
++		if (!new_size || !write_buf) {
++			log_error("VG %s metadata writing failed", vg->name);
++			goto out;
++		}
++
+ 		fidtc->write_buf = write_buf;
+ 		fidtc->write_buf_size = write_buf_size;
+ 		fidtc->new_metadata_size = new_size;
+@@ -681,11 +686,6 @@ static int _vg_write_raw(struct format_instance *fid, struct volume_group *vg,
+ 			goto_out;
+ 	}
  
- 	dm_list_init(&cbs->free);
+-	if (!new_size || !write_buf) {
+-		log_error("VG %s metadata writing failed", vg->name);
+-		goto out;
+-	}
+-
+ 	log_debug_metadata("VG %s seqno %u metadata write to %s mda_start %llu mda_size %llu mda_last %llu",
+ 			   vg->name, vg->seqno, devname,
+ 			   (unsigned long long)mda_start,
 
 
