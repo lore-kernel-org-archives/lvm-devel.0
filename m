@@ -1,40 +1,39 @@
-From: David Teigland <teigland@sourceware.org>
-Date: Mon, 22 Mar 2021 15:39:49 +0000 (GMT)
-Subject: dev-next - tests: slow down device more
-Message-ID: <20210322153949.94D15385480A@sourceware.org>
+From: Zdenek Kabelac <zkabelac@sourceware.org>
+Date: Wed, 10 Mar 2021 23:19:37 +0000 (GMT)
+Subject: main - debug: display_lvname
+Message-ID: <20210310231937.62D133857C5E@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=2dd43a7314ba72b0b899e161261ef5caacbade05
-Commit:        2dd43a7314ba72b0b899e161261ef5caacbade05
-Parent:        94c4af232c6118191ac2c81a4130e6f83823f510
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=2cbe88d6a1e9e6f637ee1b5ccdc7b78712d46998
+Commit:        2cbe88d6a1e9e6f637ee1b5ccdc7b78712d46998
+Parent:        a654148b76c71022997c3ea509b52354985b8d7f
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Sat Mar 20 09:58:50 2021 +0100
+AuthorDate:    Wed Mar 10 22:05:10 2021 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Sat Mar 20 10:52:24 2021 +0100
+CommitterDate: Thu Mar 11 00:18:01 2021 +0100
 
-tests: slow down device more
+debug: display_lvname
 
-Make the race with too fast merging less likely to occure.
 ---
- test/shell/snapshot-merge-thin.sh | 2 +-
+ tools/toollib.c | 2 +-
  1 file changed, 1 insertion(+), 1 deletion(-)
 
-diff --git a/test/shell/snapshot-merge-thin.sh b/test/shell/snapshot-merge-thin.sh
-index 447a93167..4e4577ca9 100644
---- a/test/shell/snapshot-merge-thin.sh
-+++ b/test/shell/snapshot-merge-thin.sh
-@@ -49,7 +49,7 @@ lvcreate -s -n $lv2 -L2 $vg/$lv1 "$dev2"
- dd if=/dev/zero of="$DM_DEV_DIR/$vg/$lv2" bs=1M count=1 oflag=direct
+diff --git a/tools/toollib.c b/tools/toollib.c
+index f60847b48..a8bda8bcd 100644
+--- a/tools/toollib.c
++++ b/tools/toollib.c
+@@ -3074,7 +3074,7 @@ int process_each_lv_in_vg(struct cmd_context *cmd, struct volume_group *vg,
+ 		if (!process_lv)
+ 			continue;
  
- lvs -a -o+lv_merging,lv_merge_failed $vg
--aux delay_dev "$dev1" 0 100 "$(get first_extent_sector "$dev1"):"
-+aux delay_dev "$dev1" 0 400 "$(get first_extent_sector "$dev1"):"
+-		log_very_verbose("Adding %s/%s to the list of LVs to be processed.", vg->name, lvl->lv->name);
++		log_very_verbose("Adding %s to the list of LVs to be processed.", display_lvname(lvl->lv));
  
- # Initiate background merge
- lvconvert -b --merge $vg/$lv2
+ 		if (!(final_lvl = dm_pool_zalloc(cmd->mem, sizeof(struct lv_list)))) {
+ 			log_error("Failed to allocate final LV list item.");
 
 
