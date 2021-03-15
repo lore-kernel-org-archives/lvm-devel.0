@@ -1,48 +1,68 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Wed, 10 Mar 2021 00:36:48 +0000 (GMT)
-Subject: main - cov: defined flv
-Message-ID: <20210310003648.012F13858039@sourceware.org>
+Date: Mon, 15 Mar 2021 10:14:06 +0000 (GMT)
+Subject: main - cleanup: simplify
+Message-ID: <20210315101406.E896C3858D29@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=94712e3233ac7610ed74c3207c131ec7d9a843c1
-Commit:        94712e3233ac7610ed74c3207c131ec7d9a843c1
-Parent:        a66380ea3ebcdb21e5b63f5991810e421092b245
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=b563c926ba348be14988889a581c81ca09ca66e0
+Commit:        b563c926ba348be14988889a581c81ca09ca66e0
+Parent:        664d3b0f226ffbbf064157885d7d4f8c0aed49cf
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Mar 9 16:42:38 2021 +0100
+AuthorDate:    Fri Mar 12 13:25:42 2021 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Wed Mar 10 01:35:02 2021 +0100
+CommitterDate: Sun Mar 14 16:34:38 2021 +0100
 
-cov: defined flv
+cleanup: simplify
 
 ---
- lib/activate/activate.c | 4 ++--
- 1 file changed, 2 insertions(+), 2 deletions(-)
+ tools/lvconvert.c | 14 ++++----------
+ 1 file changed, 4 insertions(+), 10 deletions(-)
 
-diff --git a/lib/activate/activate.c b/lib/activate/activate.c
-index ddad7c3f7..c450eab14 100644
---- a/lib/activate/activate.c
-+++ b/lib/activate/activate.c
-@@ -2846,7 +2846,7 @@ static int _deactivate_sub_lv_cb(struct logical_volume *lv, void *data)
-  */
- int deactivate_lv_with_sub_lv(const struct logical_volume *lv)
- {
--	struct logical_volume *flv;
-+	struct logical_volume *flv = NULL;
+diff --git a/tools/lvconvert.c b/tools/lvconvert.c
+index 4c159b01e..b50074294 100644
+--- a/tools/lvconvert.c
++++ b/tools/lvconvert.c
+@@ -4958,7 +4958,7 @@ static int _lvconvert_split_cache_single(struct cmd_context *cmd,
+ 	struct logical_volume *lv_main = NULL;
+ 	struct logical_volume *lv_fast = NULL;
+ 	struct lv_segment *seg;
+-	int ret;
++	int ret = 0;
  
- 	if (!deactivate_lv(lv->vg->cmd, lv)) {
- 		log_error("Cannot deactivate logical volume %s.",
-@@ -2856,7 +2856,7 @@ int deactivate_lv_with_sub_lv(const struct logical_volume *lv)
+ 	if (lv_is_writecache(lv)) {
+ 		lv_main = lv;
+@@ -5031,10 +5031,8 @@ static int _lvconvert_split_cache_single(struct cmd_context *cmd,
+ 			log_print_unless_silent("Logical volume %s is not cached and %s is unused.",
+ 						display_lvname(lv), display_lvname(lv_fast));
  
- 	if (!for_each_sub_lv((struct logical_volume *)lv, _deactivate_sub_lv_cb, &flv)) {
- 		log_error("Cannot deactivate subvolume %s of logical volume %s.",
--			  display_lvname(flv), display_lvname(lv));
-+			  (flv) ? display_lvname(flv) : "", display_lvname(lv));
- 		return 0;
- 	}
+-		} else  {
++		} else
+ 			log_error(INTERNAL_ERROR "Unknown cache split command.");
+-			ret = 0;
+-		}
  
+ 	} else if (lv_is_cache(lv_main) && lv_is_cache_pool(lv_fast)) {
+ 		if (cmd->command->command_enum == lvconvert_split_and_remove_cache_CMD)
+@@ -5043,14 +5041,10 @@ static int _lvconvert_split_cache_single(struct cmd_context *cmd,
+ 		else if (cmd->command->command_enum == lvconvert_split_and_keep_cache_CMD)
+ 			ret = _lvconvert_split_and_keep_cachepool(cmd, lv_main, lv_fast);
+ 
+-		else  {
++		else
+ 			log_error(INTERNAL_ERROR "Unknown cache split command.");
+-			ret = 0;
+-		}
+-	} else {
++	} else
+ 		log_error(INTERNAL_ERROR "Unknown cache split command.");
+-		ret = 0;
+-	}
+ 
+ 	if (!ret)
+ 		return ECMD_FAILED;
 
 
