@@ -1,53 +1,48 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Mon, 15 Mar 2021 10:14:17 +0000 (GMT)
-Subject: main - debug: drop stack from regular code flow
-Message-ID: <20210315101417.3A0383858039@sourceware.org>
+Date: Mon, 15 Mar 2021 10:14:20 +0000 (GMT)
+Subject: main - cov: void unused result
+Message-ID: <20210315101420.9FD8A3858D29@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=bc1bc4cffc2b5faa113b5c232aa5fc2faae8771a
-Commit:        bc1bc4cffc2b5faa113b5c232aa5fc2faae8771a
-Parent:        eadd58a97dd9a199b74260e8a2bdb5657bf7a88d
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=8a92f7070941172e1671cf6b0fd1296776daefb7
+Commit:        8a92f7070941172e1671cf6b0fd1296776daefb7
+Parent:        f69ff4b84a559a5795479489cf834fc0c3999e8d
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Mar 12 22:30:29 2021 +0100
+AuthorDate:    Mon Mar 15 10:49:20 2021 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Mon Mar 15 11:13:24 2021 +0100
 
-debug: drop stack from regular code flow
+cov: void unused result
 
 ---
- lib/label/hints.c       | 2 +-
- lib/metadata/metadata.c | 2 +-
- 2 files changed, 2 insertions(+), 2 deletions(-)
+ lib/device/bcache.c | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
 
-diff --git a/lib/label/hints.c b/lib/label/hints.c
-index aed0ea2ff..47236a15a 100644
---- a/lib/label/hints.c
-+++ b/lib/label/hints.c
-@@ -448,7 +448,7 @@ static int _dev_in_hint_hash(struct cmd_context *cmd, struct device *dev)
- 		return 0;
+diff --git a/lib/device/bcache.c b/lib/device/bcache.c
+index a5f2a5a86..285d92bc7 100644
+--- a/lib/device/bcache.c
++++ b/lib/device/bcache.c
+@@ -1401,7 +1401,7 @@ bool bcache_invalidate_di(struct bcache *cache, int di)
+ 	radix_tree_iterate(cache->rtree, k.bytes, k.bytes + sizeof(k.parts.di), &it.it);
  
- 	if (!dev_get_size(dev, &devsize) || !devsize)
--		return_0;
-+		return 0;
+ 	if (it.success)
+-		radix_tree_remove_prefix(cache->rtree, k.bytes, k.bytes + sizeof(k.parts.di));
++		(void) radix_tree_remove_prefix(cache->rtree, k.bytes, k.bytes + sizeof(k.parts.di));
  
- 	return 1;
+ 	return it.success;
  }
-diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
-index cee236e3e..47d3d8b3e 100644
---- a/lib/metadata/metadata.c
-+++ b/lib/metadata/metadata.c
-@@ -4603,7 +4603,7 @@ static bool _scan_text_mismatch(struct cmd_context *cmd, const char *vgname, con
+@@ -1436,7 +1436,7 @@ void bcache_abort_di(struct bcache *cache, int di)
  
- 		/* For other commands, return mismatch immediately. */
- 		if (ret)
--			goto_out;
-+			goto out;
- 	}
+ 	it.visit = _abort_v;
+ 	radix_tree_iterate(cache->rtree, k.bytes, k.bytes + sizeof(k.parts.di), &it);
+-	radix_tree_remove_prefix(cache->rtree, k.bytes, k.bytes + sizeof(k.parts.di));
++	(void) radix_tree_remove_prefix(cache->rtree, k.bytes, k.bytes + sizeof(k.parts.di));
+ }
  
- 	if (ret) {
+ //----------------------------------------------------------------
 
 
