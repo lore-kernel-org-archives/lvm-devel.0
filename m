@@ -1,40 +1,77 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Tue, 23 Mar 2021 11:07:08 +0000 (GMT)
-Subject: main - tests: ignore failure of zeroing
-Message-ID: <20210323110708.7835E385EC54@sourceware.org>
+Date: Mon, 15 Mar 2021 10:14:02 +0000 (GMT)
+Subject: main - activation: use interruptible_usleep
+Message-ID: <20210315101402.5E5E13858D29@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=712f7dfb4cdb729609de230e41255c5af0526860
-Commit:        712f7dfb4cdb729609de230e41255c5af0526860
-Parent:        26d76d31c5251a35bc4be1c60a1066d13b1f5f1d
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=a3bb8f2ec195fcfbea599d6efa784cb5cbd39741
+Commit:        a3bb8f2ec195fcfbea599d6efa784cb5cbd39741
+Parent:        941f67ed09155011f13bb75db6aed621f94e2374
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Mar 23 12:05:55 2021 +0100
+AuthorDate:    Thu Mar 11 20:50:39 2021 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Tue Mar 23 12:05:55 2021 +0100
+CommitterDate: Sun Mar 14 16:34:38 2021 +0100
 
-tests: ignore failure of zeroing
+activation: use interruptible_usleep
 
-Older mdadm fails the command, when the signature is already gone.
+Support interruption while waiting on device close.
 ---
- test/lib/aux.sh | 2 +-
- 1 file changed, 1 insertion(+), 1 deletion(-)
+ lib/activate/activate.c | 26 +++++++++++++-------------
+ 1 file changed, 13 insertions(+), 13 deletions(-)
 
-diff --git a/test/lib/aux.sh b/test/lib/aux.sh
-index 617d0b3a4..20736260f 100644
---- a/test/lib/aux.sh
-+++ b/test/lib/aux.sh
-@@ -796,7 +796,7 @@ cleanup_md_dev() {
- 	test "$DM_DEV_DIR" = "/dev" || rm -f "$(< MD_DEV_PV)"
+diff --git a/lib/activate/activate.c b/lib/activate/activate.c
+index 4452d4d40..93ab30424 100644
+--- a/lib/activate/activate.c
++++ b/lib/activate/activate.c
+@@ -29,6 +29,7 @@
+ #include "lib/metadata/segtype.h"
+ #include "lib/misc/sharedlib.h"
+ #include "lib/metadata/metadata.h"
++#include "lib/misc/lvm-signal.h"
  
- 	for dev in $(< MD_DEVICES); do
--		mdadm --zero-superblock "$dev" 2>/dev/null
-+		mdadm --zero-superblock "$dev" 2>/dev/null || true
- 	done
- 	udev_wait
- 	rm -f MD_DEV MD_DEVICES MD_DEV_PV
+ #include <limits.h>
+ #include <fcntl.h>
+@@ -863,25 +864,24 @@ int lv_check_not_in_use(const struct logical_volume *lv, int error_if_used)
+ 	}
+ 
+ 	open_count_check_retries = retry_deactivation() ? OPEN_COUNT_CHECK_RETRIES : 1;
+-	while (info.open_count > 0 && open_count_check_retries--) {
+-		if (!open_count_check_retries) {
+-			if (error_if_used)
+-				log_error("Logical volume %s in use.", display_lvname(lv));
+-			else
+-				log_debug_activation("Logical volume %s in use.", display_lvname(lv));
+-			return 0;
+-		}
++	while (open_count_check_retries--) {
++		if (interruptible_usleep(OPEN_COUNT_CHECK_USLEEP_DELAY))
++			break;  /* interrupted */
+ 
+-		usleep(OPEN_COUNT_CHECK_USLEEP_DELAY);
+ 		log_debug_activation("Retrying open_count check for %s.",
+ 				     display_lvname(lv));
+-		if (!lv_info(lv->vg->cmd, lv, 0, &info, 1, 0)) {
++		if (!lv_info(lv->vg->cmd, lv, 0, &info, 1, 0) || !info.exists) {
+ 			stack; /* device dissappeared? */
+-			break;
+-		}
++			return 1;
++		} else if (!info.open_count)
++			return 1;
+ 	}
+ 
+-	return 1;
++	if (error_if_used)
++		log_error("Logical volume %s in use.", display_lvname(lv));
++	else
++		log_debug_activation("Logical volume %s in use.", display_lvname(lv));
++	return 0;
+ }
+ 
+ /*
 
 
