@@ -1,40 +1,46 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Wed, 10 Mar 2021 00:36:49 +0000 (GMT)
-Subject: main - cov: happier with defined extent_size
-Message-ID: <20210310003649.24CC73857C5F@sourceware.org>
+Date: Mon, 15 Mar 2021 10:14:22 +0000 (GMT)
+Subject: main - tests: update handling of thin-pool removal
+Message-ID: <20210315101422.E6D623857C52@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=6097dfb9ad2faae1c28295b35e1fba82cb4b6f8b
-Commit:        6097dfb9ad2faae1c28295b35e1fba82cb4b6f8b
-Parent:        94712e3233ac7610ed74c3207c131ec7d9a843c1
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=78406ef6174b20ba2ee3e6405b8ed39804990482
+Commit:        78406ef6174b20ba2ee3e6405b8ed39804990482
+Parent:        e5e957e3308a6a03503b6ded290dc975494204e5
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Mar 9 19:28:24 2021 +0100
+AuthorDate:    Thu Mar 11 10:25:41 2021 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Wed Mar 10 01:35:02 2021 +0100
+CommitterDate: Mon Mar 15 11:13:24 2021 +0100
 
-cov: happier with defined extent_size
+tests: update handling of thin-pool removal
 
-Set extent_size with != 0 value so there is not division by 0
-in any code path.
+We shall no longer activate thin-pool, when
+it's going away together with all thin volumes.
 ---
- tools/toollib.c | 1 +
- 1 file changed, 1 insertion(+)
+ test/shell/component-thin.sh | 10 ++--------
+ 1 file changed, 2 insertions(+), 8 deletions(-)
 
-diff --git a/tools/toollib.c b/tools/toollib.c
-index b9be54ebb..3c81de26b 100644
---- a/tools/toollib.c
-+++ b/tools/toollib.c
-@@ -4006,6 +4006,7 @@ static int _process_duplicate_pvs(struct cmd_context *cmd,
- 	};
+diff --git a/test/shell/component-thin.sh b/test/shell/component-thin.sh
+index 3cf02f37d..ddadd0f8e 100644
+--- a/test/shell/component-thin.sh
++++ b/test/shell/component-thin.sh
+@@ -39,11 +39,5 @@ lvs -a
+ # When component LVs are active, thin-pool cannot be actived
+ not lvcreate -V20 $vg/pool
  
- 	struct volume_group dummy_vg = {
-+		.extent_size = 1,
- 		.fid = &dummy_fid,
- 		.name = "",
- 		.system_id = (char *) "",
+-
+-# FIXME: ATM removal of thin volumes goes 1-by-1 and needs to activate thin-pool.
+-# And thin-pool cannot be activate thus vgremove fails.
+-# To fix this it would need to be able to remove volumes without activation.
+-should vgremove -f $vg
+-
+-# -ff bypass activation failure
+-vgremove -ff $vg
++# Rremoval of thin volumes should not need to activate thin-pool.
++vgremove -f $vg
 
 
