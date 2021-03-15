@@ -1,67 +1,41 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Wed, 10 Mar 2021 00:36:44 +0000 (GMT)
-Subject: main - cov: variable initialization
-Message-ID: <20210310003644.897DD3858039@sourceware.org>
+Date: Mon, 15 Mar 2021 10:14:00 +0000 (GMT)
+Subject: main - thinpool: correct condition
+Message-ID: <20210315101400.199583858039@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=8a0367524182f55e7e982f0b5700d90f2a9519e2
-Commit:        8a0367524182f55e7e982f0b5700d90f2a9519e2
-Parent:        bee9b5c1d8d8f54c3ffe3c96abd2ce28cd2b5558
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=bbac843268ab353bb80a7f09841ff467bdcdeb04
+Commit:        bbac843268ab353bb80a7f09841ff467bdcdeb04
+Parent:        262008f1ceb050a9eed64f2fa50b1bc9366b9e75
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Mar 9 16:05:46 2021 +0100
+AuthorDate:    Thu Mar 11 13:33:24 2021 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Wed Mar 10 01:34:58 2021 +0100
+CommitterDate: Fri Mar 12 12:59:55 2021 +0100
 
-cov: variable initialization
+thinpool: correct condition
 
+Actually we do want to flush thin-pool message for particular LV first.
+Existing condition evaluated to noop.
 ---
- lib/device/device_id.c       | 2 +-
- lib/format_text/text_label.c | 2 +-
- tools/pvscan.c               | 2 +-
- 3 files changed, 3 insertions(+), 3 deletions(-)
+ lib/metadata/lv_manip.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
 
-diff --git a/lib/device/device_id.c b/lib/device/device_id.c
-index 1c4ba78f6..2de8b0a14 100644
---- a/lib/device/device_id.c
-+++ b/lib/device/device_id.c
-@@ -761,7 +761,7 @@ out:
+diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
+index 4114e7d5c..2c77bacc2 100644
+--- a/lib/metadata/lv_manip.c
++++ b/lib/metadata/lv_manip.c
+@@ -6707,7 +6707,7 @@ int lv_remove_single(struct cmd_context *cmd, struct logical_volume *lv,
+ 	}
  
- static void _device_ids_update_try(struct cmd_context *cmd)
- {
--	int held;
-+	int held = 0;
- 
- 	/* Defer updates to non-pvscan-cache commands. */
- 	if (cmd->pvscan_cache_single) {
-diff --git a/lib/format_text/text_label.c b/lib/format_text/text_label.c
-index 1674126c8..be5195039 100644
---- a/lib/format_text/text_label.c
-+++ b/lib/format_text/text_label.c
-@@ -379,7 +379,7 @@ static int _text_read(struct cmd_context *cmd, struct labeller *labeller, struct
- 	struct label_header *lh = (struct label_header *) label_buf;
- 	struct pv_header *pvhdr;
- 	struct pv_header_extension *pvhdr_ext;
--	struct metadata_area *mda;
-+	struct metadata_area *mda = NULL;
- 	struct metadata_area *mda1 = NULL;
- 	struct metadata_area *mda2 = NULL;
- 	struct disk_locn *dlocn_xl;
-diff --git a/tools/pvscan.c b/tools/pvscan.c
-index fdd8c482f..8bcfe311c 100644
---- a/tools/pvscan.c
-+++ b/tools/pvscan.c
-@@ -1088,7 +1088,7 @@ static int _get_args(struct cmd_context *cmd, int argc, char **argv,
- 	struct arg_value_group_list *current_group;
- 	struct pvscan_arg *arg;
- 	const char *arg_name;
--	int major, minor;
-+	int major = -1, minor = -1;
- 
- 	/* Process position args, which can be /dev/name or major:minor */
- 
+ 	/* Clear thin pool stacked messages */
+-	if (pool_lv && !pool_has_message(first_seg(pool_lv), lv, 0) &&
++	if (pool_lv && pool_has_message(first_seg(pool_lv), lv, 0) &&
+ 	    !update_pool_lv(pool_lv, 1)) {
+ 		if (force < DONT_PROMPT_OVERRIDE) {
+ 			log_error("Failed to update pool %s.", display_lvname(pool_lv));
 
 
