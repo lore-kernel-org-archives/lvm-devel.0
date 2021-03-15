@@ -1,48 +1,54 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Mon, 15 Mar 2021 10:14:20 +0000 (GMT)
-Subject: main - cov: void unused result
-Message-ID: <20210315101420.9FD8A3858D29@sourceware.org>
+Date: Mon, 15 Mar 2021 10:14:19 +0000 (GMT)
+Subject: main - debug: update message
+Message-ID: <20210315101419.7E77B3857C5E@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=8a92f7070941172e1671cf6b0fd1296776daefb7
-Commit:        8a92f7070941172e1671cf6b0fd1296776daefb7
-Parent:        f69ff4b84a559a5795479489cf834fc0c3999e8d
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=f69ff4b84a559a5795479489cf834fc0c3999e8d
+Commit:        f69ff4b84a559a5795479489cf834fc0c3999e8d
+Parent:        6e9ccf7b6f58cd3e31a79c35d3a312560809e85a
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Mon Mar 15 10:49:20 2021 +0100
+AuthorDate:    Sun Mar 14 13:15:50 2021 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Mon Mar 15 11:13:24 2021 +0100
 
-cov: void unused result
+debug: update message
 
 ---
- lib/device/bcache.c | 4 ++--
- 1 file changed, 2 insertions(+), 2 deletions(-)
+ lib/metadata/lv_manip.c | 8 ++++----
+ 1 file changed, 4 insertions(+), 4 deletions(-)
 
-diff --git a/lib/device/bcache.c b/lib/device/bcache.c
-index a5f2a5a86..285d92bc7 100644
---- a/lib/device/bcache.c
-+++ b/lib/device/bcache.c
-@@ -1401,7 +1401,7 @@ bool bcache_invalidate_di(struct bcache *cache, int di)
- 	radix_tree_iterate(cache->rtree, k.bytes, k.bytes + sizeof(k.parts.di), &it.it);
+diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
+index 6fc7afbac..12b1505df 100644
+--- a/lib/metadata/lv_manip.c
++++ b/lib/metadata/lv_manip.c
+@@ -6799,7 +6799,7 @@ int lv_remove_single(struct cmd_context *cmd, struct logical_volume *lv,
  
- 	if (it.success)
--		radix_tree_remove_prefix(cache->rtree, k.bytes, k.bytes + sizeof(k.parts.di));
-+		(void) radix_tree_remove_prefix(cache->rtree, k.bytes, k.bytes + sizeof(k.parts.di));
+ 	if (!suppress_remove_message && (visible || historical)) {
+ 		(void) dm_snprintf(msg, sizeof(msg),
+-				   "%sogical volume \"%s\" successfully removed",
++				   "%sogical volume \"%s\" successfully removed.",
+ 				   historical ? "Historical l" : "L",
+ 				   historical ? lv->this_glv->historical->name : lv->name);
+ 		if (!vg->needs_write_and_commit)
+@@ -6820,11 +6820,11 @@ static int _lv_remove_segs_using_this_lv(struct cmd_context *cmd, struct logical
+ 	struct seg_list *sl;
  
- 	return it.success;
- }
-@@ -1436,7 +1436,7 @@ void bcache_abort_di(struct bcache *cache, int di)
+ 	if ((force == PROMPT) &&
+-	    yes_no_prompt("Removing %s \"%s\" will remove %u dependent volume(s). "
+-			  "Proceed? [y/n]: ", lv_type, lv->name,
++	    yes_no_prompt("Removing %s %s will remove %u dependent volume(s). "
++			  "Proceed? [y/n]: ", lv_type, display_lvname(lv),
+ 			  dm_list_size(&lv->segs_using_this_lv)) == 'n') {
+ 		lv->to_remove = 0;
+-		log_error("Logical volume \"%s\" not removed.", lv->name);
++		log_error("Logical volume %s not removed.", display_lvname(lv));
+ 		return 0;
+ 	}
  
- 	it.visit = _abort_v;
- 	radix_tree_iterate(cache->rtree, k.bytes, k.bytes + sizeof(k.parts.di), &it);
--	radix_tree_remove_prefix(cache->rtree, k.bytes, k.bytes + sizeof(k.parts.di));
-+	(void) radix_tree_remove_prefix(cache->rtree, k.bytes, k.bytes + sizeof(k.parts.di));
- }
- 
- //----------------------------------------------------------------
 
 
