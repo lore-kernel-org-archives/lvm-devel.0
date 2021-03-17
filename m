@@ -1,69 +1,89 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Wed, 17 Mar 2021 00:00:45 +0000 (GMT)
-Subject: main - tests: no further fixes likely to be expected
-Message-ID: <20210317000045.D705E386181D@sourceware.org>
+Date: Wed, 17 Mar 2021 00:00:47 +0000 (GMT)
+Subject: main - tests: workaround for some raid targets
+Message-ID: <20210317000047.04A2D385481A@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=db37905d7f59ac0057f6d50c34d8b1095c64d50f
-Commit:        db37905d7f59ac0057f6d50c34d8b1095c64d50f
-Parent:        87659256f043ba7a76716cb8c97c350d723209db
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=e793ff1e185acfdbbbedb85a420d48527cd57c90
+Commit:        e793ff1e185acfdbbbedb85a420d48527cd57c90
+Parent:        db37905d7f59ac0057f6d50c34d8b1095c64d50f
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Mar 16 21:40:30 2021 +0100
+AuthorDate:    Tue Mar 16 22:53:23 2021 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Wed Mar 17 00:59:50 2021 +0100
 
-tests: no further fixes likely to be expected
+tests: workaround for some raid targets
 
-Skip tests for these kernels.
+Problem with some target is that shortly after initialization it
+returns incorrect status letters.
 ---
- test/shell/lvconvert-raid-reshape-stripes-load-fail.sh   | 2 +-
- test/shell/lvconvert-raid-reshape-stripes-load-reload.sh | 3 ++-
- test/shell/lvconvert-raid-reshape-stripes-load.sh        | 2 +-
- 3 files changed, 4 insertions(+), 3 deletions(-)
+ test/shell/lvcreate-raid-nosync.sh | 23 +++++++++++++++++++----
+ 1 file changed, 19 insertions(+), 4 deletions(-)
 
-diff --git a/test/shell/lvconvert-raid-reshape-stripes-load-fail.sh b/test/shell/lvconvert-raid-reshape-stripes-load-fail.sh
-index 220cd365c..da9d34798 100644
---- a/test/shell/lvconvert-raid-reshape-stripes-load-fail.sh
-+++ b/test/shell/lvconvert-raid-reshape-stripes-load-fail.sh
-@@ -18,7 +18,7 @@ SKIP_WITH_LVMPOLLD=1
- # Test reshaping under io load
+diff --git a/test/shell/lvcreate-raid-nosync.sh b/test/shell/lvcreate-raid-nosync.sh
+index dcc248e0c..05ab848a1 100644
+--- a/test/shell/lvcreate-raid-nosync.sh
++++ b/test/shell/lvcreate-raid-nosync.sh
+@@ -33,6 +33,21 @@ _sync() {
+ 	aux restore_from_devtable "$dev1"
+ }
  
- case "$(uname -r)" in
--  3.10.0-862*) die "Cannot run this test on unfixed kernel." ;;
-+  3.10.0-862*) skip "Cannot run this test on unfixed kernel." ;;
- esac
++# Workaround for raid targets returning 'a' shortly after initialization
++# TODO: maybe there is some workaround to be made on lvm side
++_check_raid_in_loop() {
++	local vg=$1
++	local lv=$2
++	local A=$3
++	local B=$(echo $A | tr A a)
++	for i in {1..10} ; do
++		check raid_leg_status $vg $lv ${A} && return 0
++		# Only when there is initial 'a..a' we will wait for a while
++		check raid_leg_status $vg $lv ${B} || break
++		sleep .05
++	done
++	die "Cannot get $A status for $vg/$lv";
++}
  
- which mkfs.ext4 || skip
-diff --git a/test/shell/lvconvert-raid-reshape-stripes-load-reload.sh b/test/shell/lvconvert-raid-reshape-stripes-load-reload.sh
-index 3023782dd..3b6150909 100644
---- a/test/shell/lvconvert-raid-reshape-stripes-load-reload.sh
-+++ b/test/shell/lvconvert-raid-reshape-stripes-load-reload.sh
-@@ -22,7 +22,8 @@ which mkfs.ext4 || skip
- aux have_raid 1 13 2 || skip
+ # Delay 1st leg so that rebuilding status characters
+ #  can be read before resync finished too quick.
+@@ -42,7 +57,7 @@ aux delay_dev "$dev1" 0 100 "$(get first_extent_sector "$dev1")"
+ for r in raid0 raid0_meta
+ do
+ 	lvcreate --type $r -Zn -i 3 -l 1 -n $lv1 $vg
+-	check raid_leg_status $vg $lv1 "AAA"
++	_check_raid_in_loop $vg $lv1 "AAA"
+ 	lvremove --yes $vg/$lv1
+ done
  
- case "$(uname -r)" in
--  5.[891]*|3.10.0-862*) die "Cannot run this test on unfixed kernel." ;;
-+  5.[891]*) die "Cannot run this test on unfixed kernel." ;;
-+  3.10.0-862*) skip "Cannot run this test on unfixed kernel." ;;
-   4.18.0-*.el8*)
-     REL="$(uname -r)"
-     REL="${REL#4.18.0-}"
-diff --git a/test/shell/lvconvert-raid-reshape-stripes-load.sh b/test/shell/lvconvert-raid-reshape-stripes-load.sh
-index 6184e9d64..68ab8b92b 100644
---- a/test/shell/lvconvert-raid-reshape-stripes-load.sh
-+++ b/test/shell/lvconvert-raid-reshape-stripes-load.sh
-@@ -16,7 +16,7 @@ SKIP_WITH_LVMPOLLD=1
- . lib/inittest
+@@ -53,7 +68,7 @@ _sync "AAA"
  
- case "$(uname -r)" in
--  3.10.0-862*) die "Cannot run this test on unfixed kernel." ;;
-+  3.10.0-862*) skip "Cannot run this test on unfixed kernel." ;;
- esac
+ # raid1 supports --nosync
+ lvcreate --type raid1 --nosync -Zn -m 2 -l 1 -n $lv1 $vg
+-check raid_leg_status $vg $lv1 "AAA"
++_check_raid_in_loop $vg $lv1 "AAA"
+ lvremove --yes $vg/$lv1
  
- # Test reshaping under io load
+ for r in $segtypes
+@@ -65,7 +80,7 @@ do
+ 
+ 	# raid4/5 support --nosync
+ 	lvcreate --type $r -Zn --nosync -i 3 -l 1 -n $lv2 $vg
+-	check raid_leg_status $vg $lv2 "AAAA"
++	_check_raid_in_loop $vg $lv2 "AAAA"
+ 	lvremove --yes $vg
+ done
+ 
+@@ -84,6 +99,6 @@ _sync "AAAAAA"
+ 
+ # raid10 supports --nosync
+ lvcreate --type raid10 --nosync -m 1 -Zn -i 3 -l 1 -n $lv1 $vg
+-check raid_leg_status $vg $lv1 "AAAAAA"
++_check_raid_in_loop $vg $lv1 "AAAAAA"
+ 
+ vgremove -ff $vg
 
 
