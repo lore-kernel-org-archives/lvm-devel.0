@@ -1,66 +1,39 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Wed, 17 Mar 2021 00:00:43 +0000 (GMT)
-Subject: main - tests: update mirror test
-Message-ID: <20210317000043.8C57A3851C26@sourceware.org>
+Date: Wed, 17 Mar 2021 00:00:44 +0000 (GMT)
+Subject: main - tests: require newer version of raid target
+Message-ID: <20210317000044.B0357385043E@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=92ee16f7c0d5d6983b90fe97d31e2884a8e5804d
-Commit:        92ee16f7c0d5d6983b90fe97d31e2884a8e5804d
-Parent:        53bad89a7b802890067e1c006775345098cfa4dc
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=87659256f043ba7a76716cb8c97c350d723209db
+Commit:        87659256f043ba7a76716cb8c97c350d723209db
+Parent:        92ee16f7c0d5d6983b90fe97d31e2884a8e5804d
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Mar 16 21:18:53 2021 +0100
+AuthorDate:    Tue Mar 16 21:37:19 2021 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Wed Mar 17 00:59:50 2021 +0100
 
-tests: update mirror test
+tests: require newer version of raid target
 
-Log results of uniq.
-Remove few unneeded lvs calls.
 ---
- test/shell/mirror-vgreduce-removemissing.sh | 11 +++--------
- 1 file changed, 3 insertions(+), 8 deletions(-)
+ test/shell/lvconvert-raid-regionsize.sh | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
 
-diff --git a/test/shell/mirror-vgreduce-removemissing.sh b/test/shell/mirror-vgreduce-removemissing.sh
-index f2f7c1973..ff7eea51f 100644
---- a/test/shell/mirror-vgreduce-removemissing.sh
-+++ b/test/shell/mirror-vgreduce-removemissing.sh
-@@ -44,7 +44,7 @@ mimages_are_on_ ()
- 	local i
+diff --git a/test/shell/lvconvert-raid-regionsize.sh b/test/shell/lvconvert-raid-regionsize.sh
+index 924e95a39..23d54d05f 100644
+--- a/test/shell/lvconvert-raid-regionsize.sh
++++ b/test/shell/lvconvert-raid-regionsize.sh
+@@ -85,7 +85,7 @@ else
+   echo "Skipping RAID6 tests"
+ fi
  
- 	echo "Check if mirror images of $lv are on PVs" "${list_pvs[@]}"
--	printf "%s\n" "${list_pvs[@]}" | sort | uniq > out1
-+	printf "%s\n" "${list_pvs[@]}" | sort | uniq | tee out1
- 
- 	get lv_field_lv_ "$vg" lv_name -a | grep "${lv}_mimage_" | tee lvs_log
- 	test -s lvs_log || return 1
-@@ -53,14 +53,9 @@ mimages_are_on_ ()
- 		mimages+=( "$i" )
- 	done < lvs_log
- 
--	for i in "${mimages[@]}"; do
--		echo "Checking $vg/$i"
--		lvs -a -o+devices "$vg/$i"
--	done
--
- 	for i in "${mimages[@]}"; do
- 		get lv_devices "$vg/$i"
--	done | sort | uniq > out2
-+	done | sort | uniq | tee out2
- 
- 	diff --ignore-blank-lines out1 out2
- }
-@@ -116,7 +111,7 @@ prepare_lvs_()
- 
- check_and_cleanup_lvs_()
- {
--	lvs -a -o+devices $vg
-+	lvs -a -o+lv_uuid,devices $vg
- 	prepare_lvs_
- }
- 
+-if aux have_raid 1 10 1; then
++if aux have_raid 1 12 0; then
+ # Create 6-way raid01
+ lvcreate --yes -aey --type raid10 -i 3 -m 1 --stripesize 128K -R 256K -L8M -n $lv1 $vg
+ check lv_field $vg/$lv1 segtype "raid10"
 
 
