@@ -1,41 +1,70 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Wed, 17 Mar 2021 00:00:40 +0000 (GMT)
-Subject: main - cleanup: use dm_strncpy
-Message-ID: <20210317000040.1F4B3386181D@sourceware.org>
+Date: Wed, 17 Mar 2021 00:00:42 +0000 (GMT)
+Subject: main - tests: added check for kernel version
+Message-ID: <20210317000042.6A24F386185F@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=94701b700b83971a49c242e070070526d4eb42dd
-Commit:        94701b700b83971a49c242e070070526d4eb42dd
-Parent:        4d75c4f597b28e4ea014ef61082074187dc6245a
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=53bad89a7b802890067e1c006775345098cfa4dc
+Commit:        53bad89a7b802890067e1c006775345098cfa4dc
+Parent:        8b2cdd8d3a8ad0b3048f38580a0dc20f6e1e492d
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Mar 16 14:06:24 2021 +0100
+AuthorDate:    Tue Mar 16 20:54:28 2021 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Wed Mar 17 00:50:22 2021 +0100
+CommitterDate: Wed Mar 17 00:59:50 2021 +0100
 
-cleanup: use dm_strncpy
+tests: added check for kernel version
 
-Use own function.
+With older kernels this test can't work reliable,
+since 'suspend' used to clean all dirty blocks
+(taking even several seconds).
 ---
- lib/activate/dev_manager.c | 3 +--
- 1 file changed, 1 insertion(+), 2 deletions(-)
+ test/shell/lvconvert-cache-abort.sh | 16 ++++++++++++----
+ 1 file changed, 12 insertions(+), 4 deletions(-)
 
-diff --git a/lib/activate/dev_manager.c b/lib/activate/dev_manager.c
-index cd9d27e11..aa88e6868 100644
---- a/lib/activate/dev_manager.c
-+++ b/lib/activate/dev_manager.c
-@@ -839,8 +839,7 @@ static int _info(struct cmd_context *cmd,
- 			if (strcmp(suffix_position + 1, suffix))
- 				continue;
+diff --git a/test/shell/lvconvert-cache-abort.sh b/test/shell/lvconvert-cache-abort.sh
+index 652c9f421..ecb0ff44d 100644
+--- a/test/shell/lvconvert-cache-abort.sh
++++ b/test/shell/lvconvert-cache-abort.sh
+@@ -50,14 +50,15 @@ test "$(get lv_field $vg/$lv1 cache_dirty_blocks)" -gt 0 || {
+ 	skip "Cannot make a dirty writeback cache LV."
+ }
  
--			(void) strncpy(old_style_dlid, dlid, sizeof(old_style_dlid));
--			old_style_dlid[sizeof(old_style_dlid) - 1] = '\0';
-+			(void) dm_strncpy(old_style_dlid, dlid, sizeof(old_style_dlid));
- 			if (!_info_run(old_style_dlid, dminfo, read_ahead, seg_status,
- 				       name_check, with_open_count, with_read_ahead,
- 				       0, 0))
+-LVM_TEST_TAG="kill_me_$PREFIX" lvconvert -v --splitcache $vg/$lv1 >logconvert 2>&1 &
++LVM_TEST_TAG="kill_me_$PREFIX" lvconvert -vvvv --splitcache $vg/$lv1 >logconvert 2>&1 &
+ PID_CONVERT=$!
+ for i in {1..50}; do
+-	dmsetup table "$vg-$lv1" | grep cleaner && break
+-	test "$i" -ge 100 && die "Waited for cleaner policy on $vg/$lv1 too long!"
+-	echo "Waiting for cleaner policy on $vg/$lv1"
++	dmsetup table "$vg-$lv1" |& tee out
++	grep cleaner out && break
++	echo "$i: Waiting for cleaner policy on $vg/$lv1"
+ 	sleep .05
+ done
++test "$i" -ge 49 && die "Waited for cleaner policy on $vg/$lv1 too long!"
+ 
+ # While lvconvert updated table to 'cleaner' policy now it 
+ # should be running in 'Flushing' loop and just 1 KILL should
+@@ -68,9 +69,16 @@ wait
+ 
+ #cat logconvert || true
+ 
++# Problem of this test is, in older kernels, even the initial change to cleaner
++# policy table line causes long suspend which in practice is cleaning all the
++# dirty blocks - so the test can't really break the cache clearing.
++#
++# So the failure of test is reported only for recent kernels > 5.6
++# ans skipped otherwise - as those can't be fixed anyway
+ grep -E "Flushing.*aborted" logconvert || {
+ 	cat logconvert || true
+ 	vgremove -f $vg
++	aux kernel_at_least 5 6 || skip "Cache missed to abort flushing with older kernel"
+ 	die "Flushing of $vg/$lv1 not aborted ?"
+ }
+ 
 
 
