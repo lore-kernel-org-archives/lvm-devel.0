@@ -1,39 +1,42 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Wed, 17 Mar 2021 00:00:48 +0000 (GMT)
-Subject: main - tests: increase version of targets for progress
-Message-ID: <20210317000048.25C9E386189F@sourceware.org>
+Date: Wed, 17 Mar 2021 00:00:49 +0000 (GMT)
+Subject: main - tests: wait for Aa status
+Message-ID: <20210317000049.4CE1A3851C26@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=80d0f200d00727f591569512ea04d9b50c22ae59
-Commit:        80d0f200d00727f591569512ea04d9b50c22ae59
-Parent:        e793ff1e185acfdbbbedb85a420d48527cd57c90
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=fda7bc1297640d739067727b6165cde0613d1fe3
+Commit:        fda7bc1297640d739067727b6165cde0613d1fe3
+Parent:        80d0f200d00727f591569512ea04d9b50c22ae59
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Mar 16 22:59:01 2021 +0100
+AuthorDate:    Wed Mar 17 00:00:03 2021 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Wed Mar 17 00:59:50 2021 +0100
 
-tests: increase version of targets for progress
+tests: wait for Aa status
 
 ---
- test/shell/lvextend-raid.sh | 2 +-
- 1 file changed, 1 insertion(+), 1 deletion(-)
+ test/shell/lvconvert-raid.sh | 5 +++++
+ 1 file changed, 5 insertions(+)
 
-diff --git a/test/shell/lvextend-raid.sh b/test/shell/lvextend-raid.sh
-index e8bd7deea..9370bf295 100644
---- a/test/shell/lvextend-raid.sh
-+++ b/test/shell/lvextend-raid.sh
-@@ -17,7 +17,7 @@ SKIP_WITH_LVMPOLLD=1
- 
- aux have_raid 1 3 0 || skip
- PROGRESS=0
--aux have_raid 1 13 0 && PROGRESS=1
-+aux have_raid 1 15 0 && PROGRESS=1
- 
- # Use smallest regionsize to save VG space
- regionsize=$(getconf PAGESIZE) # in bytes
+diff --git a/test/shell/lvconvert-raid.sh b/test/shell/lvconvert-raid.sh
+index 6aaaf3669..87eb7b53c 100644
+--- a/test/shell/lvconvert-raid.sh
++++ b/test/shell/lvconvert-raid.sh
+@@ -232,6 +232,11 @@ lvcreate -aey -l 2 -n $lv1 $vg "$dev1"
+ lvconvert -y -m 1 $vg/$lv1 \
+ 	--config 'global { mirror_segtype_default = "raid1" }' "$dev2"
+ lvs --noheadings -o attr $vg/$lv1 | grep '^[[:space:]]*r'
++for i in {1..10}; do
++	check raid_leg_status $vg $lv1 "Aa" && break
++	check raid_leg_status $vg $lv1 "aa" || die "Cannot wait for Aa on $vg/$lv1"
++	sleep .1
++done
+ not lvconvert --yes -m 0 $vg/$lv1 "$dev1"
+ lvconvert --yes -m 0 $vg/$lv1 "$dev2"
+ aux enable_dev "$dev2"
 
 
