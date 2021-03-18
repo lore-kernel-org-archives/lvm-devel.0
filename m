@@ -1,55 +1,42 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Thu, 18 Mar 2021 18:15:10 +0000 (GMT)
-Subject: main - tests: add check for lvconvert without zeroing
-Message-ID: <20210318181510.A2F5638438A3@sourceware.org>
+Date: Thu, 18 Mar 2021 18:15:12 +0000 (GMT)
+Subject: main - WHATS_NEW: updates
+Message-ID: <20210318181512.E5951386EC23@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=accf324ccba681ad06cd8bcb27ead17ec191a471
-Commit:        accf324ccba681ad06cd8bcb27ead17ec191a471
-Parent:        c06325263f6e8bbba3b240295ba766a7769735a7
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=b4ab2a10511cba2f7679cf12929438b6d2d6232d
+Commit:        b4ab2a10511cba2f7679cf12929438b6d2d6232d
+Parent:        26fb6b5e8d61e3d3097fccf4fca5bd9582fbbb4f
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu Mar 18 18:19:16 2021 +0100
+AuthorDate:    Thu Mar 18 16:55:20 2021 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Thu Mar 18 18:57:45 2021 +0100
+CommitterDate: Thu Mar 18 19:12:35 2021 +0100
 
-tests: add check for lvconvert without zeroing
+WHATS_NEW: updates
 
-Check lvconvert -Zn does not zero thin-pool metadata.
-Also check --type zero is usable for thin-pool data.
 ---
- test/shell/thin-foreign-repair.sh | 18 ++++++++++++++++++
- 1 file changed, 18 insertions(+)
+ WHATS_NEW | 6 ++++++
+ 1 file changed, 6 insertions(+)
 
-diff --git a/test/shell/thin-foreign-repair.sh b/test/shell/thin-foreign-repair.sh
-index 55e9f62c6..7cfa865f0 100644
---- a/test/shell/thin-foreign-repair.sh
-+++ b/test/shell/thin-foreign-repair.sh
-@@ -77,4 +77,22 @@ dmsetup create "$THIN" --table "0 40960 thin $DM_DEV_DIR/mapper/$POOL 0"
- 
- fsck -n "$DM_DEV_DIR/mapper/$THIN"
- 
-+clean_thin_
-+
-+lvchange -an $vg
-+
-+# Take a copy of metadata
-+lvchange -y -ay $vg/pool_tmeta
-+
-+lvcreate -L2 -n $lv1 $vg
-+dd if="$DM_DEV_DIR/$vg/pool_tmeta" of="$DM_DEV_DIR/$vg/$lv1" bs=1M count=1
-+
-+# Use zero backend for data device
-+lvcreate --type zero -L2 -n $lv2 $vg
-+
-+lvconvert --thinpool $vg/$lv2 --poolmetadata $vg/$lv1 -Zn -y
-+
-+# Metadata should NOT be zeroed and device should be available
-+dmsetup create "$THIN" --table "0 40960 thin $DM_DEV_DIR/$vg/$lv2 0"
-+
- # exit calls cleanup_mounted_and_teardown
+diff --git a/WHATS_NEW b/WHATS_NEW
+index e4ccd1b0d..5d018ef36 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,11 @@
+ Version 2.03.12 - 
+ ===================================
++  Support lvconvert -Zn with thin-pool conversion.
++  Support error and zero segtype for thin-pool data for testing.
++  Support mixed extension for striped, error and zero segtypes.
++  Support resize also for stacked virtual volumes.
++  Skip dm-zero devices just like with dm-error target.
++  Reduce ioctl() calls when checking target status.
+   Merge polling does not fail, when LV is found to be already merged.
+   Poll volumes with at least 100ms delays.
+   Do not flush dm cache when cached LV is going to be removed.
 
 
