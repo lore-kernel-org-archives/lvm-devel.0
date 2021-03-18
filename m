@@ -1,58 +1,75 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Thu, 18 Mar 2021 18:15:07 +0000 (GMT)
-Subject: main - thinpool: support lvconvert without zeroing
-Message-ID: <20210318181507.34E8F3844031@sourceware.org>
+Date: Thu, 18 Mar 2021 18:15:05 +0000 (GMT)
+Subject: main - pool: allow data on zero and error segtypes
+Message-ID: <20210318181505.CBCE03848011@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=8e7690b7980ad3bc6e7c38d6e2028f885751c355
-Commit:        8e7690b7980ad3bc6e7c38d6e2028f885751c355
-Parent:        1c3774c7a834bd0ad0dcf356f694e123d8955d9d
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=1c3774c7a834bd0ad0dcf356f694e123d8955d9d
+Commit:        1c3774c7a834bd0ad0dcf356f694e123d8955d9d
+Parent:        7a9efc5fae713a09cc1d1238a19a1cac555fb364
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed Mar 17 19:09:58 2021 +0100
+AuthorDate:    Wed Mar 17 18:26:08 2021 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Thu Mar 18 18:57:45 2021 +0100
 
-thinpool: support lvconvert without zeroing
+pool: allow data on zero and error segtypes
 
-Since lvm does support external users of thin-pool when thin devices
-are managed outside it can be useful to support conversion to
-thin pool from data and metadata LV without zeroing.
-TransactionID will be 0 in lvm2 metadata.
+Renables usage of --type zero and --type error LVs to serve as
+backend for _tdata device. Clearly not very useful in practice,
+as it can't store any real data, but usable for some testing
+and some sort of perfomance checking.
 
-  lvconvert -Zn --thinpool vg/data --poolmetadata vg/meta
+  lvcreate --type zero -L1T -n pool vg
+  lvconvert --thinpool vg/pool
+
+Will create a thin-pool with zero device backend.
 ---
- tools/lvconvert.c | 8 ++++----
+ tools/command-lines.in | 8 ++++----
  1 file changed, 4 insertions(+), 4 deletions(-)
 
-diff --git a/tools/lvconvert.c b/tools/lvconvert.c
-index b50074294..e8a38f33c 100644
---- a/tools/lvconvert.c
-+++ b/tools/lvconvert.c
-@@ -3086,8 +3086,8 @@ static int _lvconvert_to_pool(struct cmd_context *cmd,
- 	/* Allow to have only thinpool active and restore it's active state. */
- 	activate_pool = to_thinpool && lv_is_active(lv);
+diff --git a/tools/command-lines.in b/tools/command-lines.in
+index 621731174..528811f52 100644
+--- a/tools/command-lines.in
++++ b/tools/command-lines.in
+@@ -435,7 +435,7 @@ FLAGS: SECONDARY_SYNTAX
+ # lvconvert utilities for creating/maintaining thin and cache objects.
+ # Create a new command set for these and migrate them out of lvconvert?
  
--	/* Wipe metadata_lv by default, but allow skipping this for cache pools. */
--	zero_metadata = (to_cachepool) ? arg_int_value(cmd, zero_ARG, 1) : 1;
-+	/* Wipe metadata_lv by default, but allow skipping on user's request. */
-+	zero_metadata = arg_int_value(cmd, zero_ARG, 1);
+-lvconvert --type thin --thinpool LV LV_linear_striped_raid_cache_thin
++lvconvert --type thin --thinpool LV LV_linear_striped_raid_cache_thin_error_zero
+ OO: --thin, --originname LV_new, OO_LVCONVERT_POOL, OO_LVCONVERT
+ ID: lvconvert_to_thin_with_external
+ DESC: Convert LV to a thin LV, using the original LV as an external origin.
+@@ -444,7 +444,7 @@ RULE: all not lv_is_locked lv_is_raid_with_integrity
+ RULE: --poolmetadata not --readahead --stripesize --stripes_long
  
- 	/* An existing LV needs to have its lock freed once it becomes a data LV. */
- 	if (vg_is_shared(vg) && lv->lock_args) {
-@@ -3250,8 +3250,8 @@ static int _lvconvert_to_pool(struct cmd_context *cmd,
+ # alternate form of lvconvert --type thin
+-lvconvert --thin --thinpool LV LV_linear_striped_raid_cache_thin
++lvconvert --thin --thinpool LV LV_linear_striped_raid_cache_thin_error_zero
+ OO: --type thin, --originname LV_new, OO_LVCONVERT_POOL, OO_LVCONVERT
+ ID: lvconvert_to_thin_with_external
+ DESC: Convert LV to a thin LV, using the original LV as an external origin
+@@ -517,7 +517,7 @@ RULE: all and lv_is_visible
  
- 	if (zero_metadata)
- 		log_warn("THIS WILL DESTROY CONTENT OF LOGICAL VOLUME (filesystem etc.)");
--	else if (to_cachepool)
--		log_warn("WARNING: Using mismatched cache pool metadata MAY DESTROY YOUR DATA!");
-+	else
-+		log_warn("WARNING: Using mismatched pool metadata MAY DESTROY YOUR DATA!");
+ ---
  
- 	if (!arg_count(cmd, yes_ARG) &&
- 	    yes_no_prompt("Do you really want to convert %s? [y/n]: ",
+-lvconvert --type thin-pool LV_linear_striped_raid_cache
++lvconvert --type thin-pool LV_linear_striped_raid_cache_error_zero
+ OO: --stripes_long Number, --stripesize SizeKB,
+ OO_LVCONVERT_THIN, OO_LVCONVERT_POOL, OO_LVCONVERT
+ OP: PV ...
+@@ -593,7 +593,7 @@ RULE: all not lv_is_raid_with_integrity
+ # This command syntax is deprecated, and the primary forms
+ # of creating a pool or swapping metadata should be used.
+ 
+-lvconvert --cachepool LV_linear_striped_raid_cachepool
++lvconvert --cachepool LV_linear_striped_raid_cachepool_error_zero
+ OO: --type cache-pool, OO_LVCONVERT_CACHE, OO_LVCONVERT_POOL, OO_LVCONVERT
+ OP: PV ...
+ ID: lvconvert_to_cachepool_or_swap_metadata
 
 
