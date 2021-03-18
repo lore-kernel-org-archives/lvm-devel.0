@@ -1,42 +1,44 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Thu, 18 Mar 2021 18:14:54 +0000 (GMT)
-Subject: main - cleanup: simplier check first
-Message-ID: <20210318181454.43EB13848011@sourceware.org>
+Date: Thu, 18 Mar 2021 18:14:56 +0000 (GMT)
+Subject: main - thin: ignore parallel merge while polling
+Message-ID: <20210318181456.9A2833848011@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=d682ad619a50827116fb83ff98efa0e5b8821956
-Commit:        d682ad619a50827116fb83ff98efa0e5b8821956
-Parent:        a481fdaa3529a85e0cde652f79b98b2337c296cb
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=a60c8748eac2e6f047532b6d106492d120860608
+Commit:        a60c8748eac2e6f047532b6d106492d120860608
+Parent:        8cbe4a171e093aa7de9e16115b13ee3852545d07
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed Mar 17 08:56:23 2021 +0100
+AuthorDate:    Wed Mar 17 11:17:32 2021 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Thu Mar 18 18:34:57 2021 +0100
 
-cleanup: simplier check first
+thin: ignore parallel merge while polling
 
+If the thin volume has no merging snapshot,
+(being already merged) there is nothing to check.
 ---
- lib/metadata/lv_manip.c | 3 +--
- 1 file changed, 1 insertion(+), 2 deletions(-)
+ tools/lvconvert_poll.c | 5 ++++-
+ 1 file changed, 4 insertions(+), 1 deletion(-)
 
-diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
-index 12b1505df..84667f445 100644
---- a/lib/metadata/lv_manip.c
-+++ b/lib/metadata/lv_manip.c
-@@ -8471,10 +8471,9 @@ static struct logical_volume *_lv_create_an_lv(struct volume_group *vg,
- 	/* Unlock memory if possible */
- 	memlock_unlock(vg->cmd);
+diff --git a/tools/lvconvert_poll.c b/tools/lvconvert_poll.c
+index b64cffe21..50d47164f 100644
+--- a/tools/lvconvert_poll.c
++++ b/tools/lvconvert_poll.c
+@@ -179,7 +179,10 @@ progress_t poll_thin_merge_progress(struct cmd_context *cmd,
+ {
+ 	uint32_t device_id = 0;
  
--	if (segtype_is_vdo(create_segtype) && pool_lv) {
-+	if (pool_lv && segtype_is_vdo(create_segtype))
- 		if (!set_lv_segment_area_lv(first_seg(lv), 0, pool_lv, 0, LV_VDO_POOL))
- 			return_NULL;
--	}
- 
- 	if (lv_is_cache_pool(lv)) {
- 		if (!cache_set_params(first_seg(lv),
+-	if (!lv_thin_device_id(lv, &device_id) || !lv->snapshot) {
++	if (!lv->snapshot)
++		return PROGRESS_FINISHED_ALL; /* Already merged by someone else */
++
++	if (!lv_thin_device_id(lv, &device_id)) {
+ 		stack;
+ 		return PROGRESS_CHECK_FAILED;
+ 	}
 
 
