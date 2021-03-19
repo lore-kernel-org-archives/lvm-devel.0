@@ -1,45 +1,74 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Fri, 19 Mar 2021 23:17:13 +0000 (GMT)
-Subject: main - cleanup: reduce code dupliction
-Message-ID: <20210319231713.6D087386F411@sourceware.org>
+Date: Fri, 19 Mar 2021 23:17:08 +0000 (GMT)
+Subject: main - raid: interruptible usleep when waiting for sync
+Message-ID: <20210319231708.CF097385783D@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=d3d28b1b64ff6b89ac5150787f694e1db1794a1f
-Commit:        d3d28b1b64ff6b89ac5150787f694e1db1794a1f
-Parent:        d37b19aaaab0c28f4d1e4ae0690c73c0031a027b
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=076e1556978dfb216176d319d2498ec571fcc908
+Commit:        076e1556978dfb216176d319d2498ec571fcc908
+Parent:        b4ab2a10511cba2f7679cf12929438b6d2d6232d
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Mar 19 10:45:26 2021 +0100
+AuthorDate:    Thu Mar 18 23:00:23 2021 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Fri Mar 19 23:21:18 2021 +0100
+CommitterDate: Fri Mar 19 23:17:03 2021 +0100
 
-cleanup: reduce code dupliction
+raid: interruptible usleep when waiting for sync
 
+Whiel waiting for raid to return consistent status,
+use interruptible sleep - so command can break quickly.
+
+Use lv_raid_status() to get percentage easily from status.
 ---
- lib/raid/raid.c | 6 ++----
- 1 file changed, 2 insertions(+), 4 deletions(-)
+ lib/metadata/raid_manip.c | 10 ++++++++--
+ 1 file changed, 8 insertions(+), 2 deletions(-)
 
-diff --git a/lib/raid/raid.c b/lib/raid/raid.c
-index 941ba8dc8..2f1eb6cf8 100644
---- a/lib/raid/raid.c
-+++ b/lib/raid/raid.c
-@@ -441,12 +441,10 @@ static int _raid_target_percent(void **target_state,
+diff --git a/lib/metadata/raid_manip.c b/lib/metadata/raid_manip.c
+index a43e36141..dc3bce201 100644
+--- a/lib/metadata/raid_manip.c
++++ b/lib/metadata/raid_manip.c
+@@ -22,6 +22,7 @@
+ #include "lib/metadata/lv_alloc.h"
+ #include "lib/misc/lvm-string.h"
+ #include "lib/locking/lvmlockd.h"
++#include "lib/misc/lvm-signal.h"
  
- 	*total_numerator += sr->insync_regions;
- 	*total_denominator += sr->total_regions;
-+	*percent = dm_make_percent(sr->insync_regions, sr->total_regions);
+ typedef int (*fn_on_lv_t)(struct logical_volume *lv, void *data);
+ static int _eliminate_extracted_lvs_optional_write_vg(struct volume_group *vg,
+@@ -392,6 +393,7 @@ static int _raid_in_sync(const struct logical_volume *lv)
+ {
+ 	int retries = _RAID_IN_SYNC_RETRIES;
+ 	dm_percent_t sync_percent;
++	struct lv_status_raid *raid_status;
  
- 	if (seg)
--		seg->extents_copied = (uint64_t) seg->area_len
--			* dm_make_percent(sr->insync_regions , sr->total_regions) / DM_PERCENT_100;
--
--	*percent = dm_make_percent(sr->insync_regions, sr->total_regions);
-+		seg->extents_copied = (uint64_t) seg->area_len * *percent / DM_PERCENT_100;
+ 	if (seg_is_striped(first_seg(lv)))
+ 		return 1;
+@@ -403,17 +405,21 @@ static int _raid_in_sync(const struct logical_volume *lv)
+ 		 * the array is 100% in sync.
+ 		 * https://bugzilla.redhat.com/1210637
+ 		 */
+-		if (!lv_raid_percent(lv, &sync_percent)) {
++		if (!lv_raid_status(lv, &raid_status)) {
+ 			log_error("Unable to determine sync status of %s.",
+ 				  display_lvname(lv));
+ 			return 0;
+ 		}
++		sync_percent = raid_status->in_sync;
++		dm_pool_destroy(raid_status->mem);
++
+ 		if (sync_percent > DM_PERCENT_0)
+ 			break;
+ 		if (retries == _RAID_IN_SYNC_RETRIES)
+ 			log_warn("WARNING: Sync status for %s is inconsistent.",
+ 				 display_lvname(lv));
+-		usleep(500000);
++		if (interruptible_usleep(500000))
++			return_0;
+ 	} while (--retries);
  
- 	dm_pool_free(mem, sr);
- 
+ 	return (sync_percent == DM_PERCENT_100) ? 1 : 0;
 
 
