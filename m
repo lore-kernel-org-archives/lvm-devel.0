@@ -1,74 +1,1008 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Fri, 19 Mar 2021 23:17:08 +0000 (GMT)
-Subject: main - raid: interruptible usleep when waiting for sync
-Message-ID: <20210319231708.CF097385783D@sourceware.org>
+Date: Fri, 19 Mar 2021 23:17:15 +0000 (GMT)
+Subject: main - make: generate
+Message-ID: <20210319231715.B0FD0386F411@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=076e1556978dfb216176d319d2498ec571fcc908
-Commit:        076e1556978dfb216176d319d2498ec571fcc908
-Parent:        b4ab2a10511cba2f7679cf12929438b6d2d6232d
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=c6a76c1ffe8321a4f2ed988fe5884541489e120f
+Commit:        c6a76c1ffe8321a4f2ed988fe5884541489e120f
+Parent:        81d3639955f0553d691e304dcc0b2eaaf6f24bb6
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu Mar 18 23:00:23 2021 +0100
+AuthorDate:    Thu Mar 18 23:01:26 2021 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Fri Mar 19 23:17:03 2021 +0100
+CommitterDate: Fri Mar 19 23:21:18 2021 +0100
 
-raid: interruptible usleep when waiting for sync
+make: generate
 
-Whiel waiting for raid to return consistent status,
-use interruptible sleep - so command can break quickly.
-
-Use lv_raid_status() to get percentage easily from status.
+Add new lvmdevices.8_pregen and vgimportdevices.8_pregen.
 ---
- lib/metadata/raid_manip.c | 10 ++++++++--
- 1 file changed, 8 insertions(+), 2 deletions(-)
+ man/lvconvert.8_pregen       |   6 +-
+ man/lvmdevices.8_pregen      | 553 +++++++++++++++++++++++++++++++++++++++++++
+ man/vgimportdevices.8_pregen | 383 ++++++++++++++++++++++++++++++
+ 3 files changed, 939 insertions(+), 3 deletions(-)
 
-diff --git a/lib/metadata/raid_manip.c b/lib/metadata/raid_manip.c
-index a43e36141..dc3bce201 100644
---- a/lib/metadata/raid_manip.c
-+++ b/lib/metadata/raid_manip.c
-@@ -22,6 +22,7 @@
- #include "lib/metadata/lv_alloc.h"
- #include "lib/misc/lvm-string.h"
- #include "lib/locking/lvmlockd.h"
-+#include "lib/misc/lvm-signal.h"
- 
- typedef int (*fn_on_lv_t)(struct logical_volume *lv, void *data);
- static int _eliminate_extracted_lvs_optional_write_vg(struct volume_group *vg,
-@@ -392,6 +393,7 @@ static int _raid_in_sync(const struct logical_volume *lv)
- {
- 	int retries = _RAID_IN_SYNC_RETRIES;
- 	dm_percent_t sync_percent;
-+	struct lv_status_raid *raid_status;
- 
- 	if (seg_is_striped(first_seg(lv)))
- 		return 1;
-@@ -403,17 +405,21 @@ static int _raid_in_sync(const struct logical_volume *lv)
- 		 * the array is 100% in sync.
- 		 * https://bugzilla.redhat.com/1210637
- 		 */
--		if (!lv_raid_percent(lv, &sync_percent)) {
-+		if (!lv_raid_status(lv, &raid_status)) {
- 			log_error("Unable to determine sync status of %s.",
- 				  display_lvname(lv));
- 			return 0;
- 		}
-+		sync_percent = raid_status->in_sync;
-+		dm_pool_destroy(raid_status->mem);
+diff --git a/man/lvconvert.8_pregen b/man/lvconvert.8_pregen
+index c645d6a56..63fbc093c 100644
+--- a/man/lvconvert.8_pregen
++++ b/man/lvconvert.8_pregen
+@@ -597,7 +597,7 @@ Merge LV images that were split from a raid1 LV.
+ Convert LV to a thin LV, using the original LV as an external origin.
+ .br
+ .P
+-\fBlvconvert\fP \fB--type\fP \fBthin\fP \fB--thinpool\fP \fILV\fP \fILV\fP\fI_linear_striped_thin_cache_raid\fP
++\fBlvconvert\fP \fB--type\fP \fBthin\fP \fB--thinpool\fP \fILV\fP \fILV\fP\fI_linear_striped_thin_cache_raid_error_zero\fP
+ .br
+ .RS 4
+ .ad l
+@@ -803,7 +803,7 @@ Add a cache to an LV, using a specified cache device.
+ Convert LV to type thin-pool.
+ .br
+ .P
+-\fBlvconvert\fP \fB--type\fP \fBthin-pool\fP \fILV\fP\fI_linear_striped_cache_raid\fP
++\fBlvconvert\fP \fB--type\fP \fBthin-pool\fP \fILV\fP\fI_linear_striped_cache_raid_error_zero\fP
+ .br
+ .RS 4
+ .ad l
+@@ -1899,7 +1899,7 @@ Convert LV to a thin LV, using the original LV as an external origin
+ (infers --type thin).
+ .br
+ .P
+-\fBlvconvert\fP \fB-T\fP|\fB--thin\fP \fB--thinpool\fP \fILV\fP \fILV\fP\fI_linear_striped_thin_cache_raid\fP
++\fBlvconvert\fP \fB-T\fP|\fB--thin\fP \fB--thinpool\fP \fILV\fP \fILV\fP\fI_linear_striped_thin_cache_raid_error_zero\fP
+ .br
+ .RS 4
+ .ad l
+diff --git a/man/lvmdevices.8_pregen b/man/lvmdevices.8_pregen
+new file mode 100644
+index 000000000..2922449bf
+--- /dev/null
++++ b/man/lvmdevices.8_pregen
+@@ -0,0 +1,553 @@
++.TH LVMDEVICES 8 "LVM TOOLS #VERSION#" "Red Hat, Inc."
++.SH NAME
++lvmdevices - Manage the devices file
++.
++.SH SYNOPSIS
++\fBlvmdevices\fP \fIoption_args\fP
++.br
++    [ \fIoption_args\fP ]
++.br
++.P
++.ad l
++    \fB--adddev\fP \fIPV\fP
++.ad b
++.br
++.ad l
++    \fB--addpvid\fP \fIString\fP
++.ad b
++.br
++.ad l
++    \fB--check\fP
++.ad b
++.br
++.ad l
++    \fB--commandprofile\fP \fIString\fP
++.ad b
++.br
++.ad l
++    \fB--config\fP \fIString\fP
++.ad b
++.br
++.ad l
++ \fB-d\fP|\fB--debug\fP
++.ad b
++.br
++.ad l
++    \fB--deldev\fP \fIPV\fP
++.ad b
++.br
++.ad l
++    \fB--delpvid\fP \fIString\fP
++.ad b
++.br
++.ad l
++    \fB--devices\fP \fIPV\fP
++.ad b
++.br
++.ad l
++    \fB--devicesfile\fP \fIString\fP
++.ad b
++.br
++.ad l
++    \fB--driverloaded\fP \fBy\fP|\fBn\fP
++.ad b
++.br
++.ad l
++ \fB-h\fP|\fB--help\fP
++.ad b
++.br
++.ad l
++    \fB--lockopt\fP \fIString\fP
++.ad b
++.br
++.ad l
++    \fB--longhelp\fP
++.ad b
++.br
++.ad l
++    \fB--nolocking\fP
++.ad b
++.br
++.ad l
++    \fB--profile\fP \fIString\fP
++.ad b
++.br
++.ad l
++ \fB-q\fP|\fB--quiet\fP
++.ad b
++.br
++.ad l
++ \fB-t\fP|\fB--test\fP
++.ad b
++.br
++.ad l
++    \fB--update\fP
++.ad b
++.br
++.ad l
++ \fB-v\fP|\fB--verbose\fP
++.ad b
++.br
++.ad l
++    \fB--version\fP
++.ad b
++.br
++.ad l
++ \fB-y\fP|\fB--yes\fP
++.ad b
++.SH DESCRIPTION
++The LVM devices file lists devices that lvm can use.  The default file is
++/etc/lvm/devices/system.devices, and the lvmdevices(8) command is used to
++add or remove device entries.  If the file does not exist, or if lvm.conf
++includes use_devicesfile=0, then lvm will not use a devices file.
 +
- 		if (sync_percent > DM_PERCENT_0)
- 			break;
- 		if (retries == _RAID_IN_SYNC_RETRIES)
- 			log_warn("WARNING: Sync status for %s is inconsistent.",
- 				 display_lvname(lv));
--		usleep(500000);
-+		if (interruptible_usleep(500000))
-+			return_0;
- 	} while (--retries);
- 
- 	return (sync_percent == DM_PERCENT_100) ? 1 : 0;
++To use a device with lvm, add it to the devices file with the command
++lvmdevices --adddev, and to prevent lvm from seeing or using a device,
++remove it from the devices file with lvmdevices --deldev.  The
++vgimportdevices(8) command adds all PVs from a VG to the devices file,
++and updates the VG metadata to include device IDs of the PVs.
++
++Commands adding new devices to the devices file necessarily look outside
++the existing devices file to find the devices to add.  pvcreate, vgcreate,
++and vgextend also look outside the devices file to create new PVs and add
++them to the devices file.
++
++LVM records devices in the devices file using hardware-specific IDs, such
++as the WWID, and attempts to use subsystem-specific IDs for virtual device
++types (which also aim to be as unique and stable as possible.)
++These device IDs are also written in the VG metadata.  When no hardware or
++virtual ID is available, lvm falls back using the unstable device name as
++the device ID.  When devnames are used, lvm performs extra scanning to
++find devices if their devname changes, e.g. after reboot.
++
++When proper device IDs are used, an lvm command will not look at devices
++outside the devices file, but when devnames are used as a fallback, lvm
++will scan devices outside the devices file to locate PVs on renamed
++devices.  A config setting search_for_devnames can be used to control the
++scanning for renamed devname entries.
++
++Related to the devices file, the new command option --devices <devnames>
++allows a list of devices to be specified for the command to use,
++overriding the devices file.  The listed devices act as a sort of devices
++file in terms of limiting which devices lvm will see and use.  Devices
++that are not listed will appear to be missing to the lvm command.
++    
++Multiple devices files can be kept in /etc/lvm/devices, which allows lvm
++to be used with different sets of devices, e.g. system devices do not need
++to be exposed to a specific application, and the application can use lvm on
++its own devices that are not exposed to the system.  The option
++--devicesfile <filename> is used to select the devices file to use with the
++command.  Without the option set, the default system devices file is used.
++
++Setting --devicesfile "" causes lvm to not use a devices file.
++
++With no devices file, lvm will use any device on the system, and applies
++the filter to limit the full set of system devices.  With a devices file,
++the regex filter is not used, and the filter settings in lvm.conf or the
++command line are ignored.  The vgimportdevices command is one exception
++which does apply the regex filter when looking for a VG to import.
++
++If a devices file exists, lvm will use it, even if it's empty.  An empty
++devices file means lvm will see no devices.
++
++If the system devices file does not yet exist, the pvcreate or vgcreate
++commands will create it if they see no existing VGs on the system.
++lvmdevices --addev and vgimportdevices will always create a new devices file
++if it does not yet exist.
++
++It is recommended to use lvm commands to make changes to the devices file to
++ensure proper updates.
++
++.SH USAGE
++Print devices in the devices file.
++.br
++.P
++\fBlvmdevices\fP
++.br
++.RS 4
++[ COMMON_OPTIONS ]
++.RE
++.br
++-
++
++Check the devices file and report incorrect values.
++.br
++.P
++\fBlvmdevices\fP \fB--check\fP
++.br
++.RS 4
++[ COMMON_OPTIONS ]
++.RE
++.br
++-
++
++Update the devices file to fix incorrect values.
++.br
++.P
++\fBlvmdevices\fP \fB--update\fP
++.br
++.RS 4
++[ COMMON_OPTIONS ]
++.RE
++.br
++-
++
++Add a device to the devices file.
++.br
++.P
++\fBlvmdevices\fP \fB--adddev\fP \fIPV\fP
++.br
++.RS 4
++[ COMMON_OPTIONS ]
++.RE
++.br
++-
++
++Remove a device from the devices file.
++.br
++.P
++\fBlvmdevices\fP \fB--deldev\fP \fIPV\fP
++.br
++.RS 4
++[ COMMON_OPTIONS ]
++.RE
++.br
++-
++
++Find the device with the given PVID and add it to the devices file.
++.br
++.P
++\fBlvmdevices\fP \fB--addpvid\fP \fIString\fP
++.br
++.RS 4
++[ COMMON_OPTIONS ]
++.RE
++.br
++-
++
++Remove the devices file entry for the given PVID.
++.br
++.P
++\fBlvmdevices\fP \fB--delpvid\fP \fIString\fP
++.br
++.RS 4
++[ COMMON_OPTIONS ]
++.RE
++.br
++-
++
++Common options for command:
++.
++.RS 4
++.RE
++
++Common options for lvm:
++.
++.RS 4
++.ad l
++[ \fB-d\fP|\fB--debug\fP ]
++.ad b
++.br
++.ad l
++[ \fB-h\fP|\fB--help\fP ]
++.ad b
++.br
++.ad l
++[ \fB-q\fP|\fB--quiet\fP ]
++.ad b
++.br
++.ad l
++[ \fB-t\fP|\fB--test\fP ]
++.ad b
++.br
++.ad l
++[ \fB-v\fP|\fB--verbose\fP ]
++.ad b
++.br
++.ad l
++[ \fB-y\fP|\fB--yes\fP ]
++.ad b
++.br
++.ad l
++[    \fB--commandprofile\fP \fIString\fP ]
++.ad b
++.br
++.ad l
++[    \fB--config\fP \fIString\fP ]
++.ad b
++.br
++.ad l
++[    \fB--devices\fP \fIPV\fP ]
++.ad b
++.br
++.ad l
++[    \fB--devicesfile\fP \fIString\fP ]
++.ad b
++.br
++.ad l
++[    \fB--driverloaded\fP \fBy\fP|\fBn\fP ]
++.ad b
++.br
++.ad l
++[    \fB--lockopt\fP \fIString\fP ]
++.ad b
++.br
++.ad l
++[    \fB--longhelp\fP ]
++.ad b
++.br
++.ad l
++[    \fB--nolocking\fP ]
++.ad b
++.br
++.ad l
++[    \fB--profile\fP \fIString\fP ]
++.ad b
++.br
++.ad l
++[    \fB--version\fP ]
++.ad b
++.RE
++.SH OPTIONS
++.HP
++.ad l
++\fB--adddev\fP \fIPV\fP
++.br
++Add a device to the devices file.
++.ad b
++.HP
++.ad l
++\fB--addpvid\fP \fIString\fP
++.br
++Find a device with the PVID and add the device to the devices file.
++.ad b
++.HP
++.ad l
++\fB--check\fP
++.br
++Check the content of the devices file.
++.ad b
++.HP
++.ad l
++\fB--commandprofile\fP \fIString\fP
++.br
++The command profile to use for command configuration.
++See \fBlvm.conf\fP(5) for more information about profiles.
++.ad b
++.HP
++.ad l
++\fB--config\fP \fIString\fP
++.br
++Config settings for the command. These override lvm.conf settings.
++The String arg uses the same format as lvm.conf,
++or may use section/field syntax.
++See \fBlvm.conf\fP(5) for more information about config.
++.ad b
++.HP
++.ad l
++\fB-d\fP|\fB--debug\fP ...
++.br
++Set debug level. Repeat from 1 to 6 times to increase the detail of
++messages sent to the log file and/or syslog (if configured).
++.ad b
++.HP
++.ad l
++\fB--deldev\fP \fIPV\fP
++.br
++Remove a device from the devices file.
++.ad b
++.HP
++.ad l
++\fB--delpvid\fP \fIString\fP
++.br
++Remove a device with the PVID from the devices file.
++.ad b
++.HP
++.ad l
++\fB--devices\fP \fIPV\fP
++.br
++Devices that the command can use. This option can be repeated
++or accepts a comma separated list of devices. This overrides
++the devices file.
++.ad b
++.HP
++.ad l
++\fB--devicesfile\fP \fIString\fP
++.br
++A file listing devices that LVM should use.
++The file must exist in /etc/lvm/devices/ and is managed
++with the lvmdevices(8) command.
++This overrides the lvm.conf devices/devicesfile and
++devices/use_devicesfile settings.
++.ad b
++.HP
++.ad l
++\fB--driverloaded\fP \fBy\fP|\fBn\fP
++.br
++If set to no, the command will not attempt to use device-mapper.
++For testing and debugging.
++.ad b
++.HP
++.ad l
++\fB-h\fP|\fB--help\fP
++.br
++Display help text.
++.ad b
++.HP
++.ad l
++\fB--lockopt\fP \fIString\fP
++.br
++Used to pass options for special cases to lvmlockd.
++See \fBlvmlockd\fP(8) for more information.
++.ad b
++.HP
++.ad l
++\fB--longhelp\fP
++.br
++Display long help text.
++.ad b
++.HP
++.ad l
++\fB--nolocking\fP
++.br
++Disable locking.
++.ad b
++.HP
++.ad l
++\fB--profile\fP \fIString\fP
++.br
++An alias for --commandprofile or --metadataprofile, depending
++on the command.
++.ad b
++.HP
++.ad l
++\fB-q\fP|\fB--quiet\fP ...
++.br
++Suppress output and log messages. Overrides --debug and --verbose.
++Repeat once to also suppress any prompts with answer 'no'.
++.ad b
++.HP
++.ad l
++\fB-t\fP|\fB--test\fP
++.br
++Run in test mode. Commands will not update metadata.
++This is implemented by disabling all metadata writing but nevertheless
++returning success to the calling function. This may lead to unusual
++error messages in multi-stage operations if a tool relies on reading
++back metadata it believes has changed but hasn't.
++.ad b
++.HP
++.ad l
++\fB--update\fP
++.br
++Update the content of the devices file.
++.ad b
++.HP
++.ad l
++\fB-v\fP|\fB--verbose\fP ...
++.br
++Set verbose level. Repeat from 1 to 4 times to increase the detail
++of messages sent to stdout and stderr.
++.ad b
++.HP
++.ad l
++\fB--version\fP
++.br
++Display version information.
++.ad b
++.HP
++.ad l
++\fB-y\fP|\fB--yes\fP
++.br
++Do not prompt for confirmation interactively but always assume the
++answer yes. Use with extreme caution.
++(For automatic no, see -qq.)
++.ad b
++.SH VARIABLES
++.HP
++\fIString\fP
++.br
++See the option description for information about the string content.
++.HP
++\fISize\fP[UNIT]
++.br
++Size is an input number that accepts an optional unit.
++Input units are always treated as base two values, regardless of
++capitalization, e.g. 'k' and 'K' both refer to 1024.
++The default input unit is specified by letter, followed by |UNIT.
++UNIT represents other possible input units: \fBbBsSkKmMgGtTpPeE\fP.
++b|B is bytes, s|S is sectors of 512 bytes, k|K is KiB,
++m|M is MiB, g|G is GiB, t|T is TiB, p|P is PiB, e|E is EiB.
++(This should not be confused with the output control --units, where
++capital letters mean multiple of 1000.)
++.SH ENVIRONMENT VARIABLES
++See \fBlvm\fP(8) for information about environment variables used by lvm.
++For example, LVM_VG_NAME can generally be substituted for a required VG parameter.
++.SH SEE ALSO
++
++.BR lvm (8)
++.BR lvm.conf (5)
++.BR lvmconfig (8)
++.BR lvmdevices (8)
++
++.BR pvchange (8)
++.BR pvck (8)
++.BR pvcreate (8)
++.BR pvdisplay (8)
++.BR pvmove (8)
++.BR pvremove (8)
++.BR pvresize (8)
++.BR pvs (8)
++.BR pvscan (8) 
++
++.BR vgcfgbackup (8)
++.BR vgcfgrestore (8)
++.BR vgchange (8)
++.BR vgck (8)
++.BR vgcreate (8)
++.BR vgconvert (8)
++.BR vgdisplay (8)
++.BR vgexport (8)
++.BR vgextend (8)
++.BR vgimport (8)
++.BR vgimportclone (8)
++.BR vgimportdevices (8)
++.BR vgmerge (8)
++.BR vgmknodes (8)
++.BR vgreduce (8)
++.BR vgremove (8)
++.BR vgrename (8)
++.BR vgs (8)
++.BR vgscan (8)
++.BR vgsplit (8) 
++
++.BR lvcreate (8)
++.BR lvchange (8)
++.BR lvconvert (8)
++.BR lvdisplay (8)
++.BR lvextend (8)
++.BR lvreduce (8)
++.BR lvremove (8)
++.BR lvrename (8)
++.BR lvresize (8)
++.BR lvs (8)
++.BR lvscan (8)
++
++.BR lvm-fullreport (8)
++.BR lvm-lvpoll (8)
++.BR lvm2-activation-generator (8)
++.BR blkdeactivate (8)
++.BR lvmdump (8)
++
++.BR dmeventd (8)
++.BR lvmpolld (8)
++.BR lvmlockd (8)
++.BR lvmlockctl (8)
++.BR cmirrord (8)
++.BR lvmdbusd (8)
++
++.BR lvmsystemid (7)
++.BR lvmreport (7)
++.BR lvmraid (7)
++.BR lvmthin (7)
++.BR lvmcache (7)
+diff --git a/man/vgimportdevices.8_pregen b/man/vgimportdevices.8_pregen
+new file mode 100644
+index 000000000..b08c205cd
+--- /dev/null
++++ b/man/vgimportdevices.8_pregen
+@@ -0,0 +1,383 @@
++.TH VGIMPORTDEVICES 8 "LVM TOOLS #VERSION#" "Red Hat, Inc."
++.SH NAME
++vgimportdevices - Add devices for a VG to the devices file.
++.
++.SH SYNOPSIS
++\fBvgimportdevices\fP \fIoption_args\fP \fIposition_args\fP
++.br
++    [ \fIoption_args\fP ]
++.br
++.SH DESCRIPTION
++vgimportdevices adds PVs from a VG to the devices file.  This is similar
++to using using lvmdevices --adddev to add each PV to the devices file
++individually.  vgimportdevices will also update the VG metadata to include
++the device IDs of each PV.  vgimportdevices will create a new devices file
++if none exists.
++
++When a devices file is used, the regex filter is ignored, except in the case
++of vgimportdevices which will apply the regex filter when looking for the VGs
++to import to the devices file.  Use vgimportdevices -a to import all VGs on a
++system to the devices file.
++
++.SH USAGE
++Add devices from specific VGs to the devices file.
++.br
++.P
++\fBvgimportdevices\fP \fIVG\fP|\fITag\fP|\fISelect\fP ...
++.br
++.RS 4
++.ad l
++[ \fB-S\fP|\fB--select\fP \fIString\fP ]
++.ad b
++.br
++[ COMMON_OPTIONS ]
++.RE
++.br
++
++Add devices from all accessible VGs to the devices file.
++.br
++.P
++\fBvgimportdevices\fP \fB-a\fP|\fB--all\fP
++.br
++.RS 4
++[ COMMON_OPTIONS ]
++.RE
++.br
++
++Common options for command:
++.
++.RS 4
++.ad l
++[    \fB--foreign\fP ]
++.ad b
++.br
++.ad l
++[    \fB--reportformat\fP \fBbasic\fP|\fBjson\fP ]
++.ad b
++.RE
++
++Common options for lvm:
++.
++.RS 4
++.ad l
++[ \fB-d\fP|\fB--debug\fP ]
++.ad b
++.br
++.ad l
++[ \fB-h\fP|\fB--help\fP ]
++.ad b
++.br
++.ad l
++[ \fB-q\fP|\fB--quiet\fP ]
++.ad b
++.br
++.ad l
++[ \fB-t\fP|\fB--test\fP ]
++.ad b
++.br
++.ad l
++[ \fB-v\fP|\fB--verbose\fP ]
++.ad b
++.br
++.ad l
++[ \fB-y\fP|\fB--yes\fP ]
++.ad b
++.br
++.ad l
++[    \fB--commandprofile\fP \fIString\fP ]
++.ad b
++.br
++.ad l
++[    \fB--config\fP \fIString\fP ]
++.ad b
++.br
++.ad l
++[    \fB--devices\fP \fIPV\fP ]
++.ad b
++.br
++.ad l
++[    \fB--devicesfile\fP \fIString\fP ]
++.ad b
++.br
++.ad l
++[    \fB--driverloaded\fP \fBy\fP|\fBn\fP ]
++.ad b
++.br
++.ad l
++[    \fB--lockopt\fP \fIString\fP ]
++.ad b
++.br
++.ad l
++[    \fB--longhelp\fP ]
++.ad b
++.br
++.ad l
++[    \fB--nolocking\fP ]
++.ad b
++.br
++.ad l
++[    \fB--profile\fP \fIString\fP ]
++.ad b
++.br
++.ad l
++[    \fB--version\fP ]
++.ad b
++.RE
++.SH OPTIONS
++.HP
++.ad l
++\fB-a\fP|\fB--all\fP
++.br
++.ad b
++.HP
++.ad l
++\fB--commandprofile\fP \fIString\fP
++.br
++The command profile to use for command configuration.
++See \fBlvm.conf\fP(5) for more information about profiles.
++.ad b
++.HP
++.ad l
++\fB--config\fP \fIString\fP
++.br
++Config settings for the command. These override lvm.conf settings.
++The String arg uses the same format as lvm.conf,
++or may use section/field syntax.
++See \fBlvm.conf\fP(5) for more information about config.
++.ad b
++.HP
++.ad l
++\fB-d\fP|\fB--debug\fP ...
++.br
++Set debug level. Repeat from 1 to 6 times to increase the detail of
++messages sent to the log file and/or syslog (if configured).
++.ad b
++.HP
++.ad l
++\fB--devices\fP \fIPV\fP
++.br
++Devices that the command can use. This option can be repeated
++or accepts a comma separated list of devices. This overrides
++the devices file.
++.ad b
++.HP
++.ad l
++\fB--devicesfile\fP \fIString\fP
++.br
++A file listing devices that LVM should use.
++The file must exist in /etc/lvm/devices/ and is managed
++with the lvmdevices(8) command.
++This overrides the lvm.conf devices/devicesfile and
++devices/use_devicesfile settings.
++.ad b
++.HP
++.ad l
++\fB--driverloaded\fP \fBy\fP|\fBn\fP
++.br
++If set to no, the command will not attempt to use device-mapper.
++For testing and debugging.
++.ad b
++.HP
++.ad l
++\fB--foreign\fP
++.br
++Report/display foreign VGs that would otherwise be skipped.
++See \fBlvmsystemid\fP(7) for more information about foreign VGs.
++.ad b
++.HP
++.ad l
++\fB-h\fP|\fB--help\fP
++.br
++Display help text.
++.ad b
++.HP
++.ad l
++\fB--lockopt\fP \fIString\fP
++.br
++Used to pass options for special cases to lvmlockd.
++See \fBlvmlockd\fP(8) for more information.
++.ad b
++.HP
++.ad l
++\fB--longhelp\fP
++.br
++Display long help text.
++.ad b
++.HP
++.ad l
++\fB--nolocking\fP
++.br
++Disable locking.
++.ad b
++.HP
++.ad l
++\fB--profile\fP \fIString\fP
++.br
++An alias for --commandprofile or --metadataprofile, depending
++on the command.
++.ad b
++.HP
++.ad l
++\fB-q\fP|\fB--quiet\fP ...
++.br
++Suppress output and log messages. Overrides --debug and --verbose.
++Repeat once to also suppress any prompts with answer 'no'.
++.ad b
++.HP
++.ad l
++\fB--reportformat\fP \fBbasic\fP|\fBjson\fP
++.br
++Overrides current output format for reports which is defined globally by
++the report/output_format setting in lvm.conf.
++\fBbasic\fP is the original format with columns and rows.
++If there is more than one report per command, each report is prefixed
++with the report name for identification. \fBjson\fP produces report
++output in JSON format. See \fBlvmreport\fP(7) for more information.
++.ad b
++.HP
++.ad l
++\fB-S\fP|\fB--select\fP \fIString\fP
++.br
++Select objects for processing and reporting based on specified criteria.
++The criteria syntax is described by \fB--select help\fP and \fBlvmreport\fP(7).
++For reporting commands, one row is displayed for each object matching the criteria.
++See \fB--options help\fP for selectable object fields.
++Rows can be displayed with an additional "selected" field (-o selected)
++showing 1 if the row matches the selection and 0 otherwise.
++For non-reporting commands which process LVM entities, the selection is
++used to choose items to process.
++.ad b
++.HP
++.ad l
++\fB-t\fP|\fB--test\fP
++.br
++Run in test mode. Commands will not update metadata.
++This is implemented by disabling all metadata writing but nevertheless
++returning success to the calling function. This may lead to unusual
++error messages in multi-stage operations if a tool relies on reading
++back metadata it believes has changed but hasn't.
++.ad b
++.HP
++.ad l
++\fB-v\fP|\fB--verbose\fP ...
++.br
++Set verbose level. Repeat from 1 to 4 times to increase the detail
++of messages sent to stdout and stderr.
++.ad b
++.HP
++.ad l
++\fB--version\fP
++.br
++Display version information.
++.ad b
++.HP
++.ad l
++\fB-y\fP|\fB--yes\fP
++.br
++Do not prompt for confirmation interactively but always assume the
++answer yes. Use with extreme caution.
++(For automatic no, see -qq.)
++.ad b
++.SH VARIABLES
++.HP
++\fIVG\fP
++.br
++Volume Group name.  See \fBlvm\fP(8) for valid names.
++.HP
++\fITag\fP
++.br
++Tag name.  See \fBlvm\fP(8) for information about tag names and using tags
++in place of a VG, LV or PV.
++.HP
++\fISelect\fP
++.br
++Select indicates that a required positional parameter can
++be omitted if the \fB--select\fP option is used.
++No arg appears in this position.
++.HP
++\fIString\fP
++.br
++See the option description for information about the string content.
++.HP
++\fISize\fP[UNIT]
++.br
++Size is an input number that accepts an optional unit.
++Input units are always treated as base two values, regardless of
++capitalization, e.g. 'k' and 'K' both refer to 1024.
++The default input unit is specified by letter, followed by |UNIT.
++UNIT represents other possible input units: \fBbBsSkKmMgGtTpPeE\fP.
++b|B is bytes, s|S is sectors of 512 bytes, k|K is KiB,
++m|M is MiB, g|G is GiB, t|T is TiB, p|P is PiB, e|E is EiB.
++(This should not be confused with the output control --units, where
++capital letters mean multiple of 1000.)
++.SH ENVIRONMENT VARIABLES
++See \fBlvm\fP(8) for information about environment variables used by lvm.
++For example, LVM_VG_NAME can generally be substituted for a required VG parameter.
++.SH SEE ALSO
++
++.BR lvm (8)
++.BR lvm.conf (5)
++.BR lvmconfig (8)
++.BR lvmdevices (8)
++
++.BR pvchange (8)
++.BR pvck (8)
++.BR pvcreate (8)
++.BR pvdisplay (8)
++.BR pvmove (8)
++.BR pvremove (8)
++.BR pvresize (8)
++.BR pvs (8)
++.BR pvscan (8) 
++
++.BR vgcfgbackup (8)
++.BR vgcfgrestore (8)
++.BR vgchange (8)
++.BR vgck (8)
++.BR vgcreate (8)
++.BR vgconvert (8)
++.BR vgdisplay (8)
++.BR vgexport (8)
++.BR vgextend (8)
++.BR vgimport (8)
++.BR vgimportclone (8)
++.BR vgimportdevices (8)
++.BR vgmerge (8)
++.BR vgmknodes (8)
++.BR vgreduce (8)
++.BR vgremove (8)
++.BR vgrename (8)
++.BR vgs (8)
++.BR vgscan (8)
++.BR vgsplit (8) 
++
++.BR lvcreate (8)
++.BR lvchange (8)
++.BR lvconvert (8)
++.BR lvdisplay (8)
++.BR lvextend (8)
++.BR lvreduce (8)
++.BR lvremove (8)
++.BR lvrename (8)
++.BR lvresize (8)
++.BR lvs (8)
++.BR lvscan (8)
++
++.BR lvm-fullreport (8)
++.BR lvm-lvpoll (8)
++.BR lvm2-activation-generator (8)
++.BR blkdeactivate (8)
++.BR lvmdump (8)
++
++.BR dmeventd (8)
++.BR lvmpolld (8)
++.BR lvmlockd (8)
++.BR lvmlockctl (8)
++.BR cmirrord (8)
++.BR lvmdbusd (8)
++
++.BR lvmsystemid (7)
++.BR lvmreport (7)
++.BR lvmraid (7)
++.BR lvmthin (7)
++.BR lvmcache (7)
 
 
