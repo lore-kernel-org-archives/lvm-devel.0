@@ -1,46 +1,51 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Thu, 18 Mar 2021 18:15:11 +0000 (GMT)
-Subject: main - tests: check for raid sync in progress
-Message-ID: <20210318181511.C4B3F386EC52@sourceware.org>
+Date: Fri, 19 Mar 2021 23:17:10 +0000 (GMT)
+Subject: main - raid: resync cannot lose primary leg
+Message-ID: <20210319231710.00F38385783D@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=26fb6b5e8d61e3d3097fccf4fca5bd9582fbbb4f
-Commit:        26fb6b5e8d61e3d3097fccf4fca5bd9582fbbb4f
-Parent:        accf324ccba681ad06cd8bcb27ead17ec191a471
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=cc140f68a505aad117a6e8222f65a5ea13139083
+Commit:        cc140f68a505aad117a6e8222f65a5ea13139083
+Parent:        076e1556978dfb216176d319d2498ec571fcc908
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed Mar 17 11:22:16 2021 +0100
+AuthorDate:    Fri Mar 19 01:54:06 2021 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Thu Mar 18 19:12:00 2021 +0100
+CommitterDate: Fri Mar 19 23:19:31 2021 +0100
 
-tests: check for raid sync in progress
+raid: resync cannot lose primary leg
 
-TODO: this needs to be built-in in lvm command itself.
+Prohibity droping primary leg while resyncing.
 ---
- test/shell/lvconvert-raid.sh | 7 ++++---
- 1 file changed, 4 insertions(+), 3 deletions(-)
+ lib/metadata/raid_manip.c | 11 ++++++++---
+ 1 file changed, 8 insertions(+), 3 deletions(-)
 
-diff --git a/test/shell/lvconvert-raid.sh b/test/shell/lvconvert-raid.sh
-index 87eb7b53c..1ab2d4fd3 100644
---- a/test/shell/lvconvert-raid.sh
-+++ b/test/shell/lvconvert-raid.sh
-@@ -232,10 +232,11 @@ lvcreate -aey -l 2 -n $lv1 $vg "$dev1"
- lvconvert -y -m 1 $vg/$lv1 \
- 	--config 'global { mirror_segtype_default = "raid1" }' "$dev2"
- lvs --noheadings -o attr $vg/$lv1 | grep '^[[:space:]]*r'
-+# FIXME: lvconvert/lvcreate should trace state of target
- for i in {1..10}; do
--	check raid_leg_status $vg $lv1 "Aa" && break
--	check raid_leg_status $vg $lv1 "aa" || die "Cannot wait for Aa on $vg/$lv1"
--	sleep .1
-+	dmsetup status | grep $vg-$lv1: | tee out
-+	grep -E "recover|rebuild" out && break
-+	sleep .05
- done
- not lvconvert --yes -m 0 $vg/$lv1 "$dev1"
- lvconvert --yes -m 0 $vg/$lv1 "$dev2"
+diff --git a/lib/metadata/raid_manip.c b/lib/metadata/raid_manip.c
+index dc3bce201..33fd017cb 100644
+--- a/lib/metadata/raid_manip.c
++++ b/lib/metadata/raid_manip.c
+@@ -2945,11 +2945,16 @@ static int _raid_allow_extraction(struct logical_volume *lv,
+ 	    !lv_raid_dev_health(lv, &dev_health))
+ 		return_0;
+ 
+-	if (!strcmp("resync", sync_action))
+-		return 1;
++	if (!strcmp("resync", sync_action)) {
++		if (!lv_is_on_pvs(seg_lv(seg, 0), target_pvs) &&
++		    !lv_is_on_pvs(seg_metalv(seg, 0), target_pvs))
++			return 1;
++		log_error("Unable to remove primary RAID image while array resyncing.");
++		return 0;
++	}
+ 
+ 	/* If anything other than "recover", rebuild or "idle" */
+-        /* Targets reports for a while 'idle' state, before recover starts */
++	/* Targets reports for a while 'idle' state, before recover starts */
+ 	if (strcmp("recover", sync_action) &&
+ 	    strcmp("rebuild", sync_action) &&
+ 	    strcmp("idle", sync_action)) {
 
 
