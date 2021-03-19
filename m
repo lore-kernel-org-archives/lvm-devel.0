@@ -1,39 +1,45 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Fri, 19 Mar 2021 23:17:12 +0000 (GMT)
-Subject: main - gcc: ensure buffer ends with 0
-Message-ID: <20210319231712.47681385783D@sourceware.org>
+Date: Fri, 19 Mar 2021 23:17:13 +0000 (GMT)
+Subject: main - cleanup: reduce code dupliction
+Message-ID: <20210319231713.6D087386F411@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=d37b19aaaab0c28f4d1e4ae0690c73c0031a027b
-Commit:        d37b19aaaab0c28f4d1e4ae0690c73c0031a027b
-Parent:        79d8d06217b6e0ac2ef8d0303ce84f748faebb9b
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=d3d28b1b64ff6b89ac5150787f694e1db1794a1f
+Commit:        d3d28b1b64ff6b89ac5150787f694e1db1794a1f
+Parent:        d37b19aaaab0c28f4d1e4ae0690c73c0031a027b
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu Mar 18 23:08:08 2021 +0100
+AuthorDate:    Fri Mar 19 10:45:26 2021 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Fri Mar 19 23:21:18 2021 +0100
 
-gcc: ensure buffer ends with 0
+cleanup: reduce code dupliction
 
 ---
- lib/commands/toolcontext.c | 2 +-
- 1 file changed, 1 insertion(+), 1 deletion(-)
+ lib/raid/raid.c | 6 ++----
+ 1 file changed, 2 insertions(+), 4 deletions(-)
 
-diff --git a/lib/commands/toolcontext.c b/lib/commands/toolcontext.c
-index 92008a641..75634caff 100644
---- a/lib/commands/toolcontext.c
-+++ b/lib/commands/toolcontext.c
-@@ -230,7 +230,7 @@ static void _get_sysfs_dir(struct cmd_context *cmd, char *buf, size_t buf_size)
- 		return;
- 	}
+diff --git a/lib/raid/raid.c b/lib/raid/raid.c
+index 941ba8dc8..2f1eb6cf8 100644
+--- a/lib/raid/raid.c
++++ b/lib/raid/raid.c
+@@ -441,12 +441,10 @@ static int _raid_target_percent(void **target_state,
  
--	strncpy(buf, sys_mnt, buf_size);
-+	(void) dm_strncpy(buf, sys_mnt, buf_size);
- }
+ 	*total_numerator += sr->insync_regions;
+ 	*total_denominator += sr->total_regions;
++	*percent = dm_make_percent(sr->insync_regions, sr->total_regions);
  
- static uint32_t _parse_debug_fields(struct cmd_context *cmd, int cfg, const char *cfgname)
+ 	if (seg)
+-		seg->extents_copied = (uint64_t) seg->area_len
+-			* dm_make_percent(sr->insync_regions , sr->total_regions) / DM_PERCENT_100;
+-
+-	*percent = dm_make_percent(sr->insync_regions, sr->total_regions);
++		seg->extents_copied = (uint64_t) seg->area_len * *percent / DM_PERCENT_100;
+ 
+ 	dm_pool_free(mem, sr);
+ 
 
 
