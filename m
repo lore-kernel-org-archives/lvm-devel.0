@@ -1,39 +1,52 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Fri, 19 Mar 2021 23:28:47 +0000 (GMT)
-Subject: main - tests: fix condition for exclusion of /dev
-Message-ID: <20210319232847.AB51E386F80C@sourceware.org>
+Date: Sat, 20 Mar 2021 09:53:04 +0000 (GMT)
+Subject: main - raid: restore mirror handling in _raid_in_sync
+Message-ID: <20210320095304.9A46F3858001@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=edcc410835641c9ea7bd15810657e0d16608c00f
-Commit:        edcc410835641c9ea7bd15810657e0d16608c00f
-Parent:        d5b37f24f4f8914b2ab12c9fb352b2b84ca87c16
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=05920e3818b22c24dde59b3e562fe156466f83f2
+Commit:        05920e3818b22c24dde59b3e562fe156466f83f2
+Parent:        edcc410835641c9ea7bd15810657e0d16608c00f
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Sat Mar 20 00:28:13 2021 +0100
+AuthorDate:    Sat Mar 20 10:35:53 2021 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Sat Mar 20 00:28:13 2021 +0100
+CommitterDate: Sat Mar 20 10:52:24 2021 +0100
 
-tests: fix condition for exclusion of /dev
+raid: restore mirror handling in _raid_in_sync
 
+Function is not having the best name since it does check
+no just raid LVs to be in sync.
+
+Restore the mirror percentage checking - although without retries,
+since only raid target is currently known to need it - for other
+types it would be ATM a bug to get inconsistent result.
 ---
- test/lib/inittest.sh | 2 +-
- 1 file changed, 1 insertion(+), 1 deletion(-)
+ lib/metadata/raid_manip.c | 9 ++++++++-
+ 1 file changed, 8 insertions(+), 1 deletion(-)
 
-diff --git a/test/lib/inittest.sh b/test/lib/inittest.sh
-index 58fa2e5e6..0014a8cfd 100644
---- a/test/lib/inittest.sh
-+++ b/test/lib/inittest.sh
-@@ -79,7 +79,7 @@ if test -z "$SKIP_ROOT_DM_CHECK" ; then
- fi
+diff --git a/lib/metadata/raid_manip.c b/lib/metadata/raid_manip.c
+index 33fd017cb..05b7caf9c 100644
+--- a/lib/metadata/raid_manip.c
++++ b/lib/metadata/raid_manip.c
+@@ -398,7 +398,14 @@ static int _raid_in_sync(const struct logical_volume *lv)
+ 	if (seg_is_striped(first_seg(lv)))
+ 		return 1;
  
- test -n "$LVM_TEST_DIR" || LVM_TEST_DIR=${TMPDIR:-/tmp}
--test "$LVM_TEST_DIR" = "/dev" || die "Setting LVM_TEST_DIR=/dev is not supported"
-+test "$LVM_TEST_DIR" = "/dev" && die "Setting LVM_TEST_DIR=/dev is not supported!"
- 
- TESTDIR=$(mkdtemp "$LVM_TEST_DIR" "$PREFIX.XXXXXXXXXX") || \
- 	die "failed to create temporary directory in \"$LVM_TEST_DIR\""
+-	do {
++	if (!lv_is_raid(lv)) {
++		/* For non raid - fallback to mirror percentage */
++		if (!lv_mirror_percent(lv->vg->cmd, lv, 0, &sync_percent, NULL)) {
++			log_error("Cannot determine sync percentage of %s.",
++				  display_lvname(lv));
++			return 0;
++		}
++	} else do {
+ 		/*
+ 		 * FIXME We repeat the status read here to workaround an
+ 		 * unresolved kernel bug when we see 0 even though the
 
 
