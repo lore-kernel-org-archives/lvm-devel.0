@@ -1,53 +1,40 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Sat, 20 Mar 2021 09:53:05 +0000 (GMT)
-Subject: main - tests: add FIXME to raid test
-Message-ID: <20210320095305.BCEA73858009@sourceware.org>
+Date: Sat, 20 Mar 2021 09:53:08 +0000 (GMT)
+Subject: main - tests: slow down device more
+Message-ID: <20210320095308.0DC4C3858009@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=179f59a0ca7d4d5f779f86d990ebd336c9b13f0e
-Commit:        179f59a0ca7d4d5f779f86d990ebd336c9b13f0e
-Parent:        05920e3818b22c24dde59b3e562fe156466f83f2
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=2dd43a7314ba72b0b899e161261ef5caacbade05
+Commit:        2dd43a7314ba72b0b899e161261ef5caacbade05
+Parent:        94c4af232c6118191ac2c81a4130e6f83823f510
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Sat Mar 20 10:39:02 2021 +0100
+AuthorDate:    Sat Mar 20 09:58:50 2021 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Sat Mar 20 10:52:24 2021 +0100
 
-tests: add FIXME to raid test
+tests: slow down device more
 
-We have here some kind of catch-22 - since older kernels do
-use 'resync' while new 'recover' for initial raid synchronization.
-
-So now - how do we recognize in which state of raid we are.
-ATM seems to be simplest to simply keep disabled droping of primary raid
-leg unless we are in sync.
-
-FIXME: we should add a target version check and enable removal
+Make the race with too fast merging less likely to occure.
 ---
- test/shell/lvconvert-raid.sh | 8 +++++++-
- 1 file changed, 7 insertions(+), 1 deletion(-)
+ test/shell/snapshot-merge-thin.sh | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
 
-diff --git a/test/shell/lvconvert-raid.sh b/test/shell/lvconvert-raid.sh
-index 6aaaf3669..aa50fbb62 100644
---- a/test/shell/lvconvert-raid.sh
-+++ b/test/shell/lvconvert-raid.sh
-@@ -250,7 +250,13 @@ echo "Skippen test that kills this kernel"
- ;;
- *)
- lvconvert --yes -m 1 $vg/$lv1 "$dev3"
--lvconvert --yes -m 0 $vg/$lv1 "$dev1"
-+
-+# FIXME: it is unclear what should happen - older kernel
-+# do use 'resync' for initial array building so then
-+# we are not able to recognize difference
-+# Should we check version target as react differentely ??
-+# Otherwise we have problem with the above test case.
-+should lvconvert --yes -m 0 $vg/$lv1 "$dev1"
- aux enable_dev "$dev2"
- ;;
- esac
+diff --git a/test/shell/snapshot-merge-thin.sh b/test/shell/snapshot-merge-thin.sh
+index 447a93167..4e4577ca9 100644
+--- a/test/shell/snapshot-merge-thin.sh
++++ b/test/shell/snapshot-merge-thin.sh
+@@ -49,7 +49,7 @@ lvcreate -s -n $lv2 -L2 $vg/$lv1 "$dev2"
+ dd if=/dev/zero of="$DM_DEV_DIR/$vg/$lv2" bs=1M count=1 oflag=direct
+ 
+ lvs -a -o+lv_merging,lv_merge_failed $vg
+-aux delay_dev "$dev1" 0 100 "$(get first_extent_sector "$dev1"):"
++aux delay_dev "$dev1" 0 400 "$(get first_extent_sector "$dev1"):"
+ 
+ # Initiate background merge
+ lvconvert -b --merge $vg/$lv2
 
 
