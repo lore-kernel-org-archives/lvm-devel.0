@@ -1,112 +1,76 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Sat, 20 Mar 2021 09:53:06 +0000 (GMT)
-Subject: main - tests: prohibit 4K brd device with integrity
-Message-ID: <20210320095306.DF10C3858001@sourceware.org>
+Date: Sat, 20 Mar 2021 09:53:09 +0000 (GMT)
+Subject: main - tests: use mirror throttling
+Message-ID: <20210320095309.320DA3858001@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=94c4af232c6118191ac2c81a4130e6f83823f510
-Commit:        94c4af232c6118191ac2c81a4130e6f83823f510
-Parent:        179f59a0ca7d4d5f779f86d990ebd336c9b13f0e
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=d6bc11bf724be4ebfd87dc60a172da2b0e4df8d9
+Commit:        d6bc11bf724be4ebfd87dc60a172da2b0e4df8d9
+Parent:        2dd43a7314ba72b0b899e161261ef5caacbade05
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Sat Mar 20 09:54:30 2021 +0100
+AuthorDate:    Sat Mar 20 10:14:09 2021 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Sat Mar 20 10:52:24 2021 +0100
 
-tests: prohibit 4K brd device with integrity
+tests: use mirror throttling
 
-Older kernels hit these errors:
-
-device-mapper: integrity: Bio not aligned on 8 sectors: 0x8ffc, 0x4
+With small mirrors its better to throttle speed of mirror in dm-mirror.
 ---
- test/shell/integrity-blocksize-2.sh | 2 ++
- test/shell/integrity-dmeventd.sh    | 4 +++-
- test/shell/integrity-misc.sh        | 4 +++-
- test/shell/integrity-syncaction.sh  | 4 +++-
- test/shell/integrity.sh             | 4 +++-
- 5 files changed, 14 insertions(+), 4 deletions(-)
+ test/shell/pvmove-resume-1.sh        | 5 +++--
+ test/shell/pvmove-resume-multiseg.sh | 5 +++--
+ 2 files changed, 6 insertions(+), 4 deletions(-)
 
-diff --git a/test/shell/integrity-blocksize-2.sh b/test/shell/integrity-blocksize-2.sh
-index 3f6eb9242..ae0e72ec6 100644
---- a/test/shell/integrity-blocksize-2.sh
-+++ b/test/shell/integrity-blocksize-2.sh
-@@ -15,6 +15,8 @@ SKIP_WITH_LVMPOLLD=1
- . lib/inittest
- 
- aux have_integrity 1 5 0 || skip
-+# Avoid 4K ramdisk devices on older kernels
-+aux kernel_at_least  5 10 || export LVM_TEST_PREFER_BRD=0
- 
- mnt="mnt"
- mkdir -p $mnt
-diff --git a/test/shell/integrity-dmeventd.sh b/test/shell/integrity-dmeventd.sh
-index e82b92142..9049eb0f7 100644
---- a/test/shell/integrity-dmeventd.sh
-+++ b/test/shell/integrity-dmeventd.sh
-@@ -14,8 +14,10 @@ SKIP_WITH_LVMPOLLD=1
+diff --git a/test/shell/pvmove-resume-1.sh b/test/shell/pvmove-resume-1.sh
+index 6b4cbe529..7b9fc0f39 100644
+--- a/test/shell/pvmove-resume-1.sh
++++ b/test/shell/pvmove-resume-1.sh
+@@ -20,6 +20,7 @@ SKIP_WITH_CLVMD=1
  
  . lib/inittest
  
--aux have_integrity 1 5 0 || skip
- which mkfs.xfs || skip
-+aux have_integrity 1 5 0 || skip
-+# Avoid 4K ramdisk devices on older kernels
-+aux kernel_at_least  5 10 || export LVM_TEST_PREFER_BRD=0
++aux throttle_dm_mirror 50 || :
+ aux prepare_pvs 4 30
  
- mnt="mnt"
- mkdir -p $mnt
-diff --git a/test/shell/integrity-misc.sh b/test/shell/integrity-misc.sh
-index 4ebf42213..e6c108a0f 100644
---- a/test/shell/integrity-misc.sh
-+++ b/test/shell/integrity-misc.sh
-@@ -14,8 +14,10 @@ SKIP_WITH_LVMPOLLD=1
+ vgcreate -s 128k $vg "$dev1"
+@@ -34,9 +35,9 @@ test_pvmove_resume() {
+ 	lvcreate -an -Zn -l30 -n $lv1 $vg
+ 	lvcreate -an -Zn -l30 -n $lv1 $vg1
  
+-	aux delay_dev "$dev3" 0 1000 "$(get first_extent_sector "$dev3"):"
++	aux delay_dev "$dev3" 0 200 "$(get first_extent_sector "$dev3"):"
+ 	test -e HAVE_DM_DELAY || { lvremove -f $vg $vg1; return 0; }
+-	aux delay_dev "$dev4" 0 1000 "$(get first_extent_sector "$dev4"):"
++	aux delay_dev "$dev4" 0 200 "$(get first_extent_sector "$dev4"):"
+ 
+ 	pvmove -i5 "$dev1" &
+ 	PVMOVE=$!
+diff --git a/test/shell/pvmove-resume-multiseg.sh b/test/shell/pvmove-resume-multiseg.sh
+index 3a92dbaf3..c94706ed1 100644
+--- a/test/shell/pvmove-resume-multiseg.sh
++++ b/test/shell/pvmove-resume-multiseg.sh
+@@ -20,6 +20,7 @@ SKIP_WITH_LVMLOCKD=1
  . lib/inittest
  
--aux have_integrity 1 5 0 || skip
- which mkfs.xfs || skip
-+aux have_integrity 1 5 0 || skip
-+# Avoid 4K ramdisk devices on older kernels
-+aux kernel_at_least  5 10 || export LVM_TEST_PREFER_BRD=0
+ aux prepare_pvs 5 30
++aux throttle_dm_mirror 50 || :
  
- mnt="mnt"
- mkdir -p $mnt
-diff --git a/test/shell/integrity-syncaction.sh b/test/shell/integrity-syncaction.sh
-index a1d96fb0e..e404f6b6d 100644
---- a/test/shell/integrity-syncaction.sh
-+++ b/test/shell/integrity-syncaction.sh
-@@ -14,9 +14,11 @@ SKIP_WITH_LVMPOLLD=1
+ vgcreate -s 128k $vg "$dev1" "$dev2" "$dev3"
+ pvcreate --metadatacopies 0 "$dev4" "$dev5"
+@@ -33,9 +34,9 @@ test_pvmove_resume() {
+ 	# next LV on same VG and differetnt PV (we want to test 2 pvmoves per VG)
+ 	lvcreate -an -Zn -l30 -n $lv2 $vg "$dev3"
  
- . lib/inittest
+-	aux delay_dev "$dev4" 0 500 "$(get first_extent_sector "$dev4"):"
++	aux delay_dev "$dev4" 0 200 "$(get first_extent_sector "$dev4"):"
+ 	test -e HAVE_DM_DELAY || { lvremove -f $vg; return 0; }
+-	aux delay_dev "$dev5" 0 500 "$(get first_extent_sector "$dev5"):"
++	aux delay_dev "$dev5" 0 200 "$(get first_extent_sector "$dev5"):"
  
--aux have_integrity 1 5 0 || skip
- which mkfs.xfs || skip
- which xfs_growfs || skip
-+aux have_integrity 1 5 0 || skip
-+# Avoid 4K ramdisk devices on older kernels
-+aux kernel_at_least  5 10 || export LVM_TEST_PREFER_BRD=0
- 
- mnt="mnt"
- mkdir -p $mnt
-diff --git a/test/shell/integrity.sh b/test/shell/integrity.sh
-index ffac50902..80ff919b2 100644
---- a/test/shell/integrity.sh
-+++ b/test/shell/integrity.sh
-@@ -14,9 +14,11 @@ SKIP_WITH_LVMPOLLD=1
- 
- . lib/inittest
- 
--aux have_integrity 1 5 0 || skip
- which mkfs.xfs || skip
- which xfs_growfs || skip
-+aux have_integrity 1 5 0 || skip
-+# Avoid 4K ramdisk devices on older kernels
-+aux kernel_at_least  5 10 || export LVM_TEST_PREFER_BRD=0
- 
- mnt="mnt"
- mkdir -p $mnt
+ 	pvmove -i5 "$dev1" "$dev4" &
+ 	PVMOVE=$!
 
 
