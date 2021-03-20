@@ -1,52 +1,53 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Sat, 20 Mar 2021 09:53:04 +0000 (GMT)
-Subject: main - raid: restore mirror handling in _raid_in_sync
-Message-ID: <20210320095304.9A46F3858001@sourceware.org>
+Date: Sat, 20 Mar 2021 09:53:05 +0000 (GMT)
+Subject: main - tests: add FIXME to raid test
+Message-ID: <20210320095305.BCEA73858009@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=05920e3818b22c24dde59b3e562fe156466f83f2
-Commit:        05920e3818b22c24dde59b3e562fe156466f83f2
-Parent:        edcc410835641c9ea7bd15810657e0d16608c00f
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=179f59a0ca7d4d5f779f86d990ebd336c9b13f0e
+Commit:        179f59a0ca7d4d5f779f86d990ebd336c9b13f0e
+Parent:        05920e3818b22c24dde59b3e562fe156466f83f2
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Sat Mar 20 10:35:53 2021 +0100
+AuthorDate:    Sat Mar 20 10:39:02 2021 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Sat Mar 20 10:52:24 2021 +0100
 
-raid: restore mirror handling in _raid_in_sync
+tests: add FIXME to raid test
 
-Function is not having the best name since it does check
-no just raid LVs to be in sync.
+We have here some kind of catch-22 - since older kernels do
+use 'resync' while new 'recover' for initial raid synchronization.
 
-Restore the mirror percentage checking - although without retries,
-since only raid target is currently known to need it - for other
-types it would be ATM a bug to get inconsistent result.
+So now - how do we recognize in which state of raid we are.
+ATM seems to be simplest to simply keep disabled droping of primary raid
+leg unless we are in sync.
+
+FIXME: we should add a target version check and enable removal
 ---
- lib/metadata/raid_manip.c | 9 ++++++++-
- 1 file changed, 8 insertions(+), 1 deletion(-)
+ test/shell/lvconvert-raid.sh | 8 +++++++-
+ 1 file changed, 7 insertions(+), 1 deletion(-)
 
-diff --git a/lib/metadata/raid_manip.c b/lib/metadata/raid_manip.c
-index 33fd017cb..05b7caf9c 100644
---- a/lib/metadata/raid_manip.c
-+++ b/lib/metadata/raid_manip.c
-@@ -398,7 +398,14 @@ static int _raid_in_sync(const struct logical_volume *lv)
- 	if (seg_is_striped(first_seg(lv)))
- 		return 1;
- 
--	do {
-+	if (!lv_is_raid(lv)) {
-+		/* For non raid - fallback to mirror percentage */
-+		if (!lv_mirror_percent(lv->vg->cmd, lv, 0, &sync_percent, NULL)) {
-+			log_error("Cannot determine sync percentage of %s.",
-+				  display_lvname(lv));
-+			return 0;
-+		}
-+	} else do {
- 		/*
- 		 * FIXME We repeat the status read here to workaround an
- 		 * unresolved kernel bug when we see 0 even though the
+diff --git a/test/shell/lvconvert-raid.sh b/test/shell/lvconvert-raid.sh
+index 6aaaf3669..aa50fbb62 100644
+--- a/test/shell/lvconvert-raid.sh
++++ b/test/shell/lvconvert-raid.sh
+@@ -250,7 +250,13 @@ echo "Skippen test that kills this kernel"
+ ;;
+ *)
+ lvconvert --yes -m 1 $vg/$lv1 "$dev3"
+-lvconvert --yes -m 0 $vg/$lv1 "$dev1"
++
++# FIXME: it is unclear what should happen - older kernel
++# do use 'resync' for initial array building so then
++# we are not able to recognize difference
++# Should we check version target as react differentely ??
++# Otherwise we have problem with the above test case.
++should lvconvert --yes -m 0 $vg/$lv1 "$dev1"
+ aux enable_dev "$dev2"
+ ;;
+ esac
 
 
