@@ -1,39 +1,55 @@
 From: David Teigland <teigland@sourceware.org>
-Date: Mon, 22 Mar 2021 15:39:32 +0000 (GMT)
-Subject: dev-next - gcc: ensure buffer ends with 0
-Message-ID: <20210322153932.5B8E7385781A@sourceware.org>
+Date: Mon, 22 Mar 2021 15:39:25 +0000 (GMT)
+Subject: dev-next - tests: add check for lvconvert without zeroing
+Message-ID: <20210322153925.6F4EA385481A@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=d37b19aaaab0c28f4d1e4ae0690c73c0031a027b
-Commit:        d37b19aaaab0c28f4d1e4ae0690c73c0031a027b
-Parent:        79d8d06217b6e0ac2ef8d0303ce84f748faebb9b
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=accf324ccba681ad06cd8bcb27ead17ec191a471
+Commit:        accf324ccba681ad06cd8bcb27ead17ec191a471
+Parent:        c06325263f6e8bbba3b240295ba766a7769735a7
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu Mar 18 23:08:08 2021 +0100
+AuthorDate:    Thu Mar 18 18:19:16 2021 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Fri Mar 19 23:21:18 2021 +0100
+CommitterDate: Thu Mar 18 18:57:45 2021 +0100
 
-gcc: ensure buffer ends with 0
+tests: add check for lvconvert without zeroing
 
+Check lvconvert -Zn does not zero thin-pool metadata.
+Also check --type zero is usable for thin-pool data.
 ---
- lib/commands/toolcontext.c | 2 +-
- 1 file changed, 1 insertion(+), 1 deletion(-)
+ test/shell/thin-foreign-repair.sh | 18 ++++++++++++++++++
+ 1 file changed, 18 insertions(+)
 
-diff --git a/lib/commands/toolcontext.c b/lib/commands/toolcontext.c
-index 92008a641..75634caff 100644
---- a/lib/commands/toolcontext.c
-+++ b/lib/commands/toolcontext.c
-@@ -230,7 +230,7 @@ static void _get_sysfs_dir(struct cmd_context *cmd, char *buf, size_t buf_size)
- 		return;
- 	}
+diff --git a/test/shell/thin-foreign-repair.sh b/test/shell/thin-foreign-repair.sh
+index 55e9f62c6..7cfa865f0 100644
+--- a/test/shell/thin-foreign-repair.sh
++++ b/test/shell/thin-foreign-repair.sh
+@@ -77,4 +77,22 @@ dmsetup create "$THIN" --table "0 40960 thin $DM_DEV_DIR/mapper/$POOL 0"
  
--	strncpy(buf, sys_mnt, buf_size);
-+	(void) dm_strncpy(buf, sys_mnt, buf_size);
- }
+ fsck -n "$DM_DEV_DIR/mapper/$THIN"
  
- static uint32_t _parse_debug_fields(struct cmd_context *cmd, int cfg, const char *cfgname)
++clean_thin_
++
++lvchange -an $vg
++
++# Take a copy of metadata
++lvchange -y -ay $vg/pool_tmeta
++
++lvcreate -L2 -n $lv1 $vg
++dd if="$DM_DEV_DIR/$vg/pool_tmeta" of="$DM_DEV_DIR/$vg/$lv1" bs=1M count=1
++
++# Use zero backend for data device
++lvcreate --type zero -L2 -n $lv2 $vg
++
++lvconvert --thinpool $vg/$lv2 --poolmetadata $vg/$lv1 -Zn -y
++
++# Metadata should NOT be zeroed and device should be available
++dmsetup create "$THIN" --table "0 40960 thin $DM_DEV_DIR/$vg/$lv2 0"
++
+ # exit calls cleanup_mounted_and_teardown
 
 
