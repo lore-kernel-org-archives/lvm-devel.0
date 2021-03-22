@@ -1,55 +1,45 @@
 From: David Teigland <teigland@sourceware.org>
-Date: Mon, 22 Mar 2021 15:39:25 +0000 (GMT)
-Subject: dev-next - tests: add check for lvconvert without zeroing
-Message-ID: <20210322153925.6F4EA385481A@sourceware.org>
+Date: Mon, 22 Mar 2021 15:39:33 +0000 (GMT)
+Subject: dev-next - cleanup: reduce code dupliction
+Message-ID: <20210322153933.84262385480A@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=accf324ccba681ad06cd8bcb27ead17ec191a471
-Commit:        accf324ccba681ad06cd8bcb27ead17ec191a471
-Parent:        c06325263f6e8bbba3b240295ba766a7769735a7
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=d3d28b1b64ff6b89ac5150787f694e1db1794a1f
+Commit:        d3d28b1b64ff6b89ac5150787f694e1db1794a1f
+Parent:        d37b19aaaab0c28f4d1e4ae0690c73c0031a027b
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu Mar 18 18:19:16 2021 +0100
+AuthorDate:    Fri Mar 19 10:45:26 2021 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Thu Mar 18 18:57:45 2021 +0100
+CommitterDate: Fri Mar 19 23:21:18 2021 +0100
 
-tests: add check for lvconvert without zeroing
+cleanup: reduce code dupliction
 
-Check lvconvert -Zn does not zero thin-pool metadata.
-Also check --type zero is usable for thin-pool data.
 ---
- test/shell/thin-foreign-repair.sh | 18 ++++++++++++++++++
- 1 file changed, 18 insertions(+)
+ lib/raid/raid.c | 6 ++----
+ 1 file changed, 2 insertions(+), 4 deletions(-)
 
-diff --git a/test/shell/thin-foreign-repair.sh b/test/shell/thin-foreign-repair.sh
-index 55e9f62c6..7cfa865f0 100644
---- a/test/shell/thin-foreign-repair.sh
-+++ b/test/shell/thin-foreign-repair.sh
-@@ -77,4 +77,22 @@ dmsetup create "$THIN" --table "0 40960 thin $DM_DEV_DIR/mapper/$POOL 0"
+diff --git a/lib/raid/raid.c b/lib/raid/raid.c
+index 941ba8dc8..2f1eb6cf8 100644
+--- a/lib/raid/raid.c
++++ b/lib/raid/raid.c
+@@ -441,12 +441,10 @@ static int _raid_target_percent(void **target_state,
  
- fsck -n "$DM_DEV_DIR/mapper/$THIN"
+ 	*total_numerator += sr->insync_regions;
+ 	*total_denominator += sr->total_regions;
++	*percent = dm_make_percent(sr->insync_regions, sr->total_regions);
  
-+clean_thin_
-+
-+lvchange -an $vg
-+
-+# Take a copy of metadata
-+lvchange -y -ay $vg/pool_tmeta
-+
-+lvcreate -L2 -n $lv1 $vg
-+dd if="$DM_DEV_DIR/$vg/pool_tmeta" of="$DM_DEV_DIR/$vg/$lv1" bs=1M count=1
-+
-+# Use zero backend for data device
-+lvcreate --type zero -L2 -n $lv2 $vg
-+
-+lvconvert --thinpool $vg/$lv2 --poolmetadata $vg/$lv1 -Zn -y
-+
-+# Metadata should NOT be zeroed and device should be available
-+dmsetup create "$THIN" --table "0 40960 thin $DM_DEV_DIR/$vg/$lv2 0"
-+
- # exit calls cleanup_mounted_and_teardown
+ 	if (seg)
+-		seg->extents_copied = (uint64_t) seg->area_len
+-			* dm_make_percent(sr->insync_regions , sr->total_regions) / DM_PERCENT_100;
+-
+-	*percent = dm_make_percent(sr->insync_regions, sr->total_regions);
++		seg->extents_copied = (uint64_t) seg->area_len * *percent / DM_PERCENT_100;
+ 
+ 	dm_pool_free(mem, sr);
+ 
 
 
