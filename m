@@ -1,136 +1,95 @@
 From: David Teigland <teigland@sourceware.org>
-Date: Mon, 22 Mar 2021 15:38:55 +0000 (GMT)
-Subject: dev-next - device_is_usable: minor improve
-Message-ID: <20210322153855.9F5B93854808@sourceware.org>
+Date: Mon, 22 Mar 2021 15:38:57 +0000 (GMT)
+Subject: dev-next - debug: start with upper case
+Message-ID: <20210322153857.E7ABE3854808@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=4d75c4f597b28e4ea014ef61082074187dc6245a
-Commit:        4d75c4f597b28e4ea014ef61082074187dc6245a
-Parent:        0363e4de70148c7fad5c46c40bc4db30be123545
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=8b2cdd8d3a8ad0b3048f38580a0dc20f6e1e492d
+Commit:        8b2cdd8d3a8ad0b3048f38580a0dc20f6e1e492d
+Parent:        94701b700b83971a49c242e070070526d4eb42dd
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Mar 16 10:10:10 2021 +0100
+AuthorDate:    Tue Mar 16 14:16:36 2021 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Wed Mar 17 00:49:11 2021 +0100
+CommitterDate: Wed Mar 17 00:50:40 2021 +0100
 
-device_is_usable: minor improve
+debug: start with upper case
 
-Replace allocated buffer with local vg_name which doesn't
-pass pointer to allocation.
-
-Join some conditions together.
+Use upper case letter to start sentence.
+Also drop unneded check for vg as it's already non-null.
 ---
- lib/activate/dev_manager.c | 77 ++++++++++++++++++++++++----------------------
- 1 file changed, 41 insertions(+), 36 deletions(-)
+ lib/metadata/metadata.c | 18 +++++++++---------
+ 1 file changed, 9 insertions(+), 9 deletions(-)
 
-diff --git a/lib/activate/dev_manager.c b/lib/activate/dev_manager.c
-index 1a8f848ac..cd9d27e11 100644
---- a/lib/activate/dev_manager.c
-+++ b/lib/activate/dev_manager.c
-@@ -627,7 +627,8 @@ int device_is_usable(struct device *dev, struct dev_usable_check_params check, i
- 	const char *name, *uuid;
- 	uint64_t start, length;
- 	char *target_type = NULL;
--	char *params, *vgname = NULL, *lvname, *layer;
-+	char *params, *vgname, *lvname, *layer;
-+	char vg_name[NAME_LEN];
- 	void *next = NULL;
- 	int only_error_target = 1;
- 	int r = 0;
-@@ -652,44 +653,49 @@ int device_is_usable(struct device *dev, struct dev_usable_check_params check, i
+diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
+index 47d3d8b3e..4471f7c86 100644
+--- a/lib/metadata/metadata.c
++++ b/lib/metadata/metadata.c
+@@ -4557,7 +4557,7 @@ static bool _scan_text_mismatch(struct cmd_context *cmd, const char *vgname, con
+ 			continue;
+ 
+ 		if (!(dev = mda_get_device(mda))) {
+-			log_debug("rescan for text mismatch - no mda dev");
++			log_debug("Rescan for text mismatch - no mda dev.");
+ 			goto out;
+ 		}
+ 
+@@ -4570,24 +4570,24 @@ static bool _scan_text_mismatch(struct cmd_context *cmd, const char *vgname, con
+ 		 * Invalidate mda_header in bcache so it will be reread from disk.
+ 		 */
+ 		if (!dev_invalidate_bytes(dev, 4096, 512)) {
+-			log_debug("rescan for text mismatch - cannot invalidate");
++			log_debug("Rescan for text mismatch - cannot invalidate.");
+ 			goto out;
+ 		}
+ 
+ 		if (!(mdah = raw_read_mda_header(cmd->fmt, area, 1, 0, &bad_fields))) {
+-			log_debug("rescan for text mismatch - no mda header");
++			log_debug("Rescan for text mismatch - no mda header.");
+ 			goto out;
+ 		}
+ 
+ 		rlocn = mdah->raw_locns;
+ 
+ 		if (bad_fields) {
+-			log_debug("rescan for text mismatch - bad_fields");
++			log_debug("Rescan for text mismatch - bad_fields.");
+ 		} else if (rlocn->checksum != mda->scan_text_checksum) {
+-			log_debug("rescan for text checksum mismatch - now %x prev %x",
++			log_debug("Rescan for text checksum mismatch - now %x prev %x.",
+ 				  rlocn->checksum, mda->scan_text_checksum);
+ 		} else if (rlocn->offset != mda->scan_text_offset) {
+-			log_debug("rescan for text offset mismatch - now %llu prev %llu",
++			log_debug("Rescan for text offset mismatch - now %llu prev %llu.",
+ 				  (unsigned long long)rlocn->offset,
+ 				  (unsigned long long)mda->scan_text_offset);
+ 		} else {
+@@ -4608,12 +4608,12 @@ static bool _scan_text_mismatch(struct cmd_context *cmd, const char *vgname, con
+ 
+ 	if (ret) {
+ 		/* shouldn't happen */
+-		log_debug("rescan for text mismatch - no mdas");
++		log_debug("Rescan for text mismatch - no mdas.");
  		goto out;
  	}
+ out:
+ 	if (!ret)
+-		log_debug("rescan skipped - unchanged offset %llu checksum %x",
++		log_debug("Rescan skipped - unchanged offset %llu checksum %x.",
+ 			  (unsigned long long)mda->scan_text_offset,
+ 			  mda->scan_text_checksum);
  
--	/* Check internal lvm devices */
--	if (check.check_reserved &&
--	    uuid && !strncmp(uuid, UUID_PREFIX, sizeof(UUID_PREFIX) - 1)) {
--		if (strlen(uuid) > (sizeof(UUID_PREFIX) + 2 * ID_LEN)) { /* 68 */
--			log_debug_activation("%s: Reserved uuid %s on internal LV device %s not usable.",
--					     dev_name(dev), uuid, name);
--			goto out;
--		}
-+	if (uuid && (check.check_reserved || check.check_lv)) {
-+		if (!strncmp(uuid, UUID_PREFIX, sizeof(UUID_PREFIX) - 1)) { /* with LVM- prefix */
-+			if (check.check_reserved) {
-+				/* Check internal lvm devices */
-+				if (strlen(uuid) > (sizeof(UUID_PREFIX) + 2 * ID_LEN)) { /* 68 with suffix */
-+					log_debug_activation("%s: Reserved uuid %s on internal LV device %s not usable.",
-+							     dev_name(dev), uuid, name);
-+					goto out;
-+				}
+@@ -4809,7 +4809,7 @@ static struct volume_group *_vg_read(struct cmd_context *cmd,
+ 		if (!vg)
+ 			continue;
  
--		if (!(vgname = strdup(name)) ||
--		    !dm_split_lvm_name(NULL, NULL, &vgname, &lvname, &layer))
--			goto_out;
-+				/* Recognize some older reserved LVs just from the LV name (snapshot, pvmove...) */
-+				vgname = vg_name;
-+				if (!dm_strncpy(vg_name, name, sizeof(vg_name)) ||
-+				    !dm_split_lvm_name(NULL, NULL, &vgname, &lvname, &layer))
-+					goto_out;
- 
--		/* FIXME: fails to handle dev aliases i.e. /dev/dm-5, replace with UUID suffix */
--		if (lvname && (is_reserved_lvname(lvname) || *layer)) {
--			log_debug_activation("%s: Reserved internal LV device %s/%s%s%s not usable.",
--					     dev_name(dev), vgname, lvname, *layer ? "-" : "", layer);
--			goto out;
--		}
--	}
-+				/* FIXME: fails to handle dev aliases i.e. /dev/dm-5, replace with UUID suffix */
-+				if (lvname && (is_reserved_lvname(lvname) || *layer)) {
-+					log_debug_activation("%s: Reserved internal LV device %s/%s%s%s not usable.",
-+							     dev_name(dev), vgname, lvname, *layer ? "-" : "", layer);
-+					goto out;
-+				}
-+			}
- 
--	if (check.check_lv && uuid && !strncmp(uuid, "LVM-", 4)) {
--		/* Skip LVs */
--		if (is_lv)
--			*is_lv = 1;
--		goto out;
--	}
-+			if (check.check_lv) {
-+				/* Skip LVs */
-+				if (is_lv)
-+					*is_lv = 1;
-+				goto out;
-+			}
-+		}
- 
--	if (check.check_reserved && uuid &&
--	    (!strncmp(uuid, CRYPT_TEMP, sizeof(CRYPT_TEMP) - 1) ||
--	     !strncmp(uuid, CRYPT_SUBDEV, sizeof(CRYPT_SUBDEV) - 1) ||
--	     !strncmp(uuid, STRATIS, sizeof(STRATIS) - 1))) {
--		/* Skip private crypto devices */
--		log_debug_activation("%s: Reserved uuid %s on %s device %s not usable.",
--				     dev_name(dev), uuid,
--				     uuid[0] == 'C' ? "crypto" : "stratis",
--				     name);
--		goto out;
-+		if (check.check_reserved &&
-+		    (!strncmp(uuid, CRYPT_TEMP, sizeof(CRYPT_TEMP) - 1) ||
-+		     !strncmp(uuid, CRYPT_SUBDEV, sizeof(CRYPT_SUBDEV) - 1) ||
-+		     !strncmp(uuid, STRATIS, sizeof(STRATIS) - 1))) {
-+			/* Skip private crypto devices */
-+			log_debug_activation("%s: Reserved uuid %s on %s device %s not usable.",
-+					     dev_name(dev), uuid,
-+					     uuid[0] == 'C' ? "crypto" : "stratis",
-+					     name);
-+			goto out;
-+		}
- 	}
- 
- 	/* FIXME Also check for mpath no paths */
-@@ -777,7 +783,6 @@ int device_is_usable(struct device *dev, struct dev_usable_check_params check, i
- 	r = 1;
- 
-       out:
--	free(vgname);
- 	dm_task_destroy(dmt);
- 	return r;
- }
+-		if (vg && !vg_ret) {
++		if (!vg_ret) {
+ 			vg_ret = vg;
+ 			dev_ret = mda_dev;
+ 			continue;
 
 
