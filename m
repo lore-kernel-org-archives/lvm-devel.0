@@ -1,46 +1,52 @@
 From: David Teigland <teigland@sourceware.org>
-Date: Mon, 22 Mar 2021 15:39:43 +0000 (GMT)
-Subject: dev-next - tests: aux reject /dev as testing dir
-Message-ID: <20210322153943.D80C6385781A@sourceware.org>
+Date: Mon, 22 Mar 2021 15:39:46 +0000 (GMT)
+Subject: dev-next - raid: restore mirror handling in _raid_in_sync
+Message-ID: <20210322153946.2BB96385480A@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=d5b37f24f4f8914b2ab12c9fb352b2b84ca87c16
-Commit:        d5b37f24f4f8914b2ab12c9fb352b2b84ca87c16
-Parent:        e27baa791f0e28e9df539c97e25a0a8b1b1c20f7
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=05920e3818b22c24dde59b3e562fe156466f83f2
+Commit:        05920e3818b22c24dde59b3e562fe156466f83f2
+Parent:        edcc410835641c9ea7bd15810657e0d16608c00f
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Mar 19 10:39:00 2021 +0100
+AuthorDate:    Sat Mar 20 10:35:53 2021 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Sat Mar 20 00:05:01 2021 +0100
+CommitterDate: Sat Mar 20 10:52:24 2021 +0100
 
-tests: aux reject /dev as testing dir
+raid: restore mirror handling in _raid_in_sync
 
-If LVM_TEST_DIR would be set to /dev, reject such selection.
+Function is not having the best name since it does check
+no just raid LVs to be in sync.
+
+Restore the mirror percentage checking - although without retries,
+since only raid target is currently known to need it - for other
+types it would be ATM a bug to get inconsistent result.
 ---
- test/lib/inittest.sh | 8 +++++---
- 1 file changed, 5 insertions(+), 3 deletions(-)
+ lib/metadata/raid_manip.c | 9 ++++++++-
+ 1 file changed, 8 insertions(+), 1 deletion(-)
 
-diff --git a/test/lib/inittest.sh b/test/lib/inittest.sh
-index ee049fb79..58fa2e5e6 100644
---- a/test/lib/inittest.sh
-+++ b/test/lib/inittest.sh
-@@ -78,9 +78,11 @@ if test -z "$SKIP_ROOT_DM_CHECK" ; then
- 	dmsetup table | not grep "${PREFIX}[^0-9]" || die "DM table already has devices with prefix $PREFIX!"
- fi
+diff --git a/lib/metadata/raid_manip.c b/lib/metadata/raid_manip.c
+index 33fd017cb..05b7caf9c 100644
+--- a/lib/metadata/raid_manip.c
++++ b/lib/metadata/raid_manip.c
+@@ -398,7 +398,14 @@ static int _raid_in_sync(const struct logical_volume *lv)
+ 	if (seg_is_striped(first_seg(lv)))
+ 		return 1;
  
--if test -z "$LVM_TEST_DIR"; then LVM_TEST_DIR=$TMPDIR; fi
--TESTDIR=$(mkdtemp "${LVM_TEST_DIR:-/tmp}" "$PREFIX.XXXXXXXXXX") || \
--	die "failed to create temporary directory in ${LVM_TEST_DIR:-$TESTOLDPWD}"
-+test -n "$LVM_TEST_DIR" || LVM_TEST_DIR=${TMPDIR:-/tmp}
-+test "$LVM_TEST_DIR" = "/dev" || die "Setting LVM_TEST_DIR=/dev is not supported"
-+
-+TESTDIR=$(mkdtemp "$LVM_TEST_DIR" "$PREFIX.XXXXXXXXXX") || \
-+	die "failed to create temporary directory in \"$LVM_TEST_DIR\""
- RUNNING_DMEVENTD=$(pgrep dmeventd || true)
- 
- export TESTOLDPWD TESTDIR COMMON_PREFIX PREFIX RUNNING_DMEVENTD
+-	do {
++	if (!lv_is_raid(lv)) {
++		/* For non raid - fallback to mirror percentage */
++		if (!lv_mirror_percent(lv->vg->cmd, lv, 0, &sync_percent, NULL)) {
++			log_error("Cannot determine sync percentage of %s.",
++				  display_lvname(lv));
++			return 0;
++		}
++	} else do {
+ 		/*
+ 		 * FIXME We repeat the status read here to workaround an
+ 		 * unresolved kernel bug when we see 0 even though the
 
 
