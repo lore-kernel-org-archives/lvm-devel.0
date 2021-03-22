@@ -1,75 +1,39 @@
 From: David Teigland <teigland@sourceware.org>
-Date: Mon, 22 Mar 2021 15:39:51 +0000 (GMT)
-Subject: dev-next - lvm: Fix editline compilation
-Message-ID: <20210322153951.DE6D93854808@sourceware.org>
+Date: Mon, 22 Mar 2021 15:39:54 +0000 (GMT)
+Subject: dev-next - config: change default use_devicesfile to 1
+Message-ID: <20210322153954.41CCD385781A@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=b6cff47bdeef4906d675dad71277a706db0b9127
-Commit:        b6cff47bdeef4906d675dad71277a706db0b9127
-Parent:        d6bc11bf724be4ebfd87dc60a172da2b0e4df8d9
-Author:        Marian Csontos <mcsontos@redhat.com>
-AuthorDate:    Mon Mar 22 10:50:42 2021 +0100
-Committer:     Marian Csontos <mcsontos@redhat.com>
-CommitterDate: Mon Mar 22 11:37:19 2021 +0100
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=63662e2de6e19358987a495d9ad957acc92441d5
+Commit:        63662e2de6e19358987a495d9ad957acc92441d5
+Parent:        8ebfc607db62f9162f54ba3414fd52dcfafd57bc
+Author:        David Teigland <teigland@redhat.com>
+AuthorDate:    Tue Mar 16 09:52:13 2021 -0500
+Committer:     David Teigland <teigland@redhat.com>
+CommitterDate: Mon Mar 22 10:38:26 2021 -0500
 
-lvm: Fix editline compilation
+config: change default use_devicesfile to 1
 
 ---
- configure    | 2 +-
- configure.ac | 4 ++--
- tools/lvm.c  | 1 -
- 3 files changed, 3 insertions(+), 4 deletions(-)
+ lib/config/defaults.h | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
 
-diff --git a/configure b/configure
-index 4c38cbebb..0be9f136c 100755
---- a/configure
-+++ b/configure
-@@ -13404,7 +13404,7 @@ $as_echo_n "checking whether to enable readline... " >&6; }
- $as_echo "$READLINE" >&6; }
+diff --git a/lib/config/defaults.h b/lib/config/defaults.h
+index 2870dee12..8f83d35d7 100644
+--- a/lib/config/defaults.h
++++ b/lib/config/defaults.h
+@@ -323,7 +323,7 @@
  
- if test "$EDITLINE" = yes; then
--	for ac_header in editline/readline.h editline/history.h
-+	for ac_header in editline/readline.h
- do :
-   as_ac_Header=`$as_echo "ac_cv_header_$ac_header" | $as_tr_sh`
- ac_fn_c_check_header_mongrel "$LINENO" "$ac_header" "$as_ac_Header" "$ac_includes_default"
-diff --git a/configure.ac b/configure.ac
-index ee21b879d..b92be0db3 100644
---- a/configure.ac
-+++ b/configure.ac
-@@ -1420,7 +1420,7 @@ if test "$EDITLINE" == yes; then
- 	PKG_CHECK_MODULES([EDITLINE], [libedit], [
- 		AC_DEFINE([EDITLINE_SUPPORT], 1,
- 			[Define to 1 to include the LVM editline shell.])], AC_MSG_ERROR(
--[libedit could not be found which is required for the --enable-readline option.])
-+[libedit could not be found which is required for the --enable-editline option.])
- 	)
- fi
+ #define DEFAULT_MD_COMPONENT_CHECKS "auto"
  
-@@ -1557,7 +1557,7 @@ AC_MSG_CHECKING(whether to enable readline)
- AC_MSG_RESULT($READLINE)
+-#define DEFAULT_USE_DEVICES_FILE 0
++#define DEFAULT_USE_DEVICES_FILE 1
+ #define DEFAULT_DEVICES_FILE "system.devices"
  
- if test "$EDITLINE" = yes; then
--	AC_CHECK_HEADERS(editline/readline.h editline/history.h,,hard_bailout)
-+	AC_CHECK_HEADERS(editline/readline.h,,hard_bailout)
- fi
- AC_MSG_CHECKING(whether to enable editline)
- AC_MSG_RESULT($EDITLINE)
-diff --git a/tools/lvm.c b/tools/lvm.c
-index 79b1210af..cc67e924a 100644
---- a/tools/lvm.c
-+++ b/tools/lvm.c
-@@ -33,7 +33,6 @@ int main(int argc, char **argv)
- #    endif
- #  elif defined(EDITLINE_SUPPORT)
- #    include <editline/readline.h>
--#    include <editline/history.h>
- #  endif
- 
- static struct cmdline_context *_cmdline;
+ #define DEFAULT_SEARCH_FOR_DEVNAMES "auto"
 
 
