@@ -1,53 +1,51 @@
-From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Wed, 10 Mar 2021 23:19:36 +0000 (GMT)
-Subject: main - gcc: adding const
-Message-ID: <20210310231936.3CD403858001@sourceware.org>
+From: David Teigland <teigland@sourceware.org>
+Date: Mon, 22 Mar 2021 15:39:41 +0000 (GMT)
+Subject: dev-next - tests: copy more data
+Message-ID: <20210322153941.8E498385480A@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=a654148b76c71022997c3ea509b52354985b8d7f
-Commit:        a654148b76c71022997c3ea509b52354985b8d7f
-Parent:        d7bb23dd156cd059500e32a4f3966d3d1be52225
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=ed90a3d9b4247130794ed515b9547e9b4dbbf2dc
+Commit:        ed90a3d9b4247130794ed515b9547e9b4dbbf2dc
+Parent:        fe3ef6867fc585a26bf9950f66b4f190993f457c
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed Mar 10 21:58:57 2021 +0100
+AuthorDate:    Fri Mar 19 00:52:06 2021 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Thu Mar 11 00:18:01 2021 +0100
+CommitterDate: Sat Mar 20 00:05:01 2021 +0100
 
-gcc: adding const
+tests: copy more data
 
+Give pvmove --abort bigger aborting window.
 ---
- lib/metadata/metadata.c | 2 +-
- lib/metadata/metadata.h | 2 +-
- 2 files changed, 2 insertions(+), 2 deletions(-)
+ test/shell/pvmove-abort.sh | 6 +++---
+ 1 file changed, 3 insertions(+), 3 deletions(-)
 
-diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
-index 71e59207d..ed1c05f75 100644
---- a/lib/metadata/metadata.c
-+++ b/lib/metadata/metadata.c
-@@ -1659,7 +1659,7 @@ struct lv_list *find_lv_in_lv_list(const struct dm_list *ll,
- 	return NULL;
- }
+diff --git a/test/shell/pvmove-abort.sh b/test/shell/pvmove-abort.sh
+index 14457991c..f5744d430 100644
+--- a/test/shell/pvmove-abort.sh
++++ b/test/shell/pvmove-abort.sh
+@@ -22,7 +22,7 @@ aux target_at_least dm-mirror 1 10 0 || skip
+ # Throttle mirroring
+ aux throttle_dm_mirror || skip
  
--struct logical_volume *find_lv_in_vg_by_lvid(struct volume_group *vg,
-+struct logical_volume *find_lv_in_vg_by_lvid(const struct volume_group *vg,
- 					     const union lvid *lvid)
- {
- 	struct lv_list *lvl;
-diff --git a/lib/metadata/metadata.h b/lib/metadata/metadata.h
-index c6500d488..3ea77ce2e 100644
---- a/lib/metadata/metadata.h
-+++ b/lib/metadata/metadata.h
-@@ -393,7 +393,7 @@ uint32_t vg_bad_status_bits(const struct volume_group *vg, uint64_t status);
- int add_pv_to_vg(struct volume_group *vg, const char *pv_name,
- 		 struct physical_volume *pv, int new_pv);
+-aux prepare_pvs 3 60
++aux prepare_pvs 3 90
  
--struct logical_volume *find_lv_in_vg_by_lvid(struct volume_group *vg,
-+struct logical_volume *find_lv_in_vg_by_lvid(const struct volume_group *vg,
- 					     const union lvid *lvid);
+ vgcreate -s 512k $vg "$dev1" "$dev2"
+ pvcreate --metadatacopies 0 "$dev3"
+@@ -34,8 +34,8 @@ for backgroundarg in "-b" "" ;
+ do
  
- struct lv_list *find_lv_in_lv_list(const struct dm_list *ll,
+ # Create multisegment LV
+-lvcreate -an -Zn -l40 -n $lv1 $vg "$dev1"
+-lvcreate -an -Zn -l50 -n $lv2 $vg "$dev2"
++lvcreate -an -Zn -l60 -n $lv1 $vg "$dev1"
++lvcreate -an -Zn -l80 -n $lv2 $vg "$dev2"
+ 
+ cmd1=(pvmove -i1 $backgroundarg $mode "$dev1" "$dev3")
+ cmd2=(pvmove -i1 $backgroundarg $mode "$dev2" "$dev3")
 
 
