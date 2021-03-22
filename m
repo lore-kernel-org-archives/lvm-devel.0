@@ -1,134 +1,124 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Mon, 22 Mar 2021 21:53:57 +0000 (GMT)
-Subject: main - tests: remove unused wait_md_create
-Message-ID: <20210322215357.86D3D3858D29@sourceware.org>
+Date: Mon, 22 Mar 2021 21:53:58 +0000 (GMT)
+Subject: main - configure: use rawhide version
+Message-ID: <20210322215358.AB42F3857015@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=077040199d98e939446d4b51597eeeae84ae28d5
-Commit:        077040199d98e939446d4b51597eeeae84ae28d5
-Parent:        7166bbd9c26cf5d06067cfb85eb86352b4152c3c
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=0993355300fa8490163579a320d1b289c7db59af
+Commit:        0993355300fa8490163579a320d1b289c7db59af
+Parent:        077040199d98e939446d4b51597eeeae84ae28d5
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Mon Mar 22 22:07:23 2021 +0100
+AuthorDate:    Mon Mar 22 18:51:21 2021 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Mon Mar 22 22:51:24 2021 +0100
 
-tests: remove unused wait_md_create
+configure: use rawhide version
 
 ---
- test/lib/aux.sh | 80 ---------------------------------------------------------
- 1 file changed, 80 deletions(-)
+ configure              | 25 ++++++++++++++++++-------
+ include/configure.h.in |  3 ---
+ 2 files changed, 18 insertions(+), 10 deletions(-)
 
-diff --git a/test/lib/aux.sh b/test/lib/aux.sh
-index e406e47ce..e26aa9912 100644
---- a/test/lib/aux.sh
-+++ b/test/lib/aux.sh
-@@ -421,16 +421,9 @@ teardown_devs() {
- 	teardown_udev_cookies
+diff --git a/configure b/configure
+index 0be9f136c..ff363b046 100755
+--- a/configure
++++ b/configure
+@@ -868,6 +868,7 @@ infodir
+ docdir
+ oldincludedir
+ includedir
++runstatedir
+ localstatedir
+ sharedstatedir
+ sysconfdir
+@@ -1060,6 +1061,7 @@ datadir='${datarootdir}'
+ sysconfdir='${prefix}/etc'
+ sharedstatedir='${prefix}/com'
+ localstatedir='${prefix}/var'
++runstatedir='${localstatedir}/run'
+ includedir='${prefix}/include'
+ oldincludedir='/usr/include'
+ docdir='${datarootdir}/doc/${PACKAGE}'
+@@ -1312,6 +1314,15 @@ do
+   | -silent | --silent | --silen | --sile | --sil)
+     silent=yes ;;
  
- 	test ! -f MD_DEV || cleanup_md_dev
--
--	test ! -f WAIT_MD_DEV || mddev=$(< WAIT_MD_DEV)
--	udev_wait
--	test ! -f WAIT_MD_DEV || mdadm --stop $mddev || true
--	udev_wait
- 	test ! -f DEVICES || teardown_devs_prefixed "$PREFIX"
- 	test ! -f RAMDISK || { modprobe -r brd || true ; }
++  -runstatedir | --runstatedir | --runstatedi | --runstated \
++  | --runstate | --runstat | --runsta | --runst | --runs \
++  | --run | --ru | --r)
++    ac_prev=runstatedir ;;
++  -runstatedir=* | --runstatedir=* | --runstatedi=* | --runstated=* \
++  | --runstate=* | --runstat=* | --runsta=* | --runst=* | --runs=* \
++  | --run=* | --ru=* | --r=*)
++    runstatedir=$ac_optarg ;;
++
+   -sbindir | --sbindir | --sbindi | --sbind | --sbin | --sbi | --sb)
+     ac_prev=sbindir ;;
+   -sbindir=* | --sbindir=* | --sbindi=* | --sbind=* | --sbin=* \
+@@ -1449,7 +1460,7 @@ fi
+ for ac_var in	exec_prefix prefix bindir sbindir libexecdir datarootdir \
+ 		datadir sysconfdir sharedstatedir localstatedir includedir \
+ 		oldincludedir docdir infodir htmldir dvidir pdfdir psdir \
+-		libdir localedir mandir
++		libdir localedir mandir runstatedir
+ do
+   eval ac_val=\$$ac_var
+   # Remove trailing slashes.
+@@ -1602,6 +1613,7 @@ Fine tuning of the installation directories:
+   --sysconfdir=DIR        read-only single-machine data [PREFIX/etc]
+   --sharedstatedir=DIR    modifiable architecture-independent data [PREFIX/com]
+   --localstatedir=DIR     modifiable single-machine data [PREFIX/var]
++  --runstatedir=DIR       modifiable per-process data [LOCALSTATEDIR/run]
+   --libdir=DIR            object code libraries [EPREFIX/lib]
+   --includedir=DIR        C header files [PREFIX/include]
+   --oldincludedir=DIR     C header files for non-gcc [/usr/include]
+@@ -12946,12 +12958,12 @@ fi
+ 	# Put the nasty error message in config.log where it belongs
+ 	echo "$EDITLINE_PKG_ERRORS" >&5
  
--	test ! -f WAIT_MD_DEV || mdadm --stop $mddev || true
--
- 	# NOTE: SCSI_DEBUG_DEV test must come before the LOOP test because
- 	# prepare_scsi_debug_dev() also sets LOOP to short-circuit prepare_loop()
- 	if test -f SCSI_DEBUG_DEV; then
-@@ -716,64 +709,6 @@ cleanup_scsi_debug_dev() {
- 	rm -f SCSI_DEBUG_DEV LOOP
- }
+-	as_fn_error $? "libedit could not be found which is required for the --enable-readline option." "$LINENO" 5
++	as_fn_error $? "libedit could not be found which is required for the --enable-editline option." "$LINENO" 5
  
--prepare_md_dev() {
--	local level=$1
--	local rchunk=$2
--	local rdevs=$3
--	local with_bitmap="--bitmap=internal"
--	local coption="--chunk"
--	local maj
--	local mddev
--	local mddir="md/"
--	local mdname
--	local mddevdir
--	maj=$(mdadm --version 2>&1) || skip "mdadm tool is missing!"
--
--	cleanup_md_dev
--
--	rm -f debug.log strace.log
--
--	case "$level" in
--	"1")  coption="--bitmap-chunk" ;;
--	"0")  with_bitmap="" ;;
--	esac
--	# Have MD use a non-standard name to avoid colliding with an existing MD device
--	# - mdadm >= 3.0 requires that non-standard device names be in /dev/md/
--	# - newer mdadm _completely_ defers to udev to create the associated device node
--	maj=${maj##*- v}
--	maj=${maj%%.*}
--	[ "$maj" -ge 3 ] || mddir=""
--
--	mdname="md_lvm_test0"
--	mddev="/dev/${mddir}$mdname"
--	mddevdir="$DM_DEV_DIR/$mddir"
--
--	mdadm --create --metadata=1.0 "$mddev" --auto=md --level "$level" $with_bitmap "$coption"="$rchunk" --raid-devices="$rdevs" "${@:4}" || {
--		# Some older 'mdadm' version managed to open and close devices internaly
--		# and reporting non-exclusive access on such device
--		# let's just skip the test if this happens.
--		# Note: It's pretty complex to get rid of consequences
--		#       the following sequence avoid leaks on f19
--		# TODO: maybe try here to recreate few times....
--		mdadm --stop "$mddev" || true
--		udev_wait
--		mdadm --zero-superblock "${@:4}" || true
--		udev_wait
--		skip "Test skipped, unreliable mdadm detected!"
--	}
--	test -b "$mddev" || skip "mdadm has not created device!"
--
--	# LVM/DM will see this device
--	case "$DM_DEV_DIR" in
--	"/dev") readlink -f "$mddev" > MD_DEV_PV ;;
--	*)	mkdir -p "$mddevdir"
--		cp -LR "$mddev" "$mddevdir"
--		echo "${mddevdir}${mdname}" > MD_DEV_PV ;;
--	esac
--	echo "$mddev" > MD_DEV
--	printf "%s\n" "${@:4}" > MD_DEVICES
--}
--
- mdadm_create() {
- 	local mddev
- 	local maj=
-@@ -872,21 +807,6 @@ cleanup_md_dev() {
- 	rm -f MD_DEV MD_DEVICES MD_DEV_PV
- }
+ elif test $pkg_failed = untried; then
+      	{ $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
+ $as_echo "no" >&6; }
+-	as_fn_error $? "libedit could not be found which is required for the --enable-readline option." "$LINENO" 5
++	as_fn_error $? "libedit could not be found which is required for the --enable-editline option." "$LINENO" 5
  
--wait_md_create() {
--	local md=$1
+ else
+ 	EDITLINE_CFLAGS=$pkg_cv_EDITLINE_CFLAGS
+@@ -13406,11 +13418,10 @@ $as_echo "$READLINE" >&6; }
+ if test "$EDITLINE" = yes; then
+ 	for ac_header in editline/readline.h
+ do :
+-  as_ac_Header=`$as_echo "ac_cv_header_$ac_header" | $as_tr_sh`
+-ac_fn_c_check_header_mongrel "$LINENO" "$ac_header" "$as_ac_Header" "$ac_includes_default"
+-if eval test \"x\$"$as_ac_Header"\" = x"yes"; then :
++  ac_fn_c_check_header_mongrel "$LINENO" "editline/readline.h" "ac_cv_header_editline_readline_h" "$ac_includes_default"
++if test "x$ac_cv_header_editline_readline_h" = xyes; then :
+   cat >>confdefs.h <<_ACEOF
+-#define `$as_echo "HAVE_$ac_header" | $as_tr_cpp` 1
++#define HAVE_EDITLINE_READLINE_H 1
+ _ACEOF
+ 
+ else
+diff --git a/include/configure.h.in b/include/configure.h.in
+index 59b4da86f..b8d95833a 100644
+--- a/include/configure.h.in
++++ b/include/configure.h.in
+@@ -182,9 +182,6 @@
+ /* Define to 1 if you don't have `vprintf' but do have `_doprnt.' */
+ #undef HAVE_DOPRNT
+ 
+-/* Define to 1 if you have the <editline/history.h> header file. */
+-#undef HAVE_EDITLINE_HISTORY_H
 -
--	while :; do
--		if ! grep "$(basename $md)" /proc/mdstat; then
--			echo "$md not ready"
--			cat /proc/mdstat
--			sleep 2
--		else
--			break
--		fi
--	done
--	echo "$md" > WAIT_MD_DEV
--}
--
- wipefs_a() {
- 	local dev=$1
- 	shift
+ /* Define to 1 if you have the <editline/readline.h> header file. */
+ #undef HAVE_EDITLINE_READLINE_H
+ 
 
 
