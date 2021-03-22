@@ -1,76 +1,75 @@
 From: David Teigland <teigland@sourceware.org>
-Date: Mon, 22 Mar 2021 15:39:50 +0000 (GMT)
-Subject: dev-next - tests: use mirror throttling
-Message-ID: <20210322153950.B94D9385781A@sourceware.org>
+Date: Mon, 22 Mar 2021 15:39:51 +0000 (GMT)
+Subject: dev-next - lvm: Fix editline compilation
+Message-ID: <20210322153951.DE6D93854808@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=d6bc11bf724be4ebfd87dc60a172da2b0e4df8d9
-Commit:        d6bc11bf724be4ebfd87dc60a172da2b0e4df8d9
-Parent:        2dd43a7314ba72b0b899e161261ef5caacbade05
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Sat Mar 20 10:14:09 2021 +0100
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Sat Mar 20 10:52:24 2021 +0100
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=b6cff47bdeef4906d675dad71277a706db0b9127
+Commit:        b6cff47bdeef4906d675dad71277a706db0b9127
+Parent:        d6bc11bf724be4ebfd87dc60a172da2b0e4df8d9
+Author:        Marian Csontos <mcsontos@redhat.com>
+AuthorDate:    Mon Mar 22 10:50:42 2021 +0100
+Committer:     Marian Csontos <mcsontos@redhat.com>
+CommitterDate: Mon Mar 22 11:37:19 2021 +0100
 
-tests: use mirror throttling
+lvm: Fix editline compilation
 
-With small mirrors its better to throttle speed of mirror in dm-mirror.
 ---
- test/shell/pvmove-resume-1.sh        | 5 +++--
- test/shell/pvmove-resume-multiseg.sh | 5 +++--
- 2 files changed, 6 insertions(+), 4 deletions(-)
+ configure    | 2 +-
+ configure.ac | 4 ++--
+ tools/lvm.c  | 1 -
+ 3 files changed, 3 insertions(+), 4 deletions(-)
 
-diff --git a/test/shell/pvmove-resume-1.sh b/test/shell/pvmove-resume-1.sh
-index 6b4cbe529..7b9fc0f39 100644
---- a/test/shell/pvmove-resume-1.sh
-+++ b/test/shell/pvmove-resume-1.sh
-@@ -20,6 +20,7 @@ SKIP_WITH_CLVMD=1
+diff --git a/configure b/configure
+index 4c38cbebb..0be9f136c 100755
+--- a/configure
++++ b/configure
+@@ -13404,7 +13404,7 @@ $as_echo_n "checking whether to enable readline... " >&6; }
+ $as_echo "$READLINE" >&6; }
  
- . lib/inittest
+ if test "$EDITLINE" = yes; then
+-	for ac_header in editline/readline.h editline/history.h
++	for ac_header in editline/readline.h
+ do :
+   as_ac_Header=`$as_echo "ac_cv_header_$ac_header" | $as_tr_sh`
+ ac_fn_c_check_header_mongrel "$LINENO" "$ac_header" "$as_ac_Header" "$ac_includes_default"
+diff --git a/configure.ac b/configure.ac
+index ee21b879d..b92be0db3 100644
+--- a/configure.ac
++++ b/configure.ac
+@@ -1420,7 +1420,7 @@ if test "$EDITLINE" == yes; then
+ 	PKG_CHECK_MODULES([EDITLINE], [libedit], [
+ 		AC_DEFINE([EDITLINE_SUPPORT], 1,
+ 			[Define to 1 to include the LVM editline shell.])], AC_MSG_ERROR(
+-[libedit could not be found which is required for the --enable-readline option.])
++[libedit could not be found which is required for the --enable-editline option.])
+ 	)
+ fi
  
-+aux throttle_dm_mirror 50 || :
- aux prepare_pvs 4 30
+@@ -1557,7 +1557,7 @@ AC_MSG_CHECKING(whether to enable readline)
+ AC_MSG_RESULT($READLINE)
  
- vgcreate -s 128k $vg "$dev1"
-@@ -34,9 +35,9 @@ test_pvmove_resume() {
- 	lvcreate -an -Zn -l30 -n $lv1 $vg
- 	lvcreate -an -Zn -l30 -n $lv1 $vg1
+ if test "$EDITLINE" = yes; then
+-	AC_CHECK_HEADERS(editline/readline.h editline/history.h,,hard_bailout)
++	AC_CHECK_HEADERS(editline/readline.h,,hard_bailout)
+ fi
+ AC_MSG_CHECKING(whether to enable editline)
+ AC_MSG_RESULT($EDITLINE)
+diff --git a/tools/lvm.c b/tools/lvm.c
+index 79b1210af..cc67e924a 100644
+--- a/tools/lvm.c
++++ b/tools/lvm.c
+@@ -33,7 +33,6 @@ int main(int argc, char **argv)
+ #    endif
+ #  elif defined(EDITLINE_SUPPORT)
+ #    include <editline/readline.h>
+-#    include <editline/history.h>
+ #  endif
  
--	aux delay_dev "$dev3" 0 1000 "$(get first_extent_sector "$dev3"):"
-+	aux delay_dev "$dev3" 0 200 "$(get first_extent_sector "$dev3"):"
- 	test -e HAVE_DM_DELAY || { lvremove -f $vg $vg1; return 0; }
--	aux delay_dev "$dev4" 0 1000 "$(get first_extent_sector "$dev4"):"
-+	aux delay_dev "$dev4" 0 200 "$(get first_extent_sector "$dev4"):"
- 
- 	pvmove -i5 "$dev1" &
- 	PVMOVE=$!
-diff --git a/test/shell/pvmove-resume-multiseg.sh b/test/shell/pvmove-resume-multiseg.sh
-index 3a92dbaf3..c94706ed1 100644
---- a/test/shell/pvmove-resume-multiseg.sh
-+++ b/test/shell/pvmove-resume-multiseg.sh
-@@ -20,6 +20,7 @@ SKIP_WITH_LVMLOCKD=1
- . lib/inittest
- 
- aux prepare_pvs 5 30
-+aux throttle_dm_mirror 50 || :
- 
- vgcreate -s 128k $vg "$dev1" "$dev2" "$dev3"
- pvcreate --metadatacopies 0 "$dev4" "$dev5"
-@@ -33,9 +34,9 @@ test_pvmove_resume() {
- 	# next LV on same VG and differetnt PV (we want to test 2 pvmoves per VG)
- 	lvcreate -an -Zn -l30 -n $lv2 $vg "$dev3"
- 
--	aux delay_dev "$dev4" 0 500 "$(get first_extent_sector "$dev4"):"
-+	aux delay_dev "$dev4" 0 200 "$(get first_extent_sector "$dev4"):"
- 	test -e HAVE_DM_DELAY || { lvremove -f $vg; return 0; }
--	aux delay_dev "$dev5" 0 500 "$(get first_extent_sector "$dev5"):"
-+	aux delay_dev "$dev5" 0 200 "$(get first_extent_sector "$dev5"):"
- 
- 	pvmove -i5 "$dev1" "$dev4" &
- 	PVMOVE=$!
+ static struct cmdline_context *_cmdline;
 
 
