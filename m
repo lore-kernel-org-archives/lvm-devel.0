@@ -1,53 +1,39 @@
 From: David Teigland <teigland@sourceware.org>
-Date: Mon, 22 Mar 2021 15:39:47 +0000 (GMT)
-Subject: dev-next - tests: add FIXME to raid test
-Message-ID: <20210322153947.4ED52385781A@sourceware.org>
+Date: Mon, 22 Mar 2021 15:39:45 +0000 (GMT)
+Subject: dev-next - tests: fix condition for exclusion of /dev
+Message-ID: <20210322153945.082CE3854808@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=179f59a0ca7d4d5f779f86d990ebd336c9b13f0e
-Commit:        179f59a0ca7d4d5f779f86d990ebd336c9b13f0e
-Parent:        05920e3818b22c24dde59b3e562fe156466f83f2
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=edcc410835641c9ea7bd15810657e0d16608c00f
+Commit:        edcc410835641c9ea7bd15810657e0d16608c00f
+Parent:        d5b37f24f4f8914b2ab12c9fb352b2b84ca87c16
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Sat Mar 20 10:39:02 2021 +0100
+AuthorDate:    Sat Mar 20 00:28:13 2021 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Sat Mar 20 10:52:24 2021 +0100
+CommitterDate: Sat Mar 20 00:28:13 2021 +0100
 
-tests: add FIXME to raid test
+tests: fix condition for exclusion of /dev
 
-We have here some kind of catch-22 - since older kernels do
-use 'resync' while new 'recover' for initial raid synchronization.
-
-So now - how do we recognize in which state of raid we are.
-ATM seems to be simplest to simply keep disabled droping of primary raid
-leg unless we are in sync.
-
-FIXME: we should add a target version check and enable removal
 ---
- test/shell/lvconvert-raid.sh | 8 +++++++-
- 1 file changed, 7 insertions(+), 1 deletion(-)
+ test/lib/inittest.sh | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
 
-diff --git a/test/shell/lvconvert-raid.sh b/test/shell/lvconvert-raid.sh
-index 6aaaf3669..aa50fbb62 100644
---- a/test/shell/lvconvert-raid.sh
-+++ b/test/shell/lvconvert-raid.sh
-@@ -250,7 +250,13 @@ echo "Skippen test that kills this kernel"
- ;;
- *)
- lvconvert --yes -m 1 $vg/$lv1 "$dev3"
--lvconvert --yes -m 0 $vg/$lv1 "$dev1"
-+
-+# FIXME: it is unclear what should happen - older kernel
-+# do use 'resync' for initial array building so then
-+# we are not able to recognize difference
-+# Should we check version target as react differentely ??
-+# Otherwise we have problem with the above test case.
-+should lvconvert --yes -m 0 $vg/$lv1 "$dev1"
- aux enable_dev "$dev2"
- ;;
- esac
+diff --git a/test/lib/inittest.sh b/test/lib/inittest.sh
+index 58fa2e5e6..0014a8cfd 100644
+--- a/test/lib/inittest.sh
++++ b/test/lib/inittest.sh
+@@ -79,7 +79,7 @@ if test -z "$SKIP_ROOT_DM_CHECK" ; then
+ fi
+ 
+ test -n "$LVM_TEST_DIR" || LVM_TEST_DIR=${TMPDIR:-/tmp}
+-test "$LVM_TEST_DIR" = "/dev" || die "Setting LVM_TEST_DIR=/dev is not supported"
++test "$LVM_TEST_DIR" = "/dev" && die "Setting LVM_TEST_DIR=/dev is not supported!"
+ 
+ TESTDIR=$(mkdtemp "$LVM_TEST_DIR" "$PREFIX.XXXXXXXXXX") || \
+ 	die "failed to create temporary directory in \"$LVM_TEST_DIR\""
 
 
