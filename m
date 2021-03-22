@@ -1,46 +1,72 @@
 From: David Teigland <teigland@sourceware.org>
-Date: Mon, 22 Mar 2021 15:39:26 +0000 (GMT)
-Subject: dev-next - tests: check for raid sync in progress
-Message-ID: <20210322153926.9E2CF385480A@sourceware.org>
+Date: Mon, 22 Mar 2021 15:39:23 +0000 (GMT)
+Subject: dev-next - tests: aux always shift emulated devices by 1MiB
+Message-ID: <20210322153923.2A7213854808@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=26fb6b5e8d61e3d3097fccf4fca5bd9582fbbb4f
-Commit:        26fb6b5e8d61e3d3097fccf4fca5bd9582fbbb4f
-Parent:        accf324ccba681ad06cd8bcb27ead17ec191a471
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=1880b573f3b69deb561251dea003b5be7ff59ab3
+Commit:        1880b573f3b69deb561251dea003b5be7ff59ab3
+Parent:        8e7690b7980ad3bc6e7c38d6e2028f885751c355
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed Mar 17 11:22:16 2021 +0100
+AuthorDate:    Thu Mar 18 13:32:48 2021 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Thu Mar 18 19:12:00 2021 +0100
+CommitterDate: Thu Mar 18 18:57:45 2021 +0100
 
-tests: check for raid sync in progress
+tests: aux always shift emulated devices by 1MiB
 
-TODO: this needs to be built-in in lvm command itself.
+Always shift created virtual PVs on backing device by 1MiB
+and leave 1MiB free space at the end of device.
+
+This way the system doesn't see same PV headers at multiple devices.
 ---
- test/shell/lvconvert-raid.sh | 7 ++++---
- 1 file changed, 4 insertions(+), 3 deletions(-)
+ test/lib/aux.sh | 10 ++++------
+ 1 file changed, 4 insertions(+), 6 deletions(-)
 
-diff --git a/test/shell/lvconvert-raid.sh b/test/shell/lvconvert-raid.sh
-index 87eb7b53c..1ab2d4fd3 100644
---- a/test/shell/lvconvert-raid.sh
-+++ b/test/shell/lvconvert-raid.sh
-@@ -232,10 +232,11 @@ lvcreate -aey -l 2 -n $lv1 $vg "$dev1"
- lvconvert -y -m 1 $vg/$lv1 \
- 	--config 'global { mirror_segtype_default = "raid1" }' "$dev2"
- lvs --noheadings -o attr $vg/$lv1 | grep '^[[:space:]]*r'
-+# FIXME: lvconvert/lvcreate should trace state of target
- for i in {1..10}; do
--	check raid_leg_status $vg $lv1 "Aa" && break
--	check raid_leg_status $vg $lv1 "aa" || die "Cannot wait for Aa on $vg/$lv1"
--	sleep .1
-+	dmsetup status | grep $vg-$lv1: | tee out
-+	grep -E "recover|rebuild" out && break
-+	sleep .05
- done
- not lvconvert --yes -m 0 $vg/$lv1 "$dev1"
- lvconvert --yes -m 0 $vg/$lv1 "$dev2"
+diff --git a/test/lib/aux.sh b/test/lib/aux.sh
+index 53975301a..8c727e8c6 100644
+--- a/test/lib/aux.sh
++++ b/test/lib/aux.sh
+@@ -696,7 +696,7 @@ prepare_scsi_debug_dev() {
+ 	# NOTE: it will _never_ make sense to pass num_tgts param;
+ 	# last param wins.. so num_tgts=1 is imposed
+ 	touch SCSI_DEBUG_DEV
+-	modprobe scsi_debug dev_size_mb="$DEV_SIZE" "$@" num_tgts=1 || skip
++	modprobe scsi_debug dev_size_mb="$(( DEV_SIZE + 2 ))" "$@" num_tgts=1 || skip
+ 
+ 	for i in {1..20} ; do
+ 		sleep .1 # allow for async Linux SCSI device registration
+@@ -874,7 +874,7 @@ prepare_devs() {
+ 	local n=${1:-3}
+ 	local devsize=${2:-34}
+ 	local pvname=${3:-pv}
+-	local shift=0
++	local header_shift=1 # shift header from begin & end of device by 1MiB
+ 
+ 	# sanlock requires more space for the internal sanlock lv
+ 	# This could probably be lower, but what are the units?
+@@ -883,9 +883,7 @@ prepare_devs() {
+ 	fi
+ 
+ 	touch DEVICES
+-	prepare_backing_dev $(( n * devsize ))
+-	# shift start of PV devices on /dev/loopXX by 1M
+-	not diff LOOP BACKING_DEV >/dev/null 2>&1 || shift=2048
++	prepare_backing_dev $(( n * devsize + 2 * header_shift ))
+ 	blkdiscard "$BACKING_DEV" 2>/dev/null || true
+ 	echo -n "## preparing $n devices..."
+ 
+@@ -898,7 +896,7 @@ prepare_devs() {
+ 		local dev="$DM_DEV_DIR/mapper/$name"
+ 		DEVICES[$count]=$dev
+ 		count=$((  count + 1 ))
+-		echo 0 $size linear "$BACKING_DEV" $(( ( i - 1 ) * size + shift )) > "$name.table"
++		echo 0 $size linear "$BACKING_DEV" $(( ( i - 1 ) * size + ( header_shift * 2048 ) )) > "$name.table"
+ 		dmsetup create -u "TEST-$name" "$name" "$name.table" || touch CREATE_FAILED &
+ 		test -f CREATE_FAILED && break;
+ 	done
 
 
