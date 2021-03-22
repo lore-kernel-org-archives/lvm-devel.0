@@ -1,62 +1,39 @@
 From: David Teigland <teigland@sourceware.org>
-Date: Mon, 22 Mar 2021 15:39:15 +0000 (GMT)
-Subject: dev-next - dev_manager: skip also zero targets
-Message-ID: <20210322153915.24175385781A@sourceware.org>
+Date: Mon, 22 Mar 2021 15:39:18 +0000 (GMT)
+Subject: dev-next - segtypes: macros for error and zero segtypes
+Message-ID: <20210322153918.8DB45385781A@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=adc238062d13949cbf3a0b20abf310ee3f132e7e
-Commit:        adc238062d13949cbf3a0b20abf310ee3f132e7e
-Parent:        a9b4acd511beb4d5ba8d0175ad1fb56927d92c03
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=b35ef9d67cabd23f65e2ee2113af46bea095138c
+Commit:        b35ef9d67cabd23f65e2ee2113af46bea095138c
+Parent:        22554c3ff0807f62f8fa71faab153958c475028b
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu Mar 18 17:17:21 2021 +0100
+AuthorDate:    Thu Mar 18 13:13:38 2021 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Thu Mar 18 18:34:57 2021 +0100
 
-dev_manager: skip also zero targets
+segtypes: macros for error and zero segtypes
 
-Devices made only from 'error' target cannot be used,
-but if the device is also combined from 'zero' target
-the same rule can be applied as such device cannot be used.
 ---
- lib/activate/dev_manager.c | 12 +++++++-----
- 1 file changed, 7 insertions(+), 5 deletions(-)
+ lib/metadata/segtype.h | 2 ++
+ 1 file changed, 2 insertions(+)
 
-diff --git a/lib/activate/dev_manager.c b/lib/activate/dev_manager.c
-index 98917dc38..172a6bab1 100644
---- a/lib/activate/dev_manager.c
-+++ b/lib/activate/dev_manager.c
-@@ -630,7 +630,7 @@ int device_is_usable(struct device *dev, struct dev_usable_check_params check, i
- 	char *params, *vgname, *lvname, *layer;
- 	char vg_name[NAME_LEN];
- 	void *next = NULL;
--	int only_error_target = 1;
-+	int only_error_or_zero_target = 1;
- 	int r = 0;
+diff --git a/lib/metadata/segtype.h b/lib/metadata/segtype.h
+index 676f37e3c..d7cfc2b72 100644
+--- a/lib/metadata/segtype.h
++++ b/lib/metadata/segtype.h
+@@ -115,6 +115,8 @@ struct dev_manager;
+ #define SEG_TYPE_NAME_RAID6_N_6		"raid6_n_6"
  
- 	if (!(dmt = _setup_task_run(DM_DEVICE_STATUS, &info, NULL, NULL, NULL,
-@@ -766,13 +766,15 @@ int device_is_usable(struct device *dev, struct dev_usable_check_params check, i
- 			goto out;
- 		}
- 
--		if (strcmp(target_type, TARGET_NAME_ERROR))
--			only_error_target = 0;
-+		if (only_error_or_zero_target &&
-+		    strcmp(target_type, TARGET_NAME_ERROR) &&
-+		    strcmp(target_type, TARGET_NAME_ZERO))
-+			only_error_or_zero_target = 0;
- 	} while (next);
- 
--	/* Skip devices consisting entirely of error targets. */
-+	/* Skip devices consisting entirely of error or zero targets. */
- 	/* FIXME Deal with device stacked above error targets? */
--	if (check.check_error_target && only_error_target) {
-+	if (check.check_error_target && only_error_or_zero_target) {
- 		log_debug_activation("%s: Error device %s not usable.",
- 				     dev_name(dev), name);
- 		goto out;
+ #define segtype_is_linear(segtype)	(!strcmp((segtype)->name, SEG_TYPE_NAME_LINEAR))
++#define segtype_is_error(segtype)	(!strcmp((segtype)->name, SEG_TYPE_NAME_ERROR))
++#define segtype_is_zero(segtype)	(!strcmp((segtype)->name, SEG_TYPE_NAME_ZERO))
+ #define segtype_is_striped_target(segtype)	((segtype)->flags & SEG_STRIPED_TARGET ? 1 : 0)
+ #define segtype_is_cache(segtype)	((segtype)->flags & SEG_CACHE ? 1 : 0)
+ #define segtype_is_cache_pool(segtype)	((segtype)->flags & SEG_CACHE_POOL ? 1 : 0)
 
 
