@@ -1,72 +1,42 @@
 From: David Teigland <teigland@sourceware.org>
-Date: Mon, 22 Mar 2021 15:39:23 +0000 (GMT)
-Subject: dev-next - tests: aux always shift emulated devices by 1MiB
-Message-ID: <20210322153923.2A7213854808@sourceware.org>
+Date: Mon, 22 Mar 2021 15:39:27 +0000 (GMT)
+Subject: dev-next - WHATS_NEW: updates
+Message-ID: <20210322153927.C235A3854808@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=1880b573f3b69deb561251dea003b5be7ff59ab3
-Commit:        1880b573f3b69deb561251dea003b5be7ff59ab3
-Parent:        8e7690b7980ad3bc6e7c38d6e2028f885751c355
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=b4ab2a10511cba2f7679cf12929438b6d2d6232d
+Commit:        b4ab2a10511cba2f7679cf12929438b6d2d6232d
+Parent:        26fb6b5e8d61e3d3097fccf4fca5bd9582fbbb4f
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu Mar 18 13:32:48 2021 +0100
+AuthorDate:    Thu Mar 18 16:55:20 2021 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Thu Mar 18 18:57:45 2021 +0100
+CommitterDate: Thu Mar 18 19:12:35 2021 +0100
 
-tests: aux always shift emulated devices by 1MiB
+WHATS_NEW: updates
 
-Always shift created virtual PVs on backing device by 1MiB
-and leave 1MiB free space at the end of device.
-
-This way the system doesn't see same PV headers at multiple devices.
 ---
- test/lib/aux.sh | 10 ++++------
- 1 file changed, 4 insertions(+), 6 deletions(-)
+ WHATS_NEW | 6 ++++++
+ 1 file changed, 6 insertions(+)
 
-diff --git a/test/lib/aux.sh b/test/lib/aux.sh
-index 53975301a..8c727e8c6 100644
---- a/test/lib/aux.sh
-+++ b/test/lib/aux.sh
-@@ -696,7 +696,7 @@ prepare_scsi_debug_dev() {
- 	# NOTE: it will _never_ make sense to pass num_tgts param;
- 	# last param wins.. so num_tgts=1 is imposed
- 	touch SCSI_DEBUG_DEV
--	modprobe scsi_debug dev_size_mb="$DEV_SIZE" "$@" num_tgts=1 || skip
-+	modprobe scsi_debug dev_size_mb="$(( DEV_SIZE + 2 ))" "$@" num_tgts=1 || skip
- 
- 	for i in {1..20} ; do
- 		sleep .1 # allow for async Linux SCSI device registration
-@@ -874,7 +874,7 @@ prepare_devs() {
- 	local n=${1:-3}
- 	local devsize=${2:-34}
- 	local pvname=${3:-pv}
--	local shift=0
-+	local header_shift=1 # shift header from begin & end of device by 1MiB
- 
- 	# sanlock requires more space for the internal sanlock lv
- 	# This could probably be lower, but what are the units?
-@@ -883,9 +883,7 @@ prepare_devs() {
- 	fi
- 
- 	touch DEVICES
--	prepare_backing_dev $(( n * devsize ))
--	# shift start of PV devices on /dev/loopXX by 1M
--	not diff LOOP BACKING_DEV >/dev/null 2>&1 || shift=2048
-+	prepare_backing_dev $(( n * devsize + 2 * header_shift ))
- 	blkdiscard "$BACKING_DEV" 2>/dev/null || true
- 	echo -n "## preparing $n devices..."
- 
-@@ -898,7 +896,7 @@ prepare_devs() {
- 		local dev="$DM_DEV_DIR/mapper/$name"
- 		DEVICES[$count]=$dev
- 		count=$((  count + 1 ))
--		echo 0 $size linear "$BACKING_DEV" $(( ( i - 1 ) * size + shift )) > "$name.table"
-+		echo 0 $size linear "$BACKING_DEV" $(( ( i - 1 ) * size + ( header_shift * 2048 ) )) > "$name.table"
- 		dmsetup create -u "TEST-$name" "$name" "$name.table" || touch CREATE_FAILED &
- 		test -f CREATE_FAILED && break;
- 	done
+diff --git a/WHATS_NEW b/WHATS_NEW
+index e4ccd1b0d..5d018ef36 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,11 @@
+ Version 2.03.12 - 
+ ===================================
++  Support lvconvert -Zn with thin-pool conversion.
++  Support error and zero segtype for thin-pool data for testing.
++  Support mixed extension for striped, error and zero segtypes.
++  Support resize also for stacked virtual volumes.
++  Skip dm-zero devices just like with dm-error target.
++  Reduce ioctl() calls when checking target status.
+   Merge polling does not fail, when LV is found to be already merged.
+   Poll volumes with at least 100ms delays.
+   Do not flush dm cache when cached LV is going to be removed.
 
 
