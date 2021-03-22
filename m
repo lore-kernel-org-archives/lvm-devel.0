@@ -1,65 +1,46 @@
 From: David Teigland <teigland@sourceware.org>
-Date: Mon, 22 Mar 2021 15:39:24 +0000 (GMT)
-Subject: dev-next - tests: check mixing striped with error and zero
-Message-ID: <20210322153924.4C6BF385781A@sourceware.org>
+Date: Mon, 22 Mar 2021 15:39:26 +0000 (GMT)
+Subject: dev-next - tests: check for raid sync in progress
+Message-ID: <20210322153926.9E2CF385480A@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=c06325263f6e8bbba3b240295ba766a7769735a7
-Commit:        c06325263f6e8bbba3b240295ba766a7769735a7
-Parent:        1880b573f3b69deb561251dea003b5be7ff59ab3
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=26fb6b5e8d61e3d3097fccf4fca5bd9582fbbb4f
+Commit:        26fb6b5e8d61e3d3097fccf4fca5bd9582fbbb4f
+Parent:        accf324ccba681ad06cd8bcb27ead17ec191a471
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu Mar 18 16:00:01 2021 +0100
+AuthorDate:    Wed Mar 17 11:22:16 2021 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Thu Mar 18 18:57:45 2021 +0100
+CommitterDate: Thu Mar 18 19:12:00 2021 +0100
 
-tests: check mixing striped with error and zero
+tests: check for raid sync in progress
 
+TODO: this needs to be built-in in lvm command itself.
 ---
- test/shell/error-usage.sh | 11 +++++++++++
- test/shell/zero-usage.sh  |  9 +++++++++
- 2 files changed, 20 insertions(+)
+ test/shell/lvconvert-raid.sh | 7 ++++---
+ 1 file changed, 4 insertions(+), 3 deletions(-)
 
-diff --git a/test/shell/error-usage.sh b/test/shell/error-usage.sh
-index 59502480c..f8a561a37 100644
---- a/test/shell/error-usage.sh
-+++ b/test/shell/error-usage.sh
-@@ -32,4 +32,15 @@ check lv_field $vg/$lv1 seg_size_pe "4"   # 4 * 512 => 2M
- # FIXME should we print info we are ignoring stripping?
- lvextend -L+1 -I64 -i2 $vg/$lv1
- 
-+# We support mixing error with zero & linear targets
-+lvextend -L+1 --type zero $vg/$lv1
-+lvextend -L+1 --type linear $vg/$lv1
-+lvextend -L+1 --type striped $vg/$lv1
-+lvextend -L+1 --type error $vg/$lv1
-+
-+# 4 segments:  error 3m, zero 1m, linear 2m, error 1m
-+lvs -o+segtype,seg_size $vg
-+check lv_field $vg/$lv1 seg_count "4"
-+check lv_field $vg/$lv1 size "7.00m"
-+
- vgremove -ff $vg
-diff --git a/test/shell/zero-usage.sh b/test/shell/zero-usage.sh
-index 53ffbe499..063f01818 100644
---- a/test/shell/zero-usage.sh
-+++ b/test/shell/zero-usage.sh
-@@ -34,4 +34,13 @@ check lv_field $vg/$lv1 segtype "zero"
- check lv_field $vg/$lv1 seg_count "1"
- check lv_field $vg/$lv1 seg_size_pe "4"   # 4 * 512
- 
-+lvextend -L+1 --type error $vg/$lv1
-+lvextend -L+1 --type linear $vg/$lv1
-+lvextend -L+1 --type striped $vg/$lv1
-+lvextend -L+1 --type zero $vg/$lv1
-+
-+lvs -o+segtype,seg_size $vg
-+check lv_field $vg/$lv1 seg_count "4"
-+check lv_field $vg/$lv1 size "6.00m"
-+
- vgremove -ff $vg
+diff --git a/test/shell/lvconvert-raid.sh b/test/shell/lvconvert-raid.sh
+index 87eb7b53c..1ab2d4fd3 100644
+--- a/test/shell/lvconvert-raid.sh
++++ b/test/shell/lvconvert-raid.sh
+@@ -232,10 +232,11 @@ lvcreate -aey -l 2 -n $lv1 $vg "$dev1"
+ lvconvert -y -m 1 $vg/$lv1 \
+ 	--config 'global { mirror_segtype_default = "raid1" }' "$dev2"
+ lvs --noheadings -o attr $vg/$lv1 | grep '^[[:space:]]*r'
++# FIXME: lvconvert/lvcreate should trace state of target
+ for i in {1..10}; do
+-	check raid_leg_status $vg $lv1 "Aa" && break
+-	check raid_leg_status $vg $lv1 "aa" || die "Cannot wait for Aa on $vg/$lv1"
+-	sleep .1
++	dmsetup status | grep $vg-$lv1: | tee out
++	grep -E "recover|rebuild" out && break
++	sleep .05
+ done
+ not lvconvert --yes -m 0 $vg/$lv1 "$dev1"
+ lvconvert --yes -m 0 $vg/$lv1 "$dev2"
 
 
