@@ -1,42 +1,62 @@
 From: David Teigland <teigland@sourceware.org>
-Date: Mon, 22 Mar 2021 15:39:16 +0000 (GMT)
-Subject: dev-next - lvresize: support resize of stacked virtual LV
-Message-ID: <20210322153916.4AED9385781A@sourceware.org>
+Date: Mon, 22 Mar 2021 15:39:15 +0000 (GMT)
+Subject: dev-next - dev_manager: skip also zero targets
+Message-ID: <20210322153915.24175385781A@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=5a73399b73305786b61c8dcc78a76d4319608561
-Commit:        5a73399b73305786b61c8dcc78a76d4319608561
-Parent:        adc238062d13949cbf3a0b20abf310ee3f132e7e
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=adc238062d13949cbf3a0b20abf310ee3f132e7e
+Commit:        adc238062d13949cbf3a0b20abf310ee3f132e7e
+Parent:        a9b4acd511beb4d5ba8d0175ad1fb56927d92c03
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu Mar 18 13:14:13 2021 +0100
+AuthorDate:    Thu Mar 18 17:17:21 2021 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Thu Mar 18 18:34:57 2021 +0100
 
-lvresize: support resize of stacked virtual LV
+dev_manager: skip also zero targets
 
-Update the LV stack with the size also for virtual LVs.
+Devices made only from 'error' target cannot be used,
+but if the device is also combined from 'zero' target
+the same rule can be applied as such device cannot be used.
 ---
- lib/metadata/lv_manip.c | 4 ++--
- 1 file changed, 2 insertions(+), 2 deletions(-)
+ lib/activate/dev_manager.c | 12 +++++++-----
+ 1 file changed, 7 insertions(+), 5 deletions(-)
 
-diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
-index 3fff66b18..24a2816ef 100644
---- a/lib/metadata/lv_manip.c
-+++ b/lib/metadata/lv_manip.c
-@@ -3554,8 +3554,8 @@ int lv_add_virtual_segment(struct logical_volume *lv, uint64_t status,
- 		dm_list_add(&lv->segments, &seg->list);
- 	}
+diff --git a/lib/activate/dev_manager.c b/lib/activate/dev_manager.c
+index 98917dc38..172a6bab1 100644
+--- a/lib/activate/dev_manager.c
++++ b/lib/activate/dev_manager.c
+@@ -630,7 +630,7 @@ int device_is_usable(struct device *dev, struct dev_usable_check_params check, i
+ 	char *params, *vgname, *lvname, *layer;
+ 	char vg_name[NAME_LEN];
+ 	void *next = NULL;
+-	int only_error_target = 1;
++	int only_error_or_zero_target = 1;
+ 	int r = 0;
  
--	lv->le_count += extents;
--	lv->size += (uint64_t) extents *lv->vg->extent_size;
-+	if (!_setup_lv_size(lv, lv->le_count + extents))
-+		return_0;
+ 	if (!(dmt = _setup_task_run(DM_DEVICE_STATUS, &info, NULL, NULL, NULL,
+@@ -766,13 +766,15 @@ int device_is_usable(struct device *dev, struct dev_usable_check_params check, i
+ 			goto out;
+ 		}
  
- 	return 1;
- }
+-		if (strcmp(target_type, TARGET_NAME_ERROR))
+-			only_error_target = 0;
++		if (only_error_or_zero_target &&
++		    strcmp(target_type, TARGET_NAME_ERROR) &&
++		    strcmp(target_type, TARGET_NAME_ZERO))
++			only_error_or_zero_target = 0;
+ 	} while (next);
+ 
+-	/* Skip devices consisting entirely of error targets. */
++	/* Skip devices consisting entirely of error or zero targets. */
+ 	/* FIXME Deal with device stacked above error targets? */
+-	if (check.check_error_target && only_error_target) {
++	if (check.check_error_target && only_error_or_zero_target) {
+ 		log_debug_activation("%s: Error device %s not usable.",
+ 				     dev_name(dev), name);
+ 		goto out;
 
 
