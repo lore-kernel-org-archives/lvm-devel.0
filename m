@@ -1,72 +1,55 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Thu, 25 Mar 2021 23:45:49 +0000 (GMT)
-Subject: main - tests: add workaround for older mdadm
-Message-ID: <20210325234549.B20EC385800D@sourceware.org>
+Date: Tue, 23 Mar 2021 20:36:06 +0000 (GMT)
+Subject: main - tests: aux clean DM on top of MD
+Message-ID: <20210323203606.4BEED385BF9E@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=5feb99dda68dd492929fff0d7b15d3ef0ab86347
-Commit:        5feb99dda68dd492929fff0d7b15d3ef0ab86347
-Parent:        0558b223b87b922faa709e7a7e0e6aaa4b7f0c42
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=dd1f5f9a24fc906de7e6dd064ecdd8fdfa9eebda
+Commit:        dd1f5f9a24fc906de7e6dd064ecdd8fdfa9eebda
+Parent:        93f2d194aca4a589cd38dd8bdd99cad2945dd21c
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Mar 26 00:35:28 2021 +0100
+AuthorDate:    Tue Mar 23 21:28:28 2021 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Fri Mar 26 00:35:28 2021 +0100
+CommitterDate: Tue Mar 23 21:28:28 2021 +0100
 
-tests: add workaround for older mdadm
+tests: aux clean DM on top of MD
 
-Some older instancies of 'mdadm' opened legs in RW and
-closed and opened again and expected exlusive access.
-But here udev rule can be fired - so on these versions
-slow down whole mdadm runtime by using strace, to
-give system a bit more time to finish udev rule.
+Before cleaning MD, try to remove any DM on top such MD.
+Check is made through DM table check.
+Maybe parse /proc/mdstat for this???
 ---
- test/shell/lvm-on-md.sh | 16 ++++++++++++++--
- 1 file changed, 14 insertions(+), 2 deletions(-)
+ test/lib/aux.sh | 10 ++++++++++
+ 1 file changed, 10 insertions(+)
 
-diff --git a/test/shell/lvm-on-md.sh b/test/shell/lvm-on-md.sh
-index 9187d44f5..7c14e6748 100644
---- a/test/shell/lvm-on-md.sh
-+++ b/test/shell/lvm-on-md.sh
-@@ -27,6 +27,18 @@ _clear_online_files() {
+diff --git a/test/lib/aux.sh b/test/lib/aux.sh
+index 386918041..08eeac55b 100644
+--- a/test/lib/aux.sh
++++ b/test/lib/aux.sh
+@@ -783,11 +783,21 @@ cleanup_md_dev() {
+ 	mddev=$(< MD_DEV)
+ 	base=$(basename "$mddev")
  
- . lib/inittest
- 
-+which mdadm || skip
++	# try to find and remove any DM device on top of cleaned MD
++	# assume  /dev/mdXXX is  9:MINOR
++	local minor=${mddev##/dev/md}
++	for i in $(dmsetup table | grep 9:$minor | cut -d: -f1) ; do
++		dmsetup remove $i || {
++			dmsetup --force remove $i || true
++		}
++	done
 +
-+STRACE=
-+[ "$DM_DEV_DIR" = "/dev" ] && mdadm -V 2>&1 | grep " v3.2" && {
-+	# use this 'trick' to slow down mdadm which otherwise
-+	# is racing with udev rule since mdadm internally
-+	# opens and closes raid leg devices in RW mode and then
-+	# tries to get exlusive access to the leg device during
-+	# insertion to kernel and fails during assembly
-+        # There could be more affted version of mdadm.
-+	STRACE="strace -f -o /dev/null"
-+}
- 
- # This stops lvm from taking advantage of hints which
- # will have already excluded md components.
-@@ -109,7 +121,7 @@ test ! -f "$RUNDIR/lvm/vgs_online/$vg"
- # should not show an active lv
- not dmsetup info $vg-$lv1
- 
--mdadm --assemble "$mddev" "$dev1" "$dev2"
-+$STRACE mdadm --assemble "$mddev" "$dev1" "$dev2"
- aux udev_wait
- 
- not pvs "$dev1"
-@@ -264,7 +276,7 @@ test ! -f "$RUNDIR/lvm/vgs_online/$vg"
- not dmsetup info $vg-$lv1
- 
- # start the md dev
--mdadm --assemble "$mddev" "$dev1" "$dev2"
-+$STRACE mdadm --assemble "$mddev" "$dev1" "$dev2"
- aux udev_wait
- 
- not pvs "$dev1"
+ 	for i in {0..10} ; do
+ 		grep -q "$base" /proc/mdstat || break
+ 		test "$i" = 0 || {
+ 			sleep .1
+ 			echo "$mddev is still present, stopping again"
++			cat /proc/mdstat
+ 		}
+ 		mdadm --stop "$mddev" || true
+ 		udev_wait  # wait till events are process, not zeroing to early
 
 
