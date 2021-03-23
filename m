@@ -1,240 +1,44 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Fri, 26 Mar 2021 19:50:25 +0000 (GMT)
-Subject: main - tests: skip more tests for lvmpolld pass
-Message-ID: <20210326195025.5B5B63857C44@sourceware.org>
+Date: Tue, 23 Mar 2021 20:36:07 +0000 (GMT)
+Subject: main - tests: this test has race in it depending on kernel
+Message-ID: <20210323203607.6FF05386102C@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=49575a6ce1940528aaaac5eada8f8938e6cf4a84
-Commit:        49575a6ce1940528aaaac5eada8f8938e6cf4a84
-Parent:        7768650d87d4086a76f1558aab4436acda1b5e44
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=8df0a32abb840815c5d210cbdbd1483d483ee729
+Commit:        8df0a32abb840815c5d210cbdbd1483d483ee729
+Parent:        dd1f5f9a24fc906de7e6dd064ecdd8fdfa9eebda
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Mar 26 16:05:28 2021 +0100
+AuthorDate:    Tue Mar 23 21:32:51 2021 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Fri Mar 26 20:39:40 2021 +0100
+CommitterDate: Tue Mar 23 21:32:51 2021 +0100
 
-tests: skip more tests for lvmpolld pass
+tests: this test has race in it depending on kernel
 
-These test do not test polling, so skip them for lvmpolld pass.
+Some kernel seems to keep 'lvextend' busy so long,
+that actual resize already happens.
+
+So ATM use 'should'  until something better is invented.
 ---
- test/api/dbustest.sh                 |  1 +
- test/shell/exported.sh               |  2 ++
- test/shell/lvm-conf-error.sh         |  2 ++
- test/shell/metadata-bad-mdaheader.sh |  2 ++
- test/shell/metadata-bad-text.sh      |  2 ++
- test/shell/metadata-old.sh           |  2 ++
- test/shell/missing-pv-unused.sh      | 13 +++----------
- test/shell/missing-pv.sh             |  9 +++------
- test/shell/outdated-pv.sh            |  8 +++-----
- test/shell/pvck-dump.sh              |  3 +++
- test/shell/pvck-repair.sh            |  4 ++++
- 11 files changed, 27 insertions(+), 21 deletions(-)
+ test/shell/lvextend-raid.sh | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
 
-diff --git a/test/api/dbustest.sh b/test/api/dbustest.sh
-index 83e40d056..622022277 100644
---- a/test/api/dbustest.sh
-+++ b/test/api/dbustest.sh
-@@ -11,6 +11,7 @@
- # along with this program; if not, write to the Free Software Foundation,
- # Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
- 
-+SKIP_WITH_LVMPOLLD=1
- SKIP_WITH_LVMLOCKD=1
- SKIP_WITH_CLVMD=1
- 
-diff --git a/test/shell/exported.sh b/test/shell/exported.sh
-index b6d17ce7d..18a86462f 100644
---- a/test/shell/exported.sh
-+++ b/test/shell/exported.sh
-@@ -10,6 +10,8 @@
- # along with this program; if not, write to the Free Software Foundation,
- # Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
- 
-+SKIP_WITH_LVMPOLLD=1
-+
- . lib/inittest
- 
- # Check what is and is not permitted on an exported VG/PV
-diff --git a/test/shell/lvm-conf-error.sh b/test/shell/lvm-conf-error.sh
-index 01461c174..590834bbe 100644
---- a/test/shell/lvm-conf-error.sh
-+++ b/test/shell/lvm-conf-error.sh
-@@ -12,6 +12,8 @@
- 
- # Check what happens when reading of lvm.conf fails
- 
-+SKIP_WITH_LVMPOLLD=1
-+
- . lib/inittest
- 
- MKFS=mkfs.ext3
-diff --git a/test/shell/metadata-bad-mdaheader.sh b/test/shell/metadata-bad-mdaheader.sh
-index 2096dbba8..ad2bcc496 100644
---- a/test/shell/metadata-bad-mdaheader.sh
-+++ b/test/shell/metadata-bad-mdaheader.sh
-@@ -10,6 +10,8 @@
- # along with this program; if not, write to the Free Software Foundation,
- # Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
- 
-+SKIP_WITH_LVMPOLLD=1
-+
- . lib/inittest
- 
- xxd -v || skip
-diff --git a/test/shell/metadata-bad-text.sh b/test/shell/metadata-bad-text.sh
-index 971b861ca..9ccfe5f76 100644
---- a/test/shell/metadata-bad-text.sh
-+++ b/test/shell/metadata-bad-text.sh
-@@ -10,6 +10,8 @@
- # along with this program; if not, write to the Free Software Foundation,
- # Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
- 
-+SKIP_WITH_LVMPOLLD=1
-+
- RUNDIR="/run"
- test -d "$RUNDIR" || RUNDIR="/var/run"
- PVS_ONLINE_DIR="$RUNDIR/lvm/pvs_online"
-diff --git a/test/shell/metadata-old.sh b/test/shell/metadata-old.sh
-index a193ebf31..ad7bf101e 100644
---- a/test/shell/metadata-old.sh
-+++ b/test/shell/metadata-old.sh
-@@ -10,6 +10,8 @@
- # along with this program; if not, write to the Free Software Foundation,
- # Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
- 
-+SKIP_WITH_LVMPOLLD=1
-+
- . lib/inittest
- 
- aux prepare_devs 3
-diff --git a/test/shell/missing-pv-unused.sh b/test/shell/missing-pv-unused.sh
-index 2265a5bd9..d74365ffc 100644
---- a/test/shell/missing-pv-unused.sh
-+++ b/test/shell/missing-pv-unused.sh
-@@ -10,12 +10,11 @@
- # along with this program; if not, write to the Free Software Foundation,
- # Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
- 
--. lib/inittest
-+SKIP_WITH_LVMPOLLD=1
- 
--aux prepare_devs 3
--get_devs
-+. lib/inittest
- 
--vgcreate $SHARED $vg "$dev1" "$dev2" "$dev3"
-+aux prepare_vg 3
- 
- lvcreate -n $lv1 -L8M $vg "$dev2"
- lvcreate -n $lv2 -L8M $vg "$dev3"
-@@ -24,10 +23,6 @@ lvcreate -n $lv4 -L8M $vg "$dev3"
- 
- vgchange -an $vg
- 
--pvs
--vgs
--lvs -a -o+devices
--
- # Fail device that is not used by any LVs.
- aux disable_dev "$dev1"
- 
-@@ -81,6 +76,4 @@ pvs
- vgs
- lvs -a -o+devices
- 
--vgchange -an $vg
- vgremove -ff $vg
--
-diff --git a/test/shell/missing-pv.sh b/test/shell/missing-pv.sh
-index 74cc43b0e..3662483b0 100644
---- a/test/shell/missing-pv.sh
-+++ b/test/shell/missing-pv.sh
-@@ -10,12 +10,11 @@
- # along with this program; if not, write to the Free Software Foundation,
- # Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
- 
--. lib/inittest
-+SKIP_WITH_LVMPOLLD=1
- 
--aux prepare_devs 3
--get_devs
-+. lib/inittest
- 
--vgcreate $SHARED $vg "$dev1" "$dev2" "$dev3"
-+aux prepare_vg 3
- 
- lvcreate -n $lv1 -L8M --type mirror -m 1 $vg
- lvcreate -n $lv2 -L8M --type mirror -m 1 $vg
-@@ -147,6 +146,4 @@ pvs
- vgs
- lvs -a -o+devices
- 
--vgchange -an $vg
- vgremove -ff $vg
--
-diff --git a/test/shell/outdated-pv.sh b/test/shell/outdated-pv.sh
-index 5c9b1b2f3..6a361d3ce 100644
---- a/test/shell/outdated-pv.sh
-+++ b/test/shell/outdated-pv.sh
-@@ -10,10 +10,11 @@
- # along with this program; if not, write to the Free Software Foundation,
- # Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
- 
-+SKIP_WITH_LVMPOLLD=1
-+
- . lib/inittest
- 
--aux prepare_devs 3
--get_devs
-+aux prepare_vg 3
- 
- #
- # Test handling of "outdated PV" which occurs when a PV goes missing
-@@ -22,8 +23,6 @@ get_devs
- # member.  That outdated metadata needs to be cleared.
- #
- 
--vgcreate $SHARED $vg "$dev1" "$dev2" "$dev3"
--
- lvcreate -n $lv1 -l1 -an $vg "$dev1"
- lvcreate -n $lv2 -l1 -an $vg "$dev1"
- 
-@@ -63,4 +62,3 @@ pvs "$dev2" | tee out
- grep "$vg" out
- 
- vgremove -ff $vg
--
-diff --git a/test/shell/pvck-dump.sh b/test/shell/pvck-dump.sh
-index c27fcc471..81e164d73 100644
---- a/test/shell/pvck-dump.sh
-+++ b/test/shell/pvck-dump.sh
-@@ -10,6 +10,9 @@
- # along with this program; if not, write to the Free Software Foundation,
- # Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
- 
-+SKIP_WITH_LVMPOLLD=1
-+SKIP_WITH_LVMLOCKD=1
-+
- . lib/inittest
- 
- SIZE_MB=80
-diff --git a/test/shell/pvck-repair.sh b/test/shell/pvck-repair.sh
-index d48e25198..0a794da68 100644
---- a/test/shell/pvck-repair.sh
-+++ b/test/shell/pvck-repair.sh
-@@ -10,6 +10,10 @@
- # along with this program; if not, write to the Free Software Foundation,
- # Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
- 
-+SKIP_WITH_LVMPOLLD=1
-+SKIP_WITH_LVMLOCKD=1
-+
-+
- . lib/inittest
- 
- SIZE=34
+diff --git a/test/shell/lvextend-raid.sh b/test/shell/lvextend-raid.sh
+index 9370bf295..08b34d00c 100644
+--- a/test/shell/lvextend-raid.sh
++++ b/test/shell/lvextend-raid.sh
+@@ -63,7 +63,8 @@ aux delayzero_dev "$dev2"  0 50 "${sector}:"
+ lvextend -y -L+${lvext}M $vg/$lv1
+ if [ $PROGRESS -eq 1 ]
+ then
+-not check lv_field $vg/$lv1 sync_percent "100.00"
++# Even with delayed devices wre are catching races here.
++should not check lv_field $vg/$lv1 sync_percent "100.00"
+ check lv_field $vg/$lv1 size "$(($lvsz)).00m" $vg/$lv1
+ fi
+ aux wait_for_sync $vg $lv1
 
 
