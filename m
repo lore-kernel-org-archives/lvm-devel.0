@@ -1,50 +1,41 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Mon, 22 Mar 2021 21:53:59 +0000 (GMT)
-Subject: main - make: add few more predef symbols for cflow
-Message-ID: <20210322215359.CE3B13858D29@sourceware.org>
+Date: Tue, 23 Mar 2021 00:23:37 +0000 (GMT)
+Subject: main - tests: set known locking dir
+Message-ID: <20210323002337.A5EE83858004@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=f370cda716f14d0ba1ba97fa3dd5887d5165b140
-Commit:        f370cda716f14d0ba1ba97fa3dd5887d5165b140
-Parent:        0993355300fa8490163579a320d1b289c7db59af
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=7575c7ae5c012c4a20bd4c2563640880f522789c
+Commit:        7575c7ae5c012c4a20bd4c2563640880f522789c
+Parent:        f370cda716f14d0ba1ba97fa3dd5887d5165b140
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Sat Mar 20 19:02:41 2021 +0100
+AuthorDate:    Tue Mar 23 01:15:29 2021 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Mon Mar 22 22:51:24 2021 +0100
+CommitterDate: Tue Mar 23 01:15:29 2021 +0100
 
-make: add few more predef symbols for cflow
+tests: set known locking dir
 
+Tests running in the system may use locking dir of the system.
 ---
- make.tmpl.in | 5 ++++-
- 1 file changed, 4 insertions(+), 1 deletion(-)
+ test/shell/lock-blocking.sh | 3 +++
+ 1 file changed, 3 insertions(+)
 
-diff --git a/make.tmpl.in b/make.tmpl.in
-index d95d956fa..99998f9fd 100644
---- a/make.tmpl.in
-+++ b/make.tmpl.in
-@@ -404,7 +404,10 @@ ifneq ("$(CFLOW_CMD)", "")
- CFLOW_FLAGS +=\
-  --cpp="$(CC) -E $(INCLUDES) $(VALGRIND_CFLAGS) $(BLKID_CFLAGS) $(DEFS)" \
-  --symbol _ISbit:wrapper \
-+ --symbol __asm__:wrapper \
-  --symbol __attribute__:wrapper \
-+ --symbol __inline:=inline \
-+ --symbol __inline__:=inline \
-  --symbol __const:type \
-  --symbol __const__:wrapper \
-  --symbol __extension__:wrapper \
-@@ -414,7 +417,7 @@ CFLOW_FLAGS +=\
-  --symbol __pure__:wrapper \
-  --symbol __REDIRECT:wrapper \
-  --symbol __REDIRECT_NTH:wrapper \
-- --symbol __restrict:type \
-+ --symbol __restrict:=restrict \
-  --symbol __wur:wrapper
+diff --git a/test/shell/lock-blocking.sh b/test/shell/lock-blocking.sh
+index 06f1a7ab0..9defaf2c7 100644
+--- a/test/shell/lock-blocking.sh
++++ b/test/shell/lock-blocking.sh
+@@ -17,6 +17,9 @@ SKIP_WITH_LVMPOLLD=1
  
- $(CFLOW_TARGET).cflow: $(CFLOW_SOURCES)
+ . lib/inittest
+ 
++# Make sure the placement of locking dir is known
++aux lvmconf "global/locking_dir = \"$TESTDIR/var/lock/lvm\""
++
+ aux prepare_devs 3
+ pvcreate "$dev1" "$dev2"
+ vgcreate $SHARED $vg "$dev1" "$dev2"
 
 
