@@ -1,66 +1,58 @@
-From: David Teigland <teigland@sourceware.org>
-Date: Wed, 31 Mar 2021 21:49:32 +0000 (GMT)
-Subject: dev-next - tests: use shell comment
-Message-ID: <20210331214932.B63F13857C6F@sourceware.org>
+From: Zdenek Kabelac <zkabelac@sourceware.org>
+Date: Wed, 24 Mar 2021 15:41:56 +0000 (GMT)
+Subject: main - tests: improve check raid_leg_status
+Message-ID: <20210324154156.D454B384B13C@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=a55f4a8fe24a89c9a7e42e2fcd11c974eae0e127
-Commit:        a55f4a8fe24a89c9a7e42e2fcd11c974eae0e127
-Parent:        93336685f6cf8a178cb83aa1ee113a2a33ca7f5c
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=c1f5ca6751eeda5925638447b561b05bdf8a250c
+Commit:        c1f5ca6751eeda5925638447b561b05bdf8a250c
+Parent:        0783c661b9eb407b0b436559b6950deefc906b4f
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Mar 26 22:12:42 2021 +0100
+AuthorDate:    Wed Mar 24 16:05:03 2021 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Fri Mar 26 22:12:42 2021 +0100
+CommitterDate: Wed Mar 24 16:38:12 2021 +0100
 
-tests: use shell comment
+tests: improve  check raid_leg_status
 
+Enhance function to wait until raid status gets consisten
+(shifts from 0/xxxxx to something else)
+
+If it would took too long fail the check.
 ---
- test/shell/hints.sh | 9 ++++-----
- 1 file changed, 4 insertions(+), 5 deletions(-)
+ test/lib/check.sh | 17 +++++++++++++----
+ 1 file changed, 13 insertions(+), 4 deletions(-)
 
-diff --git a/test/shell/hints.sh b/test/shell/hints.sh
-index b2a53c678..a11aeec23 100644
---- a/test/shell/hints.sh
-+++ b/test/shell/hints.sh
-@@ -12,9 +12,11 @@
- 
- SKIP_WITH_LVMPOLLD=1
- 
--/* hints are currently disabled with lvmlockd */
-+# hints are currently disabled with lvmlockd
- SKIP_WITH_LVMLOCKD=1
- 
-+. lib/inittest
+diff --git a/test/lib/check.sh b/test/lib/check.sh
+index 4deb78a74..5b119430d 100644
+--- a/test/lib/check.sh
++++ b/test/lib/check.sh
+@@ -436,10 +436,19 @@ sysfs() {
+ raid_leg_status() {
+ 	local st
+ 	local val
+-	st=$(dmsetup status "$1-$2")
+-	val=$(echo "$st" | cut -d ' ' -f 6)
+-	test "$val" = "$3" || \
+-		die "$1-$2 status $val != $3  ($st)"
 +
- RUNDIR="/run"
- test -d "$RUNDIR" || RUNDIR="/var/run"
- HINTS="$RUNDIR/lvm/hints"
-@@ -22,8 +24,6 @@ NOHINTS="$RUNDIR/lvm/nohints"
- NEWHINTS="$RUNDIR/lvm/newhints"
- PREV="$RUNDIR/lvm/prev-hints"
++	# Ignore inconsisten raid status 0/xxxxx idle
++	for i in {100..0} ; do
++		st=( $(dmsetup status $1-$2) ) || die "Unable to get status of $vg/$lv1"
++		b=( $(echo "${st[6]}" | sed s:/:' ':) )
++		[ "${b[0]}" = "0" ] || {
++			test "${st[5]}" = "$3" || break
++			return 0
++		}
++		sleep .1
++	done
++
++	die "$1-$2 status ${st[5]} != $3  ($st)"
+ }
  
--. lib/inittest
--
- # TODO:
- # Test commands that ignore hints
- # Test flock
-@@ -55,7 +55,7 @@ not grep scan: tmptest
- # test that 'pvs' submits only three reads, one for each PV in hints
- # for initial scan, and one more in vg_read rescan check
- 
--if [ -e "/usr/bin/strace" ]; then
-+if which strace; then
- strace -e io_submit pvs 2>&1|tee tmptest
- test "$(grep io_submit tmptest | wc -l)" -eq 3
- 
-@@ -413,4 +413,3 @@ grep $vg4 $HINTS
- vgremove -y $vg4
- vgremove -y $vg2
- vgremove -y $vg1
--
+ grep_dmsetup() {
 
 
