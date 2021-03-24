@@ -1,83 +1,43 @@
-From: David Teigland <teigland@sourceware.org>
-Date: Wed, 31 Mar 2021 21:48:50 +0000 (GMT)
-Subject: dev-next - tests: aux updates
-Message-ID: <20210331214850.627633858C27@sourceware.org>
+From: Zdenek Kabelac <zkabelac@sourceware.org>
+Date: Wed, 24 Mar 2021 15:41:52 +0000 (GMT)
+Subject: main - fsadm: fix condition when using --getsize64
+Message-ID: <20210324154152.49D843865460@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=b19e036918cf1c2ac2995e07809a28c06bd1f34a
-Commit:        b19e036918cf1c2ac2995e07809a28c06bd1f34a
-Parent:        370749a4b859dae834ca5ce514a701a3c3abc75b
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=63c58d2a5d935cd78c77f3db13a655e68fb36367
+Commit:        63c58d2a5d935cd78c77f3db13a655e68fb36367
+Parent:        9684e82cc44cfec66f30b807160c19c06df2a2d8
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Mar 23 09:48:03 2021 +0100
+AuthorDate:    Wed Mar 24 16:11:55 2021 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Tue Mar 23 09:48:03 2021 +0100
+CommitterDate: Wed Mar 24 16:34:34 2021 +0100
 
-tests: aux updates
+fsadm: fix condition when using --getsize64
 
-Select unused md from /proc/mdstat
-Check for wipefs once.
+When blocksize --getsize64 gives empty result we want to fallback
+to ancient  --getsize * --getss  calculation (RHBZ #1942486).
+
+Reported by: ajschorr at alumni.princeton.edu
 ---
- test/lib/aux.sh | 20 ++++++++++++++------
- 1 file changed, 14 insertions(+), 6 deletions(-)
+ scripts/fsadm.sh | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
 
-diff --git a/test/lib/aux.sh b/test/lib/aux.sh
-index a982ca162..617d0b3a4 100644
---- a/test/lib/aux.sh
-+++ b/test/lib/aux.sh
-@@ -722,7 +722,7 @@ mdadm_create() {
- 	# using the old naming /dev/mdXXX
-         # if we need more MD arrays test suite more likely leaked them
- 	for devid in {127..150} ; do
--		test -b /dev/md${devid} || break
-+		grep -q "md${devid}" /proc/mdstat || break
- 	done
- 	test "$devid" -lt "150" || skip "Cannot find free /dev/mdXXX node!"
- 	mddev=/dev/md${devid}
-@@ -793,10 +793,10 @@ cleanup_md_dev() {
- 		udev_wait  # wait till events are process, not zeroing to early
- 	done
- 
--	test "$DM_DEV_DIR" != "/dev" && rm -f "$(< MD_DEV_PV)"
-+	test "$DM_DEV_DIR" = "/dev" || rm -f "$(< MD_DEV_PV)"
- 
- 	for dev in $(< MD_DEVICES); do
--		mdadm --zero-superblock "$dev" || true
-+		mdadm --zero-superblock "$dev" 2>/dev/null
- 	done
- 	udev_wait
- 	rm -f MD_DEV MD_DEVICES MD_DEV_PV
-@@ -804,17 +804,25 @@ cleanup_md_dev() {
- 
- wipefs_a() {
- 	local dev=$1
-+	local have_wipefs=1
- 	shift
- 
- 	if test -n "$LVM_TEST_DEVICES_FILE"; then
- 		lvmdevices --deldev $dev || true
- 	fi
- 
--	if wipefs -V >/dev/null; then
-+	if test -f HAVE_WIPEFS ; then
-+		have_wipefs=$(< HAVE_WIPEFS)
-+	else
-+		wipefs -V >/dev/null 2>&1 || have_wipefs=0
-+		echo "$have_wipefs" > HAVE_WIPEFS
-+	fi
-+
-+	if [ "$have_wipefs" = "1" ] ; then
- 		wipefs -a "$dev"
- 	else
--		dd if=/dev/zero of="$dev" bs=4096 count=8 || true
--		mdadm --zero-superblock "$dev" || true
-+		dd if=/dev/zero of="$dev" bs=4096 count=8 >/dev/null || true
-+		mdadm --zero-superblock "$dev" 2>/dev/null || true
- 	fi
- 
- 	if test -n "$LVM_TEST_DEVICES_FILE"; then
+diff --git a/scripts/fsadm.sh b/scripts/fsadm.sh
+index d98833c3a..20ae57462 100755
+--- a/scripts/fsadm.sh
++++ b/scripts/fsadm.sh
+@@ -378,7 +378,7 @@ detect_mounted() {
+ detect_device_size() {
+ 	# check if blockdev supports getsize64
+ 	DEVSIZE=$("$BLOCKDEV" --getsize64 "$VOLUME" 2>"$NULL" || true)
+-	if test -n "$DEVSIZE" ; then
++	if test -z "$DEVSIZE" ; then
+ 		DEVSIZE=$("$BLOCKDEV" --getsize "$VOLUME" || true)
+ 		test -n "$DEVSIZE" || error "Cannot read size of device \"$VOLUME\"."
+ 		SSSIZE=$("$BLOCKDEV" --getss "$VOLUME" || true)
 
 
