@@ -1,86 +1,42 @@
-From: David Teigland <teigland@sourceware.org>
-Date: Wed, 31 Mar 2021 21:49:04 +0000 (GMT)
-Subject: dev-next - tests: query info instead of table
-Message-ID: <20210331214904.1E45C3857C6F@sourceware.org>
+From: Zdenek Kabelac <zkabelac@sourceware.org>
+Date: Wed, 24 Mar 2021 15:41:53 +0000 (GMT)
+Subject: main - fsadm: handle error from blkid
+Message-ID: <20210324154153.6A58C384B110@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=18f2475fa18bfe8b08af830bb8335d41928206fe
-Commit:        18f2475fa18bfe8b08af830bb8335d41928206fe
-Parent:        8df0a32abb840815c5d210cbdbd1483d483ee729
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=28865f971e0b23f4d1a4117e0e0fdb61bd21d836
+Commit:        28865f971e0b23f4d1a4117e0e0fdb61bd21d836
+Parent:        63c58d2a5d935cd78c77f3db13a655e68fb36367
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed Mar 24 00:37:24 2021 +0100
+AuthorDate:    Wed Mar 24 16:26:17 2021 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Wed Mar 24 12:22:27 2021 +0100
+CommitterDate: Wed Mar 24 16:37:09 2021 +0100
 
-tests: query info instead of table
+fsadm: handle error from blkid
 
-No need to access table when we just check presence,
-so generate smaller error message about missing device.
+Fsadm wants to print its own error message when it can't detect
+type of the filesystem on a block device.
+Otherwise fsadm exits with no message on an unused block device.
 ---
- test/shell/lvm-on-md.sh | 12 ++++++------
- 1 file changed, 6 insertions(+), 6 deletions(-)
+ scripts/fsadm.sh | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
 
-diff --git a/test/shell/lvm-on-md.sh b/test/shell/lvm-on-md.sh
-index 22d5b4ca4..9187d44f5 100644
---- a/test/shell/lvm-on-md.sh
-+++ b/test/shell/lvm-on-md.sh
-@@ -93,7 +93,7 @@ not grep "Not using device" out
- not vgchange -ay $vg
- 
- # should not show an active lv
--not dmsetup table $vg-$lv1
-+not dmsetup info $vg-$lv1
- 
- # should not allow updating vg
- not lvcreate -l1 $vg
-@@ -107,7 +107,7 @@ test ! -f "$RUNDIR/lvm/pvs_online/$PVIDMD"
- test ! -f "$RUNDIR/lvm/vgs_online/$vg"
- 
- # should not show an active lv
--not dmsetup table $vg-$lv1
-+not dmsetup info $vg-$lv1
- 
- mdadm --assemble "$mddev" "$dev1" "$dev2"
- aux udev_wait
-@@ -130,7 +130,7 @@ test ! -f "$RUNDIR/lvm/pvs_online/$PVIDMD"
- test ! -f "$RUNDIR/lvm/vgs_online/$vg"
- 
- # should not show an active lv
--not dmsetup table $vg-$lv1
-+not dmsetup info $vg-$lv1
- 
- vgchange -ay $vg
- 
-@@ -247,7 +247,7 @@ grep "$dev3" out
- not vgchange -ay $vg
- 
- # should not show an active lv
--not dmsetup table $vg-$lv1
-+not dmsetup info $vg-$lv1
- 
- # should not allow updating vg
- not lvcreate -l1 $vg
-@@ -261,7 +261,7 @@ test ! -f "$RUNDIR/lvm/pvs_online/$PVIDMD"
- test ! -f "$RUNDIR/lvm/vgs_online/$vg"
- 
- # should not show an active lv
--not dmsetup table $vg-$lv1
-+not dmsetup info $vg-$lv1
- 
- # start the md dev
- mdadm --assemble "$mddev" "$dev1" "$dev2"
-@@ -285,7 +285,7 @@ test ! -f "$RUNDIR/lvm/pvs_online/$PVIDMD"
- test ! -f "$RUNDIR/lvm/vgs_online/$vg"
- 
- # should not show an active lv
--not dmsetup table $vg-$lv1
-+not dmsetup info $vg-$lv1
- 
- vgchange -ay $vg
- 
+diff --git a/scripts/fsadm.sh b/scripts/fsadm.sh
+index 20ae57462..3e1f3d405 100755
+--- a/scripts/fsadm.sh
++++ b/scripts/fsadm.sh
+@@ -230,7 +230,7 @@ detect_fs() {
+ 	esac
+ 	# use null device as cache file to be sure about the result
+ 	# not using option '-o value' to be compatible with older version of blkid
+-	FSTYPE=$("$BLKID" -c "$NULL" -s TYPE "$VOLUME")
++	FSTYPE=$("$BLKID" -c "$NULL" -s TYPE "$VOLUME" || true)
+ 	test -n "$FSTYPE" || error "Cannot get FSTYPE of \"$VOLUME\"."
+ 	FSTYPE=${FSTYPE##*TYPE=\"} # cut quotation marks
+ 	FSTYPE=${FSTYPE%%\"*}
 
 
