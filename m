@@ -1,86 +1,55 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Fri, 26 Mar 2021 19:50:28 +0000 (GMT)
-Subject: main - tests: use aux mdadm_assemble wrapper
-Message-ID: <20210326195028.C82CF3857C7A@sourceware.org>
+Date: Fri, 26 Mar 2021 19:50:31 +0000 (GMT)
+Subject: main - tests: update for newer thin-pool
+Message-ID: <20210326195031.214C53857C7A@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=02e02a5ccc7275c23e59e65df25287c8f82276fa
-Commit:        02e02a5ccc7275c23e59e65df25287c8f82276fa
-Parent:        4c59b2aa216cb5649fe5e3f54230e85ee994869b
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=1d6e1d08a887d602234485f0214edc3552e843e0
+Commit:        1d6e1d08a887d602234485f0214edc3552e843e0
+Parent:        51ac56a05e9da2c28ef5047345468fed4946078a
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Mar 26 16:07:24 2021 +0100
+AuthorDate:    Fri Mar 26 16:53:18 2021 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Fri Mar 26 20:39:41 2021 +0100
 
-tests: use aux mdadm_assemble wrapper
+tests: update for newer thin-pool
 
+Newer thin-pool handle metadata read-only recovery better.
 ---
- test/shell/lvm-on-md.sh            | 19 ++-----------------
- test/shell/pvcreate-md-fake-hdr.sh |  4 ++--
- 2 files changed, 4 insertions(+), 19 deletions(-)
+ test/shell/thin-flags.sh | 17 ++++++++++++++++-
+ 1 file changed, 16 insertions(+), 1 deletion(-)
 
-diff --git a/test/shell/lvm-on-md.sh b/test/shell/lvm-on-md.sh
-index 7c14e6748..d2810b8cf 100644
---- a/test/shell/lvm-on-md.sh
-+++ b/test/shell/lvm-on-md.sh
-@@ -27,19 +27,6 @@ _clear_online_files() {
+diff --git a/test/shell/thin-flags.sh b/test/shell/thin-flags.sh
+index 78a4b2cd7..89ed69ac9 100644
+--- a/test/shell/thin-flags.sh
++++ b/test/shell/thin-flags.sh
+@@ -98,7 +98,22 @@ not lvcreate -V10 -n $lv3 $vg/pool
+ lvs -ao+seg_pe_ranges $vg
  
- . lib/inittest
- 
--which mdadm || skip
--
--STRACE=
--[ "$DM_DEV_DIR" = "/dev" ] && mdadm -V 2>&1 | grep " v3.2" && {
--	# use this 'trick' to slow down mdadm which otherwise
--	# is racing with udev rule since mdadm internally
--	# opens and closes raid leg devices in RW mode and then
--	# tries to get exlusive access to the leg device during
--	# insertion to kernel and fails during assembly
--        # There could be more affted version of mdadm.
--	STRACE="strace -f -o /dev/null"
--}
--
- # This stops lvm from taking advantage of hints which
- # will have already excluded md components.
- 
-@@ -121,8 +108,7 @@ test ! -f "$RUNDIR/lvm/vgs_online/$vg"
- # should not show an active lv
- not dmsetup info $vg-$lv1
- 
--$STRACE mdadm --assemble "$mddev" "$dev1" "$dev2"
--aux udev_wait
-+aux mdadm_assemble "$mddev" "$dev1" "$dev2"
- 
- not pvs "$dev1"
- not pvs "$dev2"
-@@ -276,8 +262,7 @@ test ! -f "$RUNDIR/lvm/vgs_online/$vg"
- not dmsetup info $vg-$lv1
- 
- # start the md dev
--$STRACE mdadm --assemble "$mddev" "$dev1" "$dev2"
--aux udev_wait
-+aux mdadm_assemble "$mddev" "$dev1" "$dev2"
- 
- not pvs "$dev1"
- not pvs "$dev2"
-diff --git a/test/shell/pvcreate-md-fake-hdr.sh b/test/shell/pvcreate-md-fake-hdr.sh
-index 1550bc4c0..7a16ef5e4 100644
---- a/test/shell/pvcreate-md-fake-hdr.sh
-+++ b/test/shell/pvcreate-md-fake-hdr.sh
-@@ -88,8 +88,8 @@ if mdadm --detail "$mddev" ; then
- fi
- 
- # now reassemble array from  PV1 & PV2
--mdadm --assemble --verbose "$mddev" "$dev1" "$dev2"
--aux udev_wait
-+aux mdadm_assemble --verbose "$mddev" "$dev1" "$dev2"
+ # needs_check needs newer version
+-if aux have_thin 1 16 0 ; then
++if aux have_thin 1 19 0 ; then
++	check lv_attr_bit state $vg/pool "a"
 +
- sleep 1
++	dmsetup suspend $vg-pool-tpool
++
++	check lv_attr_bit state $vg/pool "s"
++
++	dmsetup resume $vg-pool-tpool
++
++	lvresize -L+2M $vg/pool_tmeta
++
++	# Newer version recovers when metadata grow up
++	check lv_attr_bit state $vg/pool "a"
++	check lv_field $vg/pool lv_health_status ""
++
++elif aux have_thin 1 16 0 ; then
+ 	check lv_attr_bit state $vg/pool "c"
+ 	check lv_field $vg/pool lv_check_needed "check needed"
  
- # and let 'fake hdr' to be fixed from master/primary leg
 
 
