@@ -1,44 +1,48 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Tue, 23 Mar 2021 20:36:07 +0000 (GMT)
-Subject: main - tests: this test has race in it depending on kernel
-Message-ID: <20210323203607.6FF05386102C@sourceware.org>
+Date: Fri, 26 Mar 2021 19:50:26 +0000 (GMT)
+Subject: main - tests: better reporting of problematic services
+Message-ID: <20210326195026.7FE643857C7A@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=8df0a32abb840815c5d210cbdbd1483d483ee729
-Commit:        8df0a32abb840815c5d210cbdbd1483d483ee729
-Parent:        dd1f5f9a24fc906de7e6dd064ecdd8fdfa9eebda
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=5ef8d845694c79683ebdbdeec69eb2e534f4b1d2
+Commit:        5ef8d845694c79683ebdbdeec69eb2e534f4b1d2
+Parent:        49575a6ce1940528aaaac5eada8f8938e6cf4a84
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Mar 23 21:32:51 2021 +0100
+AuthorDate:    Fri Mar 26 16:06:46 2021 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Tue Mar 23 21:32:51 2021 +0100
+CommitterDate: Fri Mar 26 20:39:40 2021 +0100
 
-tests: this test has race in it depending on kernel
+tests: better reporting of problematic services
 
-Some kernel seems to keep 'lvextend' busy so long,
-that actual resize already happens.
-
-So ATM use 'should'  until something better is invented.
 ---
- test/shell/lvextend-raid.sh | 3 ++-
- 1 file changed, 2 insertions(+), 1 deletion(-)
+ test/shell/000-basic.sh | 12 ++++++------
+ 1 file changed, 6 insertions(+), 6 deletions(-)
 
-diff --git a/test/shell/lvextend-raid.sh b/test/shell/lvextend-raid.sh
-index 9370bf295..08b34d00c 100644
---- a/test/shell/lvextend-raid.sh
-+++ b/test/shell/lvextend-raid.sh
-@@ -63,7 +63,8 @@ aux delayzero_dev "$dev2"  0 50 "${sector}:"
- lvextend -y -L+${lvext}M $vg/$lv1
- if [ $PROGRESS -eq 1 ]
- then
--not check lv_field $vg/$lv1 sync_percent "100.00"
-+# Even with delayed devices wre are catching races here.
-+should not check lv_field $vg/$lv1 sync_percent "100.00"
- check lv_field $vg/$lv1 size "$(($lvsz)).00m" $vg/$lv1
+diff --git a/test/shell/000-basic.sh b/test/shell/000-basic.sh
+index a7b80c72b..15f2a6021 100644
+--- a/test/shell/000-basic.sh
++++ b/test/shell/000-basic.sh
+@@ -38,11 +38,11 @@ not lvs "${DEVICES[@]}"
+ # validate testing machine with its services is in expected state and will not interfere with tests
+ if systemctl -a >out 2>/dev/null ; then
+ 	for i in dm-event lvm2-lvmpolld lvm2-monitor ; do
+-	echo $i
+-		grep $i out | not grep -v masked || {
+-			cat out
+-			should not echo "Present unmasked $i service/socket may randomize testing results!"
+-			echo "+++++ Stop & Mask with systemctl +++++"
+-		}
++		grep $i out > mout || continue
++		grep -v masked mout || continue
++		should not echo "Present unmasked $i service/socket may randomize testing results!"
++		echo "+++++ Stop & Mask with systemctl +++++"
++		touch show_out
+ 	done
++	test ! -e show_out || cat out
  fi
- aux wait_for_sync $vg $lv1
 
 
