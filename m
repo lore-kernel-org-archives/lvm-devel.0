@@ -1,54 +1,40 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Tue, 23 Mar 2021 20:36:05 +0000 (GMT)
-Subject: main - tests: wipefs with udev_wait
-Message-ID: <20210323203605.2B23D3857829@sourceware.org>
+Date: Fri, 26 Mar 2021 12:18:06 +0000 (GMT)
+Subject: main - tests: add commented example
+Message-ID: <20210326121806.BFF733858024@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=93f2d194aca4a589cd38dd8bdd99cad2945dd21c
-Commit:        93f2d194aca4a589cd38dd8bdd99cad2945dd21c
-Parent:        14a3c34983fa8ab99773a47f1ee8bdd02d84feef
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=7768650d87d4086a76f1558aab4436acda1b5e44
+Commit:        7768650d87d4086a76f1558aab4436acda1b5e44
+Parent:        25c665d5559e77c1eb0f67527fa95419a84b7553
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Mar 23 14:57:10 2021 +0100
+AuthorDate:    Fri Mar 26 13:16:44 2021 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Tue Mar 23 14:57:10 2021 +0100
+CommitterDate: Fri Mar 26 13:16:44 2021 +0100
 
-tests: wipefs with udev_wait
+tests: add commented example
 
-Try to synchronize with colliding udev.
-Also retry once if there is some failure with some
-sleep between next retry.
-
-Use oflag=direct for wipping without wipefs.
+How to run individual test.
 ---
- test/lib/aux.sh | 10 ++++++++--
- 1 file changed, 8 insertions(+), 2 deletions(-)
+ test/api/dbustest.sh | 4 ++++
+ 1 file changed, 4 insertions(+)
 
-diff --git a/test/lib/aux.sh b/test/lib/aux.sh
-index 20736260f..386918041 100644
---- a/test/lib/aux.sh
-+++ b/test/lib/aux.sh
-@@ -818,10 +818,16 @@ wipefs_a() {
- 		echo "$have_wipefs" > HAVE_WIPEFS
- 	fi
+diff --git a/test/api/dbustest.sh b/test/api/dbustest.sh
+index d922d903f..83e40d056 100644
+--- a/test/api/dbustest.sh
++++ b/test/api/dbustest.sh
+@@ -32,4 +32,8 @@ aux prepare_profiles "lvmdbusd"
  
-+	udev_wait
- 	if [ "$have_wipefs" = "1" ] ; then
--		wipefs -a "$dev"
-+		wipefs -a "$dev" || {
-+			echo "$dev: device in-use, retrying wipe again."
-+			sleep 1
-+			udev_wait
-+			wipefs -a "$dev"
-+		}
- 	else
--		dd if=/dev/zero of="$dev" bs=4096 count=8 >/dev/null || true
-+		dd if=/dev/zero of="$dev" bs=4096 count=8 oflag=direct >/dev/null || true
- 		mdadm --zero-superblock "$dev" 2>/dev/null || true
- 	fi
+ aux prepare_lvmdbusd
  
++# Example for testing individual test:
++#"$TESTOLDPWD/dbus/lvmdbustest.py" -v TestDbusService.test_lv_interface_cache_lv
++#"$TESTOLDPWD/dbus/lvmdbustest.py" -v TestDbusService.test_pv_symlinks
++
+ "$TESTOLDPWD/dbus/lvmdbustest.py" -v
 
 
