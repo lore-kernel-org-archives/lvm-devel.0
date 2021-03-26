@@ -1,40 +1,50 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Fri, 26 Mar 2021 12:18:06 +0000 (GMT)
-Subject: main - tests: add commented example
-Message-ID: <20210326121806.BFF733858024@sourceware.org>
+Date: Fri, 26 Mar 2021 12:18:02 +0000 (GMT)
+Subject: main - tests: add basic validation of running services
+Message-ID: <20210326121802.317523858024@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=7768650d87d4086a76f1558aab4436acda1b5e44
-Commit:        7768650d87d4086a76f1558aab4436acda1b5e44
-Parent:        25c665d5559e77c1eb0f67527fa95419a84b7553
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=85fae836c09daf457f3f8f14e3eae2179cfd2ffa
+Commit:        85fae836c09daf457f3f8f14e3eae2179cfd2ffa
+Parent:        9bcc76b63c14566e5ced09ac18129e1c9a98e8e4
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Mar 26 13:16:44 2021 +0100
+AuthorDate:    Fri Mar 26 11:13:56 2021 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Fri Mar 26 13:16:44 2021 +0100
+CommitterDate: Fri Mar 26 11:13:56 2021 +0100
 
-tests: add commented example
+tests: add basic validation of running services
 
-How to run individual test.
+For determinist test results lvm2/dm service shall not be present
+and running in the system as it may randomize test results.
+
+In case they are found present, this test ends with warning (not failure).
 ---
- test/api/dbustest.sh | 4 ++++
- 1 file changed, 4 insertions(+)
+ test/shell/000-basic.sh | 12 ++++++++++++
+ 1 file changed, 12 insertions(+)
 
-diff --git a/test/api/dbustest.sh b/test/api/dbustest.sh
-index d922d903f..83e40d056 100644
---- a/test/api/dbustest.sh
-+++ b/test/api/dbustest.sh
-@@ -32,4 +32,8 @@ aux prepare_profiles "lvmdbusd"
- 
- aux prepare_lvmdbusd
- 
-+# Example for testing individual test:
-+#"$TESTOLDPWD/dbus/lvmdbustest.py" -v TestDbusService.test_lv_interface_cache_lv
-+#"$TESTOLDPWD/dbus/lvmdbustest.py" -v TestDbusService.test_pv_symlinks
+diff --git a/test/shell/000-basic.sh b/test/shell/000-basic.sh
+index 1e511d1f0..a7b80c72b 100644
+--- a/test/shell/000-basic.sh
++++ b/test/shell/000-basic.sh
+@@ -34,3 +34,15 @@ get_devs
+ # ensure we do not crash on a bug in config file
+ aux lvmconf 'log/prefix = 1""'
+ not lvs "${DEVICES[@]}"
 +
- "$TESTOLDPWD/dbus/lvmdbustest.py" -v
++# validate testing machine with its services is in expected state and will not interfere with tests
++if systemctl -a >out 2>/dev/null ; then
++	for i in dm-event lvm2-lvmpolld lvm2-monitor ; do
++	echo $i
++		grep $i out | not grep -v masked || {
++			cat out
++			should not echo "Present unmasked $i service/socket may randomize testing results!"
++			echo "+++++ Stop & Mask with systemctl +++++"
++		}
++	done
++fi
 
 
