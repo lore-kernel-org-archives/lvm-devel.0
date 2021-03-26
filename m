@@ -1,66 +1,76 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Fri, 26 Mar 2021 23:42:19 +0000 (GMT)
-Subject: main - tests: use shell comment
-Message-ID: <20210326234219.1DD0B385800F@sourceware.org>
+Date: Fri, 26 Mar 2021 23:42:20 +0000 (GMT)
+Subject: main - tests: more skipped tests for lvmpolld
+Message-ID: <20210326234220.410BC385801A@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=a55f4a8fe24a89c9a7e42e2fcd11c974eae0e127
-Commit:        a55f4a8fe24a89c9a7e42e2fcd11c974eae0e127
-Parent:        93336685f6cf8a178cb83aa1ee113a2a33ca7f5c
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=8e9bc52b15106d0edaf47f56e4f467f8365597f0
+Commit:        8e9bc52b15106d0edaf47f56e4f467f8365597f0
+Parent:        a55f4a8fe24a89c9a7e42e2fcd11c974eae0e127
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Mar 26 22:12:42 2021 +0100
+AuthorDate:    Fri Mar 26 22:13:37 2021 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Fri Mar 26 22:12:42 2021 +0100
+CommitterDate: Fri Mar 26 22:13:37 2021 +0100
 
-tests: use shell comment
+tests: more skipped tests for lvmpolld
 
 ---
- test/shell/hints.sh | 9 ++++-----
- 1 file changed, 4 insertions(+), 5 deletions(-)
+ test/shell/lvmlockd-hello-world.sh | 3 ++-
+ test/shell/lvmlockd-lv-types.sh    | 3 ++-
+ test/shell/pv-range-overflow.sh    | 1 +
+ 3 files changed, 5 insertions(+), 2 deletions(-)
 
-diff --git a/test/shell/hints.sh b/test/shell/hints.sh
-index b2a53c678..a11aeec23 100644
---- a/test/shell/hints.sh
-+++ b/test/shell/hints.sh
-@@ -12,9 +12,11 @@
+diff --git a/test/shell/lvmlockd-hello-world.sh b/test/shell/lvmlockd-hello-world.sh
+index 43946a54b..2e1d3291c 100644
+--- a/test/shell/lvmlockd-hello-world.sh
++++ b/test/shell/lvmlockd-hello-world.sh
+@@ -12,6 +12,8 @@
  
- SKIP_WITH_LVMPOLLD=1
+ test_description='Hello world for vgcreate $SHARED with lvmlockd and sanlock'
  
--/* hints are currently disabled with lvmlockd */
-+# hints are currently disabled with lvmlockd
- SKIP_WITH_LVMLOCKD=1
- 
-+. lib/inittest
++SKIP_WITH_LVMPOLLD=1
 +
- RUNDIR="/run"
- test -d "$RUNDIR" || RUNDIR="/var/run"
- HINTS="$RUNDIR/lvm/hints"
-@@ -22,8 +24,6 @@ NOHINTS="$RUNDIR/lvm/nohints"
- NEWHINTS="$RUNDIR/lvm/newhints"
- PREV="$RUNDIR/lvm/prev-hints"
+ . lib/inittest
  
--. lib/inittest
+ [ -z "$LVM_TEST_LVMLOCKD" ] && skip
+@@ -23,4 +25,3 @@ vgcreate $SHARED $vg "$dev1"
+ vgs -o+locktype,lockargs $vg
+ 
+ vgremove $vg
 -
- # TODO:
- # Test commands that ignore hints
- # Test flock
-@@ -55,7 +55,7 @@ not grep scan: tmptest
- # test that 'pvs' submits only three reads, one for each PV in hints
- # for initial scan, and one more in vg_read rescan check
+diff --git a/test/shell/lvmlockd-lv-types.sh b/test/shell/lvmlockd-lv-types.sh
+index 3503f2420..6138e5623 100644
+--- a/test/shell/lvmlockd-lv-types.sh
++++ b/test/shell/lvmlockd-lv-types.sh
+@@ -12,6 +12,8 @@
  
--if [ -e "/usr/bin/strace" ]; then
-+if which strace; then
- strace -e io_submit pvs 2>&1|tee tmptest
- test "$(grep io_submit tmptest | wc -l)" -eq 3
+ test_description='Check lvmlockd lock_args for different LV types'
  
-@@ -413,4 +413,3 @@ grep $vg4 $HINTS
- vgremove -y $vg4
- vgremove -y $vg2
- vgremove -y $vg1
++SKIP_WITH_LVMPOLLD=1
++
+ . lib/inittest
+ 
+ [ -z "$LVM_TEST_LVMLOCKD" ] && skip;
+@@ -182,4 +184,3 @@ lvchange -an $vg/lv4
+ lvremove $vg/lv4
+ 
+ vgremove $vg
 -
+diff --git a/test/shell/pv-range-overflow.sh b/test/shell/pv-range-overflow.sh
+index f880a1311..ab845a942 100644
+--- a/test/shell/pv-range-overflow.sh
++++ b/test/shell/pv-range-overflow.sh
+@@ -13,6 +13,7 @@
+ # 'Ensure that pvmove diagnoses PE-range values 2^32 and larger.'
+ 
+ 
++SKIP_WITH_LVMPOLLD=1
+ 
+ . lib/inittest
+ 
 
 
