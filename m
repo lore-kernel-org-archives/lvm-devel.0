@@ -1,39 +1,58 @@
-From: David Teigland <teigland@sourceware.org>
-Date: Wed, 31 Mar 2021 21:49:59 +0000 (GMT)
-Subject: dev-next - config: change default use_devicesfile to 1
-Message-ID: <20210331214959.55D943857C6F@sourceware.org>
+From: Zdenek Kabelac <zkabelac@sourceware.org>
+Date: Fri, 26 Mar 2021 12:18:03 +0000 (GMT)
+Subject: main - tests: move setting of dmeventd pid
+Message-ID: <20210326121803.528653854801@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=3008dade3a2237b5fbde0e733cde6eff6d8e2a0c
-Commit:        3008dade3a2237b5fbde0e733cde6eff6d8e2a0c
-Parent:        f38a49e3e092a23bd087cb3643152388bdce9a84
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Tue Mar 16 09:52:13 2021 -0500
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Wed Mar 31 16:47:04 2021 -0500
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=3ed79d8dfe8b75830d8fd6925d7cef5ef1ebd8f2
+Commit:        3ed79d8dfe8b75830d8fd6925d7cef5ef1ebd8f2
+Parent:        85fae836c09daf457f3f8f14e3eae2179cfd2ffa
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Fri Mar 26 11:16:32 2021 +0100
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Fri Mar 26 11:16:32 2021 +0100
 
-config: change default use_devicesfile to 1
+tests: move setting of dmeventd pid
 
+Added comment the  'lvs' already initiates dmeventd
+
+Note: we don't have any query mechanism to check if dmeventd
+is already running except access of socket which basically
+starts dmeventd if it's not running.
 ---
- lib/config/defaults.h | 2 +-
- 1 file changed, 1 insertion(+), 1 deletion(-)
+ test/shell/dmeventd-restart.sh | 5 +++--
+ 1 file changed, 3 insertions(+), 2 deletions(-)
 
-diff --git a/lib/config/defaults.h b/lib/config/defaults.h
-index 2870dee12..8f83d35d7 100644
---- a/lib/config/defaults.h
-+++ b/lib/config/defaults.h
-@@ -323,7 +323,7 @@
+diff --git a/test/shell/dmeventd-restart.sh b/test/shell/dmeventd-restart.sh
+index 151f1d51a..0def8c1fa 100644
+--- a/test/shell/dmeventd-restart.sh
++++ b/test/shell/dmeventd-restart.sh
+@@ -41,7 +41,7 @@ test -e LOCAL_CLVMD || grep 'already monitored' lvchange.out
  
- #define DEFAULT_MD_COMPONENT_CHECKS "auto"
+ # now try what happens if no dmeventd is running
+ kill -9 "$(< LOCAL_DMEVENTD)"
+-rm LOCAL_DMEVENTD
++rm LOCAL_DMEVENTD debug.log*
  
--#define DEFAULT_USE_DEVICES_FILE 0
-+#define DEFAULT_USE_DEVICES_FILE 1
- #define DEFAULT_DEVICES_FILE "system.devices"
+ dmeventd -R -f &
+ echo $! >LOCAL_DMEVENTD
+@@ -52,11 +52,12 @@ sleep 9
+ not pgrep dmeventd
+ rm LOCAL_DMEVENTD
  
- #define DEFAULT_SEARCH_FOR_DEVNAMES "auto"
++# First lvs restarts 'dmeventd' (initiate a socket connection to a daemon)
+ check lv_field $vg/3way seg_monitor "not monitored"
++pgrep -o dmeventd >LOCAL_DMEVENTD
+ check lv_field $vg/4way seg_monitor "not monitored"
+ 
+ lvchange --monitor y --verbose $vg/3way 2>&1 | tee lvchange.out
+-pgrep -o dmeventd >LOCAL_DMEVENTD
+ test -e LOCAL_CLVMD || not grep 'already monitored' lvchange.out
+ 
+ lvchange --monitor y --verbose $vg/$lv2 2>&1 | tee lvchange.out
 
 
