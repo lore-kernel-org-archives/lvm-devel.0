@@ -1,64 +1,39 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Sat, 27 Mar 2021 22:19:45 +0000 (GMT)
-Subject: main - tests: reoder killing order
-Message-ID: <20210327221945.AAE5E385801D@sourceware.org>
+Date: Sat, 27 Mar 2021 22:19:46 +0000 (GMT)
+Subject: main - tests: ensure raid is synchronized
+Message-ID: <20210327221946.CF52D3857811@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=5ec7992e29fdf3273673f712d6a9f231903b6bf2
-Commit:        5ec7992e29fdf3273673f712d6a9f231903b6bf2
-Parent:        feb7fef6c8d22d5773b6a5d1d9f2a5a3f52b5b3b
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=f584f0cd9e84c33128200897eebd6edb22557167
+Commit:        f584f0cd9e84c33128200897eebd6edb22557167
+Parent:        5ec7992e29fdf3273673f712d6a9f231903b6bf2
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Sat Mar 27 22:33:37 2021 +0100
+AuthorDate:    Sat Mar 27 23:15:54 2021 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Sat Mar 27 23:19:08 2021 +0100
 
-tests: reoder killing order
+tests: ensure raid is synchronized
 
-We need to stop pvmove while still in progress,
-so restart lvmpolld after pvmoving devices are gone
 ---
- test/shell/pvmove-resume-multiseg.sh | 12 ++++++------
- 1 file changed, 6 insertions(+), 6 deletions(-)
+ test/shell/lvconvert-raid-allocation.sh | 2 ++
+ 1 file changed, 2 insertions(+)
 
-diff --git a/test/shell/pvmove-resume-multiseg.sh b/test/shell/pvmove-resume-multiseg.sh
-index 1263d81ed..cdb426b66 100644
---- a/test/shell/pvmove-resume-multiseg.sh
-+++ b/test/shell/pvmove-resume-multiseg.sh
-@@ -20,7 +20,7 @@ SKIP_WITH_LVMLOCKD=1
- . lib/inittest
- 
- aux prepare_pvs 5 40
--aux throttle_dm_mirror 40 || :
-+aux throttle_dm_mirror 60 || :
- 
- vgcreate -s 128k $vg "$dev1" "$dev2" "$dev3"
- pvcreate --metadatacopies 0 "$dev4" "$dev5"
-@@ -48,17 +48,17 @@ test_pvmove_resume() {
- 	aux wait_pvmove_lv_ready "$vg-pvmove1" 300
- 	kill -9 $PVMOVE
- 
-+	while dmsetup status "$vg-$lv1"; do dmsetup remove "$vg-$lv1" || true; done
-+	while dmsetup status "$vg-$lv2"; do dmsetup remove "$vg-$lv2" || true; done
-+	while dmsetup status "$vg-pvmove0"; do dmsetup remove "$vg-pvmove0" || true; done
-+	while dmsetup status "$vg-pvmove1"; do dmsetup remove "$vg-pvmove1" || true; done
-+
- 	if test -e LOCAL_LVMPOLLD ; then
- 		aux prepare_lvmpolld
- 	fi
- 
- 	wait
- 
--	while dmsetup status "$vg-$lv1"; do dmsetup remove "$vg-$lv1" || true; done
--	while dmsetup status "$vg-$lv2"; do dmsetup remove "$vg-$lv2" || true; done
--	while dmsetup status "$vg-pvmove0"; do dmsetup remove "$vg-pvmove0" || true; done
--	while dmsetup status "$vg-pvmove1"; do dmsetup remove "$vg-pvmove1" || true; done
--
- 	check lv_attr_bit type $vg/pvmove0 "p"
- 	check lv_attr_bit type $vg/pvmove1 "p"
- 
+diff --git a/test/shell/lvconvert-raid-allocation.sh b/test/shell/lvconvert-raid-allocation.sh
+index acdae0caa..5420d584d 100644
+--- a/test/shell/lvconvert-raid-allocation.sh
++++ b/test/shell/lvconvert-raid-allocation.sh
+@@ -52,6 +52,8 @@ aux wait_for_sync $vg $lv1
+ not lvconvert -m +1 $vg/$lv1 \
+     "$dev5:0-1" "$dev1" "$dev2" "$dev3" "$dev4"
+ lvconvert -y -m +1 $vg/$lv1 "$dev5"
++aux wait_for_sync $vg $lv1
++# Cannot pass without --yes
+ not lvconvert -m 0 $vg/$lv1
+ lvconvert -y -m 0 $vg/$lv1
+ # Should work due to '--alloc anywhere'
 
 
