@@ -1,47 +1,41 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Sat, 27 Mar 2021 22:19:41 +0000 (GMT)
-Subject: main - tests: for 4.18 use already 1.20 logic
-Message-ID: <20210327221941.1D280385801D@sourceware.org>
+Date: Sat, 27 Mar 2021 22:19:42 +0000 (GMT)
+Subject: main - tests: use known path for test in find
+Message-ID: <20210327221942.405433857C48@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=37d603268f98ba51d9fd9c734004274de8fcca1b
-Commit:        37d603268f98ba51d9fd9c734004274de8fcca1b
-Parent:        f07a793813a51bd792f7a5a5e290a6727100aaca
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=12222add1abb45ebbc0c6dfccb514bb75d4ae4ea
+Commit:        12222add1abb45ebbc0c6dfccb514bb75d4ae4ea
+Parent:        37d603268f98ba51d9fd9c734004274de8fcca1b
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Sat Mar 27 19:28:43 2021 +0100
+AuthorDate:    Sat Mar 27 21:33:28 2021 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Sat Mar 27 23:16:52 2021 +0100
+CommitterDate: Sat Mar 27 23:18:38 2021 +0100
 
-tests: for 4.18 use already 1.20 logic
+tests: use known path for test in find
 
-Looks like there was some missed versioning increase during devel.
-So with kernel >= 4.18 version 1.19 is enough to look like 1.20
-
-However backported 1.19 targets seems to not provide all
-the capabilities.
+Actually make sure which 'test' binary is executed.
+Since we used to have 'test' binary in tests.
 ---
- test/shell/thin-flags.sh | 5 ++++-
- 1 file changed, 4 insertions(+), 1 deletion(-)
+ test/lib/aux.sh | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
 
-diff --git a/test/shell/thin-flags.sh b/test/shell/thin-flags.sh
-index 6e5749a74..0b3148a9c 100644
---- a/test/shell/thin-flags.sh
-+++ b/test/shell/thin-flags.sh
-@@ -98,7 +98,10 @@ not lvcreate -V10 -n $lv3 $vg/pool
- lvs -ao+seg_pe_ranges $vg
+diff --git a/test/lib/aux.sh b/test/lib/aux.sh
+index 0ce2b8b07..38191842d 100644
+--- a/test/lib/aux.sh
++++ b/test/lib/aux.sh
+@@ -582,7 +582,7 @@ teardown() {
  
- # needs_check needs newer version
--if aux have_thin 1 20 0 ; then
-+THINMINVER="1 20 0"
-+aux kernel_at_least 4.18 && THINMINVER="1 19 0" # kernel >=4.18 already had changes from 1.20
-+
-+if aux have_thin $THINVER ; then
- 	check lv_attr_bit state $vg/pool "a"
+ 	# Remove any dangling symlink in /dev/disk (our tests can confuse udev)
+ 	test -d /dev/disk && {
+-		find /dev/disk -type l ! -exec test -e {} \; -print | xargs rm -f || true
++		find /dev/disk -type l ! -exec /usr/bin/test -e {} \; -print | xargs rm -f || true
+ 	}
  
- 	dmsetup suspend $vg-pool-tpool
+ 	# Remove any metadata archives and backups from this test on system
 
 
