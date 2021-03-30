@@ -1,175 +1,150 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Tue, 30 Mar 2021 11:10:09 +0000 (GMT)
-Subject: main - device_mapper: remove unused lines
-Message-ID: <20210330111009.AAEEF3860C39@sourceware.org>
+Date: Tue, 30 Mar 2021 11:10:12 +0000 (GMT)
+Subject: main - man: writecache missed for --type
+Message-ID: <20210330111012.01DAD3860C39@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=f1e8437c59882a71a9a6e005d188a12a35f0cf9b
-Commit:        f1e8437c59882a71a9a6e005d188a12a35f0cf9b
-Parent:        1cedbaf13778de02e38b5dc80a7af246b7ec83e5
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=2aaea13aaa2935905a6d1cb32db4e2cd477c22f4
+Commit:        2aaea13aaa2935905a6d1cb32db4e2cd477c22f4
+Parent:        648188df2a9ba7528f60a9362860d7615227061b
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Mon Mar 29 22:02:45 2021 +0200
+AuthorDate:    Tue Mar 30 11:22:27 2021 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Tue Mar 30 13:07:51 2021 +0200
+CommitterDate: Tue Mar 30 13:08:14 2021 +0200
 
-device_mapper: remove unused lines
+man: writecache missed for --type
 
-No need for versioning history in internal version.
+Add missing writecache type into man pages.
 ---
- device_mapper/datastruct/bitset.c | 15 -----------
- device_mapper/ioctl/libdm-iface.c | 49 ----------------------------------
- device_mapper/libdm-deptree.c     | 55 ---------------------------------------
- 3 files changed, 119 deletions(-)
+ man/lvconvert.8_pregen | 4 ++--
+ man/lvcreate.8_pregen  | 4 ++--
+ man/lvextend.8_pregen  | 6 +++---
+ man/lvresize.8_pregen  | 6 +++---
+ tools/vals.h           | 2 +-
+ 5 files changed, 11 insertions(+), 11 deletions(-)
 
-diff --git a/device_mapper/datastruct/bitset.c b/device_mapper/datastruct/bitset.c
-index fc2c3c39c..c99927cc1 100644
---- a/device_mapper/datastruct/bitset.c
-+++ b/device_mapper/datastruct/bitset.c
-@@ -242,18 +242,3 @@ bad:
- 	}
- 	return NULL;
- }
--
--#if defined(__GNUC__)
--/*
-- * Maintain backward compatibility with older versions that did not
-- * accept a 'min_num_bits' argument to dm_bitset_parse_list().
-- */
--dm_bitset_t dm_bitset_parse_list_v1_02_129(const char *str, struct dm_pool *mem);
--dm_bitset_t dm_bitset_parse_list_v1_02_129(const char *str, struct dm_pool *mem)
--{
--	return dm_bitset_parse_list(str, mem, 0);
--}
--
--#else /* if defined(__GNUC__) */
--
--#endif
-diff --git a/device_mapper/ioctl/libdm-iface.c b/device_mapper/ioctl/libdm-iface.c
-index 536e4b238..a2a56be45 100644
---- a/device_mapper/ioctl/libdm-iface.c
-+++ b/device_mapper/ioctl/libdm-iface.c
-@@ -2209,52 +2209,3 @@ void dm_lib_exit(void)
- 	_version_ok = 1;
- 	_version_checked = 0;
- }
--
--#if defined(__GNUC__)
--/*
-- * Maintain binary backward compatibility.
-- * Version script mechanism works with 'gcc' compatible compilers only.
-- */
--
--/*
-- * This following code is here to retain ABI compatibility after adding
-- * the field deferred_remove to struct dm_info in version 1.02.89.
-- *
-- * Binaries linked against version 1.02.88 of libdevmapper or earlier
-- * will use this function that returns dm_info without the
-- * deferred_remove field.
-- *
-- * Binaries compiled against version 1.02.89 onwards will use
-- * the new function dm_task_get_info_with_deferred_remove due to the
-- * #define.
-- *
-- * N.B. Keep this function at the end of the file to make sure that
-- * no code in this file accidentally calls it.
-- */
--
--int dm_task_get_info_base(struct dm_task *dmt, struct dm_info *info);
--int dm_task_get_info_base(struct dm_task *dmt, struct dm_info *info)
--{
--	struct dm_info new_info;
--
--	if (!dm_task_get_info(dmt, &new_info))
--		return 0;
--
--	memcpy(info, &new_info, offsetof(struct dm_info, deferred_remove));
--
--	return 1;
--}
--
--int dm_task_get_info_with_deferred_remove(struct dm_task *dmt, struct dm_info *info);
--int dm_task_get_info_with_deferred_remove(struct dm_task *dmt, struct dm_info *info)
--{
--	struct dm_info new_info;
--
--	if (!dm_task_get_info(dmt, &new_info))
--		return 0;
--
--	memcpy(info, &new_info, offsetof(struct dm_info, internal_suspend));
--
--	return 1;
--}
--#endif
-diff --git a/device_mapper/libdm-deptree.c b/device_mapper/libdm-deptree.c
-index ede75ef77..70acfb093 100644
---- a/device_mapper/libdm-deptree.c
-+++ b/device_mapper/libdm-deptree.c
-@@ -4328,61 +4328,6 @@ void dm_tree_node_set_callback(struct dm_tree_node *dnode,
- 	dnode->callback_data = data;
- }
+diff --git a/man/lvconvert.8_pregen b/man/lvconvert.8_pregen
+index 63fbc093c..5be4321c6 100644
+--- a/man/lvconvert.8_pregen
++++ b/man/lvconvert.8_pregen
+@@ -259,7 +259,7 @@ lvconvert - Change logical volume layout
+ .ad b
+ .br
+ .ad l
+-    \fB--type\fP \fBlinear\fP|\fBstriped\fP|\fBsnapshot\fP|\fBmirror\fP|\fBraid\fP|\fBthin\fP|\fBcache\fP|\fBvdo\fP|\fBthin-pool\fP|\fBcache-pool\fP|\fBvdo-pool\fP
++    \fB--type\fP \fBlinear\fP|\fBstriped\fP|\fBsnapshot\fP|\fBraid\fP|\fBmirror\fP|\fBthin\fP|\fBthin-pool\fP|\fBvdo\fP|\fBvdo-pool\fP|\fBcache\fP|\fBcache-pool\fP|\fBwritecache\fP
+ .ad b
+ .br
+ .ad l
+@@ -1738,7 +1738,7 @@ the image (see --splitmirrors with --name.
+ .ad b
+ .HP
+ .ad l
+-\fB--type\fP \fBlinear\fP|\fBstriped\fP|\fBsnapshot\fP|\fBmirror\fP|\fBraid\fP|\fBthin\fP|\fBcache\fP|\fBvdo\fP|\fBthin-pool\fP|\fBcache-pool\fP|\fBvdo-pool\fP
++\fB--type\fP \fBlinear\fP|\fBstriped\fP|\fBsnapshot\fP|\fBraid\fP|\fBmirror\fP|\fBthin\fP|\fBthin-pool\fP|\fBvdo\fP|\fBvdo-pool\fP|\fBcache\fP|\fBcache-pool\fP|\fBwritecache\fP
+ .br
+ The LV type, also known as "segment type" or "segtype".
+ See usage descriptions for the specific ways to use these types.
+diff --git a/man/lvcreate.8_pregen b/man/lvcreate.8_pregen
+index 8f548811e..79441c128 100644
+--- a/man/lvcreate.8_pregen
++++ b/man/lvcreate.8_pregen
+@@ -263,7 +263,7 @@ lvcreate - Create a logical volume
+ .ad b
+ .br
+ .ad l
+-    \fB--type\fP \fBlinear\fP|\fBstriped\fP|\fBsnapshot\fP|\fBmirror\fP|\fBraid\fP|\fBthin\fP|\fBcache\fP|\fBvdo\fP|\fBthin-pool\fP|\fBcache-pool\fP|\fBvdo-pool\fP
++    \fB--type\fP \fBlinear\fP|\fBstriped\fP|\fBsnapshot\fP|\fBraid\fP|\fBmirror\fP|\fBthin\fP|\fBthin-pool\fP|\fBvdo\fP|\fBvdo-pool\fP|\fBcache\fP|\fBcache-pool\fP|\fBwritecache\fP
+ .ad b
+ .br
+ .ad l
+@@ -1845,7 +1845,7 @@ The name of a thin pool LV.
+ .ad b
+ .HP
+ .ad l
+-\fB--type\fP \fBlinear\fP|\fBstriped\fP|\fBsnapshot\fP|\fBmirror\fP|\fBraid\fP|\fBthin\fP|\fBcache\fP|\fBvdo\fP|\fBthin-pool\fP|\fBcache-pool\fP|\fBvdo-pool\fP
++\fB--type\fP \fBlinear\fP|\fBstriped\fP|\fBsnapshot\fP|\fBraid\fP|\fBmirror\fP|\fBthin\fP|\fBthin-pool\fP|\fBvdo\fP|\fBvdo-pool\fP|\fBcache\fP|\fBcache-pool\fP|\fBwritecache\fP
+ .br
+ The LV type, also known as "segment type" or "segtype".
+ See usage descriptions for the specific ways to use these types.
+diff --git a/man/lvextend.8_pregen b/man/lvextend.8_pregen
+index 4ccfa809b..5e0a89ffd 100644
+--- a/man/lvextend.8_pregen
++++ b/man/lvextend.8_pregen
+@@ -119,7 +119,7 @@ lvextend - Add space to a logical volume
+ .ad b
+ .br
+ .ad l
+-    \fB--type\fP \fBlinear\fP|\fBstriped\fP|\fBsnapshot\fP|\fBmirror\fP|\fBraid\fP|\fBthin\fP|\fBcache\fP|\fBvdo\fP|\fBthin-pool\fP|\fBcache-pool\fP|\fBvdo-pool\fP
++    \fB--type\fP \fBlinear\fP|\fBstriped\fP|\fBsnapshot\fP|\fBraid\fP|\fBmirror\fP|\fBthin\fP|\fBthin-pool\fP|\fBvdo\fP|\fBvdo-pool\fP|\fBcache\fP|\fBcache-pool\fP|\fBwritecache\fP
+ .ad b
+ .br
+ .ad l
+@@ -284,7 +284,7 @@ Common options for command:
+ .ad b
+ .br
+ .ad l
+-[    \fB--type\fP \fBlinear\fP|\fBstriped\fP|\fBsnapshot\fP|\fBmirror\fP|\fBraid\fP|\fBthin\fP|\fBcache\fP|\fBvdo\fP|\fBthin-pool\fP|\fBcache-pool\fP|\fBvdo-pool\fP ]
++[    \fB--type\fP \fBlinear\fP|\fBstriped\fP|\fBsnapshot\fP|\fBraid\fP|\fBmirror\fP|\fBthin\fP|\fBthin-pool\fP|\fBvdo\fP|\fBvdo-pool\fP|\fBcache\fP|\fBcache-pool\fP|\fBwritecache\fP ]
+ .ad b
+ .RE
  
--#if defined(__GNUC__)
--/*
-- * Backward compatible implementations.
-- *
-- * Keep these at the end of the file to make sure that
-- * no code in this file accidentally calls it.
-- */
--
--/* Backward compatible dm_tree_node_size_changed() implementations. */
--int dm_tree_node_size_changed_base(const struct dm_tree_node *dnode);
--int dm_tree_node_size_changed_base(const struct dm_tree_node *dnode)
--{
--	/* Base does not make difference between smaller and bigger */
--	return dm_tree_node_size_changed(dnode) ? 1 : 0;
--}
--
--/*
-- * Retain ABI compatibility after adding the DM_CACHE_FEATURE_METADATA2
-- * in version 1.02.138.
-- *
-- * Binaries compiled against version 1.02.138 onwards will use
-- * the new function dm_tree_node_add_cache_target which detects unknown
-- * feature flags and returns error for them.
-- */
--int dm_tree_node_add_cache_target_base(struct dm_tree_node *node,
--				       uint64_t size,
--				       uint64_t feature_flags, /* DM_CACHE_FEATURE_* */
--				       const char *metadata_uuid,
--				       const char *data_uuid,
--				       const char *origin_uuid,
--				       const char *policy_name,
--				       const struct dm_config_node *policy_settings,
--				       uint32_t data_block_size);
--int dm_tree_node_add_cache_target_base(struct dm_tree_node *node,
--				       uint64_t size,
--				       uint64_t feature_flags,
--				       const char *metadata_uuid,
--				       const char *data_uuid,
--				       const char *origin_uuid,
--				       const char *policy_name,
--				       const struct dm_config_node *policy_settings,
--				       uint32_t data_block_size)
--{
--	/* Old version supported only these FEATURE bits, others were ignored so masked them */
--	static const uint64_t _mask =
--		DM_CACHE_FEATURE_WRITEBACK |
--		DM_CACHE_FEATURE_WRITETHROUGH |
--		DM_CACHE_FEATURE_PASSTHROUGH;
--
--	return dm_tree_node_add_cache_target(node, size, feature_flags & _mask,
--					     metadata_uuid, data_uuid, origin_uuid,
--					     policy_name, policy_settings, 0, 0, 0, 0, data_block_size);
--}
--#endif
--
- int dm_tree_node_add_vdo_target(struct dm_tree_node *node,
- 				uint64_t size,
- 				const char *vdo_pool_name,
+@@ -614,7 +614,7 @@ back metadata it believes has changed but hasn't.
+ .ad b
+ .HP
+ .ad l
+-\fB--type\fP \fBlinear\fP|\fBstriped\fP|\fBsnapshot\fP|\fBmirror\fP|\fBraid\fP|\fBthin\fP|\fBcache\fP|\fBvdo\fP|\fBthin-pool\fP|\fBcache-pool\fP|\fBvdo-pool\fP
++\fB--type\fP \fBlinear\fP|\fBstriped\fP|\fBsnapshot\fP|\fBraid\fP|\fBmirror\fP|\fBthin\fP|\fBthin-pool\fP|\fBvdo\fP|\fBvdo-pool\fP|\fBcache\fP|\fBcache-pool\fP|\fBwritecache\fP
+ .br
+ The LV type, also known as "segment type" or "segtype".
+ See usage descriptions for the specific ways to use these types.
+diff --git a/man/lvresize.8_pregen b/man/lvresize.8_pregen
+index 528066154..bc0b440db 100644
+--- a/man/lvresize.8_pregen
++++ b/man/lvresize.8_pregen
+@@ -115,7 +115,7 @@ lvresize - Resize a logical volume
+ .ad b
+ .br
+ .ad l
+-    \fB--type\fP \fBlinear\fP|\fBstriped\fP|\fBsnapshot\fP|\fBmirror\fP|\fBraid\fP|\fBthin\fP|\fBcache\fP|\fBvdo\fP|\fBthin-pool\fP|\fBcache-pool\fP|\fBvdo-pool\fP
++    \fB--type\fP \fBlinear\fP|\fBstriped\fP|\fBsnapshot\fP|\fBraid\fP|\fBmirror\fP|\fBthin\fP|\fBthin-pool\fP|\fBvdo\fP|\fBvdo-pool\fP|\fBcache\fP|\fBcache-pool\fP|\fBwritecache\fP
+ .ad b
+ .br
+ .ad l
+@@ -232,7 +232,7 @@ Common options for command:
+ .ad b
+ .br
+ .ad l
+-[    \fB--type\fP \fBlinear\fP|\fBstriped\fP|\fBsnapshot\fP|\fBmirror\fP|\fBraid\fP|\fBthin\fP|\fBcache\fP|\fBvdo\fP|\fBthin-pool\fP|\fBcache-pool\fP|\fBvdo-pool\fP ]
++[    \fB--type\fP \fBlinear\fP|\fBstriped\fP|\fBsnapshot\fP|\fBraid\fP|\fBmirror\fP|\fBthin\fP|\fBthin-pool\fP|\fBvdo\fP|\fBvdo-pool\fP|\fBcache\fP|\fBcache-pool\fP|\fBwritecache\fP ]
+ .ad b
+ .RE
+ 
+@@ -556,7 +556,7 @@ back metadata it believes has changed but hasn't.
+ .ad b
+ .HP
+ .ad l
+-\fB--type\fP \fBlinear\fP|\fBstriped\fP|\fBsnapshot\fP|\fBmirror\fP|\fBraid\fP|\fBthin\fP|\fBcache\fP|\fBvdo\fP|\fBthin-pool\fP|\fBcache-pool\fP|\fBvdo-pool\fP
++\fB--type\fP \fBlinear\fP|\fBstriped\fP|\fBsnapshot\fP|\fBraid\fP|\fBmirror\fP|\fBthin\fP|\fBthin-pool\fP|\fBvdo\fP|\fBvdo-pool\fP|\fBcache\fP|\fBcache-pool\fP|\fBwritecache\fP
+ .br
+ The LV type, also known as "segment type" or "segtype".
+ See usage descriptions for the specific ways to use these types.
+diff --git a/tools/vals.h b/tools/vals.h
+index 70404436b..098dc9e4e 100644
+--- a/tools/vals.h
++++ b/tools/vals.h
+@@ -128,7 +128,7 @@ val(nextents_VAL, nextents_arg, "NExtents", "[-]Number[PERCENT]")
+ val(permission_VAL, permission_arg, "Permission", "rw|r")
+ val(metadatatype_VAL, metadatatype_arg, "MetadataType", "lvm2")
+ val(units_VAL, string_arg, "Units", "r|R|h|H|b|B|s|S|k|K|m|M|g|G|t|T|p|P|e|E")
+-val(segtype_VAL, segtype_arg, "SegType", "linear|striped|snapshot|mirror|raid|thin|cache|vdo|thin-pool|cache-pool|vdo-pool")
++val(segtype_VAL, segtype_arg, "SegType", "linear|striped|snapshot|raid|mirror|thin|thin-pool|vdo|vdo-pool|cache|cache-pool|writecache")
+ val(alloc_VAL, alloc_arg, "Alloc", "contiguous|cling|cling_by_tags|normal|anywhere|inherit")
+ val(locktype_VAL, locktype_arg, "LockType", "sanlock|dlm|none")
+ val(readahead_VAL, readahead_arg, "Readahead", "auto|none|Number")
 
 
