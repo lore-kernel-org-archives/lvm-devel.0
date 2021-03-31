@@ -1,91 +1,41 @@
 From: David Teigland <teigland@sourceware.org>
-Date: Wed, 31 Mar 2021 21:49:52 +0000 (GMT)
-Subject: dev-next - libdm: use libdm header util.h
-Message-ID: <20210331214952.4A91D3857C6F@sourceware.org>
+Date: Wed, 31 Mar 2021 21:49:55 +0000 (GMT)
+Subject: dev-next - man: show config options with comments
+Message-ID: <20210331214955.BAA973858C27@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=648188df2a9ba7528f60a9362860d7615227061b
-Commit:        648188df2a9ba7528f60a9362860d7615227061b
-Parent:        f1e8437c59882a71a9a6e005d188a12a35f0cf9b
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=d5b0c72f40abc8caa199a0f484a9a0223f4a03dc
+Commit:        d5b0c72f40abc8caa199a0f484a9a0223f4a03dc
+Parent:        ff5776024f056aeff0f1dac9f028e55761e7c24b
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Mon Mar 29 22:43:36 2021 +0200
+AuthorDate:    Tue Mar 30 13:01:31 2021 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Tue Mar 30 13:08:14 2021 +0200
 
-libdm: use libdm header util.h
+man: show config options with comments
 
-Avoid using lvm header for libdm build.
 ---
- libdm/dm-tools/util.h | 41 +++++++++++++++++++++++++++++++++++++++++
- libdm/misc/dmlib.h    |  2 +-
- 2 files changed, 42 insertions(+), 1 deletion(-)
+ man/lvmvdo.7_main | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
 
-diff --git a/libdm/dm-tools/util.h b/libdm/dm-tools/util.h
-index 730b90370..3925a7438 100644
---- a/libdm/dm-tools/util.h
-+++ b/libdm/dm-tools/util.h
-@@ -76,4 +76,45 @@
+diff --git a/man/lvmvdo.7_main b/man/lvmvdo.7_main
+index 520a28ecf..55b9fa2a6 100644
+--- a/man/lvmvdo.7_main
++++ b/man/lvmvdo.7_main
+@@ -121,8 +121,8 @@ VDO allows to set a large variety of options. Lots of these settings
+ can be specified in lvm.conf or profile settings. You can prepare
+ a number of different profiles in the #DEFAULT_SYS_DIR#/profile directory
+ and just specify the profile file name.
+-Check the output of \fBlvmconfig --type full\fP for a detailed description
+-of all individual VDO settings.
++Check the output of \fBlvmconfig --type default --withcomments\fP
++for a detailed description of all individual VDO settings.
  
- #define FMTVGID "%." DM_TO_STRING(ID_LEN) "s"
- 
-+/*
-+ * GCC 3.4 adds a __builtin_clz, which uses the count leading zeros (clz)
-+ * instruction on arches that have one. Provide a fallback using shifts
-+ * and comparisons for older compilers.
-+ */
-+#ifdef HAVE___BUILTIN_CLZ
-+#define clz(x) __builtin_clz((x))
-+#else /* ifdef HAVE___BUILTIN_CLZ */
-+static unsigned _dm_clz(unsigned x)
-+{
-+	int n;
-+
-+	if ((int)x <= 0) return (~x >> 26) & 32;
-+
-+	n = 1;
-+
-+	if ((x >> 16) == 0) {
-+		n = n + 16;
-+		x = x << 16;
-+	}
-+
-+	if ((x >> 24) == 0) {
-+		n = n + 8;
-+		x = x << 8;
-+	}
-+
-+	if ((x >> 28) == 0) {
-+		n = n + 4;
-+		x = x << 4;
-+	}
-+
-+	if ((x >> 30) == 0) {
-+		n = n + 2;
-+		x = x << 2;
-+	}
-+	n = n - (x >> 31);
-+	return n;
-+}
-+#define clz(x) _dm_clz((x))
-+#endif /* ifdef HAVE___BUILTIN_CLZ */
-+
- #endif
-diff --git a/libdm/misc/dmlib.h b/libdm/misc/dmlib.h
-index 22328696b..85a22c50f 100644
---- a/libdm/misc/dmlib.h
-+++ b/libdm/misc/dmlib.h
-@@ -72,7 +72,7 @@
- #define DM_EXPORT_SYMBOL_BASE(func)
- #endif
- 
--#include "lib/misc/util.h"
-+#include "libdm/dm-tools/util.h"
- 
- #include "libdm/libdevmapper.h"
- #include "libdm/misc/dm-logging.h"
+ .I Example
+ .nf
 
 
