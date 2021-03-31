@@ -1,42 +1,50 @@
-From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Wed, 24 Mar 2021 15:41:53 +0000 (GMT)
-Subject: main - fsadm: handle error from blkid
-Message-ID: <20210324154153.6A58C384B110@sourceware.org>
+From: David Teigland <teigland@sourceware.org>
+Date: Wed, 31 Mar 2021 21:49:05 +0000 (GMT)
+Subject: dev-next - tests: remove more file in teardonw
+Message-ID: <20210331214905.440503858C27@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=28865f971e0b23f4d1a4117e0e0fdb61bd21d836
-Commit:        28865f971e0b23f4d1a4117e0e0fdb61bd21d836
-Parent:        63c58d2a5d935cd78c77f3db13a655e68fb36367
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=a126dde069ada9380ba2f7ab7e520ba4ce3e2a90
+Commit:        a126dde069ada9380ba2f7ab7e520ba4ce3e2a90
+Parent:        18f2475fa18bfe8b08af830bb8335d41928206fe
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed Mar 24 16:26:17 2021 +0100
+AuthorDate:    Wed Mar 24 00:39:01 2021 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Wed Mar 24 16:37:09 2021 +0100
+CommitterDate: Wed Mar 24 12:23:07 2021 +0100
 
-fsadm: handle error from blkid
+tests: remove more file in teardonw
 
-Fsadm wants to print its own error message when it can't detect
-type of the filesystem on a block device.
-Otherwise fsadm exits with no message on an unused block device.
+Our tests may result in producation of huge set of
+invalid links in /dev/disk directory depeding on version
+of udev and various kinds of failures.
+
+Also we happen to invoke some on-system pvscans generating
+local /etc/lvm/archive & backups - remove them when
+test is finished.
 ---
- scripts/fsadm.sh | 2 +-
- 1 file changed, 1 insertion(+), 1 deletion(-)
+ test/lib/aux.sh | 6 ++++++
+ 1 file changed, 6 insertions(+)
 
-diff --git a/scripts/fsadm.sh b/scripts/fsadm.sh
-index 20ae57462..3e1f3d405 100755
---- a/scripts/fsadm.sh
-+++ b/scripts/fsadm.sh
-@@ -230,7 +230,7 @@ detect_fs() {
- 	esac
- 	# use null device as cache file to be sure about the result
- 	# not using option '-o value' to be compatible with older version of blkid
--	FSTYPE=$("$BLKID" -c "$NULL" -s TYPE "$VOLUME")
-+	FSTYPE=$("$BLKID" -c "$NULL" -s TYPE "$VOLUME" || true)
- 	test -n "$FSTYPE" || error "Cannot get FSTYPE of \"$VOLUME\"."
- 	FSTYPE=${FSTYPE##*TYPE=\"} # cut quotation marks
- 	FSTYPE=${FSTYPE%%\"*}
+diff --git a/test/lib/aux.sh b/test/lib/aux.sh
+index 08eeac55b..f81d03e88 100644
+--- a/test/lib/aux.sh
++++ b/test/lib/aux.sh
+@@ -580,6 +580,12 @@ teardown() {
+ 		rm -rf "${TESTDIR:?}" || echo BLA
+ 	}
+ 
++	# Remove any dangling symlink in /dev/disk (our tests can confuse udev)
++	find /dev/disk -type l ! -exec test -e {} \; -print | xargs rm -f
++
++	# Remove any metadata archives and backups from this test on system
++	rm -f /etc/lvm/archive/${PREFIX}* /etc/lvm/backup/${PREFIX}*
++
+ 	echo "ok"
+ }
+ 
 
 
