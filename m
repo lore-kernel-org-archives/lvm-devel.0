@@ -1,58 +1,40 @@
-From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Wed, 24 Mar 2021 15:41:56 +0000 (GMT)
-Subject: main - tests: improve check raid_leg_status
-Message-ID: <20210324154156.D454B384B13C@sourceware.org>
+From: David Teigland <teigland@sourceware.org>
+Date: Wed, 31 Mar 2021 21:49:36 +0000 (GMT)
+Subject: dev-next - tests: correct thin-pool version
+Message-ID: <20210331214936.2D3843858C27@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=c1f5ca6751eeda5925638447b561b05bdf8a250c
-Commit:        c1f5ca6751eeda5925638447b561b05bdf8a250c
-Parent:        0783c661b9eb407b0b436559b6950deefc906b4f
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=f07a793813a51bd792f7a5a5e290a6727100aaca
+Commit:        f07a793813a51bd792f7a5a5e290a6727100aaca
+Parent:        53338cf566838381febe37d8254275e5f2a408ce
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed Mar 24 16:05:03 2021 +0100
+AuthorDate:    Sat Mar 27 00:33:18 2021 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Wed Mar 24 16:38:12 2021 +0100
+CommitterDate: Sat Mar 27 00:34:00 2021 +0100
 
-tests: improve  check raid_leg_status
+tests: correct thin-pool version
 
-Enhance function to wait until raid status gets consisten
-(shifts from 0/xxxxx to something else)
-
-If it would took too long fail the check.
+Use thin-pool target version 1.20 for changed behavior.
 ---
- test/lib/check.sh | 17 +++++++++++++----
- 1 file changed, 13 insertions(+), 4 deletions(-)
+ test/shell/thin-flags.sh | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
 
-diff --git a/test/lib/check.sh b/test/lib/check.sh
-index 4deb78a74..5b119430d 100644
---- a/test/lib/check.sh
-+++ b/test/lib/check.sh
-@@ -436,10 +436,19 @@ sysfs() {
- raid_leg_status() {
- 	local st
- 	local val
--	st=$(dmsetup status "$1-$2")
--	val=$(echo "$st" | cut -d ' ' -f 6)
--	test "$val" = "$3" || \
--		die "$1-$2 status $val != $3  ($st)"
-+
-+	# Ignore inconsisten raid status 0/xxxxx idle
-+	for i in {100..0} ; do
-+		st=( $(dmsetup status $1-$2) ) || die "Unable to get status of $vg/$lv1"
-+		b=( $(echo "${st[6]}" | sed s:/:' ':) )
-+		[ "${b[0]}" = "0" ] || {
-+			test "${st[5]}" = "$3" || break
-+			return 0
-+		}
-+		sleep .1
-+	done
-+
-+	die "$1-$2 status ${st[5]} != $3  ($st)"
- }
+diff --git a/test/shell/thin-flags.sh b/test/shell/thin-flags.sh
+index 89ed69ac9..6e5749a74 100644
+--- a/test/shell/thin-flags.sh
++++ b/test/shell/thin-flags.sh
+@@ -98,7 +98,7 @@ not lvcreate -V10 -n $lv3 $vg/pool
+ lvs -ao+seg_pe_ranges $vg
  
- grep_dmsetup() {
+ # needs_check needs newer version
+-if aux have_thin 1 19 0 ; then
++if aux have_thin 1 20 0 ; then
+ 	check lv_attr_bit state $vg/pool "a"
+ 
+ 	dmsetup suspend $vg-pool-tpool
 
 
