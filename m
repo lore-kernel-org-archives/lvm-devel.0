@@ -1,53 +1,94 @@
 From: David Teigland <teigland@sourceware.org>
-Date: Wed, 31 Mar 2021 21:48:37 +0000 (GMT)
-Subject: dev-next - tests: remove local changes
-Message-ID: <20210331214837.B965F3857C6F@sourceware.org>
+Date: Wed, 31 Mar 2021 21:48:42 +0000 (GMT)
+Subject: dev-next - tests: convert to use mdadm_create
+Message-ID: <20210331214842.575233857C6F@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=77432ee13742d09af5e8b1f8813d65bda3556a1d
-Commit:        77432ee13742d09af5e8b1f8813d65bda3556a1d
-Parent:        daca6e2c225889a8ee4bfe4f4724d92481df2558
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=a7d7471906501eebb6cf418ab3d0d9326805449f
+Commit:        a7d7471906501eebb6cf418ab3d0d9326805449f
+Parent:        b1483dcbac0ffbc3e449e6fb8b17988203f45c57
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Mon Mar 22 10:15:08 2021 +0100
+AuthorDate:    Mon Mar 22 22:23:53 2021 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Mon Mar 22 22:36:37 2021 +0100
+CommitterDate: Mon Mar 22 22:50:36 2021 +0100
 
-tests: remove local changes
+tests: convert to use mdadm_create
 
-Use aux for preparing profile.
-Avoid playing with LVM_BINARY localy - we already
-preset this variable in lib/utils.
+Flip usage from prepare_md_dev to mdadm_create.
 ---
- test/api/dbustest.sh | 13 +------------
- 1 file changed, 1 insertion(+), 12 deletions(-)
+ test/shell/pvcreate-md-fake-hdr.sh | 21 +++++++++++----------
+ 1 file changed, 11 insertions(+), 10 deletions(-)
 
-diff --git a/test/api/dbustest.sh b/test/api/dbustest.sh
-index f7d2e91a8..d922d903f 100644
---- a/test/api/dbustest.sh
-+++ b/test/api/dbustest.sh
-@@ -28,18 +28,7 @@ aux extend_filter_LVMTEST
+diff --git a/test/shell/pvcreate-md-fake-hdr.sh b/test/shell/pvcreate-md-fake-hdr.sh
+index 82dd8d4bb..1550bc4c0 100644
+--- a/test/shell/pvcreate-md-fake-hdr.sh
++++ b/test/shell/pvcreate-md-fake-hdr.sh
+@@ -1,6 +1,6 @@
+ #!/usr/bin/env bash
  
- # We need the lvmdbusd.profile for the daemon to utilize JSON
- # output
--mkdir -p "$TESTDIR/etc/profile"
--cp -v "$TESTOLDPWD/lib/lvmdbusd.profile" "$TESTDIR/etc/profile/"
--
--# Need to set this up so that the lvmdbusd service knows which
--# binary to be running, which should be the one we just built
--LVM_BINARY=$(which lvm 2>/dev/null)
--export LVM_BINARY
--
--# skip if we don't have our own lvmetad...
--if test -z "${installed_testsuite+varset}"; then
--	(echo "$LVM_BINARY" | grep -q "$abs_builddir") || skip
--fi
-+aux prepare_profiles "lvmdbusd"
+-# Copyright (C) 2018 Red Hat, Inc. All rights reserved.
++# Copyright (C) 2018-2021 Red Hat, Inc. All rights reserved.
+ #
+ # This copyrighted material is made available to anyone wishing to use,
+ # modify, copy, or redistribute it subject to the terms and conditions
+@@ -26,16 +26,17 @@ aux extend_filter_LVMTEST "a|/dev/md|"
+ aux prepare_devs 4
  
- aux prepare_lvmdbusd
+ pvcreate "$dev2"
+-aux prepare_md_dev 0 64 2 "$dev1" "$dev2"
+-# Incorrectly shows  $dev2 as PV for 'raid0'
+-pvs -vvvv
  
++aux mdadm_create --metadata=1.0 --level=0 --chunk=64 --raid-devices=2 "$dev1" "$dev2"
++
++pvs | tee out
++not grep pv2 out
+ 
+ vgcreate $SHARED $vg "$dev3" "$dev4"
+ 
+ # create 2 disk MD raid1 array
+ # by default using metadata format 1.0 with data at the end of device
+-aux prepare_md_dev 1 64 2 "$dev1" "$dev2"
++aux mdadm_create --metadata=1.0 --level=1 --chunk=64 --raid-devices=2 "$dev1" "$dev2"
+ 
+ mddev=$(< MD_DEV)
+ pvdev=$(< MD_DEV_PV)
+@@ -51,8 +52,8 @@ vgremove -f $vg
+ sleep 3
+ aux udev_wait
+ # too bad  'dd' wakes up  md array reassembling
+-should not mdadm --detail "$mddev"
+-should not mdadm --stop "$mddev"
++mdadm --detail "$mddev" || true
++mdadm --stop "$mddev" || true
+ sleep 3
+ 
+ # print what  blkid thinks about each PV
+@@ -64,12 +65,12 @@ done
+ # expect open count for each PV to be 0
+ dmsetup info -c
+ 
+-pvs -vvvv  "$dev2" "$dev3" || true
++pvs "$dev2" "$dev3" || true
+ 
+ # still expect open count for each PV to be 0
+ dmsetup info -c
+ 
+-pvs -vvvv  "$dev3" "$dev2" || true
++pvs "$dev3" "$dev2" || true
+ 
+ # and again we expect open count for each PV to be 0
+ dmsetup info -c
+@@ -97,5 +98,5 @@ if mdadm --action=repair "$mddev" ; then
+ 	sleep 1
+ 	pvscan -vvvv
+ 	# should be showing correctly PV3 & PV4
+-	pvs -vvvv "$dev3" "$dev4"
++	pvs "$dev3" "$dev4"
+ fi
 
 
