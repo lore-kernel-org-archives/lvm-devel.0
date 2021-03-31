@@ -1,41 +1,47 @@
 From: David Teigland <teigland@sourceware.org>
-Date: Wed, 31 Mar 2021 21:48:59 +0000 (GMT)
-Subject: dev-next - tests: increase required version
-Message-ID: <20210331214859.85FA13857C6F@sourceware.org>
+Date: Wed, 31 Mar 2021 21:49:06 +0000 (GMT)
+Subject: dev-next - tests: skip stray testing on real dev dir
+Message-ID: <20210331214906.683EF3858C27@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=14a3c34983fa8ab99773a47f1ee8bdd02d84feef
-Commit:        14a3c34983fa8ab99773a47f1ee8bdd02d84feef
-Parent:        d0644fb2c346414ae138369557bbd898d5feac6f
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=afd43a75f20fbecb047924468c84212f7aefcf0b
+Commit:        afd43a75f20fbecb047924468c84212f7aefcf0b
+Parent:        a126dde069ada9380ba2f7ab7e520ba4ce3e2a90
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Mar 23 14:39:13 2021 +0100
+AuthorDate:    Wed Mar 24 11:57:46 2021 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Tue Mar 23 14:39:13 2021 +0100
+CommitterDate: Wed Mar 24 12:23:07 2021 +0100
 
-tests: increase required version
+tests: skip stray testing on real dev dir
 
-Seems like version 1.13.2 remains crashing kernel - so increase
-the required version for this reshaping test.
+Do not modify /dev dir maintained by udev.
 ---
- test/shell/lvconvert-raid-reshape-stripes-load-reload.sh | 2 +-
- 1 file changed, 1 insertion(+), 1 deletion(-)
+ test/shell/stray-device-node.sh | 5 +++++
+ 1 file changed, 5 insertions(+)
 
-diff --git a/test/shell/lvconvert-raid-reshape-stripes-load-reload.sh b/test/shell/lvconvert-raid-reshape-stripes-load-reload.sh
-index 1e2ad0fb4..2dde4d014 100644
---- a/test/shell/lvconvert-raid-reshape-stripes-load-reload.sh
-+++ b/test/shell/lvconvert-raid-reshape-stripes-load-reload.sh
-@@ -19,7 +19,7 @@ SKIP_WITH_LVMPOLLD=1
+diff --git a/test/shell/stray-device-node.sh b/test/shell/stray-device-node.sh
+index 7ed229388..003afb7e8 100644
+--- a/test/shell/stray-device-node.sh
++++ b/test/shell/stray-device-node.sh
+@@ -18,6 +18,9 @@ SKIP_WITH_LVMPOLLD=1
+ aux prepare_devs 3
+ get_devs
  
- which md5sum || skip
- which mkfs.ext4 || skip
--aux have_raid 1 13 2 || skip
-+aux have_raid 1 14 || skip
++# Avoid manipulation with real /dev dir
++test "$DM_DEV_DIR" = "/dev" && skip "Skipping stray test on real /dev dir"
++
+ cp -r "$dev1" "$DM_DEV_DIR/stray"
  
- mount_dir="mnt"
- 
+ vgcreate $SHARED "$vg" "${DEVICES[@]}"
+@@ -29,3 +32,5 @@ aux disable_dev "$dev1"
+ pvscan
+ vgreduce --removemissing --force $vg
+ aux enable_dev "$dev1"
++
++rm -f "$DM_DEV_DIR/stray"
 
 
