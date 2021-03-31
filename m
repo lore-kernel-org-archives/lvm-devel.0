@@ -1,86 +1,76 @@
 From: David Teigland <teigland@sourceware.org>
-Date: Wed, 31 Mar 2021 21:49:28 +0000 (GMT)
-Subject: dev-next - tests: use aux mdadm_assemble wrapper
-Message-ID: <20210331214928.280703857C6F@sourceware.org>
+Date: Wed, 31 Mar 2021 21:49:33 +0000 (GMT)
+Subject: dev-next - tests: more skipped tests for lvmpolld
+Message-ID: <20210331214933.D86D53858C27@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=02e02a5ccc7275c23e59e65df25287c8f82276fa
-Commit:        02e02a5ccc7275c23e59e65df25287c8f82276fa
-Parent:        4c59b2aa216cb5649fe5e3f54230e85ee994869b
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=8e9bc52b15106d0edaf47f56e4f467f8365597f0
+Commit:        8e9bc52b15106d0edaf47f56e4f467f8365597f0
+Parent:        a55f4a8fe24a89c9a7e42e2fcd11c974eae0e127
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Mar 26 16:07:24 2021 +0100
+AuthorDate:    Fri Mar 26 22:13:37 2021 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Fri Mar 26 20:39:41 2021 +0100
+CommitterDate: Fri Mar 26 22:13:37 2021 +0100
 
-tests: use aux mdadm_assemble wrapper
+tests: more skipped tests for lvmpolld
 
 ---
- test/shell/lvm-on-md.sh            | 19 ++-----------------
- test/shell/pvcreate-md-fake-hdr.sh |  4 ++--
- 2 files changed, 4 insertions(+), 19 deletions(-)
+ test/shell/lvmlockd-hello-world.sh | 3 ++-
+ test/shell/lvmlockd-lv-types.sh    | 3 ++-
+ test/shell/pv-range-overflow.sh    | 1 +
+ 3 files changed, 5 insertions(+), 2 deletions(-)
 
-diff --git a/test/shell/lvm-on-md.sh b/test/shell/lvm-on-md.sh
-index 7c14e6748..d2810b8cf 100644
---- a/test/shell/lvm-on-md.sh
-+++ b/test/shell/lvm-on-md.sh
-@@ -27,19 +27,6 @@ _clear_online_files() {
+diff --git a/test/shell/lvmlockd-hello-world.sh b/test/shell/lvmlockd-hello-world.sh
+index 43946a54b..2e1d3291c 100644
+--- a/test/shell/lvmlockd-hello-world.sh
++++ b/test/shell/lvmlockd-hello-world.sh
+@@ -12,6 +12,8 @@
+ 
+ test_description='Hello world for vgcreate $SHARED with lvmlockd and sanlock'
+ 
++SKIP_WITH_LVMPOLLD=1
++
+ . lib/inittest
+ 
+ [ -z "$LVM_TEST_LVMLOCKD" ] && skip
+@@ -23,4 +25,3 @@ vgcreate $SHARED $vg "$dev1"
+ vgs -o+locktype,lockargs $vg
+ 
+ vgremove $vg
+-
+diff --git a/test/shell/lvmlockd-lv-types.sh b/test/shell/lvmlockd-lv-types.sh
+index 3503f2420..6138e5623 100644
+--- a/test/shell/lvmlockd-lv-types.sh
++++ b/test/shell/lvmlockd-lv-types.sh
+@@ -12,6 +12,8 @@
+ 
+ test_description='Check lvmlockd lock_args for different LV types'
+ 
++SKIP_WITH_LVMPOLLD=1
++
+ . lib/inittest
+ 
+ [ -z "$LVM_TEST_LVMLOCKD" ] && skip;
+@@ -182,4 +184,3 @@ lvchange -an $vg/lv4
+ lvremove $vg/lv4
+ 
+ vgremove $vg
+-
+diff --git a/test/shell/pv-range-overflow.sh b/test/shell/pv-range-overflow.sh
+index f880a1311..ab845a942 100644
+--- a/test/shell/pv-range-overflow.sh
++++ b/test/shell/pv-range-overflow.sh
+@@ -13,6 +13,7 @@
+ # 'Ensure that pvmove diagnoses PE-range values 2^32 and larger.'
+ 
+ 
++SKIP_WITH_LVMPOLLD=1
  
  . lib/inittest
  
--which mdadm || skip
--
--STRACE=
--[ "$DM_DEV_DIR" = "/dev" ] && mdadm -V 2>&1 | grep " v3.2" && {
--	# use this 'trick' to slow down mdadm which otherwise
--	# is racing with udev rule since mdadm internally
--	# opens and closes raid leg devices in RW mode and then
--	# tries to get exlusive access to the leg device during
--	# insertion to kernel and fails during assembly
--        # There could be more affted version of mdadm.
--	STRACE="strace -f -o /dev/null"
--}
--
- # This stops lvm from taking advantage of hints which
- # will have already excluded md components.
- 
-@@ -121,8 +108,7 @@ test ! -f "$RUNDIR/lvm/vgs_online/$vg"
- # should not show an active lv
- not dmsetup info $vg-$lv1
- 
--$STRACE mdadm --assemble "$mddev" "$dev1" "$dev2"
--aux udev_wait
-+aux mdadm_assemble "$mddev" "$dev1" "$dev2"
- 
- not pvs "$dev1"
- not pvs "$dev2"
-@@ -276,8 +262,7 @@ test ! -f "$RUNDIR/lvm/vgs_online/$vg"
- not dmsetup info $vg-$lv1
- 
- # start the md dev
--$STRACE mdadm --assemble "$mddev" "$dev1" "$dev2"
--aux udev_wait
-+aux mdadm_assemble "$mddev" "$dev1" "$dev2"
- 
- not pvs "$dev1"
- not pvs "$dev2"
-diff --git a/test/shell/pvcreate-md-fake-hdr.sh b/test/shell/pvcreate-md-fake-hdr.sh
-index 1550bc4c0..7a16ef5e4 100644
---- a/test/shell/pvcreate-md-fake-hdr.sh
-+++ b/test/shell/pvcreate-md-fake-hdr.sh
-@@ -88,8 +88,8 @@ if mdadm --detail "$mddev" ; then
- fi
- 
- # now reassemble array from  PV1 & PV2
--mdadm --assemble --verbose "$mddev" "$dev1" "$dev2"
--aux udev_wait
-+aux mdadm_assemble --verbose "$mddev" "$dev1" "$dev2"
-+
- sleep 1
- 
- # and let 'fake hdr' to be fixed from master/primary leg
 
 
