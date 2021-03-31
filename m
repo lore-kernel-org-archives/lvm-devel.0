@@ -1,54 +1,55 @@
 From: David Teigland <teigland@sourceware.org>
-Date: Wed, 31 Mar 2021 21:49:00 +0000 (GMT)
-Subject: dev-next - tests: wipefs with udev_wait
-Message-ID: <20210331214900.AB2553858C27@sourceware.org>
+Date: Wed, 31 Mar 2021 21:49:01 +0000 (GMT)
+Subject: dev-next - tests: aux clean DM on top of MD
+Message-ID: <20210331214901.CFA833857C6F@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=93f2d194aca4a589cd38dd8bdd99cad2945dd21c
-Commit:        93f2d194aca4a589cd38dd8bdd99cad2945dd21c
-Parent:        14a3c34983fa8ab99773a47f1ee8bdd02d84feef
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=dd1f5f9a24fc906de7e6dd064ecdd8fdfa9eebda
+Commit:        dd1f5f9a24fc906de7e6dd064ecdd8fdfa9eebda
+Parent:        93f2d194aca4a589cd38dd8bdd99cad2945dd21c
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Mar 23 14:57:10 2021 +0100
+AuthorDate:    Tue Mar 23 21:28:28 2021 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Tue Mar 23 14:57:10 2021 +0100
+CommitterDate: Tue Mar 23 21:28:28 2021 +0100
 
-tests: wipefs with udev_wait
+tests: aux clean DM on top of MD
 
-Try to synchronize with colliding udev.
-Also retry once if there is some failure with some
-sleep between next retry.
-
-Use oflag=direct for wipping without wipefs.
+Before cleaning MD, try to remove any DM on top such MD.
+Check is made through DM table check.
+Maybe parse /proc/mdstat for this???
 ---
- test/lib/aux.sh | 10 ++++++++--
- 1 file changed, 8 insertions(+), 2 deletions(-)
+ test/lib/aux.sh | 10 ++++++++++
+ 1 file changed, 10 insertions(+)
 
 diff --git a/test/lib/aux.sh b/test/lib/aux.sh
-index 20736260f..386918041 100644
+index 386918041..08eeac55b 100644
 --- a/test/lib/aux.sh
 +++ b/test/lib/aux.sh
-@@ -818,10 +818,16 @@ wipefs_a() {
- 		echo "$have_wipefs" > HAVE_WIPEFS
- 	fi
+@@ -783,11 +783,21 @@ cleanup_md_dev() {
+ 	mddev=$(< MD_DEV)
+ 	base=$(basename "$mddev")
  
-+	udev_wait
- 	if [ "$have_wipefs" = "1" ] ; then
--		wipefs -a "$dev"
-+		wipefs -a "$dev" || {
-+			echo "$dev: device in-use, retrying wipe again."
-+			sleep 1
-+			udev_wait
-+			wipefs -a "$dev"
++	# try to find and remove any DM device on top of cleaned MD
++	# assume  /dev/mdXXX is  9:MINOR
++	local minor=${mddev##/dev/md}
++	for i in $(dmsetup table | grep 9:$minor | cut -d: -f1) ; do
++		dmsetup remove $i || {
++			dmsetup --force remove $i || true
 +		}
- 	else
--		dd if=/dev/zero of="$dev" bs=4096 count=8 >/dev/null || true
-+		dd if=/dev/zero of="$dev" bs=4096 count=8 oflag=direct >/dev/null || true
- 		mdadm --zero-superblock "$dev" 2>/dev/null || true
- 	fi
- 
++	done
++
+ 	for i in {0..10} ; do
+ 		grep -q "$base" /proc/mdstat || break
+ 		test "$i" = 0 || {
+ 			sleep .1
+ 			echo "$mddev is still present, stopping again"
++			cat /proc/mdstat
+ 		}
+ 		mdadm --stop "$mddev" || true
+ 		udev_wait  # wait till events are process, not zeroing to early
 
 
