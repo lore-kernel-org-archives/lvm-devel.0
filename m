@@ -1,55 +1,44 @@
 From: David Teigland <teigland@sourceware.org>
-Date: Wed, 31 Mar 2021 21:49:01 +0000 (GMT)
-Subject: dev-next - tests: aux clean DM on top of MD
-Message-ID: <20210331214901.CFA833857C6F@sourceware.org>
+Date: Wed, 31 Mar 2021 21:49:02 +0000 (GMT)
+Subject: dev-next - tests: this test has race in it depending on kernel
+Message-ID: <20210331214902.F04633858C27@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=dd1f5f9a24fc906de7e6dd064ecdd8fdfa9eebda
-Commit:        dd1f5f9a24fc906de7e6dd064ecdd8fdfa9eebda
-Parent:        93f2d194aca4a589cd38dd8bdd99cad2945dd21c
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=8df0a32abb840815c5d210cbdbd1483d483ee729
+Commit:        8df0a32abb840815c5d210cbdbd1483d483ee729
+Parent:        dd1f5f9a24fc906de7e6dd064ecdd8fdfa9eebda
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Mar 23 21:28:28 2021 +0100
+AuthorDate:    Tue Mar 23 21:32:51 2021 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Tue Mar 23 21:28:28 2021 +0100
+CommitterDate: Tue Mar 23 21:32:51 2021 +0100
 
-tests: aux clean DM on top of MD
+tests: this test has race in it depending on kernel
 
-Before cleaning MD, try to remove any DM on top such MD.
-Check is made through DM table check.
-Maybe parse /proc/mdstat for this???
+Some kernel seems to keep 'lvextend' busy so long,
+that actual resize already happens.
+
+So ATM use 'should'  until something better is invented.
 ---
- test/lib/aux.sh | 10 ++++++++++
- 1 file changed, 10 insertions(+)
+ test/shell/lvextend-raid.sh | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
 
-diff --git a/test/lib/aux.sh b/test/lib/aux.sh
-index 386918041..08eeac55b 100644
---- a/test/lib/aux.sh
-+++ b/test/lib/aux.sh
-@@ -783,11 +783,21 @@ cleanup_md_dev() {
- 	mddev=$(< MD_DEV)
- 	base=$(basename "$mddev")
- 
-+	# try to find and remove any DM device on top of cleaned MD
-+	# assume  /dev/mdXXX is  9:MINOR
-+	local minor=${mddev##/dev/md}
-+	for i in $(dmsetup table | grep 9:$minor | cut -d: -f1) ; do
-+		dmsetup remove $i || {
-+			dmsetup --force remove $i || true
-+		}
-+	done
-+
- 	for i in {0..10} ; do
- 		grep -q "$base" /proc/mdstat || break
- 		test "$i" = 0 || {
- 			sleep .1
- 			echo "$mddev is still present, stopping again"
-+			cat /proc/mdstat
- 		}
- 		mdadm --stop "$mddev" || true
- 		udev_wait  # wait till events are process, not zeroing to early
+diff --git a/test/shell/lvextend-raid.sh b/test/shell/lvextend-raid.sh
+index 9370bf295..08b34d00c 100644
+--- a/test/shell/lvextend-raid.sh
++++ b/test/shell/lvextend-raid.sh
+@@ -63,7 +63,8 @@ aux delayzero_dev "$dev2"  0 50 "${sector}:"
+ lvextend -y -L+${lvext}M $vg/$lv1
+ if [ $PROGRESS -eq 1 ]
+ then
+-not check lv_field $vg/$lv1 sync_percent "100.00"
++# Even with delayed devices wre are catching races here.
++should not check lv_field $vg/$lv1 sync_percent "100.00"
+ check lv_field $vg/$lv1 size "$(($lvsz)).00m" $vg/$lv1
+ fi
+ aux wait_for_sync $vg $lv1
 
 
