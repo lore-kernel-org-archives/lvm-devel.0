@@ -1,79 +1,151 @@
 From: David Teigland <teigland@sourceware.org>
-Date: Wed, 31 Mar 2021 21:48:35 +0000 (GMT)
-Subject: dev-next - tests: skip only portion of test
-Message-ID: <20210331214835.73B963857C6F@sourceware.org>
+Date: Wed, 31 Mar 2021 21:48:38 +0000 (GMT)
+Subject: dev-next - tests: new aux mdadm_create
+Message-ID: <20210331214838.DC5213858C27@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=bee8027cfa296bd910c75d5000a60d7ef99ecd78
-Commit:        bee8027cfa296bd910c75d5000a60d7ef99ecd78
-Parent:        8d2ad4419a58536696474dbdfb241204d561dcf6
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=ada99f939fe24e23994244fdbe960014b355fd44
+Commit:        ada99f939fe24e23994244fdbe960014b355fd44
+Parent:        77432ee13742d09af5e8b1f8813d65bda3556a1d
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Sun Mar 21 23:25:16 2021 +0100
+AuthorDate:    Mon Mar 22 18:54:54 2021 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Mon Mar 22 22:36:37 2021 +0100
+CommitterDate: Mon Mar 22 22:42:52 2021 +0100
 
-tests: skip only portion of test
+tests: new aux mdadm_create
 
-Seems this kernel bug is taking more time to get it fixed,
-so skipping only failing portion of test and ending with WARNING.
+Add generic wrapper for mdadm --create which takes
+normal 'mdadm' args - but allows us to handle differences of
+mdadm usage across various version of mdadm tool.
+
+Resulting MD device is availalble in  $(< MD_DEV).
+
+Automatic cleaning is made through   cleanup_md_dev
+
+Calling of mdadm_create cleans previous MD dev if it exists.
 ---
- .../lvconvert-raid-reshape-stripes-load-reload.sh     | 19 ++++++++-----------
- 1 file changed, 8 insertions(+), 11 deletions(-)
+ test/lib/aux.sh | 91 ++++++++++++++++++++++++++++++++++++++++++++++++++-------
+ 1 file changed, 81 insertions(+), 10 deletions(-)
 
-diff --git a/test/shell/lvconvert-raid-reshape-stripes-load-reload.sh b/test/shell/lvconvert-raid-reshape-stripes-load-reload.sh
-index 3b6150909..1e2ad0fb4 100644
---- a/test/shell/lvconvert-raid-reshape-stripes-load-reload.sh
-+++ b/test/shell/lvconvert-raid-reshape-stripes-load-reload.sh
-@@ -21,15 +21,6 @@ which md5sum || skip
- which mkfs.ext4 || skip
- aux have_raid 1 13 2 || skip
+diff --git a/test/lib/aux.sh b/test/lib/aux.sh
+index ae173b8da..2bc3da2c9 100644
+--- a/test/lib/aux.sh
++++ b/test/lib/aux.sh
+@@ -776,8 +776,80 @@ prepare_md_dev() {
+ 	printf "%s\n" "${@:4}" > MD_DEVICES
+ }
  
--case "$(uname -r)" in
--  5.[891]*) die "Cannot run this test on unfixed kernel." ;;
--  3.10.0-862*) skip "Cannot run this test on unfixed kernel." ;;
--  4.18.0-*.el8*)
--    REL="$(uname -r)"
--    REL="${REL#4.18.0-}"
--    [[ "${REL%%.*}" -lt 283 ]] || die "Cannot run this test on unfixed kernel." ;;
--esac
--
- mount_dir="mnt"
- 
- cleanup_mounted_and_teardown()
-@@ -57,8 +48,8 @@ check lv_first_seg_field $vg/$lv1 segtype "raid5_ls"
- check lv_first_seg_field $vg/$lv1 stripesize "64.00k"
- check lv_first_seg_field $vg/$lv1 data_stripes 10
- check lv_first_seg_field $vg/$lv1 stripes 11
--wipefs -a /dev/$vg/$lv1
--mkfs -t ext4 /dev/$vg/$lv1
-+wipefs -a "$DM_DEV_DIR/$vg/$lv1"
-+mkfs -t ext4 "$DM_DEV_DIR/$vg/$lv1"
- 
- mkdir -p "$mount_dir"
- mount "$DM_DEV_DIR/$vg/$lv1" "$mount_dir"
-@@ -80,6 +71,10 @@ check lv_first_seg_field $vg/$lv1 data_stripes 15
- check lv_first_seg_field $vg/$lv1 stripes 16
- 
- # Reload table during reshape to test for data corruption
-+case "$(uname -r)" in
-+  5.[891]*|3.10.0-862*|4.18.0-*.el8*)
-+	should not echo "Skipping table reload test on on unfixed kernel!!!" ;;
-+  *)
- for i in {0..5}
- do
- 	dmsetup table $vg-$lv1|dmsetup load $vg-$lv1
-@@ -88,6 +83,8 @@ do
- 	sleep 0.3
- done
- 
-+esac
++mdadm_create() {
++	local mddev
++	local maj=
++	local mdname="md_lvm_test0"
++	local mddir="md/"
++	local mddevdir="$DM_DEV_DIR/$mddir"
 +
- aux delay_dev "$dev2" 0
++	maj=$(mdadm --version 2>&1) || skip "mdadm tool is missing!"
++
++	cleanup_md_dev
++	rm -f debug.log strace.log
++
++	# Have MD use a non-standard name to avoid colliding with an existing MD device
++	# - mdadm >= 3.0 requires that non-standard device names be in /dev/md/
++	# - newer mdadm _completely_ defers to udev to create the associated device node
++	maj=${maj##*- v}
++	maj=${maj%%.*}
++	[ "$maj" -ge 3 ] || mddir=""
++
++	mddev="/dev/${mddir}$mdname"
++	name=$1
++
++	mdadm --create "$mddev" "$@" || {
++		# Some older 'mdadm' version managed to open and close devices internaly
++		# and reporting non-exclusive access on such device
++		# let's just skip the test if this happens.
++		# Note: It's pretty complex to get rid of consequences
++		#       the following sequence avoid leaks on f19
++		# TODO: maybe try here to recreate few times....
++		mdadm --stop "$mddev" || true
++		udev_wait
++		while  [ "$#" -ne 0 ] ; do
++			case "$1" in
++			*"$PREFIX"*) mdadm --zero-superblock "$1" || true ;;
++			esac
++			shift
++		done
++		udev_wait
++		skip "Test skipped, unreliable mdadm detected!"
++	}
++
++	for i in {10..0} ; do
++		test -e "$mddev" && break
++		echo "Waiting for $mddev."
++		sleep .5
++	done
++
++	# LVM/DM will see this device
++	case "$DM_DEV_DIR" in
++	"/dev") readlink -f "$mddev" > MD_DEV_PV ;;
++	*)	mkdir -p "$mddevdir"
++		rm -f "$mddevdir/$mdname"
++		cp -LR "$mddev" "$mddevdir"
++		echo "${mddevdir}${mdname}" > MD_DEV_PV ;;
++	esac
++
++	mddev=$(readlink -f "$mddev")
++	test -b "$mddev" || skip "mdadm has not created device!"
++	echo "$mddev" > MD_DEV
++	rm -f MD_DEVICES
++	while  [ "$#" -ne 0 ] ; do
++		case "$1" in
++		*"$PREFIX"*) echo "$1" >> MD_DEVICES ;;
++		esac
++		shift
++	done
++}
++
+ cleanup_md_dev() {
+ 	test -f MD_DEV || return 0
++	grep -q "$(basename $(< MD_DEV) )" /proc/mdstat || {
++		rm -f MD_DEV
++		return 0
++	}
  
- kill -9 %% || true
+ 	local IFS=$IFS_NL
+ 	local dev
+@@ -785,21 +857,20 @@ cleanup_md_dev() {
+ 	local mddev_pv
+ 	mddev=$(< MD_DEV)
+ 	mddev_pv=$(< MD_DEV_PV)
+-	udev_wait
+-	mdadm --stop "$mddev" || true
+-	udev_wait  # wait till events are process, not zeroing to early
++
++	for i in {10..0} ; do
++		udev_wait
++		mdadm --stop "$mddev" || true
++		udev_wait  # wait till events are process, not zeroing to early
++		grep -q "$(basename $(< MD_DEV) )" /proc/mdstat || break
++		sleep .1
++		echo "$mddev is still present, stopping again"
++	done
+ 	test "$DM_DEV_DIR" != "/dev" && rm -rf "${mddev_pv%/*}"
+ 	for dev in $(< MD_DEVICES); do
+ 		mdadm --zero-superblock "$dev" || true
+ 	done
+ 	udev_wait
+-	if [ -b "$mddev" ]; then
+-		# mdadm doesn't always cleanup the device node
+-		# sleeps offer hack to defeat: 'md: md127 still in use'
+-		# see: https://bugzilla.redhat.com/show_bug.cgi?id=509908#c25
+-		sleep 2
+-		rm -f "$mddev"
+-	fi
+ 	rm -f MD_DEV MD_DEVICES MD_DEV_PV
+ }
+ 
 
 
