@@ -1,43 +1,48 @@
-From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Wed, 24 Mar 2021 15:41:55 +0000 (GMT)
-Subject: main - tests: handle case of missing /dev/disk
-Message-ID: <20210324154155.B0B23384B110@sourceware.org>
+From: David Teigland <teigland@sourceware.org>
+Date: Wed, 31 Mar 2021 21:49:25 +0000 (GMT)
+Subject: dev-next - tests: better reporting of problematic services
+Message-ID: <20210331214925.D98D13857C6F@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=0783c661b9eb407b0b436559b6950deefc906b4f
-Commit:        0783c661b9eb407b0b436559b6950deefc906b4f
-Parent:        2151b71819ffd45e71f2565aa2c0d2cb9685e2c0
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=5ef8d845694c79683ebdbdeec69eb2e534f4b1d2
+Commit:        5ef8d845694c79683ebdbdeec69eb2e534f4b1d2
+Parent:        49575a6ce1940528aaaac5eada8f8938e6cf4a84
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed Mar 24 15:52:14 2021 +0100
+AuthorDate:    Fri Mar 26 16:06:46 2021 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Wed Mar 24 16:38:12 2021 +0100
+CommitterDate: Fri Mar 26 20:39:40 2021 +0100
 
-tests: handle case of missing /dev/disk
+tests: better reporting of problematic services
 
-In case there is no symlink - udev can optimize /dev/disk away,
-thus find would fail in teardown.
 ---
- test/lib/aux.sh | 4 +++-
- 1 file changed, 3 insertions(+), 1 deletion(-)
+ test/shell/000-basic.sh | 12 ++++++------
+ 1 file changed, 6 insertions(+), 6 deletions(-)
 
-diff --git a/test/lib/aux.sh b/test/lib/aux.sh
-index f81d03e88..6c43790b7 100644
---- a/test/lib/aux.sh
-+++ b/test/lib/aux.sh
-@@ -581,7 +581,9 @@ teardown() {
- 	}
- 
- 	# Remove any dangling symlink in /dev/disk (our tests can confuse udev)
--	find /dev/disk -type l ! -exec test -e {} \; -print | xargs rm -f
-+	test -d /dev/disk && {
-+		find /dev/disk -type l ! -exec test -e {} \; -print | xargs rm -f || true
-+	}
- 
- 	# Remove any metadata archives and backups from this test on system
- 	rm -f /etc/lvm/archive/${PREFIX}* /etc/lvm/backup/${PREFIX}*
+diff --git a/test/shell/000-basic.sh b/test/shell/000-basic.sh
+index a7b80c72b..15f2a6021 100644
+--- a/test/shell/000-basic.sh
++++ b/test/shell/000-basic.sh
+@@ -38,11 +38,11 @@ not lvs "${DEVICES[@]}"
+ # validate testing machine with its services is in expected state and will not interfere with tests
+ if systemctl -a >out 2>/dev/null ; then
+ 	for i in dm-event lvm2-lvmpolld lvm2-monitor ; do
+-	echo $i
+-		grep $i out | not grep -v masked || {
+-			cat out
+-			should not echo "Present unmasked $i service/socket may randomize testing results!"
+-			echo "+++++ Stop & Mask with systemctl +++++"
+-		}
++		grep $i out > mout || continue
++		grep -v masked mout || continue
++		should not echo "Present unmasked $i service/socket may randomize testing results!"
++		echo "+++++ Stop & Mask with systemctl +++++"
++		touch show_out
+ 	done
++	test ! -e show_out || cat out
+ fi
 
 
