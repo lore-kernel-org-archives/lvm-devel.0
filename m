@@ -1,39 +1,66 @@
 From: David Teigland <teigland@sourceware.org>
-Date: Wed, 31 Mar 2021 21:49:35 +0000 (GMT)
-Subject: dev-next - tests: increase mirror throttling
-Message-ID: <20210331214935.092883858C27@sourceware.org>
+Date: Wed, 31 Mar 2021 21:49:32 +0000 (GMT)
+Subject: dev-next - tests: use shell comment
+Message-ID: <20210331214932.B63F13857C6F@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=53338cf566838381febe37d8254275e5f2a408ce
-Commit:        53338cf566838381febe37d8254275e5f2a408ce
-Parent:        8e9bc52b15106d0edaf47f56e4f467f8365597f0
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=a55f4a8fe24a89c9a7e42e2fcd11c974eae0e127
+Commit:        a55f4a8fe24a89c9a7e42e2fcd11c974eae0e127
+Parent:        93336685f6cf8a178cb83aa1ee113a2a33ca7f5c
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Sat Mar 27 00:29:28 2021 +0100
+AuthorDate:    Fri Mar 26 22:12:42 2021 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Sat Mar 27 00:29:28 2021 +0100
+CommitterDate: Fri Mar 26 22:12:42 2021 +0100
 
-tests: increase mirror throttling
+tests: use shell comment
 
 ---
- test/shell/pvmove-resume-multiseg.sh | 2 +-
- 1 file changed, 1 insertion(+), 1 deletion(-)
+ test/shell/hints.sh | 9 ++++-----
+ 1 file changed, 4 insertions(+), 5 deletions(-)
 
-diff --git a/test/shell/pvmove-resume-multiseg.sh b/test/shell/pvmove-resume-multiseg.sh
-index b38195a84..1263d81ed 100644
---- a/test/shell/pvmove-resume-multiseg.sh
-+++ b/test/shell/pvmove-resume-multiseg.sh
-@@ -20,7 +20,7 @@ SKIP_WITH_LVMLOCKD=1
- . lib/inittest
+diff --git a/test/shell/hints.sh b/test/shell/hints.sh
+index b2a53c678..a11aeec23 100644
+--- a/test/shell/hints.sh
++++ b/test/shell/hints.sh
+@@ -12,9 +12,11 @@
  
- aux prepare_pvs 5 40
--aux throttle_dm_mirror 50 || :
-+aux throttle_dm_mirror 40 || :
+ SKIP_WITH_LVMPOLLD=1
  
- vgcreate -s 128k $vg "$dev1" "$dev2" "$dev3"
- pvcreate --metadatacopies 0 "$dev4" "$dev5"
+-/* hints are currently disabled with lvmlockd */
++# hints are currently disabled with lvmlockd
+ SKIP_WITH_LVMLOCKD=1
+ 
++. lib/inittest
++
+ RUNDIR="/run"
+ test -d "$RUNDIR" || RUNDIR="/var/run"
+ HINTS="$RUNDIR/lvm/hints"
+@@ -22,8 +24,6 @@ NOHINTS="$RUNDIR/lvm/nohints"
+ NEWHINTS="$RUNDIR/lvm/newhints"
+ PREV="$RUNDIR/lvm/prev-hints"
+ 
+-. lib/inittest
+-
+ # TODO:
+ # Test commands that ignore hints
+ # Test flock
+@@ -55,7 +55,7 @@ not grep scan: tmptest
+ # test that 'pvs' submits only three reads, one for each PV in hints
+ # for initial scan, and one more in vg_read rescan check
+ 
+-if [ -e "/usr/bin/strace" ]; then
++if which strace; then
+ strace -e io_submit pvs 2>&1|tee tmptest
+ test "$(grep io_submit tmptest | wc -l)" -eq 3
+ 
+@@ -413,4 +413,3 @@ grep $vg4 $HINTS
+ vgremove -y $vg4
+ vgremove -y $vg2
+ vgremove -y $vg1
+-
 
 
