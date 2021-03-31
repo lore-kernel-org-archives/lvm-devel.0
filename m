@@ -1,72 +1,84 @@
 From: David Teigland <teigland@sourceware.org>
-Date: Wed, 31 Mar 2021 21:49:16 +0000 (GMT)
-Subject: dev-next - tests: add workaround for older mdadm
-Message-ID: <20210331214916.B1AAA3858C27@sourceware.org>
+Date: Wed, 31 Mar 2021 21:49:22 +0000 (GMT)
+Subject: dev-next - tests: dbus update
+Message-ID: <20210331214922.6E36D3857C6F@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=5feb99dda68dd492929fff0d7b15d3ef0ab86347
-Commit:        5feb99dda68dd492929fff0d7b15d3ef0ab86347
-Parent:        0558b223b87b922faa709e7a7e0e6aaa4b7f0c42
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=25c665d5559e77c1eb0f67527fa95419a84b7553
+Commit:        25c665d5559e77c1eb0f67527fa95419a84b7553
+Parent:        6db533c4393e1e8ca02e957c529afaf67fa7e20b
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Mar 26 00:35:28 2021 +0100
+AuthorDate:    Fri Mar 26 13:13:26 2021 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Fri Mar 26 00:35:28 2021 +0100
+CommitterDate: Fri Mar 26 13:13:26 2021 +0100
 
-tests: add workaround for older mdadm
+tests: dbus update
 
-Some older instancies of 'mdadm' opened legs in RW and
-closed and opened again and expected exlusive access.
-But here udev rule can be fired - so on these versions
-slow down whole mdadm runtime by using strace, to
-give system a bit more time to finish udev rule.
+Always use  PREFIX for vg header - all tests must use this prefix,
+VGs without are not allowed.
+
+Modify pv_symlink test - as the test was checking unsupportable
+combination - since lvm2 commands withing testsuite are only
+allowed to manipulate with /dev/mapper/LVMTESTXXXX path -
+nothing else allowed and fails on being filtered.
 ---
- test/shell/lvm-on-md.sh | 16 ++++++++++++++--
- 1 file changed, 14 insertions(+), 2 deletions(-)
+ test/dbus/lvmdbustest.py | 12 +++++++-----
+ 1 file changed, 7 insertions(+), 5 deletions(-)
 
-diff --git a/test/shell/lvm-on-md.sh b/test/shell/lvm-on-md.sh
-index 9187d44f5..7c14e6748 100644
---- a/test/shell/lvm-on-md.sh
-+++ b/test/shell/lvm-on-md.sh
-@@ -27,6 +27,18 @@ _clear_online_files() {
+diff --git a/test/dbus/lvmdbustest.py b/test/dbus/lvmdbustest.py
+index efa1afb26..6dab312c0 100755
+--- a/test/dbus/lvmdbustest.py
++++ b/test/dbus/lvmdbustest.py
+@@ -59,7 +59,7 @@ if pv_device_list:
  
- . lib/inittest
  
-+which mdadm || skip
+ def vg_n(prefix=None):
+-	name = rs(8, '_vg')
++	name = g_prefix + '_vg'
+ 	if prefix:
+ 		name = prefix + name
+ 	return name
+@@ -1838,7 +1838,6 @@ class TestDbusService(unittest.TestCase):
+ 		# typically utilizes loopback, this test is skipped in
+ 		# those environments.
+ 		pv_object_path = self.objs[PV_INT][0].object_path
+-
+ 		if not self.objs[PV_INT][0].Pv.Name.startswith("/dev"):
+ 			raise unittest.SkipTest('test not running in /dev')
+ 
+@@ -1867,8 +1866,9 @@ class TestDbusService(unittest.TestCase):
+ 
+ 		# Lets locate a symlink for it
+ 		devices = glob('/dev/disk/*/*')
++		rp_pv_device_path = os.path.realpath(pv_device_path)
+ 		for d in devices:
+-			if pv_device_path == os.path.realpath(d):
++			if rp_pv_device_path == os.path.realpath(d):
+ 				symlink = d
+ 				break
+ 
+@@ -1878,14 +1878,16 @@ class TestDbusService(unittest.TestCase):
+ 		rc = self._lookup(symlink)
+ 		self.assertEqual(rc, '/')
+ 
+-		pv_object_path = self._pv_create(symlink)
++		### pv_object_path = self._pv_create(symlink)
++		### Test is limited by filter rules and must use  /dev/mapper/LVMTEST path
++		pv_object_path = self._pv_create(pv_device_path)
 +
-+STRACE=
-+[ "$DM_DEV_DIR" = "/dev" ] && mdadm -V 2>&1 | grep " v3.2" && {
-+	# use this 'trick' to slow down mdadm which otherwise
-+	# is racing with udev rule since mdadm internally
-+	# opens and closes raid leg devices in RW mode and then
-+	# tries to get exlusive access to the leg device during
-+	# insertion to kernel and fails during assembly
-+        # There could be more affted version of mdadm.
-+	STRACE="strace -f -o /dev/null"
-+}
+ 		self.assertNotEqual(pv_object_path, '/')
  
- # This stops lvm from taking advantage of hints which
- # will have already excluded md components.
-@@ -109,7 +121,7 @@ test ! -f "$RUNDIR/lvm/vgs_online/$vg"
- # should not show an active lv
- not dmsetup info $vg-$lv1
+ 		pv_proxy = ClientProxy(self.bus, pv_object_path, interfaces=(PV_INT, ))
+ 		self.assertEqual(pv_proxy.Pv.Name, pv_device_path)
  
--mdadm --assemble "$mddev" "$dev1" "$dev2"
-+$STRACE mdadm --assemble "$mddev" "$dev1" "$dev2"
- aux udev_wait
+ 		# Lets check symlink lookup
+-		self.assertEqual(pv_object_path, self._lookup(symlink))
+ 		self.assertEqual(pv_object_path, self._lookup(pv_device_path))
  
- not pvs "$dev1"
-@@ -264,7 +276,7 @@ test ! -f "$RUNDIR/lvm/vgs_online/$vg"
- not dmsetup info $vg-$lv1
- 
- # start the md dev
--mdadm --assemble "$mddev" "$dev1" "$dev2"
-+$STRACE mdadm --assemble "$mddev" "$dev1" "$dev2"
- aux udev_wait
- 
- not pvs "$dev1"
+ 	def _create_vdo_pool_and_lv(self, vg_prefix="vdo_"):
 
 
