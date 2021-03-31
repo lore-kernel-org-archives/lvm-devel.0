@@ -1,43 +1,39 @@
-From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Wed, 24 Mar 2021 15:41:52 +0000 (GMT)
-Subject: main - fsadm: fix condition when using --getsize64
-Message-ID: <20210324154152.49D843865460@sourceware.org>
+From: David Teigland <teigland@sourceware.org>
+Date: Wed, 31 Mar 2021 21:48:51 +0000 (GMT)
+Subject: dev-next - tests: test needs to have playable locking dir
+Message-ID: <20210331214851.86BE23857C74@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=63c58d2a5d935cd78c77f3db13a655e68fb36367
-Commit:        63c58d2a5d935cd78c77f3db13a655e68fb36367
-Parent:        9684e82cc44cfec66f30b807160c19c06df2a2d8
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=acac3cb52457b536cf8e984ce947a0ac2e837a5d
+Commit:        acac3cb52457b536cf8e984ce947a0ac2e837a5d
+Parent:        b19e036918cf1c2ac2995e07809a28c06bd1f34a
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed Mar 24 16:11:55 2021 +0100
+AuthorDate:    Tue Mar 23 09:48:47 2021 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Wed Mar 24 16:34:34 2021 +0100
+CommitterDate: Tue Mar 23 09:48:47 2021 +0100
 
-fsadm: fix condition when using --getsize64
+tests: test needs to have playable locking dir
 
-When blocksize --getsize64 gives empty result we want to fallback
-to ancient  --getsize * --getss  calculation (RHBZ #1942486).
-
-Reported by: ajschorr at alumni.princeton.edu
 ---
- scripts/fsadm.sh | 2 +-
- 1 file changed, 1 insertion(+), 1 deletion(-)
+ test/shell/vgchange-sysinit.sh | 2 ++
+ 1 file changed, 2 insertions(+)
 
-diff --git a/scripts/fsadm.sh b/scripts/fsadm.sh
-index d98833c3a..20ae57462 100755
---- a/scripts/fsadm.sh
-+++ b/scripts/fsadm.sh
-@@ -378,7 +378,7 @@ detect_mounted() {
- detect_device_size() {
- 	# check if blockdev supports getsize64
- 	DEVSIZE=$("$BLOCKDEV" --getsize64 "$VOLUME" 2>"$NULL" || true)
--	if test -n "$DEVSIZE" ; then
-+	if test -z "$DEVSIZE" ; then
- 		DEVSIZE=$("$BLOCKDEV" --getsize "$VOLUME" || true)
- 		test -n "$DEVSIZE" || error "Cannot read size of device \"$VOLUME\"."
- 		SSSIZE=$("$BLOCKDEV" --getss "$VOLUME" || true)
+diff --git a/test/shell/vgchange-sysinit.sh b/test/shell/vgchange-sysinit.sh
+index cea72f4d0..5740addf5 100644
+--- a/test/shell/vgchange-sysinit.sh
++++ b/test/shell/vgchange-sysinit.sh
+@@ -22,6 +22,8 @@ aux prepare_pvs 2 8
+ var_lock="$DM_DEV_DIR/$vg1/$lv1"
+ # keep in sync with aux configured lockingdir
+ mount_dir="var/lock/lvm"
++mkdir -p $mount_dir
++aux lvmconf "global/locking_dir = \"$TESTDIR/$mount_dir\""
+ 
+ cleanup_mounted_and_teardown()
+ {
 
 
