@@ -1,40 +1,39 @@
 From: David Teigland <teigland@sourceware.org>
-Date: Wed, 31 Mar 2021 21:48:57 +0000 (GMT)
-Subject: dev-next - tests: ignore failure of zeroing
-Message-ID: <20210331214857.41D6F3857C6F@sourceware.org>
+Date: Wed, 31 Mar 2021 21:48:54 +0000 (GMT)
+Subject: dev-next - tests: set default basic flavour
+Message-ID: <20210331214854.EBC303858C27@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=712f7dfb4cdb729609de230e41255c5af0526860
-Commit:        712f7dfb4cdb729609de230e41255c5af0526860
-Parent:        26d76d31c5251a35bc4be1c60a1066d13b1f5f1d
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=a5fc6a0fe7f7384db9a88a399d288d16d782f516
+Commit:        a5fc6a0fe7f7384db9a88a399d288d16d782f516
+Parent:        0b2a037c800c3b8d20ea4d233cd2642611a2d136
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Mar 23 12:05:55 2021 +0100
+AuthorDate:    Tue Mar 23 11:33:30 2021 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Tue Mar 23 12:05:55 2021 +0100
+CommitterDate: Tue Mar 23 11:33:30 2021 +0100
 
-tests: ignore failure of zeroing
+tests: set default basic flavour
 
-Older mdadm fails the command, when the signature is already gone.
 ---
- test/lib/aux.sh | 2 +-
+ test/lib/inittest.sh | 2 +-
  1 file changed, 1 insertion(+), 1 deletion(-)
 
-diff --git a/test/lib/aux.sh b/test/lib/aux.sh
-index 617d0b3a4..20736260f 100644
---- a/test/lib/aux.sh
-+++ b/test/lib/aux.sh
-@@ -796,7 +796,7 @@ cleanup_md_dev() {
- 	test "$DM_DEV_DIR" = "/dev" || rm -f "$(< MD_DEV_PV)"
+diff --git a/test/lib/inittest.sh b/test/lib/inittest.sh
+index 0014a8cfd..0fd651710 100644
+--- a/test/lib/inittest.sh
++++ b/test/lib/inittest.sh
+@@ -25,7 +25,7 @@ TESTNAME=${0##*/}
+ PS4='#${BASH_SOURCE[0]##*/}:${LINENO}+ '
+ export TESTNAME PS4
  
- 	for dev in $(< MD_DEVICES); do
--		mdadm --zero-superblock "$dev" 2>/dev/null
-+		mdadm --zero-superblock "$dev" 2>/dev/null || true
- 	done
- 	udev_wait
- 	rm -f MD_DEV MD_DEVICES MD_DEV_PV
+-LVM_TEST_FLAVOUR=${LVM_TEST_FLAVOUR-}
++LVM_TEST_FLAVOUR=${LVM_TEST_FLAVOUR-ndev-vanilla}
+ 
+ LVM_TEST_BACKING_DEVICE=${LVM_TEST_BACKING_DEVICE-}
+ LVM_TEST_DEVDIR=${LVM_TEST_DEVDIR-}
 
 
