@@ -1,44 +1,86 @@
 From: David Teigland <teigland@sourceware.org>
-Date: Wed, 31 Mar 2021 21:49:02 +0000 (GMT)
-Subject: dev-next - tests: this test has race in it depending on kernel
-Message-ID: <20210331214902.F04633858C27@sourceware.org>
+Date: Wed, 31 Mar 2021 21:49:04 +0000 (GMT)
+Subject: dev-next - tests: query info instead of table
+Message-ID: <20210331214904.1E45C3857C6F@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=8df0a32abb840815c5d210cbdbd1483d483ee729
-Commit:        8df0a32abb840815c5d210cbdbd1483d483ee729
-Parent:        dd1f5f9a24fc906de7e6dd064ecdd8fdfa9eebda
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=18f2475fa18bfe8b08af830bb8335d41928206fe
+Commit:        18f2475fa18bfe8b08af830bb8335d41928206fe
+Parent:        8df0a32abb840815c5d210cbdbd1483d483ee729
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Mar 23 21:32:51 2021 +0100
+AuthorDate:    Wed Mar 24 00:37:24 2021 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Tue Mar 23 21:32:51 2021 +0100
+CommitterDate: Wed Mar 24 12:22:27 2021 +0100
 
-tests: this test has race in it depending on kernel
+tests: query info instead of table
 
-Some kernel seems to keep 'lvextend' busy so long,
-that actual resize already happens.
-
-So ATM use 'should'  until something better is invented.
+No need to access table when we just check presence,
+so generate smaller error message about missing device.
 ---
- test/shell/lvextend-raid.sh | 3 ++-
- 1 file changed, 2 insertions(+), 1 deletion(-)
+ test/shell/lvm-on-md.sh | 12 ++++++------
+ 1 file changed, 6 insertions(+), 6 deletions(-)
 
-diff --git a/test/shell/lvextend-raid.sh b/test/shell/lvextend-raid.sh
-index 9370bf295..08b34d00c 100644
---- a/test/shell/lvextend-raid.sh
-+++ b/test/shell/lvextend-raid.sh
-@@ -63,7 +63,8 @@ aux delayzero_dev "$dev2"  0 50 "${sector}:"
- lvextend -y -L+${lvext}M $vg/$lv1
- if [ $PROGRESS -eq 1 ]
- then
--not check lv_field $vg/$lv1 sync_percent "100.00"
-+# Even with delayed devices wre are catching races here.
-+should not check lv_field $vg/$lv1 sync_percent "100.00"
- check lv_field $vg/$lv1 size "$(($lvsz)).00m" $vg/$lv1
- fi
- aux wait_for_sync $vg $lv1
+diff --git a/test/shell/lvm-on-md.sh b/test/shell/lvm-on-md.sh
+index 22d5b4ca4..9187d44f5 100644
+--- a/test/shell/lvm-on-md.sh
++++ b/test/shell/lvm-on-md.sh
+@@ -93,7 +93,7 @@ not grep "Not using device" out
+ not vgchange -ay $vg
+ 
+ # should not show an active lv
+-not dmsetup table $vg-$lv1
++not dmsetup info $vg-$lv1
+ 
+ # should not allow updating vg
+ not lvcreate -l1 $vg
+@@ -107,7 +107,7 @@ test ! -f "$RUNDIR/lvm/pvs_online/$PVIDMD"
+ test ! -f "$RUNDIR/lvm/vgs_online/$vg"
+ 
+ # should not show an active lv
+-not dmsetup table $vg-$lv1
++not dmsetup info $vg-$lv1
+ 
+ mdadm --assemble "$mddev" "$dev1" "$dev2"
+ aux udev_wait
+@@ -130,7 +130,7 @@ test ! -f "$RUNDIR/lvm/pvs_online/$PVIDMD"
+ test ! -f "$RUNDIR/lvm/vgs_online/$vg"
+ 
+ # should not show an active lv
+-not dmsetup table $vg-$lv1
++not dmsetup info $vg-$lv1
+ 
+ vgchange -ay $vg
+ 
+@@ -247,7 +247,7 @@ grep "$dev3" out
+ not vgchange -ay $vg
+ 
+ # should not show an active lv
+-not dmsetup table $vg-$lv1
++not dmsetup info $vg-$lv1
+ 
+ # should not allow updating vg
+ not lvcreate -l1 $vg
+@@ -261,7 +261,7 @@ test ! -f "$RUNDIR/lvm/pvs_online/$PVIDMD"
+ test ! -f "$RUNDIR/lvm/vgs_online/$vg"
+ 
+ # should not show an active lv
+-not dmsetup table $vg-$lv1
++not dmsetup info $vg-$lv1
+ 
+ # start the md dev
+ mdadm --assemble "$mddev" "$dev1" "$dev2"
+@@ -285,7 +285,7 @@ test ! -f "$RUNDIR/lvm/pvs_online/$PVIDMD"
+ test ! -f "$RUNDIR/lvm/vgs_online/$vg"
+ 
+ # should not show an active lv
+-not dmsetup table $vg-$lv1
++not dmsetup info $vg-$lv1
+ 
+ vgchange -ay $vg
+ 
 
 
