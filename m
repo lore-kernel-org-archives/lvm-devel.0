@@ -1,96 +1,206 @@
 From: David Teigland <teigland@sourceware.org>
-Date: Wed, 31 Mar 2021 21:49:31 +0000 (GMT)
-Subject: dev-next - tests: update dbus test_nesting
-Message-ID: <20210331214931.91E513858C27@sourceware.org>
+Date: Wed, 31 Mar 2021 21:49:29 +0000 (GMT)
+Subject: dev-next - tests: use blkid without caching
+Message-ID: <20210331214929.4B57C3858C27@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=93336685f6cf8a178cb83aa1ee113a2a33ca7f5c
-Commit:        93336685f6cf8a178cb83aa1ee113a2a33ca7f5c
-Parent:        1d6e1d08a887d602234485f0214edc3552e843e0
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=51ac56a05e9da2c28ef5047345468fed4946078a
+Commit:        51ac56a05e9da2c28ef5047345468fed4946078a
+Parent:        02e02a5ccc7275c23e59e65df25287c8f82276fa
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Mar 26 20:21:57 2021 +0100
+AuthorDate:    Fri Mar 26 16:12:47 2021 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Fri Mar 26 20:39:41 2021 +0100
 
-tests: update dbus test_nesting
+tests: use blkid without caching
 
-Test has to use PV with suffix  pv[0..9]  otherwise
-it's ignored by test suite filter.
-
-Better fix for VG names to use prefix LVMTEST.
-
-Skip the test for runs without LVM_TEST_DEVDIR != /dev
+Always use blkid without caching to avoid poluting
+cache stored in /run/blkid or /etc on older distros
 ---
- test/dbus/lvmdbustest.py | 16 +++++++++++-----
- 1 file changed, 11 insertions(+), 5 deletions(-)
+ test/shell/integrity-blocksize.sh  | 42 +++++++++++++++++++-------------------
+ test/shell/pvcreate-md-fake-hdr.sh |  2 +-
+ test/shell/writecache-blocksize.sh |  2 +-
+ 3 files changed, 23 insertions(+), 23 deletions(-)
 
-diff --git a/test/dbus/lvmdbustest.py b/test/dbus/lvmdbustest.py
-index 6dab312c0..746025903 100755
---- a/test/dbus/lvmdbustest.py
-+++ b/test/dbus/lvmdbustest.py
-@@ -26,6 +26,9 @@ g_tmo = 0
- # Prefix on created objects to enable easier clean-up
- g_prefix = os.getenv('PREFIX', '')
+diff --git a/test/shell/integrity-blocksize.sh b/test/shell/integrity-blocksize.sh
+index 329a2f73f..a85070cc5 100644
+--- a/test/shell/integrity-blocksize.sh
++++ b/test/shell/integrity-blocksize.sh
+@@ -41,7 +41,7 @@ aux prepare_devs 1
+ vgcreate $vg "$dev1"
+ lvcreate -n $lv1 -l8 $vg
+ mkfs.xfs -f "$DM_DEV_DIR/$vg/$lv1"
+-blkid "$DM_DEV_DIR/$vg/$lv1" | grep BLOCK_SIZE || skip
++blkid -c /dev/null "$DM_DEV_DIR/$vg/$lv1" | grep BLOCK_SIZE || skip
+ lvchange -an $vg
+ vgremove -ff $vg
  
-+# Check dev dir prefix for test suite  (LVM_TEST_DEVDIR
-+dm_dev_dir = os.getenv('DM_DEV_DIR', '/dev')
-+
- # Use the session bus instead of the system bus
- use_session = os.getenv('LVM_DBUSD_USE_SESSION', False)
+@@ -145,9 +145,9 @@ lvremove -y $vg2/$lv1
+ lvcreate --type raid1 -m1 -l 8 -n $lv1 $vg1
+ aux wipefs_a /dev/$vg1/$lv1
+ mkfs.xfs -f "$DM_DEV_DIR/$vg1/$lv1"
+-blkid "$DM_DEV_DIR/$vg1/$lv1" | grep BLOCK_SIZE=\"512\"
++blkid -c /dev/null "$DM_DEV_DIR/$vg1/$lv1" | grep BLOCK_SIZE=\"512\"
+ lvconvert --raidintegrity y $vg1/$lv1
+-blkid "$DM_DEV_DIR/$vg1/$lv1" | grep BLOCK_SIZE=\"512\"
++blkid -c /dev/null "$DM_DEV_DIR/$vg1/$lv1" | grep BLOCK_SIZE=\"512\"
+ mount "$DM_DEV_DIR/$vg1/$lv1" $mnt
+ umount $mnt
+ pvck --dump metadata $LOOP1 | grep 'block_size = 512'
+@@ -157,9 +157,9 @@ lvremove -y $vg1/$lv1
+ lvcreate --type raid1 -m1 -l 8 -n $lv1 $vg2
+ aux wipefs_a /dev/$vg2/$lv1
+ mkfs.xfs -f "$DM_DEV_DIR/$vg2/$lv1"
+-blkid "$DM_DEV_DIR/$vg2/$lv1" | grep BLOCK_SIZE=\"4096\"
++blkid -c /dev/null "$DM_DEV_DIR/$vg2/$lv1" | grep BLOCK_SIZE=\"4096\"
+ lvconvert --raidintegrity y $vg2/$lv1
+-blkid "$DM_DEV_DIR/$vg2/$lv1" | grep BLOCK_SIZE=\"4096\"
++blkid -c /dev/null "$DM_DEV_DIR/$vg2/$lv1" | grep BLOCK_SIZE=\"4096\"
+ mount "$DM_DEV_DIR/$vg2/$lv1" $mnt
+ umount $mnt
+ pvck --dump metadata $LOOP3 | grep 'block_size = 4096'
+@@ -169,9 +169,9 @@ lvremove -y $vg2/$lv1
+ lvcreate --type raid1 -m1 -l 8 -n $lv1 $vg1
+ aux wipefs_a /dev/$vg1/$lv1
+ mkfs.ext4 -b 1024 "$DM_DEV_DIR/$vg1/$lv1"
+-blkid "$DM_DEV_DIR/$vg1/$lv1" | grep BLOCK_SIZE=\"1024\"
++blkid -c /dev/null "$DM_DEV_DIR/$vg1/$lv1" | grep BLOCK_SIZE=\"1024\"
+ lvconvert --raidintegrity y $vg1/$lv1
+-blkid "$DM_DEV_DIR/$vg1/$lv1" | grep BLOCK_SIZE=\"1024\"
++blkid -c /dev/null "$DM_DEV_DIR/$vg1/$lv1" | grep BLOCK_SIZE=\"1024\"
+ mount "$DM_DEV_DIR/$vg1/$lv1" $mnt
+ umount $mnt
+ pvck --dump metadata $LOOP1 | grep 'block_size = 512'
+@@ -181,11 +181,11 @@ lvremove -y $vg1/$lv1
+ lvcreate --type raid1 -m1 -l 8 -n $lv1 $vg1
+ aux wipefs_a /dev/$vg1/$lv1
+ mkfs.ext4 -b 1024 "$DM_DEV_DIR/$vg1/$lv1"
+-blkid "$DM_DEV_DIR/$vg1/$lv1" | grep BLOCK_SIZE=\"1024\"
++blkid -c /dev/null "$DM_DEV_DIR/$vg1/$lv1" | grep BLOCK_SIZE=\"1024\"
+ lvchange -an $vg1/$lv1
+ lvconvert --raidintegrity y $vg1/$lv1
+ lvchange -ay $vg1/$lv1
+-blkid "$DM_DEV_DIR/$vg1/$lv1" | grep BLOCK_SIZE=\"1024\"
++blkid -c /dev/null "$DM_DEV_DIR/$vg1/$lv1" | grep BLOCK_SIZE=\"1024\"
+ mount "$DM_DEV_DIR/$vg1/$lv1" $mnt
+ umount $mnt
+ pvck --dump metadata $LOOP1 | grep 'block_size = 1024'
+@@ -195,9 +195,9 @@ lvremove -y $vg1/$lv1
+ lvcreate --type raid1 -m1 -l 8 -n $lv1 $vg2
+ aux wipefs_a /dev/$vg2/$lv1
+ mkfs.ext4 "$DM_DEV_DIR/$vg2/$lv1"
+-blkid "$DM_DEV_DIR/$vg2/$lv1" | grep BLOCK_SIZE=\"4096\"
++blkid -c /dev/null "$DM_DEV_DIR/$vg2/$lv1" | grep BLOCK_SIZE=\"4096\"
+ lvconvert --raidintegrity y $vg2/$lv1
+-blkid "$DM_DEV_DIR/$vg2/$lv1" | grep BLOCK_SIZE=\"4096\"
++blkid -c /dev/null "$DM_DEV_DIR/$vg2/$lv1" | grep BLOCK_SIZE=\"4096\"
+ mount "$DM_DEV_DIR/$vg2/$lv1" $mnt
+ umount $mnt
+ pvck --dump metadata $LOOP3 | grep 'block_size = 4096'
+@@ -207,10 +207,10 @@ lvremove -y $vg2/$lv1
+ lvcreate --type raid1 -m1 -l 8 -n $lv1 $vg1
+ aux wipefs_a /dev/$vg1/$lv1
+ mkfs.xfs -f -s size=4096 "$DM_DEV_DIR/$vg1/$lv1"
+-blkid "$DM_DEV_DIR/$vg1/$lv1" | grep BLOCK_SIZE=\"4096\"
++blkid -c /dev/null "$DM_DEV_DIR/$vg1/$lv1" | grep BLOCK_SIZE=\"4096\"
+ lvconvert --raidintegrity y --raidintegrityblocksize 512 $vg1/$lv1
+ lvs -o raidintegrityblocksize $vg1/$lv1 | grep 512
+-blkid "$DM_DEV_DIR/$vg1/$lv1" | grep BLOCK_SIZE=\"4096\"
++blkid -c /dev/null "$DM_DEV_DIR/$vg1/$lv1" | grep BLOCK_SIZE=\"4096\"
+ mount "$DM_DEV_DIR/$vg1/$lv1" $mnt
+ umount $mnt
+ pvck --dump metadata $LOOP1 | grep 'block_size = 512'
+@@ -220,13 +220,13 @@ lvremove -y $vg1/$lv1
+ lvcreate --type raid1 -m1 -l 8 -n $lv1 $vg1
+ aux wipefs_a /dev/$vg1/$lv1
+ mkfs.xfs -f -s size=4096 "$DM_DEV_DIR/$vg1/$lv1"
+-blkid "$DM_DEV_DIR/$vg1/$lv1" | grep BLOCK_SIZE=\"4096\"
++blkid -c /dev/null "$DM_DEV_DIR/$vg1/$lv1" | grep BLOCK_SIZE=\"4096\"
+ lvchange -an $vg1/$lv1
+ # lv needs to be inactive to increase LBS from 512
+ lvconvert --raidintegrity y --raidintegrityblocksize 1024 $vg1/$lv1
+ lvs -o raidintegrityblocksize $vg1/$lv1 | grep 1024
+ lvchange -ay $vg1/$lv1
+-blkid "$DM_DEV_DIR/$vg1/$lv1" | grep BLOCK_SIZE=\"4096\"
++blkid -c /dev/null "$DM_DEV_DIR/$vg1/$lv1" | grep BLOCK_SIZE=\"4096\"
+ mount "$DM_DEV_DIR/$vg1/$lv1" $mnt
+ umount $mnt
+ pvck --dump metadata $LOOP1 | grep 'block_size = 1024'
+@@ -236,9 +236,9 @@ lvremove -y $vg1/$lv1
+ lvcreate --type raid1 -m1 -l 8 -n $lv1 $vg1
+ aux wipefs_a /dev/$vg1/$lv1
+ mkfs.ext4 -b 1024 "$DM_DEV_DIR/$vg1/$lv1"
+-blkid "$DM_DEV_DIR/$vg1/$lv1" | grep BLOCK_SIZE=\"1024\"
++blkid -c /dev/null "$DM_DEV_DIR/$vg1/$lv1" | grep BLOCK_SIZE=\"1024\"
+ lvconvert --raidintegrity y --raidintegrityblocksize 512 $vg1/$lv1
+-blkid "$DM_DEV_DIR/$vg1/$lv1" | grep BLOCK_SIZE=\"1024\"
++blkid -c /dev/null "$DM_DEV_DIR/$vg1/$lv1" | grep BLOCK_SIZE=\"1024\"
+ mount "$DM_DEV_DIR/$vg1/$lv1" $mnt
+ umount $mnt
+ pvck --dump metadata $LOOP1 | grep 'block_size = 512'
+@@ -263,14 +263,14 @@ mkfs.xfs -f "$DM_DEV_DIR/$vg1/$lv1"
+ mount "$DM_DEV_DIR/$vg1/$lv1" $mnt
+ echo "test" > $mnt/test
+ umount $mnt
+-blkid "$DM_DEV_DIR/$vg1/$lv1" | grep BLOCK_SIZE=\"512\"
++blkid -c /dev/null "$DM_DEV_DIR/$vg1/$lv1" | grep BLOCK_SIZE=\"512\"
+ lvchange -an $vg1/$lv1
+ lvconvert --raidintegrity y $vg1/$lv1
+ lvchange -ay $vg1/$lv1
+ mount "$DM_DEV_DIR/$vg1/$lv1" $mnt
+ cat $mnt/test
+ umount $mnt
+-blkid "$DM_DEV_DIR/$vg1/$lv1" | grep BLOCK_SIZE=\"512\"
++blkid -c /dev/null "$DM_DEV_DIR/$vg1/$lv1" | grep BLOCK_SIZE=\"512\"
+ pvck --dump metadata $LOOP1 | grep 'block_size = 512'
+ lvchange -an $vg1/$lv1
+ lvremove -y $vg1/$lv1
+@@ -282,14 +282,14 @@ mkfs.xfs -f "$DM_DEV_DIR/$vg2/$lv1"
+ mount "$DM_DEV_DIR/$vg2/$lv1" $mnt
+ echo "test" > $mnt/test
+ umount $mnt
+-blkid "$DM_DEV_DIR/$vg2/$lv1" | grep BLOCK_SIZE=\"4096\"
++blkid -c /dev/null "$DM_DEV_DIR/$vg2/$lv1" | grep BLOCK_SIZE=\"4096\"
+ lvchange -an $vg2/$lv1
+ lvconvert --raidintegrity y $vg2/$lv1
+ lvchange -ay $vg2/$lv1
+ mount "$DM_DEV_DIR/$vg2/$lv1" $mnt
+ cat $mnt/test
+ umount $mnt
+-blkid "$DM_DEV_DIR/$vg2/$lv1" | grep BLOCK_SIZE=\"4096\"
++blkid -c /dev/null "$DM_DEV_DIR/$vg2/$lv1" | grep BLOCK_SIZE=\"4096\"
+ pvck --dump metadata $LOOP3 | grep 'block_size = 4096'
+ lvchange -an $vg2/$lv1
+ lvremove -y $vg2/$lv1
+diff --git a/test/shell/pvcreate-md-fake-hdr.sh b/test/shell/pvcreate-md-fake-hdr.sh
+index 7a16ef5e4..73846ed71 100644
+--- a/test/shell/pvcreate-md-fake-hdr.sh
++++ b/test/shell/pvcreate-md-fake-hdr.sh
+@@ -59,7 +59,7 @@ sleep 3
+ # print what  blkid thinks about each PV
+ for i in "$dev1" "$dev2" "$dev3" "$dev4"
+ do
+-	blkid -c /dev/null -w /dev/null "$i" || echo "Unknown signature"
++	blkid -c /dev/null "$i" || echo "Unknown signature"
+ done
  
-@@ -59,10 +62,10 @@ if pv_device_list:
+ # expect open count for each PV to be 0
+diff --git a/test/shell/writecache-blocksize.sh b/test/shell/writecache-blocksize.sh
+index 74f8c2ae5..a8bb1e49d 100644
+--- a/test/shell/writecache-blocksize.sh
++++ b/test/shell/writecache-blocksize.sh
+@@ -144,7 +144,7 @@ aux prepare_devs 2 64
+ vgcreate $vg "$dev1"
+ lvcreate -n $lv1 -L50 $vg
+ mkfs.xfs -f "$DM_DEV_DIR/$vg/$lv1"
+-blkid "$DM_DEV_DIR/$vg/$lv1" | grep BLOCK_SIZE || skip
++blkid -c /dev/null "$DM_DEV_DIR/$vg/$lv1" | grep BLOCK_SIZE || skip
+ lvchange -an $vg
+ vgremove -ff $vg
  
- 
- def vg_n(prefix=None):
--	name = g_prefix + '_vg'
-+	name = rs(8, '_vg')
- 	if prefix:
- 		name = prefix + name
--	return name
-+	return g_prefix + name
- 
- 
- def lv_n(suffix=None):
-@@ -70,7 +73,7 @@ def lv_n(suffix=None):
- 		s = '_lv'
- 	else:
- 		s = suffix
--	return g_prefix + rs(8, s)
-+	return rs(8, s)
- 
- 
- def _is_testsuite_pv(pv_name):
-@@ -338,7 +341,7 @@ class TestDbusService(unittest.TestCase):
- 		if not pv_paths:
- 			pv_paths = self._all_pv_object_paths()
- 
--		vg_name = vg_n(prefix=vg_prefix)
-+		vg_name = vg_n()
- 
- 		vg_path = self.handle_return(
- 			self.objs[MANAGER_INT][0].Manager.VgCreate(
-@@ -1811,7 +1814,7 @@ class TestDbusService(unittest.TestCase):
- 			pv_object_path, vg.Vg.Pvs, "Expecting PV object path in Vg.Pvs")
- 
- 		lv = self._create_lv(
--			vg=vg.Vg, size=vg.Vg.FreeBytes, suffix="_pv")
-+			vg=vg.Vg, size=vg.Vg.FreeBytes, suffix="_pv0")
- 		device_path = '/dev/%s/%s' % (vg.Vg.Name, lv.LvCommon.Name)
- 		new_pv_object_path = self._pv_create(device_path)
- 
-@@ -1837,6 +1840,9 @@ class TestDbusService(unittest.TestCase):
- 		# by editing lvm.conf with "devices/scan_lvs = 1"  As testing
- 		# typically utilizes loopback, this test is skipped in
- 		# those environments.
-+
-+		if dm_dev_dir != '/dev':
-+			raise unittest.SkipTest('test not running in real /dev')
- 		pv_object_path = self.objs[PV_INT][0].object_path
- 		if not self.objs[PV_INT][0].Pv.Name.startswith("/dev"):
- 			raise unittest.SkipTest('test not running in /dev')
 
 
