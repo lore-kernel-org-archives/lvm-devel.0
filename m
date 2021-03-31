@@ -1,39 +1,45 @@
 From: David Teigland <teigland@sourceware.org>
-Date: Wed, 31 Mar 2021 21:48:54 +0000 (GMT)
-Subject: dev-next - tests: set default basic flavour
-Message-ID: <20210331214854.EBC303858C27@sourceware.org>
+Date: Wed, 31 Mar 2021 21:48:58 +0000 (GMT)
+Subject: dev-next - tests: use prefix for VG name
+Message-ID: <20210331214858.62BA43858C27@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=a5fc6a0fe7f7384db9a88a399d288d16d782f516
-Commit:        a5fc6a0fe7f7384db9a88a399d288d16d782f516
-Parent:        0b2a037c800c3b8d20ea4d233cd2642611a2d136
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=d0644fb2c346414ae138369557bbd898d5feac6f
+Commit:        d0644fb2c346414ae138369557bbd898d5feac6f
+Parent:        712f7dfb4cdb729609de230e41255c5af0526860
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Mar 23 11:33:30 2021 +0100
+AuthorDate:    Tue Mar 23 14:38:54 2021 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Tue Mar 23 11:33:30 2021 +0100
+CommitterDate: Tue Mar 23 14:38:54 2021 +0100
 
-tests: set default basic flavour
+tests: use prefix for VG name
 
 ---
- test/lib/inittest.sh | 2 +-
- 1 file changed, 1 insertion(+), 1 deletion(-)
+ test/shell/losetup-partscan.sh | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
 
-diff --git a/test/lib/inittest.sh b/test/lib/inittest.sh
-index 0014a8cfd..0fd651710 100644
---- a/test/lib/inittest.sh
-+++ b/test/lib/inittest.sh
-@@ -25,7 +25,7 @@ TESTNAME=${0##*/}
- PS4='#${BASH_SOURCE[0]##*/}:${LINENO}+ '
- export TESTNAME PS4
+diff --git a/test/shell/losetup-partscan.sh b/test/shell/losetup-partscan.sh
+index 98b2677f8..aa752064c 100644
+--- a/test/shell/losetup-partscan.sh
++++ b/test/shell/losetup-partscan.sh
+@@ -37,7 +37,7 @@ aux extend_filter "a|$LOOP|"
  
--LVM_TEST_FLAVOUR=${LVM_TEST_FLAVOUR-}
-+LVM_TEST_FLAVOUR=${LVM_TEST_FLAVOUR-ndev-vanilla}
+ # creation should fail for 'partitioned' loop device
+ not pvcreate -y "$LOOP"
+-not vgcreate $SHARED vg "$LOOP"
++not vgcreate $SHARED ${PREFIX}vg "$LOOP"
  
- LVM_TEST_BACKING_DEVICE=${LVM_TEST_BACKING_DEVICE-}
- LVM_TEST_DEVDIR=${LVM_TEST_DEVDIR-}
+ aux teardown_devs
+ 
+@@ -61,4 +61,4 @@ aux extend_filter "a|$LOOP|"
+ # creation should pass for 'non-partitioned' loop device
+ pvcreate -y "$LOOP"
+ 
+-vgcreate $SHARED vg "$LOOP"
++vgcreate $SHARED ${PREFIX}vg "$LOOP"
 
 
