@@ -1,40 +1,50 @@
 From: David Teigland <teigland@sourceware.org>
-Date: Wed, 31 Mar 2021 21:49:21 +0000 (GMT)
-Subject: dev-next - tests: try to observe some unusual problem
-Message-ID: <20210331214921.4A9653858C27@sourceware.org>
+Date: Wed, 31 Mar 2021 21:49:19 +0000 (GMT)
+Subject: dev-next - tests: add basic validation of running services
+Message-ID: <20210331214919.065E43857C6F@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=6db533c4393e1e8ca02e957c529afaf67fa7e20b
-Commit:        6db533c4393e1e8ca02e957c529afaf67fa7e20b
-Parent:        3ed79d8dfe8b75830d8fd6925d7cef5ef1ebd8f2
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=85fae836c09daf457f3f8f14e3eae2179cfd2ffa
+Commit:        85fae836c09daf457f3f8f14e3eae2179cfd2ffa
+Parent:        9bcc76b63c14566e5ced09ac18129e1c9a98e8e4
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Mar 26 11:36:22 2021 +0100
+AuthorDate:    Fri Mar 26 11:13:56 2021 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Fri Mar 26 11:36:22 2021 +0100
+CommitterDate: Fri Mar 26 11:13:56 2021 +0100
 
-tests: try to observe some unusual problem
+tests: add basic validation of running services
 
-Lets see, why it's very occasionaly able to active LV.
+For determinist test results lvm2/dm service shall not be present
+and running in the system as it may randomize test results.
+
+In case they are found present, this test ends with warning (not failure).
 ---
- test/shell/duplicate-vgnames.sh | 2 +-
- 1 file changed, 1 insertion(+), 1 deletion(-)
+ test/shell/000-basic.sh | 12 ++++++++++++
+ 1 file changed, 12 insertions(+)
 
-diff --git a/test/shell/duplicate-vgnames.sh b/test/shell/duplicate-vgnames.sh
-index 0f98f9c37..0bbc08937 100644
---- a/test/shell/duplicate-vgnames.sh
-+++ b/test/shell/duplicate-vgnames.sh
-@@ -399,7 +399,7 @@ grep $UUID2 out | grep active
- grep $UUID3 out | not grep active
- vgchange -an
- 
--not vgchange -ay $vg1
-+not vgchange -ay -vvvv $vg1
- lvs --foreign -o vguuid,active |tee out
- grep $UUID1 out | not grep active
- grep $UUID2 out | not grep active
+diff --git a/test/shell/000-basic.sh b/test/shell/000-basic.sh
+index 1e511d1f0..a7b80c72b 100644
+--- a/test/shell/000-basic.sh
++++ b/test/shell/000-basic.sh
+@@ -34,3 +34,15 @@ get_devs
+ # ensure we do not crash on a bug in config file
+ aux lvmconf 'log/prefix = 1""'
+ not lvs "${DEVICES[@]}"
++
++# validate testing machine with its services is in expected state and will not interfere with tests
++if systemctl -a >out 2>/dev/null ; then
++	for i in dm-event lvm2-lvmpolld lvm2-monitor ; do
++	echo $i
++		grep $i out | not grep -v masked || {
++			cat out
++			should not echo "Present unmasked $i service/socket may randomize testing results!"
++			echo "+++++ Stop & Mask with systemctl +++++"
++		}
++	done
++fi
 
 
