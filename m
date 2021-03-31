@@ -1,38 +1,43 @@
 From: David Teigland <teigland@sourceware.org>
-Date: Wed, 31 Mar 2021 21:49:14 +0000 (GMT)
-Subject: dev-next - WHATS_NEW: updates
-Message-ID: <20210331214914.6C2DF3857C6F@sourceware.org>
+Date: Wed, 31 Mar 2021 21:49:12 +0000 (GMT)
+Subject: dev-next - tests: handle case of missing /dev/disk
+Message-ID: <20210331214912.2357C3858C27@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=73710b87fb567e3d6d72b475afe9f95ccc0afad6
-Commit:        73710b87fb567e3d6d72b475afe9f95ccc0afad6
-Parent:        c1f5ca6751eeda5925638447b561b05bdf8a250c
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=0783c661b9eb407b0b436559b6950deefc906b4f
+Commit:        0783c661b9eb407b0b436559b6950deefc906b4f
+Parent:        2151b71819ffd45e71f2565aa2c0d2cb9685e2c0
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed Mar 24 16:30:23 2021 +0100
+AuthorDate:    Wed Mar 24 15:52:14 2021 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Wed Mar 24 16:41:08 2021 +0100
+CommitterDate: Wed Mar 24 16:38:12 2021 +0100
 
-WHATS_NEW: updates
+tests: handle case of missing /dev/disk
 
+In case there is no symlink - udev can optimize /dev/disk away,
+thus find would fail in teardown.
 ---
- WHATS_NEW | 2 ++
- 1 file changed, 2 insertions(+)
+ test/lib/aux.sh | 4 +++-
+ 1 file changed, 3 insertions(+), 1 deletion(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index 80e16d880..3e086f951 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,7 @@
- Version 2.03.12 - 
- ===================================
-+  Report error when the filesystem is missing on fsadm resized volume.
-+  Handle better blockdev with --getsize64 support for fsadm.
-   Do not include editline/history.h when using editline library.
-   Support lvconvert -Zn with thin-pool conversion.
-   Support error and zero segtype for thin-pool data for testing.
+diff --git a/test/lib/aux.sh b/test/lib/aux.sh
+index f81d03e88..6c43790b7 100644
+--- a/test/lib/aux.sh
++++ b/test/lib/aux.sh
+@@ -581,7 +581,9 @@ teardown() {
+ 	}
+ 
+ 	# Remove any dangling symlink in /dev/disk (our tests can confuse udev)
+-	find /dev/disk -type l ! -exec test -e {} \; -print | xargs rm -f
++	test -d /dev/disk && {
++		find /dev/disk -type l ! -exec test -e {} \; -print | xargs rm -f || true
++	}
+ 
+ 	# Remove any metadata archives and backups from this test on system
+ 	rm -f /etc/lvm/archive/${PREFIX}* /etc/lvm/backup/${PREFIX}*
 
 
