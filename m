@@ -1,42 +1,61 @@
 From: David Teigland <teigland@sourceware.org>
-Date: Wed, 31 Mar 2021 21:49:44 +0000 (GMT)
-Subject: dev-next - tests: fix unfinished check for 4.18 kernel
-Message-ID: <20210331214944.343923857C6F@sourceware.org>
+Date: Wed, 31 Mar 2021 21:49:47 +0000 (GMT)
+Subject: dev-next - tests: add aux remove_dm_devs
+Message-ID: <20210331214947.AAA573857C6F@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=afbaab20c72515231740a1a6827d0110c6ff59cf
-Commit:        afbaab20c72515231740a1a6827d0110c6ff59cf
-Parent:        f584f0cd9e84c33128200897eebd6edb22557167
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=d9b97510324e7c16cf8ec61f511b6f5d71bff767
+Commit:        d9b97510324e7c16cf8ec61f511b6f5d71bff767
+Parent:        0ddbc4c5cdbef0cc57b79c164b22b34c0bc6a27a
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Sun Mar 28 00:16:54 2021 +0100
+AuthorDate:    Sun Mar 28 13:29:44 2021 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Sun Mar 28 00:21:38 2021 +0100
+CommitterDate: Sun Mar 28 14:22:11 2021 +0200
 
-tests: fix unfinished check for 4.18 kernel
+tests: add aux remove_dm_devs
 
+Add function to remove DM devices and dies
+if some device can't be removed.
 ---
- test/shell/thin-flags.sh | 4 ++--
- 1 file changed, 2 insertions(+), 2 deletions(-)
+ test/lib/aux.sh | 22 ++++++++++++++++++++++
+ 1 file changed, 22 insertions(+)
 
-diff --git a/test/shell/thin-flags.sh b/test/shell/thin-flags.sh
-index 0b3148a9c..795d47ae5 100644
---- a/test/shell/thin-flags.sh
-+++ b/test/shell/thin-flags.sh
-@@ -99,9 +99,9 @@ lvs -ao+seg_pe_ranges $vg
+diff --git a/test/lib/aux.sh b/test/lib/aux.sh
+index 38191842d..6177de4d4 100644
+--- a/test/lib/aux.sh
++++ b/test/lib/aux.sh
+@@ -1110,6 +1110,28 @@ enable_dev() {
+ 	finish_udev_transaction
+ }
  
- # needs_check needs newer version
- THINMINVER="1 20 0"
--aux kernel_at_least 4.18 && THINMINVER="1 19 0" # kernel >=4.18 already had changes from 1.20
-+aux kernel_at_least 4 18 && THINMINVER="1 19 0" # kernel >=4.18 already had changes from 1.20
- 
--if aux have_thin $THINVER ; then
-+if aux have_thin $THINMINVER ; then
- 	check lv_attr_bit state $vg/pool "a"
- 
- 	dmsetup suspend $vg-pool-tpool
++# Try to remove list of DM device from table
++remove_dm_devs() {
++	local remove=( "$@" )
++	local held
++	local i
++
++	for i in {1..50}; do
++		held=()
++		for d in "${remove[@]}" ; do
++			dmsetup remove "$d" 2>/dev/null || {
++				dmsetup info -c "$d" 2>/dev/null && {
++					held+=( "$d" )
++					dmsetup status "$d"
++				}
++			}
++		done
++		test ${#held[@]} -eq 0 && return
++		remove=( "${held[@]}" )
++	done
++	die "Can't remove device(s) ${held[@]}"
++}
++
+ # Throttle down performance of kcopyd when mirroring i.e. disk image
+ throttle_sys="/sys/module/dm_mirror/parameters/raid1_resync_throttle"
+ throttle_dm_mirror() {
 
 
