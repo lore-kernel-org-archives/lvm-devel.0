@@ -1,42 +1,41 @@
 From: David Teigland <teigland@sourceware.org>
-Date: Wed, 31 Mar 2021 21:49:09 +0000 (GMT)
-Subject: dev-next - fsadm: handle error from blkid
-Message-ID: <20210331214909.CFEB43857C6F@sourceware.org>
+Date: Wed, 31 Mar 2021 21:49:10 +0000 (GMT)
+Subject: dev-next - tests: check fsadm with missing filesystem
+Message-ID: <20210331214910.F237A3858C27@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=28865f971e0b23f4d1a4117e0e0fdb61bd21d836
-Commit:        28865f971e0b23f4d1a4117e0e0fdb61bd21d836
-Parent:        63c58d2a5d935cd78c77f3db13a655e68fb36367
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=2151b71819ffd45e71f2565aa2c0d2cb9685e2c0
+Commit:        2151b71819ffd45e71f2565aa2c0d2cb9685e2c0
+Parent:        28865f971e0b23f4d1a4117e0e0fdb61bd21d836
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed Mar 24 16:26:17 2021 +0100
+AuthorDate:    Wed Mar 24 16:33:16 2021 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Wed Mar 24 16:37:09 2021 +0100
+CommitterDate: Wed Mar 24 16:38:12 2021 +0100
 
-fsadm: handle error from blkid
+tests: check fsadm with missing filesystem
 
-Fsadm wants to print its own error message when it can't detect
-type of the filesystem on a block device.
-Otherwise fsadm exits with no message on an unused block device.
 ---
- scripts/fsadm.sh | 2 +-
- 1 file changed, 1 insertion(+), 1 deletion(-)
+ test/shell/fsadm.sh | 4 ++++
+ 1 file changed, 4 insertions(+)
 
-diff --git a/scripts/fsadm.sh b/scripts/fsadm.sh
-index 20ae57462..3e1f3d405 100755
---- a/scripts/fsadm.sh
-+++ b/scripts/fsadm.sh
-@@ -230,7 +230,7 @@ detect_fs() {
- 	esac
- 	# use null device as cache file to be sure about the result
- 	# not using option '-o value' to be compatible with older version of blkid
--	FSTYPE=$("$BLKID" -c "$NULL" -s TYPE "$VOLUME")
-+	FSTYPE=$("$BLKID" -c "$NULL" -s TYPE "$VOLUME" || true)
- 	test -n "$FSTYPE" || error "Cannot get FSTYPE of \"$VOLUME\"."
- 	FSTYPE=${FSTYPE##*TYPE=\"} # cut quotation marks
- 	FSTYPE=${FSTYPE%%\"*}
+diff --git a/test/shell/fsadm.sh b/test/shell/fsadm.sh
+index 987b1a1a9..c5b3774c2 100644
+--- a/test/shell/fsadm.sh
++++ b/test/shell/fsadm.sh
+@@ -99,6 +99,10 @@ fsadm
+ # check needs arg
+ not fsadm check
+ 
++# check needs arg
++not fsadm resize "$dev_vg_lv" 30M |& tee out
++grep "Cannot get FSTYPE" out
++
+ if check_missing ext2; then
+ 	mkfs.ext2 -b4096 -j "$dev_vg_lv"
+ 
 
 
