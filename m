@@ -1,89 +1,115 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Tue,  6 Apr 2021 20:07:26 +0000 (GMT)
-Subject: main - daemon-server: handle reaping threads better
-Message-ID: <20210406200726.3B3153858012@sourceware.org>
+Date: Tue,  6 Apr 2021 20:07:27 +0000 (GMT)
+Subject: main - mirror_percent: support interruptible check
+Message-ID: <20210406200727.5AD683857823@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=1f17b1c56526abc7b7c8edacfba683b396f95705
-Commit:        1f17b1c56526abc7b7c8edacfba683b396f95705
-Parent:        fe4f83171d43ed764b2342f2081db8d9e8ce9343
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=ff8aaadec912398598fd4b16de99ed700b97b130
+Commit:        ff8aaadec912398598fd4b16de99ed700b97b130
+Parent:        1f17b1c56526abc7b7c8edacfba683b396f95705
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu Apr 1 11:32:47 2021 +0200
+AuthorDate:    Tue Apr 6 14:47:11 2021 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Tue Apr 6 21:26:57 2021 +0200
+CommitterDate: Tue Apr 6 22:02:31 2021 +0200
 
-daemon-server: handle reaping threads better
+mirror_percent: support interruptible check
 
-Avoid sleeping in pselect when thread missed reap() handling.
-This speedup handling of daemon shutdown sequences.
+When checking for mirror percentage with WAITEVENT (i.e. during pvmove)
+handle intrruption (^C) of such wait.
 ---
- libdaemon/server/daemon-server.c | 23 +++++++++++++----------
- 1 file changed, 13 insertions(+), 10 deletions(-)
+ lib/activate/dev_manager.c | 36 ++++++++++++++++++++++++++++--------
+ 1 file changed, 28 insertions(+), 8 deletions(-)
 
-diff --git a/libdaemon/server/daemon-server.c b/libdaemon/server/daemon-server.c
-index 7c1b1cf89..1e900261c 100644
---- a/libdaemon/server/daemon-server.c
-+++ b/libdaemon/server/daemon-server.c
-@@ -551,9 +551,14 @@ static void _reap(daemon_state s, int waiting)
+diff --git a/lib/activate/dev_manager.c b/lib/activate/dev_manager.c
+index 172a6bab1..c4a673901 100644
+--- a/lib/activate/dev_manager.c
++++ b/lib/activate/dev_manager.c
+@@ -26,6 +26,7 @@
+ #include "lib/activate/activate.h"
+ #include "lib/misc/lvm-exec.h"
+ #include "lib/datastruct/str_list.h"
++#include "lib/misc/lvm-signal.h"
  
- 	while (ts) {
- 		if (waiting || !ts->active) {
--			if (ts->client.thread_id &&
--			    (errno = pthread_join(ts->client.thread_id, &rv)))
--				ERROR(&s, "pthread_join failed: %s", strerror(errno));
-+			if (ts->client.thread_id) {
-+				if ((errno = pthread_kill(ts->client.thread_id, SIGTERM)) &&
-+				    (errno != ESRCH))
-+					ERROR(&s, "pthread_kill failed for pid %ld",
-+					      (long)ts->client.thread_id);
-+				if ((errno = pthread_join(ts->client.thread_id, &rv)))
-+					ERROR(&s, "pthread_join failed: %s", strerror(errno));
-+			}
- 			last->next = ts->next;
- 			free(ts);
- 		} else
-@@ -659,19 +664,13 @@ void daemon_start(daemon_state s)
- 	if (sigprocmask(SIG_SETMASK, NULL, &old_set))
- 		perror("sigprocmask error");
+ #include <limits.h>
+ #include <dirent.h>
+@@ -1123,7 +1124,8 @@ static int _percent_run(struct dev_manager *dm, const char *name,
+ 			const char *dlid,
+ 			const char *target_type, int wait,
+ 			const struct logical_volume *lv, dm_percent_t *overall_percent,
+-			uint32_t *event_nr, int fail_if_percent_unsupported)
++			uint32_t *event_nr, int fail_if_percent_unsupported,
++			int *interrupted)
+ {
+ 	int r = 0;
+ 	struct dm_task *dmt;
+@@ -1144,9 +1146,12 @@ static int _percent_run(struct dev_manager *dm, const char *name,
+ 	if (!(segtype = get_segtype_from_string(dm->cmd, target_type)))
+ 		return_0;
  
--	while (!failed) {
-+	while (!failed && !_shutdown_requested) {
- 		_reset_timeout(s);
- 		FD_ZERO(&in);
- 		FD_SET(s.socket_fd, &in);
++	if (wait)
++		sigint_allow();
++
+ 	if (!(dmt = _setup_task_run(wait ? DM_DEVICE_WAITEVENT : DM_DEVICE_STATUS, &info,
+ 				    name, dlid, event_nr, 0, 0, 0, 0, 0)))
+-		return_0;
++		goto_bad;
  
- 		if (sigprocmask(SIG_SETMASK, &new_set, NULL))
- 			perror("sigprocmask error");
--		if (_shutdown_requested && !s.threads->next) {
--			if (sigprocmask(SIG_SETMASK, &old_set, NULL))
--				perror("sigprocmask error");
--			INFO(&s, "%s shutdown requested", s.name);
--			break;
--		}
- 		ret = pselect(s.socket_fd + 1, &in, NULL, NULL, _get_timeout(s), &old_set);
- 		if (sigprocmask(SIG_SETMASK, &old_set, NULL))
- 			perror("sigprocmask error");
-@@ -679,6 +678,7 @@ void daemon_start(daemon_state s)
- 		if (ret < 0) {
- 			if ((errno != EINTR) && (errno != EAGAIN))
- 				perror("select error");
-+			_reap(s, 0);
- 			continue;
- 		}
+ 	if (!info.exists)
+ 		goto_out;
+@@ -1214,8 +1219,19 @@ static int _percent_run(struct dev_manager *dm, const char *name,
+ 			     display_percent(dm->cmd, *overall_percent));
+ 	r = 1;
  
-@@ -698,6 +698,9 @@ void daemon_start(daemon_state s)
- 		}
+-      out:
++    out:
+ 	dm_task_destroy(dmt);
++
++    bad:
++	if (wait) {
++		sigint_restore();
++
++		if (sigint_caught()) {
++			*interrupted = 1;
++			return_0;
++		}
++	}
++
+ 	return r;
+ }
+ 
+@@ -1224,20 +1240,24 @@ static int _percent(struct dev_manager *dm, const char *name, const char *dlid,
+ 		    const struct logical_volume *lv, dm_percent_t *percent,
+ 		    uint32_t *event_nr, int fail_if_percent_unsupported)
+ {
++	int interrupted = 0;
++
+ 	if (dlid && *dlid) {
+ 		if (_percent_run(dm, NULL, dlid, target_type, wait, lv, percent,
+-				 event_nr, fail_if_percent_unsupported))
++				 event_nr, fail_if_percent_unsupported, &interrupted))
+ 			return 1;
+ 
+-		if (_original_uuid_format_check_required(dm->cmd) &&
++		if (!interrupted &&
++		    _original_uuid_format_check_required(dm->cmd) &&
+ 		    _percent_run(dm, NULL, dlid + sizeof(UUID_PREFIX) - 1,
+ 				 target_type, wait, lv, percent,
+-				 event_nr, fail_if_percent_unsupported))
++				 event_nr, fail_if_percent_unsupported, &interrupted))
+ 			return 1;
  	}
  
-+	if (_shutdown_requested)
-+		INFO(&s, "%s shutdown requested", s.name);
-+
- 	INFO(&s, "%s waiting for client threads to finish", s.name);
- 	_reap(s, 1);
- out:
+-	if (name && _percent_run(dm, name, NULL, target_type, wait, lv, percent,
+-				 event_nr, fail_if_percent_unsupported))
++	if (!interrupted && name &&
++	    _percent_run(dm, name, NULL, target_type, wait, lv, percent,
++				 event_nr, fail_if_percent_unsupported, &interrupted))
+ 		return 1;
+ 
+ 	return_0;
 
 
