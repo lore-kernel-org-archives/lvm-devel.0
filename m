@@ -1,115 +1,130 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Tue,  6 Apr 2021 20:07:27 +0000 (GMT)
-Subject: main - mirror_percent: support interruptible check
-Message-ID: <20210406200727.5AD683857823@sourceware.org>
+Date: Tue,  6 Apr 2021 20:07:28 +0000 (GMT)
+Subject: main - polldaemon: improve support for interruptions
+Message-ID: <20210406200728.7B5593858012@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=ff8aaadec912398598fd4b16de99ed700b97b130
-Commit:        ff8aaadec912398598fd4b16de99ed700b97b130
-Parent:        1f17b1c56526abc7b7c8edacfba683b396f95705
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=d2522f4a05aa027bcc911ecb832450bc19b7fb57
+Commit:        d2522f4a05aa027bcc911ecb832450bc19b7fb57
+Parent:        ff8aaadec912398598fd4b16de99ed700b97b130
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Apr 6 14:47:11 2021 +0200
+AuthorDate:    Tue Apr 6 14:57:42 2021 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Tue Apr 6 22:02:31 2021 +0200
 
-mirror_percent: support interruptible check
+polldaemon: improve support for interruptions
 
-When checking for mirror percentage with WAITEVENT (i.e. during pvmove)
-handle intrruption (^C) of such wait.
+Enhance handling of interruptions of polling process and lvmpoll daemon.
+Daemon should now react much faster on interrups (i.e. shutdown
+sequence) and avoid taking lenghty sleep waiting on pvmove signaling.
 ---
- lib/activate/dev_manager.c | 36 ++++++++++++++++++++++++++++--------
- 1 file changed, 28 insertions(+), 8 deletions(-)
+ daemons/lvmpolld/lvmpolld-core.c |  6 ++----
+ tools/polldaemon.c               | 35 ++++++++++++++++-------------------
+ 2 files changed, 18 insertions(+), 23 deletions(-)
 
-diff --git a/lib/activate/dev_manager.c b/lib/activate/dev_manager.c
-index 172a6bab1..c4a673901 100644
---- a/lib/activate/dev_manager.c
-+++ b/lib/activate/dev_manager.c
-@@ -26,6 +26,7 @@
- #include "lib/activate/activate.h"
- #include "lib/misc/lvm-exec.h"
- #include "lib/datastruct/str_list.h"
-+#include "lib/misc/lvm-signal.h"
- 
- #include <limits.h>
- #include <dirent.h>
-@@ -1123,7 +1124,8 @@ static int _percent_run(struct dev_manager *dm, const char *name,
- 			const char *dlid,
- 			const char *target_type, int wait,
- 			const struct logical_volume *lv, dm_percent_t *overall_percent,
--			uint32_t *event_nr, int fail_if_percent_unsupported)
-+			uint32_t *event_nr, int fail_if_percent_unsupported,
-+			int *interrupted)
+diff --git a/daemons/lvmpolld/lvmpolld-core.c b/daemons/lvmpolld/lvmpolld-core.c
+index f7381eb35..ab8284145 100644
+--- a/daemons/lvmpolld/lvmpolld-core.c
++++ b/daemons/lvmpolld/lvmpolld-core.c
+@@ -149,7 +149,7 @@ static void _lvmpolld_global_unlock(struct lvmpolld_state *ls)
+ static int _fini(struct daemon_state *s)
  {
- 	int r = 0;
- 	struct dm_task *dmt;
-@@ -1144,9 +1146,12 @@ static int _percent_run(struct dev_manager *dm, const char *name,
- 	if (!(segtype = get_segtype_from_string(dm->cmd, target_type)))
- 		return_0;
+ 	int done;
+-	const struct timespec t = { .tv_nsec = 250000000 }; /* .25 sec */
++	const struct timespec t = { .tv_nsec = 10000000 }; /* .01 sec */
+ 	struct lvmpolld_state *ls = s->private;
  
-+	if (wait)
-+		sigint_allow();
-+
- 	if (!(dmt = _setup_task_run(wait ? DM_DEVICE_WAITEVENT : DM_DEVICE_STATUS, &info,
- 				    name, dlid, event_nr, 0, 0, 0, 0, 0)))
--		return_0;
-+		goto_bad;
- 
- 	if (!info.exists)
- 		goto_out;
-@@ -1214,8 +1219,19 @@ static int _percent_run(struct dev_manager *dm, const char *name,
- 			     display_percent(dm->cmd, *overall_percent));
- 	r = 1;
- 
--      out:
-+    out:
- 	dm_task_destroy(dmt);
-+
-+    bad:
-+	if (wait) {
-+		sigint_restore();
-+
-+		if (sigint_caught()) {
-+			*interrupted = 1;
-+			return_0;
-+		}
-+	}
-+
- 	return r;
- }
- 
-@@ -1224,20 +1240,24 @@ static int _percent(struct dev_manager *dm, const char *name, const char *dlid,
- 		    const struct logical_volume *lv, dm_percent_t *percent,
- 		    uint32_t *event_nr, int fail_if_percent_unsupported)
- {
-+	int interrupted = 0;
-+
- 	if (dlid && *dlid) {
- 		if (_percent_run(dm, NULL, dlid, target_type, wait, lv, percent,
--				 event_nr, fail_if_percent_unsupported))
-+				 event_nr, fail_if_percent_unsupported, &interrupted))
- 			return 1;
- 
--		if (_original_uuid_format_check_required(dm->cmd) &&
-+		if (!interrupted &&
-+		    _original_uuid_format_check_required(dm->cmd) &&
- 		    _percent_run(dm, NULL, dlid + sizeof(UUID_PREFIX) - 1,
- 				 target_type, wait, lv, percent,
--				 event_nr, fail_if_percent_unsupported))
-+				 event_nr, fail_if_percent_unsupported, &interrupted))
- 			return 1;
+ 	DEBUGLOG(s, "fini");
+@@ -236,9 +236,7 @@ static int poll_for_output(struct lvmpolld_lv *pdlv, struct lvmpolld_thread_data
  	}
  
--	if (name && _percent_run(dm, name, NULL, target_type, wait, lv, percent,
--				 event_nr, fail_if_percent_unsupported))
-+	if (!interrupted && name &&
-+	    _percent_run(dm, name, NULL, target_type, wait, lv, percent,
-+				 event_nr, fail_if_percent_unsupported, &interrupted))
- 		return 1;
+ 	while (1) {
+-		do {
+-			r = poll(fds, 2, pdlv_get_timeout(pdlv) * 1000);
+-		} while (r < 0 && errno == EINTR);
++		r = poll(fds, 2, pdlv_get_timeout(pdlv) * 1000);
  
- 	return_0;
+ 		DEBUGLOG(pdlv->ls, "%s: %s %d", PD_LOG_PREFIX, "poll() returned", r);
+ 		if (r < 0) {
+diff --git a/tools/polldaemon.c b/tools/polldaemon.c
+index c182e548e..a220d63a2 100644
+--- a/tools/polldaemon.c
++++ b/tools/polldaemon.c
+@@ -122,10 +122,12 @@ static void _nanosleep(unsigned secs, unsigned allow_zero_time)
+ 	if (!secs && !allow_zero_time)
+ 		wtime.tv_nsec = WAIT_AT_LEAST_NANOSECS;
+ 
+-	while (!nanosleep(&wtime, &wtime) && errno == EINTR) {}
++	sigint_allow();
++	nanosleep(&wtime, &wtime);
++	sigint_restore();
+ }
+ 
+-static void _sleep_and_rescan_devices(struct cmd_context *cmd, struct daemon_parms *parms)
++static int _sleep_and_rescan_devices(struct cmd_context *cmd, struct daemon_parms *parms)
+ {
+ 	if (!parms->aborting) {
+ 		/*
+@@ -137,8 +139,12 @@ static void _sleep_and_rescan_devices(struct cmd_context *cmd, struct daemon_par
+ 		lvmcache_destroy(cmd, 1, 0);
+ 		label_scan_destroy(cmd);
+ 		_nanosleep(parms->interval, 0);
++		if (sigint_caught())
++			return_0;
+ 		lvmcache_label_scan(cmd);
+ 	}
++
++	return 1;
+ }
+ 
+ int wait_for_single_lv(struct cmd_context *cmd, struct poll_operation_id *id,
+@@ -150,14 +156,18 @@ int wait_for_single_lv(struct cmd_context *cmd, struct poll_operation_id *id,
+ 	uint32_t lockd_state = 0;
+ 	uint32_t error_flags = 0;
+ 	int ret;
++	unsigned wait_before_testing = parms->wait_before_testing;
+ 
+-	if (!parms->wait_before_testing)
++	if (!wait_before_testing)
+ 		lvmcache_label_scan(cmd);
+ 
+ 	/* Poll for completion */
+ 	while (!finished) {
+-		if (parms->wait_before_testing)
+-			_sleep_and_rescan_devices(cmd, parms);
++		if (wait_before_testing &&
++		    !_sleep_and_rescan_devices(cmd, parms)) {
++			log_error("ABORTING: Polling interrupted for %s.", id->display_name);
++			return 0;
++		}
+ 
+ 		/*
+ 		 * An ex VG lock is needed because the check can call finish_copy
+@@ -220,20 +230,7 @@ int wait_for_single_lv(struct cmd_context *cmd, struct poll_operation_id *id,
+ 		if (!lockd_vg(cmd, id->vg_name, "un", 0, &lockd_state))
+ 			stack;
+ 
+-		/*
+-		 * FIXME Sleeping after testing, while preferred, also works around
+-		 * unreliable "finished" state checking in _percent_run.  If the
+-		 * above _check_lv_status is deferred until after the first sleep it
+-		 * may be that a polldaemon will run without ever completing.
+-		 *
+-		 * This happens when one snapshot-merge polldaemon is racing with
+-		 * another (polling the same LV).  The first to see the LV status
+-		 * reach the "finished" state will alter the LV that the other
+-		 * polldaemon(s) are polling.  These other polldaemon(s) can then
+-		 * continue polling an LV that doesn't have a "status".
+-		 */
+-		if (!parms->wait_before_testing && !finished)
+-			_sleep_and_rescan_devices(cmd, parms);
++		wait_before_testing = 1;
+ 	}
+ 
+ 	return 1;
 
 
