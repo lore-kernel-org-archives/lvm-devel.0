@@ -1,95 +1,58 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Tue,  6 Apr 2021 20:07:18 +0000 (GMT)
-Subject: main - makefiles: slight change in .export.sym
-Message-ID: <20210406200718.3C8453858012@sourceware.org>
+Date: Tue,  6 Apr 2021 20:07:19 +0000 (GMT)
+Subject: main - makefiles: add check for versioned symbols
+Message-ID: <20210406200719.6101D3846079@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=40b277ae1799fc7a2e3f38b0abebd81a8e3d1995
-Commit:        40b277ae1799fc7a2e3f38b0abebd81a8e3d1995
-Parent:        1398e66a556fd3ed79353819ca8bef4ccb351990
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=c23f4c8075655aeaef96b3e19ad44c0be78020c9
+Commit:        c23f4c8075655aeaef96b3e19ad44c0be78020c9
+Parent:        40b277ae1799fc7a2e3f38b0abebd81a8e3d1995
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Sun Apr 4 13:06:09 2021 +0200
+AuthorDate:    Tue Apr 6 14:39:44 2021 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Tue Apr 6 21:26:57 2021 +0200
 
-makefiles: slight change in .export.sym
+makefiles: add check for versioned symbols
 
-Avoid emitting Local symbol and sort symbols from
-start and add dependency on previous version
-Should not change anything, just better followup
-linkage guidlines.
+Simple check produced library has the latest symbol as well as its versioned
+older version with check for dm_stats_create_region().
 ---
- libdm/make.tmpl.in | 13 +++++++------
- make.tmpl.in       | 13 +++++++------
- 2 files changed, 14 insertions(+), 12 deletions(-)
+ libdm/Makefile.in | 12 +++++++++++-
+ 1 file changed, 11 insertions(+), 1 deletion(-)
 
-diff --git a/libdm/make.tmpl.in b/libdm/make.tmpl.in
-index 70edcf91d..219eeca9d 100644
---- a/libdm/make.tmpl.in
-+++ b/libdm/make.tmpl.in
-@@ -509,20 +509,21 @@ EXPORTED_SYMBOLS := $(wildcard $(srcdir)/.exported_symbols.Base $(srcdir)/.expor
- ifeq (,$(firstword $(EXPORTED_SYMBOLS)))
- 	$(Q) set -e; (echo "Base {"; echo "	global:";\
- 		 $(SED) "/^#/d;s/^/		/;s/$$/;/" $<;\
-+		 echo "	local:"; echo "		*;";\
- 		 echo "};";\
--		 echo "Local {"; echo "	local:"; echo "		*;"; echo "};";\
- 		 ) > $@
- else
- 	$(Q) set -e;\
- 	R=$$($(SORT) $^ | $(GREP) -v "^#" | uniq -u);\
- 	test -z "$$R" || { echo "Mismatch between symbols in shared library and lists in .exported_symbols.* files: $$R"; false; } ;\
--	( for i in $$(echo $(EXPORTED_SYMBOLS) | tr ' ' '\n' | $(SORT) -rnt_ -k5 ); do\
-+	LAST=;\
-+	for i in $$(echo $(EXPORTED_SYMBOLS) | tr ' ' '\n' | $(SORT) -nt_ -k5 ); do\
- 		echo "$${i##*.} {"; echo "	global:";\
- 		$(SED) "/^#/d;s/^/		/;s/$$/;/" $$i;\
--		echo "};";\
--	  done;\
--	  echo "Local {"; echo "	local:"; echo "		*;"; echo "};";\
--	) > $@
-+		if test -z "$$LAST"; then echo "	local:"; echo "		*;";fi;\
-+		echo "}$$LAST;";\
-+		LAST=" $${i##*.}";\
-+	done > $@
- endif
+diff --git a/libdm/Makefile.in b/libdm/Makefile.in
+index 12fec06b4..a78d2b517 100644
+--- a/libdm/Makefile.in
++++ b/libdm/Makefile.in
+@@ -47,7 +47,7 @@ endif
  
- ifeq ("@USE_TRACKING@","yes")
-diff --git a/make.tmpl.in b/make.tmpl.in
-index 99998f9fd..b28ef6f8f 100644
---- a/make.tmpl.in
-+++ b/make.tmpl.in
-@@ -551,20 +551,21 @@ EXPORTED_SYMBOLS := $(wildcard $(srcdir)/.exported_symbols.Base $(srcdir)/.expor
- ifeq (,$(firstword $(EXPORTED_SYMBOLS)))
- 	$(Q) set -e; (echo "Base {"; echo "	global:";\
- 		 $(SED) "/^#/d;s/^/		/;s/$$/;/" $<;\
-+		 echo "	local:"; echo "		*;";\
- 		 echo "};";\
--		 echo "Local {"; echo "	local:"; echo "		*;"; echo "};";\
- 		 ) > $@
- else
- 	$(Q) set -e;\
- 	R=$$($(SORT) $^ | $(GREP) -v "^#" | uniq -u);\
- 	test -z "$$R" || { echo "Mismatch between symbols in shared library and lists in .exported_symbols.* files: $$R"; false; } ;\
--	( for i in $$(echo $(EXPORTED_SYMBOLS) | tr ' ' '\n' | $(SORT) -rnt_ -k5 ); do\
-+	LAST=;\
-+	for i in $$(echo $(EXPORTED_SYMBOLS) | tr ' ' '\n' | $(SORT) -nt_ -k5 ); do\
- 		echo "$${i##*.} {"; echo "	global:";\
- 		$(SED) "/^#/d;s/^/		/;s/$$/;/" $$i;\
--		echo "};";\
--	  done;\
--	  echo "Local {"; echo "	local:"; echo "		*;"; echo "};";\
--	) > $@
-+		if test -z "$$LAST"; then echo "	local:"; echo "		*;";fi;\
-+		echo "}$$LAST;";\
-+		LAST=" $${i##*.}";\
-+	done > $@
- endif
+ LIB_SHARED = $(interface)/libdevmapper.$(LIB_SUFFIX)
+ LIB_VERSION = $(LIB_VERSION_DM)
+-TARGETS = libdevmapper.$(LIB_SUFFIX) libdevmapper.$(LIB_SUFFIX).$(LIB_VERSION)
++TARGETS = libdevmapper.$(LIB_SUFFIX) libdevmapper.$(LIB_SUFFIX).$(LIB_VERSION) .symver_check
  
- ifeq ("$(USE_TRACKING)","yes")
+ CFLOW_LIST = $(SOURCES)
+ CFLOW_LIST_TARGET = libdevmapper.cflow
+@@ -69,6 +69,16 @@ libdevmapper.$(LIB_SUFFIX) libdevmapper.$(LIB_SUFFIX).$(LIB_VERSION): $(LIB_SHAR
+ 	@echo "    [LN] $<"
+ 	$(Q) $(LN_S) -f $< $@
+ 
++# Check versioned build when default versioned symbol is present @@
++# also the older symbol is built-in
++.symver_check: $(LIB_SHARED)
++	@echo "    [CHECK] $<"
++	$(Q) if readelf -Ws $< | grep -q dm_stats_create_region@@; then \
++	SYM=$$(readelf -Ws $< | grep dm_stats_create_region@DM_1_02_106); \
++	if test -n "$$SYM"; then touch $@; \
++	else echo >&2 "Missing versioned symbols in $<"; false; fi; \
++	else touch $@; fi
++
+ .PHONY: install_dynamic install_static install_include \
+ 	install_ioctl install_ioctl_static \
+ 	install_pkgconfig
 
 
