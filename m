@@ -1,310 +1,191 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Mon, 12 Apr 2021 07:55:35 +0000 (GMT)
-Subject: main - configure: better support for use of --without
-Message-ID: <20210412075535.E326E3835429@sourceware.org>
+Date: Mon, 12 Apr 2021 07:55:37 +0000 (GMT)
+Subject: main - configure: make aio optional
+Message-ID: <20210412075537.12A3839FCC4C@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=744afec6c06d83049ed9fa3c700db2ccffeb146e
-Commit:        744afec6c06d83049ed9fa3c700db2ccffeb146e
-Parent:        aee0cd6530c6340f6f0a8256b887c8561f29dde6
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=57b5bc9c87ba090e198c9e5ec679ad81db88a093
+Commit:        57b5bc9c87ba090e198c9e5ec679ad81db88a093
+Parent:        744afec6c06d83049ed9fa3c700db2ccffeb146e
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu Apr 8 21:29:44 2021 +0200
+AuthorDate:    Sat Apr 10 22:09:32 2021 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Mon Apr 12 09:54:15 2021 +0200
 
-configure: better support for use of --without
+configure: make aio optional
 
-When --with-... option is used as --without-... it gets
-assigned value 'no' - so support it better where we can.
-
-Also remove 'shared' from help as it's not supported.
+Add support for external AIO_CFLAGS and AIO_LIBS so user
+can point to his own build - this might be useful when
+user wants to use own libaio library.
 ---
- configure    | 33 +++++++++++++++++----------------
- configure.ac | 38 ++++++++++++++++++++------------------
- 2 files changed, 37 insertions(+), 34 deletions(-)
+ configure    | 34 ++++++++++++++++++++++++++++++++--
+ configure.ac | 15 ++++++++++++---
+ make.tmpl.in |  2 ++
+ 3 files changed, 46 insertions(+), 5 deletions(-)
 
 diff --git a/configure b/configure
-index 9fe0c8ddf..154862bcc 100755
+index 154862bcc..95c1d2758 100755
 --- a/configure
 +++ b/configure
-@@ -1713,22 +1713,21 @@ Optional Packages:
-                           create nodes on resume or create [ON=resume]
-   --with-default-name-mangling=MANGLING
-                           default name mangling: auto/none/hex [auto]
--  --with-snapshots=TYPE   snapshot support: internal/shared/none [internal]
--  --with-mirrors=TYPE     mirror support: internal/shared/none [internal]
-+  --with-snapshots=TYPE   snapshot support: internal/none [internal]
-+  --with-mirrors=TYPE     mirror support: internal/none [internal]
-   --with-default-mirror-segtype=TYPE
-                           default mirror segtype: raid1/mirror [raid1]
-   --with-default-raid10-segtype=TYPE
-                           default mirror segtype: raid10/mirror [raid10]
-   --with-default-sparse-segtype=TYPE
-                           default sparse segtype: thin/snapshot [thin]
--  --with-thin=TYPE        thin provisioning support: internal/shared/none
--                          [internal]
-+  --with-thin=TYPE        thin provisioning support: internal/none [internal]
-   --with-thin-check=PATH  thin_check tool: [autodetect]
-   --with-thin-dump=PATH   thin_dump tool: [autodetect]
-   --with-thin-repair=PATH thin_repair tool: [autodetect]
-   --with-thin-restore=PATH
-                           thin_restore tool: [autodetect]
--  --with-cache=TYPE       cache support: internal/shared/none [internal]
-+  --with-cache=TYPE       cache support: internal/none [internal]
-   --with-cache-check=PATH cache_check tool: [autodetect]
-   --with-cache-dump=PATH  cache_dump tool: [autodetect]
-   --with-cache-repair=PATH
-@@ -8385,7 +8384,7 @@ fi
+@@ -795,6 +795,8 @@ PKGCONFIGINIT_CFLAGS
+ PKG_CONFIG_LIBDIR
+ PKG_CONFIG_PATH
+ PKG_CONFIG
++AIO_LIBS
++AIO_CFLAGS
+ VDO_FORMAT_CMD
+ CACHE_RESTORE_CMD
+ CACHE_REPAIR_CMD
+@@ -998,6 +1000,8 @@ CXX
+ CXXFLAGS
+ CCC
+ CPP
++AIO_CFLAGS
++AIO_LIBS
+ PKG_CONFIG
+ PKG_CONFIG_PATH
+ PKG_CONFIG_LIBDIR
+@@ -1797,6 +1801,8 @@ Some influential environment variables:
+   CXX         C++ compiler command
+   CXXFLAGS    C++ compiler flags
+   CPP         C preprocessor
++  AIO_CFLAGS  C compiler flags for AIO
++  AIO_LIBS    linker flags for AIO
+   PKG_CONFIG  path to pkg-config utility
+   PKG_CONFIG_PATH
+               directories to add to pkg-config's search path
+@@ -6088,7 +6094,7 @@ fi
  
- case "$MANGLING" in
-  auto) mangling=DM_STRING_MANGLING_AUTO;;
-- none|disabled) mangling=DM_STRING_MANGLING_NONE;;
-+ no|none|disabled) mangling=DM_STRING_MANGLING_NONE;;
-  hex) mangling=DM_STRING_MANGLING_HEX;;
-  *) as_fn_error $? "--with-default-name-mangling parameter invalid" "$LINENO" 5;;
+ 
+ for ac_header in assert.h ctype.h dirent.h errno.h fcntl.h float.h \
+-  getopt.h inttypes.h langinfo.h libaio.h libgen.h limits.h locale.h paths.h \
++  getopt.h inttypes.h langinfo.h libgen.h limits.h locale.h paths.h \
+   signal.h stdarg.h stddef.h stdio.h stdlib.h string.h sys/file.h \
+   sys/ioctl.h syslog.h sys/mman.h sys/param.h sys/resource.h sys/stat.h \
+   sys/time.h sys/types.h sys/utsname.h sys/wait.h time.h \
+@@ -6121,6 +6127,19 @@ fi
+ 
+ done
+ 
++for ac_header in libaio.h
++do :
++  ac_fn_c_check_header_mongrel "$LINENO" "libaio.h" "ac_cv_header_libaio_h" "$ac_includes_default"
++if test "x$ac_cv_header_libaio_h" = xyes; then :
++  cat >>confdefs.h <<_ACEOF
++#define HAVE_LIBAIO_H 1
++_ACEOF
++ LVM_NEEDS_LIBAIO_WARN=
++else
++  LVM_NEEDS_LIBAIO_WARN=y
++fi
++
++done
+ 
+ case "$host_os" in
+ 	linux*)
+@@ -9813,6 +9832,14 @@ $as_echo "#define INTEGRITY_INTERNAL 1" >>confdefs.h
+  *) as_fn_error $? "--with-integrity parameter invalid" "$LINENO" 5 ;;
  esac
-@@ -8412,7 +8411,7 @@ fi
- $as_echo "$SNAPSHOTS" >&6; }
  
- case "$SNAPSHOTS" in
--  none|shared) ;;
-+  no|none|shared) ;;
-   internal)
- $as_echo "#define SNAPSHOT_INTERNAL 1" >>confdefs.h
-  ;;
-@@ -8434,7 +8433,7 @@ fi
- $as_echo "$MIRRORS" >&6; }
++################################################################################
++# Allow users to override default location for libaio
++# there seems to be no pkg-config support available
++AIO_CFLAGS=
++AIO_LIBS=${AIO_LIBS:--laio}
++
++
++
+ ################################################################################
+ # Check whether --enable-readline was given.
+ if test "${enable_readline+set}" = set; then :
+@@ -10759,7 +10786,6 @@ cat >>confdefs.h <<_ACEOF
+ _ACEOF
  
- case "$MIRRORS" in
--  none|shared) ;;
-+  no|none|shared) ;;
-   internal)
- $as_echo "#define MIRRORED_INTERNAL 1" >>confdefs.h
-  ;;
-@@ -8479,7 +8478,10 @@ _ACEOF
  
- # Check whether --with-default-sparse-segtype was given.
- if test "${with_default_sparse_segtype+set}" = set; then :
--  withval=$with_default_sparse_segtype; DEFAULT_SPARSE_SEGTYPE=$withval
-+  withval=$with_default_sparse_segtype;  case "$withval" in
-+				thin|snapshot) DEFAULT_SPARSE_SEGTYPE=$withval ;;
-+				*) as_fn_error $? "--with-default-sparse-segtype parameter invalid" "$LINENO" 5 ;;
-+			     esac
- else
-   DEFAULT_SPARSE_SEGTYPE="thin"
- fi
-@@ -8533,7 +8535,7 @@ fi
- $as_echo "$THIN" >&6; }
- 
- case "$THIN" in
--  none)  test "$DEFAULT_SPARSE_SEGTYPE" = "thin" && DEFAULT_SPARSE_SEGTYPE="snapshot" ;;
-+  no|none)  test "$DEFAULT_SPARSE_SEGTYPE" = "thin" && DEFAULT_SPARSE_SEGTYPE="snapshot" ;;
-   shared) ;;
-   internal)
- $as_echo "#define THIN_INTERNAL 1" >>confdefs.h
-@@ -9014,7 +9016,6 @@ $as_echo "$THIN_CHECK_NEEDS_CHECK" >&6; }
- $as_echo "#define THIN_CHECK_NEEDS_CHECK 1" >>confdefs.h
- 
- 	fi
 -
- 	;;
- esac
- 
-@@ -9089,7 +9090,7 @@ fi
- $as_echo "$CACHE" >&6; }
- 
- case "$CACHE" in
-- none|shared) ;;
-+ no|none|shared) ;;
-  internal)
- $as_echo "#define CACHE_INTERNAL 1" >>confdefs.h
-  ;;
-@@ -9626,7 +9627,7 @@ else
+ ################################################################################
+ { $as_echo "$as_me:${as_lineno-$LINENO}: checking whether to enable valgrind awareness of pools" >&5
+ $as_echo_n "checking whether to enable valgrind awareness of pools... " >&6; }
+@@ -15524,6 +15550,10 @@ if test -n "$VDO_CONFIGURE_WARN"; then :
+ $as_echo "$as_me: WARNING: Unrecognized 'vdoformat' tool is REQUIRED for VDO logical volume creation!" >&2;}
  fi
  
- case "$VDO" in
-- none) ;;
-+ no|none) ;;
-  internal)
++if test -n "$LVM_NEEDS_LIBAIO_WARN"; then :
++  { $as_echo "$as_me:${as_lineno-$LINENO}: WARNING: Only libdm part can be build without libaio:  make [install_]device-mapper" >&5
++$as_echo "$as_me: WARNING: Only libdm part can be build without libaio:  make [install_]device-mapper" >&2;}
++fi
  
- $as_echo "#define VDO_INTERNAL 1" >>confdefs.h
-@@ -9778,7 +9779,7 @@ fi
- $as_echo "$WRITECACHE" >&6; }
- 
- case "$WRITECACHE" in
-- none) ;;
-+ no|none) ;;
-  internal)
- 
- $as_echo "#define WRITECACHE_INTERNAL 1" >>confdefs.h
-@@ -9803,7 +9804,7 @@ fi
- $as_echo "$INTEGRITY" >&6; }
- 
- case "$INTEGRITY" in
-- none) ;;
-+ no|none) ;;
-  internal)
- 
- $as_echo "#define INTEGRITY_INTERNAL 1" >>confdefs.h
-@@ -10401,7 +10402,7 @@ $as_echo_n "checking whether to use symbol versioning... " >&6; }
- if test "${with_symvers+set}" = set; then :
-   withval=$with_symvers;  case "$withval" in
- 				gnu|no) symvers=$withval ;;
--				*) as_fn_error $? "Unknown argument to with-symvers" "$LINENO" 5 ;;
-+				*) as_fn_error $? "--with-symvers parameter invalid" "$LINENO" 5 ;;
- 			     esac
- else
-   symvers=gnu
+ if test "$ODIRECT" != yes; then :
+   { $as_echo "$as_me:${as_lineno-$LINENO}: WARNING: O_DIRECT disabled: low-memory pvmove may lock up" >&5
 diff --git a/configure.ac b/configure.ac
-index 21a1d311e..60b9c1043 100644
+index 60b9c1043..33a691e01 100644
 --- a/configure.ac
 +++ b/configure.ac
-@@ -289,7 +289,7 @@ AC_ARG_WITH(default-name-mangling,
- 	    MANGLING=$withval, MANGLING=auto)
- case "$MANGLING" in
-  auto) mangling=DM_STRING_MANGLING_AUTO;;
-- none|disabled) mangling=DM_STRING_MANGLING_NONE;;
-+ no|none|disabled) mangling=DM_STRING_MANGLING_NONE;;
-  hex) mangling=DM_STRING_MANGLING_HEX;;
-  *) AC_MSG_ERROR([--with-default-name-mangling parameter invalid]);;
- esac
-@@ -301,12 +301,12 @@ dnl -- snapshots inclusion type
- AC_MSG_CHECKING(whether to include snapshots)
- AC_ARG_WITH(snapshots,
- 	    AC_HELP_STRING([--with-snapshots=TYPE],
--			   [snapshot support: internal/shared/none [internal]]),
-+			   [snapshot support: internal/none [internal]]),
- 	    SNAPSHOTS=$withval, SNAPSHOTS=internal)
- AC_MSG_RESULT($SNAPSHOTS)
+@@ -101,14 +101,14 @@ AC_HEADER_SYS_WAIT
+ AC_HEADER_TIME
  
- case "$SNAPSHOTS" in
--  none|shared) ;;
-+  no|none|shared) ;;
-   internal) AC_DEFINE([SNAPSHOT_INTERNAL], 1,
- 		      [Define to 1 to include built-in support for snapshots.]) ;;
-   *) AC_MSG_ERROR([--with-snapshots parameter invalid]) ;;
-@@ -317,12 +317,12 @@ dnl -- mirrors inclusion type
- AC_MSG_CHECKING(whether to include mirrors)
- AC_ARG_WITH(mirrors,
- 	    AC_HELP_STRING([--with-mirrors=TYPE],
--			   [mirror support: internal/shared/none [internal]]),
-+			   [mirror support: internal/none [internal]]),
- 	    MIRRORS=$withval, MIRRORS=internal)
- AC_MSG_RESULT($MIRRORS)
+ AC_CHECK_HEADERS([assert.h ctype.h dirent.h errno.h fcntl.h float.h \
+-  getopt.h inttypes.h langinfo.h libaio.h libgen.h limits.h locale.h paths.h \
++  getopt.h inttypes.h langinfo.h libgen.h limits.h locale.h paths.h \
+   signal.h stdarg.h stddef.h stdio.h stdlib.h string.h sys/file.h \
+   sys/ioctl.h syslog.h sys/mman.h sys/param.h sys/resource.h sys/stat.h \
+   sys/time.h sys/types.h sys/utsname.h sys/wait.h time.h \
+   unistd.h], , [AC_MSG_ERROR(bailing out)])
  
- case "$MIRRORS" in
--  none|shared) ;;
-+  no|none|shared) ;;
-   internal) AC_DEFINE([MIRRORED_INTERNAL], 1,
- 		      [Define to 1 to include built-in support for mirrors.]) ;;
-   *) AC_MSG_ERROR([--with-mirrors parameter invalid]) ;;
-@@ -352,14 +352,17 @@ AC_DEFINE_UNQUOTED([DEFAULT_RAID10_SEGTYPE], ["$DEFAULT_RAID10_SEGTYPE"],
- AC_ARG_WITH(default-sparse-segtype,
- 	    AC_HELP_STRING([--with-default-sparse-segtype=TYPE],
- 			   [default sparse segtype: thin/snapshot [thin]]),
--			   DEFAULT_SPARSE_SEGTYPE=$withval, DEFAULT_SPARSE_SEGTYPE="thin")
-+			   [ case "$withval" in
-+				thin|snapshot) DEFAULT_SPARSE_SEGTYPE=$withval ;;
-+				*) AC_MSG_ERROR(--with-default-sparse-segtype parameter invalid) ;;
-+			     esac], DEFAULT_SPARSE_SEGTYPE="thin")
- 
- ################################################################################
- dnl -- thin provisioning
- AC_MSG_CHECKING(whether to include thin provisioning)
- AC_ARG_WITH(thin,
- 	    AC_HELP_STRING([--with-thin=TYPE],
--			   [thin provisioning support: internal/shared/none [internal]]),
-+			   [thin provisioning support: internal/none [internal]]),
- 	    THIN=$withval, THIN=internal)
- AC_ARG_WITH(thin-check,
- 	    AC_HELP_STRING([--with-thin-check=PATH],
-@@ -381,7 +384,7 @@ AC_ARG_WITH(thin-restore,
- AC_MSG_RESULT($THIN)
- 
- case "$THIN" in
--  none)  test "$DEFAULT_SPARSE_SEGTYPE" = "thin" && DEFAULT_SPARSE_SEGTYPE="snapshot" ;;
-+  no|none)  test "$DEFAULT_SPARSE_SEGTYPE" = "thin" && DEFAULT_SPARSE_SEGTYPE="snapshot" ;;
-   shared) ;;
-   internal) AC_DEFINE([THIN_INTERNAL], 1,
- 		      [Define to 1 to include built-in support for thin provisioning.]) ;;
-@@ -458,7 +461,6 @@ case "$THIN" in
- 	if test "$THIN_CHECK_NEEDS_CHECK" = yes; then
- 		AC_DEFINE([THIN_CHECK_NEEDS_CHECK], 1, [Define to 1 if the external 'thin_check' tool requires the --clear-needs-check-flag option])
- 	fi
+ AC_CHECK_HEADERS(termios.h sys/statvfs.h sys/timerfd.h sys/vfs.h linux/magic.h linux/fiemap.h)
 -
- 	;;
++AC_CHECK_HEADERS(libaio.h,LVM_NEEDS_LIBAIO_WARN=,LVM_NEEDS_LIBAIO_WARN=y)
+ case "$host_os" in
+ 	linux*)
+ 		AC_CHECK_HEADERS(asm/byteorder.h linux/fs.h malloc.h,,AC_MSG_ERROR(bailing out)) ;;
+@@ -684,6 +684,14 @@ case "$INTEGRITY" in
+  *) AC_MSG_ERROR([--with-integrity parameter invalid]) ;;
  esac
  
-@@ -479,7 +481,7 @@ dnl -- cache inclusion type
- AC_MSG_CHECKING(whether to include cache)
- AC_ARG_WITH(cache,
- 	    AC_HELP_STRING([--with-cache=TYPE],
--			   [cache support: internal/shared/none [internal]]),
-+			   [cache support: internal/none [internal]]),
- 			   CACHE=$withval, CACHE="internal")
- AC_ARG_WITH(cache-check,
- 	    AC_HELP_STRING([--with-cache-check=PATH],
-@@ -500,7 +502,7 @@ AC_ARG_WITH(cache-restore,
- AC_MSG_RESULT($CACHE)
- 
- case "$CACHE" in
-- none|shared) ;;
-+ no|none|shared) ;;
-  internal) AC_DEFINE([CACHE_INTERNAL], 1, [Define to 1 to include built-in support for cache.]) ;;
-  *) AC_MSG_ERROR([--with-cache parameter invalid]) ;;
- esac
-@@ -613,8 +615,8 @@ AC_ARG_WITH(vdo-format,
- 			   [vdoformat tool: [autodetect]]),
- 			   VDO_FORMAT_CMD=$withval, VDO_FORMAT_CMD="autodetect")
- case "$VDO" in
-- none) ;;
-- internal) 
-+ no|none) ;;
-+ internal)
- 	AC_DEFINE([VDO_INTERNAL], 1, [Define to 1 to include built-in support for vdo.])
- 	if test "$VDO_FORMAT_CMD" = "autodetect"; then
- 		AC_PATH_TOOL(VDO_FORMAT_CMD, vdoformat, [], [$PATH])
-@@ -643,7 +645,7 @@ AC_DEFINE_UNQUOTED([VDO_FORMAT_CMD], ["$VDO_FORMAT_CMD"],
- #AC_ARG_WITH(vdo-lib,
- #            AC_HELP_STRING([--with-vdo-lib=PATH],
- #                           [vdo support: Path to utils lib: [/usr/lib]]),
--#                           VDO_LIB=$withval, VDO_LIB="/usr/lib") 
-+#                           VDO_LIB=$withval, VDO_LIB="/usr/lib")
- #AC_MSG_RESULT($VDO_LIB)
- 
++################################################################################
++# Allow users to override default location for libaio
++# there seems to be no pkg-config support available
++AIO_CFLAGS=
++AIO_LIBS=${AIO_LIBS:--laio}
++AC_ARG_VAR([AIO_CFLAGS], [C compiler flags for AIO])
++AC_ARG_VAR([AIO_LIBS], [linker flags for AIO])
++
  ################################################################################
-@@ -657,8 +659,8 @@ AC_ARG_WITH(writecache,
- AC_MSG_RESULT($WRITECACHE)
+ dnl -- Disable readline
+ AC_ARG_ENABLE([readline],
+@@ -881,7 +889,6 @@ TESTSUITE_DATA='${datarootdir}/lvm2-testsuite'
+ # double eval needed ${datarootdir} -> ${prefix}/share -> real path
+ AC_DEFINE_UNQUOTED(TESTSUITE_DATA, ["$(eval echo $(eval echo $TESTSUITE_DATA))"], [Path to testsuite data])
  
- case "$WRITECACHE" in
-- none) ;;
-- internal) 
-+ no|none) ;;
-+ internal)
- 	AC_DEFINE([WRITECACHE_INTERNAL], 1, [Define to 1 to include built-in support for writecache.])
- 	;;
-  *) AC_MSG_ERROR([--with-writecache parameter invalid]) ;;
-@@ -675,7 +677,7 @@ AC_ARG_WITH(integrity,
- AC_MSG_RESULT($INTEGRITY)
+-
+ ################################################################################
+ dnl -- Enable valgrind awareness of memory pools
+ AC_MSG_CHECKING(whether to enable valgrind awareness of pools)
+@@ -1977,6 +1984,8 @@ AS_IF([test -n "$CACHE_CHECK_VERSION_WARN"],
+ AS_IF([test -n "$VDO_CONFIGURE_WARN"],
+       [AC_MSG_WARN([Unrecognized 'vdoformat' tool is REQUIRED for VDO logical volume creation!])])
  
- case "$INTEGRITY" in
-- none) ;;
-+ no|none) ;;
-  internal)
- 	AC_DEFINE([INTEGRITY_INTERNAL], 1, [Define to 1 to include built-in support for integrity.])
- 	;;
-@@ -830,7 +832,7 @@ AC_ARG_WITH(symvers,
- 			   [use symbol versioning of the shared library [default=gnu]]),
- 			   [ case "$withval" in
- 				gnu|no) symvers=$withval ;;
--				*) AC_MSG_ERROR(Unknown argument to with-symvers) ;;
-+				*) AC_MSG_ERROR(--with-symvers parameter invalid) ;;
- 			     esac], symvers=gnu)
- AC_MSG_RESULT($symvers)
++AS_IF([test -n "$LVM_NEEDS_LIBAIO_WARN"],
++      [AC_MSG_WARN([Only libdm part can be build without libaio:  make [[install_]]device-mapper])])
  
+ AS_IF([test "$ODIRECT" != yes],
+       [AC_MSG_WARN([O_DIRECT disabled: low-memory pvmove may lock up])])
+diff --git a/make.tmpl.in b/make.tmpl.in
+index 14557c4c4..73bf298c7 100644
+--- a/make.tmpl.in
++++ b/make.tmpl.in
+@@ -76,6 +76,8 @@ LIB_SUFFIX = @LIB_SUFFIX@
+ DL_LIBS = @DL_LIBS@
+ RT_LIBS = @RT_LIBS@
+ M_LIBS = @M_LIBS@
++AIO_LIBS = @AIO_LIBS@
++AIO_CFLAGS = @AIO_CFLAGS@
+ PTHREAD_LIBS = @PTHREAD_LIBS@
+ READLINE_LIBS = @READLINE_LIBS@
+ EDITLINE_LIBS = @EDITLINE_LIBS@
 
 
