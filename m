@@ -1,93 +1,81 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Mon, 12 Apr 2021 07:55:38 +0000 (GMT)
-Subject: main - libdm: replace deprecated security_context_t
-Message-ID: <20210412075538.3838539FCC74@sourceware.org>
+Date: Mon, 12 Apr 2021 07:55:39 +0000 (GMT)
+Subject: main - makefiles: deps also for cxx
+Message-ID: <20210412075539.5B91C39FCC77@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=75424dd6927ac38c97ca4acc78b7f4933cd7b139
-Commit:        75424dd6927ac38c97ca4acc78b7f4933cd7b139
-Parent:        57b5bc9c87ba090e198c9e5ec679ad81db88a093
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=ebf33323b93870f811c5a701826cfab1f4d41489
+Commit:        ebf33323b93870f811c5a701826cfab1f4d41489
+Parent:        75424dd6927ac38c97ca4acc78b7f4933cd7b139
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Sat Apr 10 21:55:19 2021 +0200
+AuthorDate:    Sat Apr 10 01:21:33 2021 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Mon Apr 12 09:54:16 2021 +0200
 
-libdm: replace deprecated security_context_t
+makefiles: deps also for cxx
 
-Use 'char *' instead of deprecated security_context_t.
-In more details i.e.:
-
-https://gitlab.gnome.org/GNOME/glib/-/merge_requests/1776
+Generate deps also for .cxx.
+Remove include dir deps - there is nothing to build.
 ---
- device_mapper/libdm-common.c | 6 +++---
- libdm/libdm-common.c         | 6 +++---
- 2 files changed, 6 insertions(+), 6 deletions(-)
+ Makefile.in        | 5 -----
+ libdm/make.tmpl.in | 2 +-
+ make.tmpl.in       | 2 +-
+ 3 files changed, 2 insertions(+), 7 deletions(-)
 
-diff --git a/device_mapper/libdm-common.c b/device_mapper/libdm-common.c
-index c0dde2071..6a2573ec4 100644
---- a/device_mapper/libdm-common.c
-+++ b/device_mapper/libdm-common.c
-@@ -931,7 +931,7 @@ int dm_task_add_target(struct dm_task *dmt, uint64_t start, uint64_t size,
+diff --git a/Makefile.in b/Makefile.in
+index 5dd642f63..4dceaba1d 100644
+--- a/Makefile.in
++++ b/Makefile.in
+@@ -47,8 +47,6 @@ include $(top_srcdir)/base/Makefile
+ include $(top_srcdir)/device_mapper/Makefile
+ include $(top_srcdir)/test/unit/Makefile
  
- #ifdef HAVE_SELINUX
- static int _selabel_lookup(const char *path, mode_t mode,
--			   security_context_t *scontext)
-+			   char **scontext)
- {
- #ifdef HAVE_SELINUX_LABEL_H
- 	if (!_selabel_handle &&
-@@ -974,7 +974,7 @@ static int _is_selinux_enabled(void)
- int dm_prepare_selinux_context(const char *path, mode_t mode)
- {
- #ifdef HAVE_SELINUX
--	security_context_t scontext = NULL;
-+	char *scontext = NULL;
+-libdm: include
+-libdaemon: include
+ lib: libdaemon $(BASE_TARGET) $(DEVICE_MAPPER_TARGET)
+ daemons: lib libdaemon tools
+ scripts: lib
+@@ -59,11 +57,8 @@ all_man: tools
+ test: tools daemons
+ unit-test  run-unit-test: test
  
- 	if (_is_selinux_enabled() <= 0)
- 		return 1;
-@@ -1002,7 +1002,7 @@ int dm_prepare_selinux_context(const char *path, mode_t mode)
- int dm_set_selinux_context(const char *path, mode_t mode)
- {
- #ifdef HAVE_SELINUX
--	security_context_t scontext = NULL;
-+	char *scontext = NULL;
+-lib.device-mapper: include.device-mapper
+-libdm.device-mapper: include.device-mapper
+ daemons.device-mapper: libdm.device-mapper
+ tools.device-mapper: libdm.device-mapper
+-scripts.device-mapper: include.device-mapper
+ device-mapper: tools.device-mapper daemons.device-mapper man.device-mapper
+ device_mapper: device-mapper
  
- 	if (_is_selinux_enabled() <= 0)
- 		return 1;
-diff --git a/libdm/libdm-common.c b/libdm/libdm-common.c
-index 1f3fe1642..708414676 100644
---- a/libdm/libdm-common.c
-+++ b/libdm/libdm-common.c
-@@ -929,7 +929,7 @@ int dm_task_add_target(struct dm_task *dmt, uint64_t start, uint64_t size,
+diff --git a/libdm/make.tmpl.in b/libdm/make.tmpl.in
+index f7a5a7a73..a306101d5 100644
+--- a/libdm/make.tmpl.in
++++ b/libdm/make.tmpl.in
+@@ -403,7 +403,7 @@ DEFS+=-D_FILE_OFFSET_BITS=64
+ %.o: %.cpp $(DEPS)
+ 	@echo "    [CXX] $(<F)"
+ 	@mkdir -p $(@D)
+-	$(Q) $(CXX) -c $(INCLUDES) $(VALGRIND_CFLAGS) $(DEFS) $(DEFS_$@) $(WFLAGS) $(CXXFLAGS) $(CXXFLAGS_$@) $< -o $@
++	$(Q) $(CXX) $(DEPFLAGS) -c $(INCLUDES) $(VALGRIND_CFLAGS) $(DEFS) $(DEFS_$@) $(WFLAGS) $(CXXFLAGS) $(CXXFLAGS_$@) $< -o $@
  
- #ifdef HAVE_SELINUX
- static int _selabel_lookup(const char *path, mode_t mode,
--			   security_context_t *scontext)
-+			   char **scontext)
- {
- #ifdef HAVE_SELINUX_LABEL_H
- 	if (!_selabel_handle &&
-@@ -972,7 +972,7 @@ static int _is_selinux_enabled(void)
- int dm_prepare_selinux_context(const char *path, mode_t mode)
- {
- #ifdef HAVE_SELINUX
--	security_context_t scontext = NULL;
-+	char *scontext = NULL;
+ %.pot: %.c $(DEPS)
+ 	@echo "    [CC] $@"
+diff --git a/make.tmpl.in b/make.tmpl.in
+index 73bf298c7..6145b0bd5 100644
+--- a/make.tmpl.in
++++ b/make.tmpl.in
+@@ -454,7 +454,7 @@ DEFS+=-D_FILE_OFFSET_BITS=64
+ %.o: %.cpp $(DEPS)
+ 	@echo "    [CXX] $(<F)"
+ 	@mkdir -p $(@D)
+-	$(Q) $(CXX) -c $(INCLUDES) $(VALGRIND_CFLAGS) $(DEFS) $(DEFS_$@) $(WFLAGS) $(CXXFLAGS) $(CXXFLAGS_$@) $< -o $@
++	$(Q) $(CXX) $(DEPFLAGS) -c $(INCLUDES) $(VALGRIND_CFLAGS) $(DEFS) $(DEFS_$@) $(WFLAGS) $(CXXFLAGS) $(CXXFLAGS_$@) $< -o $@
  
- 	if (_is_selinux_enabled() <= 0)
- 		return 1;
-@@ -1000,7 +1000,7 @@ int dm_prepare_selinux_context(const char *path, mode_t mode)
- int dm_set_selinux_context(const char *path, mode_t mode)
- {
- #ifdef HAVE_SELINUX
--	security_context_t scontext = NULL;
-+	char *scontext = NULL;
- 
- 	if (_is_selinux_enabled() <= 0)
- 		return 1;
+ %.pot: %.c $(DEPS)
+ 	@echo "    [CC] $(<F)"
 
 
