@@ -1,66 +1,60 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Mon, 19 Apr 2021 13:00:47 +0000 (GMT)
-Subject: main - makefiles: generate only needed text
-Message-ID: <20210419130047.088FA396901B@sourceware.org>
+Date: Mon, 19 Apr 2021 13:00:51 +0000 (GMT)
+Subject: main - man-generator: use \(em
+Message-ID: <20210419130051.9BEE6396903A@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=54f98c94b45629dccc5588a54fa7fa448ea40d0c
-Commit:        54f98c94b45629dccc5588a54fa7fa448ea40d0c
-Parent:        adfdfd9c58aa2bb24d675eaa5f33e0101015d10f
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=d94e5ba5afad7297852e4826be21ae30d39f9541
+Commit:        d94e5ba5afad7297852e4826be21ae30d39f9541
+Parent:        efd0939583484b85ddb8ed3ebb7cda0db51cf473
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Sun Apr 18 20:37:37 2021 +0200
+AuthorDate:    Sat Apr 17 00:21:04 2021 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Mon Apr 19 14:37:07 2021 +0200
+CommitterDate: Mon Apr 19 14:37:08 2021 +0200
 
-makefiles: generate only needed text
+man-generator: use \(em
 
-Avoid storing see_also & _end parts in  generated doc,
-since these we can easily 'cat' while making man pages.
+Use \(em in command title description and command multidefs.
 ---
- man/Makefile.in | 14 ++++++++------
- 1 file changed, 8 insertions(+), 6 deletions(-)
+ tools/command.c | 8 ++++----
+ 1 file changed, 4 insertions(+), 4 deletions(-)
 
-diff --git a/man/Makefile.in b/man/Makefile.in
-index d716deb58..7ad533980 100644
---- a/man/Makefile.in
-+++ b/man/Makefile.in
-@@ -122,13 +122,13 @@ SEE_ALSO=$(srcdir)/see_also.end
- %.8_gen: $(srcdir)/%.8_des $(srcdir)/%.8_end $(MANGENERATOR) $(TESTMAN)
- 	$(Q)set -e ; ( \
- 	    if [ ! -s $(TESTMAN) ] ; then \
--		cat $(srcdir)/$(@:%.8_gen=%.8_pregen) ; \
-+		cat $(srcdir)/$(@:%.8_gen=%.8_pregen) \
-+		    $(srcdir)/$(basename $@).8_end $(SEE_ALSO) ; \
- 	    else \
- 		MANCMD=$(basename $@) && \
- 		$(MANGENERATOR) --primary $$MANCMD $< && \
- 		$(MANGENERATOR) --secondary $$MANCMD && \
--		cat $(srcdir)/$(basename $@).8_end && \
--		cat $(SEE_ALSO) ; \
-+		cat $(srcdir)/$(basename $@).8_end $(SEE_ALSO) ; \
- 	    fi \
- 	) > $@
+diff --git a/tools/command.c b/tools/command.c
+index 556f22e95..cb261531c 100644
+--- a/tools/command.c
++++ b/tools/command.c
+@@ -3538,7 +3538,7 @@ static int _print_man(char *name, char *des_file, int secondary)
+ 		if (!prev_cmd || strcmp(prev_cmd->name, cmd->name)) {
+ 			printf(".SH NAME\n");
+ 			if (cname && cname->desc)
+-				printf("%s - %s\n", lvmname, cname->desc);
++				printf("%s \\(em %s\n", lvmname, cname->desc);
+ 			else
+ 				printf("%s\n", lvmname);
  
-@@ -262,11 +262,13 @@ install: install_lvm2 install_device-mapper install_cluster
- install_all_man: install install_systemd_generators
+@@ -3600,7 +3600,7 @@ static int _print_man(char *name, char *des_file, int secondary)
+ 			_print_man_all_positions_desc(cname);
+ 		} else {
+ 			if (cname->variants > 2)
+-				printf("-\n");
++				printf("\\(em\n");
+ 		}
  
- # Copy generated man pages back to source tree as fallback for machines where generator doesn't work
--pregenerated_man: all
-+pregenerated_man: $(MANGENERATOR) $(TESTMAN)
- 	@echo "    [GENERATE] $^"
--	$(Q) set -e ; for i in $(srcdir)/*.8_des; do \
-+	$(Q) set -e ; test -s $(TESTMAN) && for i in $(srcdir)/*.8_des; do \
- 		CMD=`basename $$i .8_des`; \
--		cat $${CMD}.8_gen > $(srcdir)/$$CMD.8_pregen ; \
-+		( $(MANGENERATOR) --primary $$CMD $$i && \
-+		$(MANGENERATOR) --secondary $$CMD )  \
-+		> $(srcdir)/$$CMD.8_pregen ; \
- 	done
+ 		printf("\n");
+@@ -3647,8 +3647,8 @@ static void _print_man_secondary(char *name)
  
- generate: pregenerated_man
+ 		_print_man_usage(lvmname, cmd);
+ 
+-		printf("-\n");
+-		printf("\n");
++		printf("\\(em\n");
++		printf(".P\n");
+ 	}
+ }
+ 
 
 
