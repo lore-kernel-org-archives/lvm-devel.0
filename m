@@ -1,91 +1,126 @@
-From: David Teigland <teigland@sourceware.org>
-Date: Fri, 16 Apr 2021 21:01:37 +0000 (GMT)
-Subject: main - remove unused flag DEV_UDEV_INFO_MISSING
-Message-ID: <20210416210137.E501E386102F@sourceware.org>
+From: Zdenek Kabelac <zkabelac@sourceware.org>
+Date: Mon, 19 Apr 2021 13:00:45 +0000 (GMT)
+Subject: main - makefiles: improved hyphenation replacement
+Message-ID: <20210419130045.D81713969019@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=b94f2a8b552a6089774d5e65082b98cf9579dc6e
-Commit:        b94f2a8b552a6089774d5e65082b98cf9579dc6e
-Parent:        8daf5cd45f7767d9b0cfdfde67e95e23d21f859c
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Fri Apr 16 16:01:19 2021 -0500
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Fri Apr 16 16:01:19 2021 -0500
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=adfdfd9c58aa2bb24d675eaa5f33e0101015d10f
+Commit:        adfdfd9c58aa2bb24d675eaa5f33e0101015d10f
+Parent:        b94f2a8b552a6089774d5e65082b98cf9579dc6e
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Wed Apr 14 14:39:17 2021 +0200
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Mon Apr 19 14:37:07 2021 +0200
 
-remove unused flag DEV_UDEV_INFO_MISSING
+makefiles: improved hyphenation replacement
 
+Sed replacements script missed to properly replace several '-' to '\-'.
+Replace it with simpler set of regexes.
+
+Also add new target 'make checksed' for testing with examples,
+where the replacement should or should not occure for easier testing.
 ---
- lib/device/dev-md.c   | 5 +----
- lib/device/dev-type.c | 5 +----
- lib/device/device.h   | 5 ++---
- 3 files changed, 4 insertions(+), 11 deletions(-)
+ man/Makefile.in | 80 ++++++++++++++++++++++++++++++++++-----------------------
+ 1 file changed, 48 insertions(+), 32 deletions(-)
 
-diff --git a/lib/device/dev-md.c b/lib/device/dev-md.c
-index 3049b81b7..78a77a968 100644
---- a/lib/device/dev-md.c
-+++ b/lib/device/dev-md.c
-@@ -166,17 +166,14 @@ static int _udev_dev_is_md_component(struct device *dev)
- 	if (!(ext = dev_ext_get(dev)))
- 		return_0;
+diff --git a/man/Makefile.in b/man/Makefile.in
+index a6029bbe8..d716deb58 100644
+--- a/man/Makefile.in
++++ b/man/Makefile.in
+@@ -147,42 +147,58 @@ $(SED) -e "s+#VERSION#+$(LVM_VERSION)+" \
+ 	-e "s+#DEFAULT_MANGLING#+$(DEFAULT_MANGLING)+" $< > $@
+ endef
  
--	if (!(value = udev_device_get_property_value((struct udev_device *)ext->handle, DEV_EXT_UDEV_BLKID_TYPE))) {
--		dev->flags |= DEV_UDEV_INFO_MISSING;
-+	if (!(value = udev_device_get_property_value((struct udev_device *)ext->handle, DEV_EXT_UDEV_BLKID_TYPE)))
- 		return 0;
--	}
+-# Escape any '-':
++# Escape any '-' to '\-'  (except ^.TH line)
++# and fix unwanted changes:
++#    '\\-'  back to '\-'
++#    words like 'device\-mapper' back to 'device-mapper',
++#    \[\->] \[<\-] back to \[->], \[<-]
++#    however for some words i.e. '*-pool' we want '*\-pool'
++#    also 'vg-lv,[systemd-]machine-id,lvm-full,lvm-lvpoll' should go with \-
+ #
+-# - multiple (>= 2)
+-# - in ' -'
+-# - in ranges
+-# - in middle of options (e.g. '--use-policies') and their arguments
+-# - in symbolic use (e.g. '->')
+-# - in "$vg-$lv"
+-# - in single one in '\\f.-'
+ define ESCAPEHYPHENS
+-$(SED) -i -e "s+\([ [:alpha:]]\)-\{7\}+\1\\\-\\\-\\\-\\\-\\\-\\\-\\\-+g" \
+-	  -e "s+\([ [:alpha:]]\)-\{6\}+\1\\\-\\\-\\\-\\\-\\\-\\\-+g" \
+-	  -e "s+\([ [:alpha:]]\)-\{5\}+\1\\\-\\\-\\\-\\\-\\\-+g" \
+-	  -e "s+\([ [:alpha:]]\)-\{4\}+\1\\\-\\\-\\\-\\\-+g" \
+-	  -e "s+\([ [:alpha:]]\)-\{3\}+\1\\\-\\\-\\\-+g" \
+-	  -e "s+\([ [:alpha:]]\)-\{2\}+\1\\\-\\\-+g" \
+-	  -e "s+\([^\]\)-\([[:alnum:]\?]\)+\1\\\-\2+g" \
+-	  -e "s+ --+\\\-\\\-+g" \
+-	  -e "s+|-|+|\\\-|+g" \
+-	  -e "s+|-\\\-+\\\-\\\-+g" \
+-	  -e "s+ -\"+ \\\-\"+g" \
+-	  -e "s+'--'+'\\\-\\\-'+g" \
+-	  -e "s+^--+\\\-\\\-+g" \
+-	  -e "s+\([[:alnum:]]\) - \([[:alnum:]]\)+\1 \\\- \2+g" \
+-	  -e "s+\(<\)-+\1\\\-+g" \
+-	  -e "s+[^\\]-\(>\)+\\\-\1+g" \
+-	  -e "s+\([[:alnum:]]\{2,\}\)\\\-\([[:alnum:]]\{2,\}\)+\1-\2+g" \
+-	  -e "s+\(\\\-\\\-[[:alnum:]]\{2,\}\)-+\1\\\-+g" \
+-	  -e "s+\(lvm2\-activation\)+lvm2\\\-activation+" \
+-	  -e "s+\([^\\]\)-pool+\1\\\-pool+g" \
+-	  -e "s+\([[:digit:]]\)-\([[:digit:]]\)+\1\\\-\2+g" \
+-	  -e "s+\\\-git+\-git+g" \
+-	  -e "s+\(vg.*\)\-lv+\1\\\-lv+g" \
+-	  -e "s+\([[:digit:]]\{4\}\)\\\-\([[:digit:]]\{2\}\)\\\-\([[:digit:]]\{2\}\)+\1-\2-\3+g" $@
++$(SED) -i -e "/^.TH/ !s+-+\\\-+g" \
++	  -e "s+\\\[\]-+\\\-+g" \
++	  -e "s+\(^\|[^[:alnum:]\-]\)\([[:alpha:]]\{1,\}\)\\\-\((\|[([:alpha:]]\{2,\}\)+\1\2-\3+g" \
++	  -e "s+\([[:alpha:]]\)-\(pool\)+\1\\\-\2+g" \
++	  -e "s+[\][[]\(<\{0,1\}\)\\\-+\\\[\1-+g" \
++	  -e "s+\(vg.\{1,\}[^\]\)-lv+\1\\\-lv+g" \
++	  -e "s+systemd-machine+systemd\\\-machine+g" \
++	  -e "s+machine-id+machine\\\-id+g" \
++	  -e "s+lvm-full+lvm\\\-full+g" \
++	  -e "s+lvm-lvpoll+lvm\\\-lvpoll+g" \
++	  $@
+ endef
  
- 	return !strcmp(value, DEV_EXT_UDEV_BLKID_TYPE_SW_RAID);
- }
- #else
- static int _udev_dev_is_md_component(struct device *dev)
- {
--	dev->flags |= DEV_UDEV_INFO_MISSING;
- 	return 0;
- }
- #endif
-diff --git a/lib/device/dev-type.c b/lib/device/dev-type.c
-index 7cbb7fbed..1b335722d 100644
---- a/lib/device/dev-type.c
-+++ b/lib/device/dev-type.c
-@@ -1261,10 +1261,8 @@ int udev_dev_is_md_component(struct device *dev)
- 	const char *value;
- 	int ret = 0;
- 
--	if (!obtain_device_list_from_udev()) {
--		dev->flags |= DEV_UDEV_INFO_MISSING;
-+	if (!obtain_device_list_from_udev())
- 		return 0;
--	}
- 
- 	if (!(udev_device = _udev_get_dev(dev)))
- 		return 0;
-@@ -1291,7 +1289,6 @@ int udev_dev_is_mpath_component(struct device *dev)
- 
- int udev_dev_is_md_component(struct device *dev)
- {
--	dev->flags |= DEV_UDEV_INFO_MISSING;
- 	return 0;
- }
- 
-diff --git a/lib/device/device.h b/lib/device/device.h
-index aed1a0342..ca8b3cdd8 100644
---- a/lib/device/device.h
-+++ b/lib/device/device.h
-@@ -37,9 +37,8 @@
- #define DEV_BCACHE_WRITE	0x00008000      /* bcache_fd is open with RDWR */
- #define DEV_SCAN_FOUND_LABEL	0x00010000      /* label scan read dev and found label */
- #define DEV_IS_MD_COMPONENT	0x00020000	/* device is an md component */
--#define DEV_UDEV_INFO_MISSING   0x00040000	/* we have no udev info for this device */
--#define DEV_IS_NVME		0x00080000	/* set if dev is nvme */
--#define DEV_MATCHED_USE_ID	0x00100000	/* matched an entry from cmd->use_devices */
-+#define DEV_IS_NVME		0x00040000	/* set if dev is nvme */
-+#define DEV_MATCHED_USE_ID	0x00080000	/* matched an entry from cmd->use_devices */
- 
- /*
-  * Support for external device info.
++.PHONY: checksed
++checksed:
++	$(Q) echo "cmd -a -b retry -c ret --use-policy -d" > $@
++	$(Q) echo "cmd \fI-u\fB -d retry \fI--use-pol --use-poli 4.0 --use \"-L|--size\"" >> $@
++	$(Q) echo "cmd --use-pol" >> $@
++	$(Q) echo "cmd --[raid]use device-mapper thin-pool \fB-\fP sdb1:1000-1999 \fB-t\fP|\fB--test\fP -? -o-field3" >> $@
++	$(Q) echo "cmd -dd---- \[->] \[<-] -*- -o#field5 -o-field3 -d" >> $@
++	$(Q) echo "-d" >> $@
++	$(Q) echo ".TH 2.03.12(2)-git" >> $@
++	$(Q) echo "--verbose" >> $@
++	$(Q) echo ".BR -- [ raid ] most  -- [ raid ] most" >> $@
++	$(Q) echo ".BR | --verbose|--verb  --verbose  --verbose --verbose --verbose" >> $@
++	$(Q) echo "skip - unint --aa-dd- --aa-dd-- ---aa-dd 4.0 \-a\-b" >> $@
++	$(Q) echo "cmd \-a \-b retry \-c ret \-\-use\-policy \-d" > $@-e
++	$(Q) echo "cmd \fI\-u\fB \-d retry \fI\-\-use\-pol \-\-use\-poli 4.0 \-\-use \"\-L|\-\-size\"" >> $@-e
++	$(Q) echo "cmd \-\-use\-pol" >> $@-e
++	$(Q) echo "cmd \-\-[raid]use device-mapper thin\-pool \fB\-\fP sdb1:1000\-1999 \fB\-t\fP|\fB\-\-test\fP \-? \-o\-field3" >> $@-e
++	$(Q) echo "cmd \-dd\-\-\-\- \[->] \[<-] \-*\- \-o#field5 \-o\-field3 \-d" >> $@-e
++	$(Q) echo "\-d" >> $@-e
++	$(Q) echo ".TH 2.03.12(2)-git" >> $@-e
++	$(Q) echo "\-\-verbose" >> $@-e
++	$(Q) echo ".BR \-\- [ raid ] most  \-\- [ raid ] most" >> $@-e
++	$(Q) echo ".BR | \-\-verbose|\-\-verb  \-\-verbose  \-\-verbose \-\-verbose \-\-verbose" >> $@-e
++	$(Q) echo "skip \- unint \-\-aa\-dd\- \-\-aa\-dd\-\- \-\-\-aa\-dd 4.0 \-a\-b" >> $@-e
++	$(Q) $(ESCAPEHYPHENS)
++	$(Q) echo "--- H Y P H E N A T E D ---"
++	$(Q) cat $@
++	$(Q) diff -u $@-e $@
++	$(Q) $(RM) $@ $@-e
++
+ %.5: $(srcdir)/%.5_main
+ 	@echo "    [MAN] $@"
+ 	$(Q) $(SUBSTVARS)
 
 
