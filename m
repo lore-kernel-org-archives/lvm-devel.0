@@ -1,126 +1,92 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Mon, 19 Apr 2021 13:00:45 +0000 (GMT)
-Subject: main - makefiles: improved hyphenation replacement
-Message-ID: <20210419130045.D81713969019@sourceware.org>
+Date: Mon, 19 Apr 2021 13:00:48 +0000 (GMT)
+Subject: main - man: use editline reference
+Message-ID: <20210419130048.341A03969019@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=adfdfd9c58aa2bb24d675eaa5f33e0101015d10f
-Commit:        adfdfd9c58aa2bb24d675eaa5f33e0101015d10f
-Parent:        b94f2a8b552a6089774d5e65082b98cf9579dc6e
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=dc934b13b9e47e59f0a176c9f4d9ceaa8a11ca32
+Commit:        dc934b13b9e47e59f0a176c9f4d9ceaa8a11ca32
+Parent:        54f98c94b45629dccc5588a54fa7fa448ea40d0c
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed Apr 14 14:39:17 2021 +0200
+AuthorDate:    Fri Apr 16 14:40:42 2021 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Mon Apr 19 14:37:07 2021 +0200
 
-makefiles: improved hyphenation replacement
+man: use editline reference
 
-Sed replacements script missed to properly replace several '-' to '\-'.
-Replace it with simpler set of regexes.
-
-Also add new target 'make checksed' for testing with examples,
-where the replacement should or should not occure for easier testing.
+When compiled with editline, refer this in man page as well
+instead of readline.
 ---
- man/Makefile.in | 80 ++++++++++++++++++++++++++++++++++-----------------------
- 1 file changed, 48 insertions(+), 32 deletions(-)
+ man/Makefile.in | 10 ++++++++++
+ man/lvm.8_main  | 12 ++++++------
+ 2 files changed, 16 insertions(+), 6 deletions(-)
 
 diff --git a/man/Makefile.in b/man/Makefile.in
-index a6029bbe8..d716deb58 100644
+index 7ad533980..31a4052e2 100644
 --- a/man/Makefile.in
 +++ b/man/Makefile.in
-@@ -147,42 +147,58 @@ $(SED) -e "s+#VERSION#+$(LVM_VERSION)+" \
+@@ -132,6 +132,15 @@ SEE_ALSO=$(srcdir)/see_also.end
+ 	    fi \
+ 	) > $@
+ 
++#
++# When EDITLINE_LIBS is defined, we are compiling with libedit
++#
++ifneq ("$(EDITLINE_LIBS)", "")
++DEFAULT_LIBLINE=editline
++else
++DEFAULT_LIBLINE=readline
++endif
++
+ define SUBSTVARS
+ $(SED) -e "s+#VERSION#+$(LVM_VERSION)+" \
+ 	-e "s+#DEFAULT_SYS_DIR#+$(DEFAULT_SYS_DIR)+" \
+@@ -144,6 +153,7 @@ $(SED) -e "s+#VERSION#+$(LVM_VERSION)+" \
+ 	-e "s+#DEFAULT_RUN_DIR#+$(DEFAULT_RUN_DIR)+" \
+ 	-e "s+#DEFAULT_PID_DIR#+$(DEFAULT_PID_DIR)+" \
+ 	-e "s+#SYSTEMD_GENERATOR_DIR#+$(SYSTEMD_GENERATOR_DIR)+" \
++	-e "s+#DEFAULT_LIBLINE#+$(DEFAULT_LIBLINE)+" \
  	-e "s+#DEFAULT_MANGLING#+$(DEFAULT_MANGLING)+" $< > $@
  endef
  
--# Escape any '-':
-+# Escape any '-' to '\-'  (except ^.TH line)
-+# and fix unwanted changes:
-+#    '\\-'  back to '\-'
-+#    words like 'device\-mapper' back to 'device-mapper',
-+#    \[\->] \[<\-] back to \[->], \[<-]
-+#    however for some words i.e. '*-pool' we want '*\-pool'
-+#    also 'vg-lv,[systemd-]machine-id,lvm-full,lvm-lvpoll' should go with \-
- #
--# - multiple (>= 2)
--# - in ' -'
--# - in ranges
--# - in middle of options (e.g. '--use-policies') and their arguments
--# - in symbolic use (e.g. '->')
--# - in "$vg-$lv"
--# - in single one in '\\f.-'
- define ESCAPEHYPHENS
--$(SED) -i -e "s+\([ [:alpha:]]\)-\{7\}+\1\\\-\\\-\\\-\\\-\\\-\\\-\\\-+g" \
--	  -e "s+\([ [:alpha:]]\)-\{6\}+\1\\\-\\\-\\\-\\\-\\\-\\\-+g" \
--	  -e "s+\([ [:alpha:]]\)-\{5\}+\1\\\-\\\-\\\-\\\-\\\-+g" \
--	  -e "s+\([ [:alpha:]]\)-\{4\}+\1\\\-\\\-\\\-\\\-+g" \
--	  -e "s+\([ [:alpha:]]\)-\{3\}+\1\\\-\\\-\\\-+g" \
--	  -e "s+\([ [:alpha:]]\)-\{2\}+\1\\\-\\\-+g" \
--	  -e "s+\([^\]\)-\([[:alnum:]\?]\)+\1\\\-\2+g" \
--	  -e "s+ --+\\\-\\\-+g" \
--	  -e "s+|-|+|\\\-|+g" \
--	  -e "s+|-\\\-+\\\-\\\-+g" \
--	  -e "s+ -\"+ \\\-\"+g" \
--	  -e "s+'--'+'\\\-\\\-'+g" \
--	  -e "s+^--+\\\-\\\-+g" \
--	  -e "s+\([[:alnum:]]\) - \([[:alnum:]]\)+\1 \\\- \2+g" \
--	  -e "s+\(<\)-+\1\\\-+g" \
--	  -e "s+[^\\]-\(>\)+\\\-\1+g" \
--	  -e "s+\([[:alnum:]]\{2,\}\)\\\-\([[:alnum:]]\{2,\}\)+\1-\2+g" \
--	  -e "s+\(\\\-\\\-[[:alnum:]]\{2,\}\)-+\1\\\-+g" \
--	  -e "s+\(lvm2\-activation\)+lvm2\\\-activation+" \
--	  -e "s+\([^\\]\)-pool+\1\\\-pool+g" \
--	  -e "s+\([[:digit:]]\)-\([[:digit:]]\)+\1\\\-\2+g" \
--	  -e "s+\\\-git+\-git+g" \
--	  -e "s+\(vg.*\)\-lv+\1\\\-lv+g" \
--	  -e "s+\([[:digit:]]\{4\}\)\\\-\([[:digit:]]\{2\}\)\\\-\([[:digit:]]\{2\}\)+\1-\2-\3+g" $@
-+$(SED) -i -e "/^.TH/ !s+-+\\\-+g" \
-+	  -e "s+\\\[\]-+\\\-+g" \
-+	  -e "s+\(^\|[^[:alnum:]\-]\)\([[:alpha:]]\{1,\}\)\\\-\((\|[([:alpha:]]\{2,\}\)+\1\2-\3+g" \
-+	  -e "s+\([[:alpha:]]\)-\(pool\)+\1\\\-\2+g" \
-+	  -e "s+[\][[]\(<\{0,1\}\)\\\-+\\\[\1-+g" \
-+	  -e "s+\(vg.\{1,\}[^\]\)-lv+\1\\\-lv+g" \
-+	  -e "s+systemd-machine+systemd\\\-machine+g" \
-+	  -e "s+machine-id+machine\\\-id+g" \
-+	  -e "s+lvm-full+lvm\\\-full+g" \
-+	  -e "s+lvm-lvpoll+lvm\\\-lvpoll+g" \
-+	  $@
- endef
- 
-+.PHONY: checksed
-+checksed:
-+	$(Q) echo "cmd -a -b retry -c ret --use-policy -d" > $@
-+	$(Q) echo "cmd \fI-u\fB -d retry \fI--use-pol --use-poli 4.0 --use \"-L|--size\"" >> $@
-+	$(Q) echo "cmd --use-pol" >> $@
-+	$(Q) echo "cmd --[raid]use device-mapper thin-pool \fB-\fP sdb1:1000-1999 \fB-t\fP|\fB--test\fP -? -o-field3" >> $@
-+	$(Q) echo "cmd -dd---- \[->] \[<-] -*- -o#field5 -o-field3 -d" >> $@
-+	$(Q) echo "-d" >> $@
-+	$(Q) echo ".TH 2.03.12(2)-git" >> $@
-+	$(Q) echo "--verbose" >> $@
-+	$(Q) echo ".BR -- [ raid ] most  -- [ raid ] most" >> $@
-+	$(Q) echo ".BR | --verbose|--verb  --verbose  --verbose --verbose --verbose" >> $@
-+	$(Q) echo "skip - unint --aa-dd- --aa-dd-- ---aa-dd 4.0 \-a\-b" >> $@
-+	$(Q) echo "cmd \-a \-b retry \-c ret \-\-use\-policy \-d" > $@-e
-+	$(Q) echo "cmd \fI\-u\fB \-d retry \fI\-\-use\-pol \-\-use\-poli 4.0 \-\-use \"\-L|\-\-size\"" >> $@-e
-+	$(Q) echo "cmd \-\-use\-pol" >> $@-e
-+	$(Q) echo "cmd \-\-[raid]use device-mapper thin\-pool \fB\-\fP sdb1:1000\-1999 \fB\-t\fP|\fB\-\-test\fP \-? \-o\-field3" >> $@-e
-+	$(Q) echo "cmd \-dd\-\-\-\- \[->] \[<-] \-*\- \-o#field5 \-o\-field3 \-d" >> $@-e
-+	$(Q) echo "\-d" >> $@-e
-+	$(Q) echo ".TH 2.03.12(2)-git" >> $@-e
-+	$(Q) echo "\-\-verbose" >> $@-e
-+	$(Q) echo ".BR \-\- [ raid ] most  \-\- [ raid ] most" >> $@-e
-+	$(Q) echo ".BR | \-\-verbose|\-\-verb  \-\-verbose  \-\-verbose \-\-verbose \-\-verbose" >> $@-e
-+	$(Q) echo "skip \- unint \-\-aa\-dd\- \-\-aa\-dd\-\- \-\-\-aa\-dd 4.0 \-a\-b" >> $@-e
-+	$(Q) $(ESCAPEHYPHENS)
-+	$(Q) echo "--- H Y P H E N A T E D ---"
-+	$(Q) cat $@
-+	$(Q) diff -u $@-e $@
-+	$(Q) $(RM) $@ $@-e
-+
- %.5: $(srcdir)/%.5_main
- 	@echo "    [MAN] $@"
- 	$(Q) $(SUBSTVARS)
+diff --git a/man/lvm.8_main b/man/lvm.8_main
+index 44961f7cf..08af2ee33 100644
+--- a/man/lvm.8_main
++++ b/man/lvm.8_main
+@@ -24,11 +24,11 @@ kernel.
+ The lvm command, and other commands listed below, are the command-line
+ tools for LVM.  A separate manual page describes each command in detail.
+ .P
+-If \fBlvm\fP is invoked with no arguments it presents a readline prompt
+-(assuming it was compiled with readline support).
++If \fBlvm\fP is invoked with no arguments it presents a #DEFAULT_LIBLINE# prompt
++(assuming it was compiled with #DEFAULT_LIBLINE# support).
+ LVM commands may be entered interactively at this prompt with
+-readline facilities including history and command name and option
+-completion.  Refer to \fBreadline\fP(3) for details.
++#DEFAULT_LIBLINE# facilities including history and command name and option
++completion.  Refer to \fB#DEFAULT_LIBLINE#\fP(3) for details.
+ .P
+ If \fBlvm\fP is invoked with argv[0] set to the name of a specific
+ LVM command (for example by using a hard or soft link) it acts as
+@@ -409,7 +409,7 @@ Message text may also change.
+ .
+ .TP
+ .B HOME
+-Directory containing \fI.lvm_history\fP if the internal readline
++Directory containing \fI.lvm_history\fP if the internal #DEFAULT_LIBLINE#
+ shell is invoked.
+ .TP
+ .B LVM_OUT_FD
+@@ -561,4 +561,4 @@ Prepends source file name and code line number with libdm debugging.
+ .P
+ .BR dmsetup (8),
+ .BR dmstats (8),
+-.BR readline (3)
++.BR #DEFAULT_LIBLINE# (3)
 
 
