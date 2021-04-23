@@ -1,38 +1,41 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Fri, 23 Apr 2021 21:06:08 +0000 (GMT)
-Subject: main - man: add missing _iorig suffix
-Message-ID: <20210423210608.CADEA39450F9@sourceware.org>
+Date: Fri, 23 Apr 2021 21:05:36 +0000 (GMT)
+Subject: main - pvscan: fix memleak
+Message-ID: <20210423210536.BCC54393BC13@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=a21028dea71464f93cd1c0836aee63ebfc3add10
-Commit:        a21028dea71464f93cd1c0836aee63ebfc3add10
-Parent:        579c9413212deb80c56628a11bd36ba9bace3a22
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=65c4f81dc2eebe4096c48159f2fbd1107e284aea
+Commit:        65c4f81dc2eebe4096c48159f2fbd1107e284aea
+Parent:        5e8307f4bfc6e04cd601fea78129302ce02ffef8
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu Apr 22 12:37:18 2021 +0200
+AuthorDate:    Fri Apr 23 15:11:36 2021 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Fri Apr 23 23:00:55 2021 +0200
+CommitterDate: Fri Apr 23 22:55:39 2021 +0200
 
-man: add missing _iorig suffix
+pvscan: fix memleak
 
+Commit 25b58310e3d606a85abc9bd50991ccb7ddcbfe25 add zalloc()
+without correspoding free(), switch to use cmd mempool.
 ---
- man/lvm.8_main | 1 +
- 1 file changed, 1 insertion(+)
+ tools/pvscan.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
 
-diff --git a/man/lvm.8_main b/man/lvm.8_main
-index 234442e64..6f86d0353 100644
---- a/man/lvm.8_main
-+++ b/man/lvm.8_main
-@@ -288,6 +288,7 @@ The LV name may also not contain any of the following strings:
- .RB ' _cdata ',
- .RB ' _cmeta ',
- .RB ' _corig ',
-+.RB ' _iorig ',
- .RB ' _mimage ',
- .RB ' _mlog ',
- .RB ' _pmspare ',
+diff --git a/tools/pvscan.c b/tools/pvscan.c
+index 22cb7bc18..83f3f3983 100644
+--- a/tools/pvscan.c
++++ b/tools/pvscan.c
+@@ -848,7 +848,7 @@ static int _get_devs_from_saved_vg(struct cmd_context *cmd, const char *vgname,
+ 			goto bad;
+ 		}
+ 
+-		if (!(devl = zalloc(sizeof(*devl))))
++		if (!(devl = dm_pool_zalloc(cmd->mem, sizeof(*devl))))
+ 			goto_bad;
+ 
+ 		devl->dev = dev;
 
 
