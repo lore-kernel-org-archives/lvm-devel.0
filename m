@@ -1,83 +1,53 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Fri, 23 Apr 2021 21:05:57 +0000 (GMT)
-Subject: main - cov: explicitely ignore return value
-Message-ID: <20210423210557.6512E394480D@sourceware.org>
+Date: Fri, 23 Apr 2021 21:06:00 +0000 (GMT)
+Subject: main - clang: always initialized values
+Message-ID: <20210423210600.CB8DA393BC13@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=395ce6c2bb034ed64479fcf4bc8974615a0f4bb8
-Commit:        395ce6c2bb034ed64479fcf4bc8974615a0f4bb8
-Parent:        2b3dcd754ff99987661c47ce57a660bfcfed3ffb
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=21bdd0a3597eaa138906bc467f6749e70bc60e78
+Commit:        21bdd0a3597eaa138906bc467f6749e70bc60e78
+Parent:        8f85834a330c1b803c130d9f7a33633267fb8d5b
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu Apr 22 16:49:34 2021 +0200
+AuthorDate:    Thu Apr 22 21:49:30 2021 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Fri Apr 23 23:00:55 2021 +0200
 
-cov: explicitely ignore return value
+clang: always initialized values
 
 ---
- daemons/lvmlockd/lvmlockd-core.c | 6 +++---
- lib/device/device_id.c           | 2 +-
- lib/label/label.c                | 2 +-
- 3 files changed, 5 insertions(+), 5 deletions(-)
+ device_mapper/libdm-report.c | 2 +-
+ libdm/libdm-report.c         | 2 +-
+ 2 files changed, 2 insertions(+), 2 deletions(-)
 
-diff --git a/daemons/lvmlockd/lvmlockd-core.c b/daemons/lvmlockd/lvmlockd-core.c
-index 094491029..cd8485bb0 100644
---- a/daemons/lvmlockd/lvmlockd-core.c
-+++ b/daemons/lvmlockd/lvmlockd-core.c
-@@ -4968,7 +4968,7 @@ static void *client_thread_main(void *arg_in)
- 	}
- out:
- 	if (adopt_opt && lock_acquire_written)
--		unlink(adopt_file);
-+		(void) unlink(adopt_file);
- 	return NULL;
- }
- 
-@@ -5740,13 +5740,13 @@ static void adopt_locks(void)
- 	if (count_start_fail || count_adopt_fail)
- 		goto fail;
- 
--	unlink(adopt_file);
-+	(void) unlink(adopt_file);
- 	write_adopt_file();
- 	log_debug("adopt_locks done");
- 	return;
- 
- fail:
--	unlink(adopt_file);
-+	(void) unlink(adopt_file);
- 	log_error("adopt_locks failed, reset host");
- }
- 
-diff --git a/lib/device/device_id.c b/lib/device/device_id.c
-index 9fd22692c..6fa3b0360 100644
---- a/lib/device/device_id.c
-+++ b/lib/device/device_id.c
-@@ -679,7 +679,7 @@ int device_ids_write(struct cmd_context *cmd)
- 		goto out;
- 	}
- 
--	unlink(tmppath); /* in case a previous file was left */
-+	(void) unlink(tmppath); /* in case a previous file was left */
- 
- 	if (!(fp = fopen(tmppath, "w+"))) {
- 		log_warn("Cannot open tmp devices_file to write.");
-diff --git a/lib/label/label.c b/lib/label/label.c
-index f305ac735..203c5b6bb 100644
---- a/lib/label/label.c
-+++ b/lib/label/label.c
-@@ -1657,7 +1657,7 @@ bool dev_write_bytes(struct device *dev, uint64_t start, size_t len, void *data)
- 		_scan_dev_close(dev);
- 
- 		dev->flags |= DEV_BCACHE_WRITE;
--		label_scan_open(dev);
-+		(void) label_scan_open(dev); /* checked later */
- 	}
- 
- 	if (dev->bcache_di < 0) {
+diff --git a/device_mapper/libdm-report.c b/device_mapper/libdm-report.c
+index f14aa8bc7..c6e7a2a03 100644
+--- a/device_mapper/libdm-report.c
++++ b/device_mapper/libdm-report.c
+@@ -3774,7 +3774,7 @@ static struct selection_node *_parse_selection(struct dm_report *rh,
+ 	struct field_selection *fs;
+ 	struct selection_node *sn;
+ 	const char *ws, *we; /* field name */
+-	const char *vs, *ve; /* value */
++	const char *vs = NULL, *ve = NULL; /* value */
+ 	const char *last;
+ 	uint32_t flags, field_num;
+ 	int implicit;
+diff --git a/libdm/libdm-report.c b/libdm/libdm-report.c
+index 5433e74ae..2efcc07c9 100644
+--- a/libdm/libdm-report.c
++++ b/libdm/libdm-report.c
+@@ -3773,7 +3773,7 @@ static struct selection_node *_parse_selection(struct dm_report *rh,
+ 	struct field_selection *fs;
+ 	struct selection_node *sn;
+ 	const char *ws, *we; /* field name */
+-	const char *vs, *ve; /* value */
++	const char *vs = NULL, *ve = NULL; /* value */
+ 	const char *last;
+ 	uint32_t flags, field_num;
+ 	int implicit;
 
 
