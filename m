@@ -1,87 +1,49 @@
-From: Leo Yan <leo.yan@linaro.org>
-Date: Sun, 25 Apr 2021 10:22:41 +0800
-Subject: [LVM2 RFCv1 5/5] tools: Add support for "idm" lock type
-In-Reply-To: <20210425022241.5055-1-leo.yan@linaro.org>
-References: <20210425022241.5055-1-leo.yan@linaro.org>
-Message-ID: <20210425022241.5055-6-leo.yan@linaro.org>
+From: Zdenek Kabelac <zkabelac@sourceware.org>
+Date: Fri, 23 Apr 2021 21:05:44 +0000 (GMT)
+Subject: main - cov: add checks to prevent NULL dereference
+Message-ID: <20210423210544.C5EBF394480D@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-This patch is to update the comment and code to support "idm" lock type
-which is used for LVM toolkit.
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=d7237ca63a1497fc06a975639331ea7869b02c1a
+Commit:        d7237ca63a1497fc06a975639331ea7869b02c1a
+Parent:        3d96203e21be7fcea783afaa94e10295696a4533
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Thu Apr 22 15:08:04 2021 +0200
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Fri Apr 23 23:00:55 2021 +0200
 
-Signed-off-by: Leo Yan <leo.yan@linaro.org>
+cov: add checks to prevent NULL dereference
+
 ---
- tools/lvconvert.c |  2 ++
- tools/toollib.c   | 11 ++++++-----
- 2 files changed, 8 insertions(+), 5 deletions(-)
+ lib/device/device_id.c | 5 +++--
+ 1 file changed, 3 insertions(+), 2 deletions(-)
 
-diff --git a/tools/lvconvert.c b/tools/lvconvert.c
-index 4c159b01e..1f2178ce5 100644
---- a/tools/lvconvert.c
-+++ b/tools/lvconvert.c
-@@ -3415,6 +3415,8 @@ static int _lvconvert_to_pool(struct cmd_context *cmd,
- 				pool_lv->lock_args = "pending";
- 			else if (!strcmp(vg->lock_type, "dlm"))
- 				pool_lv->lock_args = "dlm";
-+			else if (!strcmp(vg->lock_type, "idm"))
-+				pool_lv->lock_args = "idm";
- 			/* The lock_args will be set in vg_write(). */
- 		}
- 	}
-diff --git a/tools/toollib.c b/tools/toollib.c
-index 67fbbdaa0..cda6d74f3 100644
---- a/tools/toollib.c
-+++ b/tools/toollib.c
-@@ -591,15 +591,15 @@ int vgcreate_params_set_from_args(struct cmd_context *cmd,
- 	 * new VG, and is it compatible with current lvm.conf settings.
- 	 *
- 	 * The end result is to set vp_new->lock_type to:
--	 * none | clvm | dlm | sanlock.
-+	 * none | clvm | dlm | sanlock | idm.
- 	 *
- 	 * If 'vgcreate --lock-type <arg>' is set, the answer is given
--	 * directly by <arg> which is one of none|clvm|dlm|sanlock.
-+	 * directly by <arg> which is one of none|clvm|dlm|sanlock|idm.
- 	 *
- 	 * 'vgcreate --clustered y' is the way to create clvm VGs.
- 	 *
- 	 * 'vgcreate --shared' is the way to create lockd VGs.
--	 * lock_type of sanlock or dlm is selected based on
-+	 * lock_type of sanlock, dlm or idm is selected based on
- 	 * which lock manager is running.
- 	 *
- 	 *
-@@ -646,7 +646,7 @@ int vgcreate_params_set_from_args(struct cmd_context *cmd,
- 	 * - lvmlockd is used
- 	 * - VGs with CLUSTERED set are ignored (requires clvmd)
- 	 * - VGs with lockd type can be used
--	 * - vgcreate can create new VGs with lock_type sanlock or dlm
-+	 * - vgcreate can create new VGs with lock_type sanlock, dlm or idm
- 	 * - 'vgcreate --clustered y' fails
- 	 * - 'vgcreate --shared' works
- 	 * - 'vgcreate' (neither option) creates a local VG
-@@ -658,7 +658,7 @@ int vgcreate_params_set_from_args(struct cmd_context *cmd,
- 		lock_type = arg_str_value(cmd, locktype_ARG, "");
- 
- 		if (arg_is_set(cmd, shared_ARG) && !is_lockd_type(lock_type)) {
--			log_error("The --shared option requires lock type sanlock or dlm.");
-+			log_error("The --shared option requires lock type sanlock, dlm or idm.");
- 			return 0;
+diff --git a/lib/device/device_id.c b/lib/device/device_id.c
+index 1a9705f04..9fd22692c 100644
+--- a/lib/device/device_id.c
++++ b/lib/device/device_id.c
+@@ -523,7 +523,7 @@ int device_ids_read(struct cmd_context *cmd)
+ 			_copy_idline_str(line, _devices_file_systemid, sizeof(_devices_file_systemid));
+ 			log_debug("read devices file systemid %s", _devices_file_systemid);
+ 			if ((!cmd->system_id && _devices_file_systemid[0]) ||
+-			    strcmp(cmd->system_id, _devices_file_systemid)) {
++			    (cmd->system_id && strcmp(cmd->system_id, _devices_file_systemid))) {
+ 				log_warn("WARNING: ignoring devices file with wrong system id %s vs local %s.",
+ 					  _devices_file_systemid[0] ? _devices_file_systemid : "none", cmd->system_id ?: "none");
+ 				free_dus(&cmd->use_devices);
+@@ -1077,7 +1077,8 @@ id_done:
+ 		if (du_devid && (du_devid != du_dev)) {
+ 			log_warn("WARNING: device %s (%s) and %s (%s) have duplicate device ID.",
+ 				 dev_name(dev), id->idname,
+-				 du_pvid->dev ? dev_name(du_pvid->dev) : "none", du_pvid->idname);
++				 (du_pvid && du_pvid->dev) ? dev_name(du_pvid->dev) : "none",
++				 du_pvid ? du_pvid->idname : "");
  		}
  
-@@ -697,6 +697,7 @@ int vgcreate_params_set_from_args(struct cmd_context *cmd,
- 
- 	case LOCK_TYPE_SANLOCK:
- 	case LOCK_TYPE_DLM:
-+	case LOCK_TYPE_IDM:
- 		if (!use_lvmlockd) {
- 			log_error("Using a shared lock type requires lvmlockd.");
- 			return 0;
--- 
-2.25.1
+ 		if (du_pvid && (du_pvid != du_dev)) {
 
 
