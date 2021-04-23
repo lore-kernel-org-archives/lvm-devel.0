@@ -1,39 +1,38 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Fri, 23 Apr 2021 21:06:06 +0000 (GMT)
-Subject: main - args.h: bold command refference
-Message-ID: <20210423210606.87B66394480D@sourceware.org>
+Date: Fri, 23 Apr 2021 21:06:08 +0000 (GMT)
+Subject: main - man: add missing _iorig suffix
+Message-ID: <20210423210608.CADEA39450F9@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=6f61de300980a55381c70347712c22a96c22807b
-Commit:        6f61de300980a55381c70347712c22a96c22807b
-Parent:        f678052385dd7fe04e4d4c3681b7dd58b1bca64b
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=a21028dea71464f93cd1c0836aee63ebfc3add10
+Commit:        a21028dea71464f93cd1c0836aee63ebfc3add10
+Parent:        579c9413212deb80c56628a11bd36ba9bace3a22
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Apr 23 22:45:20 2021 +0200
+AuthorDate:    Thu Apr 22 12:37:18 2021 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Fri Apr 23 23:00:55 2021 +0200
 
-args.h: bold command refference
+man: add missing _iorig suffix
 
 ---
- tools/args.h | 2 +-
- 1 file changed, 1 insertion(+), 1 deletion(-)
+ man/lvm.8_main | 1 +
+ 1 file changed, 1 insertion(+)
 
-diff --git a/tools/args.h b/tools/args.h
-index 93ee737ce..741c82b9f 100644
---- a/tools/args.h
-+++ b/tools/args.h
-@@ -1386,7 +1386,7 @@ arg(readahead_ARG, 'r', "readahead", readahead_VAL, 0, 0,
-     "\\fBnone\\fP is equivalent to zero.\n")
- 
- arg(resizefs_ARG, 'r', "resizefs", 0, 0, 0,
--    "Resize underlying filesystem together with the LV using fsadm(8).\n")
-+    "Resize underlying filesystem together with the LV using \\fBfsadm\\fP(8).\n")
- 
- /* Not used */
- arg(reset_ARG, 'R', "reset", 0, 0, 0, NULL)
+diff --git a/man/lvm.8_main b/man/lvm.8_main
+index 234442e64..6f86d0353 100644
+--- a/man/lvm.8_main
++++ b/man/lvm.8_main
+@@ -288,6 +288,7 @@ The LV name may also not contain any of the following strings:
+ .RB ' _cdata ',
+ .RB ' _cmeta ',
+ .RB ' _corig ',
++.RB ' _iorig ',
+ .RB ' _mimage ',
+ .RB ' _mlog ',
+ .RB ' _pmspare ',
 
 
