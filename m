@@ -1,33 +1,42 @@
-From: David Teigland <teigland@redhat.com>
-Date: Thu, 29 Apr 2021 10:31:39 -0500
-Subject: [LVM2 RFCv1 1/5] lvmlockd: idm: Introduce new locking scheme
-In-Reply-To: <20210429032645.GB199698@leoy-ThinkPad-X240s>
-References: <20210425022241.5055-1-leo.yan@linaro.org>
-	<20210425022241.5055-2-leo.yan@linaro.org>
-	<20210428195445.GF9566@redhat.com>
-	<20210429032645.GB199698@leoy-ThinkPad-X240s>
-Message-ID: <20210429142122.GA27388@redhat.com>
+From: Zdenek Kabelac <zkabelac@sourceware.org>
+Date: Fri, 23 Apr 2021 21:05:45 +0000 (GMT)
+Subject: main - cov: check _insert_dev return value
+Message-ID: <20210423210545.E92B9393BC13@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On Thu, Apr 29, 2021 at 11:26:45AM +0800, Leo Yan wrote:
-> As a side topic, just curious if LVM doesn't use LVB for invalidation
-> the cached metadata, then now LVM uses which mechanism for metadata
-> invalidation?  
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=7e135868374601020920094f135d678c688d0950
+Commit:        7e135868374601020920094f135d678c688d0950
+Parent:        d7237ca63a1497fc06a975639331ea7869b02c1a
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Thu Apr 22 12:30:26 2021 +0200
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Fri Apr 23 23:00:55 2021 +0200
 
-Every command reads metadata from disk, so there is no cache that needs to
-be invalidated.  There is the /run/lvm/hints file, but that is not used
-for shared VGs (it caches which devices on the system are LVM PVs).
+cov: check _insert_dev return value
 
-> No sure if I understand your question or not.  But I think you are
-> suggesting to check "vg->lock_type" is IDM and then create pv_list for
-> IDM type.  Will refine code for this.
+Although we try later to validate device was inserted,
+we can validate return value and early-exit.
+---
+ lib/device/dev-cache.c | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
 
-Yes that's what I was thinking, thanks.
-
-Dave
+diff --git a/lib/device/dev-cache.c b/lib/device/dev-cache.c
+index aa93b5758..dddf84e4d 100644
+--- a/lib/device/dev-cache.c
++++ b/lib/device/dev-cache.c
+@@ -1510,7 +1510,8 @@ struct device *dev_cache_get(struct cmd_context *cmd, const char *name, struct d
+ 	 * for st_rdev.
+ 	 */
+ 	if (!dev) {
+-		_insert_dev(name, st.st_rdev);
++		if (!_insert_dev(name, st.st_rdev))
++			return_NULL;
+ 
+ 		/* Get the struct dev that was just added. */
+ 		dev = (struct device *) dm_hash_lookup(_cache.names, name);
 
 
