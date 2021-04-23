@@ -1,64 +1,62 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Fri, 23 Apr 2021 21:06:07 +0000 (GMT)
-Subject: main - man: document fsadm -l option
-Message-ID: <20210423210607.AA1F23B08C1C@sourceware.org>
+Date: Fri, 23 Apr 2021 21:06:12 +0000 (GMT)
+Subject: main - cleanup: indent
+Message-ID: <20210423210612.3D5703945C04@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=579c9413212deb80c56628a11bd36ba9bace3a22
-Commit:        579c9413212deb80c56628a11bd36ba9bace3a22
-Parent:        6f61de300980a55381c70347712c22a96c22807b
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=05eb90db68dcaa89fbfcce52cf122f25488ee69f
+Commit:        05eb90db68dcaa89fbfcce52cf122f25488ee69f
+Parent:        fccd6e034625dade9ca302f2fcd99eb32d90974f
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu Apr 22 11:09:05 2021 +0200
+AuthorDate:    Fri Apr 23 19:45:34 2021 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Fri Apr 23 23:00:55 2021 +0200
 
-man: document fsadm -l option
+cleanup: indent
 
-Missed -l option in man page, although users should prefer
-lvresize -r when the also want to do a volume management,
-as there they can specify i.e. extents for allocation.
-Also mention dm-crypt support in command description.
 ---
- man/fsadm.8_main | 11 +++++++++--
- 1 file changed, 9 insertions(+), 2 deletions(-)
+ lib/label/label.c | 2 +-
+ tools/vgsplit.c   | 4 ++--
+ 2 files changed, 3 insertions(+), 3 deletions(-)
 
-diff --git a/man/fsadm.8_main b/man/fsadm.8_main
-index d83e99292..dfff5bb97 100644
---- a/man/fsadm.8_main
-+++ b/man/fsadm.8_main
-@@ -25,13 +25,14 @@ fsadm \(em utility to resize or check filesystem on a device
- .
- .SH DESCRIPTION
- .
--fsadm utility checks or resizes the filesystem on a device.
-+fsadm utility checks or resizes the filesystem on a device (can be
-+also dm-crypt encrypted device).
- It tries to use the same API for
- .BR ext2 ,
- .BR ext3 ,
- .BR ext4 ,
- .BR ReiserFS
--.RB and
-+and
- .BR XFS
- filesystem.
- .
-@@ -50,6 +51,12 @@ Bypass some sanity checks.
- Display the help text.
- .
- .TP
-+.BR -l | --lvresize
-+Resize also given lvm2 logical volume. More volume management
-+functionality is provided with complementary \fBlvresize\fP(8) and the option
-+.BR -r | --resizefs.
-+.
-+.TP
- .BR -n | --dry-run
- Print commands without running them.
- .
+diff --git a/lib/label/label.c b/lib/label/label.c
+index 203c5b6bb..9ebbb4ec9 100644
+--- a/lib/label/label.c
++++ b/lib/label/label.c
+@@ -1097,7 +1097,7 @@ int label_scan(struct cmd_context *cmd)
+ 		 * so this will usually do nothing.
+ 		 */
+ 		label_scan_invalidate(dev);
+-	};
++	}
+ 	dev_iter_destroy(iter);
+ 
+ 	/*
+diff --git a/tools/vgsplit.c b/tools/vgsplit.c
+index 8a785bdbd..296248e7c 100644
+--- a/tools/vgsplit.c
++++ b/tools/vgsplit.c
+@@ -311,7 +311,7 @@ static int _move_raids(struct volume_group *vg_from,
+ 		/* Ignore, if no allocations on PVs of @vg_to */
+ 		if (!lv_is_on_pvs(lv, &vg_to->pvs))
+ 			continue;
+- 
++
+ 		/* If allocations are on PVs of @vg_to -> move RAID LV stack across */
+ 		if (!_move_one_lv(vg_from, vg_to, lvh, &lvht))
+ 			return_0;
+@@ -460,7 +460,7 @@ static int _move_cache(struct volume_group *vg_from,
+ 			    !lv_is_on_pvs(meta, &vg_to->pvs))
+ 				continue;
+ 		}
+-		
++
+ 		if (fast && orig &&
+ 		    !lv_is_on_pvs(orig, &vg_to->pvs) && !lv_is_on_pvs(fast, &vg_to->pvs))
+ 			continue;
 
 
