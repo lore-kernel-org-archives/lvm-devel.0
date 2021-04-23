@@ -1,48 +1,40 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Fri, 23 Apr 2021 21:05:39 +0000 (GMT)
-Subject: main - devicesfile: use pool memory
-Message-ID: <20210423210539.0EAF0393BC13@sourceware.org>
+Date: Fri, 23 Apr 2021 21:05:58 +0000 (GMT)
+Subject: main - cov: use correct enum type
+Message-ID: <20210423210558.874D239450F9@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=2b90466f78892c1e578c830a72566662d137dace
-Commit:        2b90466f78892c1e578c830a72566662d137dace
-Parent:        80ef9138726c85e837dbb5a7572178f8b972e300
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=25b672417e06265c4552184b4ae1f0853bd31732
+Commit:        25b672417e06265c4552184b4ae1f0853bd31732
+Parent:        395ce6c2bb034ed64479fcf4bc8974615a0f4bb8
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Apr 23 15:03:11 2021 +0200
+AuthorDate:    Thu Apr 22 17:31:17 2021 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Fri Apr 23 22:58:45 2021 +0200
+CommitterDate: Fri Apr 23 23:00:55 2021 +0200
 
-devicesfile: use pool memory
+cov: use correct enum type
 
-Switch to use command mempool instead of zalloc() as relase
-part would be required otherwise.
+Correct function declaration.
 ---
- lib/device/dev-cache.c | 6 ++----
- 1 file changed, 2 insertions(+), 4 deletions(-)
+ lib/format_text/import_vsn1.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
 
-diff --git a/lib/device/dev-cache.c b/lib/device/dev-cache.c
-index 05b2b9bff..112296a81 100644
---- a/lib/device/dev-cache.c
-+++ b/lib/device/dev-cache.c
-@@ -1710,13 +1710,11 @@ static int _setup_devices_list(struct cmd_context *cmd)
- 	 */
+diff --git a/lib/format_text/import_vsn1.c b/lib/format_text/import_vsn1.c
+index ef25369a6..946184b4b 100644
+--- a/lib/format_text/import_vsn1.c
++++ b/lib/format_text/import_vsn1.c
+@@ -128,7 +128,7 @@ static int _read_id(struct id *id, const struct dm_config_node *cn, const char *
+ 	return 1;
+ }
  
- 	dm_list_iterate_items(strl, &cmd->deviceslist) {
--		if (!(du = zalloc(sizeof(struct dev_use))))
-+		if (!(du = dm_pool_zalloc(cmd->mem, sizeof(struct dev_use))))
- 			return_0;
- 
--		if (!(du->devname = strdup(strl->str))) {
--			free(du);
-+		if (!(du->devname = dm_pool_strdup(cmd->mem, strl->str)))
- 			return_0;
--		}
- 
- 		dm_list_add(&cmd->use_devices, &du->list);
- 	}
+-static int _read_flag_config(const struct dm_config_node *n, uint64_t *status, int type)
++static int _read_flag_config(const struct dm_config_node *n, uint64_t *status, enum pv_vg_lv_e type)
+ {
+ 	const struct dm_config_value *cv;
+ 	*status = 0;
 
 
