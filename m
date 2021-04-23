@@ -1,68 +1,57 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Fri, 20 Apr 2018 07:01:58 -0400
-Subject: master - mirror: block_on_error only with monitoring
-Message-ID: <201804201101.w3KB1wmt031229@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Fri, 23 Apr 2021 21:06:03 +0000 (GMT)
+Subject: main - clang: ensure vg is defined
+Message-ID: <20210423210603.1E2313B08C2B@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=55d83f9f6ee1892d419bdd9d50c3450ac41f6749
-Commit:        55d83f9f6ee1892d419bdd9d50c3450ac41f6749
-Parent:        66400d003d357611f19f99fb68500c364fbef547
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=49caa9f3b1950ffd2ca9aa990e8bf0b480b62b87
+Commit:        49caa9f3b1950ffd2ca9aa990e8bf0b480b62b87
+Parent:        51fd232b8eb2613a198b049d44688ea2422b248a
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu Mar 29 21:10:58 2018 +0200
+AuthorDate:    Thu Apr 22 22:42:54 2021 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Fri Apr 20 12:13:51 2018 +0200
+CommitterDate: Fri Apr 23 23:00:55 2021 +0200
 
-mirror: block_on_error only with monitoring
+clang: ensure vg is defined
 
-When user configured lvm2 to NOT user monitoring, activated mirror
-actually hang upon error and it's quite unusable moment.
-
-So instead Warn those 'brave' non-monitoring users about possible
-problem and activation mirror without blocking error handling.
-
-This also makes it a bit simpler for test suite to handle trouble
-cases when test is running without  dmeventd.
 ---
- lib/commands/toolcontext.h |    1 +
- lib/mirror/mirrored.c      |   10 ++++++++--
- 2 files changed, 9 insertions(+), 2 deletions(-)
+ tools/pvchange.c | 6 +++---
+ 1 file changed, 3 insertions(+), 3 deletions(-)
 
-diff --git a/lib/commands/toolcontext.h b/lib/commands/toolcontext.h
-index 4225c57..89d1088 100644
---- a/lib/commands/toolcontext.h
-+++ b/lib/commands/toolcontext.h
-@@ -169,6 +169,7 @@ struct cmd_context {
- 	unsigned activate_component:1;		/* command activates component LV */
- 	unsigned process_component_lvs:1;	/* command processes also component LVs */
+diff --git a/tools/pvchange.c b/tools/pvchange.c
+index b0bc83ed5..d6e35d66f 100644
+--- a/tools/pvchange.c
++++ b/tools/pvchange.c
+@@ -54,7 +54,7 @@ static int _pvchange_single(struct cmd_context *cmd, struct volume_group *vg,
+ 	}
  
-+	unsigned mirror_warn_printed:1;		/* command already printed warning about non-monitored mirrors */
- 	/*
- 	 * Filtering.
- 	 */
-diff --git a/lib/mirror/mirrored.c b/lib/mirror/mirrored.c
-index e6dc99b..10828e8 100644
---- a/lib/mirror/mirrored.c
-+++ b/lib/mirror/mirrored.c
-@@ -314,8 +314,14 @@ static int _add_log(struct dm_pool *mem, struct lv_segment *seg,
- 	if (mirror_in_sync() && !(seg->status & PVMOVE))
- 		log_flags |= DM_NOSYNC;
+ 	/* If in a VG, must change using volume group. */
+-	if (!is_orphan(pv)) {
++	if (vg && !is_orphan(pv)) {
+ 		if (tagargs && !(vg->fid->fmt->features & FMT_TAGS)) {
+ 			log_error("Volume group containing %s does not "
+ 				  "support tags", pv_name);
+@@ -134,7 +134,7 @@ static int _pvchange_single(struct cmd_context *cmd, struct volume_group *vg,
+ 	}
  
--	if (_block_on_error_available && !(seg->status & PVMOVE))
--		log_flags |= DM_BLOCK_ON_ERROR;
-+	if (_block_on_error_available && !(seg->status & PVMOVE)) {
-+		if (dmeventd_monitor_mode() > 0)
-+			log_flags |= DM_BLOCK_ON_ERROR;
-+		else {
-+			log_warn_suppress(seg->lv->vg->cmd->mirror_warn_printed, "WARNING: Mirrors without monitoring will not react on failures.");
-+			seg->lv->vg->cmd->mirror_warn_printed = 1;
-+		}
-+	}
+ 	if (arg_is_set(cmd, metadataignore_ARG)) {
+-		if ((vg_mda_copies(vg) != VGMETADATACOPIES_UNMANAGED) &&
++		if (vg && (vg_mda_copies(vg) != VGMETADATACOPIES_UNMANAGED) &&
+ 		    (arg_count(cmd, force_ARG) == PROMPT) &&
+ 		    yes_no_prompt("Override preferred number of copies "
+ 				  "of VG %s metadata? [y/n]: ",
+@@ -175,7 +175,7 @@ static int _pvchange_single(struct cmd_context *cmd, struct volume_group *vg,
+ 	}
  
- 	return dm_tree_node_add_mirror_target_log(node, region_size, clustered, log_dlid, area_count, log_flags);
- }
+ 	log_verbose("Updating physical volume \"%s\"", pv_name);
+-	if (!is_orphan(pv)) {
++	if (vg && !is_orphan(pv)) {
+ 		if (!vg_write(vg) || !vg_commit(vg)) {
+ 			log_error("Failed to store physical volume \"%s\" in "
+ 				  "volume group \"%s\"", pv_name, vg->name);
 
 
