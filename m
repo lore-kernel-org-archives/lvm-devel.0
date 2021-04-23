@@ -1,63 +1,83 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Fri, 23 Apr 2021 21:05:59 +0000 (GMT)
-Subject: main - cov: convert to code that analyzer may better understand
-Message-ID: <20210423210559.A88F839450F4@sourceware.org>
+Date: Fri, 23 Apr 2021 21:05:57 +0000 (GMT)
+Subject: main - cov: explicitely ignore return value
+Message-ID: <20210423210557.6512E394480D@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=8f85834a330c1b803c130d9f7a33633267fb8d5b
-Commit:        8f85834a330c1b803c130d9f7a33633267fb8d5b
-Parent:        25b672417e06265c4552184b4ae1f0853bd31732
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=395ce6c2bb034ed64479fcf4bc8974615a0f4bb8
+Commit:        395ce6c2bb034ed64479fcf4bc8974615a0f4bb8
+Parent:        2b3dcd754ff99987661c47ce57a660bfcfed3ffb
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu Apr 22 15:06:48 2021 +0200
+AuthorDate:    Thu Apr 22 16:49:34 2021 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Fri Apr 23 23:00:55 2021 +0200
 
-cov: convert to code that analyzer may better understand
+cov: explicitely ignore return value
 
-Switch to code that is problematic to analyzer
 ---
- lib/device/dev-cache.c | 14 +++++++-------
- 1 file changed, 7 insertions(+), 7 deletions(-)
+ daemons/lvmlockd/lvmlockd-core.c | 6 +++---
+ lib/device/device_id.c           | 2 +-
+ lib/label/label.c                | 2 +-
+ 3 files changed, 5 insertions(+), 5 deletions(-)
 
-diff --git a/lib/device/dev-cache.c b/lib/device/dev-cache.c
-index dddf84e4d..d7fa93fd6 100644
---- a/lib/device/dev-cache.c
-+++ b/lib/device/dev-cache.c
-@@ -293,13 +293,13 @@ static int _compare_paths(const char *path0, const char *path1)
- 	/* We prefer symlinks - they exist for a reason!
- 	 * So we prefer a shorter path before the first symlink in the name.
- 	 * FIXME Configuration option to invert this? */
--	while (s0) {
--		s0 = strchr(s0, '/');
--		s1 = strchr(s1, '/');
--		if (s0) {
-+	while (s0 && s1) {
-+		if ((s0 = strchr(s0, '/')))
- 			*s0 = '\0';
-+
-+		if ((s1 = strchr(s1, '/')))
- 			*s1 = '\0';
--		}
-+
- 		if (lstat(p0, &stat0)) {
- 			log_sys_very_verbose("lstat", p0);
- 			return 1;
-@@ -312,10 +312,10 @@ static int _compare_paths(const char *path0, const char *path1)
- 			return 0;
- 		if (!S_ISLNK(stat0.st_mode) && S_ISLNK(stat1.st_mode))
- 			return 1;
--		if (s0) {
-+		if (s0)
- 			*s0++ = '/';
-+		if (s1)
- 			*s1++ = '/';
--		}
+diff --git a/daemons/lvmlockd/lvmlockd-core.c b/daemons/lvmlockd/lvmlockd-core.c
+index 094491029..cd8485bb0 100644
+--- a/daemons/lvmlockd/lvmlockd-core.c
++++ b/daemons/lvmlockd/lvmlockd-core.c
+@@ -4968,7 +4968,7 @@ static void *client_thread_main(void *arg_in)
+ 	}
+ out:
+ 	if (adopt_opt && lock_acquire_written)
+-		unlink(adopt_file);
++		(void) unlink(adopt_file);
+ 	return NULL;
+ }
+ 
+@@ -5740,13 +5740,13 @@ static void adopt_locks(void)
+ 	if (count_start_fail || count_adopt_fail)
+ 		goto fail;
+ 
+-	unlink(adopt_file);
++	(void) unlink(adopt_file);
+ 	write_adopt_file();
+ 	log_debug("adopt_locks done");
+ 	return;
+ 
+ fail:
+-	unlink(adopt_file);
++	(void) unlink(adopt_file);
+ 	log_error("adopt_locks failed, reset host");
+ }
+ 
+diff --git a/lib/device/device_id.c b/lib/device/device_id.c
+index 9fd22692c..6fa3b0360 100644
+--- a/lib/device/device_id.c
++++ b/lib/device/device_id.c
+@@ -679,7 +679,7 @@ int device_ids_write(struct cmd_context *cmd)
+ 		goto out;
  	}
  
- 	/* ASCII comparison */
+-	unlink(tmppath); /* in case a previous file was left */
++	(void) unlink(tmppath); /* in case a previous file was left */
+ 
+ 	if (!(fp = fopen(tmppath, "w+"))) {
+ 		log_warn("Cannot open tmp devices_file to write.");
+diff --git a/lib/label/label.c b/lib/label/label.c
+index f305ac735..203c5b6bb 100644
+--- a/lib/label/label.c
++++ b/lib/label/label.c
+@@ -1657,7 +1657,7 @@ bool dev_write_bytes(struct device *dev, uint64_t start, size_t len, void *data)
+ 		_scan_dev_close(dev);
+ 
+ 		dev->flags |= DEV_BCACHE_WRITE;
+-		label_scan_open(dev);
++		(void) label_scan_open(dev); /* checked later */
+ 	}
+ 
+ 	if (dev->bcache_di < 0) {
 
 
