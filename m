@@ -1,59 +1,56 @@
-From: David Teigland <teigland@sourceware.org>
-Date: Wed, 21 Apr 2021 17:12:01 +0000 (GMT)
-Subject: main - man/help: move implied annotation
-Message-ID: <20210421171201.1BEF83892015@sourceware.org>
+From: Zdenek Kabelac <zkabelac@sourceware.org>
+Date: Fri, 23 Apr 2021 21:05:35 +0000 (GMT)
+Subject: main - lvmcache: fix memory leak
+Message-ID: <20210423210535.98130393BC13@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=66dd481f46099dd118136dacfad0e815e781605a
-Commit:        66dd481f46099dd118136dacfad0e815e781605a
-Parent:        d651b340e68d97ada25e558eb50aa40062bba936
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Wed Apr 21 12:05:10 2021 -0500
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Wed Apr 21 12:05:10 2021 -0500
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=5e8307f4bfc6e04cd601fea78129302ce02ffef8
+Commit:        5e8307f4bfc6e04cd601fea78129302ce02ffef8
+Parent:        66dd481f46099dd118136dacfad0e815e781605a
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Fri Apr 23 14:44:57 2021 +0200
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Fri Apr 23 22:54:41 2021 +0200
 
-man/help: move implied annotation
+lvmcache: fix memory leak
 
-from
-[ --type foo (implied) ]
-
-to
-[ --type foo] (implied)
+With commit 0b18c25d934564015402de33e15a267045ed1b8c there
+was introduced  'zalloc()' for allocation of outdates pvs,
+but no matching  'free()' is present.
+Switch to use cmd mempool instead of adding free() code into
+several places.
 ---
- tools/command.c | 8 ++++----
- 1 file changed, 4 insertions(+), 4 deletions(-)
+ WHATS_NEW            | 1 +
+ lib/cache/lvmcache.c | 2 +-
+ 2 files changed, 2 insertions(+), 1 deletion(-)
 
-diff --git a/tools/command.c b/tools/command.c
-index 99661a517..6431e2a50 100644
---- a/tools/command.c
-+++ b/tools/command.c
-@@ -1979,9 +1979,9 @@ void print_usage(struct command *cmd, int longhelp, int desc_first)
- 		if (cmd->autotype) {
- 			printf("\n\t");
- 			if (!cmd->autotype2)
--				printf("[ --type %s (implied) ]", cmd->autotype);
-+				printf("[ --type %s ] (implied)", cmd->autotype);
- 			else
--				printf("[ --type %s|%s (implied) ]", cmd->autotype, cmd->autotype2);
-+				printf("[ --type %s|%s ] (implied)", cmd->autotype, cmd->autotype2);
- 		}
+diff --git a/WHATS_NEW b/WHATS_NEW
+index a51e4a05f..7917c2690 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.03.12 - 
+ ===================================
++  Fix memleak when generating list of outdated pvs.
+   Better hyphenation usage in man pages.
+   Replace use of deprecated security_context_t with char*.
+   Configure supports AIO_LIBS and AIO_CFLAGS.
+diff --git a/lib/cache/lvmcache.c b/lib/cache/lvmcache.c
+index d4acec509..017134d7d 100644
+--- a/lib/cache/lvmcache.c
++++ b/lib/cache/lvmcache.c
+@@ -2818,7 +2818,7 @@ void lvmcache_get_outdated_devs(struct cmd_context *cmd,
+ 	}
  
- 		if (include_extents) {
-@@ -2762,9 +2762,9 @@ static void _print_man_usage(char *lvmname, struct command *cmd)
- 
- 		if (cmd->autotype) {
- 			if (!cmd->autotype2)
--				printf("[ \\fB--type %s\\fP (implied) ]\n", cmd->autotype);
-+				printf("[ \\fB--type %s\\fP ] (implied)\n", cmd->autotype);
- 			else
--				printf("[ \\fB--type %s\\fP|\\fB%s\\fP (implied) ]\n", cmd->autotype, cmd->autotype2);
-+				printf("[ \\fB--type %s\\fP|\\fB%s\\fP ] (implied)\n", cmd->autotype, cmd->autotype2);
- 			printf(".br\n");
- 			sep = 1;
- 		}
+ 	dm_list_iterate_items(info, &vginfo->outdated_infos) {
+-		if (!(devl = zalloc(sizeof(*devl))))
++		if (!(devl = dm_pool_zalloc(cmd->mem, sizeof(*devl))))
+ 			return;
+ 		devl->dev = info->dev;
+ 		dm_list_add(devs, &devl->list);
 
 
