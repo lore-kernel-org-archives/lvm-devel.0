@@ -1,62 +1,42 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Fri, 23 Apr 2021 21:06:12 +0000 (GMT)
-Subject: main - cleanup: indent
-Message-ID: <20210423210612.3D5703945C04@sourceware.org>
+Date: Fri, 23 Apr 2021 21:06:11 +0000 (GMT)
+Subject: main - makefiles: add target for man-generator
+Message-ID: <20210423210611.1BF743B08C2B@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=05eb90db68dcaa89fbfcce52cf122f25488ee69f
-Commit:        05eb90db68dcaa89fbfcce52cf122f25488ee69f
-Parent:        fccd6e034625dade9ca302f2fcd99eb32d90974f
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=fccd6e034625dade9ca302f2fcd99eb32d90974f
+Commit:        fccd6e034625dade9ca302f2fcd99eb32d90974f
+Parent:        348c46c8fcc285b1c7495a3792f2c3b1c2939e8e
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Apr 23 19:45:34 2021 +0200
+AuthorDate:    Fri Apr 23 13:49:52 2021 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Fri Apr 23 23:00:55 2021 +0200
 
-cleanup: indent
+makefiles: add target for man-generator
 
+Add supporting target for recreating man-generator when dependencies needs it.
 ---
- lib/label/label.c | 2 +-
- tools/vgsplit.c   | 4 ++--
- 2 files changed, 3 insertions(+), 3 deletions(-)
+ man/Makefile.in | 4 ++++
+ 1 file changed, 4 insertions(+)
 
-diff --git a/lib/label/label.c b/lib/label/label.c
-index 203c5b6bb..9ebbb4ec9 100644
---- a/lib/label/label.c
-+++ b/lib/label/label.c
-@@ -1097,7 +1097,7 @@ int label_scan(struct cmd_context *cmd)
- 		 * so this will usually do nothing.
- 		 */
- 		label_scan_invalidate(dev);
--	};
-+	}
- 	dev_iter_destroy(iter);
+diff --git a/man/Makefile.in b/man/Makefile.in
+index 7f4664b01..29afc776b 100644
+--- a/man/Makefile.in
++++ b/man/Makefile.in
+@@ -128,6 +128,10 @@ all_man: man
  
- 	/*
-diff --git a/tools/vgsplit.c b/tools/vgsplit.c
-index 8a785bdbd..296248e7c 100644
---- a/tools/vgsplit.c
-+++ b/tools/vgsplit.c
-@@ -311,7 +311,7 @@ static int _move_raids(struct volume_group *vg_from,
- 		/* Ignore, if no allocations on PVs of @vg_to */
- 		if (!lv_is_on_pvs(lv, &vg_to->pvs))
- 			continue;
-- 
+ $(MAN5) $(MAN7) $(MAN8) $(MAN8SO) $(MAN8DM) $(MAN8CLUSTER) $(MAN8SYSTEMD_GENERATORS): Makefile
+ 
++$(MANGENERATOR):
++	@echo "    [MAKE] $<"
++	$(Q) $(MAKE) -C $(top_builddir) tools
 +
- 		/* If allocations are on PVs of @vg_to -> move RAID LV stack across */
- 		if (!_move_one_lv(vg_from, vg_to, lvh, &lvht))
- 			return_0;
-@@ -460,7 +460,7 @@ static int _move_cache(struct volume_group *vg_from,
- 			    !lv_is_on_pvs(meta, &vg_to->pvs))
- 				continue;
- 		}
--		
-+
- 		if (fast && orig &&
- 		    !lv_is_on_pvs(orig, &vg_to->pvs) && !lv_is_on_pvs(fast, &vg_to->pvs))
- 			continue;
+ # Test whether or not the man page generator works
+ $(TESTMAN): $(MANGENERATOR) Makefile
+ 	@echo "    [TSTMAN] $@"
 
 
