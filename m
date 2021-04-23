@@ -1,40 +1,64 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Fri, 23 Apr 2021 21:05:41 +0000 (GMT)
-Subject: main - cov: ensure there is space for 0 at eol
-Message-ID: <20210423210541.5CB2C393BC13@sourceware.org>
+Date: Fri, 23 Apr 2021 21:05:50 +0000 (GMT)
+Subject: main - cov: daemonize avoid leak of FD on error path
+Message-ID: <20210423210550.84F4A394480D@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=d1f9845c96284ee72692b7701a2dd1b86006524e
-Commit:        d1f9845c96284ee72692b7701a2dd1b86006524e
-Parent:        cfe26470e350580249f03025ae6bafbf2ab8e60b
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=d388b36da236e66dd42e59d7b5c9d596d6de1961
+Commit:        d388b36da236e66dd42e59d7b5c9d596d6de1961
+Parent:        d95b26fae0bdab7d306f0dff1d9328a697e041f3
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu Apr 22 15:08:34 2021 +0200
+AuthorDate:    Thu Apr 22 15:05:31 2021 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Fri Apr 23 22:58:45 2021 +0200
+CommitterDate: Fri Apr 23 23:00:55 2021 +0200
 
-cov: ensure there is space for 0 at eol
+cov: daemonize avoid leak of FD on error path
 
-Reserve 1 char for \0.
+Use our common patter for reopening FDs to /dev/null
+that avoids leaking FD on error path.
 ---
- tools/command.c | 2 +-
- 1 file changed, 1 insertion(+), 1 deletion(-)
+ libdm/dm-tools/dmfilemapd.c | 23 +++++++++++++----------
+ 1 file changed, 13 insertions(+), 10 deletions(-)
 
-diff --git a/tools/command.c b/tools/command.c
-index 6431e2a50..1de739aaa 100644
---- a/tools/command.c
-+++ b/tools/command.c
-@@ -2522,7 +2522,7 @@ static const char *_man_long_opt_name(const char *cmdname, int opt_enum)
+diff --git a/libdm/dm-tools/dmfilemapd.c b/libdm/dm-tools/dmfilemapd.c
+index e15f0015f..2a86810ed 100644
+--- a/libdm/dm-tools/dmfilemapd.c
++++ b/libdm/dm-tools/dmfilemapd.c
+@@ -653,18 +653,21 @@ static int _daemonise(struct filemap_monitor *fm)
  	}
  
- 	if (strchr(long_opt, '[')) {
--		for (i = 0; i < sizeof(long_opt_name); ++long_opt, ++i) {
-+		for (i = 0; i < sizeof(long_opt_name) - 1; ++long_opt, ++i) {
- 			if (i < (sizeof(long_opt_name) - 8))
- 				switch(*long_opt) {
- 				case '[':
+ 	if (!_verbose) {
+-		if (close(STDIN_FILENO))
+-			_early_log("Error closing stdin");
+-		if (close(STDOUT_FILENO))
+-			_early_log("Error closing stdout");
+-		if (close(STDERR_FILENO))
+-			_early_log("Error closing stderr");
+-		if ((open("/dev/null", O_RDONLY) < 0) ||
+-	            (open("/dev/null", O_WRONLY) < 0) ||
+-		    (open("/dev/null", O_WRONLY) < 0)) {
+-			_early_log("Error opening stdio streams.");
++		if ((fd = open("/dev/null", O_RDWR)) == -1) {
++			_early_log("Error opening /dev/null.");
+ 			return 0;
+ 		}
++
++		if ((dup2(fd, STDIN_FILENO) == -1) ||
++		    (dup2(fd, STDOUT_FILENO) == -1) ||
++		    (dup2(fd, STDERR_FILENO) == -1)) {
++			if (fd > STDERR_FILENO)
++				(void) close(fd);
++			_early_log("Error redirecting stdin/out/err to null.");
++			return 0;
++		}
++		if (fd > STDERR_FILENO)
++			(void) close(fd);
+ 	}
+ 	/* TODO: Use libdaemon/server/daemon-server.c _daemonise() */
+ 	for (fd = (int) sysconf(_SC_OPEN_MAX) - 1; fd > STDERR_FILENO; fd--) {
 
 
