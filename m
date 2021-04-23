@@ -1,56 +1,63 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Fri, 23 Apr 2021 21:05:35 +0000 (GMT)
-Subject: main - lvmcache: fix memory leak
-Message-ID: <20210423210535.98130393BC13@sourceware.org>
+Date: Fri, 23 Apr 2021 21:05:37 +0000 (GMT)
+Subject: main - device_id: fix memleak and free idname
+Message-ID: <20210423210537.E1949394480D@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=5e8307f4bfc6e04cd601fea78129302ce02ffef8
-Commit:        5e8307f4bfc6e04cd601fea78129302ce02ffef8
-Parent:        66dd481f46099dd118136dacfad0e815e781605a
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=80ef9138726c85e837dbb5a7572178f8b972e300
+Commit:        80ef9138726c85e837dbb5a7572178f8b972e300
+Parent:        65c4f81dc2eebe4096c48159f2fbd1107e284aea
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Apr 23 14:44:57 2021 +0200
+AuthorDate:    Fri Apr 23 00:25:14 2021 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Fri Apr 23 22:54:41 2021 +0200
+CommitterDate: Fri Apr 23 22:57:08 2021 +0200
 
-lvmcache: fix memory leak
+device_id: fix memleak and free idname
 
-With commit 0b18c25d934564015402de33e15a267045ed1b8c there
-was introduced  'zalloc()' for allocation of outdates pvs,
-but no matching  'free()' is present.
-Switch to use cmd mempool instead of adding free() code into
-several places.
+Remove extra code path used only for 'free()'
+and free(idname) on all paths that do not add it to list
+and avoid memleak in few cases.
 ---
- WHATS_NEW            | 1 +
- lib/cache/lvmcache.c | 2 +-
- 2 files changed, 2 insertions(+), 1 deletion(-)
+ lib/device/device_id.c | 13 ++++++++-----
+ 1 file changed, 8 insertions(+), 5 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index a51e4a05f..7917c2690 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.03.12 - 
- ===================================
-+  Fix memleak when generating list of outdated pvs.
-   Better hyphenation usage in man pages.
-   Replace use of deprecated security_context_t with char*.
-   Configure supports AIO_LIBS and AIO_CFLAGS.
-diff --git a/lib/cache/lvmcache.c b/lib/cache/lvmcache.c
-index d4acec509..017134d7d 100644
---- a/lib/cache/lvmcache.c
-+++ b/lib/cache/lvmcache.c
-@@ -2818,7 +2818,7 @@ void lvmcache_get_outdated_devs(struct cmd_context *cmd,
+diff --git a/lib/device/device_id.c b/lib/device/device_id.c
+index cf5867dab..1a9705f04 100644
+--- a/lib/device/device_id.c
++++ b/lib/device/device_id.c
+@@ -1008,21 +1008,24 @@ id_done:
+ 			break;
+ 		}
  	}
+-	if (found_id && !strcmp(id->idname, idname)) {
+-		free((char *)idname);
+-	} else if (found_id && strcmp(id->idname, idname)) {
++
++	if (found_id && idname && strcmp(id->idname, idname)) {
+ 		dm_list_del(&id->list);
+ 		free_did(id);
+ 		found_id = 0;
+ 	}
+ 	if (!found_id) {
+-		if (!(id = zalloc(sizeof(struct dev_id))))
++		if (!(id = zalloc(sizeof(struct dev_id)))) {
++			free((char *)idname);
+ 			return_0;
++		}
+ 		id->idtype = idtype;
+ 		id->idname = (char *)idname;
+ 		id->dev = dev;
+ 		dm_list_add(&dev->ids, &id->list);
+-	}
++	} else
++		free((char*)idname);
++
+ 	dev->id = id;
+ 	dev->flags |= DEV_MATCHED_USE_ID;
  
- 	dm_list_iterate_items(info, &vginfo->outdated_infos) {
--		if (!(devl = zalloc(sizeof(*devl))))
-+		if (!(devl = dm_pool_zalloc(cmd->mem, sizeof(*devl))))
- 			return;
- 		devl->dev = info->dev;
- 		dm_list_add(devs, &devl->list);
 
 
