@@ -1,1358 +1,307 @@
 From: Leo Yan <leo.yan@linaro.org>
-Date: Sun, 25 Apr 2021 10:22:37 +0800
-Subject: [LVM2 RFCv1 1/5] lvmlockd: idm: Introduce new locking scheme
+Date: Sun, 25 Apr 2021 10:22:39 +0800
+Subject: [LVM2 RFCv1 3/5] lib: locking: Add new type "idm"
 In-Reply-To: <20210425022241.5055-1-leo.yan@linaro.org>
 References: <20210425022241.5055-1-leo.yan@linaro.org>
-Message-ID: <20210425022241.5055-2-leo.yan@linaro.org>
+Message-ID: <20210425022241.5055-4-leo.yan@linaro.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Alongside the existed locking schemes of DLM and sanlock, this patch is
-to introduce new locking scheme: In-Drive-Mutex (IDM).
+We can consider the drive firmware a server to handle the locking
+request from nodes, this essentially is a client-server model.
+DLM uses the kernel as a central place to manage locks, so it also
+complies with client-server model for locking operations.  This is
+why IDM and DLM are similar with each other for their wrappers.
 
-With the IDM support in the drive, the locks are resident in the drive,
-thus, the locking lease is maintained in a central place: the drive
-firmware.  We can consider this is a typical client-server model,
-every host (or node) in the server cluster launches the request for
-leasing mutex to a drive firmware, the drive firmware works as an
-arbitrator to grant the mutex to a requester and it can reject other
-applicants if the mutex has been acquired.  To satisfy the LVM
-activation for different modes, IDM supports two locking modes:
-exclusive and shareable.
-
-Every IDM is identified with two IDs, one is the host ID and another is
-the resource ID.  The resource ID is a unique identifier for what the
-resource it's protected, in the integration with lvmlockd, the resource
-ID is combined with VG's UUID and LV's UUID; for the global locking,
-the bytes in resource ID are all zeros, and for the VG locking, the
-LV's UUID is set as zero.   Every host can generate a random UUID and
-use it as the host ID for the SCSI command, this ID is used to clarify
-the ownership for mutex.
-
-For easily invoking the IDM commands to drive, like other locking
-scheme (e.g. sanlock), a daemon program named IDM lock manager is
-created, so the detailed IDM SCSI commands are encapsulated in the
-daemon, and lvmlockd uses the wrapper APIs to communicate with the
-daemon program.
-
-This patch introduces the IDM locking wrapper layer, it forwards the
-locking requests from lvmlockd to the IDM lock manager, and returns the
-result from drives' responding.
-
-One thing should be mentioned is the IDM's LVB.  IDM supports LVB to max
-7 bytes when stores into the drive, the most significant byte of 8 bytes
-is reserved for control bits.  For this reason, the patch maps the
-timestamp in macrosecond unit with its cached LVB, essentially, if any
-timestamp was updated by other nodes, that means the local LVB is
-invalidate thus the metadata should be invlidated.  When the timestamp
-is stored into drive's LVB, it's possbile to cause time-going-backwards
-issue, which is introduced by the time precision or missing
-synchronization acrossing over multiple nodes.  So the IDM wrapper fixes
-up the timestamp by increment 1 to the latest value and write back into
-drive.
+This patch largely works by generalizing the DLM code paths and then
+providing degeneralized functions as wrappers for both IDM and DLM.
 
 Signed-off-by: Leo Yan <leo.yan@linaro.org>
 ---
- configure                            | 173 ++++++
- configure.ac                         |  20 +
- daemons/lvmlockd/Makefile.in         |   5 +
- daemons/lvmlockd/lvmlockd-idm.c      | 837 +++++++++++++++++++++++++++
- daemons/lvmlockd/lvmlockd-internal.h | 108 ++++
- 5 files changed, 1143 insertions(+)
- create mode 100644 daemons/lvmlockd/lvmlockd-idm.c
+ lib/display/display.c            |  4 ++
+ lib/locking/lvmlockd.c           | 72 +++++++++++++++++++++++++++-----
+ lib/metadata/metadata-exported.h |  1 +
+ lib/metadata/metadata.c          | 12 +++++-
+ 4 files changed, 78 insertions(+), 11 deletions(-)
 
-diff --git a/configure b/configure
-index 4c38cbebb..df9aa2af6 100755
---- a/configure
-+++ b/configure
-@@ -745,6 +745,7 @@ BUILD_DMFILEMAPD
- BUILD_LOCKDDLM_CONTROL
- BUILD_LOCKDDLM
- BUILD_LOCKDSANLOCK
-+BUILD_LOCKDIDM
- BUILD_LVMLOCKD
- BUILD_LVMPOLLD
- BUILD_LVMDBUSD
-@@ -780,6 +781,8 @@ LOCKD_DLM_LIBS
- LOCKD_DLM_CFLAGS
- LOCKD_SANLOCK_LIBS
- LOCKD_SANLOCK_CFLAGS
-+LOCKD_IDM_LIBS
-+LOCKD_IDM_CFLAGS
- VALGRIND_LIBS
- VALGRIND_CFLAGS
- GENPNG
-@@ -940,6 +943,7 @@ enable_lvmpolld
- enable_lvmlockd_sanlock
- enable_lvmlockd_dlm
- enable_lvmlockd_dlmcontrol
-+enable_lvmlockd_idm
- enable_use_lvmlockd
- with_lvmlockd_pidfile
- enable_use_lvmpolld
-@@ -1011,6 +1015,8 @@ LOCKD_DLM_CFLAGS
- LOCKD_DLM_LIBS
- LOCKD_DLM_CONTROL_CFLAGS
- LOCKD_DLM_CONTROL_LIBS
-+LOCKD_IDM_CFLAGS
-+LOCKD_IDM_LIBS
- NOTIFY_DBUS_CFLAGS
- NOTIFY_DBUS_LIBS
- BLKID_CFLAGS
-@@ -1659,6 +1665,7 @@ Optional Features:
-   --enable-lvmlockd-dlm   enable the LVM lock daemon using dlm
-   --enable-lvmlockd-dlmcontrol
-                           enable lvmlockd remote refresh using libdlmcontrol
-+  --enable-lvmlockd-idm   enable the LVM lock daemon using idm
-   --disable-use-lvmlockd  disable usage of LVM lock daemon
-   --disable-use-lvmpolld  disable usage of LVM Poll Daemon
-   --enable-dmfilemapd     enable the dmstats filemap daemon
-@@ -1810,6 +1817,10 @@ Some influential environment variables:
-               C compiler flags for LOCKD_DLM_CONTROL, overriding pkg-config
-   LOCKD_DLM_CONTROL_LIBS
-               linker flags for LOCKD_DLM_CONTROL, overriding pkg-config
-+  LOCKD_IDM_CFLAGS
-+              C compiler flags for LOCKD_IDM, overriding pkg-config
-+  LOCKD_IDM_LIBS
-+              linker flags for LOCKD_IDM, overriding pkg-config
-   NOTIFY_DBUS_CFLAGS
-               C compiler flags for NOTIFY_DBUS, overriding pkg-config
-   NOTIFY_DBUS_LIBS
-@@ -3104,6 +3115,7 @@ case "$host_os" in
- 		LOCKDSANLOCK=no
- 		LOCKDDLM=no
- 		LOCKDDLM_CONTROL=no
-+		LOCKDIDM=no
- 		ODIRECT=yes
- 		DM_IOCTLS=yes
- 		SELINUX=yes
-@@ -11121,6 +11133,167 @@ $as_echo "#define LOCKDDLM_CONTROL_SUPPORT 1" >>confdefs.h
- 	BUILD_LVMLOCKD=yes
- fi
+diff --git a/lib/display/display.c b/lib/display/display.c
+index f0f03c0a5..f9c9ef836 100644
+--- a/lib/display/display.c
++++ b/lib/display/display.c
+@@ -95,6 +95,8 @@ const char *get_lock_type_string(lock_type_t lock_type)
+ 		return "dlm";
+ 	case LOCK_TYPE_SANLOCK:
+ 		return "sanlock";
++	case LOCK_TYPE_IDM:
++		return "idm";
+ 	}
+ 	return "invalid";
+ }
+@@ -111,6 +113,8 @@ lock_type_t get_lock_type_from_string(const char *str)
+ 		return LOCK_TYPE_DLM;
+ 	if (!strcmp(str, "sanlock"))
+ 		return LOCK_TYPE_SANLOCK;
++	if (!strcmp(str, "idm"))
++		return LOCK_TYPE_IDM;
+ 	return LOCK_TYPE_INVALID;
+ }
  
-+################################################################################
-+{ $as_echo "$as_me:${as_lineno-$LINENO}: checking whether to build lvmlockdidm" >&5
-+$as_echo_n "checking whether to build lvmlockdidm... " >&6; }
-+# Check whether --enable-lvmlockd-idm was given.
-+if test "${enable_lvmlockd_idm+set}" = set; then :
-+  enableval=$enable_lvmlockd_idm; LOCKDIDM=$enableval
-+fi
-+
-+{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $LOCKDIDM" >&5
-+$as_echo "$LOCKDIDM" >&6; }
-+
-+BUILD_LOCKDIDM=$LOCKDIDM
-+
-+if test "$BUILD_LOCKDIDM" = yes; then
-+
-+pkg_failed=no
-+{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for LOCKD_IDM" >&5
-+$as_echo_n "checking for LOCKD_IDM... " >&6; }
-+
-+if test -n "$LOCKD_IDM_CFLAGS"; then
-+    pkg_cv_LOCKD_IDM_CFLAGS="$LOCKD_IDM_CFLAGS"
-+ elif test -n "$PKG_CONFIG"; then
-+    if test -n "$PKG_CONFIG" && \
-+    { { $as_echo "$as_me:${as_lineno-$LINENO}: \$PKG_CONFIG --exists --print-errors \"libseagate_ilm >= 0.1.0\""; } >&5
-+  ($PKG_CONFIG --exists --print-errors "libseagate_ilm >= 0.1.0") 2>&5
-+  ac_status=$?
-+  $as_echo "$as_me:${as_lineno-$LINENO}: \$? = $ac_status" >&5
-+  test $ac_status = 0; }; then
-+  pkg_cv_LOCKD_IDM_CFLAGS=`$PKG_CONFIG --cflags "libseagate_ilm >= 0.1.0" 2>/dev/null`
-+		      test "x$?" != "x0" && pkg_failed=yes
-+else
-+  pkg_failed=yes
-+fi
-+ else
-+    pkg_failed=untried
-+fi
-+if test -n "$LOCKD_IDM_LIBS"; then
-+    pkg_cv_LOCKD_IDM_LIBS="$LOCKD_IDM_LIBS"
-+ elif test -n "$PKG_CONFIG"; then
-+    if test -n "$PKG_CONFIG" && \
-+    { { $as_echo "$as_me:${as_lineno-$LINENO}: \$PKG_CONFIG --exists --print-errors \"libseagate_ilm >= 0.1.0\""; } >&5
-+  ($PKG_CONFIG --exists --print-errors "libseagate_ilm >= 0.1.0") 2>&5
-+  ac_status=$?
-+  $as_echo "$as_me:${as_lineno-$LINENO}: \$? = $ac_status" >&5
-+  test $ac_status = 0; }; then
-+  pkg_cv_LOCKD_IDM_LIBS=`$PKG_CONFIG --libs "libseagate_ilm >= 0.1.0" 2>/dev/null`
-+		      test "x$?" != "x0" && pkg_failed=yes
-+else
-+  pkg_failed=yes
-+fi
-+ else
-+    pkg_failed=untried
-+fi
-+
-+
-+
-+if test $pkg_failed = yes; then
-+	{ $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
-+$as_echo "no" >&6; }
-+
-+if $PKG_CONFIG --atleast-pkgconfig-version 0.20; then
-+        _pkg_short_errors_supported=yes
-+else
-+        _pkg_short_errors_supported=no
-+fi
-+        if test $_pkg_short_errors_supported = yes; then
-+	        LOCKD_IDM_PKG_ERRORS=`$PKG_CONFIG --short-errors --print-errors --cflags --libs "libseagate_ilm >= 0.1.0" 2>&1`
-+        else
-+	        LOCKD_IDM_PKG_ERRORS=`$PKG_CONFIG --print-errors --cflags --libs "libseagate_ilm >= 0.1.0" 2>&1`
-+        fi
-+	# Put the nasty error message in config.log where it belongs
-+	echo "$LOCKD_IDM_PKG_ERRORS" >&5
-+
-+	$bailout
-+elif test $pkg_failed = untried; then
-+	{ $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
-+$as_echo "no" >&6; }
-+	$bailout
-+else
-+	LOCKD_IDM_CFLAGS=$pkg_cv_LOCKD_IDM_CFLAGS
-+	LOCKD_IDM_LIBS=$pkg_cv_LOCKD_IDM_LIBS
-+        { $as_echo "$as_me:${as_lineno-$LINENO}: result: yes" >&5
-+$as_echo "yes" >&6; }
-+fi
-+
-+pkg_failed=no
-+{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for BLKID" >&5
-+$as_echo_n "checking for BLKID... " >&6; }
-+
-+if test -n "$BLKID_CFLAGS"; then
-+    pkg_cv_BLKID_CFLAGS="$BLKID_CFLAGS"
-+ elif test -n "$PKG_CONFIG"; then
-+    if test -n "$PKG_CONFIG" && \
-+    { { $as_echo "$as_me:${as_lineno-$LINENO}: \$PKG_CONFIG --exists --print-errors \"blkid >= 2.24\""; } >&5
-+  ($PKG_CONFIG --exists --print-errors "blkid >= 2.24") 2>&5
-+  ac_status=$?
-+  $as_echo "$as_me:${as_lineno-$LINENO}: \$? = $ac_status" >&5
-+  test $ac_status = 0; }; then
-+  pkg_cv_BLKID_CFLAGS=`$PKG_CONFIG --cflags "blkid >= 2.24" 2>/dev/null`
-+		      test "x$?" != "x0" && pkg_failed=yes
-+else
-+  pkg_failed=yes
-+fi
-+ else
-+    pkg_failed=untried
-+fi
-+if test -n "$BLKID_LIBS"; then
-+    pkg_cv_BLKID_LIBS="$BLKID_LIBS"
-+ elif test -n "$PKG_CONFIG"; then
-+    if test -n "$PKG_CONFIG" && \
-+    { { $as_echo "$as_me:${as_lineno-$LINENO}: \$PKG_CONFIG --exists --print-errors \"blkid >= 2.24\""; } >&5
-+  ($PKG_CONFIG --exists --print-errors "blkid >= 2.24") 2>&5
-+  ac_status=$?
-+  $as_echo "$as_me:${as_lineno-$LINENO}: \$? = $ac_status" >&5
-+  test $ac_status = 0; }; then
-+  pkg_cv_BLKID_LIBS=`$PKG_CONFIG --libs "blkid >= 2.24" 2>/dev/null`
-+		      test "x$?" != "x0" && pkg_failed=yes
-+else
-+  pkg_failed=yes
-+fi
-+ else
-+    pkg_failed=untried
-+fi
-+
-+
-+
-+if test $pkg_failed = yes; then
-+   	{ $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
-+$as_echo "no" >&6; }
-+
-+if $PKG_CONFIG --atleast-pkgconfig-version 0.20; then
-+        _pkg_short_errors_supported=yes
-+else
-+        _pkg_short_errors_supported=no
-+fi
-+        if test $_pkg_short_errors_supported = yes; then
-+	        BLKID_PKG_ERRORS=`$PKG_CONFIG --short-errors --print-errors --cflags --libs "blkid >= 2.24" 2>&1`
-+        else
-+	        BLKID_PKG_ERRORS=`$PKG_CONFIG --print-errors --cflags --libs "blkid >= 2.24" 2>&1`
-+        fi
-+	# Put the nasty error message in config.log where it belongs
-+	echo "$BLKID_PKG_ERRORS" >&5
-+
-+	$bailout
-+elif test $pkg_failed = untried; then
-+     	{ $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
-+$as_echo "no" >&6; }
-+	$bailout
-+else
-+	BLKID_CFLAGS=$pkg_cv_BLKID_CFLAGS
-+	BLKID_LIBS=$pkg_cv_BLKID_LIBS
-+        { $as_echo "$as_me:${as_lineno-$LINENO}: result: yes" >&5
-+$as_echo "yes" >&6; }
-+	HAVE_LOCKD_IDM=yes
-+fi
-+
-+$as_echo "#define LOCKDIDM_SUPPORT 1" >>confdefs.h
-+
-+	BUILD_LVMLOCKD=yes
-+fi
-+
- ################################################################################
- { $as_echo "$as_me:${as_lineno-$LINENO}: checking whether to build lvmlockd" >&5
- $as_echo_n "checking whether to build lvmlockd... " >&6; }
-diff --git a/configure.ac b/configure.ac
-index ee21b879d..8a2ccf912 100644
---- a/configure.ac
-+++ b/configure.ac
-@@ -43,6 +43,7 @@ case "$host_os" in
- 		LOCKDSANLOCK=no
- 		LOCKDDLM=no
- 		LOCKDDLM_CONTROL=no
-+		LOCKDIDM=no
- 		ODIRECT=yes
- 		DM_IOCTLS=yes
- 		SELINUX=yes
-@@ -960,6 +961,25 @@ if test "$BUILD_LOCKDDLM_CONTROL" = yes; then
- 	BUILD_LVMLOCKD=yes
- fi
+diff --git a/lib/locking/lvmlockd.c b/lib/locking/lvmlockd.c
+index 3b9abd6bf..268f9fc2f 100644
+--- a/lib/locking/lvmlockd.c
++++ b/lib/locking/lvmlockd.c
+@@ -553,7 +553,8 @@ static int _deactivate_sanlock_lv(struct cmd_context *cmd, struct volume_group *
+ 	return 1;
+ }
  
-+################################################################################
-+dnl -- Build lvmlockdidm
-+AC_MSG_CHECKING(whether to build lvmlockdidm)
-+AC_ARG_ENABLE(lvmlockd-idm,
-+	      AC_HELP_STRING([--enable-lvmlockd-idm],
-+			     [enable the LVM lock daemon using idm]),
-+	      LOCKDIDM=$enableval)
-+AC_MSG_RESULT($LOCKDIDM)
-+
-+BUILD_LOCKDIDM=$LOCKDIDM
-+
-+dnl -- Look for Seagate IDM libraries
-+if test "$BUILD_LOCKDIDM" = yes; then
-+	PKG_CHECK_MODULES(LOCKD_IDM, libseagate_ilm >= 0.1.0, [HAVE_LOCKD_IDM=yes], $bailout)
-+	PKG_CHECK_MODULES(BLKID, blkid >= 2.24, [HAVE_LOCKD_IDM=yes], $bailout)
-+	AC_DEFINE([LOCKDIDM_SUPPORT], 1, [Define to 1 to include code that uses lvmlockd IDM option.])
-+	BUILD_LVMLOCKD=yes
-+fi
-+
- ################################################################################
- dnl -- Build lvmlockd
- AC_MSG_CHECKING(whether to build lvmlockd)
-diff --git a/daemons/lvmlockd/Makefile.in b/daemons/lvmlockd/Makefile.in
-index bd577d1e6..578292166 100644
---- a/daemons/lvmlockd/Makefile.in
-+++ b/daemons/lvmlockd/Makefile.in
-@@ -30,6 +30,11 @@ ifeq ("@BUILD_LOCKDDLM@", "yes")
-   LOCK_LIBS += -ldlmcontrol
- endif
+-static int _init_vg_dlm(struct cmd_context *cmd, struct volume_group *vg)
++static int _init_vg(struct cmd_context *cmd, struct volume_group *vg,
++		    const char *lock_type)
+ {
+ 	daemon_reply reply;
+ 	const char *reply_str;
+@@ -569,7 +570,7 @@ static int _init_vg_dlm(struct cmd_context *cmd, struct volume_group *vg)
+ 	reply = _lockd_send("init_vg",
+ 				"pid = " FMTd64, (int64_t) getpid(),
+ 				"vg_name = %s", vg->name,
+-				"vg_lock_type = %s", "dlm",
++				"vg_lock_type = %s", lock_type,
+ 				NULL);
  
-+ifeq ("@BUILD_LOCKDIDM@", "yes")
-+  SOURCES += lvmlockd-idm.c
-+  LOCK_LIBS += -lseagate_ilm -lblkid
-+endif
-+
- SOURCES2 = lvmlockctl.c
+ 	if (!_lockd_result(reply, &result, NULL)) {
+@@ -589,10 +590,12 @@ static int _init_vg_dlm(struct cmd_context *cmd, struct volume_group *vg)
+ 		log_error("VG %s init failed: invalid parameters for dlm", vg->name);
+ 		break;
+ 	case -EMANAGER:
+-		log_error("VG %s init failed: lock manager dlm is not running", vg->name);
++		log_error("VG %s init failed: lock manager %s is not running",
++			  vg->name, lock_type);
+ 		break;
+ 	case -EPROTONOSUPPORT:
+-		log_error("VG %s init failed: lock manager dlm is not supported by lvmlockd", vg->name);
++		log_error("VG %s init failed: lock manager %s is not supported by lvmlockd",
++			  vg->name, lock_type);
+ 		break;
+ 	case -EEXIST:
+ 		log_error("VG %s init failed: a lockspace with the same name exists", vg->name);
+@@ -616,7 +619,7 @@ static int _init_vg_dlm(struct cmd_context *cmd, struct volume_group *vg)
+ 		goto out;
+ 	}
  
- TARGETS = lvmlockd lvmlockctl
-diff --git a/daemons/lvmlockd/lvmlockd-idm.c b/daemons/lvmlockd/lvmlockd-idm.c
-new file mode 100644
-index 000000000..e9f50535c
---- /dev/null
-+++ b/daemons/lvmlockd/lvmlockd-idm.c
-@@ -0,0 +1,837 @@
-+/*
-+ * Copyright (C) 2020-2021 Seagate Ltd.
-+ *
-+ * This file is part of LVM2.
-+ *
-+ * This copyrighted material is made available to anyone wishing to use,
-+ * modify, copy, or redistribute it subject to the terms and conditions
-+ * of the GNU Lesser General Public License v.2.1.
-+ */
-+
-+#define _XOPEN_SOURCE 500  /* pthread */
-+#define _ISOC99_SOURCE
-+
-+#include "tools/tool.h"
-+
-+#include "daemon-server.h"
-+#include "lib/mm/xlate.h"
-+
-+#include "lvmlockd-internal.h"
-+#include "daemons/lvmlockd/lvmlockd-client.h"
-+
-+#include "ilm.h"
-+
-+#include <blkid/blkid.h>
-+#include <ctype.h>
-+#include <dirent.h>
-+#include <errno.h>
-+#include <poll.h>
-+#include <regex.h>
-+#include <stddef.h>
-+#include <syslog.h>
-+#include <sys/sysmacros.h>
-+#include <time.h>
-+
-+#define IDM_TIMEOUT	60000	/* unit: millisecond, 60 seconds */
-+
-+/*
-+ * Each lockspace thread has its own In-Drive Mutex (IDM) lock manager's
-+ * connection.  After established socket connection, the lockspace has
-+ * been created in IDM lock manager and afterwards use the socket file
-+ * descriptor to send any requests for lock related operations.
-+ */
-+
-+struct lm_idm {
-+	int sock;	/* IDM lock manager connection */
-+};
-+
-+struct rd_idm {
-+	struct idm_lock_id id;
-+	struct idm_lock_op op;
-+	uint64_t vb_timestamp;
-+	struct val_blk *vb;
-+};
-+
-+int lm_data_size_idm(void)
+-	vg->lock_type = "dlm";
++	vg->lock_type = lock_type;
+ 	vg->lock_args = vg_lock_args;
+ 
+ 	if (!vg_write(vg) || !vg_commit(vg)) {
+@@ -631,6 +634,16 @@ out:
+ 	return ret;
+ }
+ 
++static int _init_vg_dlm(struct cmd_context *cmd, struct volume_group *vg)
 +{
-+	return sizeof(struct rd_idm);
++	return _init_vg(cmd, vg, "dlm");
 +}
 +
-+static uint64_t read_utc_us(void)
++static int _init_vg_idm(struct cmd_context *cmd, struct volume_group *vg)
 +{
-+	struct timespec cur_time;
-+
-+	clock_gettime(CLOCK_REALTIME, &cur_time);
-+
-+	/*
-+	 * Convert to microseconds unit.  IDM reserves the MSB in 8 bytes
-+	 * and the low 56 bits are used for timestamp; 56 bits can support
-+	 * calendar year to 2284, so it has 260 years for overflow.  Thus it
-+	 * is quite safe for overflow issue when wrote this code.
-+	 */
-+	return cur_time.tv_sec * 1000000 + cur_time.tv_nsec / 1000;
++	return _init_vg(cmd, vg, "idm");
 +}
 +
-+static int uuid_read_format(char *uuid_str, const char *buffer)
+ static int _init_vg_sanlock(struct cmd_context *cmd, struct volume_group *vg, int lv_lock_count)
+ {
+ 	daemon_reply reply;
+@@ -794,7 +807,7 @@ out:
+ 
+ /* called after vg_remove on disk */
+ 
+-static int _free_vg_dlm(struct cmd_context *cmd, struct volume_group *vg)
++static int _free_vg(struct cmd_context *cmd, struct volume_group *vg)
+ {
+ 	daemon_reply reply;
+ 	uint32_t lockd_flags = 0;
+@@ -820,16 +833,27 @@ static int _free_vg_dlm(struct cmd_context *cmd, struct volume_group *vg)
+ 	}
+ 
+ 	if (!ret)
+-		log_error("_free_vg_dlm lvmlockd result %d", result);
++		log_error("%s: lock type %s lvmlockd result %d",
++			  __func__, vg->lock_type, result);
+ 
+ 	daemon_reply_destroy(reply);
+ 
+ 	return 1;
+ }
+ 
++static int _free_vg_dlm(struct cmd_context *cmd, struct volume_group *vg)
 +{
-+	int out = 0;
++	return _free_vg(cmd, vg);
++}
 +
-+	/* just strip out any dashes */
-+	while (*buffer) {
++static int _free_vg_idm(struct cmd_context *cmd, struct volume_group *vg)
++{
++	return _free_vg(cmd, vg);
++}
 +
-+		if (*buffer == '-') {
-+			buffer++;
-+			continue;
+ /* called before vg_remove on disk */
+ 
+-static int _busy_vg_dlm(struct cmd_context *cmd, struct volume_group *vg)
++static int _busy_vg(struct cmd_context *cmd, struct volume_group *vg)
+ {
+ 	daemon_reply reply;
+ 	uint32_t lockd_flags = 0;
+@@ -864,13 +888,24 @@ static int _busy_vg_dlm(struct cmd_context *cmd, struct volume_group *vg)
+ 	}
+ 
+ 	if (!ret)
+-		log_error("_busy_vg_dlm lvmlockd result %d", result);
++		log_error("%s: lock type %s lvmlockd result %d", __func__,
++			  vg->lock_type, result);
+ 
+  out:
+ 	daemon_reply_destroy(reply);
+ 	return ret;
+ }
+ 
++static int _busy_vg_dlm(struct cmd_context *cmd, struct volume_group *vg)
++{
++	return _busy_vg(cmd, vg);
++}
++
++static int _busy_vg_idm(struct cmd_context *cmd, struct volume_group *vg)
++{
++	return _busy_vg(cmd, vg);
++}
++
+ /* called before vg_remove on disk */
+ 
+ static int _free_vg_sanlock(struct cmd_context *cmd, struct volume_group *vg)
+@@ -976,6 +1011,8 @@ int lockd_init_vg(struct cmd_context *cmd, struct volume_group *vg,
+ 		return _init_vg_dlm(cmd, vg);
+ 	case LOCK_TYPE_SANLOCK:
+ 		return _init_vg_sanlock(cmd, vg, lv_lock_count);
++	case LOCK_TYPE_IDM:
++		return _init_vg_idm(cmd, vg);
+ 	default:
+ 		log_error("Unknown lock_type.");
+ 		return 0;
+@@ -1017,7 +1054,8 @@ int lockd_free_vg_before(struct cmd_context *cmd, struct volume_group *vg,
+ 	 * When removing (not changing), each LV is locked
+ 	 * when it is removed, they do not need checking here.
+ 	 */
+-	if (lock_type_num == LOCK_TYPE_DLM || lock_type_num == LOCK_TYPE_SANLOCK) {
++	if (lock_type_num == LOCK_TYPE_DLM || lock_type_num == LOCK_TYPE_SANLOCK ||
++	    lock_type_num == LOCK_TYPE_IDM) {
+ 		if (changing && !_lockd_all_lvs(cmd, vg)) {
+ 			log_error("Cannot change VG %s with active LVs", vg->name);
+ 			return 0;
+@@ -1041,6 +1079,9 @@ int lockd_free_vg_before(struct cmd_context *cmd, struct volume_group *vg,
+ 	case LOCK_TYPE_SANLOCK:
+ 		/* returning an error will prevent vg_remove() */
+ 		return _free_vg_sanlock(cmd, vg);
++	case LOCK_TYPE_IDM:
++		/* returning an error will prevent vg_remove() */
++		return _busy_vg_idm(cmd, vg);
+ 	default:
+ 		log_error("Unknown lock_type.");
+ 		return 0;
+@@ -1059,6 +1100,9 @@ void lockd_free_vg_final(struct cmd_context *cmd, struct volume_group *vg)
+ 	case LOCK_TYPE_DLM:
+ 		_free_vg_dlm(cmd, vg);
+ 		break;
++	case LOCK_TYPE_IDM:
++		_free_vg_idm(cmd, vg);
++		break;
+ 	default:
+ 		log_error("Unknown lock_type.");
+ 	}
+@@ -2679,6 +2723,7 @@ int lockd_init_lv(struct cmd_context *cmd, struct volume_group *vg, struct logic
+ 		return 1;
+ 	case LOCK_TYPE_SANLOCK:
+ 	case LOCK_TYPE_DLM:
++	case LOCK_TYPE_IDM:
+ 		break;
+ 	default:
+ 		log_error("lockd_init_lv: unknown lock_type.");
+@@ -2821,6 +2866,8 @@ int lockd_init_lv(struct cmd_context *cmd, struct volume_group *vg, struct logic
+ 		lv->lock_args = "pending";
+ 	else if (!strcmp(vg->lock_type, "dlm"))
+ 		lv->lock_args = "dlm";
++	else if (!strcmp(vg->lock_type, "idm"))
++		lv->lock_args = "idm";
+ 
+ 	return 1;
+ }
+@@ -2836,6 +2883,7 @@ int lockd_free_lv(struct cmd_context *cmd, struct volume_group *vg,
+ 		return 1;
+ 	case LOCK_TYPE_DLM:
+ 	case LOCK_TYPE_SANLOCK:
++	case LOCK_TYPE_IDM:
+ 		if (!lock_args)
+ 			return 1;
+ 		return _free_lv(cmd, vg, lv_name, lv_id, lock_args);
+@@ -3007,6 +3055,10 @@ const char *lockd_running_lock_type(struct cmd_context *cmd, int *found_multiple
+ 		log_debug("lvmlockd found dlm");
+ 		lock_type = "dlm";
+ 		break;
++	case LOCK_TYPE_IDM:
++		log_debug("lvmlockd found idm");
++		lock_type = "idm";
++		break;
+ 	default:
+ 		log_error("Failed to find a running lock manager.");
+ 		break;
+diff --git a/lib/metadata/metadata-exported.h b/lib/metadata/metadata-exported.h
+index 874088993..80755c2a3 100644
+--- a/lib/metadata/metadata-exported.h
++++ b/lib/metadata/metadata-exported.h
+@@ -353,6 +353,7 @@ typedef enum {
+ 	LOCK_TYPE_CLVM = 1,
+ 	LOCK_TYPE_DLM = 2,
+ 	LOCK_TYPE_SANLOCK = 3,
++	LOCK_TYPE_IDM = 4,
+ } lock_type_t;
+ 
+ struct cmd_context;
+diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
+index ed1c05f75..b815eda87 100644
+--- a/lib/metadata/metadata.c
++++ b/lib/metadata/metadata.c
+@@ -2235,6 +2235,13 @@ static int _validate_lv_lock_args(struct logical_volume *lv)
+ 				   lv->vg->name, display_lvname(lv), lv->lock_args);
+ 			r = 0;
+ 		}
++
++	} else if (!strcmp(lv->vg->lock_type, "idm")) {
++		if (strcmp(lv->lock_args, "idm")) {
++			log_error(INTERNAL_ERROR "LV %s/%s has invalid lock_args \"%s\"",
++				   lv->vg->name, display_lvname(lv), lv->lock_args);
++			r = 0;
 +		}
-+
-+		if (out >= 32) {
-+			log_error("Too many characters to be uuid.");
-+			return -1;
-+		}
-+
-+		uuid_str[out++] = *buffer;
-+		buffer++;
-+	}
-+
-+	if (out != 32) {
-+		log_error("Couldn't read uuid: incorrect number of "
-+			  "characters.");
-+		return -1;
-+	}
-+
-+	return 0;
-+}
-+
-+#define SYSFS_ROOT		"/sys"
-+#define BUS_SCSI_DEVS		"/bus/scsi/devices"
-+
-+static struct idm_lock_op glb_lock_op;
-+
-+static void lm_idm_free_dir_list(struct dirent **dir_list, int dir_num)
-+{
-+	int i;
-+
-+	for (i = 0; i < dir_num; ++i)
-+		free(dir_list[i]);
-+	free(dir_list);
-+}
-+
-+static int lm_idm_scsi_directory_select(const struct dirent *s)
-+{
-+	regex_t regex;
-+	int ret;
-+
-+	/* Only select directory with the format x:x:x:x */
-+	ret = regcomp(&regex, "^[0-9]+:[0-9]+:[0-9]+:[0-9]+$", REG_EXTENDED);
-+	if (ret)
-+		return 0;
-+
-+	ret = regexec(&regex, s->d_name, 0, NULL, 0);
-+	if (!ret) {
-+		regfree(&regex);
+ 	}
+ 
+ 	return r;
+@@ -2582,7 +2589,8 @@ int vg_validate(struct volume_group *vg)
+ 			r = 0;
+ 		}
+ 
+-		if (strcmp(vg->lock_type, "sanlock") && strcmp(vg->lock_type, "dlm")) {
++		if (strcmp(vg->lock_type, "sanlock") && strcmp(vg->lock_type, "dlm") &&
++		    strcmp(vg->lock_type, "idm")) {
+ 			log_error(INTERNAL_ERROR "VG %s has unknown lock_type %s",
+ 				  vg->name, vg->lock_type);
+ 			r = 0;
+@@ -4368,6 +4376,8 @@ int is_lockd_type(const char *lock_type)
+ 		return 1;
+ 	if (!strcmp(lock_type, "sanlock"))
+ 		return 1;
++	if (!strcmp(lock_type, "idm"))
 +		return 1;
-+	}
-+
-+	regfree(&regex);
-+	return 0;
-+}
-+
-+static int lm_idm_scsi_find_block_dirctory(const char *block_path)
-+{
-+	struct stat stats;
-+
-+	if ((stat(block_path, &stats) >= 0) && S_ISDIR(stats.st_mode))
-+		return 0;
-+
-+	return -1;
-+}
-+
-+static int lm_idm_scsi_block_node_select(const struct dirent *s)
-+{
-+	if (DT_LNK != s->d_type && DT_DIR != s->d_type)
-+		return 0;
-+
-+	if (DT_DIR == s->d_type) {
-+		/* Skip this directory: '.' and parent: '..' */
-+		if (!strcmp(s->d_name, ".") || !strcmp(s->d_name, ".."))
-+			return 0;
-+	}
-+
-+	return 1;
-+}
-+
-+static int lm_idm_scsi_find_block_node(const char *blk_path, char **blk_dev)
-+{
-+        struct dirent **dir_list;
-+        int dir_num;
-+
-+        dir_num = scandir(blk_path, &dir_list, lm_idm_scsi_block_node_select, NULL);
-+        if (dir_num < 0) {
-+		log_error("Cannot find valid directory entry in %s", blk_path);
-+                return -1;
-+	}
-+
-+	/*
-+	 * Should have only one block name under the path, if the dir_num is
-+	 * not 1 (e.g. 0 or any number bigger than 1), it must be wrong and
-+	 * should never happen.
-+	 */
-+	if (dir_num == 1)
-+		*blk_dev = strdup(dir_list[0]->d_name);
-+	else
-+		*blk_dev = NULL;
-+
-+	lm_idm_free_dir_list(dir_list, dir_num);
-+
-+	if (!*blk_dev)
-+		return -1;
-+
-+        return dir_num;
-+}
-+
-+static int lm_idm_scsi_search_propeller_partition(char *dev)
-+{
-+	int i, nparts;
-+	blkid_probe pr;
-+	blkid_partlist ls;
-+	int found = -1;
-+
-+	pr = blkid_new_probe_from_filename(dev);
-+	if (!pr) {
-+		log_error("%s: failed to create a new libblkid probe", dev);
-+		return -1;
-+	}
-+
-+	/* Binary interface */
-+	ls = blkid_probe_get_partitions(pr);
-+	if (!ls) {
-+		log_error("%s: failed to read partitions", dev);
-+		return -1;
-+	}
-+
-+	/* List partitions */
-+	nparts = blkid_partlist_numof_partitions(ls);
-+	if (!nparts)
-+		goto done;
-+
-+	for (i = 0; i < nparts; i++) {
-+		const char *p;
-+		blkid_partition par = blkid_partlist_get_partition(ls, i);
-+
-+		p = blkid_partition_get_name(par);
-+		if (p) {
-+			log_debug("partition name='%s'", p);
-+
-+			if (!strcmp(p, "propeller"))
-+				found = blkid_partition_get_partno(par);
-+		}
-+
-+		if (found >= 0)
-+			break;
-+	}
-+
-+done:
-+	blkid_free_probe(pr);
-+	return found;
-+}
-+
-+static char *lm_idm_scsi_get_block_device_node(const char *scsi_path)
-+{
-+	char *blk_path = NULL;
-+	char *blk_dev = NULL;
-+	char *dev_node = NULL;
-+	int ret;
-+
-+	/*
-+	 * Locate the "block" directory, such like:
-+	 * /sys/bus/scsi/devices/1:0:0:0/block
-+	 */
-+	ret = asprintf(&blk_path, "%s/%s", scsi_path, "block");
-+	if (ret < 0) {
-+		log_error("Fail to allocate block path for %s", scsi_path);
-+		goto fail;
-+	}
-+
-+	ret = lm_idm_scsi_find_block_dirctory(blk_path);
-+	if (ret < 0) {
-+		log_error("Fail to find block path %s", blk_path);
-+		goto fail;
-+	}
-+
-+	/*
-+	 * Locate the block device name, such like:
-+	 * /sys/bus/scsi/devices/1:0:0:0/block/sdb
-+	 *
-+	 * After return from this function and if it makes success,
-+	 * the global variable "blk_dev" points to the block device
-+	 * name, in this example it points to string "sdb".
-+	 */
-+	ret = lm_idm_scsi_find_block_node(blk_path, &blk_dev);
-+	if (ret < 0) {
-+		log_error("Fail to find block node");
-+		goto fail;
-+	}
-+
-+	ret = asprintf(&dev_node, "/dev/%s", blk_dev);
-+	if (ret < 0) {
-+		log_error("Fail to allocate memory for blk node path");
-+		goto fail;
-+	}
-+
-+	ret = lm_idm_scsi_search_propeller_partition(dev_node);
-+	if (ret < 0)
-+		goto fail;
-+
-+	free(blk_path);
-+	free(blk_dev);
-+	return dev_node;
-+
-+fail:
-+	free(blk_path);
-+	free(blk_dev);
-+	free(dev_node);
-+	return NULL;
-+}
-+
-+static int lm_idm_get_gl_lock_pv_list(void)
-+{
-+	struct dirent **dir_list;
-+	char scsi_bus_path[PATH_MAX];
-+	char *drive_path;
-+	int i, dir_num, ret;
-+
-+	if (glb_lock_op.drive_num)
-+		return 0;
-+
-+	snprintf(scsi_bus_path, sizeof(scsi_bus_path), "%s%s",
-+		 SYSFS_ROOT, BUS_SCSI_DEVS);
-+
-+	dir_num = scandir(scsi_bus_path, &dir_list,
-+			  lm_idm_scsi_directory_select, NULL);
-+	if (dir_num < 0) {  /* scsi mid level may not be loaded */
-+		log_error("Attached devices: none");
-+		return -1;
-+	}
-+
-+	for (i = 0; i < dir_num; i++) {
-+		char *scsi_path;
-+
-+		ret = asprintf(&scsi_path, "%s/%s", scsi_bus_path,
-+			       dir_list[i]->d_name);
-+		if (ret < 0) {
-+			log_error("Fail to allocate memory for scsi directory");
-+			goto failed;
-+		}
-+
-+		if (glb_lock_op.drive_num >= ILM_DRIVE_MAX_NUM) {
-+			log_error("Global lock: drive number %d exceeds limitation (%d) ?!",
-+				  glb_lock_op.drive_num, ILM_DRIVE_MAX_NUM);
-+			free(scsi_path);
-+			goto failed;
-+		}
-+
-+		drive_path = lm_idm_scsi_get_block_device_node(scsi_path);
-+		if (!drive_path) {
-+			free(scsi_path);
-+			continue;
-+		}
-+
-+		glb_lock_op.drives[glb_lock_op.drive_num] = drive_path;
-+		glb_lock_op.drive_num++;
-+
-+		free(scsi_path);
-+	}
-+
-+	lm_idm_free_dir_list(dir_list, dir_num);
-+	return 0;
-+
-+failed:
-+	lm_idm_free_dir_list(dir_list, dir_num);
-+
-+	for (i = 0; i < glb_lock_op.drive_num; i++) {
-+		if (glb_lock_op.drives[i]) {
-+			free(glb_lock_op.drives[i]);
-+			glb_lock_op.drives[i] = NULL;
-+		}
-+	}
-+
-+	return -1;
-+}
-+
-+static void lm_idm_update_vb_timestamp(uint64_t *vb_timestamp)
-+{
-+	uint64_t utc_us = read_utc_us();
-+
-+	/*
-+	 * It's possible that the multiple nodes have no clock
-+	 * synchronization with microsecond prcision and the time
-+	 * is going backward.  For this case, simply increment the
-+	 * existing timestamp and write out to drive.
-+	 */
-+	if (*vb_timestamp >= utc_us)
-+		(*vb_timestamp)++;
-+	else
-+		*vb_timestamp = utc_us;
-+}
-+
-+int lm_prepare_lockspace_idm(struct lockspace *ls)
-+{
-+	struct lm_idm *lm = NULL;
-+
-+	lm = malloc(sizeof(struct lm_idm));
-+	if (!lm) {
-+		log_error("S %s prepare_lockspace_idm fail to allocate lm_idm for %s",
-+			  ls->name, ls->vg_name);
-+		return -ENOMEM;
-+	}
-+	memset(lm, 0x0, sizeof(struct lm_idm));
-+
-+	ls->lm_data = lm;
-+	log_debug("S %s prepare_lockspace_idm done", ls->name);
-+	return 0;
-+}
-+
-+int lm_add_lockspace_idm(struct lockspace *ls, int adopt)
-+{
-+	char killpath[IDM_FAILURE_PATH_LEN];
-+	char killargs[IDM_FAILURE_ARGS_LEN];
-+	struct lm_idm *lmi = (struct lm_idm *)ls->lm_data;
-+	int rv;
-+
-+	if (daemon_test)
-+		return 0;
-+
-+	if (!strcmp(ls->name, S_NAME_GL_IDM)) {
-+		/*
-+		 * Prepare the pv list for global lock, if the drive contains
-+		 * "propeller" partition, then this drive will be considered
-+		 * as a member of pv list.
-+		 */
-+		rv = lm_idm_get_gl_lock_pv_list();
-+		if (rv < 0) {
-+			log_error("S %s add_lockspace_idm fail to get pv list for glb lock",
-+				  ls->name);
-+			return -EIO;
-+		} else {
-+			log_error("S %s add_lockspace_idm get pv list for glb lock",
-+				  ls->name);
-+		}
-+	}
-+
-+	/*
-+	 * Construct the execution path for command "lvmlockctl" by using the
-+	 * path to the lvm binary and appending "lockctl".
-+	 */
-+	memset(killpath, 0, sizeof(killpath));
-+	snprintf(killpath, IDM_FAILURE_PATH_LEN, "%slockctl", LVM_PATH);
-+
-+	/* Pass the argument "--kill vg_name" for killpath */
-+	memset(killargs, 0, sizeof(killargs));
-+	snprintf(killargs, IDM_FAILURE_ARGS_LEN, "--kill %s", ls->vg_name);
-+
-+	/* Connect with IDM lock manager per every lockspace. */
-+	rv = ilm_connect(&lmi->sock);
-+	if (rv < 0) {
-+		log_error("S %s add_lockspace_idm fail to connect the lock manager %d",
-+			  ls->name, lmi->sock);
-+		lmi->sock = 0;
-+		rv = -EMANAGER;
-+		goto fail;
-+	}
-+
-+	rv = ilm_set_killpath(lmi->sock, killpath, killargs);
-+	if (rv < 0) {
-+		log_error("S %s add_lockspace_idm fail to set kill path %d",
-+			  ls->name, rv);
-+		rv = -EMANAGER;
-+		goto fail;
-+	}
-+
-+	log_debug("S %s add_lockspace_idm kill path is: \"%s %s\"",
-+		  ls->name, killpath, killargs);
-+
-+	log_debug("S %s add_lockspace_idm done", ls->name);
-+	return 0;
-+
-+fail:
-+	if (lmi && lmi->sock)
-+		close(lmi->sock);
-+	if (lmi)
-+		free(lmi);
-+	return rv;
-+}
-+
-+int lm_rem_lockspace_idm(struct lockspace *ls, int free_vg)
-+{
-+	struct lm_idm *lmi = (struct lm_idm *)ls->lm_data;
-+	int i, rv = 0;
-+
-+	if (daemon_test)
-+		goto out;
-+
-+	rv = ilm_disconnect(lmi->sock);
-+	if (rv < 0)
-+		log_error("S %s rem_lockspace_idm error %d", ls->name, rv);
-+
-+	/* Release pv list for global lock */
-+	if (!strcmp(ls->name, "lvm_global")) {
-+		for (i = 0; i < glb_lock_op.drive_num; i++) {
-+			if (glb_lock_op.drives[i]) {
-+				free(glb_lock_op.drives[i]);
-+				glb_lock_op.drives[i] = NULL;
-+			}
-+		}
-+	}
-+
-+out:
-+	free(lmi);
-+	ls->lm_data = NULL;
-+	return rv;
-+}
-+
-+static int lm_add_resource_idm(struct lockspace *ls, struct resource *r)
-+{
-+	struct rd_idm *rdi = (struct rd_idm *)r->lm_data;
-+
-+	if (r->type == LD_RT_GL || r->type == LD_RT_VG) {
-+		rdi->vb = zalloc(sizeof(struct val_blk));
-+		if (!rdi->vb)
-+			return -ENOMEM;
-+	}
-+
-+	return 0;
-+}
-+
-+int lm_rem_resource_idm(struct lockspace *ls, struct resource *r)
-+{
-+	struct rd_idm *rdi = (struct rd_idm *)r->lm_data;
-+
-+	if (rdi->vb)
-+		free(rdi->vb);
-+
-+	memset(rdi, 0, sizeof(struct rd_idm));
-+	r->lm_init = 0;
-+	return 0;
-+}
-+
-+static int to_idm_mode(int ld_mode)
-+{
-+	switch (ld_mode) {
-+	case LD_LK_EX:
-+		return IDM_MODE_EXCLUSIVE;
-+	case LD_LK_SH:
-+		return IDM_MODE_SHAREABLE;
-+	default:
-+		break;
-+	};
-+
-+	return -1;
-+}
-+
-+int lm_lock_idm(struct lockspace *ls, struct resource *r, int ld_mode,
-+		struct val_blk *vb_out, char *lv_uuid, struct pvs *pvs,
-+		int adopt)
-+{
-+	struct lm_idm *lmi = (struct lm_idm *)ls->lm_data;
-+	struct rd_idm *rdi = (struct rd_idm *)r->lm_data;
-+	char **drive_path = NULL;
-+	uint64_t timestamp;
-+	int reset_vb = 0;
-+	int rv, i;
-+
-+	if (!r->lm_init) {
-+		rv = lm_add_resource_idm(ls, r);
-+		if (rv < 0)
-+			return rv;
-+		r->lm_init = 1;
-+	}
-+
-+	rdi->op.mode = to_idm_mode(ld_mode);
-+	if (rv < 0) {
-+		log_error("lock_idm invalid mode %d", ld_mode);
-+		return -EINVAL;
-+	}
-+
-+	log_debug("S %s R %s lock_idm", ls->name, r->name);
-+
-+	if (daemon_test) {
-+		if (rdi->vb) {
-+			vb_out->version = le16_to_cpu(rdi->vb->version);
-+			vb_out->flags = le16_to_cpu(rdi->vb->flags);
-+			vb_out->r_version = le32_to_cpu(rdi->vb->r_version);
-+		}
-+		return 0;
-+	}
-+
-+	rdi->op.timeout = IDM_TIMEOUT;
-+
-+	/*
-+	 * Generate the UUID string, for RT_VG, it only needs to generate
-+	 * UUID string for VG level, for RT_LV, it needs to generate
-+	 * UUID strings for both VG and LV levels.  At the end, these IDs
-+	 * are used as identifier for IDM in drive firmware.
-+	 */
-+	if (r->type == LD_RT_VG || r->type == LD_RT_LV)
-+		log_debug("S %s R %s VG uuid %s", ls->name, r->name, ls->vg_uuid);
-+	if (r->type == LD_RT_LV)
-+		log_debug("S %s R %s LV uuid %s", ls->name, r->name, lv_uuid);
-+
-+	memset(&rdi->id, 0x0, sizeof(struct idm_lock_id));
-+	if (r->type == LD_RT_VG) {
-+		uuid_read_format(rdi->id.vg_uuid, ls->vg_uuid);
-+	} else if (r->type == LD_RT_LV) {
-+		uuid_read_format(rdi->id.vg_uuid, ls->vg_uuid);
-+		uuid_read_format(rdi->id.lv_uuid, lv_uuid);
-+	}
-+
-+	/*
-+	 * Establish the drive path list for lock, since different lock type
-+	 * has different drive list; the GL lock uses the global pv list,
-+	 * the VG lock uses the pv list spanned for the whole volume group,
-+	 * the LV lock uses the pv list for the logical volume.
-+	 */
-+	switch (r->type) {
-+	case LD_RT_GL:
-+		drive_path = glb_lock_op.drives;
-+		rdi->op.drive_num = glb_lock_op.drive_num;
-+		break;
-+	case LD_RT_VG:
-+		drive_path = (char **)ls->pvs.path;
-+		rdi->op.drive_num = ls->pvs.num;
-+		break;
-+	case LD_RT_LV:
-+		drive_path = (char **)pvs->path;
-+		rdi->op.drive_num = pvs->num;
-+		break;
-+	default:
-+		break;
-+	}
-+
-+	if (!drive_path) {
-+		log_error("S %s R %s cannot find the valid drive path array",
-+			  ls->name, r->name);
-+		return -EINVAL;
-+	}
-+
-+	if (rdi->op.drive_num >= ILM_DRIVE_MAX_NUM) {
-+		log_error("S %s R %s exceeds limitation for drive path array",
-+			  ls->name, r->name);
-+		return -EINVAL;
-+	}
-+
-+	for (i = 0; i < rdi->op.drive_num; i++)
-+		rdi->op.drives[i] = drive_path[i];
-+
-+	log_debug("S %s R %s mode %d drive_num %d timeout %d",
-+		  ls->name, r->name, rdi->op.mode,
-+		  rdi->op.drive_num, rdi->op.timeout);
-+
-+	for (i = 0; i < rdi->op.drive_num; i++)
-+		log_debug("S %s R %s drive path[%d] %s",
-+			  ls->name, r->name, i, rdi->op.drives[i]);
-+
-+	rv = ilm_lock(lmi->sock, &rdi->id, &rdi->op);
-+	if (rv < 0) {
-+		log_debug("S %s R %s lock_idm acquire mode %d rv %d",
-+			  ls->name, r->name, ld_mode, rv);
-+		return -ELOCKIO;
-+	}
-+
-+	if (rdi->vb) {
-+		rv = ilm_read_lvb(lmi->sock, &rdi->id, (char *)&timestamp,
-+				  sizeof(uint64_t));
-+
-+		/*
-+		 * If fail to read value block, which might be caused by drive
-+		 * failure, notify up layer to invalidate metadata.
-+		 */
-+		if (rv < 0) {
-+			log_error("S %s R %s lock_idm get_lvb error %d",
-+				  ls->name, r->name, rv);
-+			reset_vb = 1;
-+
-+			/* Reset timestamp */
-+			rdi->vb_timestamp = 0;
-+
-+		/*
-+		 * If the cached timestamp mismatches with the stored value
-+		 * in the IDM, this means another host has updated timestamp
-+		 * for the new VB.  Let's reset VB and notify up layer to
-+		 * invalidate metadata.
-+		 */
-+		} else if (rdi->vb_timestamp != timestamp) {
-+			log_debug("S %s R %s lock_idm get lvb timestamp %lu:%lu",
-+				  ls->name, r->name, rdi->vb_timestamp,
-+				  timestamp);
-+
-+			rdi->vb_timestamp = timestamp;
-+			reset_vb = 1;
-+		}
-+
-+		if (reset_vb == 1) {
-+			memset(rdi->vb, 0, sizeof(struct val_blk));
-+			memset(vb_out, 0, sizeof(struct val_blk));
-+
-+			/*
-+			 * The lock is still acquired, but the vb values has
-+			 * been invalidated.
-+			 */
-+			rv = 0;
-+			goto out;
-+		}
-+
-+		/* Otherwise, copy the cached VB to up layer */
-+		memcpy(vb_out, rdi->vb, sizeof(struct val_blk));
-+	}
-+
-+out:
-+	return rv;
-+}
-+
-+int lm_convert_idm(struct lockspace *ls, struct resource *r,
-+		   int ld_mode, uint32_t r_version)
-+{
-+	struct lm_idm *lmi = (struct lm_idm *)ls->lm_data;
-+	struct rd_idm *rdi = (struct rd_idm *)r->lm_data;
-+	int mode, rv;
-+
-+	if (rdi->vb && r_version && (r->mode == LD_LK_EX)) {
-+		if (!rdi->vb->version) {
-+			/* first time vb has been written */
-+			rdi->vb->version = VAL_BLK_VERSION;
-+		}
-+		rdi->vb->r_version = r_version;
-+
-+		log_debug("S %s R %s convert_idm set r_version %u",
-+			  ls->name, r->name, r_version);
-+
-+		lm_idm_update_vb_timestamp(&rdi->vb_timestamp);
-+		log_debug("S %s R %s convert_idm vb %x %x %u timestamp %lu",
-+			  ls->name, r->name, rdi->vb->version, rdi->vb->flags,
-+			  rdi->vb->r_version, rdi->vb_timestamp);
-+	}
-+
-+	mode = to_idm_mode(ld_mode);
-+	if (mode < 0) {
-+		log_error("S %s R %s convert_idm invalid mode %d",
-+			  ls->name, r->name, ld_mode);
-+		return -EINVAL;
-+	}
-+
-+	log_debug("S %s R %s convert_idm", ls->name, r->name);
-+
-+	if (daemon_test)
-+		return 0;
-+
-+	if (rdi->vb && r_version && (r->mode == LD_LK_EX)) {
-+		rv = ilm_write_lvb(lmi->sock, &rdi->id,
-+				   (char *)rdi->vb_timestamp, sizeof(uint64_t));
-+		if (rv < 0) {
-+			log_error("S %s R %s convert_idm write lvb error %d",
-+				  ls->name, r->name, rv);
-+			return -ELMERR;
-+		}
-+	}
-+
-+	rv = ilm_convert(lmi->sock, &rdi->id, mode);
-+	if (rv < 0)
-+		log_error("S %s R %s convert_idm convert error %d",
-+			  ls->name, r->name, rv);
-+
-+	return rv;
-+}
-+
-+int lm_unlock_idm(struct lockspace *ls, struct resource *r,
-+		  uint32_t r_version, uint32_t lmu_flags)
-+{
-+	struct lm_idm *lmi = (struct lm_idm *)ls->lm_data;
-+	struct rd_idm *rdi = (struct rd_idm *)r->lm_data;
-+	int rv;
-+
-+	if (rdi->vb && r_version && (r->mode == LD_LK_EX)) {
-+		if (!rdi->vb->version) {
-+			/* first time vb has been written */
-+			rdi->vb->version = VAL_BLK_VERSION;
-+		}
-+		if (r_version)
-+			rdi->vb->r_version = r_version;
-+
-+		lm_idm_update_vb_timestamp(&rdi->vb_timestamp);
-+		log_debug("S %s R %s unlock_idm vb %x %x %u timestamp %lu",
-+			  ls->name, r->name, rdi->vb->version, rdi->vb->flags,
-+			  rdi->vb->r_version, rdi->vb_timestamp);
-+	}
-+
-+	log_debug("S %s R %s unlock_idm", ls->name, r->name);
-+
-+	if (daemon_test)
-+		return 0;
-+
-+	if (rdi->vb && r_version && (r->mode == LD_LK_EX)) {
-+		rv = ilm_write_lvb(lmi->sock, &rdi->id,
-+				   (char *)&rdi->vb_timestamp, sizeof(uint64_t));
-+		if (rv < 0) {
-+			log_error("S %s R %s unlock_idm set_lvb error %d",
-+				  ls->name, r->name, rv);
-+			return -ELMERR;
-+		}
-+	}
-+
-+	rv = ilm_unlock(lmi->sock, &rdi->id);
-+	if (rv < 0)
-+		log_error("S %s R %s unlock_idm error %d", ls->name, r->name, rv);
-+
-+	return rv;
-+}
-+
-+int lm_hosts_idm(struct lockspace *ls, int notify)
-+{
-+	struct resource *r;
-+	struct lm_idm *lmi = (struct lm_idm *)ls->lm_data;
-+	struct rd_idm *rdi;
-+	int count, self, found_others = 0;
-+	int rv;
-+
-+	list_for_each_entry(r, &ls->resources, list) {
-+		if (!r->lm_init)
-+			continue;
-+
-+		rdi = (struct rd_idm *)r->lm_data;
-+
-+		rv = ilm_get_host_count(lmi->sock, &rdi->id, &rdi->op,
-+					&count, &self);
-+		if (rv < 0) {
-+			log_error("S %s lm_hosts_idm error %d", ls->name, rv);
-+			return rv;
-+		}
-+
-+		/* Fixup: need to reduce self count */
-+		if (count > found_others)
-+			found_others = count;
-+	}
-+
-+	return found_others;
-+}
-+
-+int lm_get_lockspaces_idm(struct list_head *ls_rejoin)
-+{
-+	/* TODO: Need to add support for adoption. */
-+	return -1;
-+}
-+
-+int lm_is_running_idm(void)
-+{
-+	int sock, rv;
-+
-+	if (daemon_test)
-+		return gl_use_idm;
-+
-+	rv = ilm_connect(&sock);
-+	if (rv < 0) {
-+		log_error("Fail to connect seagate IDM lock manager %d", rv);
-+		return 0;
-+	}
-+
-+	ilm_disconnect(sock);
-+	return 1;
-+}
-diff --git a/daemons/lvmlockd/lvmlockd-internal.h b/daemons/lvmlockd/lvmlockd-internal.h
-index 14bdfeed0..983d66589 100644
---- a/daemons/lvmlockd/lvmlockd-internal.h
-+++ b/daemons/lvmlockd/lvmlockd-internal.h
-@@ -20,6 +20,7 @@
- #define R_NAME_GL          "GLLK"
- #define R_NAME_VG          "VGLK"
- #define S_NAME_GL_DLM      "lvm_global"
-+#define S_NAME_GL_IDM      "lvm_global"
- #define LVM_LS_PREFIX      "lvm_"           /* ls name is prefix + vg_name */
- /* global lockspace name for sanlock is a vg name */
+ 	return 0;
+ }
  
-@@ -29,6 +30,7 @@ enum {
- 	LD_LM_UNUSED = 1, /* place holder so values match lib/locking/lvmlockd.h */
- 	LD_LM_DLM = 2,
- 	LD_LM_SANLOCK = 3,
-+	LD_LM_IDM = 4,
- };
- 
- /* operation types */
-@@ -118,6 +120,11 @@ struct client {
-  */
- #define DEFAULT_MAX_RETRIES 4
- 
-+struct pvs {
-+	const char **path;
-+	int num;
-+};
-+
- struct action {
- 	struct list_head list;
- 	uint32_t client_id;
-@@ -140,6 +147,7 @@ struct action {
- 	char vg_args[MAX_ARGS+1];
- 	char lv_args[MAX_ARGS+1];
- 	char vg_sysid[MAX_NAME+1];
-+	struct pvs pvs;			/* PV list for idm */
- };
- 
- struct resource {
-@@ -184,6 +192,7 @@ struct lockspace {
- 	uint64_t free_lock_offset;	/* for sanlock, start search for free lock here */
- 	int free_lock_sector_size;	/* for sanlock */
- 	int free_lock_align_size;	/* for sanlock */
-+	struct pvs pvs;			/* for idm: PV list */
- 
- 	uint32_t start_client_id;	/* client_id that started the lockspace */
- 	pthread_t thread;		/* makes synchronous lock requests */
-@@ -325,6 +334,7 @@ static inline int list_empty(const struct list_head *head)
- EXTERN int gl_type_static;
- EXTERN int gl_use_dlm;
- EXTERN int gl_use_sanlock;
-+EXTERN int gl_use_idm;
- EXTERN int gl_vg_removed;
- EXTERN char gl_lsname_dlm[MAX_NAME+1];
- EXTERN char gl_lsname_sanlock[MAX_NAME+1];
-@@ -619,4 +629,102 @@ static inline int lm_support_sanlock(void)
- 
- #endif /* sanlock support */
- 
-+#ifdef LOCKDSANLOCK_SUPPORT
-+
-+int lm_data_size_idm(void);
-+int lm_init_vg_idm(char *ls_name, char *vg_name, uint32_t flags, char *vg_args);
-+int lm_prepare_lockspace_idm(struct lockspace *ls);
-+int lm_add_lockspace_idm(struct lockspace *ls, int adopt);
-+int lm_rem_lockspace_idm(struct lockspace *ls, int free_vg);
-+int lm_lock_idm(struct lockspace *ls, struct resource *r, int ld_mode,
-+		struct val_blk *vb_out, char *lv_uuid, struct pvs *pvs,
-+		int adopt);
-+int lm_convert_idm(struct lockspace *ls, struct resource *r,
-+		   int ld_mode, uint32_t r_version);
-+int lm_unlock_idm(struct lockspace *ls, struct resource *r,
-+		  uint32_t r_version, uint32_t lmu_flags);
-+int lm_hosts_idm(struct lockspace *ls, int notify);
-+int lm_get_lockspaces_idm(struct list_head *ls_rejoin);
-+int lm_is_running_idm(void);
-+int lm_rem_resource_idm(struct lockspace *ls, struct resource *r);
-+
-+static inline int lm_support_idm(void)
-+{
-+	return 1;
-+}
-+
-+#else
-+
-+static int lm_data_size_idm(void)
-+{
-+	return -1;
-+}
-+
-+static int lm_init_vg_idm(char *ls_name, char *vg_name, uint32_t flags,
-+			  char *vg_args)
-+{
-+	return -1;
-+}
-+
-+static int lm_prepare_lockspace_idm(struct lockspace *ls)
-+{
-+	return -1;
-+}
-+
-+static int lm_add_lockspace_idm(struct lockspace *ls, int adopt)
-+{
-+	return -1;
-+}
-+
-+static int lm_rem_lockspace_idm(struct lockspace *ls, int free_vg)
-+{
-+	return -1;
-+}
-+
-+static int lm_lock_idm(struct lockspace *ls, struct resource *r, int ld_mode,
-+		       struct val_blk *vb_out, char *lv_uuid, struct pvs *pvs,
-+		       int adopt)
-+{
-+	return -1;
-+}
-+
-+static int lm_convert_idm(struct lockspace *ls, struct resource *r,
-+			  int ld_mode, uint32_t r_version)
-+{
-+	return -1;
-+}
-+
-+static int lm_unlock_idm(struct lockspace *ls, struct resource *r,
-+			 uint32_t r_version, uint32_t lmu_flags)
-+{
-+	return -1;
-+}
-+
-+static int lm_hosts_idm(struct lockspace *ls, int notify)
-+{
-+	return -1;
-+}
-+
-+static int lm_get_lockspaces_idm(struct list_head *ls_rejoin)
-+{
-+	return -1;
-+}
-+
-+static int lm_is_running_idm(void)
-+{
-+	return 0;
-+}
-+
-+static int lm_rem_resource_idm(struct lockspace *ls, struct resource *r)
-+{
-+	return -1;
-+}
-+
-+static inline int lm_support_idm(void)
-+{
-+	return 0;
-+}
-+
-+#endif /* Seagate IDM support */
-+
- #endif	/* _LVM_LVMLOCKD_INTERNAL_H */
 -- 
 2.25.1
 
