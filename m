@@ -1,54 +1,713 @@
-From: David Teigland <teigland@sourceware.org>
-Date: Fri, 23 Apr 2021 22:37:36 +0000 (GMT)
-Subject: main - Revert "cov: check label_read_pvid return value"
-Message-ID: <20210423223736.3CB953854814@sourceware.org>
+From: Leo Yan <leo.yan@linaro.org>
+Date: Sun, 25 Apr 2021 10:22:38 +0800
+Subject: [LVM2 RFCv1 2/5] lvmlockd: idm: Hook Seagate IDM wrapper APIs
+In-Reply-To: <20210425022241.5055-1-leo.yan@linaro.org>
+References: <20210425022241.5055-1-leo.yan@linaro.org>
+Message-ID: <20210425022241.5055-3-leo.yan@linaro.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=fcbed26393f57d49daa7da73922b1a922f9523a2
-Commit:        fcbed26393f57d49daa7da73922b1a922f9523a2
-Parent:        9cdd4dcca7e6d166e44270a81425a50e598836f4
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Fri Apr 23 17:12:24 2021 -0500
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Fri Apr 23 17:12:24 2021 -0500
+To allow the IDM locking scheme be used by users, this patch hooks the
+IDM wrapper; it also introducs a new locking type "idm" and we can use
+it for global lock with option '-g idm'.
 
-Revert "cov: check label_read_pvid return value"
+To support IDM locking type, the main change in the data structure is to
+add pvs path arrary.  The pvs list is transferred from the lvm commands,
+when lvmlockd core layer receives message, it extracts the message with
+the keyword "path[idx]".  Finally, the pv list will pass to IDM lock
+manager as the target drives for sending IDM SCSI commands.
 
-This reverts commit bf461b99c6d26e550835b77eaffe2204cbc9bed3.
-
-label_read_pvid returns 0 for non-PVs and these callers want
-to handle non-PVs.
+Signed-off-by: Leo Yan <leo.yan@linaro.org>
 ---
- tools/lvmdevices.c | 6 ++----
- 1 file changed, 2 insertions(+), 4 deletions(-)
+ daemons/lvmlockd/lvmlockd-core.c     | 279 ++++++++++++++++++++++++---
+ daemons/lvmlockd/lvmlockd-internal.h |   4 +-
+ 2 files changed, 255 insertions(+), 28 deletions(-)
 
-diff --git a/tools/lvmdevices.c b/tools/lvmdevices.c
-index c6cb1fcff..b67db7464 100644
---- a/tools/lvmdevices.c
-+++ b/tools/lvmdevices.c
-@@ -181,8 +181,7 @@ int lvmdevices(struct cmd_context *cmd, int argc, char **argv)
- 				continue;
- 			dev = du->dev;
+diff --git a/daemons/lvmlockd/lvmlockd-core.c b/daemons/lvmlockd/lvmlockd-core.c
+index 094491029..d7971ccc1 100644
+--- a/daemons/lvmlockd/lvmlockd-core.c
++++ b/daemons/lvmlockd/lvmlockd-core.c
+@@ -421,6 +421,63 @@ struct lockspace *alloc_lockspace(void)
+ 	return ls;
+ }
  
--			if (!label_read_pvid(dev))
--				continue;
-+			label_read_pvid(dev);
++static char **alloc_pvs_path(struct pvs *pvs, int num)
++{
++	if (!num)
++		return NULL;
++
++	pvs->path = malloc(sizeof(char *) * num);
++	if (!pvs->path)
++		return NULL;
++
++	memset(pvs->path, 0x0, sizeof(char *) * num);
++	return pvs->path;
++}
++
++static void free_pvs_path(struct pvs *pvs)
++{
++	int i;
++
++	for (i = 0; i < pvs->num; i++) {
++		if (!pvs->path[i])
++			continue;
++
++		free((char *)pvs->path[i]);
++		pvs->path[i] = NULL;
++	}
++
++	if (!pvs->path) {
++		free(pvs->path);
++		pvs->path = NULL;
++	}
++}
++
++static char **alloc_and_copy_pvs_path(struct pvs *dst, struct pvs *src)
++{
++	int i;
++
++	if (!alloc_pvs_path(dst, src->num))
++		return NULL;
++
++	dst->num = 0;
++	for (i = 0; i < src->num; i++) {
++		if (!src->path[i] || !strcmp(src->path[i], "none"))
++			continue;
++
++		dst->path[dst->num] = strdup(src->path[i]);
++		if (!dst->path[dst->num]) {
++			log_error("out of memory for copying pvs path");
++			goto failed;
++		}
++		dst->num++;
++	}
++	return dst->path;
++
++failed:
++	free_pvs_path(dst);
++	return NULL;
++}
++
+ static struct action *alloc_action(void)
+ {
+ 	struct action *act;
+@@ -510,6 +567,9 @@ static void free_action(struct action *act)
+ 		free(act->path);
+ 		act->path = NULL;
+ 	}
++
++	free_pvs_path(&act->pvs);
++
+ 	pthread_mutex_lock(&unused_struct_mutex);
+ 	if (unused_action_count >= MAX_UNUSED_ACTION) {
+ 		free(act);
+@@ -564,9 +624,12 @@ static int setup_structs(void)
+ 	struct lock *lk;
+ 	int data_san = lm_data_size_sanlock();
+ 	int data_dlm = lm_data_size_dlm();
++	int data_idm = lm_data_size_idm();
+ 	int i;
  
- 			/*
- 			 * label_read_pvid has read the first 4K of the device
-@@ -284,8 +283,7 @@ int lvmdevices(struct cmd_context *cmd, int argc, char **argv)
- 		 * (it's ok if the device is not a PV and has no PVID)
- 		 */
- 		label_scan_setup_bcache();
--		if (!label_read_pvid(dev))
--			goto_bad;
-+		label_read_pvid(dev);
+ 	resource_lm_data_size = data_san > data_dlm ? data_san : data_dlm;
++	resource_lm_data_size = resource_lm_data_size > data_idm ?
++					resource_lm_data_size : data_idm;
  
- 		/*
- 		 * Allow filtered devices to be added to devices_file, but
+ 	pthread_mutex_init(&unused_struct_mutex, NULL);
+ 	INIT_LIST_HEAD(&unused_action);
+@@ -683,6 +746,8 @@ static const char *lm_str(int x)
+ 		return "dlm";
+ 	case LD_LM_SANLOCK:
+ 		return "sanlock";
++	case LD_LM_IDM:
++		return "idm";
+ 	default:
+ 		return "lm_unknown";
+ 	}
+@@ -968,6 +1033,8 @@ static int lm_prepare_lockspace(struct lockspace *ls, struct action *act)
+ 		rv = lm_prepare_lockspace_dlm(ls);
+ 	else if (ls->lm_type == LD_LM_SANLOCK)
+ 		rv = lm_prepare_lockspace_sanlock(ls);
++	else if (ls->lm_type == LD_LM_IDM)
++		rv = lm_prepare_lockspace_idm(ls);
+ 	else
+ 		return -1;
+ 
+@@ -984,6 +1051,8 @@ static int lm_add_lockspace(struct lockspace *ls, struct action *act, int adopt)
+ 		rv = lm_add_lockspace_dlm(ls, adopt);
+ 	else if (ls->lm_type == LD_LM_SANLOCK)
+ 		rv = lm_add_lockspace_sanlock(ls, adopt);
++	else if (ls->lm_type == LD_LM_IDM)
++		rv = lm_add_lockspace_idm(ls, adopt);
+ 	else
+ 		return -1;
+ 
+@@ -1000,6 +1069,8 @@ static int lm_rem_lockspace(struct lockspace *ls, struct action *act, int free_v
+ 		rv = lm_rem_lockspace_dlm(ls, free_vg);
+ 	else if (ls->lm_type == LD_LM_SANLOCK)
+ 		rv = lm_rem_lockspace_sanlock(ls, free_vg);
++	else if (ls->lm_type == LD_LM_IDM)
++		rv = lm_rem_lockspace_idm(ls, free_vg);
+ 	else
+ 		return -1;
+ 
+@@ -1017,6 +1088,9 @@ static int lm_lock(struct lockspace *ls, struct resource *r, int mode, struct ac
+ 		rv = lm_lock_dlm(ls, r, mode, vb_out, adopt);
+ 	else if (ls->lm_type == LD_LM_SANLOCK)
+ 		rv = lm_lock_sanlock(ls, r, mode, vb_out, retry, adopt);
++	else if (ls->lm_type == LD_LM_IDM)
++		rv = lm_lock_idm(ls, r, mode, vb_out, act->lv_uuid,
++				 &act->pvs, adopt);
+ 	else
+ 		return -1;
+ 
+@@ -1034,6 +1108,8 @@ static int lm_convert(struct lockspace *ls, struct resource *r,
+ 		rv = lm_convert_dlm(ls, r, mode, r_version);
+ 	else if (ls->lm_type == LD_LM_SANLOCK)
+ 		rv = lm_convert_sanlock(ls, r, mode, r_version);
++	else if (ls->lm_type == LD_LM_IDM)
++		rv = lm_convert_idm(ls, r, mode, r_version);
+ 	else
+ 		return -1;
+ 
+@@ -1051,6 +1127,8 @@ static int lm_unlock(struct lockspace *ls, struct resource *r, struct action *ac
+ 		rv = lm_unlock_dlm(ls, r, r_version, lmu_flags);
+ 	else if (ls->lm_type == LD_LM_SANLOCK)
+ 		rv = lm_unlock_sanlock(ls, r, r_version, lmu_flags);
++	else if (ls->lm_type == LD_LM_IDM)
++		rv = lm_unlock_idm(ls, r, r_version, lmu_flags);
+ 	else
+ 		return -1;
+ 
+@@ -1065,6 +1143,8 @@ static int lm_hosts(struct lockspace *ls, int notify)
+ 		return lm_hosts_dlm(ls, notify);
+ 	else if (ls->lm_type == LD_LM_SANLOCK)
+ 		return lm_hosts_sanlock(ls, notify);
++	else if (ls->lm_type == LD_LM_IDM)
++		return lm_hosts_idm(ls, notify);
+ 	return -1;
+ }
+ 
+@@ -1074,6 +1154,8 @@ static void lm_rem_resource(struct lockspace *ls, struct resource *r)
+ 		lm_rem_resource_dlm(ls, r);
+ 	else if (ls->lm_type == LD_LM_SANLOCK)
+ 		lm_rem_resource_sanlock(ls, r);
++	else if (ls->lm_type == LD_LM_IDM)
++		lm_rem_resource_idm(ls, r);
+ }
+ 
+ static int lm_find_free_lock(struct lockspace *ls, uint64_t *free_offset, int *sector_size, int *align_size)
+@@ -1082,6 +1164,8 @@ static int lm_find_free_lock(struct lockspace *ls, uint64_t *free_offset, int *s
+ 		return 0;
+ 	else if (ls->lm_type == LD_LM_SANLOCK)
+ 		return lm_find_free_lock_sanlock(ls, free_offset, sector_size, align_size);
++	else if (ls->lm_type == LD_LM_IDM)
++		return 0;
+ 	return -1;
+ }
+ 
+@@ -1690,8 +1774,8 @@ static int res_update(struct lockspace *ls, struct resource *r,
+ }
+ 
+ /*
+- * There is nothing to deallocate when freeing a dlm LV, the LV
+- * will simply be unlocked by rem_resource.
++ * For DLM and IDM locking scheme, there is nothing to deallocate when freeing a
++ * LV, the LV will simply be unlocked by rem_resource.
+  */
+ 
+ static int free_lv(struct lockspace *ls, struct resource *r)
+@@ -1700,6 +1784,8 @@ static int free_lv(struct lockspace *ls, struct resource *r)
+ 		return lm_free_lv_sanlock(ls, r);
+ 	else if (ls->lm_type == LD_LM_DLM)
+ 		return 0;
++	else if (ls->lm_type == LD_LM_IDM)
++		return 0;
+ 	else
+ 		return -EINVAL;
+ }
+@@ -2760,6 +2846,8 @@ out_act:
+ 	ls->drop_vg = drop_vg;
+ 	if (ls->lm_type == LD_LM_DLM && !strcmp(ls->name, gl_lsname_dlm))
+ 		global_dlm_lockspace_exists = 0;
++	if (ls->lm_type == LD_LM_IDM && !strcmp(ls->name, gl_lsname_idm))
++		global_idm_lockspace_exists = 0;
+ 
+ 	/*
+ 	 * Avoid a name collision of the same lockspace is added again before
+@@ -2851,6 +2939,8 @@ static void gl_ls_name(char *ls_name)
+ 		memcpy(ls_name, gl_lsname_dlm, MAX_NAME);
+ 	else if (gl_use_sanlock)
+ 		memcpy(ls_name, gl_lsname_sanlock, MAX_NAME);
++	else if (gl_use_idm)
++		memcpy(ls_name, gl_lsname_idm, MAX_NAME);
+ 	else
+ 		memset(ls_name, 0, MAX_NAME);
+ }
+@@ -2879,9 +2969,19 @@ static int add_lockspace_thread(const char *ls_name,
+ 	strncpy(ls->name, ls_name, MAX_NAME);
+ 	ls->lm_type = lm_type;
+ 
+-	if (act)
++	if (act) {
+ 		ls->start_client_id = act->client_id;
+ 
++		/*
++		 * Copy PV list to lockspact structure, so this is
++		 * used for VG locking for idm scheme.
++		 */
++		if (!alloc_and_copy_pvs_path(&ls->pvs, &act->pvs)) {
++			free(ls);
++			return -ENOMEM;
++		}
++	}
++
+ 	if (vg_uuid)
+ 		strncpy(ls->vg_uuid, vg_uuid, 64);
+ 
+@@ -2908,6 +3008,17 @@ static int add_lockspace_thread(const char *ls_name,
+ 	pthread_mutex_lock(&lockspaces_mutex);
+ 	ls2 = find_lockspace_name(ls->name);
+ 	if (ls2) {
++		/*
++		 * If find an existed lockspace, we need to update the PV list
++		 * based on the latest information, and release for the old
++		 * PV list in case it keeps stale information.
++		 */
++		free_pvs_path(&ls2->pvs);
++		if (!alloc_and_copy_pvs_path(&ls2->pvs, &ls->pvs)) {
++			log_debug("add_lockspace_thread %s fails to allocate pvs", ls->name);
++			rv = -ENOMEM;
++		}
++
+ 		if (ls2->thread_stop) {
+ 			log_debug("add_lockspace_thread %s exists and stopping", ls->name);
+ 			rv = -EAGAIN;
+@@ -2920,6 +3031,7 @@ static int add_lockspace_thread(const char *ls_name,
+ 		}
+ 		pthread_mutex_unlock(&lockspaces_mutex);
+ 		free_resource(r);
++		free_pvs_path(&ls->pvs);
+ 		free(ls);
+ 		return rv;
+ 	}
+@@ -2933,6 +3045,8 @@ static int add_lockspace_thread(const char *ls_name,
+ 
+ 	if (ls->lm_type == LD_LM_DLM && !strcmp(ls->name, gl_lsname_dlm))
+ 		global_dlm_lockspace_exists = 1;
++	if (ls->lm_type == LD_LM_IDM && !strcmp(ls->name, gl_lsname_idm))
++		global_idm_lockspace_exists = 1;
+ 	list_add_tail(&ls->list, &lockspaces);
+ 	pthread_mutex_unlock(&lockspaces_mutex);
+ 
+@@ -2943,6 +3057,7 @@ static int add_lockspace_thread(const char *ls_name,
+ 		list_del(&ls->list);
+ 		pthread_mutex_unlock(&lockspaces_mutex);
+ 		free_resource(r);
++		free_pvs_path(&ls->pvs);
+ 		free(ls);
+ 		return rv;
+ 	}
+@@ -2951,16 +3066,15 @@ static int add_lockspace_thread(const char *ls_name,
+ }
+ 
+ /*
+- * There is no add_sanlock_global_lockspace or
+- * rem_sanlock_global_lockspace because with sanlock,
+- * the global lockspace is one of the vg lockspaces.
++ * There is no variant for sanlock because, with sanlock, the global
++ * lockspace is one of the vg lockspaces.
+  */
+-
+-static int add_dlm_global_lockspace(struct action *act)
++static int add_global_lockspace(char *ls_name, int lm_type,
++				struct action *act)
+ {
+ 	int rv;
+ 
+-	if (global_dlm_lockspace_exists)
++	if (global_dlm_lockspace_exists || global_idm_lockspace_exists)
+ 		return 0;
+ 
+ 	/*
+@@ -2968,9 +3082,9 @@ static int add_dlm_global_lockspace(struct action *act)
+ 	 * lock request, insert an internal gl sh lock request?
+ 	 */
+ 
+-	rv = add_lockspace_thread(gl_lsname_dlm, NULL, NULL, LD_LM_DLM, NULL, act);
++	rv = add_lockspace_thread(ls_name, NULL, NULL, lm_type, NULL, act);
+ 	if (rv < 0)
+-		log_debug("add_dlm_global_lockspace add_lockspace_thread %d", rv);
++		log_debug("add_global_lockspace add_lockspace_thread %d", rv);
+ 
+ 	/*
+ 	 * EAGAIN may be returned for a short period because
+@@ -2983,12 +3097,12 @@ static int add_dlm_global_lockspace(struct action *act)
+ }
+ 
+ /*
+- * If dlm gl lockspace is the only one left, then stop it.
+- * This is not used for an explicit rem_lockspace action from
+- * the client, only for auto remove.
++ * When DLM or IDM locking scheme is used for global lock, if the global
++ * lockspace is the only one left, then stop it.  This is not used for
++ * an explicit rem_lockspace action from the client, only for auto
++ * remove.
+  */
+-
+-static int rem_dlm_global_lockspace(void)
++static int rem_global_lockspace(char *ls_name)
+ {
+ 	struct lockspace *ls, *ls_gl = NULL;
+ 	int others = 0;
+@@ -2996,7 +3110,7 @@ static int rem_dlm_global_lockspace(void)
+ 
+ 	pthread_mutex_lock(&lockspaces_mutex);
+ 	list_for_each_entry(ls, &lockspaces, list) {
+-		if (!strcmp(ls->name, gl_lsname_dlm)) {
++		if (!strcmp(ls->name, ls_name)) {
+ 			ls_gl = ls;
+ 			continue;
+ 		}
+@@ -3028,6 +3142,26 @@ out:
+ 	return rv;
+ }
+ 
++static int add_dlm_global_lockspace(struct action *act)
++{
++	return add_global_lockspace(gl_lsname_dlm, LD_LM_DLM, act);
++}
++
++static int rem_dlm_global_lockspace(void)
++{
++	return rem_global_lockspace(gl_lsname_dlm);
++}
++
++static int add_idm_global_lockspace(struct action *act)
++{
++	return add_global_lockspace(gl_lsname_idm, LD_LM_IDM, act);
++}
++
++static int rem_idm_global_lockspace(void)
++{
++	return rem_global_lockspace(gl_lsname_idm);
++}
++
+ /*
+  * When the first dlm lockspace is added for a vg, automatically add a separate
+  * dlm lockspace for the global lock.
+@@ -3053,6 +3187,9 @@ static int add_lockspace(struct action *act)
+ 		if (gl_use_dlm) {
+ 			rv = add_dlm_global_lockspace(act);
+ 			return rv;
++		} else if (gl_use_idm) {
++			rv = add_idm_global_lockspace(act);
++			return rv;
+ 		} else {
+ 			return -EINVAL;
+ 		}
+@@ -3061,6 +3198,8 @@ static int add_lockspace(struct action *act)
+ 	if (act->rt == LD_RT_VG) {
+ 		if (gl_use_dlm)
+ 			add_dlm_global_lockspace(NULL);
++		else if (gl_use_idm)
++			add_idm_global_lockspace(NULL);
+ 
+ 		vg_ls_name(act->vg_name, ls_name);
+ 
+@@ -3128,14 +3267,15 @@ static int rem_lockspace(struct action *act)
+ 	pthread_mutex_unlock(&lockspaces_mutex);
+ 
+ 	/*
+-	 * The dlm global lockspace was automatically added when
+-	 * the first dlm vg lockspace was added, now reverse that
+-	 * by automatically removing the dlm global lockspace when
+-	 * the last dlm vg lockspace is removed.
++	 * For DLM and IDM locking scheme, the global lockspace was
++	 * automatically added when the first vg lockspace was added,
++	 * now reverse that by automatically removing the dlm global
++	 * lockspace when the last vg lockspace is removed.
+ 	 */
+-
+ 	if (rt == LD_RT_VG && gl_use_dlm)
+ 		rem_dlm_global_lockspace();
++	else if (rt == LD_RT_VG && gl_use_idm)
++		rem_idm_global_lockspace();
+ 
+ 	return 0;
+ }
+@@ -3259,6 +3399,7 @@ static int for_each_lockspace(int do_stop, int do_free, int do_force)
+ 				if (ls->free_vg) {
+ 					/* In future we may need to free ls->actions here */
+ 					free_ls_resources(ls);
++					free_pvs_path(&ls->pvs);
+ 					free(ls);
+ 					free_count++;
+ 				}
+@@ -3272,6 +3413,7 @@ static int for_each_lockspace(int do_stop, int do_free, int do_force)
+ 		if (!gl_type_static) {
+ 			gl_use_dlm = 0;
+ 			gl_use_sanlock = 0;
++			gl_use_idm = 0;
+ 		}
+ 	}
+ 	pthread_mutex_unlock(&lockspaces_mutex);
+@@ -3347,6 +3489,9 @@ static int work_init_vg(struct action *act)
+ 		rv = lm_init_vg_sanlock(ls_name, act->vg_name, act->flags, act->vg_args);
+ 	else if (act->lm_type == LD_LM_DLM)
+ 		rv = lm_init_vg_dlm(ls_name, act->vg_name, act->flags, act->vg_args);
++	else if (act->lm_type == LD_LM_IDM)
++		/* Non't do anything for IDM when initialize VG */
++		rv = 0;
+ 	else
+ 		rv = -EINVAL;
+ 
+@@ -3450,6 +3595,8 @@ static int work_init_lv(struct action *act)
+ 
+ 	} else if (act->lm_type == LD_LM_DLM) {
+ 		return 0;
++	} else if (act->lm_type == LD_LM_IDM) {
++		return 0;
+ 	} else {
+ 		log_error("init_lv ls_name %s bad lm_type %d", ls_name, act->lm_type);
+ 		return -EINVAL;
+@@ -3513,20 +3660,29 @@ static void *worker_thread_main(void *arg_in)
+ 		if (act->op == LD_OP_RUNNING_LM) {
+ 			int run_sanlock = lm_is_running_sanlock();
+ 			int run_dlm = lm_is_running_dlm();
++			int run_idm = lm_is_running_idm();
+ 
+ 			if (daemon_test) {
+ 				run_sanlock = gl_use_sanlock;
+ 				run_dlm = gl_use_dlm;
++				run_idm = gl_use_idm;
+ 			}
+ 
+-			if (run_sanlock && run_dlm)
++			/*
++			 * It's not possible to enable multiple locking schemes
++			 * for global lock, otherwise, it must be conflict and
++			 * reports it!
++			 */
++			if ((run_sanlock + run_dlm + run_idm) >= 2)
+ 				act->result = -EXFULL;
+-			else if (!run_sanlock && !run_dlm)
++			else if (!run_sanlock && !run_dlm && !run_idm)
+ 				act->result = -ENOLCK;
+ 			else if (run_sanlock)
+ 				act->result = LD_LM_SANLOCK;
+ 			else if (run_dlm)
+ 				act->result = LD_LM_DLM;
++			else if (run_idm)
++				act->result = LD_LM_IDM;
+ 			add_client_result(act);
+ 
+ 		} else if ((act->op == LD_OP_LOCK) && (act->flags & LD_AF_SEARCH_LS)) {
+@@ -3814,6 +3970,9 @@ static int client_send_result(struct client *cl, struct action *act)
+ 		} else if (gl_use_dlm) {
+ 			if (!gl_lsname_dlm[0])
+ 				strcat(result_flags, "NO_GL_LS,");
++		} else if (gl_use_idm) {
++			if (!gl_lsname_idm[0])
++				strcat(result_flags, "NO_GL_LS,");
+ 		} else {
+ 			int found_lm = 0;
+ 
+@@ -3821,6 +3980,8 @@ static int client_send_result(struct client *cl, struct action *act)
+ 				found_lm++;
+ 			if (lm_support_sanlock() && lm_is_running_sanlock())
+ 				found_lm++;
++			if (lm_support_idm() && lm_is_running_idm())
++				found_lm++;
+ 
+ 			if (!found_lm)
+ 				strcat(result_flags, "NO_GL_LS,NO_LM");
+@@ -3996,11 +4157,13 @@ static int add_lock_action(struct action *act)
+ 		if (gl_use_sanlock && (act->op == LD_OP_ENABLE || act->op == LD_OP_DISABLE)) {
+ 			vg_ls_name(act->vg_name, ls_name);
+ 		} else {
+-			if (!gl_use_dlm && !gl_use_sanlock) {
++			if (!gl_use_dlm && !gl_use_sanlock && !gl_use_idm) {
+ 				if (lm_is_running_dlm())
+ 					gl_use_dlm = 1;
+ 				else if (lm_is_running_sanlock())
+ 					gl_use_sanlock = 1;
++				else if (lm_is_running_idm())
++					gl_use_idm = 1;
+ 			}
+ 			gl_ls_name(ls_name);
+ 		}
+@@ -4048,6 +4211,17 @@ static int add_lock_action(struct action *act)
+ 			add_dlm_global_lockspace(NULL);
+ 			goto retry;
+ 
++		} else if (act->op == LD_OP_LOCK && act->rt == LD_RT_GL && act->mode != LD_LK_UN && gl_use_idm) {
++			/*
++			 * Automatically start the idm global lockspace when
++			 * a command tries to acquire the global lock.
++			 */
++			log_debug("lockspace \"%s\" not found for idm gl, adding...", ls_name);
++			act->flags |= LD_AF_SEARCH_LS;
++			act->flags |= LD_AF_WAIT_STARTING;
++			add_idm_global_lockspace(NULL);
++			goto retry;
++
+ 		} else if (act->op == LD_OP_LOCK && act->mode == LD_LK_UN) {
+ 			log_debug("lockspace \"%s\" not found for unlock ignored", ls_name);
+ 			return -ENOLS;
+@@ -4268,6 +4442,8 @@ static int str_to_lm(const char *str)
+ 		return LD_LM_SANLOCK;
+ 	if (!strcmp(str, "dlm"))
+ 		return LD_LM_DLM;
++	if (!strcmp(str, "idm"))
++		return LD_LM_IDM;
+ 	return -2; 
+ }
+ 
+@@ -4603,12 +4779,14 @@ static void client_recv_action(struct client *cl)
+ 	const char *vg_sysid;
+ 	const char *path;
+ 	const char *str;
++	struct pvs pvs;
++	char buf[11];	/* p a t h [ x x x x ] \0 */
+ 	int64_t val;
+ 	uint32_t opts = 0;
+ 	int result = 0;
+ 	int cl_pid;
+ 	int op, rt, lm, mode;
+-	int rv;
++	int rv, i;
+ 
+ 	buffer_init(&req.buffer);
+ 
+@@ -4697,11 +4875,13 @@ static void client_recv_action(struct client *cl)
+ 	if (!cl->name[0] && cl_name)
+ 		strncpy(cl->name, cl_name, MAX_NAME);
+ 
+-	if (!gl_use_dlm && !gl_use_sanlock && (lm > 0)) {
++	if (!gl_use_dlm && !gl_use_sanlock && !gl_use_idm && (lm > 0)) {
+ 		if (lm == LD_LM_DLM && lm_support_dlm())
+ 			gl_use_dlm = 1;
+ 		else if (lm == LD_LM_SANLOCK && lm_support_sanlock())
+ 			gl_use_sanlock = 1;
++		else if (lm == LD_LM_IDM && lm_support_idm())
++			gl_use_idm = 1;
+ 
+ 		log_debug("set gl_use_%s", lm_str(lm));
+ 	}
+@@ -4758,6 +4938,40 @@ static void client_recv_action(struct client *cl)
+ 	if (val)
+ 		act->host_id = val;
+ 
++	/* Create PV list for idm */
++	if (lm == LD_LM_IDM) {
++		memset(&pvs, 0x0, sizeof(pvs));
++
++		pvs.num = daemon_request_int(req, "path_num", 0);
++		log_error("pvs_num = %d", pvs.num);
++
++		if (!pvs.num)
++			goto skip_pvs_path;
++
++		/* Receive the pv list which is transferred from LVM command */
++		if (!alloc_pvs_path(&pvs, pvs.num)) {
++			log_error("fail to allocate pvs path");
++			rv = -ENOMEM;
++			goto out;
++		}
++
++		for (i = 0; i < pvs.num; i++) {
++			snprintf(buf, sizeof(buf), "path[%d]", i);
++			pvs.path[i] = (char *)daemon_request_str(req, buf, NULL);
++		}
++
++		if (!alloc_and_copy_pvs_path(&act->pvs, &pvs)) {
++			log_error("fail to allocate pvs path");
++			rv = -ENOMEM;
++			goto out;
++		}
++
++		if (pvs.path)
++			free(pvs.path);
++		pvs.path = NULL;
++	}
++
++skip_pvs_path:
+ 	act->max_retries = daemon_request_int(req, "max_retries", DEFAULT_MAX_RETRIES);
+ 
+ 	dm_config_destroy(req.cft);
+@@ -4779,6 +4993,12 @@ static void client_recv_action(struct client *cl)
+ 		goto out;
+ 	}
+ 
++	if (lm == LD_LM_IDM && !lm_support_idm()) {
++		log_debug("idm not supported");
++		rv = -EPROTONOSUPPORT;
++		goto out;
++	}
++
+ 	if (act->op == LD_OP_LOCK && act->mode != LD_LK_UN)
+ 		cl->lock_ops = 1;
+ 
+@@ -5377,6 +5597,7 @@ static void adopt_locks(void)
+ 		}
+ 		
+ 		list_del(&ls->list);
++		free_pvs_path(&ls->pvs);
+ 		free(ls);
+ 	}
+ 
+@@ -5417,6 +5638,7 @@ static void adopt_locks(void)
+ 		if (rv < 0) {
+ 			log_error("Failed to create lockspace thread for VG %s", ls->vg_name);
+ 			list_del(&ls->list);
++			free_pvs_path(&ls->pvs);
+ 			free(ls);
+ 			free_action(act);
+ 			count_start_fail++;
+@@ -5859,6 +6081,7 @@ static int main_loop(daemon_state *ds_arg)
+ 	}
+ 
+ 	strcpy(gl_lsname_dlm, S_NAME_GL_DLM);
++	strcpy(gl_lsname_idm, S_NAME_GL_IDM);
+ 
+ 	INIT_LIST_HEAD(&lockspaces);
+ 	pthread_mutex_init(&lockspaces_mutex, NULL);
+@@ -6112,6 +6335,8 @@ int main(int argc, char *argv[])
+ 				gl_use_dlm = 1;
+ 			else if (lm == LD_LM_SANLOCK && lm_support_sanlock())
+ 				gl_use_sanlock = 1;
++			else if (lm == LD_LM_IDM && lm_support_idm())
++				gl_use_idm = 1;
+ 			else {
+ 				fprintf(stderr, "invalid gl-type option\n");
+ 				exit(EXIT_FAILURE);
+diff --git a/daemons/lvmlockd/lvmlockd-internal.h b/daemons/lvmlockd/lvmlockd-internal.h
+index 983d66589..06a50ad85 100644
+--- a/daemons/lvmlockd/lvmlockd-internal.h
++++ b/daemons/lvmlockd/lvmlockd-internal.h
+@@ -121,7 +121,7 @@ struct client {
+ #define DEFAULT_MAX_RETRIES 4
+ 
+ struct pvs {
+-	const char **path;
++	char **path;
+ 	int num;
+ };
+ 
+@@ -338,7 +338,9 @@ EXTERN int gl_use_idm;
+ EXTERN int gl_vg_removed;
+ EXTERN char gl_lsname_dlm[MAX_NAME+1];
+ EXTERN char gl_lsname_sanlock[MAX_NAME+1];
++EXTERN char gl_lsname_idm[MAX_NAME+1];
+ EXTERN int global_dlm_lockspace_exists;
++EXTERN int global_idm_lockspace_exists;
+ 
+ EXTERN int daemon_test; /* run as much as possible without a live lock manager */
+ EXTERN int daemon_debug;
+-- 
+2.25.1
 
 
