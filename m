@@ -1,67 +1,85 @@
-From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Fri, 23 Apr 2021 21:05:43 +0000 (GMT)
-Subject: main - cov: avoid leak when repeating options
-Message-ID: <20210423210543.A2151393BC13@sourceware.org>
+From: Leo Yan <leo.yan@linaro.org>
+Date: Sun, 25 Apr 2021 10:22:36 +0800
+Subject: [LVM2 RFCv1 0/5] Enable In-Drive-Mutex Locking scheme
+Message-ID: <20210425022241.5055-1-leo.yan@linaro.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=3d96203e21be7fcea783afaa94e10295696a4533
-Commit:        3d96203e21be7fcea783afaa94e10295696a4533
-Parent:        7e77e250a9249f6b7c9bc63b88de393c02ef6a61
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu Apr 22 17:53:45 2021 +0200
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Fri Apr 23 22:59:25 2021 +0200
+This patch set enables the In-Drive-Mutex (IDM) locking scheme.
 
-cov: avoid leak when repeating options
+The In-Drive-Mutex (IDM) offers an alternative to sanlock and DLM
+barrier operations for lvmlockd controlled metadata updates.
+This mechanism works differently from the two existing methods
+in that it does not use a specific logical volume (LV) for lock leasing,
+instead we rely on drives that implement new SCSI commands such that
+every host can acquire and release locks from the drive firmware.
+By managing the synchronization of metadata updates from multiple
+servers within the drive creates a single point of truth which
+removes potential state synchronization errors from drive hotswap and other
+issues.  The reduction in complexity simplifies lvmlockd and increases
+performance of metadata updates for shared volume groups.
 
-Do not leak previous buffer, when option is set more then once.
----
- daemons/lvmlockd/lvmlockctl.c | 4 ++++
- tools/pvck.c                  | 1 +
- 2 files changed, 5 insertions(+)
+For easier using IDM locking, the IDM locking manager and IDM lib are
+provided.  The IDM lock manager runs as a daemon and it acts as a bridge
+between lvmlockd and drive firmware; the IDM lib APIs is provided
+for lvmlockd easily to invoke.  Therefore, the IDM locking manager and
+IDM library are a good place to understand deeper for the locking scheme
+and its algorithms, its code can be found on the github [1].
 
-diff --git a/daemons/lvmlockd/lvmlockctl.c b/daemons/lvmlockd/lvmlockctl.c
-index 350e78e9a..32da99c6d 100644
---- a/daemons/lvmlockd/lvmlockctl.c
-+++ b/daemons/lvmlockd/lvmlockctl.c
-@@ -987,18 +987,22 @@ static int read_options(int argc, char *argv[])
- 			break;
- 		case 'k':
- 			kill_vg = 1;
-+			free(arg_vg_name);
- 			arg_vg_name = strdup(optarg);
- 			break;
- 		case 'r':
- 			drop_vg = 1;
-+			free(arg_vg_name);
- 			arg_vg_name = strdup(optarg);
- 			break;
- 		case 'E':
- 			gl_enable = 1;
-+			free(arg_vg_name);
- 			arg_vg_name = strdup(optarg);
- 			break;
- 		case 'D':
- 			gl_disable = 1;
-+			free(arg_vg_name);
- 			arg_vg_name = strdup(optarg);
- 			break;
- 		case 'S':
-diff --git a/tools/pvck.c b/tools/pvck.c
-index 2af34dc57..6bc1c091f 100644
---- a/tools/pvck.c
-+++ b/tools/pvck.c
-@@ -1774,6 +1774,7 @@ static int _get_one_setting(struct cmd_context *cmd, struct settings *set, char
- 	}
- 
- 	if (!strncmp(key, "backup_file", strlen("backup_file"))) {
-+		free(set->backup_file);
- 		if ((set->backup_file = strdup(val)))
- 			return 1;
- 		return 0;
+The patches in this set are arranged with the bottom-to-top approach.
+
+The patch 01 presents the IDM wrapper layer for lvmlockd, it shows
+the interface with IDM locking manager daemon.  By reading this patch,
+especially for locking/unlocking/convert APIs, hope it can give out some
+basic idea for the usages for IDM.  The patch 02 is to hook IDM
+with lvmlockd core layer.
+
+The latter two patches 03 and 04 are to enable Seagate IDM in the locking
+lib; the locking lib is invoked by LVM commands, after enable the IDM
+locking scheme, we need to ask locking lib to generate PV list for
+VG/LV and pass the list from LVM command to lvmlockd.  As the result,
+the PVs are the target for sending IDM SCSI commands which finally is
+used by IDM lock manager.
+
+The last patch is a minor enabling IDM locking scheme in tools.
+
+This patch set has been tested with Seagate drives which has been
+flashed firmware for supporting IDM.  The basic operations for VG/VL
+creating/removing, activation/deactivation, and thin pool can pass the
+testing with IDM.
+
+It's planned to enable IDM testing with LVM testing framework, which
+will be sent out later in a separate patch series.
+
+[1] https://github.com/Seagate/propeller
+
+
+Leo Yan (5):
+  lvmlockd: idm: Introduce new locking scheme
+  lvmlockd: idm: Hook Seagate IDM wrapper APIs
+  lib: locking: Add new type "idm"
+  lib: locking: Parse PV list for IDM locking
+  tools: Add support for "idm" lock type
+
+ configure                            | 173 ++++++
+ configure.ac                         |  20 +
+ daemons/lvmlockd/Makefile.in         |   5 +
+ daemons/lvmlockd/lvmlockd-core.c     | 279 ++++++++-
+ daemons/lvmlockd/lvmlockd-idm.c      | 837 +++++++++++++++++++++++++++
+ daemons/lvmlockd/lvmlockd-internal.h | 110 ++++
+ lib/display/display.c                |   4 +
+ lib/locking/lvmlockd.c               | 356 +++++++++++-
+ lib/metadata/metadata-exported.h     |   1 +
+ lib/metadata/metadata.c              |  12 +-
+ tools/lvconvert.c                    |   2 +
+ tools/toollib.c                      |  11 +-
+ 12 files changed, 1756 insertions(+), 54 deletions(-)
+ create mode 100644 daemons/lvmlockd/lvmlockd-idm.c
+
+-- 
+2.25.1
 
 
