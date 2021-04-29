@@ -1,80 +1,48 @@
 From: Leo Yan <leo.yan@linaro.org>
-Date: Thu, 29 Apr 2021 11:12:09 +0800
-Subject: [LVM2 RFCv1 4/5] lib: locking: Parse PV list for IDM locking
-In-Reply-To: <20210428193927.GE9566@redhat.com>
+Date: Thu, 29 Apr 2021 11:26:45 +0800
+Subject: [LVM2 RFCv1 1/5] lvmlockd: idm: Introduce new locking scheme
+In-Reply-To: <20210428195445.GF9566@redhat.com>
 References: <20210425022241.5055-1-leo.yan@linaro.org>
-	<20210425022241.5055-5-leo.yan@linaro.org>
-	<20210428193927.GE9566@redhat.com>
-Message-ID: <20210429031209.GA199698@leoy-ThinkPad-X240s>
+	<20210425022241.5055-2-leo.yan@linaro.org>
+	<20210428195445.GF9566@redhat.com>
+Message-ID: <20210429032645.GB199698@leoy-ThinkPad-X240s>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On Wed, Apr 28, 2021 at 02:39:27PM -0500, David Teigland wrote:
-> On Sun, Apr 25, 2021 at 10:22:40AM +0800, Leo Yan wrote:
-> > +static void _lockd_retrive_lv_pv_list(struct volume_group *vg,
-> > +				      const char *lv_name,
-> > +				      struct lvmlockd_pvs *lock_pvs)
-> > +{
+On Wed, Apr 28, 2021 at 02:54:45PM -0500, David Teigland wrote:
+> On Sun, Apr 25, 2021 at 10:22:37AM +0800, Leo Yan wrote:
+> > One thing should be mentioned is the IDM's LVB.  IDM supports LVB to max
+> > 7 bytes when stores into the drive, the most significant byte of 8 bytes
+> > is reserved for control bits.  For this reason, the patch maps the
+> > timestamp in macrosecond unit with its cached LVB, essentially, if any
+> > timestamp was updated by other nodes, that means the local LVB is
+> > invalidate thus the metadata should be invlidated.  When the timestamp
+> > is stored into drive's LVB, it's possbile to cause time-going-backwards
+> > issue, which is introduced by the time precision or missing
+> > synchronization acrossing over multiple nodes.  So the IDM wrapper fixes
+> > up the timestamp by increment 1 to the latest value and write back into
+> > drive.
 > 
-> It looks like this wants a list of PVs (names) used by the LV.  Try
-> iterating through all PVs in the VG and using the existing lv_is_on_pv()
-> function to check if the LV is using that PV, e.g.
-> 
-> for each pv in vg->pvs,
-> 	if (lv_is_on_pv(lv, pv))
-> 		copy the pv name;
+> While lvmlockd, sanlock, dlm are still using the LVB to track VG changes,
+> it's not actually being used for anything any longer.  When lvm used
+> lvmetad to cache metadata, we used the LVB to trigger lvmetad cache
+> invalidation.  It's possible that this LVB functionality could be useful
+> again in the future.
 
-Using lv_is_on_pv() is much better.  I read a bit for the code, except
-it checks the LV itself is on the PV or not, it also checks sub LVs
-(like metadata, pool, etc).  Will fix it.
+Thanks for reminding.  So I think it's good to keep LVB functionality
+for IDM in lvmlockd, which allows IDM have the consistent supporting
+with other locking schemes (sanlock and dlm), and maybe can be used
+later as you said;  will update the commit log to reflect this.
 
-> You could pass the lv struct through to here, or use find_lv(vg, lv_name)
-> to get it again here.
-> 
-> > @@ -251,7 +485,16 @@ static int _lockd_request(struct cmd_context *cmd,
-> >  	if (vg_name && lv_name) {
-> > -		reply = _lockd_send(req_name,
-> > +		/*
-> > +		 * For LV operation, the PV list must be passed for idm,
-> > +		 * otherwise, IDM lock manager has no idea to send locking
-> > +		 * request to which drives, so return failure.
-> > +		 */
-> > +		if (!lock_pvs)
-> > +			return 1;
-> > +
-> > +		reply = _lockd_send_with_pvs(req_name,
-> 
-> Requires other lock managers to include lock_pvs?
+As a side topic, just curious if LVM doesn't use LVB for invalidation
+the cached metadata, then now LVM uses which mechanism for metadata
+invalidation?  Sorry this question shows my lacking knowledge, but just
+want to ensure I don't miss anything for the IDM enabling.
 
-No, will change code to only pass "lock_pvs" for IDM; for other
-locking schemes, will assign NULL pointer to "lock_pvs".
-
-> > +	/*
-> > +	 * Create the VG's PV list when start the VG, the PV list
-> > +	 * is passed to lvmlockd, and the the PVs path will be used
-> > +	 * to send SCSI commands for idm locking scheme.
-> > +	 */
-> 
-> if vg->lock_type is IDM before creating pv_list?
-
-Yes, IIUC, when start the VG, "vg->lock_type" has been assigned to the
-locking scheme which it's using; for IDM locking scheme, "vg->lock_type"
-is "idm" before creating pv_list.
-
-> > +	_lockd_retrive_vg_pv_list(vg, &lock_pvs);
-> > +
-> > +	reply = _lockd_send_with_pvs("start_vg",
-> > +				&lock_pvs,
-> 
-> and probably NULL instead of &lock_pvs for non-IDM.
-
-Will do.
-
-Will follow up the comments in next patch set, thanks for reviewing!
-
+Thanks,
 Leo
 
 
