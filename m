@@ -1,58 +1,47 @@
-From: agk@sourceware.org <agk@sourceware.org>
-Date: 27 Jul 2010 22:52:20 -0000
-Subject: LVM2 VERSION VERSION_DM WHATS_NEW WHATS_NEW_DM
-Message-ID: <20100727225220.29286.qmail@sourceware.org>
+From: David Teigland <teigland@sourceware.org>
+Date: Tue,  4 May 2021 18:08:52 +0000 (GMT)
+Subject: main - pvremove: use consistent error message
+Message-ID: <20210504180852.4ECD8395144A@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	agk at sourceware.org	2010-07-27 22:52:19
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=2419345b9d407d8b07327d7484f765ee92be5994
+Commit:        2419345b9d407d8b07327d7484f765ee92be5994
+Parent:        4dc5d4ac7e7a9457ccc46ff04796b347e58bf4da
+Author:        David Teigland <teigland@redhat.com>
+AuthorDate:    Tue May 4 13:03:25 2021 -0500
+Committer:     David Teigland <teigland@redhat.com>
+CommitterDate: Tue May 4 13:08:02 2021 -0500
 
-Modified files:
-	.              : VERSION VERSION_DM WHATS_NEW WHATS_NEW_DM 
+pvremove: use consistent error message
 
-Log message:
-	pre-release
+When the device is not a PV print
+  "No PV found on device ..."
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/VERSION.diff?cvsroot=lvm2&r1=1.246&r2=1.247
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/VERSION_DM.diff?cvsroot=lvm2&r1=1.57&r2=1.58
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1672&r2=1.1673
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW_DM.diff?cvsroot=lvm2&r1=1.396&r2=1.397
+instead of
+  "Failed to read lvm info for ... PVID ."
 
---- LVM2/VERSION	2010/07/07 02:37:28	1.246
-+++ LVM2/VERSION	2010/07/27 22:52:19	1.247
-@@ -1 +1 @@
--2.02.71(2)-cvs (2010-07-07)
-+2.02.71(2)-cvs (2010-07-27)
---- LVM2/VERSION_DM	2010/07/07 02:37:28	1.57
-+++ LVM2/VERSION_DM	2010/07/27 22:52:19	1.58
-@@ -1 +1 @@
--1.02.53-cvs (2010-07-07)
-+1.02.53-cvs (2010-07-27)
---- LVM2/WHATS_NEW	2010/07/27 21:57:37	1.1672
-+++ LVM2/WHATS_NEW	2010/07/27 22:52:19	1.1673
-@@ -1,5 +1,5 @@
--Version 2.02.71 -
--===============================
-+Version 2.02.71 - 27th July 2010
-+================================
-   Document LVM fault handling in doc/lvm_fault_handling.txt.
-   Make vgck warn about missing PVs.
-   Clarify help text for vg_mda_count.
---- LVM2/WHATS_NEW_DM	2010/07/27 21:57:37	1.396
-+++ LVM2/WHATS_NEW_DM	2010/07/27 22:52:19	1.397
-@@ -1,5 +1,5 @@
--Version 1.02.53 -
--===============================
-+Version 1.02.53 - 27th July 2010
-+================================
-   Switch dmeventd to use dm_create_lockfile and drop duplicate code.
-   Add dm_create_lockfile to libdm to handle pidfiles for all daemons.
-   Replace lookup with next in struct dfa_state & calculate states on demand.
+an earlier check had been added with a different
+message for the same condition.
+---
+ tools/toollib.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/tools/toollib.c b/tools/toollib.c
+index 8f9ea1e6b..07f065322 100644
+--- a/tools/toollib.c
++++ b/tools/toollib.c
+@@ -5028,7 +5028,7 @@ static int _pvremove_check_used(struct cmd_context *cmd,
+ 	if (!(info = lvmcache_info_from_pvid(pd->dev->pvid, pd->dev, 0))) {
+ 		if (pp->force)
+ 			return 1;
+-		log_error("Failed to read lvm info for %s PVID %s.", dev_name(pd->dev), pd->dev->pvid);
++		log_error("No PV found on device %s.", dev_name(pd->dev));
+ 		dm_list_move(&pp->arg_fail, &pd->list);
+ 		return 0;
+ 	}
 
 
