@@ -1,120 +1,151 @@
 From: David Teigland <teigland@sourceware.org>
-Date: Wed,  5 May 2021 19:00:57 +0000 (GMT)
-Subject: main - devices file: recommend removing filter
-Message-ID: <20210505190057.CD8923857429@sourceware.org>
+Date: Wed,  5 May 2021 21:20:22 +0000 (GMT)
+Subject: main - blkid: simplify fs block size check
+Message-ID: <20210505212022.CF831385742C@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=71933d3496dfb21e1e39744d69f0372e202c1a1c
-Commit:        71933d3496dfb21e1e39744d69f0372e202c1a1c
-Parent:        2419345b9d407d8b07327d7484f765ee92be5994
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=318bb3a06b420e2ff9344138f20b879e82878866
+Commit:        318bb3a06b420e2ff9344138f20b879e82878866
+Parent:        71933d3496dfb21e1e39744d69f0372e202c1a1c
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Wed May 5 13:59:42 2021 -0500
+AuthorDate:    Wed May 5 16:15:10 2021 -0500
 Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Wed May 5 13:59:42 2021 -0500
+CommitterDate: Wed May 5 16:15:10 2021 -0500
 
-devices file: recommend removing filter
+blkid: simplify fs block size check
 
-When the devices file is enabled and the filter is set,
-recommand that the user remove the filter from lvm.conf
-since it's ignored.
+Only the LV path name is needed for blkid query,
+the step of getting a dev struct is not needed.
 ---
- lib/commands/toolcontext.c |  4 ++--
- lib/filters/filter-regex.c | 21 +++++++++++++++++++--
- lib/filters/filter.h       |  2 +-
- 3 files changed, 22 insertions(+), 5 deletions(-)
+ lib/device/dev-type.c          | 10 +++++-----
+ lib/device/dev-type.h          |  2 +-
+ lib/metadata/integrity_manip.c |  7 +------
+ tools/lvconvert.c              | 18 +++++-------------
+ 4 files changed, 12 insertions(+), 25 deletions(-)
 
-diff --git a/lib/commands/toolcontext.c b/lib/commands/toolcontext.c
-index 75634caff..296618686 100644
---- a/lib/commands/toolcontext.c
-+++ b/lib/commands/toolcontext.c
-@@ -1106,7 +1106,7 @@ static struct dev_filter *_init_filter_chain(struct cmd_context *cmd)
- 
- 	/* global regex filter. Optional. */
- 	if ((cn = find_config_tree_node(cmd, devices_global_filter_CFG, NULL))) {
--		if (!(filters[nr_filt] = regex_filter_create(cn->v))) {
-+		if (!(filters[nr_filt] = regex_filter_create(cn->v, 0, 1))) {
- 			log_error("Failed to create global regex device filter");
- 			goto bad;
- 		}
-@@ -1115,7 +1115,7 @@ static struct dev_filter *_init_filter_chain(struct cmd_context *cmd)
- 
- 	/* regex filter. Optional. */
- 	if ((cn = find_config_tree_node(cmd, devices_filter_CFG, NULL))) {
--		if (!(filters[nr_filt] = regex_filter_create(cn->v))) {
-+		if (!(filters[nr_filt] = regex_filter_create(cn->v, 1, 0))) {
- 			log_error("Failed to create regex device filter");
- 			goto bad;
- 		}
-diff --git a/lib/filters/filter-regex.c b/lib/filters/filter-regex.c
-index c6916983b..05c5b3f2d 100644
---- a/lib/filters/filter-regex.c
-+++ b/lib/filters/filter-regex.c
-@@ -21,6 +21,10 @@ struct rfilter {
- 	struct dm_pool *mem;
- 	dm_bitset_t accept;
- 	struct dm_regex *engine;
-+	unsigned config_filter:1;
-+	unsigned config_global_filter:1;
-+	unsigned warned_filter:1;
-+	unsigned warned_global_filter:1;
- };
- 
- static int _extract_pattern(struct dm_pool *mem, const char *pat,
-@@ -157,8 +161,18 @@ static int _accept_p(struct cmd_context *cmd, struct dev_filter *f, struct devic
- 	if (cmd->enable_devices_list)
- 		return 1;
- 
--	if (cmd->enable_devices_file && !cmd->filter_regex_with_devices_file)
-+	if (cmd->enable_devices_file && !cmd->filter_regex_with_devices_file) {
-+		/* can't warn in create_filter because enable_devices_file is set later */
-+		if (rf->config_filter && !rf->warned_filter) {
-+			log_warn("Please remove the lvm.conf filter, it is ignored with the devices file.");
-+			rf->warned_filter = 1;
-+		}
-+		if (rf->config_global_filter && !rf->warned_global_filter) {
-+			log_warn("Please remove the lvm.conf global_filter, it is ignored with the devices file.");
-+			rf->warned_global_filter = 1;
-+		}
- 		return 1;
-+	}
- 
- 	dm_list_iterate_items(sl, &dev->aliases) {
- 		m = dm_regex_match(rf->engine, sl->str);
-@@ -199,7 +213,7 @@ static void _regex_destroy(struct dev_filter *f)
- 	dm_pool_destroy(rf->mem);
+diff --git a/lib/device/dev-type.c b/lib/device/dev-type.c
+index 1b335722d..706061814 100644
+--- a/lib/device/dev-type.c
++++ b/lib/device/dev-type.c
+@@ -701,23 +701,23 @@ out:
  }
  
--struct dev_filter *regex_filter_create(const struct dm_config_value *patterns)
-+struct dev_filter *regex_filter_create(const struct dm_config_value *patterns, int config_filter, int config_global_filter)
+ #ifdef BLKID_WIPING_SUPPORT
+-int get_fs_block_size(struct device *dev, uint32_t *fs_block_size)
++int get_fs_block_size(const char *pathname, uint32_t *fs_block_size)
  {
- 	struct dm_pool *mem = dm_pool_create("filter regex", 10 * 1024);
- 	struct rfilter *rf;
-@@ -213,6 +227,9 @@ struct dev_filter *regex_filter_create(const struct dm_config_value *patterns)
+ 	char *block_size_str = NULL;
  
- 	rf->mem = mem;
+-	if ((block_size_str = blkid_get_tag_value(NULL, "BLOCK_SIZE", dev_name(dev)))) {
++	if ((block_size_str = blkid_get_tag_value(NULL, "BLOCK_SIZE", pathname))) {
+ 		*fs_block_size = (uint32_t)atoi(block_size_str);
+ 		free(block_size_str);
+-		log_debug("Found blkid BLOCK_SIZE %u for fs on %s", *fs_block_size, dev_name(dev));
++		log_debug("Found blkid BLOCK_SIZE %u for fs on %s", *fs_block_size, pathname);
+ 		return 1;
+ 	} else {
+-		log_debug("No blkid BLOCK_SIZE for fs on %s", dev_name(dev));
++		log_debug("No blkid BLOCK_SIZE for fs on %s", pathname);
+ 		*fs_block_size = 0;
+ 		return 0;
+ 	}
+ }
+ #else
+-int get_fs_block_size(struct device *dev, uint32_t *fs_block_size)
++int get_fs_block_size(const char *pathname, uint32_t *fs_block_size)
+ {
+ 	log_debug("Disabled blkid BLOCK_SIZE for fs.");
+ 	*fs_block_size = 0;
+diff --git a/lib/device/dev-type.h b/lib/device/dev-type.h
+index 45377c144..d358520df 100644
+--- a/lib/device/dev-type.h
++++ b/lib/device/dev-type.h
+@@ -100,6 +100,6 @@ int dev_is_nvme(struct dev_types *dt, struct device *dev);
  
-+	rf->config_filter = config_filter;
-+	rf->config_global_filter = config_global_filter;
-+
- 	if (!_build_matcher(rf, patterns))
- 		goto_bad;
+ int dev_is_lv(struct device *dev);
  
-diff --git a/lib/filters/filter.h b/lib/filters/filter.h
-index 40fbdeabb..f9de65273 100644
---- a/lib/filters/filter.h
-+++ b/lib/filters/filter.h
-@@ -44,7 +44,7 @@ void internal_filter_clear(void);
-  * r|.*|             - reject everything else
-  */
+-int get_fs_block_size(struct device *dev, uint32_t *fs_block_size);
++int get_fs_block_size(const char *pathname, uint32_t *fs_block_size);
  
--struct dev_filter *regex_filter_create(const struct dm_config_value *patterns);
-+struct dev_filter *regex_filter_create(const struct dm_config_value *patterns, int config_filter, int config_global_filter);
+ #endif
+diff --git a/lib/metadata/integrity_manip.c b/lib/metadata/integrity_manip.c
+index 4fbccfb3c..c2fd7504c 100644
+--- a/lib/metadata/integrity_manip.c
++++ b/lib/metadata/integrity_manip.c
+@@ -326,7 +326,6 @@ static int _set_integrity_block_size(struct cmd_context *cmd, struct logical_vol
+ 				     int lbs_4k, int lbs_512, int pbs_4k, int pbs_512)
+ {
+ 	char pathname[PATH_MAX];
+-	struct device *fs_dev;
+ 	uint32_t fs_block_size = 0;
+ 	int rv;
  
- typedef enum {
- 	FILTER_MODE_NO_LVMETAD,
+@@ -371,10 +370,6 @@ static int _set_integrity_block_size(struct cmd_context *cmd, struct logical_vol
+ 			log_error("Path name too long to get LV block size %s", display_lvname(lv));
+ 			goto bad;
+ 		}
+-		if (!(fs_dev = dev_cache_get(cmd, pathname, NULL))) {
+-			log_error("Device for LV not found to check block size %s", display_lvname(lv));
+-			goto bad;
+-		}
+ 
+ 		/*
+ 		 * get_fs_block_size() returns the libblkid BLOCK_SIZE value,
+@@ -387,7 +382,7 @@ static int _set_integrity_block_size(struct cmd_context *cmd, struct logical_vol
+ 		 * value the block size, but it's possible values are not the same
+ 		 * as xfs's, and do not seem to relate directly to the device LBS.
+ 		 */
+-		rv = get_fs_block_size(fs_dev, &fs_block_size);
++		rv = get_fs_block_size(pathname, &fs_block_size);
+ 		if (!rv || !fs_block_size) {
+ 			int use_bs;
+ 
+diff --git a/tools/lvconvert.c b/tools/lvconvert.c
+index ab6892105..990a723b6 100644
+--- a/tools/lvconvert.c
++++ b/tools/lvconvert.c
+@@ -5948,7 +5948,6 @@ static int _set_writecache_block_size(struct cmd_context *cmd,
+ 				      uint32_t *block_size_sectors)
+ {
+ 	char pathname[PATH_MAX];
+-	struct device *fs_dev;
+ 	struct dm_list pvs_list;
+ 	struct pv_list *pvl;
+ 	uint32_t fs_block_size = 0;
+@@ -6011,17 +6010,10 @@ static int _set_writecache_block_size(struct cmd_context *cmd,
+ 		goto bad;
+ 	}
+ 
+-	if (!sync_local_dev_names(cmd))
+-		stack;
+-
+-	if (!(fs_dev = dev_cache_get(cmd, pathname, NULL))) {
+-		if (test_mode()) {
+-			log_print("Test mode skips checking fs block size.");
+-			fs_block_size = 0;
+-			goto skip_fs;
+-		}
+-		log_error("Device for LV not found to check block size %s", pathname);
+-		goto bad;
++	if (test_mode()) {
++		log_print("Test mode skips checking fs block size.");
++		fs_block_size = 0;
++		goto skip_fs;
+ 	}
+ 
+ 	/*
+@@ -6037,7 +6029,7 @@ static int _set_writecache_block_size(struct cmd_context *cmd,
+ 	 *
+ 	 * With 512 LBS and 4K PBS, mkfs.xfs will use xfs sector size 4K.
+ 	 */
+-	rv = get_fs_block_size(fs_dev, &fs_block_size);
++	rv = get_fs_block_size(pathname, &fs_block_size);
+ skip_fs:
+ 	if (!rv || !fs_block_size) {
+ 		if (lbs_4k && pbs_4k && !pbs_512) {
 
 
