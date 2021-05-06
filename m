@@ -1,86 +1,183 @@
-From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Wed, 28 Jul 2010 11:15:46 +0200
-Subject: [PATCH 00/14] Miscellaneous fixes
-Message-ID: <cover.1280307502.git.zkabelac@redhat.com>
+From: David Teigland <teigland@sourceware.org>
+Date: Thu,  6 May 2021 19:44:16 +0000 (GMT)
+Subject: main - tests: new lvextend-caches
+Message-ID: <20210506194416.0ABA6384B801@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Miscellaneous fixes:
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=92fcfc59b2b0a81121771cab3b21ec5dde797510
+Commit:        92fcfc59b2b0a81121771cab3b21ec5dde797510
+Parent:        318bb3a06b420e2ff9344138f20b879e82878866
+Author:        David Teigland <teigland@redhat.com>
+AuthorDate:    Thu May 6 14:43:10 2021 -0500
+Committer:     David Teigland <teigland@redhat.com>
+CommitterDate: Thu May 6 14:43:10 2021 -0500
 
-One fix for non-srcdir builds.
-Fxes for testsuit.
-Cleanups for compiler warnings.
-Updates to dmsetup code.
+tests: new lvextend-caches
 
-Last patch is proposal for 3 solution how to fix udev patch
-checking - I think the check should be a separate function
-in lib dm used by dmsetup and liblvm. This patch is not supposed
-to be applied in this form.
+to test lvextend of LVs with attached cache|writecache
+---
+ test/shell/lvextend-caches.sh | 150 ++++++++++++++++++++++++++++++++++++++++++
+ 1 file changed, 150 insertions(+)
 
-
-Zdenek Kabelac (14):
-  Skip VPATH usage
-  Testsuit: Shell &&||
-  Testsuit: create empty files
-  Testsuit: test variables with quotes
-  Testsuit: speedup
-  Testsuit: add missing prepare_dmeventd
-  Fix constness warning
-  Fix C function definition
-  Fix constness warning
-  Fix void* arithmetic - use char*
-  Fix void* arithmetic and more readable char[]
-  log_debug event_nr
-  Reorder read_ahead check
-  Proposal of different check for udev dir
-
- daemons/clvmd/clvmd-singlenode.c        |    6 ++--
- daemons/clvmd/lvm-functions.c           |    4 +-
- include/Makefile.in                     |    1 -
- lib/activate/dev_manager.c              |    8 +++---
- lib/format_text/archive.c               |    4 +-
- lib/format_text/import.c                |    2 +-
- lib/locking/file_locking.c              |    2 +-
- libdm/ioctl/libdm-iface.c               |   13 ++++++-----
- libdm/mm/dbg_malloc.c                   |    6 ++--
- test/lvm-utils.sh                       |   30 +++++++++++++++++----------
- test/t-000-basic.sh                     |    4 +-
- test/t-activate-missing.sh              |    1 +
- test/t-activate-partial.sh              |    1 +
- test/t-inconsistent-metadata.sh         |    1 +
- test/t-listings.sh                      |    1 +
- test/t-lock-blocking.sh                 |    2 +-
- test/t-lvchange-mirror.sh               |    1 +
- test/t-lvconvert-mirror-basic.sh        |    1 +
- test/t-lvconvert-mirror.sh              |    1 +
- test/t-lvconvert-repair-dmeventd.sh     |    2 +-
- test/t-lvconvert-repair-policy.sh       |    1 +
- test/t-lvconvert-repair-replace.sh      |    1 +
- test/t-lvconvert-repair-transient.sh    |    1 +
- test/t-lvconvert-repair.sh              |    2 +-
- test/t-lvcreate-mirror.sh               |    1 +
- test/t-lvcreate-operation.sh            |    1 +
- test/t-lvcreate-pvtags.sh               |    1 +
- test/t-lvcreate-usage.sh                |    1 +
- test/t-lvresize-mirror.sh               |    1 +
- test/t-metadata.sh                      |    1 +
- test/t-mirror-names.sh                  |    1 +
- test/t-mirror-vgreduce-removemissing.sh |    1 +
- test/t-nomda-missing.sh                 |    1 +
- test/t-pvchange-usage.sh                |    2 +-
- test/t-pvmove-basic.sh                  |    7 ++---
- test/t-snapshots-of-mirrors.sh          |    1 +
- test/t-unknown-segment.sh               |    1 +
- test/t-unlost-pv.sh                     |    1 +
- test/test-utils.sh                      |    2 +-
- tools/dmsetup.c                         |   33 ++++++++++++++++++++++++++++--
- tools/lvmcmdline.c                      |    4 ++-
- 41 files changed, 107 insertions(+), 49 deletions(-)
-
--- 
-1.7.2
+diff --git a/test/shell/lvextend-caches.sh b/test/shell/lvextend-caches.sh
+new file mode 100644
+index 000000000..de9af6d2c
+--- /dev/null
++++ b/test/shell/lvextend-caches.sh
+@@ -0,0 +1,150 @@
++#!/usr/bin/env bash
++
++# Copyright (C) 2017-2020 Red Hat, Inc. All rights reserved.
++#
++# This copyrighted material is made available to anyone wishing to use,
++# modify, copy, or redistribute it subject to the terms and conditions
++# of the GNU General Public License v.2.
++#
++# You should have received a copy of the GNU General Public License
++# along with this program; if not, write to the Free Software Foundation,
++# Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
++
++SKIP_WITH_LVMPOLLD=1
++
++# lvextend LV with cache|writecache
++
++. lib/inittest
++
++do_test()
++{
++	# create some initial data
++	lvchange -ay $vg/$lv1
++	mkfs.xfs -f -s size=4096 "$DM_DEV_DIR/$vg/$lv1"
++	mount "$DM_DEV_DIR/$vg/$lv1" "$mount_dir"
++	cp pattern "$mount_dir/pattern1"
++	dd if=/dev/urandom of="$mount_dir/rand100M" bs=1M count=100 conv=fdatasync
++	cp pattern "$mount_dir/pattern2"
++
++	# extend while mounted
++	lvextend -L+64M $vg/$lv1 "$dev4"
++	lvs -a $vg -o+devices
++
++	# verify initial data
++	diff pattern "$mount_dir/pattern1"
++	diff pattern "$mount_dir/pattern2"
++	dd of=/dev/null if="$mount_dir/rand100M" bs=1M count=100
++
++	# add more data
++	cp pattern "$mount_dir/pattern3"
++	dd if=/dev/urandom of="$mount_dir/rand8M" bs=1M count=8 conv=fdatasync
++
++	# restart the LV
++	umount "$mount_dir"
++	lvchange -an $vg/$lv1
++	lvchange -ay $vg/$lv1
++	mount "$DM_DEV_DIR/$vg/$lv1" "$mount_dir"
++
++	# verify all data
++	diff pattern "$mount_dir/pattern1"
++	diff pattern "$mount_dir/pattern2"
++	diff pattern "$mount_dir/pattern3"
++	dd of=/dev/null if="$mount_dir/rand100M" bs=1M count=100
++	dd of=/dev/null if="$mount_dir/rand8M" bs=1M count=8
++
++	# extend again while inactive
++	umount "$mount_dir"
++	lvchange -an $vg/$lv1
++	lvextend -L+64M $vg/$lv1 "$dev5"
++	lvs -a $vg -o+devices
++	lvchange -ay $vg/$lv1
++	mount "$DM_DEV_DIR/$vg/$lv1" "$mount_dir"
++
++	# verify all data
++	diff pattern "$mount_dir/pattern1"
++	diff pattern "$mount_dir/pattern2"
++	diff pattern "$mount_dir/pattern3"
++	dd of=/dev/null if="$mount_dir/rand100M" bs=1M count=100
++	dd of=/dev/null if="$mount_dir/rand8M" bs=1M count=8
++
++	# add more data
++	cp pattern "$mount_dir/pattern4"
++
++	# remove the cache
++	lvconvert --splitcache $vg/$lv1
++
++	# verify all data
++	diff pattern "$mount_dir/pattern1"
++	diff pattern "$mount_dir/pattern2"
++	diff pattern "$mount_dir/pattern3"
++	diff pattern "$mount_dir/pattern4"
++	dd of=/dev/null if="$mount_dir/rand100M" bs=1M count=100
++	dd of=/dev/null if="$mount_dir/rand8M" bs=1M count=8
++
++	umount "$mount_dir"
++	lvchange -an $vg/$lv1
++	lvchange -ay $vg/$lv1
++	mount "$DM_DEV_DIR/$vg/$lv1" "$mount_dir"
++
++	# verify all data
++	diff pattern "$mount_dir/pattern1"
++	diff pattern "$mount_dir/pattern2"
++	diff pattern "$mount_dir/pattern3"
++	diff pattern "$mount_dir/pattern4"
++	dd of=/dev/null if="$mount_dir/rand100M" bs=1M count=100
++	dd of=/dev/null if="$mount_dir/rand8M" bs=1M count=8
++
++	umount "$mount_dir"
++	lvchange -an $vg/$lv1
++	lvremove $vg/$lv1
++	lvremove -y $vg
++}
++
++
++aux have_cache 1 10 0 || skip
++aux have_writecache 1 0 0 || skip
++which mkfs.xfs || skip
++
++mount_dir="mnt"
++mkdir -p "$mount_dir"
++
++aux prepare_devs 6 66 # want 64M of usable space from each dev
++
++# generate random data
++dd if=/dev/urandom of=pattern bs=512K count=1
++
++vgcreate $SHARED $vg "$dev1" "$dev2" "$dev3" "$dev4" "$dev5" "$dev6"
++
++# test type cache|writecache
++# cache with cachepool|cachevol
++# cache with writeback|writethrough
++
++# lv1 is main LV: 128M
++# lv2 is fast LV:  64M
++
++lvcreate -n $lv1 -L128M -an $vg "$dev1" "$dev2"
++lvcreate -n $lv2 -L64M -an $vg "$dev3"
++lvconvert -y --type writecache --cachevol $lv2 $vg/$lv1
++lvs -a $vg -o+devices
++do_test
++
++lvcreate -n $lv1 -L128M -an $vg "$dev1" "$dev2"
++lvcreate -n $lv2 -L64M -an $vg "$dev3"
++lvconvert -y --type cache --cachevol $lv2 --cachemode writeback $vg/$lv1
++lvs -a $vg -o+devices
++do_test
++
++lvcreate -n $lv1 -L128M -an $vg "$dev1" "$dev2"
++lvcreate -n $lv2 -L64M -an $vg "$dev3"
++lvconvert -y --type cache --cachevol $lv2 --cachemode writethrough $vg/$lv1
++lvs -a $vg -o+devices
++do_test
++
++lvcreate -n $lv1 -L128M -an $vg "$dev1" "$dev2"
++lvcreate -y --type cache-pool -n $lv2 -L64M --poolmetadataspare n $vg "$dev3" "$dev6"
++lvconvert -y --type cache --cachepool $lv2 --poolmetadataspare n $vg/$lv1
++lvs -a $vg -o+devices
++do_test
++
++vgremove -f $vg
++
 
 
