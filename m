@@ -1,183 +1,95 @@
 From: David Teigland <teigland@sourceware.org>
-Date: Thu,  6 May 2021 19:44:16 +0000 (GMT)
-Subject: main - tests: new lvextend-caches
-Message-ID: <20210506194416.0ABA6384B801@sourceware.org>
+Date: Thu,  6 May 2021 21:32:41 +0000 (GMT)
+Subject: main - writecache: allow attaching to thin pool data
+Message-ID: <20210506213241.F0105384C003@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=92fcfc59b2b0a81121771cab3b21ec5dde797510
-Commit:        92fcfc59b2b0a81121771cab3b21ec5dde797510
-Parent:        318bb3a06b420e2ff9344138f20b879e82878866
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=6b00c8c9109b0b6111d4adb9918cccc407ac448f
+Commit:        6b00c8c9109b0b6111d4adb9918cccc407ac448f
+Parent:        92fcfc59b2b0a81121771cab3b21ec5dde797510
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Thu May 6 14:43:10 2021 -0500
+AuthorDate:    Thu May 6 16:18:50 2021 -0500
 Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Thu May 6 14:43:10 2021 -0500
+CommitterDate: Thu May 6 16:23:03 2021 -0500
 
-tests: new lvextend-caches
+writecache: allow attaching to thin pool data
 
-to test lvextend of LVs with attached cache|writecache
 ---
- test/shell/lvextend-caches.sh | 150 ++++++++++++++++++++++++++++++++++++++++++
- 1 file changed, 150 insertions(+)
+ tools/command-lines.in |  4 ++--
+ tools/lvconvert.c      | 14 ++++++++++++--
+ 2 files changed, 14 insertions(+), 4 deletions(-)
 
-diff --git a/test/shell/lvextend-caches.sh b/test/shell/lvextend-caches.sh
-new file mode 100644
-index 000000000..de9af6d2c
---- /dev/null
-+++ b/test/shell/lvextend-caches.sh
-@@ -0,0 +1,150 @@
-+#!/usr/bin/env bash
+diff --git a/tools/command-lines.in b/tools/command-lines.in
+index 164516a2e..1107c1e02 100644
+--- a/tools/command-lines.in
++++ b/tools/command-lines.in
+@@ -493,7 +493,7 @@ AUTOTYPE: cache
+ 
+ ---
+ 
+-lvconvert --type writecache --cachevol LV LV_linear_striped_raid
++lvconvert --type writecache --cachevol LV LV_linear_striped_raid_thinpool
+ OO: OO_LVCONVERT, --cachesettings String
+ ID: lvconvert_to_writecache
+ DESC: Attach a writecache to an LV, converts the LV to type writecache.
+@@ -520,7 +520,7 @@ FLAGS: SECONDARY_SYNTAX
+ 
+ ---
+ 
+-lvconvert --type writecache --cachedevice PV LV_linear_striped_raid
++lvconvert --type writecache --cachedevice PV LV_linear_striped_raid_thinpool
+ OO: OO_LVCONVERT, --cachesize SizeMB, --cachesettings String
+ ID: lvconvert_to_writecache_with_device
+ DESC: Add a writecache to an LV, using a specified cache device.
+diff --git a/tools/lvconvert.c b/tools/lvconvert.c
+index 990a723b6..8dd8a15c4 100644
+--- a/tools/lvconvert.c
++++ b/tools/lvconvert.c
+@@ -6106,6 +6106,7 @@ int lvconvert_writecache_attach_single(struct cmd_context *cmd,
+ 					struct processing_handle *handle)
+ {
+ 	struct volume_group *vg = lv->vg;
++	struct logical_volume *lv_update;
+ 	struct logical_volume *lv_wcorig;
+ 	struct logical_volume *lv_fast;
+ 	struct writecache_settings settings = { 0 };
+@@ -6228,6 +6229,15 @@ int lvconvert_writecache_attach_single(struct cmd_context *cmd,
+ 
+ 	lv_fast->status |= LV_CACHE_VOL;
+ 
++	/* When the lv arg is a thinpool, redirect update to data sub lv. */
 +
-+# Copyright (C) 2017-2020 Red Hat, Inc. All rights reserved.
-+#
-+# This copyrighted material is made available to anyone wishing to use,
-+# modify, copy, or redistribute it subject to the terms and conditions
-+# of the GNU General Public License v.2.
-+#
-+# You should have received a copy of the GNU General Public License
-+# along with this program; if not, write to the Free Software Foundation,
-+# Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
++	if (lv_is_thin_pool(lv)) {
++		lv_update = seg_lv(first_seg(lv), 0);
++		log_verbose("Redirecting operation to data sub LV %s.", display_lvname(lv_update));
++	} else {
++		lv_update = lv;
++	}
 +
-+SKIP_WITH_LVMPOLLD=1
-+
-+# lvextend LV with cache|writecache
-+
-+. lib/inittest
-+
-+do_test()
-+{
-+	# create some initial data
-+	lvchange -ay $vg/$lv1
-+	mkfs.xfs -f -s size=4096 "$DM_DEV_DIR/$vg/$lv1"
-+	mount "$DM_DEV_DIR/$vg/$lv1" "$mount_dir"
-+	cp pattern "$mount_dir/pattern1"
-+	dd if=/dev/urandom of="$mount_dir/rand100M" bs=1M count=100 conv=fdatasync
-+	cp pattern "$mount_dir/pattern2"
-+
-+	# extend while mounted
-+	lvextend -L+64M $vg/$lv1 "$dev4"
-+	lvs -a $vg -o+devices
-+
-+	# verify initial data
-+	diff pattern "$mount_dir/pattern1"
-+	diff pattern "$mount_dir/pattern2"
-+	dd of=/dev/null if="$mount_dir/rand100M" bs=1M count=100
-+
-+	# add more data
-+	cp pattern "$mount_dir/pattern3"
-+	dd if=/dev/urandom of="$mount_dir/rand8M" bs=1M count=8 conv=fdatasync
-+
-+	# restart the LV
-+	umount "$mount_dir"
-+	lvchange -an $vg/$lv1
-+	lvchange -ay $vg/$lv1
-+	mount "$DM_DEV_DIR/$vg/$lv1" "$mount_dir"
-+
-+	# verify all data
-+	diff pattern "$mount_dir/pattern1"
-+	diff pattern "$mount_dir/pattern2"
-+	diff pattern "$mount_dir/pattern3"
-+	dd of=/dev/null if="$mount_dir/rand100M" bs=1M count=100
-+	dd of=/dev/null if="$mount_dir/rand8M" bs=1M count=8
-+
-+	# extend again while inactive
-+	umount "$mount_dir"
-+	lvchange -an $vg/$lv1
-+	lvextend -L+64M $vg/$lv1 "$dev5"
-+	lvs -a $vg -o+devices
-+	lvchange -ay $vg/$lv1
-+	mount "$DM_DEV_DIR/$vg/$lv1" "$mount_dir"
-+
-+	# verify all data
-+	diff pattern "$mount_dir/pattern1"
-+	diff pattern "$mount_dir/pattern2"
-+	diff pattern "$mount_dir/pattern3"
-+	dd of=/dev/null if="$mount_dir/rand100M" bs=1M count=100
-+	dd of=/dev/null if="$mount_dir/rand8M" bs=1M count=8
-+
-+	# add more data
-+	cp pattern "$mount_dir/pattern4"
-+
-+	# remove the cache
-+	lvconvert --splitcache $vg/$lv1
-+
-+	# verify all data
-+	diff pattern "$mount_dir/pattern1"
-+	diff pattern "$mount_dir/pattern2"
-+	diff pattern "$mount_dir/pattern3"
-+	diff pattern "$mount_dir/pattern4"
-+	dd of=/dev/null if="$mount_dir/rand100M" bs=1M count=100
-+	dd of=/dev/null if="$mount_dir/rand8M" bs=1M count=8
-+
-+	umount "$mount_dir"
-+	lvchange -an $vg/$lv1
-+	lvchange -ay $vg/$lv1
-+	mount "$DM_DEV_DIR/$vg/$lv1" "$mount_dir"
-+
-+	# verify all data
-+	diff pattern "$mount_dir/pattern1"
-+	diff pattern "$mount_dir/pattern2"
-+	diff pattern "$mount_dir/pattern3"
-+	diff pattern "$mount_dir/pattern4"
-+	dd of=/dev/null if="$mount_dir/rand100M" bs=1M count=100
-+	dd of=/dev/null if="$mount_dir/rand8M" bs=1M count=8
-+
-+	umount "$mount_dir"
-+	lvchange -an $vg/$lv1
-+	lvremove $vg/$lv1
-+	lvremove -y $vg
-+}
-+
-+
-+aux have_cache 1 10 0 || skip
-+aux have_writecache 1 0 0 || skip
-+which mkfs.xfs || skip
-+
-+mount_dir="mnt"
-+mkdir -p "$mount_dir"
-+
-+aux prepare_devs 6 66 # want 64M of usable space from each dev
-+
-+# generate random data
-+dd if=/dev/urandom of=pattern bs=512K count=1
-+
-+vgcreate $SHARED $vg "$dev1" "$dev2" "$dev3" "$dev4" "$dev5" "$dev6"
-+
-+# test type cache|writecache
-+# cache with cachepool|cachevol
-+# cache with writeback|writethrough
-+
-+# lv1 is main LV: 128M
-+# lv2 is fast LV:  64M
-+
-+lvcreate -n $lv1 -L128M -an $vg "$dev1" "$dev2"
-+lvcreate -n $lv2 -L64M -an $vg "$dev3"
-+lvconvert -y --type writecache --cachevol $lv2 $vg/$lv1
-+lvs -a $vg -o+devices
-+do_test
-+
-+lvcreate -n $lv1 -L128M -an $vg "$dev1" "$dev2"
-+lvcreate -n $lv2 -L64M -an $vg "$dev3"
-+lvconvert -y --type cache --cachevol $lv2 --cachemode writeback $vg/$lv1
-+lvs -a $vg -o+devices
-+do_test
-+
-+lvcreate -n $lv1 -L128M -an $vg "$dev1" "$dev2"
-+lvcreate -n $lv2 -L64M -an $vg "$dev3"
-+lvconvert -y --type cache --cachevol $lv2 --cachemode writethrough $vg/$lv1
-+lvs -a $vg -o+devices
-+do_test
-+
-+lvcreate -n $lv1 -L128M -an $vg "$dev1" "$dev2"
-+lvcreate -y --type cache-pool -n $lv2 -L64M --poolmetadataspare n $vg "$dev3" "$dev6"
-+lvconvert -y --type cache --cachepool $lv2 --poolmetadataspare n $vg/$lv1
-+lvs -a $vg -o+devices
-+do_test
-+
-+vgremove -f $vg
-+
+ 	/*
+ 	 * Changes the vg struct to match the desired state.
+ 	 *
+@@ -6240,7 +6250,7 @@ int lvconvert_writecache_attach_single(struct cmd_context *cmd,
+ 	 *   gets new id, becomes hidden, gets segments from lv.
+ 	 */
+ 
+-	if (!(lv_wcorig = _lv_writecache_create(cmd, lv, lv_fast, block_size_sectors, &settings)))
++	if (!(lv_wcorig = _lv_writecache_create(cmd, lv_update, lv_fast, block_size_sectors, &settings)))
+ 		goto_bad;
+ 
+ 	/*
+@@ -6248,7 +6258,7 @@ int lvconvert_writecache_attach_single(struct cmd_context *cmd,
+ 	 * where the old LV is suspended and the new LV is resumed.
+ 	 */
+ 
+-	if (!lv_update_and_reload(lv))
++	if (!lv_update_and_reload(lv_update))
+ 		goto_bad;
+ 
+ 	lockd_lv(cmd, lv, "un", 0);
 
 
