@@ -1,84 +1,67 @@
-From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Wed, 28 Jul 2010 11:15:48 +0200
-Subject: [PATCH 02/14] Testsuit: Shell &&||
-In-Reply-To: <cover.1280307502.git.zkabelac@redhat.com>
-References: <cover.1280307502.git.zkabelac@redhat.com>
-Message-ID: <5b080c4d0409d304b4ce4403db9e52a4dba835b6.1280307502.git.zkabelac@redhat.com>
+From: Marian Csontos <mcsontos@sourceware.org>
+Date: Fri,  7 May 2021 15:40:15 +0000 (GMT)
+Subject: stable-2.02 - pre-release
+Message-ID: <20210507154015.EB9473857C71@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Visually better align lines which are executed as a result of true
-or false result of previous command.
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=cde814abc04c6724a1561fc9935ac6b986054404
+Commit:        cde814abc04c6724a1561fc9935ac6b986054404
+Parent:        844a075c01ad300439a46f2ef4c85482f83bf992
+Author:        Marian Csontos <mcsontos@redhat.com>
+AuthorDate:    Fri May 7 17:33:50 2021 +0200
+Committer:     Marian Csontos <mcsontos@redhat.com>
+CommitterDate: Fri May 7 17:33:50 2021 +0200
 
-Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
+pre-release
+
 ---
- test/lvm-utils.sh      |    6 +++---
- test/t-000-basic.sh    |    4 ++--
- test/t-pvmove-basic.sh |    7 +++----
- 3 files changed, 8 insertions(+), 9 deletions(-)
+ VERSION      | 2 +-
+ VERSION_DM   | 2 +-
+ WHATS_NEW    | 4 ++--
+ WHATS_NEW_DM | 4 ++--
+ 4 files changed, 6 insertions(+), 6 deletions(-)
 
-diff --git a/test/lvm-utils.sh b/test/lvm-utils.sh
-index 39d52fd..6c00084 100644
---- a/test/lvm-utils.sh
-+++ b/test/lvm-utils.sh
-@@ -129,9 +129,9 @@ vg_validate_pvlv_counts_()
- 
- 	lvs -a -o+devices $local_vg
- 
--	check_vg_field_ $local_vg pv_count $num_pvs &&
--	check_vg_field_ $local_vg lv_count $num_lvs &&
--	check_vg_field_ $local_vg snap_count $num_snaps
-+	check_vg_field_ $local_vg pv_count $num_pvs && \
-+	  check_vg_field_ $local_vg lv_count $num_lvs && \
-+	  check_vg_field_ $local_vg snap_count $num_snaps
- }
- 
- dmsetup_has_dm_devdir_support_()
-diff --git a/test/t-000-basic.sh b/test/t-000-basic.sh
-index c70a7f8..ed76a6f 100755
---- a/test/t-000-basic.sh
-+++ b/test/t-000-basic.sh
-@@ -20,9 +20,9 @@ lvm pvmove --version|sed -n "1s/.*: *\([0-9][^ ]*\) .*/\1/p" > actual
- # ensure they are the same
- diff -u actual expected
- 
--mknod $DM_DEV_DIR/null c 1 3 ||
-+mknod $DM_DEV_DIR/null c 1 3 || \
-   error "Can't create nodes on filesystem"
--echo >$DM_DEV_DIR/null || 
-+echo >$DM_DEV_DIR/null || \
-   error "Filesystem for tests does not allow using device nodes (check nodev)"
- 
- # ensure we can create devices (uses dmsetup, etc)
-diff --git a/test/t-pvmove-basic.sh b/test/t-pvmove-basic.sh
-index cc2145b..44b533c 100755
---- a/test/t-pvmove-basic.sh
-+++ b/test/t-pvmove-basic.sh
-@@ -33,8 +33,7 @@ lv_is_on_() {
- }
- 
- save_dev_sum_() {
--  mkfs.ext3 $1 > /dev/null &&
--  md5sum $1 > md5.$(basename $1)
-+  mkfs.ext3 $1 > /dev/null && md5sum $1 > md5.$(basename $1)
- }
- 
- check_dev_sum_() {
-@@ -83,8 +82,8 @@ check_and_cleanup_lvs_() {
-   lvs -a -o name $vg > out && ! grep ^pvmove out
-   lvremove -ff $vg
- 	if ! dmsetup table|not grep $vg; then
--		echo "ERROR: lvremove did leave some some mappings in DM behind!" &&
--		return 1
-+		echo "ERROR: lvremove did leave some some mappings in DM behind!" && \
-+			return 1
- 	fi
- 	:
- }
--- 
-1.7.2
+diff --git a/VERSION b/VERSION
+index 60ed5750e..542534973 100644
+--- a/VERSION
++++ b/VERSION
+@@ -1 +1 @@
+-2.02.188(2)-git (2020-03-24)
++2.02.188(2) (2021-05-07)
+diff --git a/VERSION_DM b/VERSION_DM
+index cf4dff740..6c50cd9ef 100644
+--- a/VERSION_DM
++++ b/VERSION_DM
+@@ -1 +1 @@
+-1.02.172-git (2020-03-24)
++1.02.172 (2021-05-07)
+diff --git a/WHATS_NEW b/WHATS_NEW
+index 14b6ec2b9..458236475 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,5 @@
+-Version 2.02.188 - 
+-==================================
++Version 2.02.188 - 07th May 2021
++================================
+   Fix problem with unbound variable usage within fsadm.
+   Avoid removing LVs on error path of lvconvert during creation volumes.
+   Fix crashing lvdisplay when thin volume was waiting for merge.
+diff --git a/WHATS_NEW_DM b/WHATS_NEW_DM
+index 188ac8900..a74a05461 100644
+--- a/WHATS_NEW_DM
++++ b/WHATS_NEW_DM
+@@ -1,5 +1,5 @@
+-Version 1.02.172 - 
+-==================================
++Version 1.02.172 - 07th May 2021
++================================
+   Add dm_tree_node_add_thin_pool_target_v1 with crop_metadata support.
+   Add support for VDO in blkdeactivate script.
+   Try to remove all created devices on dm preload tree error path.
 
 
