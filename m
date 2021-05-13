@@ -1,7 +1,7 @@
 From: David Teigland <teigland@sourceware.org>
-Date: Tue, 11 May 2021 20:23:24 +0000 (GMT)
+Date: Thu, 13 May 2021 18:35:19 +0000 (GMT)
 Subject: dev-next branch - deleted
-Message-ID: <20210511202324.10252385800A@sourceware.org>
+Message-ID: <20210513183519.509A2385802A@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -10,6 +10,6 @@ Content-Transfer-Encoding: 7bit
 
 branch: dev-next - deleted with refnum:
 
-04d5420ff9d6111c899e307bd9fee07fd41bb3e1 configure: update
+924084a4dd19dedb6abdaa41388516a81c37192b configure: update
 
 
