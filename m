@@ -1,12 +1,22 @@
-From: Leo Yan <leo.yan@linaro.org>
-Date: Fri, 21 May 2021 10:56:37 +0800
-Subject: [PATCH] configure: Add macro LOCKDIDM_SUPPORT
-Message-ID: <20210521025638.2050724-1-leo.yan@linaro.org>
+From: David Teigland <teigland@sourceware.org>
+Date: Fri, 21 May 2021 14:27:46 +0000 (GMT)
+Subject: main - configure: Add macro LOCKDIDM_SUPPORT
+Message-ID: <20210521142746.E5C3B38515FC@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
+
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=102294f9788f243509f1001a60924d6920fd9092
+Commit:        102294f9788f243509f1001a60924d6920fd9092
+Parent:        8b904dc71143f4dc7553026f783aa1c0b1d4b954
+Author:        Leo Yan <leo.yan@linaro.org>
+AuthorDate:    Fri May 21 10:56:37 2021 +0800
+Committer:     David Teigland <teigland@redhat.com>
+CommitterDate: Fri May 21 09:27:30 2021 -0500
+
+configure: Add macro LOCKDIDM_SUPPORT
 
 The macro LOCKDIDM_SUPPORT is missed in configure.h.in file, thus when
 execute "configure" command, it has no chance to add this macro in the
@@ -33,7 +43,5 @@ index 671d201b2..bcb282660 100644
  /* Define to 1 if `lstat' dereferences a symlink specified with a trailing
     slash. */
  #undef LSTAT_FOLLOWS_SLASHED_SYMLINK
--- 
-2.25.1
 
 
