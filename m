@@ -1,48 +1,45 @@
 From: David Teigland <teigland@sourceware.org>
-Date: Wed,  2 Jun 2021 16:14:04 +0000 (GMT)
-Subject: main - writecache: don't pvmove device used by writecache
-Message-ID: <20210602161404.66D4C3955408@sourceware.org>
+Date: Wed,  2 Jun 2021 16:40:44 +0000 (GMT)
+Subject: dev-next - lvmdbusd: Use ID_FS_TYPE UDev property in udevwatch
+Message-ID: <20210602164044.3F717385DC22@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=e7f107c24666c8577f30e530b74f1ce0347e459b
-Commit:        e7f107c24666c8577f30e530b74f1ce0347e459b
-Parent:        247f69f9aafe731ef85268da1e6ce817295b265d
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Wed Jun 2 11:12:20 2021 -0500
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=2801b7a9b2faf08183685a79ec1dcee42d333541
+Commit:        2801b7a9b2faf08183685a79ec1dcee42d333541
+Parent:        c53bb2b5ea5e5a985e32235515ad21fff62e3b5b
+Author:        Vojtech Trefny <vtrefny@redhat.com>
+AuthorDate:    Wed Jun 2 17:17:40 2021 +0200
 Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Wed Jun 2 11:12:20 2021 -0500
+CommitterDate: Wed Jun 2 11:40:01 2021 -0500
 
-writecache: don't pvmove device used by writecache
+lvmdbusd: Use ID_FS_TYPE UDev property in udevwatch
 
-The existing check didn't cover the unusual case where the
-cachevol exists on the same device as the origin LV.
+'.ID_FS_TYPE_NEW' is a custom property added by an LVM UDev rule
+which is now being removed and 'ID_FS_TYPE' has the same value.
+
+Signed-off-by: Vojtech Trefny <vtrefny@redhat.com>
 ---
- tools/pvmove.c | 9 +++++++++
- 1 file changed, 9 insertions(+)
+ daemons/lvmdbusd/udevwatch.py | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
 
-diff --git a/tools/pvmove.c b/tools/pvmove.c
-index da635a662..bb372f7dc 100644
---- a/tools/pvmove.c
-+++ b/tools/pvmove.c
-@@ -387,6 +387,15 @@ static struct logical_volume *_set_up_pvmove_lv(struct cmd_context *cmd,
- 			return NULL;
- 		}
+diff --git a/daemons/lvmdbusd/udevwatch.py b/daemons/lvmdbusd/udevwatch.py
+index b53b18003..f9b3e4ad1 100644
+--- a/daemons/lvmdbusd/udevwatch.py
++++ b/daemons/lvmdbusd/udevwatch.py
+@@ -52,8 +52,8 @@ def filter_event(action, device):
+ 	# when appropriate.
+ 	refresh = False
  
-+		if (lv_is_writecache(lv)) {
-+			struct logical_volume *lv_cachevol = first_seg(lv)->writecache;
-+			if (lv_is_on_pvs(lv_cachevol, source_pvl)) {
-+				log_error("Unable to move device used for writecache cachevol %s.", display_lvname(lv_cachevol));
-+				return NULL;
-+			}
-+
-+		}
-+
- 		if (lv_is_raid(lv) && lv_raid_has_integrity(lv)) {
- 			log_error("Unable to pvmove device used for raid with integrity.");
- 			return NULL;
+-	if '.ID_FS_TYPE_NEW' in device:
+-		fs_type_new = device['.ID_FS_TYPE_NEW']
++	if 'ID_FS_TYPE' in device:
++		fs_type_new = device['ID_FS_TYPE']
+ 
+ 		if 'LVM' in fs_type_new:
+ 			refresh = True
 
 
