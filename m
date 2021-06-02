@@ -1,41 +1,48 @@
 From: David Teigland <teigland@sourceware.org>
-Date: Wed,  2 Jun 2021 16:14:03 +0000 (GMT)
-Subject: main - writecache: fix lv_on_pmem
-Message-ID: <20210602161403.2DBA1396EC42@sourceware.org>
+Date: Wed,  2 Jun 2021 16:14:04 +0000 (GMT)
+Subject: main - writecache: don't pvmove device used by writecache
+Message-ID: <20210602161404.66D4C3955408@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=247f69f9aafe731ef85268da1e6ce817295b265d
-Commit:        247f69f9aafe731ef85268da1e6ce817295b265d
-Parent:        b725b5ea6ecfeef428fd7ffcd6855a38378d761b
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=e7f107c24666c8577f30e530b74f1ce0347e459b
+Commit:        e7f107c24666c8577f30e530b74f1ce0347e459b
+Parent:        247f69f9aafe731ef85268da1e6ce817295b265d
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Wed Jun 2 10:51:12 2021 -0500
+AuthorDate:    Wed Jun 2 11:12:20 2021 -0500
 Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Wed Jun 2 10:51:12 2021 -0500
+CommitterDate: Wed Jun 2 11:12:20 2021 -0500
 
-writecache: fix lv_on_pmem
+writecache: don't pvmove device used by writecache
 
-dev_is_pmem on pv->dev requires a pv segment or it could segfault.
+The existing check didn't cover the unusual case where the
+cachevol exists on the same device as the origin LV.
 ---
- lib/metadata/metadata.c | 3 +++
- 1 file changed, 3 insertions(+)
+ tools/pvmove.c | 9 +++++++++
+ 1 file changed, 9 insertions(+)
 
-diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
-index 110cbaed4..0b284435b 100644
---- a/lib/metadata/metadata.c
-+++ b/lib/metadata/metadata.c
-@@ -4412,6 +4412,9 @@ int lv_on_pmem(struct logical_volume *lv)
+diff --git a/tools/pvmove.c b/tools/pvmove.c
+index da635a662..bb372f7dc 100644
+--- a/tools/pvmove.c
++++ b/tools/pvmove.c
+@@ -387,6 +387,15 @@ static struct logical_volume *_set_up_pvmove_lv(struct cmd_context *cmd,
+ 			return NULL;
+ 		}
  
- 	dm_list_iterate_items(seg, &lv->segments) {
- 		for (s = 0; s < seg->area_count; s++) {
-+			if (seg_type(seg, s) != AREA_PV)
-+				continue;
++		if (lv_is_writecache(lv)) {
++			struct logical_volume *lv_cachevol = first_seg(lv)->writecache;
++			if (lv_is_on_pvs(lv_cachevol, source_pvl)) {
++				log_error("Unable to move device used for writecache cachevol %s.", display_lvname(lv_cachevol));
++				return NULL;
++			}
 +
- 			pv = seg_pv(seg, s);
- 
- 			if (dev_is_pmem(lv->vg->cmd->dev_types, pv->dev)) {
++		}
++
+ 		if (lv_is_raid(lv) && lv_raid_has_integrity(lv)) {
+ 			log_error("Unable to pvmove device used for raid with integrity.");
+ 			return NULL;
 
 
