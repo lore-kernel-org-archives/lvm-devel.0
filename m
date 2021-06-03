@@ -1,149 +1,184 @@
-From: agk@sourceware.org <agk@sourceware.org>
-Date: 9 Jan 2007 20:31:09 -0000
-Subject: LVM2 ./WHATS_NEW ./configure ./configure.in ./ ...
-Message-ID: <20070109203109.7120.qmail@sourceware.org>
+From: Leo Yan <leo.yan@linaro.org>
+Date: Thu,  3 Jun 2021 17:59:22 +0800
+Subject: [PATCH v1 14/17] tests: multi-hosts: Add VG testing
+In-Reply-To: <20210603095925.510302-1-leo.yan@linaro.org>
+References: <20210603095925.510302-1-leo.yan@linaro.org>
+Message-ID: <20210603095925.510302-15-leo.yan@linaro.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	agk at sourceware.org	2007-01-09 20:31:08
+This patch is to add VG testing on multi hosts.  There have two scripts,
+the script multi_hosts_vg_hosta.sh is used to create VGs on one host,
+and the second script multi_hosts_vg_hostb.sh afterwards will acquire
+global lock and VG lock, and remove VGs.  The testing flow verifies the
+locking operations between two hosts with lvmlockd and the backend
+locking manager.
 
-Modified files:
-	.              : WHATS_NEW configure configure.in make.tmpl.in 
-	lib/activate   : dev_manager.c 
+  On the host A:
+    make check_lvmlockd_idm \
+      LVM_TEST_BACKING_DEVICE=/dev/sdj3,/dev/sdk3,/dev/sdl3 \
+      LVM_TEST_MULTI_HOST=1 T=multi_hosts_vg_hosta.sh
 
-Log message:
-	Add configure --with-dmdir to compile against a device-mapper source tree.
-	Use no flush suspending for mirrors.
+  On the host B:
+    make check_lvmlockd_idm \
+      LVM_TEST_BACKING_DEVICE=/dev/sdj3,/dev/sdk3,/dev/sdl3 \
+      LVM_TEST_MULTI_HOST=1 T=multi_hosts_vg_hostb.sh
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.527&r2=1.528
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/configure.diff?cvsroot=lvm2&r1=1.55&r2=1.56
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/configure.in.diff?cvsroot=lvm2&r1=1.54&r2=1.55
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/make.tmpl.in.diff?cvsroot=lvm2&r1=1.45&r2=1.46
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/activate/dev_manager.c.diff?cvsroot=lvm2&r1=1.117&r2=1.118
+Signed-off-by: Leo Yan <leo.yan@linaro.org>
+---
+ test/Makefile.in                   |  1 +
+ test/lib/inittest.sh               |  2 ++
+ test/shell/multi_hosts_vg_hosta.sh | 45 ++++++++++++++++++++++++++
+ test/shell/multi_hosts_vg_hostb.sh | 52 ++++++++++++++++++++++++++++++
+ 4 files changed, 100 insertions(+)
+ create mode 100644 test/shell/multi_hosts_vg_hosta.sh
+ create mode 100644 test/shell/multi_hosts_vg_hostb.sh
 
---- LVM2/WHATS_NEW	2007/01/08 14:24:20	1.527
-+++ LVM2/WHATS_NEW	2007/01/09 20:31:08	1.528
-@@ -1,5 +1,7 @@
- Version 2.02.18 -
- ====================================
-+  Add configure --with-dmdir to compile against a device-mapper source tree.
-+  Use no flush suspending for mirrors.
-   Add dmeventd_mirror register_mutex, tidy initialisation & add memlock.
-   Fix create mirror with name longer than 22 chars.
-   Fix some activate.c prototypes when compiled without devmapper.
---- LVM2/configure	2006/11/20 20:03:26	1.55
-+++ LVM2/configure	2007/01/09 20:31:08	1.56
-@@ -310,7 +310,7 @@
- #endif"
+diff --git a/test/Makefile.in b/test/Makefile.in
+index 573df77a7..cd134129b 100644
+--- a/test/Makefile.in
++++ b/test/Makefile.in
+@@ -93,6 +93,7 @@ help:
+ 	@echo -e "\nSupported variables:"
+ 	@echo "  LVM_TEST_AUX_TRACE	Set for verbose messages for aux scripts []."
+ 	@echo "  LVM_TEST_BACKING_DEVICE Set device used for testing (see also LVM_TEST_DIR)."
++	@echo "  LVM_TEST_MULTI_HOST	Set multiple hosts used for testing."
+ 	@echo "  LVM_TEST_CAN_CLOBBER_DMESG Allow to clobber dmesg buffer without /dev/kmsg. (1)"
+ 	@echo "  LVM_TEST_DEVDIR	Set to '/dev' to run on real /dev."
+ 	@echo "  LVM_TEST_PREFER_BRD	Prefer using brd (ramdisk) over loop for testing [1]."
+diff --git a/test/lib/inittest.sh b/test/lib/inittest.sh
+index 98a916ca6..4ca8ac59e 100644
+--- a/test/lib/inittest.sh
++++ b/test/lib/inittest.sh
+@@ -32,6 +32,7 @@ LVM_TEST_DEVDIR=${LVM_TEST_DEVDIR-}
+ LVM_TEST_NODEBUG=${LVM_TEST_NODEBUG-}
+ LVM_TEST_LVM1=${LVM_TEST_LVM1-}
+ LVM_TEST_FAILURE=${LVM_TEST_FAILURE-}
++LVM_TEST_MULTI_HOST=${LVM_TEST_MULTI_HOST-}
+ # TODO: LVM_TEST_SHARED
+ SHARED=${SHARED-}
  
- ac_default_prefix=/usr
--ac_subst_vars='SHELL PATH_SEPARATOR PACKAGE_NAME PACKAGE_TARNAME PACKAGE_VERSION PACKAGE_STRING PACKAGE_BUGREPORT exec_prefix prefix program_transform_name bindir sbindir libexecdir datadir sysconfdir sharedstatedir localstatedir libdir includedir oldincludedir infodir mandir build_alias host_alias target_alias DEFS ECHO_C ECHO_N ECHO_T LIBS build build_cpu build_vendor build_os host host_cpu host_vendor host_os target target_cpu target_vendor target_os AWK CC CFLAGS LDFLAGS CPPFLAGS ac_ct_CC EXEEXT OBJEXT INSTALL_PROGRAM INSTALL_SCRIPT INSTALL_DATA LN_S SET_MAKE RANLIB ac_ct_RANLIB CFLOW_CMD CSCOPE_CMD CPP EGREP ALLOCA LIBOBJS POW_LIB MSGFMT MODPROBE_CMD JOBS STATIC_LINK LVM1 POOL SNAPSHOTS MIRRORS OWNER GROUP COPTIMISE_FLAG CLDFLAGS CLDWHOLEARCHIVE CLDNOWHOLEARCHIVE LDDEPS LIB_SUFFIX LVM_VERSION LVM1_FALLBACK DEBUG DEVMAPPER HAVE_LIBDL HAVE_SELINUX HAVE_REALTIME CMDLIB LOCALEDIR CONFDIR STATICDIR INTL_PACKAGE INTL CLVMD CLUSTER FSADM DMEVENTD LTLIBOBJS'
-+ac_subst_vars='SHELL PATH_SEPARATOR PACKAGE_NAME PACKAGE_TARNAME PACKAGE_VERSION PACKAGE_STRING PACKAGE_BUGREPORT exec_prefix prefix program_transform_name bindir sbindir libexecdir datadir sysconfdir sharedstatedir localstatedir libdir includedir oldincludedir infodir mandir build_alias host_alias target_alias DEFS ECHO_C ECHO_N ECHO_T LIBS build build_cpu build_vendor build_os host host_cpu host_vendor host_os target target_cpu target_vendor target_os AWK CC CFLAGS LDFLAGS CPPFLAGS ac_ct_CC EXEEXT OBJEXT INSTALL_PROGRAM INSTALL_SCRIPT INSTALL_DATA LN_S SET_MAKE RANLIB ac_ct_RANLIB CFLOW_CMD CSCOPE_CMD CPP EGREP ALLOCA LIBOBJS POW_LIB MSGFMT MODPROBE_CMD JOBS STATIC_LINK LVM1 POOL SNAPSHOTS MIRRORS OWNER GROUP COPTIMISE_FLAG CLDFLAGS CLDWHOLEARCHIVE CLDNOWHOLEARCHIVE LDDEPS LIB_SUFFIX LVM_VERSION LVM1_FALLBACK DEBUG DEVMAPPER HAVE_LIBDL HAVE_SELINUX HAVE_REALTIME CMDLIB LOCALEDIR CONFDIR STATICDIR DMDIR INTL_PACKAGE INTL CLVMD CLUSTER FSADM DMEVENTD LTLIBOBJS'
- ac_subst_files=''
+@@ -65,6 +66,7 @@ test -n "$SKIP_WITH_LVMLOCKD" && test -n "$LVM_TEST_LVMLOCKD" && initskip
+ unset CDPATH
  
- # Initialize some variables set by options.
-@@ -883,6 +883,7 @@
-   --with-localedir=DIR    Translation files in DIR PREFIX/share/locale
-   --with-confdir=DIR      Configuration files in DIR /etc
-   --with-staticdir=DIR    Static binary in DIR EXEC_PREFIX/sbin
-+  --with-dmdir=DIR        Build against device-mapper source tree in DIR
- 
- Some influential environment variables:
-   CC          C compiler command
-@@ -8964,6 +8965,15 @@
-    STATICDIR='${exec_prefix}/sbin'
- fi;
- 
+ export LVM_TEST_BACKING_DEVICE LVM_TEST_DEVDIR LVM_TEST_NODEBUG LVM_TEST_FAILURE
++export LVM_TEST_MULTI_HOST
+ export LVM_TEST_LVMLOCKD LVM_TEST_LVMLOCKD_TEST
+ export LVM_TEST_LVMPOLLD LVM_TEST_LOCK_TYPE_DLM LVM_TEST_LOCK_TYPE_SANLOCK LVM_TEST_LOCK_TYPE_IDM
+ export LVM_TEST_DEVICES_FILE
+diff --git a/test/shell/multi_hosts_vg_hosta.sh b/test/shell/multi_hosts_vg_hosta.sh
+new file mode 100644
+index 000000000..15347490c
+--- /dev/null
++++ b/test/shell/multi_hosts_vg_hosta.sh
+@@ -0,0 +1,45 @@
++#!/usr/bin/env bash
 +
-+# Check whether --with-dmdir or --without-dmdir was given.
-+if test "${with_dmdir+set}" = set; then
-+  withval="$with_dmdir"
-+   DMDIR="$withval"
-+else
-+   DMDIR=
-+fi;
++# Copyright (C) 2020 Seagate, Inc. All rights reserved.
++#
++# This copyrighted material is made available to anyone wishing to use,
++# modify, copy, or redistribute it subject to the terms and conditions
++# of the GNU General Public License v2.
++#
++# You should have received a copy of the GNU General Public License
++# along with this program; if not, write to the Free Software Foundation,
++# Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 +
- ################################################################################
- if test x$READLINE = xyes; then
- 
-@@ -11202,6 +11212,7 @@
- 
- 
- 
++# This testing script is for multi-hosts testing, the paired scripts
++# are: multi_hosts_vg_hosta.sh / multi_hosts_vg_hostb.sh
++#
++# On the host A:
++#   make check_lvmlockd_idm \
++#     LVM_TEST_BACKING_DEVICE=/dev/sdj3,/dev/sdk3,/dev/sdl3 \
++#     LVM_TEST_MULTI_HOST=1 T=multi_hosts_vg_hosta.sh
++# On the host B:
++#   make check_lvmlockd_idm \
++#     LVM_TEST_BACKING_DEVICE=/dev/sdj3,/dev/sdk3,/dev/sdl3 \
++#     LVM_TEST_MULTI_HOST=1 T=multi_hosts_vg_hostb.sh
 +
- ################################################################################
-                                                                                                                                                                                                                                                           ac_config_files="$ac_config_files Makefile make.tmpl daemons/Makefile daemons/clvmd/Makefile dmeventd/Makefile dmeventd/mirror/Makefile doc/Makefile include/Makefile lib/Makefile lib/format1/Makefile lib/format_pool/Makefile lib/locking/Makefile lib/mirror/Makefile lib/snapshot/Makefile man/Makefile po/Makefile scripts/Makefile tools/Makefile tools/version.h tools/fsadm/Makefile test/mm/Makefile test/device/Makefile test/format1/Makefile test/regex/Makefile test/filters/Makefile"
- cat >confcache <<\_ACEOF
-@@ -11900,6 +11911,7 @@
- s, at LOCALEDIR@,$LOCALEDIR,;t t
- s, at CONFDIR@,$CONFDIR,;t t
- s, at STATICDIR@,$STATICDIR,;t t
-+s, at DMDIR@,$DMDIR,;t t
- s, at INTL_PACKAGE@,$INTL_PACKAGE,;t t
- s, at INTL@,$INTL,;t t
- s, at CLVMD@,$CLVMD,;t t
---- LVM2/configure.in	2006/11/20 20:03:26	1.54
-+++ LVM2/configure.in	2007/01/09 20:31:08	1.55
-@@ -526,6 +526,11 @@
-   	    [ STATICDIR="$withval" ],
-  	    [ STATICDIR='${exec_prefix}/sbin' ])
- 
-+AC_ARG_WITH(dmdir,
-+	    [  --with-dmdir=DIR        Build against device-mapper source tree in DIR],
-+  	    [ DMDIR="$withval" ],
-+	    [ DMDIR= ])
++SKIP_WITH_LVMPOLLD=1
 +
- ################################################################################
- dnl -- Ensure additional headers required
- if test x$READLINE = xyes; then
-@@ -608,6 +613,7 @@
- AC_SUBST(LOCALEDIR)
- AC_SUBST(CONFDIR)
- AC_SUBST(STATICDIR)
-+AC_SUBST(DMDIR)
- AC_SUBST(INTL_PACKAGE)
- AC_SUBST(INTL)
- AC_SUBST(CLVMD)
---- LVM2/make.tmpl.in	2006/05/16 20:53:13	1.45
-+++ LVM2/make.tmpl.in	2007/01/09 20:31:08	1.46
-@@ -73,6 +73,10 @@
-   DEFS += -DINTL_PACKAGE=\"@INTL_PACKAGE@\" -DLOCALEDIR=\"@LOCALEDIR@\"
- endif
- 
-+ifneq ("@DMDIR@", "")
-+  LDFLAGS += -L at DMDIR@/lib/ioctl
-+endif
++. lib/inittest
 +
- LDFLAGS += -L$(top_srcdir)/lib -L$(libdir)
- 
- #DEFS += -DDEBUG_POOL
-@@ -89,6 +93,10 @@
- 
- INCLUDES += -I. -I$(top_srcdir)/include
- 
-+ifneq ("@DMDIR@", "")
-+  INCLUDES += -I@DMDIR@/include
-+endif
++[ -z "$LVM_TEST_MULTI_HOST" ] && skip;
 +
- ifdef DESTDIR
-   INCLUDES += -I$(DESTDIR)/usr/include
- endif
---- LVM2/lib/activate/dev_manager.c	2006/11/30 23:11:39	1.117
-+++ LVM2/lib/activate/dev_manager.c	2007/01/09 20:31:08	1.118
-@@ -993,6 +993,8 @@
- 		break;
- 	case SUSPEND:
- 		dm_tree_skip_lockfs(root);
-+		if ((lv->status & MIRRORED) && !(lv->status & PVMOVE))
-+			dm_tree_use_no_flush_suspend(root);
- 	case SUSPEND_WITH_LOCKFS:
- 		if (!dm_tree_suspend_children(root, dlid, ID_LEN + sizeof(UUID_PREFIX) - 1))
- 			goto_out;
++IFS=',' read -r -a BLKDEVS <<< "$LVM_TEST_BACKING_DEVICE"
++
++for d in "${BLKDEVS[@]}"; do
++	aux extend_filter_LVMTEST "a|$d|"
++done
++
++aux lvmconf "devices/allow_changes_with_duplicate_pvs = 1"
++
++i=0
++for d in "${BLKDEVS[@]}"; do
++	echo $i
++	i=$((i+1))
++	vgcreate $SHARED TESTVG$i $d
++	vgchange -a n TESTVG$i
++done
+diff --git a/test/shell/multi_hosts_vg_hostb.sh b/test/shell/multi_hosts_vg_hostb.sh
+new file mode 100644
+index 000000000..bab65b68b
+--- /dev/null
++++ b/test/shell/multi_hosts_vg_hostb.sh
+@@ -0,0 +1,52 @@
++#!/usr/bin/env bash
++
++# Copyright (C) 2020 Seagate, Inc. All rights reserved.
++#
++# This copyrighted material is made available to anyone wishing to use,
++# modify, copy, or redistribute it subject to the terms and conditions
++# of the GNU General Public License v2.
++#
++# You should have received a copy of the GNU General Public License
++# along with this program; if not, write to the Free Software Foundation,
++# Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
++
++# This testing script is for multi-hosts testing, the paired scripts
++# are: multi_hosts_vg_hosta.sh / multi_hosts_vg_hostb.sh
++#
++# On the host A:
++#   make check_lvmlockd_idm \
++#     LVM_TEST_BACKING_DEVICE=/dev/sdj3,/dev/sdk3,/dev/sdl3 \
++#     LVM_TEST_MULTI_HOST=1 T=multi_hosts_vg_hosta.sh
++# On the host B:
++#   make check_lvmlockd_idm \
++#     LVM_TEST_BACKING_DEVICE=/dev/sdj3,/dev/sdk3,/dev/sdl3 \
++#     LVM_TEST_MULTI_HOST=1 T=multi_hosts_vg_hostb.sh
++
++SKIP_WITH_LVMPOLLD=1
++
++. lib/inittest
++
++[ -z "$LVM_TEST_MULTI_HOST" ] && skip;
++
++IFS=',' read -r -a BLKDEVS <<< "$LVM_TEST_BACKING_DEVICE"
++
++for d in "${BLKDEVS[@]}"; do
++	aux extend_filter_LVMTEST "a|$d|"
++done
++
++aux lvmconf "devices/allow_changes_with_duplicate_pvs = 1"
++
++vgchange --lock-start
++
++i=0
++for d in "${BLKDEVS[@]}"; do
++        i=$((i+1))
++	check vg_field TESTVG$i lv_count 0
++done
++
++i=0
++for d in "${BLKDEVS[@]}"; do
++        i=$((i+1))
++	vgchange -a ey TESTVG$i
++	vgremove -ff TESTVG$i
++done
+-- 
+2.25.1
 
 
