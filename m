@@ -1,130 +1,46 @@
 From: David Teigland <teigland@sourceware.org>
-Date: Thu,  3 Jun 2021 14:39:58 +0000 (GMT)
-Subject: main - tests: stress: Add multi-threads stress testing for PV/VG/LV
-Message-ID: <20210603143958.731923839C7C@sourceware.org>
+Date: Thu,  3 Jun 2021 14:39:55 +0000 (GMT)
+Subject: main - tests: Add checking for lvmlockd log
+Message-ID: <20210603143955.097BA3838032@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=f83e11ff4332ce7ca24f6bfede4fe60c48123700
-Commit:        f83e11ff4332ce7ca24f6bfede4fe60c48123700
-Parent:        692fe7bb31b6682151601f196e6274a3e8b772d5
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=5b361b197e1a3fbbc5419b9c46f19539c2b7305c
+Commit:        5b361b197e1a3fbbc5419b9c46f19539c2b7305c
+Parent:        2097c27c05de30003850eb667b9cf21b3181fddf
 Author:        Leo Yan <leo.yan@linaro.org>
-AuthorDate:    Thu Jun 3 17:59:15 2021 +0800
+AuthorDate:    Thu Jun 3 17:59:12 2021 +0800
 Committer:     David Teigland <teigland@redhat.com>
 CommitterDate: Thu Jun 3 09:39:32 2021 -0500
 
-tests: stress: Add multi-threads stress testing for PV/VG/LV
+tests: Add checking for lvmlockd log
 
-This patch is to add the stress testing, which launches three threads,
-one thread is for creating/removing PV, one thread is for
-creating/removing VG, and the last one thread is for LV operations.
+Add checking for lvmlockd log, this can be used for the test cases which
+are interested in the interaction with lvmlockd.
 
 Signed-off-by: Leo Yan <leo.yan@linaro.org>
 ---
- test/shell/stress_multi_threads_2.sh | 93 ++++++++++++++++++++++++++++++++++++
- 1 file changed, 93 insertions(+)
+ test/lib/check.sh | 5 +++++
+ 1 file changed, 5 insertions(+)
 
-diff --git a/test/shell/stress_multi_threads_2.sh b/test/shell/stress_multi_threads_2.sh
-new file mode 100644
-index 000000000..a035b5727
---- /dev/null
-+++ b/test/shell/stress_multi_threads_2.sh
-@@ -0,0 +1,93 @@
-+#!/usr/bin/env bash
-+
-+# Copyright (C) 2021 Seagate, Inc. All rights reserved.
-+#
-+# This copyrighted material is made available to anyone wishing to use,
-+# modify, copy, or redistribute it subject to the terms and conditions
-+# of the GNU General Public License v2.
-+#
-+# You should have received a copy of the GNU General Public License
-+# along with this program; if not, write to the Free Software Foundation,
-+# Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
-+
-+
-+SKIP_WITH_LVMPOLLD=1
-+
-+. lib/inittest
-+
-+aux prepare_devs 8
-+get_devs
-+
-+pvcreate -M2 "$dev1" "$dev2" "$dev3" "$dev4" "$dev5" "$dev6"
-+
-+test_vg_thread1()
-+{
-+	for i in {1..1000}
-+	do
-+		vgcreate --shared -M2 "$vg1" "$dev1" "$dev2" "$dev3"
-+		vgremove -ff $vg1
-+	done
+diff --git a/test/lib/check.sh b/test/lib/check.sh
+index 8493bde83..1f261940a 100644
+--- a/test/lib/check.sh
++++ b/test/lib/check.sh
+@@ -456,6 +456,11 @@ grep_dmsetup() {
+ 	grep -q "${@:3}" out || die "Expected output \"" "${@:3}" "\" from dmsetup $1 not found!"
+ }
+ 
++grep_lvmlockd_dump() {
++	lvmlockctl --dump | tee out
++	grep -q "${@:1}" out || die "Expected output \"" "${@:1}" "\" from lvmlockctl --dump not found!"
 +}
 +
-+test_vg_thread2()
-+{
-+	vgcreate --shared -M2 "$vg2" "$dev4" "$dev5" "$dev6"
-+
-+	for i in {1..1000}
-+	do
-+		# Create new logic volume and deactivate it
-+		lvcreate -a n --zero n -l 1 -n foo $vg2
-+
-+		# Set minor number
-+		lvchange $vg2/foo -My --major=255 --minor=124
-+
-+		# Activate logic volume
-+		lvchange $vg2/foo -a y
-+
-+		# Extend logic volume with 10%
-+		lvextend -l+10 $vg2/foo
-+
-+		# Deactivate logic volume
-+		lvchange $vg2/foo -a n
-+
-+		# Deactivate volume group
-+		vgchange $vg2 -a n
-+
-+		# Activate volume group with shareable mode
-+		vgchange $vg2 -a sy
-+
-+		# lvextend fails due to mismatched lock mode
-+		not lvextend -l+10 $vg2/foo
-+
-+		# Promote volume group to exclusive mode
-+		vgchange $vg2 -a ey
-+
-+		lvreduce -f -l-4 $vg2/foo
-+
-+		lvchange -an $vg2/foo
-+		lvremove $vg2/foo
-+	done
-+
-+	vgremove -ff $vg2
-+}
-+
-+test_vg_thread3()
-+{
-+	for i in {1..1000}
-+	do
-+		pvcreate -M2 "$dev7" "$dev8"
-+		pvremove "$dev7"
-+		pvremove "$dev8"
-+	done
-+}
-+
-+test_vg_thread1 &
-+WAITPID=$!
-+
-+test_vg_thread2 &
-+WAITPID="$WAITPID "$!
-+
-+test_vg_thread3 &
-+WAITPID="$WAITPID "$!
-+
-+wait $WAITPID
+ #set -x
+ unset LVM_VALGRIND
+ "$@"
 
 
