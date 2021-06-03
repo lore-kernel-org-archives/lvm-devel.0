@@ -1,139 +1,228 @@
 From: Leo Yan <leo.yan@linaro.org>
-Date: Thu,  3 Jun 2021 17:59:08 +0800
-Subject: [PATCH v1 00/17] LVM2: Enable testing for In-Drive-Mutex
-Message-ID: <20210603095925.510302-1-leo.yan@linaro.org>
+Date: Thu,  3 Jun 2021 17:59:09 +0800
+Subject: [PATCH v1 01/17] tests: Enable the testing for IDM locking scheme
+In-Reply-To: <20210603095925.510302-1-leo.yan@linaro.org>
+References: <20210603095925.510302-1-leo.yan@linaro.org>
+Message-ID: <20210603095925.510302-2-leo.yan@linaro.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-This patch series is to enable In-Drive-Mutex (IDM) testing in LVM2.
+This patch is to introduce testing option LVM_TEST_LOCK_TYPE_IDM, with
+specifying this option, the Seagate IDM lock manager will be launched as
+backend for testing.  Also add the prepare and remove shell scripts for
+IDM.
 
-Patches 01 ~ 04 are fundamental changes for supporting IDM testing.
-
-  - Patch 01 provides the scripts for setting up environment and
-    teardown.  And introduces the testing option for IDM;
-  - Patch 02 is to extend backing device from only one device name to
-    multiple device names with comma as splitter.  This can give the
-    flexibility for testing IDM drives;
-  - Patch 03 introduces the SCSI command to explicitly cleanup drive
-    firmware;
-  - Patch 04 adds checkers for lvmlockd log, it provides helper for
-    verify the failure handling.
-
-Patches 05 ~ 07 are stress testing patches, they verify the single
-thread and multi-threads testing cases; this can give the pressure to
-lvmlockd and the locking manager for multiple requests simultaneously.
-
-Patches 08 ~ 13 are failure handling testing cases.  Patch 08 introduces
-an utility for injection failures into the IDM lock manager, thus this
-can emulate the drive failures in the lock manager; patch 09 is verify
-the failure happens in lvmlockd; patches 10~12 test the failure
-handling, which deliberately delete part or all drives, then check if
-the IDM lock manager and lvmlockd can handle these failures as expected
-or not; patch 13 is to check the failure handling when the IDM lock
-manager is malfunctioning.
-
-Patches 14 ~ 17 introduces multi-hosts testing cases.  Every testing
-provides pair script, one is with suffix "hosta.sh" and another is with
-suffix "hostb.sh".  The designed sequence is firstly to launch the
-script "hosta.sh" on one host, and then run the script "hostb.sh" on
-another host.  So with the co-operation with these two scripts, we can
-verify the locking scheme on multi-hosts.
-
-After applied this patch series, the IDM locking scheme was verified
-on Centos 7 (centos-release-7-9.2009.1.el7.centos.x86_64) with commands:
-
-  # export IDM_DRIVES=/dev/sdb2,/dev/sdd2,/dev/sde2,/dev/sdg2,\
-         	     /dev/sdb3,/dev/sdd3,/dev/sde3,/dev/sdg3,\
-         	     /dev/sdb4,/dev/sdd4,/dev/sde4,/dev/sdg4,\
-         	     /dev/sdb5,/dev/sdd5,/dev/sde5,/dev/sdg5
-  # make check_lvmlockd_idm LVM_TEST_BACKING_DEVICE=$IDM_DRIVES
-
-The enviornment variable "IDM_DRIVES" is set to the partitions used for
-PVs and the drives containing these partitions support IDM locking.
-
-The testing result is recorded in the file [1]:
-- The testing result shows no regression introduced for LVM core paths;
-- There have 15 failure cases for IDM locking scheme, the main reasons
-  for these failure cases are:
-  1. Cannot find drive path cannot achieve majority for IDM locking
-     algorithm;
-  2. Have no sufficient disk size for the testing case;
-  3. Fail to find drive device name after deleting PV's device mapper;
-  4. Need to specify the bigger log line number, otherwise the testing
-     is interrupted by the log system.
-
-[1] https://github.com/Seagate/propeller/blob/master/doc/lvm_test.md
-
-
-Leo Yan (17):
-  tests: Enable the testing for IDM locking scheme
-  tests: Support multiple backing devices
-  tests: Cleanup idm context when prepare devices
-  tests: Add checking for lvmlockd log
-  tests: stress: Add single thread stress testing
-  tests: stress: Add multi-threads stress testing for VG/LV
-  tests: stress: Add multi-threads stress testing for PV/VG/LV
-  tests: Support idm failure injection
-  tests: Add testing for lvmlockd failure
-  tests: idm: Add testing for the fabric failure
-  tests: idm: Add testing for the fabric failure and timeout
-  tests: idm: Add testing for the fabric's half brain failure
-  tests: idm: Add testing for IDM lock manager failure
-  tests: multi-hosts: Add VG testing
-  tests: multi-hosts: Add LV testing
-  tests: multi-hosts: Test lease timeout with LV exclusive mode
-  tests: multi-hosts: Test lease timeout with LV shareable mode
-
- test/Makefile.in                              |  15 +++
- test/lib/aux.sh                               |  73 +++++++++++-
- test/lib/check.sh                             |   5 +
- test/lib/flavour-udev-lvmlockd-idm.sh         |   5 +
- test/lib/idm_inject_failure.c                 |  55 +++++++++
- test/lib/inittest.sh                          |   8 +-
- test/shell/aa-lvmlockd-idm-prepare.sh         |  20 ++++
- test/shell/idm_fabric_failure.sh              |  58 +++++++++
- test/shell/idm_fabric_failure_half_brain.sh   |  78 ++++++++++++
- test/shell/idm_fabric_failure_timeout.sh      |  74 ++++++++++++
- test/shell/idm_ilm_failure.sh                 |  80 +++++++++++++
- test/shell/lvmlockd-lv-types.sh               |   6 +
- test/shell/lvmlockd_failure.sh                |  37 ++++++
- test/shell/multi_hosts_lv_ex_timeout_hosta.sh |  87 ++++++++++++++
- test/shell/multi_hosts_lv_ex_timeout_hostb.sh |  56 +++++++++
- test/shell/multi_hosts_lv_hosta.sh            |  78 ++++++++++++
- test/shell/multi_hosts_lv_hostb.sh            |  61 ++++++++++
- test/shell/multi_hosts_lv_sh_timeout_hosta.sh |  87 ++++++++++++++
- test/shell/multi_hosts_lv_sh_timeout_hostb.sh |  56 +++++++++
- test/shell/multi_hosts_vg_hosta.sh            |  45 +++++++
- test/shell/multi_hosts_vg_hostb.sh            |  52 ++++++++
- test/shell/stress_multi_threads_1.sh          | 111 ++++++++++++++++++
- test/shell/stress_multi_threads_2.sh          |  93 +++++++++++++++
- test/shell/stress_single_thread.sh            |  59 ++++++++++
- test/shell/zz-lvmlockd-idm-remove.sh          |  29 +++++
- 25 files changed, 1323 insertions(+), 5 deletions(-)
+Signed-off-by: Leo Yan <leo.yan@linaro.org>
+---
+ test/Makefile.in                      |  9 +++++++++
+ test/lib/aux.sh                       | 25 +++++++++++++++++++++++
+ test/lib/flavour-udev-lvmlockd-idm.sh |  5 +++++
+ test/lib/inittest.sh                  |  3 ++-
+ test/shell/aa-lvmlockd-idm-prepare.sh | 20 ++++++++++++++++++
+ test/shell/lvmlockd-lv-types.sh       |  6 ++++++
+ test/shell/zz-lvmlockd-idm-remove.sh  | 29 +++++++++++++++++++++++++++
+ 7 files changed, 96 insertions(+), 1 deletion(-)
  create mode 100644 test/lib/flavour-udev-lvmlockd-idm.sh
- create mode 100644 test/lib/idm_inject_failure.c
  create mode 100644 test/shell/aa-lvmlockd-idm-prepare.sh
- create mode 100644 test/shell/idm_fabric_failure.sh
- create mode 100644 test/shell/idm_fabric_failure_half_brain.sh
- create mode 100644 test/shell/idm_fabric_failure_timeout.sh
- create mode 100644 test/shell/idm_ilm_failure.sh
- create mode 100644 test/shell/lvmlockd_failure.sh
- create mode 100644 test/shell/multi_hosts_lv_ex_timeout_hosta.sh
- create mode 100644 test/shell/multi_hosts_lv_ex_timeout_hostb.sh
- create mode 100644 test/shell/multi_hosts_lv_hosta.sh
- create mode 100644 test/shell/multi_hosts_lv_hostb.sh
- create mode 100644 test/shell/multi_hosts_lv_sh_timeout_hosta.sh
- create mode 100644 test/shell/multi_hosts_lv_sh_timeout_hostb.sh
- create mode 100644 test/shell/multi_hosts_vg_hosta.sh
- create mode 100644 test/shell/multi_hosts_vg_hostb.sh
- create mode 100644 test/shell/stress_multi_threads_1.sh
- create mode 100644 test/shell/stress_multi_threads_2.sh
- create mode 100644 test/shell/stress_single_thread.sh
  create mode 100644 test/shell/zz-lvmlockd-idm-remove.sh
 
+diff --git a/test/Makefile.in b/test/Makefile.in
+index e4cd3aac5..662974be6 100644
+--- a/test/Makefile.in
++++ b/test/Makefile.in
+@@ -85,6 +85,7 @@ help:
+ 	@echo "  check_all_lvmpolld     Run all tests with lvmpolld daemon."
+ 	@echo "  check_lvmlockd_sanlock Run tests with lvmlockd and sanlock."
+ 	@echo "  check_lvmlockd_dlm     Run tests with lvmlockd and dlm."
++	@echo "  check_lvmlockd_idm	Run tests with lvmlockd and idm."
+ 	@echo "  check_lvmlockd_test    Run tests with lvmlockd --test."
+ 	@echo "  run-unit-test          Run only unit tests (root not needed)."
+ 	@echo "  clean			Clean dir."
+@@ -168,6 +169,13 @@ check_lvmlockd_dlm: .tests-stamp
+ 		--flavours udev-lvmlockd-dlm --only shell/aa-lvmlockd-dlm-prepare.sh,$(T),shell/zz-lvmlockd-dlm-remove.sh --skip $(S)
+ endif
+ 
++ifeq ("@BUILD_LVMLOCKD@", "yes")
++check_lvmlockd_idm: .tests-stamp
++	VERBOSE=$(VERBOSE) ./lib/runner \
++		--testdir . --outdir $(LVM_TEST_RESULTS) \
++		--flavours udev-lvmlockd-idm --only shell/aa-lvmlockd-idm-prepare.sh,$(T),shell/zz-lvmlockd-idm-remove.sh --skip $(S)
++endif
++
+ ifeq ("@BUILD_LVMLOCKD@", "yes")
+ check_lvmlockd_test: .tests-stamp
+ 	VERBOSE=$(VERBOSE) ./lib/runner \
+@@ -189,6 +197,7 @@ LIB_FLAVOURS = \
+  flavour-udev-lvmpolld\
+  flavour-udev-lvmlockd-sanlock\
+  flavour-udev-lvmlockd-dlm\
++ flavour-udev-lvmlockd-idm\
+  flavour-udev-lvmlockd-test\
+  flavour-udev-vanilla
+ 
+diff --git a/test/lib/aux.sh b/test/lib/aux.sh
+index 1a1f11a1d..97c7ac68b 100644
+--- a/test/lib/aux.sh
++++ b/test/lib/aux.sh
+@@ -119,6 +119,20 @@ prepare_sanlock() {
+ 	fi
+ }
+ 
++prepare_idm() {
++	if pgrep seagate_ilm; then
++		echo "Cannot run while existing seagate_ilm process exists"
++		exit 1
++	fi
++
++	seagate_ilm -D 0 -l 0 -L 7 -E 7 -S 7
++
++	if ! pgrep seagate_ilm; then
++		echo "Failed to start seagate_ilm"
++		exit 1
++	fi
++}
++
+ prepare_lvmlockd() {
+ 	if pgrep lvmlockd ; then
+ 		echo "Cannot run while existing lvmlockd process exists"
+@@ -135,6 +149,11 @@ prepare_lvmlockd() {
+ 		echo "starting lvmlockd for dlm"
+ 		lvmlockd
+ 
++	elif test -n "$LVM_TEST_LOCK_TYPE_IDM"; then
++		# make check_lvmlockd_idm
++		echo "starting lvmlockd for idm"
++		lvmlockd -g idm
++
+ 	elif test -n "$LVM_TEST_LVMLOCKD_TEST_DLM"; then
+ 		# make check_lvmlockd_test
+ 		echo "starting lvmlockd --test (dlm)"
+@@ -144,6 +163,12 @@ prepare_lvmlockd() {
+ 		# FIXME: add option for this combination of --test and sanlock
+ 		echo "starting lvmlockd --test (sanlock)"
+ 		lvmlockd --test -g sanlock -o 2
++
++	elif test -n "$LVM_TEST_LVMLOCKD_TEST_IDM"; then
++		# make check_lvmlockd_test
++		echo "starting lvmlockd --test (idm)"
++		lvmlockd --test -g idm
++
+ 	else
+ 		echo "not starting lvmlockd"
+ 		exit 0
+diff --git a/test/lib/flavour-udev-lvmlockd-idm.sh b/test/lib/flavour-udev-lvmlockd-idm.sh
+new file mode 100644
+index 000000000..e9f8908df
+--- /dev/null
++++ b/test/lib/flavour-udev-lvmlockd-idm.sh
+@@ -0,0 +1,5 @@
++export LVM_TEST_LOCKING=1
++export LVM_TEST_LVMPOLLD=1
++export LVM_TEST_LVMLOCKD=1
++export LVM_TEST_LOCK_TYPE_IDM=1
++export LVM_TEST_DEVDIR=/dev
+diff --git a/test/lib/inittest.sh b/test/lib/inittest.sh
+index 0fd651710..6b4bcb348 100644
+--- a/test/lib/inittest.sh
++++ b/test/lib/inittest.sh
+@@ -40,6 +40,7 @@ LVM_TEST_LVMPOLLD=${LVM_TEST_LVMPOLLD-}
+ LVM_TEST_DEVICES_FILE=${LVM_TEST_DEVICES_FILE-}
+ LVM_TEST_LOCK_TYPE_DLM=${LVM_TEST_LOCK_TYPE_DLM-}
+ LVM_TEST_LOCK_TYPE_SANLOCK=${LVM_TEST_LOCK_TYPE_SANLOCK-}
++LVM_TEST_LOCK_TYPE_IDM=${LVM_TEST_LOCK_TYPE_IDM-}
+ 
+ SKIP_WITHOUT_CLVMD=${SKIP_WITHOUT_CLVMD-}
+ SKIP_WITH_CLVMD=${SKIP_WITH_CLVMD-}
+@@ -64,7 +65,7 @@ unset CDPATH
+ 
+ export LVM_TEST_BACKING_DEVICE LVM_TEST_DEVDIR LVM_TEST_NODEBUG
+ export LVM_TEST_LVMLOCKD LVM_TEST_LVMLOCKD_TEST
+-export LVM_TEST_LVMPOLLD LVM_TEST_LOCK_TYPE_DLM LVM_TEST_LOCK_TYPE_SANLOCK
++export LVM_TEST_LVMPOLLD LVM_TEST_LOCK_TYPE_DLM LVM_TEST_LOCK_TYPE_SANLOCK LVM_TEST_LOCK_TYPE_IDM
+ export LVM_TEST_DEVICES_FILE
+ # grab some common utilities
+ . lib/utils
+diff --git a/test/shell/aa-lvmlockd-idm-prepare.sh b/test/shell/aa-lvmlockd-idm-prepare.sh
+new file mode 100644
+index 000000000..8faff3bc2
+--- /dev/null
++++ b/test/shell/aa-lvmlockd-idm-prepare.sh
+@@ -0,0 +1,20 @@
++#!/usr/bin/env bash
++
++# Copyright (C) 2021 Seagate.  All rights reserved.
++#
++# This copyrighted material is made available to anyone wishing to use,
++# modify, copy, or redistribute it subject to the terms and conditions
++# of the GNU General Public License v2.
++#
++# You should have received a copy of the GNU General Public License
++# along with this program; if not, write to the Free Software Foundation,
++# Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
++
++test_description='Set up things to run tests with idm'
++
++. lib/inittest
++
++[ -z "$LVM_TEST_LOCK_TYPE_IDM" ] && skip;
++
++aux prepare_idm
++aux prepare_lvmlockd
+diff --git a/test/shell/lvmlockd-lv-types.sh b/test/shell/lvmlockd-lv-types.sh
+index 6138e5623..ee350b1c6 100644
+--- a/test/shell/lvmlockd-lv-types.sh
++++ b/test/shell/lvmlockd-lv-types.sh
+@@ -36,6 +36,12 @@ LOCKARGS2="dlm"
+ LOCKARGS3="dlm"
+ fi
+ 
++if test -n "$LVM_TEST_LOCK_TYPE_IDM" ; then
++LOCKARGS1="idm"
++LOCKARGS2="idm"
++LOCKARGS3="idm"
++fi
++
+ aux prepare_devs 5
+ 
+ vgcreate --shared $vg "$dev1" "$dev2" "$dev3" "$dev4" "$dev5"
+diff --git a/test/shell/zz-lvmlockd-idm-remove.sh b/test/shell/zz-lvmlockd-idm-remove.sh
+new file mode 100644
+index 000000000..25943a579
+--- /dev/null
++++ b/test/shell/zz-lvmlockd-idm-remove.sh
+@@ -0,0 +1,29 @@
++#!/usr/bin/env bash
++
++# Copyright (C) 2021 Seagate. All rights reserved.
++#
++# This copyrighted material is made available to anyone wishing to use,
++# modify, copy, or redistribute it subject to the terms and conditions
++# of the GNU General Public License v2.
++#
++# You should have received a copy of the GNU General Public License
++# along with this program; if not, write to the Free Software Foundation,
++# Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
++
++test_description='Remove the idm test setup'
++
++. lib/inittest
++
++[ -z "$LVM_TEST_LOCK_TYPE_IDM" ] && skip;
++
++# FIXME: collect debug logs (only if a test failed?)
++# lvmlockctl -d > lvmlockd-debug.txt
++# dlm_tool dump > dlm-debug.txt
++
++lvmlockctl --stop-lockspaces
++sleep 1
++killall lvmlockd
++sleep 1
++killall lvmlockd || true
++sleep 1
++killall seagate_ilm
 -- 
 2.25.1
 
