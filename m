@@ -1,49 +1,50 @@
 From: Leo Yan <leo.yan@linaro.org>
-Date: Thu,  3 Jun 2021 17:59:19 +0800
-Subject: [PATCH v1 11/17] tests: idm: Add testing for the fabric failure and timeout
+Date: Thu,  3 Jun 2021 17:59:21 +0800
+Subject: [PATCH v1 13/17] tests: idm: Add testing for IDM lock manager failure
 In-Reply-To: <20210603095925.510302-1-leo.yan@linaro.org>
 References: <20210603095925.510302-1-leo.yan@linaro.org>
-Message-ID: <20210603095925.510302-12-leo.yan@linaro.org>
+Message-ID: <20210603095925.510302-14-leo.yan@linaro.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-If the fabric is broken instantly, the drives connected on the fabric
-will disappear from the system.  For worst case, the lease is timeout
-and the drives cannot recovery back.  So a new test is added to emulate
-this scenario, it uses a drive for LVM operations and this drive is also
-used for locking scheme; if the drive and all its associated paths (if
-the drive supports multiple paths) are disconnected, the lock manager
-should stop the lockspace for the VG/LVs.
+If the IDM lock manager fails to access drives, might partially fail to
+access drives (e.g. it fails to access one of three drives), or totally
+fail to access drives, the lock manager should handle properly for these
+cases.  When the drives are partially failure, if the lock manager still
+can renew the lease for the locking, then it doesn't need to take any
+action for the drive failure; otherwise, if it detects it cannot renew
+the locking majority, it needs ti immediately kill the VG from the
+lvmlockd.
 
-And afterwards, if the drive recovers back, the VG/LV resident in the
-drive should be operated properly.  The test command is as below:
+This patch adds the test for verification the IDM lock manager failure;
+the command can be used as below:
 
   # make check_lvmlockd_idm \
-	LVM_TEST_BACKING_DEVICE=/dev/sdp3 LVM_TEST_FAILURE=1 \
-	T=idm_fabric_failure_timeout.sh
+    LVM_TEST_BACKING_DEVICE=/dev/sdp3,/dev/sdl3,/dev/sdq3 \
+    LVM_TEST_FAILURE=1 T=idm_ilm_failure.sh
 
 Signed-off-by: Leo Yan <leo.yan@linaro.org>
 ---
- test/shell/idm_fabric_failure_timeout.sh | 74 ++++++++++++++++++++++++
- 1 file changed, 74 insertions(+)
- create mode 100644 test/shell/idm_fabric_failure_timeout.sh
+ test/shell/idm_ilm_failure.sh | 80 +++++++++++++++++++++++++++++++++++
+ 1 file changed, 80 insertions(+)
+ create mode 100644 test/shell/idm_ilm_failure.sh
 
-diff --git a/test/shell/idm_fabric_failure_timeout.sh b/test/shell/idm_fabric_failure_timeout.sh
+diff --git a/test/shell/idm_ilm_failure.sh b/test/shell/idm_ilm_failure.sh
 new file mode 100644
-index 000000000..cf71f7609
+index 000000000..58bed270e
 --- /dev/null
-+++ b/test/shell/idm_fabric_failure_timeout.sh
-@@ -0,0 +1,74 @@
++++ b/test/shell/idm_ilm_failure.sh
+@@ -0,0 +1,80 @@
 +#!/usr/bin/env bash
 +
 +# Copyright (C) 2020 Seagate, Inc. All rights reserved.
 +#
 +# This copyrighted material is made available to anyone wishing to use,
 +# modify, copy, or redistribute it subject to the terms and conditions
-+# of the GNU General Public License v2.
++# of the GNU General Public License v.2.
 +#
 +# You should have received a copy of the GNU General Public License
 +# along with this program; if not, write to the Free Software Foundation,
@@ -57,60 +58,66 @@ index 000000000..cf71f7609
 +[ -z "$LVM_TEST_LOCK_TYPE_IDM" ] && skip;
 +[ -z "$LVM_TEST_FAILURE" ] && skip;
 +
-+aux prepare_devs 1
++aux prepare_devs 3
 +aux extend_filter_LVMTEST
 +
 +DRIVE1=`dmsetup deps -o devname $dev1 | awk '{gsub(/[()]/,""); print $4;}' | sed 's/[0-9]*$//'`
++DRIVE2=`dmsetup deps -o devname $dev2 | awk '{gsub(/[()]/,""); print $4;}' | sed 's/[0-9]*$//'`
++DRIVE3=`dmsetup deps -o devname $dev3 | awk '{gsub(/[()]/,""); print $4;}' | sed 's/[0-9]*$//'`
++
++if [ "$DRIVE1" = "$DRIVE2" ] || [ "$DRIVE1" = "$DRIVE3" ] || [ "$DRIVE2" = "$DRIVE3" ]; then
++	die "Need to pass three different drives!?"
++fi
 +
 +# The previous device-mapper are removed, but LVM still can directly
 +# access VGs from the specified physical drives.  So enable drives
 +# for these drives.
-+aux extend_filter_LVMTEST "a|/dev/$DRIVE1*|"
++aux extend_filter_LVMTEST "a|/dev/$DRIVE1*|" "a|/dev/$DRIVE2*|" "a|/dev/$DRIVE3*|"
 +aux lvmconf "devices/allow_changes_with_duplicate_pvs = 1"
 +
-+vgcreate $SHARED $vg "$dev1"
++vgcreate $SHARED $vg "$dev1" "$dev2" "$dev3"
 +
-+# Create new logic volume
-+lvcreate -a ey --zero n -l 1 -n $lv1 $vg
++# Create new logic volume and deactivate it
++lvcreate -a y --zero n -l 1 -n $lv1 $vg
 +
-+drive_list=($DRIVE1)
++# Inject failure 40% so cannot send partially request to drives
++idm_inject_failure 40
 +
-+# Find all drives with the same WWN and delete them from system,
-+# so that we can emulate the same drive with multiple paths are
-+# disconnected with system.
-+drive_wwn=`udevadm info /dev/${DRIVE1} | awk -F= '/E: ID_WWN=/ {print $2}'`
-+for dev in /dev/*; do
-+	if [ -b "$dev" ] && [[ ! "$dev" =~ [0-9] ]]; then
-+		wwn=`udevadm info "${dev}" | awk -F= '/E: ID_WWN=/ {print $2}'`
-+		if [ "$wwn" = "$drive_wwn" ]; then
-+			base_name="$(basename -- ${dev})"
-+			drive_list+=("$base_name")
-+			host_list+=(`readlink /sys/block/$base_name | awk -F'/' '{print $6}'`)
-+		fi
-+	fi
-+done
++# Wait for 40s, but the lock will not be time out
++sleep 40
 +
-+for d in "${drive_list[@]}"; do
-+	[ -f /sys/block/$d/device/delete ] && echo 1 > /sys/block/$d/device/delete
-+done
++# Inject failure with 0% so can access drives
++idm_inject_failure 0
 +
-+# Fail to create new logic volume
-+not lvcreate -a n --zero n -l 1 -n $lv2 $vg
++# Deactivate logic volume due to locking failure
++lvchange $vg/$lv1 -a n
 +
-+# Wait for lock time out caused by drive failure
++# Inject failure 100% so cannot send request to drives
++idm_inject_failure 100
++
++# Wait for 70s but should have no any alive locks
 +sleep 70
++
++# Inject failure with 0% so can access drives
++idm_inject_failure 0
++
++# Activate logic volume
++lvchange $vg/$lv1 -a y
++
++# Inject failure so cannot send request to drives
++idm_inject_failure 100
++
++# Wait for 70s but will not time out
++sleep 70
++
++# Inject failure with 0% so can access drives
++idm_inject_failure 0
 +
 +check grep_lvmlockd_dump "S lvm_$vg kill_vg"
 +lvmlockctl --drop $vg
 +
-+# Rescan drives so can probe the deleted drives and join back them
-+for h in "${host_list[@]}"; do
-+	[ -f /sys/class/scsi_host/${h}/scan ] && echo "- - -" > /sys/class/scsi_host/${h}/scan
-+done
-+
-+# After the drive is reconnected, $vg should be visible again.
 +vgchange --lock-start
-+vgremove -ff $vg
++vgremove -f $vg
 -- 
 2.25.1
 
