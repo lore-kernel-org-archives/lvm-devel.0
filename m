@@ -1,95 +1,123 @@
 From: David Teigland <teigland@sourceware.org>
-Date: Thu,  3 Jun 2021 14:39:56 +0000 (GMT)
-Subject: main - tests: stress: Add single thread stress testing
-Message-ID: <20210603143956.2F3E23838032@sourceware.org>
+Date: Thu,  3 Jun 2021 14:39:59 +0000 (GMT)
+Subject: main - tests: Support idm failure injection
+Message-ID: <20210603143959.976FB3838032@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=fe660467fa4c943bb0ce928e7af65572e2ddeddc
-Commit:        fe660467fa4c943bb0ce928e7af65572e2ddeddc
-Parent:        5b361b197e1a3fbbc5419b9c46f19539c2b7305c
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=8c7b2df41fdddcd1b1c504522ab79300882eb72f
+Commit:        8c7b2df41fdddcd1b1c504522ab79300882eb72f
+Parent:        f83e11ff4332ce7ca24f6bfede4fe60c48123700
 Author:        Leo Yan <leo.yan@linaro.org>
-AuthorDate:    Thu Jun 3 17:59:13 2021 +0800
+AuthorDate:    Thu Jun 3 17:59:16 2021 +0800
 Committer:     David Teigland <teigland@redhat.com>
 CommitterDate: Thu Jun 3 09:39:32 2021 -0500
 
-tests: stress: Add single thread stress testing
+tests: Support idm failure injection
 
-This patch is to add the stress testing, which loops to create LV,
-activate and deactivate LV in the single thread.
+When the drive failure occurs, the IDM lock manager and lvmlockd should
+handle this case properly.  E.g. when the IDM lock manager detects the
+lease renewal failure caused by I/O errors, it should invoke the kill
+path which is predefined by lvmlockd, so that the kill path program
+(like lvmlockctl) can send requests to lvmlockd to stop and drop lock
+for the relevant VG/LVs.
+
+To verify the failure handling flow, this patch introduces an idm
+failure injection program, it can input the "percentage" for drive
+failures so that can emulate different failure cases.
 
 Signed-off-by: Leo Yan <leo.yan@linaro.org>
 ---
- test/shell/stress_single_thread.sh | 59 ++++++++++++++++++++++++++++++++++++++
- 1 file changed, 59 insertions(+)
+ test/Makefile.in              |  5 ++++
+ test/lib/idm_inject_failure.c | 55 +++++++++++++++++++++++++++++++++++++++++++
+ 2 files changed, 60 insertions(+)
 
-diff --git a/test/shell/stress_single_thread.sh b/test/shell/stress_single_thread.sh
+diff --git a/test/Makefile.in b/test/Makefile.in
+index 662974be6..573df77a7 100644
+--- a/test/Makefile.in
++++ b/test/Makefile.in
+@@ -171,6 +171,7 @@ endif
+ 
+ ifeq ("@BUILD_LVMLOCKD@", "yes")
+ check_lvmlockd_idm: .tests-stamp
++	$(INSTALL_PROGRAM) lib/idm_inject_failure $(EXECDIR)
+ 	VERBOSE=$(VERBOSE) ./lib/runner \
+ 		--testdir . --outdir $(LVM_TEST_RESULTS) \
+ 		--flavours udev-lvmlockd-idm --only shell/aa-lvmlockd-idm-prepare.sh,$(T),shell/zz-lvmlockd-idm-remove.sh --skip $(S)
+@@ -269,6 +270,10 @@ lib/securetest: lib/dmsecuretest.o .lib-dir-stamp
+ 	@echo "    [CC] $@"
+ 	$(Q) $(CC) -g $(CFLAGS) $(LDFLAGS) $(EXTRA_EXEC_LDFLAGS) $(ELDFLAGS) -o $@ $< -L$(interfacebuilddir) -ldevmapper $(LIBS)
+ 
++lib/idm_inject_failure: lib/idm_inject_failure.o .lib-dir-stamp
++	@echo "    [CC] $@"
++	$(Q) $(CC) -g $(CFLAGS) $(LDFLAGS) $(EXTRA_EXEC_LDFLAGS) $(ELDFLAGS) -o $@ $< $(INTERNAL_LIBS) $(LIBS) -lseagate_ilm
++
+ lib/runner.o: $(wildcard $(srcdir)/lib/*.h)
+ 
+ CFLAGS_runner.o += $(EXTRA_EXEC_CFLAGS)
+diff --git a/test/lib/idm_inject_failure.c b/test/lib/idm_inject_failure.c
 new file mode 100644
-index 000000000..e18d4900b
+index 000000000..4998b585a
 --- /dev/null
-+++ b/test/shell/stress_single_thread.sh
-@@ -0,0 +1,59 @@
-+#!/usr/bin/env bash
++++ b/test/lib/idm_inject_failure.c
+@@ -0,0 +1,55 @@
++/*
++ * Copyright (C) 2020-2021 Seagate Ltd.
++ *
++ * This copyrighted material is made available to anyone wishing to use,
++ * modify, copy, or redistribute it subject to the terms and conditions
++ * of the GNU Lesser General Public License v.2.1.
++ */
 +
-+# Copyright (C) 2021 Seagate, Inc. All rights reserved.
-+#
-+# This copyrighted material is made available to anyone wishing to use,
-+# modify, copy, or redistribute it subject to the terms and conditions
-+# of the GNU General Public License v2.
-+#
-+# You should have received a copy of the GNU General Public License
-+# along with this program; if not, write to the Free Software Foundation,
-+# Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
++#include <errno.h>
++#include <limits.h>
++#include <signal.h>
++#include <stddef.h>
++#include <stdio.h>
++#include <stdlib.h>
++#include <string.h>
++#include <sys/types.h>
++#include <sys/inotify.h>
++#include <uuid/uuid.h>
++#include <unistd.h>
++#include <sys/stat.h>
++#include <sys/types.h>
 +
++#include <ilm.h>
 +
-+SKIP_WITH_LVMPOLLD=1
++int main(int argc, char *argv[])
++{
++	int pecent = atoi(argv[1]);
++	int ret, s;
 +
-+. lib/inittest
++	ret = ilm_connect(&s);
++	if (ret == 0) {
++		printf("ilm_connect: SUCCESS\n");
++	} else {
++		printf("ilm_connect: FAIL\n");
++		exit(-1);
++	}
 +
-+aux prepare_vg 3
++	ret = ilm_inject_fault(s, pecent);
++	if (ret == 0) {
++		printf("ilm_inject_fault (100): SUCCESS\n");
++	} else {
++		printf("ilm_inject_fault (100): FAIL\n");
++		exit(-1);
++	}
 +
-+for i in {1..1000}
-+do
-+	# Create new logic volume and deactivate it
-+	lvcreate -a n --zero n -l 1 -n foo $vg
++	ret = ilm_disconnect(s);
++	if (ret == 0) {
++		printf("ilm_disconnect: SUCCESS\n");
++	} else {
++		printf("ilm_disconnect: FAIL\n");
++		exit(-1);
++	}
 +
-+	# Set minor number
-+	lvchange $vg/foo -My --major=255 --minor=123
-+
-+	# Activate logic volume
-+	lvchange $vg/foo -a y
-+
-+	# Check device mapper
-+	dmsetup info $vg-foo | tee info
-+	grep -E "^Major, minor: *[0-9]+, 123" info
-+
-+	# Extend logic volume with 10%
-+	lvextend -l+10 $vg/foo
-+
-+	# Deactivate logic volume
-+	lvchange $vg/foo -a n
-+
-+	# Deactivate volume group
-+	vgchange $vg -a n
-+
-+	# Activate volume group with shareable mode
-+	vgchange $vg -a sy
-+
-+	# lvextend fails due to mismatched lock mode
-+	not lvextend -l+10 $vg/foo
-+
-+	# Promote volume group to exclusive mode
-+	vgchange $vg -a ey
-+
-+	lvreduce -f -l-4 $vg/foo
-+
-+	lvchange -an $vg/foo
-+	lvremove $vg/foo
-+done
-+
-+vgremove -ff $vg
++	return 0;
++}
 
 
