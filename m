@@ -1,100 +1,148 @@
 From: David Teigland <teigland@sourceware.org>
-Date: Thu,  3 Jun 2021 14:39:52 +0000 (GMT)
-Subject: main - tests: Support multiple backing devices
-Message-ID: <20210603143952.B5124386FC28@sourceware.org>
+Date: Thu,  3 Jun 2021 14:39:57 +0000 (GMT)
+Subject: main - tests: stress: Add multi-threads stress testing for VG/LV
+Message-ID: <20210603143957.4FB783835833@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=759b0392d5f0f15e7e503ae1b3ef82ea7b4df0c1
-Commit:        759b0392d5f0f15e7e503ae1b3ef82ea7b4df0c1
-Parent:        c64dbc7ee80963a02f82f3257963f90b471fa90e
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=692fe7bb31b6682151601f196e6274a3e8b772d5
+Commit:        692fe7bb31b6682151601f196e6274a3e8b772d5
+Parent:        fe660467fa4c943bb0ce928e7af65572e2ddeddc
 Author:        Leo Yan <leo.yan@linaro.org>
-AuthorDate:    Thu Jun 3 17:59:10 2021 +0800
+AuthorDate:    Thu Jun 3 17:59:14 2021 +0800
 Committer:     David Teigland <teigland@redhat.com>
 CommitterDate: Thu Jun 3 09:39:32 2021 -0500
 
-tests: Support multiple backing devices
+tests: stress: Add multi-threads stress testing for VG/LV
 
-In current implementation, the option "LVM_TEST_BACKING_DEVICE" only
-supports to specify one backing device; this patch is to extend the
-option to support multiple backing devices by using comma as separator,
-e.g. below command specifies two backing devices:
-
-  make check_lvmlockd_idm LVM_TEST_BACKING_DEVICE=/dev/sdj3,/dev/sdk3
-
-This can allow the testing works on multiple drives and verify the
-locking scheme if can work as expected for multiple drives case.  For
-example, for Seagate IDM locking scheme, if a VG uses two PVs, every PV
-is resident on a drive, thus the locking operations will be sent to two
-drives respectively; so the extension for "LVM_TEST_BACKING_DEVICE" can
-help to verify different drive configurations for locking.
+This patch is to add the stress testing, which launches two threads,
+each thread creates LV, activate and deactivate LV in the loop; so this
+can test for multi-threading in lvmlockd and its backend lock manager.
 
 Signed-off-by: Leo Yan <leo.yan@linaro.org>
 ---
- test/lib/aux.sh | 31 ++++++++++++++++++++++++++++---
- 1 file changed, 28 insertions(+), 3 deletions(-)
+ test/shell/stress_multi_threads_1.sh | 111 +++++++++++++++++++++++++++++++++++
+ 1 file changed, 111 insertions(+)
 
-diff --git a/test/lib/aux.sh b/test/lib/aux.sh
-index 97c7ac68b..a592dad81 100644
---- a/test/lib/aux.sh
-+++ b/test/lib/aux.sh
-@@ -901,11 +901,22 @@ prepare_backing_dev() {
- 	local size=${1=32}
- 	shift
- 
-+	if test -n "$LVM_TEST_BACKING_DEVICE"; then
-+		IFS=',' read -r -a BACKING_DEVICE_ARRAY <<< "$LVM_TEST_BACKING_DEVICE"
+diff --git a/test/shell/stress_multi_threads_1.sh b/test/shell/stress_multi_threads_1.sh
+new file mode 100644
+index 000000000..c96fa244b
+--- /dev/null
++++ b/test/shell/stress_multi_threads_1.sh
+@@ -0,0 +1,111 @@
++#!/usr/bin/env bash
 +
-+		for d in "${BACKING_DEVICE_ARRAY[@]}"; do
-+			if test ! -b "$d"; then
-+				echo "Device $d doesn't exist!"
-+				return 1
-+			fi
-+		done
-+	fi
++# Copyright (C) 2021 Seagate, Inc. All rights reserved.
++#
++# This copyrighted material is made available to anyone wishing to use,
++# modify, copy, or redistribute it subject to the terms and conditions
++# of the GNU General Public License v2.
++#
++# You should have received a copy of the GNU General Public License
++# along with this program; if not, write to the Free Software Foundation,
++# Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 +
- 	if test -f BACKING_DEV; then
- 		BACKING_DEV=$(< BACKING_DEV)
- 		return 0
--	elif test -b "$LVM_TEST_BACKING_DEVICE"; then
--		BACKING_DEV=$LVM_TEST_BACKING_DEVICE
-+	elif test -n "$LVM_TEST_BACKING_DEVICE"; then
-+		BACKING_DEV=${BACKING_DEVICE_ARRAY[0]}
- 		echo "$BACKING_DEV" > BACKING_DEV
- 		return 0
- 	elif test "${LVM_TEST_PREFER_BRD-1}" = "1" && \
-@@ -953,7 +964,14 @@ prepare_devs() {
- 		local dev="$DM_DEV_DIR/mapper/$name"
- 		DEVICES[$count]=$dev
- 		count=$((  count + 1 ))
--		echo 0 $size linear "$BACKING_DEV" $(( ( i - 1 ) * size + ( header_shift * 2048 ) )) > "$name.table"
-+		# If the backing device number can meet the requirement for PV devices,
-+		# then allocate a dedicated backing device for PV; otherwise, rollback
-+		# to use single backing device for device-mapper.
-+		if [ -n "$LVM_TEST_BACKING_DEVICE" ] && [ $n -le ${#BACKING_DEVICE_ARRAY[@]} ]; then
-+			echo 0 $size linear "${BACKING_DEVICE_ARRAY[$(( count - 1 ))]}" $(( header_shift * 2048 )) > "$name.table"
-+		else
-+			echo 0 $size linear "$BACKING_DEV" $(( ( i - 1 ) * size + ( header_shift * 2048 ) )) > "$name.table"
-+		fi
- 		dmsetup create -u "TEST-$name" "$name" "$name.table" || touch CREATE_FAILED &
- 		test -f CREATE_FAILED && break;
- 	done
-@@ -971,6 +989,13 @@ prepare_devs() {
- 		return $?
- 	fi
- 
-+	for d in "${BACKING_DEVICE_ARRAY[@]}"; do
-+		cnt=$((`blockdev --getsize64 $d` / 1024 / 1024))
-+		cnt=$(( cnt < 1000 ? cnt : 1000 ))
-+		dd if=/dev/zero of="$d" bs=1MB count=$cnt
-+		wipefs -a "$d" 2>/dev/null || true
++
++SKIP_WITH_LVMPOLLD=1
++
++. lib/inittest
++
++aux prepare_devs 6
++get_devs
++
++pvcreate -M2 "${DEVICES[@]}"
++
++vgcreate --shared -M2 "$vg1" "$dev1" "$dev2" "$dev3"
++vgcreate --shared -M2 "$vg2" "$dev4" "$dev5" "$dev6"
++
++test_vg_thread1()
++{
++	for i in {1..1000}
++	do
++		# Create new logic volume and deactivate it
++		lvcreate -a n --zero n -l 1 -n foo $vg1
++
++		# Set minor number
++		lvchange $vg1/foo -My --major=255 --minor=123
++
++		# Activate logic volume
++		lvchange $vg1/foo -a y
++
++		# Extend logic volume with 10%
++		lvextend -l+10 $vg1/foo
++
++		# Deactivate logic volume
++		lvchange $vg1/foo -a n
++
++		# Deactivate volume group
++		vgchange $vg1 -a n
++
++		# Activate volume group with shareable mode
++		vgchange $vg1 -a sy
++
++		# lvextend fails due to mismatched lock mode
++		not lvextend -l+10 $vg1/foo
++
++		# Promote volume group to exclusive mode
++		vgchange $vg1 -a ey
++
++		lvreduce -f -l-4 $vg1/foo
++
++		lvchange -an $vg1/foo
++		lvremove $vg1/foo
 +	done
++}
 +
- 	# non-ephemeral devices need to be cleared between tests
- 	test -f LOOP -o -f RAMDISK || for d in "${DEVICES[@]}"; do
- 		# ensure disk header is always zeroed
++test_vg_thread2()
++{
++	for i in {1..1000}
++	do
++		# Create new logic volume and deactivate it
++		lvcreate -a n --zero n -l 1 -n foo $vg2
++
++		# Set minor number
++		lvchange $vg2/foo -My --major=255 --minor=124
++
++		# Activate logic volume
++		lvchange $vg2/foo -a y
++
++		# Extend logic volume with 10%
++		lvextend -l+10 $vg2/foo
++
++		# Deactivate logic volume
++		lvchange $vg2/foo -a n
++
++		# Deactivate volume group
++		vgchange $vg2 -a n
++
++		# Activate volume group with shareable mode
++		vgchange $vg2 -a sy
++
++		# lvextend fails due to mismatched lock mode
++		not lvextend -l+10 $vg2/foo
++
++		# Promote volume group to exclusive mode
++		vgchange $vg2 -a ey
++
++		lvreduce -f -l-4 $vg2/foo
++
++		lvchange -an $vg2/foo
++		lvremove $vg2/foo
++	done
++}
++
++test_vg_thread1 &
++WAITPID=$!
++
++test_vg_thread2 &
++WAITPID="$WAITPID "$!
++
++wait $WAITPID
++
++vgremove -ff $vg1
++vgremove -ff $vg2
 
 
