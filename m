@@ -1,49 +1,56 @@
 From: Leo Yan <leo.yan@linaro.org>
-Date: Thu,  3 Jun 2021 17:59:23 +0800
-Subject: [PATCH v1 15/17] tests: multi-hosts: Add LV testing
+Date: Thu,  3 Jun 2021 17:59:24 +0800
+Subject: [PATCH v1 16/17] tests: multi-hosts: Test lease timeout with LV exclusive mode
 In-Reply-To: <20210603095925.510302-1-leo.yan@linaro.org>
 References: <20210603095925.510302-1-leo.yan@linaro.org>
-Message-ID: <20210603095925.510302-16-leo.yan@linaro.org>
+Message-ID: <20210603095925.510302-17-leo.yan@linaro.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-This patch is to add LV testing on multi hosts.  There have two scripts,
-the script multi_hosts_lv_hosta.sh is used to create LVs on one host,
-and the second script multi_hosts_lv_hostb.sh will acquire
-global lock and VG lock, and remove VGs.  The testing flow verifies the
-locking operations between two hosts with lvmlockd and the backend
-locking manager.
+This patch is to test timeout handling after activate LV with exclusive
+mode.  It contains two scripts for host A and host B separately.
+
+The script on host A firstly creates VGs and LVs based on the passed
+back devices, every back device is for a dedicated VG and a LV is
+created as well in the VG.  Afterwards, all LVs are activated by host A,
+so host A acquires the lease for these LVs.  Then the test is designed
+to fail on host A.
+
+After the host A fails, host B starts to run the paired testing script,
+it firstly fails to activate the LVs since the locks are leased by
+host A; after lease expiration (after 70s), host B can achieve the lease
+for LVs and it can operate LVs and VGs.
 
   On the host A:
     make check_lvmlockd_idm \
       LVM_TEST_BACKING_DEVICE=/dev/sdj3,/dev/sdk3,/dev/sdl3 \
-      LVM_TEST_MULTI_HOST=1 T=multi_hosts_lv_hosta.sh
+      LVM_TEST_MULTI_HOST=1 T=multi_hosts_lv_ex_timeout_hosta.sh
 
   On the host B:
     make check_lvmlockd_idm \
       LVM_TEST_BACKING_DEVICE=/dev/sdj3,/dev/sdk3,/dev/sdl3 \
-      LVM_TEST_MULTI_HOST=1 T=multi_hosts_lv_hostb.sh
+      LVM_TEST_MULTI_HOST=1 T=multi_hosts_lv_ex_timeout_hostb.sh
 
 Signed-off-by: Leo Yan <leo.yan@linaro.org>
 ---
- test/shell/multi_hosts_lv_hosta.sh | 78 ++++++++++++++++++++++++++++++
- test/shell/multi_hosts_lv_hostb.sh | 61 +++++++++++++++++++++++
- 2 files changed, 139 insertions(+)
- create mode 100644 test/shell/multi_hosts_lv_hosta.sh
- create mode 100644 test/shell/multi_hosts_lv_hostb.sh
+ test/shell/multi_hosts_lv_ex_timeout_hosta.sh | 87 +++++++++++++++++++
+ test/shell/multi_hosts_lv_ex_timeout_hostb.sh | 56 ++++++++++++
+ 2 files changed, 143 insertions(+)
+ create mode 100644 test/shell/multi_hosts_lv_ex_timeout_hosta.sh
+ create mode 100644 test/shell/multi_hosts_lv_ex_timeout_hostb.sh
 
-diff --git a/test/shell/multi_hosts_lv_hosta.sh b/test/shell/multi_hosts_lv_hosta.sh
+diff --git a/test/shell/multi_hosts_lv_ex_timeout_hosta.sh b/test/shell/multi_hosts_lv_ex_timeout_hosta.sh
 new file mode 100644
-index 000000000..68404d251
+index 000000000..c8be91ee3
 --- /dev/null
-+++ b/test/shell/multi_hosts_lv_hosta.sh
-@@ -0,0 +1,78 @@
++++ b/test/shell/multi_hosts_lv_ex_timeout_hosta.sh
+@@ -0,0 +1,87 @@
 +#!/usr/bin/env bash
 +
-+# Copyright (C) 2020 Seagate, Inc. All rights reserved.
++# Copyright (C) 2021 Seagate, Inc. All rights reserved.
 +#
 +# This copyrighted material is made available to anyone wishing to use,
 +# modify, copy, or redistribute it subject to the terms and conditions
@@ -53,17 +60,16 @@ index 000000000..68404d251
 +# along with this program; if not, write to the Free Software Foundation,
 +# Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 +
-+# This testing script is for multi-hosts testing, the paired scripts
-+# are: multi_hosts_lv_hosta.sh / multi_hosts_lv_hostb.sh
++# This testing script is for multi-hosts testing.
 +#
 +# On the host A:
 +#   make check_lvmlockd_idm \
 +#     LVM_TEST_BACKING_DEVICE=/dev/sdj3,/dev/sdk3,/dev/sdl3 \
-+#     LVM_TEST_MULTI_HOST=1 T=multi_hosts_lv_hosta.sh
++#     LVM_TEST_MULTI_HOST=1 T=multi_hosts_lv_ex_timeout_hosta.sh
 +# On the host B:
 +#   make check_lvmlockd_idm \
 +#     LVM_TEST_BACKING_DEVICE=/dev/sdj3,/dev/sdk3,/dev/sdl3 \
-+#     LVM_TEST_MULTI_HOST=1 T=multi_hosts_lv_hostb.sh
++#     LVM_TEST_MULTI_HOST=1 T=multi_hosts_lv_ex_timeout_hostb.sh
 +
 +SKIP_WITH_LVMPOLLD=1
 +
@@ -78,8 +84,6 @@ index 000000000..68404d251
 +done
 +
 +aux lvmconf "devices/allow_changes_with_duplicate_pvs = 1"
-+
-+BLKDEVS_NUM=${#BLKDEVS[@]}
 +
 +for d in "${BLKDEVS[@]}"; do
 +	dd if=/dev/zero of="$d" bs=32k count=1
@@ -96,38 +100,50 @@ index 000000000..68404d251
 +	fi
 +done
 +
-+#aux prepare_pvs $BLKDEVS_NUM 6400
-+
 +for i in $(seq 1 ${#BLKDEVS[@]}); do
-+	echo $i
-+	d="dev$i"
 +	vgcreate $SHARED TESTVG$i ${BLKDEVS[$(( i - 1 ))]}
++	lvcreate -a n --zero n -l 1 -n foo TESTVG$i
++	lvchange -a ey TESTVG$i/foo
++done
 +
-+	for j in {1..20}; do
-+		lvcreate -a n --zero n -l 1 -n foo$j TESTVG$i
++for d in "${BLKDEVS[@]}"; do
++	drive_wwn=`udevadm info $d | awk -F= '/E: ID_WWN=/ {print $2}'`
++	for dev in /dev/*; do
++		if [ -b "$dev" ] && [[ ! "$dev" =~ [0-9] ]]; then
++			wwn=`udevadm info "${dev}" | awk -F= '/E: ID_WWN=/ {print $2}'`
++			if [ "$wwn" = "$drive_wwn" ]; then
++				base_name="$(basename -- ${dev})"
++				drive_list+=("$base_name")
++				host_list+=(`readlink /sys/block/$base_name | awk -F'/' '{print $6}'`)
++			fi
++		fi
 +	done
 +done
++
++for d in "${drive_list[@]}"; do
++	[ -f /sys/block/$d/device/delete ] && echo 1 > /sys/block/$d/device/delete
++done
++
++sleep 100
 +
 +for i in $(seq 1 ${#BLKDEVS[@]}); do
-+	for j in {1..20}; do
-+		lvchange -a ey TESTVG$i/foo$j
-+	done
++	check grep_lvmlockd_dump "S lvm_TESTVG$i kill_vg"
++	lvmlockctl --drop TESTVG$i
 +done
 +
-+for i in $(seq 1 ${#BLKDEVS[@]}); do
-+	for j in {1..20}; do
-+		lvchange -a n TESTVG$i/foo$j
-+	done
++# Rescan drives so can probe the deleted drives and join back them
++for h in "${host_list[@]}"; do
++	[ -f /sys/class/scsi_host/${h}/scan ] && echo "- - -" > /sys/class/scsi_host/${h}/scan
 +done
-diff --git a/test/shell/multi_hosts_lv_hostb.sh b/test/shell/multi_hosts_lv_hostb.sh
+diff --git a/test/shell/multi_hosts_lv_ex_timeout_hostb.sh b/test/shell/multi_hosts_lv_ex_timeout_hostb.sh
 new file mode 100644
-index 000000000..13efd1a6b
+index 000000000..f0273fa44
 --- /dev/null
-+++ b/test/shell/multi_hosts_lv_hostb.sh
-@@ -0,0 +1,61 @@
++++ b/test/shell/multi_hosts_lv_ex_timeout_hostb.sh
+@@ -0,0 +1,56 @@
 +#!/usr/bin/env bash
 +
-+# Copyright (C) 2020 Seagate, Inc. All rights reserved.
++# Copyright (C) 2021 Seagate, Inc. All rights reserved.
 +#
 +# This copyrighted material is made available to anyone wishing to use,
 +# modify, copy, or redistribute it subject to the terms and conditions
@@ -137,17 +153,16 @@ index 000000000..13efd1a6b
 +# along with this program; if not, write to the Free Software Foundation,
 +# Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 +
-+# This testing script is for multi-hosts testing, the paired scripts
-+# are: multi_hosts_lv_hosta.sh / multi_hosts_lv_hostb.sh
++# This testing script is for multi-hosts testing.
 +#
 +# On the host A:
 +#   make check_lvmlockd_idm \
 +#     LVM_TEST_BACKING_DEVICE=/dev/sdj3,/dev/sdk3,/dev/sdl3 \
-+#     LVM_TEST_MULTI_HOST=1 T=multi_hosts_lv_hosta.sh
++#     LVM_TEST_MULTI_HOST=1 T=multi_hosts_lv_ex_timeout_hosta.sh
 +# On the host B:
 +#   make check_lvmlockd_idm \
 +#     LVM_TEST_BACKING_DEVICE=/dev/sdj3,/dev/sdk3,/dev/sdl3 \
-+#     LVM_TEST_MULTI_HOST=1 T=multi_hosts_lv_hostb.sh
++#     LVM_TEST_MULTI_HOST=1 T=multi_hosts_lv_ex_timeout_hostb.sh
 +
 +SKIP_WITH_LVMPOLLD=1
 +
@@ -165,22 +180,18 @@ index 000000000..13efd1a6b
 +
 +vgchange --lock-start
 +
-+for i in $(seq 1 ${#BLKDEVS[@]}); do
-+	for j in {1..20}; do
-+		lvchange -a sy TESTVG$i/foo$j
-+	done
-+done
++vgdisplay
 +
 +for i in $(seq 1 ${#BLKDEVS[@]}); do
-+	for j in {1..20}; do
-+		lvchange -a ey TESTVG$i/foo$j
-+	done
++	not lvchange -a ey TESTVG$i/foo
 +done
 +
++# Sleep for 70 seconds so the previous lease is expired
++sleep 70
++
 +for i in $(seq 1 ${#BLKDEVS[@]}); do
-+	for j in {1..20}; do
-+		lvchange -a n TESTVG$i/foo$j
-+	done
++	lvchange -a ey TESTVG$i/foo
++	lvchange -a n TESTVG$i/foo
 +done
 +
 +for i in $(seq 1 ${#BLKDEVS[@]}); do
