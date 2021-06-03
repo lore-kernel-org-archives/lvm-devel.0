@@ -1,26 +1,26 @@
 From: David Teigland <teigland@sourceware.org>
-Date: Thu,  3 Jun 2021 14:40:06 +0000 (GMT)
-Subject: main - tests: multi-hosts: Add VG testing
-Message-ID: <20210603144006.80EF1383B420@sourceware.org>
+Date: Thu,  3 Jun 2021 14:40:07 +0000 (GMT)
+Subject: main - tests: multi-hosts: Add LV testing
+Message-ID: <20210603144007.A71323839C7C@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=e75bd71aaea6e092b93533bdc948fd527821d297
-Commit:        e75bd71aaea6e092b93533bdc948fd527821d297
-Parent:        92b47d8eb8c4b717fd79d0b7c50ecac0dceb31a5
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=e9950efff1d8cad43d6aec38fa30ff8b801960fb
+Commit:        e9950efff1d8cad43d6aec38fa30ff8b801960fb
+Parent:        e75bd71aaea6e092b93533bdc948fd527821d297
 Author:        Leo Yan <leo.yan@linaro.org>
-AuthorDate:    Thu Jun 3 17:59:22 2021 +0800
+AuthorDate:    Thu Jun 3 17:59:23 2021 +0800
 Committer:     David Teigland <teigland@redhat.com>
 CommitterDate: Thu Jun 3 09:39:32 2021 -0500
 
-tests: multi-hosts: Add VG testing
+tests: multi-hosts: Add LV testing
 
-This patch is to add VG testing on multi hosts.  There have two scripts,
-the script multi_hosts_vg_hosta.sh is used to create VGs on one host,
-and the second script multi_hosts_vg_hostb.sh afterwards will acquire
+This patch is to add LV testing on multi hosts.  There have two scripts,
+the script multi_hosts_lv_hosta.sh is used to create LVs on one host,
+and the second script multi_hosts_lv_hostb.sh will acquire
 global lock and VG lock, and remove VGs.  The testing flow verifies the
 locking operations between two hosts with lvmlockd and the backend
 locking manager.
@@ -28,59 +28,25 @@ locking manager.
   On the host A:
     make check_lvmlockd_idm \
       LVM_TEST_BACKING_DEVICE=/dev/sdj3,/dev/sdk3,/dev/sdl3 \
-      LVM_TEST_MULTI_HOST=1 T=multi_hosts_vg_hosta.sh
+      LVM_TEST_MULTI_HOST=1 T=multi_hosts_lv_hosta.sh
 
   On the host B:
     make check_lvmlockd_idm \
       LVM_TEST_BACKING_DEVICE=/dev/sdj3,/dev/sdk3,/dev/sdl3 \
-      LVM_TEST_MULTI_HOST=1 T=multi_hosts_vg_hostb.sh
+      LVM_TEST_MULTI_HOST=1 T=multi_hosts_lv_hostb.sh
 
 Signed-off-by: Leo Yan <leo.yan@linaro.org>
 ---
- test/Makefile.in                   |  1 +
- test/lib/inittest.sh               |  2 ++
- test/shell/multi_hosts_vg_hosta.sh | 45 +++++++++++++++++++++++++++++++++
- test/shell/multi_hosts_vg_hostb.sh | 52 ++++++++++++++++++++++++++++++++++++++
- 4 files changed, 100 insertions(+)
+ test/shell/multi_hosts_lv_hosta.sh | 78 ++++++++++++++++++++++++++++++++++++++
+ test/shell/multi_hosts_lv_hostb.sh | 61 +++++++++++++++++++++++++++++
+ 2 files changed, 139 insertions(+)
 
-diff --git a/test/Makefile.in b/test/Makefile.in
-index 573df77a7..cd134129b 100644
---- a/test/Makefile.in
-+++ b/test/Makefile.in
-@@ -93,6 +93,7 @@ help:
- 	@echo -e "\nSupported variables:"
- 	@echo "  LVM_TEST_AUX_TRACE	Set for verbose messages for aux scripts []."
- 	@echo "  LVM_TEST_BACKING_DEVICE Set device used for testing (see also LVM_TEST_DIR)."
-+	@echo "  LVM_TEST_MULTI_HOST	Set multiple hosts used for testing."
- 	@echo "  LVM_TEST_CAN_CLOBBER_DMESG Allow to clobber dmesg buffer without /dev/kmsg. (1)"
- 	@echo "  LVM_TEST_DEVDIR	Set to '/dev' to run on real /dev."
- 	@echo "  LVM_TEST_PREFER_BRD	Prefer using brd (ramdisk) over loop for testing [1]."
-diff --git a/test/lib/inittest.sh b/test/lib/inittest.sh
-index 98a916ca6..4ca8ac59e 100644
---- a/test/lib/inittest.sh
-+++ b/test/lib/inittest.sh
-@@ -32,6 +32,7 @@ LVM_TEST_DEVDIR=${LVM_TEST_DEVDIR-}
- LVM_TEST_NODEBUG=${LVM_TEST_NODEBUG-}
- LVM_TEST_LVM1=${LVM_TEST_LVM1-}
- LVM_TEST_FAILURE=${LVM_TEST_FAILURE-}
-+LVM_TEST_MULTI_HOST=${LVM_TEST_MULTI_HOST-}
- # TODO: LVM_TEST_SHARED
- SHARED=${SHARED-}
- 
-@@ -65,6 +66,7 @@ test -n "$SKIP_WITH_LVMLOCKD" && test -n "$LVM_TEST_LVMLOCKD" && initskip
- unset CDPATH
- 
- export LVM_TEST_BACKING_DEVICE LVM_TEST_DEVDIR LVM_TEST_NODEBUG LVM_TEST_FAILURE
-+export LVM_TEST_MULTI_HOST
- export LVM_TEST_LVMLOCKD LVM_TEST_LVMLOCKD_TEST
- export LVM_TEST_LVMPOLLD LVM_TEST_LOCK_TYPE_DLM LVM_TEST_LOCK_TYPE_SANLOCK LVM_TEST_LOCK_TYPE_IDM
- export LVM_TEST_DEVICES_FILE
-diff --git a/test/shell/multi_hosts_vg_hosta.sh b/test/shell/multi_hosts_vg_hosta.sh
+diff --git a/test/shell/multi_hosts_lv_hosta.sh b/test/shell/multi_hosts_lv_hosta.sh
 new file mode 100644
-index 000000000..15347490c
+index 000000000..68404d251
 --- /dev/null
-+++ b/test/shell/multi_hosts_vg_hosta.sh
-@@ -0,0 +1,45 @@
++++ b/test/shell/multi_hosts_lv_hosta.sh
+@@ -0,0 +1,78 @@
 +#!/usr/bin/env bash
 +
 +# Copyright (C) 2020 Seagate, Inc. All rights reserved.
@@ -94,16 +60,16 @@ index 000000000..15347490c
 +# Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 +
 +# This testing script is for multi-hosts testing, the paired scripts
-+# are: multi_hosts_vg_hosta.sh / multi_hosts_vg_hostb.sh
++# are: multi_hosts_lv_hosta.sh / multi_hosts_lv_hostb.sh
 +#
 +# On the host A:
 +#   make check_lvmlockd_idm \
 +#     LVM_TEST_BACKING_DEVICE=/dev/sdj3,/dev/sdk3,/dev/sdl3 \
-+#     LVM_TEST_MULTI_HOST=1 T=multi_hosts_vg_hosta.sh
++#     LVM_TEST_MULTI_HOST=1 T=multi_hosts_lv_hosta.sh
 +# On the host B:
 +#   make check_lvmlockd_idm \
 +#     LVM_TEST_BACKING_DEVICE=/dev/sdj3,/dev/sdk3,/dev/sdl3 \
-+#     LVM_TEST_MULTI_HOST=1 T=multi_hosts_vg_hostb.sh
++#     LVM_TEST_MULTI_HOST=1 T=multi_hosts_lv_hostb.sh
 +
 +SKIP_WITH_LVMPOLLD=1
 +
@@ -119,19 +85,52 @@ index 000000000..15347490c
 +
 +aux lvmconf "devices/allow_changes_with_duplicate_pvs = 1"
 +
-+i=0
++BLKDEVS_NUM=${#BLKDEVS[@]}
++
 +for d in "${BLKDEVS[@]}"; do
-+	echo $i
-+	i=$((i+1))
-+	vgcreate $SHARED TESTVG$i $d
-+	vgchange -a n TESTVG$i
++	dd if=/dev/zero of="$d" bs=32k count=1
++	wipefs -a "$d" 2>/dev/null || true
++
++	sg_dev=`sg_map26 ${d}`
++	if [ -n "$LVM_TEST_LOCK_TYPE_IDM" ]; then
++		echo "Cleanup IDM context for drive ${d} ($sg_dev)"
++		sg_raw -v -r 512 -o /tmp/idm_tmp_data.bin $sg_dev \
++			88 00 01 00 00 00 00 20 FF 01 00 00 00 01 00 00
++		sg_raw -v -s 512 -i /tmp/idm_tmp_data.bin $sg_dev \
++			8E 00 FF 00 00 00 00 00 00 00 00 00 00 01 00 00
++		rm /tmp/idm_tmp_data.bin
++	fi
 +done
-diff --git a/test/shell/multi_hosts_vg_hostb.sh b/test/shell/multi_hosts_vg_hostb.sh
++
++#aux prepare_pvs $BLKDEVS_NUM 6400
++
++for i in $(seq 1 ${#BLKDEVS[@]}); do
++	echo $i
++	d="dev$i"
++	vgcreate $SHARED TESTVG$i ${BLKDEVS[$(( i - 1 ))]}
++
++	for j in {1..20}; do
++		lvcreate -a n --zero n -l 1 -n foo$j TESTVG$i
++	done
++done
++
++for i in $(seq 1 ${#BLKDEVS[@]}); do
++	for j in {1..20}; do
++		lvchange -a ey TESTVG$i/foo$j
++	done
++done
++
++for i in $(seq 1 ${#BLKDEVS[@]}); do
++	for j in {1..20}; do
++		lvchange -a n TESTVG$i/foo$j
++	done
++done
+diff --git a/test/shell/multi_hosts_lv_hostb.sh b/test/shell/multi_hosts_lv_hostb.sh
 new file mode 100644
-index 000000000..bab65b68b
+index 000000000..13efd1a6b
 --- /dev/null
-+++ b/test/shell/multi_hosts_vg_hostb.sh
-@@ -0,0 +1,52 @@
++++ b/test/shell/multi_hosts_lv_hostb.sh
+@@ -0,0 +1,61 @@
 +#!/usr/bin/env bash
 +
 +# Copyright (C) 2020 Seagate, Inc. All rights reserved.
@@ -145,16 +144,16 @@ index 000000000..bab65b68b
 +# Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 +
 +# This testing script is for multi-hosts testing, the paired scripts
-+# are: multi_hosts_vg_hosta.sh / multi_hosts_vg_hostb.sh
++# are: multi_hosts_lv_hosta.sh / multi_hosts_lv_hostb.sh
 +#
 +# On the host A:
 +#   make check_lvmlockd_idm \
 +#     LVM_TEST_BACKING_DEVICE=/dev/sdj3,/dev/sdk3,/dev/sdl3 \
-+#     LVM_TEST_MULTI_HOST=1 T=multi_hosts_vg_hosta.sh
++#     LVM_TEST_MULTI_HOST=1 T=multi_hosts_lv_hosta.sh
 +# On the host B:
 +#   make check_lvmlockd_idm \
 +#     LVM_TEST_BACKING_DEVICE=/dev/sdj3,/dev/sdk3,/dev/sdl3 \
-+#     LVM_TEST_MULTI_HOST=1 T=multi_hosts_vg_hostb.sh
++#     LVM_TEST_MULTI_HOST=1 T=multi_hosts_lv_hostb.sh
 +
 +SKIP_WITH_LVMPOLLD=1
 +
@@ -172,17 +171,26 @@ index 000000000..bab65b68b
 +
 +vgchange --lock-start
 +
-+i=0
-+for d in "${BLKDEVS[@]}"; do
-+        i=$((i+1))
-+	check vg_field TESTVG$i lv_count 0
++for i in $(seq 1 ${#BLKDEVS[@]}); do
++	for j in {1..20}; do
++		lvchange -a sy TESTVG$i/foo$j
++	done
 +done
 +
-+i=0
-+for d in "${BLKDEVS[@]}"; do
-+        i=$((i+1))
-+	vgchange -a ey TESTVG$i
-+	vgremove -ff TESTVG$i
++for i in $(seq 1 ${#BLKDEVS[@]}); do
++	for j in {1..20}; do
++		lvchange -a ey TESTVG$i/foo$j
++	done
++done
++
++for i in $(seq 1 ${#BLKDEVS[@]}); do
++	for j in {1..20}; do
++		lvchange -a n TESTVG$i/foo$j
++	done
++done
++
++for i in $(seq 1 ${#BLKDEVS[@]}); do
++	vgremove -f TESTVG$i
 +done
 
 
