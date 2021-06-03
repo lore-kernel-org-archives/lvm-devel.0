@@ -1,117 +1,124 @@
 From: Leo Yan <leo.yan@linaro.org>
-Date: Thu,  3 Jun 2021 17:59:16 +0800
-Subject: [PATCH v1 08/17] tests: Support idm failure injection
+Date: Thu,  3 Jun 2021 17:59:15 +0800
+Subject: [PATCH v1 07/17] tests: stress: Add multi-threads stress testing for PV/VG/LV
 In-Reply-To: <20210603095925.510302-1-leo.yan@linaro.org>
 References: <20210603095925.510302-1-leo.yan@linaro.org>
-Message-ID: <20210603095925.510302-9-leo.yan@linaro.org>
+Message-ID: <20210603095925.510302-8-leo.yan@linaro.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-When the drive failure occurs, the IDM lock manager and lvmlockd should
-handle this case properly.  E.g. when the IDM lock manager detects the
-lease renewal failure caused by I/O errors, it should invoke the kill
-path which is predefined by lvmlockd, so that the kill path program
-(like lvmlockctl) can send requests to lvmlockd to stop and drop lock
-for the relevant VG/LVs.
-
-To verify the failure handling flow, this patch introduces an idm
-failure injection program, it can input the "percentage" for drive
-failures so that can emulate different failure cases.
+This patch is to add the stress testing, which launches three threads,
+one thread is for creating/removing PV, one thread is for
+creating/removing VG, and the last one thread is for LV operations.
 
 Signed-off-by: Leo Yan <leo.yan@linaro.org>
 ---
- test/Makefile.in              |  5 ++++
- test/lib/idm_inject_failure.c | 55 +++++++++++++++++++++++++++++++++++
- 2 files changed, 60 insertions(+)
- create mode 100644 test/lib/idm_inject_failure.c
+ test/shell/stress_multi_threads_2.sh | 93 ++++++++++++++++++++++++++++
+ 1 file changed, 93 insertions(+)
+ create mode 100644 test/shell/stress_multi_threads_2.sh
 
-diff --git a/test/Makefile.in b/test/Makefile.in
-index 662974be6..573df77a7 100644
---- a/test/Makefile.in
-+++ b/test/Makefile.in
-@@ -171,6 +171,7 @@ endif
- 
- ifeq ("@BUILD_LVMLOCKD@", "yes")
- check_lvmlockd_idm: .tests-stamp
-+	$(INSTALL_PROGRAM) lib/idm_inject_failure $(EXECDIR)
- 	VERBOSE=$(VERBOSE) ./lib/runner \
- 		--testdir . --outdir $(LVM_TEST_RESULTS) \
- 		--flavours udev-lvmlockd-idm --only shell/aa-lvmlockd-idm-prepare.sh,$(T),shell/zz-lvmlockd-idm-remove.sh --skip $(S)
-@@ -269,6 +270,10 @@ lib/securetest: lib/dmsecuretest.o .lib-dir-stamp
- 	@echo "    [CC] $@"
- 	$(Q) $(CC) -g $(CFLAGS) $(LDFLAGS) $(EXTRA_EXEC_LDFLAGS) $(ELDFLAGS) -o $@ $< -L$(interfacebuilddir) -ldevmapper $(LIBS)
- 
-+lib/idm_inject_failure: lib/idm_inject_failure.o .lib-dir-stamp
-+	@echo "    [CC] $@"
-+	$(Q) $(CC) -g $(CFLAGS) $(LDFLAGS) $(EXTRA_EXEC_LDFLAGS) $(ELDFLAGS) -o $@ $< $(INTERNAL_LIBS) $(LIBS) -lseagate_ilm
-+
- lib/runner.o: $(wildcard $(srcdir)/lib/*.h)
- 
- CFLAGS_runner.o += $(EXTRA_EXEC_CFLAGS)
-diff --git a/test/lib/idm_inject_failure.c b/test/lib/idm_inject_failure.c
+diff --git a/test/shell/stress_multi_threads_2.sh b/test/shell/stress_multi_threads_2.sh
 new file mode 100644
-index 000000000..4998b585a
+index 000000000..a035b5727
 --- /dev/null
-+++ b/test/lib/idm_inject_failure.c
-@@ -0,0 +1,55 @@
-+/*
-+ * Copyright (C) 2020-2021 Seagate Ltd.
-+ *
-+ * This copyrighted material is made available to anyone wishing to use,
-+ * modify, copy, or redistribute it subject to the terms and conditions
-+ * of the GNU Lesser General Public License v.2.1.
-+ */
++++ b/test/shell/stress_multi_threads_2.sh
+@@ -0,0 +1,93 @@
++#!/usr/bin/env bash
 +
-+#include <errno.h>
-+#include <limits.h>
-+#include <signal.h>
-+#include <stddef.h>
-+#include <stdio.h>
-+#include <stdlib.h>
-+#include <string.h>
-+#include <sys/types.h>
-+#include <sys/inotify.h>
-+#include <uuid/uuid.h>
-+#include <unistd.h>
-+#include <sys/stat.h>
-+#include <sys/types.h>
++# Copyright (C) 2021 Seagate, Inc. All rights reserved.
++#
++# This copyrighted material is made available to anyone wishing to use,
++# modify, copy, or redistribute it subject to the terms and conditions
++# of the GNU General Public License v2.
++#
++# You should have received a copy of the GNU General Public License
++# along with this program; if not, write to the Free Software Foundation,
++# Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 +
-+#include <ilm.h>
 +
-+int main(int argc, char *argv[])
++SKIP_WITH_LVMPOLLD=1
++
++. lib/inittest
++
++aux prepare_devs 8
++get_devs
++
++pvcreate -M2 "$dev1" "$dev2" "$dev3" "$dev4" "$dev5" "$dev6"
++
++test_vg_thread1()
 +{
-+	int pecent = atoi(argv[1]);
-+	int ret, s;
-+
-+	ret = ilm_connect(&s);
-+	if (ret == 0) {
-+		printf("ilm_connect: SUCCESS\n");
-+	} else {
-+		printf("ilm_connect: FAIL\n");
-+		exit(-1);
-+	}
-+
-+	ret = ilm_inject_fault(s, pecent);
-+	if (ret == 0) {
-+		printf("ilm_inject_fault (100): SUCCESS\n");
-+	} else {
-+		printf("ilm_inject_fault (100): FAIL\n");
-+		exit(-1);
-+	}
-+
-+	ret = ilm_disconnect(s);
-+	if (ret == 0) {
-+		printf("ilm_disconnect: SUCCESS\n");
-+	} else {
-+		printf("ilm_disconnect: FAIL\n");
-+		exit(-1);
-+	}
-+
-+	return 0;
++	for i in {1..1000}
++	do
++		vgcreate --shared -M2 "$vg1" "$dev1" "$dev2" "$dev3"
++		vgremove -ff $vg1
++	done
 +}
++
++test_vg_thread2()
++{
++	vgcreate --shared -M2 "$vg2" "$dev4" "$dev5" "$dev6"
++
++	for i in {1..1000}
++	do
++		# Create new logic volume and deactivate it
++		lvcreate -a n --zero n -l 1 -n foo $vg2
++
++		# Set minor number
++		lvchange $vg2/foo -My --major=255 --minor=124
++
++		# Activate logic volume
++		lvchange $vg2/foo -a y
++
++		# Extend logic volume with 10%
++		lvextend -l+10 $vg2/foo
++
++		# Deactivate logic volume
++		lvchange $vg2/foo -a n
++
++		# Deactivate volume group
++		vgchange $vg2 -a n
++
++		# Activate volume group with shareable mode
++		vgchange $vg2 -a sy
++
++		# lvextend fails due to mismatched lock mode
++		not lvextend -l+10 $vg2/foo
++
++		# Promote volume group to exclusive mode
++		vgchange $vg2 -a ey
++
++		lvreduce -f -l-4 $vg2/foo
++
++		lvchange -an $vg2/foo
++		lvremove $vg2/foo
++	done
++
++	vgremove -ff $vg2
++}
++
++test_vg_thread3()
++{
++	for i in {1..1000}
++	do
++		pvcreate -M2 "$dev7" "$dev8"
++		pvremove "$dev7"
++		pvremove "$dev8"
++	done
++}
++
++test_vg_thread1 &
++WAITPID=$!
++
++test_vg_thread2 &
++WAITPID="$WAITPID "$!
++
++test_vg_thread3 &
++WAITPID="$WAITPID "$!
++
++wait $WAITPID
 -- 
 2.25.1
 
