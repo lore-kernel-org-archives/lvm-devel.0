@@ -1,31 +1,38 @@
-From: Leo Yan <leo.yan@linaro.org>
-Date: Thu,  3 Jun 2021 17:59:14 +0800
-Subject: [PATCH v1 06/17] tests: stress: Add multi-threads stress testing for VG/LV
-In-Reply-To: <20210603095925.510302-1-leo.yan@linaro.org>
-References: <20210603095925.510302-1-leo.yan@linaro.org>
-Message-ID: <20210603095925.510302-7-leo.yan@linaro.org>
+From: David Teigland <teigland@sourceware.org>
+Date: Thu,  3 Jun 2021 14:39:58 +0000 (GMT)
+Subject: main - tests: stress: Add multi-threads stress testing for PV/VG/LV
+Message-ID: <20210603143958.731923839C7C@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-This patch is to add the stress testing, which launches two threads,
-each thread creates LV, activate and deactivate LV in the loop; so this
-can test for multi-threading in lvmlockd and its backend lock manager.
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=f83e11ff4332ce7ca24f6bfede4fe60c48123700
+Commit:        f83e11ff4332ce7ca24f6bfede4fe60c48123700
+Parent:        692fe7bb31b6682151601f196e6274a3e8b772d5
+Author:        Leo Yan <leo.yan@linaro.org>
+AuthorDate:    Thu Jun 3 17:59:15 2021 +0800
+Committer:     David Teigland <teigland@redhat.com>
+CommitterDate: Thu Jun 3 09:39:32 2021 -0500
+
+tests: stress: Add multi-threads stress testing for PV/VG/LV
+
+This patch is to add the stress testing, which launches three threads,
+one thread is for creating/removing PV, one thread is for
+creating/removing VG, and the last one thread is for LV operations.
 
 Signed-off-by: Leo Yan <leo.yan@linaro.org>
 ---
- test/shell/stress_multi_threads_1.sh | 111 +++++++++++++++++++++++++++
- 1 file changed, 111 insertions(+)
- create mode 100644 test/shell/stress_multi_threads_1.sh
+ test/shell/stress_multi_threads_2.sh | 93 ++++++++++++++++++++++++++++++++++++
+ 1 file changed, 93 insertions(+)
 
-diff --git a/test/shell/stress_multi_threads_1.sh b/test/shell/stress_multi_threads_1.sh
+diff --git a/test/shell/stress_multi_threads_2.sh b/test/shell/stress_multi_threads_2.sh
 new file mode 100644
-index 000000000..c96fa244b
+index 000000000..a035b5727
 --- /dev/null
-+++ b/test/shell/stress_multi_threads_1.sh
-@@ -0,0 +1,111 @@
++++ b/test/shell/stress_multi_threads_2.sh
+@@ -0,0 +1,93 @@
 +#!/usr/bin/env bash
 +
 +# Copyright (C) 2021 Seagate, Inc. All rights reserved.
@@ -43,54 +50,24 @@ index 000000000..c96fa244b
 +
 +. lib/inittest
 +
-+aux prepare_devs 6
++aux prepare_devs 8
 +get_devs
 +
-+pvcreate -M2 "${DEVICES[@]}"
-+
-+vgcreate --shared -M2 "$vg1" "$dev1" "$dev2" "$dev3"
-+vgcreate --shared -M2 "$vg2" "$dev4" "$dev5" "$dev6"
++pvcreate -M2 "$dev1" "$dev2" "$dev3" "$dev4" "$dev5" "$dev6"
 +
 +test_vg_thread1()
 +{
 +	for i in {1..1000}
 +	do
-+		# Create new logic volume and deactivate it
-+		lvcreate -a n --zero n -l 1 -n foo $vg1
-+
-+		# Set minor number
-+		lvchange $vg1/foo -My --major=255 --minor=123
-+
-+		# Activate logic volume
-+		lvchange $vg1/foo -a y
-+
-+		# Extend logic volume with 10%
-+		lvextend -l+10 $vg1/foo
-+
-+		# Deactivate logic volume
-+		lvchange $vg1/foo -a n
-+
-+		# Deactivate volume group
-+		vgchange $vg1 -a n
-+
-+		# Activate volume group with shareable mode
-+		vgchange $vg1 -a sy
-+
-+		# lvextend fails due to mismatched lock mode
-+		not lvextend -l+10 $vg1/foo
-+
-+		# Promote volume group to exclusive mode
-+		vgchange $vg1 -a ey
-+
-+		lvreduce -f -l-4 $vg1/foo
-+
-+		lvchange -an $vg1/foo
-+		lvremove $vg1/foo
++		vgcreate --shared -M2 "$vg1" "$dev1" "$dev2" "$dev3"
++		vgremove -ff $vg1
 +	done
 +}
 +
 +test_vg_thread2()
 +{
++	vgcreate --shared -M2 "$vg2" "$dev4" "$dev5" "$dev6"
++
 +	for i in {1..1000}
 +	do
 +		# Create new logic volume and deactivate it
@@ -125,6 +102,18 @@ index 000000000..c96fa244b
 +		lvchange -an $vg2/foo
 +		lvremove $vg2/foo
 +	done
++
++	vgremove -ff $vg2
++}
++
++test_vg_thread3()
++{
++	for i in {1..1000}
++	do
++		pvcreate -M2 "$dev7" "$dev8"
++		pvremove "$dev7"
++		pvremove "$dev8"
++	done
 +}
 +
 +test_vg_thread1 &
@@ -133,11 +122,9 @@ index 000000000..c96fa244b
 +test_vg_thread2 &
 +WAITPID="$WAITPID "$!
 +
-+wait $WAITPID
++test_vg_thread3 &
++WAITPID="$WAITPID "$!
 +
-+vgremove -ff $vg1
-+vgremove -ff $vg2
--- 
-2.25.1
++wait $WAITPID
 
 
