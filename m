@@ -1,124 +1,99 @@
 From: Leo Yan <leo.yan@linaro.org>
-Date: Thu,  3 Jun 2021 17:59:15 +0800
-Subject: [PATCH v1 07/17] tests: stress: Add multi-threads stress testing for PV/VG/LV
+Date: Thu,  3 Jun 2021 17:59:17 +0800
+Subject: [PATCH v1 09/17] tests: Add testing for lvmlockd failure
 In-Reply-To: <20210603095925.510302-1-leo.yan@linaro.org>
 References: <20210603095925.510302-1-leo.yan@linaro.org>
-Message-ID: <20210603095925.510302-8-leo.yan@linaro.org>
+Message-ID: <20210603095925.510302-10-leo.yan@linaro.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-This patch is to add the stress testing, which launches three threads,
-one thread is for creating/removing PV, one thread is for
-creating/removing VG, and the last one thread is for LV operations.
+After the lvmlockd abnormally exits and relaunch the daemon, if LVM
+commands continue to run, lvmlockd and the backend lock manager (e.g.
+sanlock lock manager or IDM lock manager) should can continue to serve
+the requests from LVM commands.
+
+This patch adds a test to emulate lvmlockd failure, and verify the LVM
+commands after lvmlockd recovers back.  Below is an example for testing
+the case:
+
+  # make check_lvmlockd_idm \
+	LVM_TEST_BACKING_DEVICE=/dev/sdo3,/dev/sdp3,/dev/sdp4 \
+	LVM_TEST_FAILURE=1 T=lvmlockd_failure.sh
 
 Signed-off-by: Leo Yan <leo.yan@linaro.org>
 ---
- test/shell/stress_multi_threads_2.sh | 93 ++++++++++++++++++++++++++++
- 1 file changed, 93 insertions(+)
- create mode 100644 test/shell/stress_multi_threads_2.sh
+ test/lib/inittest.sh           |  3 ++-
+ test/shell/lvmlockd_failure.sh | 37 ++++++++++++++++++++++++++++++++++
+ 2 files changed, 39 insertions(+), 1 deletion(-)
+ create mode 100644 test/shell/lvmlockd_failure.sh
 
-diff --git a/test/shell/stress_multi_threads_2.sh b/test/shell/stress_multi_threads_2.sh
+diff --git a/test/lib/inittest.sh b/test/lib/inittest.sh
+index 6b4bcb348..98a916ca6 100644
+--- a/test/lib/inittest.sh
++++ b/test/lib/inittest.sh
+@@ -31,6 +31,7 @@ LVM_TEST_BACKING_DEVICE=${LVM_TEST_BACKING_DEVICE-}
+ LVM_TEST_DEVDIR=${LVM_TEST_DEVDIR-}
+ LVM_TEST_NODEBUG=${LVM_TEST_NODEBUG-}
+ LVM_TEST_LVM1=${LVM_TEST_LVM1-}
++LVM_TEST_FAILURE=${LVM_TEST_FAILURE-}
+ # TODO: LVM_TEST_SHARED
+ SHARED=${SHARED-}
+ 
+@@ -63,7 +64,7 @@ test -n "$SKIP_WITH_LVMLOCKD" && test -n "$LVM_TEST_LVMLOCKD" && initskip
+ 
+ unset CDPATH
+ 
+-export LVM_TEST_BACKING_DEVICE LVM_TEST_DEVDIR LVM_TEST_NODEBUG
++export LVM_TEST_BACKING_DEVICE LVM_TEST_DEVDIR LVM_TEST_NODEBUG LVM_TEST_FAILURE
+ export LVM_TEST_LVMLOCKD LVM_TEST_LVMLOCKD_TEST
+ export LVM_TEST_LVMPOLLD LVM_TEST_LOCK_TYPE_DLM LVM_TEST_LOCK_TYPE_SANLOCK LVM_TEST_LOCK_TYPE_IDM
+ export LVM_TEST_DEVICES_FILE
+diff --git a/test/shell/lvmlockd_failure.sh b/test/shell/lvmlockd_failure.sh
 new file mode 100644
-index 000000000..a035b5727
+index 000000000..e0fccfb83
 --- /dev/null
-+++ b/test/shell/stress_multi_threads_2.sh
-@@ -0,0 +1,93 @@
++++ b/test/shell/lvmlockd_failure.sh
+@@ -0,0 +1,37 @@
 +#!/usr/bin/env bash
 +
-+# Copyright (C) 2021 Seagate, Inc. All rights reserved.
++# Copyright (C) 2020~2021 Seagate, Inc.  All rights reserved.
 +#
 +# This copyrighted material is made available to anyone wishing to use,
 +# modify, copy, or redistribute it subject to the terms and conditions
-+# of the GNU General Public License v2.
++# of the GNU General Public License v.2.
 +#
 +# You should have received a copy of the GNU General Public License
 +# along with this program; if not, write to the Free Software Foundation,
 +# Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 +
-+
 +SKIP_WITH_LVMPOLLD=1
 +
 +. lib/inittest
 +
-+aux prepare_devs 8
-+get_devs
++[ -z "$LVM_TEST_FAILURE" ] && skip;
 +
-+pvcreate -M2 "$dev1" "$dev2" "$dev3" "$dev4" "$dev5" "$dev6"
++aux prepare_vg 3
 +
-+test_vg_thread1()
-+{
-+	for i in {1..1000}
-+	do
-+		vgcreate --shared -M2 "$vg1" "$dev1" "$dev2" "$dev3"
-+		vgremove -ff $vg1
-+	done
-+}
++# Create new logic volume
++lvcreate -a ey --zero n -l 1 -n $lv1 $vg
 +
-+test_vg_thread2()
-+{
-+	vgcreate --shared -M2 "$vg2" "$dev4" "$dev5" "$dev6"
++# Emulate lvmlockd abnormally exiting
++killall -9 lvmlockd
 +
-+	for i in {1..1000}
-+	do
-+		# Create new logic volume and deactivate it
-+		lvcreate -a n --zero n -l 1 -n foo $vg2
++systemctl start lvm2-lvmlockd
 +
-+		# Set minor number
-+		lvchange $vg2/foo -My --major=255 --minor=124
++vgchange --lock-start $vg
 +
-+		# Activate logic volume
-+		lvchange $vg2/foo -a y
++lvchange -a n $vg/$lv1
++lvchange -a sy $vg/$lv1
 +
-+		# Extend logic volume with 10%
-+		lvextend -l+10 $vg2/foo
++lvcreate -a ey --zero n -l 1 -n $lv2 $vg
++lvchange -a n $vg/$lv2
 +
-+		# Deactivate logic volume
-+		lvchange $vg2/foo -a n
-+
-+		# Deactivate volume group
-+		vgchange $vg2 -a n
-+
-+		# Activate volume group with shareable mode
-+		vgchange $vg2 -a sy
-+
-+		# lvextend fails due to mismatched lock mode
-+		not lvextend -l+10 $vg2/foo
-+
-+		# Promote volume group to exclusive mode
-+		vgchange $vg2 -a ey
-+
-+		lvreduce -f -l-4 $vg2/foo
-+
-+		lvchange -an $vg2/foo
-+		lvremove $vg2/foo
-+	done
-+
-+	vgremove -ff $vg2
-+}
-+
-+test_vg_thread3()
-+{
-+	for i in {1..1000}
-+	do
-+		pvcreate -M2 "$dev7" "$dev8"
-+		pvremove "$dev7"
-+		pvremove "$dev8"
-+	done
-+}
-+
-+test_vg_thread1 &
-+WAITPID=$!
-+
-+test_vg_thread2 &
-+WAITPID="$WAITPID "$!
-+
-+test_vg_thread3 &
-+WAITPID="$WAITPID "$!
-+
-+wait $WAITPID
++vgremove -ff $vg
 -- 
 2.25.1
 
