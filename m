@@ -1,93 +1,71 @@
 From: Leo Yan <leo.yan@linaro.org>
-Date: Thu,  3 Jun 2021 17:59:10 +0800
-Subject: [PATCH v1 02/17] tests: Support multiple backing devices
+Date: Thu,  3 Jun 2021 17:59:11 +0800
+Subject: [PATCH v1 03/17] tests: Cleanup idm context when prepare devices
 In-Reply-To: <20210603095925.510302-1-leo.yan@linaro.org>
 References: <20210603095925.510302-1-leo.yan@linaro.org>
-Message-ID: <20210603095925.510302-3-leo.yan@linaro.org>
+Message-ID: <20210603095925.510302-4-leo.yan@linaro.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-In current implementation, the option "LVM_TEST_BACKING_DEVICE" only
-supports to specify one backing device; this patch is to extend the
-option to support multiple backing devices by using comma as separator,
-e.g. below command specifies two backing devices:
-
-  make check_lvmlockd_idm LVM_TEST_BACKING_DEVICE=/dev/sdj3,/dev/sdk3
-
-This can allow the testing works on multiple drives and verify the
-locking scheme if can work as expected for multiple drives case.  For
-example, for Seagate IDM locking scheme, if a VG uses two PVs, every PV
-is resident on a drive, thus the locking operations will be sent to two
-drives respectively; so the extension for "LVM_TEST_BACKING_DEVICE" can
-help to verify different drive configurations for locking.
+For testing idm locking scheme, it's good to cleanup the idm context
+before run the test cases.  This can give a clean environment for the
+testing.
 
 Signed-off-by: Leo Yan <leo.yan@linaro.org>
 ---
- test/lib/aux.sh | 31 ++++++++++++++++++++++++++++---
- 1 file changed, 28 insertions(+), 3 deletions(-)
+ test/lib/aux.sh | 29 +++++++++++++++++++++++------
+ 1 file changed, 23 insertions(+), 6 deletions(-)
 
 diff --git a/test/lib/aux.sh b/test/lib/aux.sh
-index 97c7ac68b..a592dad81 100644
+index a592dad81..bb189f466 100644
 --- a/test/lib/aux.sh
 +++ b/test/lib/aux.sh
-@@ -901,11 +901,22 @@ prepare_backing_dev() {
+@@ -897,6 +897,20 @@ wipefs_a() {
+ 	udev_wait
+ }
+ 
++cleanup_idm_context() {
++	local dev=$1
++
++	if [ -n "$LVM_TEST_LOCK_TYPE_IDM" ]; then
++		sg_dev=`sg_map26 ${dev}`
++		echo "Cleanup IDM context for drive ${dev} ($sg_dev)"
++		sg_raw -v -r 512 -o /tmp/idm_tmp_data.bin $sg_dev \
++			88 00 01 00 00 00 00 20 FF 01 00 00 00 01 00 00
++		sg_raw -v -s 512 -i /tmp/idm_tmp_data.bin $sg_dev \
++			8E 00 FF 00 00 00 00 00 00 00 00 00 00 01 00 00
++		rm /tmp/idm_tmp_data.bin
++	fi
++}
++
+ prepare_backing_dev() {
  	local size=${1=32}
  	shift
- 
-+	if test -n "$LVM_TEST_BACKING_DEVICE"; then
-+		IFS=',' read -r -a BACKING_DEVICE_ARRAY <<< "$LVM_TEST_BACKING_DEVICE"
-+
-+		for d in "${BACKING_DEVICE_ARRAY[@]}"; do
-+			if test ! -b "$d"; then
-+				echo "Device $d doesn't exist!"
-+				return 1
-+			fi
-+		done
-+	fi
-+
- 	if test -f BACKING_DEV; then
- 		BACKING_DEV=$(< BACKING_DEV)
- 		return 0
--	elif test -b "$LVM_TEST_BACKING_DEVICE"; then
--		BACKING_DEV=$LVM_TEST_BACKING_DEVICE
-+	elif test -n "$LVM_TEST_BACKING_DEVICE"; then
-+		BACKING_DEV=${BACKING_DEVICE_ARRAY[0]}
- 		echo "$BACKING_DEV" > BACKING_DEV
- 		return 0
- 	elif test "${LVM_TEST_PREFER_BRD-1}" = "1" && \
-@@ -953,7 +964,14 @@ prepare_devs() {
- 		local dev="$DM_DEV_DIR/mapper/$name"
- 		DEVICES[$count]=$dev
- 		count=$((  count + 1 ))
--		echo 0 $size linear "$BACKING_DEV" $(( ( i - 1 ) * size + ( header_shift * 2048 ) )) > "$name.table"
-+		# If the backing device number can meet the requirement for PV devices,
-+		# then allocate a dedicated backing device for PV; otherwise, rollback
-+		# to use single backing device for device-mapper.
-+		if [ -n "$LVM_TEST_BACKING_DEVICE" ] && [ $n -le ${#BACKING_DEVICE_ARRAY[@]} ]; then
-+			echo 0 $size linear "${BACKING_DEVICE_ARRAY[$(( count - 1 ))]}" $(( header_shift * 2048 )) > "$name.table"
-+		else
-+			echo 0 $size linear "$BACKING_DEV" $(( ( i - 1 ) * size + ( header_shift * 2048 ) )) > "$name.table"
-+		fi
- 		dmsetup create -u "TEST-$name" "$name" "$name.table" || touch CREATE_FAILED &
- 		test -f CREATE_FAILED && break;
- 	done
-@@ -971,6 +989,13 @@ prepare_devs() {
+@@ -989,12 +1003,15 @@ prepare_devs() {
  		return $?
  	fi
  
-+	for d in "${BACKING_DEVICE_ARRAY[@]}"; do
-+		cnt=$((`blockdev --getsize64 $d` / 1024 / 1024))
-+		cnt=$(( cnt < 1000 ? cnt : 1000 ))
-+		dd if=/dev/zero of="$d" bs=1MB count=$cnt
-+		wipefs -a "$d" 2>/dev/null || true
-+	done
-+
+-	for d in "${BACKING_DEVICE_ARRAY[@]}"; do
+-		cnt=$((`blockdev --getsize64 $d` / 1024 / 1024))
+-		cnt=$(( cnt < 1000 ? cnt : 1000 ))
+-		dd if=/dev/zero of="$d" bs=1MB count=$cnt
+-		wipefs -a "$d" 2>/dev/null || true
+-	done
++	if [ -n "$LVM_TEST_BACKING_DEVICE" ]; then
++		for d in "${BACKING_DEVICE_ARRAY[@]}"; do
++			cnt=$((`blockdev --getsize64 $d` / 1024 / 1024))
++			cnt=$(( cnt < 1000 ? cnt : 1000 ))
++			dd if=/dev/zero of="$d" bs=1MB count=$cnt
++			wipefs -a "$d" 2>/dev/null || true
++			cleanup_idm_context "$d"
++		done
++	fi
+ 
  	# non-ephemeral devices need to be cleared between tests
  	test -f LOOP -o -f RAMDISK || for d in "${DEVICES[@]}"; do
- 		# ensure disk header is always zeroed
 -- 
 2.25.1
 
