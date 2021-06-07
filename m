@@ -1,42 +1,173 @@
 From: David Teigland <teigland@sourceware.org>
-Date: Thu,  3 Jun 2021 19:47:18 +0000 (GMT)
-Subject: main - fix empty mem pool leak
-Message-ID: <20210603194718.DF7F2386FC05@sourceware.org>
+Date: Mon,  7 Jun 2021 17:56:03 +0000 (GMT)
+Subject: main - tests: writecache-blocksize add dm-cache tests
+Message-ID: <20210607175603.6032D388C00A@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=c43f2f8ae08ed0555a300764c8644ea56f4f41e2
-Commit:        c43f2f8ae08ed0555a300764c8644ea56f4f41e2
-Parent:        fe05828e7e4c78a1ed4430ce4057c785d0b898a0
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=a7f334a53269ee6967417a01d37b7f9592637cfc
+Commit:        a7f334a53269ee6967417a01d37b7f9592637cfc
+Parent:        c43f2f8ae08ed0555a300764c8644ea56f4f41e2
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Thu Jun 3 14:44:55 2021 -0500
+AuthorDate:    Mon Jun 7 12:11:12 2021 -0500
 Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Thu Jun 3 14:46:33 2021 -0500
+CommitterDate: Mon Jun 7 12:11:12 2021 -0500
 
-fix empty mem pool leak
+tests: writecache-blocksize add dm-cache tests
 
-of "config" when LVM_SYSTEM_DIR=""
+Add the same tests for dm-cache as exist for dm-writecache,
+dm-cache uses a different blocksize in a couple cases.
 ---
- lib/commands/toolcontext.c | 4 ++--
- 1 file changed, 2 insertions(+), 2 deletions(-)
+ test/shell/writecache-blocksize.sh | 64 +++++++++++++++++++++++++++-----------
+ 1 file changed, 45 insertions(+), 19 deletions(-)
 
-diff --git a/lib/commands/toolcontext.c b/lib/commands/toolcontext.c
-index 296618686..e2be89d0f 100644
---- a/lib/commands/toolcontext.c
-+++ b/lib/commands/toolcontext.c
-@@ -966,8 +966,8 @@ static void _destroy_config(struct cmd_context *cmd)
- 	/* CONFIG_FILE/CONFIG_MERGED_FILES */
- 	if ((cft = remove_config_tree_by_source(cmd, CONFIG_MERGED_FILES)))
- 		config_destroy(cft);
--	else
--		remove_config_tree_by_source(cmd, CONFIG_FILE);
-+	else if ((cft = remove_config_tree_by_source(cmd, CONFIG_FILE)))
-+		config_destroy(cft);
+diff --git a/test/shell/writecache-blocksize.sh b/test/shell/writecache-blocksize.sh
+index a8bb1e49d..2579ef7b7 100644
+--- a/test/shell/writecache-blocksize.sh
++++ b/test/shell/writecache-blocksize.sh
+@@ -10,7 +10,7 @@
+ # along with this program; if not, write to the Free Software Foundation,
+ # Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  
- 	dm_list_iterate_items(cfl, &cmd->config_files)
- 		config_destroy(cfl->cft);
+-# Test writecache usage
++# Test dm-writecache and dm-cache with different block size combinations
+ 
+ SKIP_WITH_LVMPOLLD=1
+ 
+@@ -94,6 +94,7 @@ _verify_data_on_lv() {
+ 	lvchange -an $vg/$lv1
+ }
+ 
++# Check that the LBS/PBS that were set up is accurately reported for the devs.
+ _check_env() {
+ 
+ 	check sysfs "$(< SCSI_DEBUG_DEV)" queue/logical_block_size "$1"
+@@ -105,24 +106,33 @@ _check_env() {
+ 	blockdev --getpbsz "$dev2"
+ }
+ 
++#
++# _run_test $BS1 $BS2 $type $optname "..."
++#
++# $BS1:    the xfs sectsz is verified to match $BS1, after mkfs
++# $BS2:    the lv1 LBS is verified to match $BS2, after cache is added to lv1
++# $type    is cache or writecache to use in lvconvert --type $type
++# $optname is either --cachevol or --cachepool to use in lvconvert
++# "..." a sector size option to use in mkfs.xfs
++#
++
+ _run_test() {
+ 	vgcreate $SHARED $vg "$dev1"
+ 	vgextend $vg "$dev2"
+ 	lvcreate -n $lv1 -l 8 -an $vg "$dev1"
+ 	lvcreate -n $lv2 -l 4 -an $vg "$dev2"
+ 	lvchange -ay $vg/$lv1
+-	mkfs.xfs -f $2 "$DM_DEV_DIR/$vg/$lv1" |tee out
++	mkfs.xfs -f $5 "$DM_DEV_DIR/$vg/$lv1" |tee out
+ 	grep "sectsz=$1" out
+ 	_add_new_data_to_mnt
+-	lvconvert --yes --type writecache --cachevol $lv2 $vg/$lv1
++	lvconvert --yes --type $3 $4 $lv2 $vg/$lv1
+ 	blockdev --getss "$DM_DEV_DIR/$vg/$lv1" |tee out
+-	grep "$1" out
++	grep "$2" out
+ 	blockdev --getpbsz "$DM_DEV_DIR/$vg/$lv1"
+ 	_add_more_data_to_mnt
+ 	_verify_data_on_mnt
+ 	lvconvert --splitcache $vg/$lv1
+ 	check lv_field $vg/$lv1 segtype linear
+-	check lv_field $vg/$lv2 segtype linear
+ 	blockdev --getss "$DM_DEV_DIR/$vg/$lv1"
+ 	blockdev --getpbsz "$DM_DEV_DIR/$vg/$lv1"
+ 	_verify_data_on_mnt
+@@ -136,7 +146,7 @@ _run_test() {
+ 	vgremove $vg
+ }
+ 
+-# scsi_debug devices with 512 LBS 512 PBS
++# Setup: LBS 512, PBS 512
+ aux prepare_scsi_debug_dev 256 || skip
+ aux prepare_devs 2 64
+ 
+@@ -150,43 +160,58 @@ vgremove -ff $vg
+ 
+ _check_env "512" "512"
+ 
+-# lbs 512, pbs 512, xfs 512, wc 512
+-_run_test 512 ""
++# lbs 512, pbs 512, xfs 512, wc bs 512
++_run_test 512 512 "writecache" "--cachevol" ""
++# lbs 512, pbs 512, xfs 512, cache bs 512
++_run_test 512 512 "cache" "--cachevol"  ""
++_run_test 512 512 "cache" "--cachepool" ""
+ 
+-# lbs 512, pbs 512, xfs -s 4096, wc 4096
+-_run_test 4096 "-s size=4096"
++# lbs 512, pbs 512, xfs -s 4096, wc bs 4096
++_run_test 4096 4096 "writecache" "--cachevol" "-s size=4096"
++# lbs 512, pbs 512, xfs -s 4096, cache bs 512
++_run_test 4096 512 "cache" "--cachevol"  "-s size=4096"
++_run_test 4096 512 "cache" "--cachepool" "-s size=4096"
+ 
+ aux cleanup_scsi_debug_dev
+ 
+ 
+-# lbs=512, pbs=4096
++# Setup: LBS 512, PBS 4096
+ aux prepare_scsi_debug_dev 256 sector_size=512 physblk_exp=3
+ aux prepare_devs 2 64
+ 
+ _check_env "512" "4096"
+ 
+-# lbs 512, pbs 4k, xfs 4k, wc 4k
+-_run_test 4096 ""
++# lbs 512, pbs 4k, xfs 4k, wc bs 4k
++_run_test 4096 4096 "writecache" "--cachevol" ""
++# lbs 512, pbs 4k, xfs 4k, cache bs 512
++_run_test 4096 512 "cache" "--cachevol"  ""
++_run_test 4096 512 "cache" "--cachepool" ""
+ 
+-# lbs 512, pbs 4k, xfs -s 512, wc 512
+-_run_test 512 "-s size=512"
++# lbs 512, pbs 4k, xfs -s 512, wc bs 512
++_run_test 512 512 "writecache" "--cachevol" "-s size=512"
++# lbs 512, pbs 4k, xfs -s 512, cache bs 512
++_run_test 512 512 "cache" "--cachevol"  "-s size=512"
++_run_test 512 512 "cache" "--cachepool" "-s size=512"
+ 
+ aux cleanup_scsi_debug_dev
+ 
+ 
+-# scsi_debug devices with 4K LBS and 4K PBS
++# Setup: LBS 4096, PBS 4096
+ aux prepare_scsi_debug_dev 256 sector_size=4096
+ aux prepare_devs 2 64
+ 
+ _check_env "4096" "4096"
+ 
+-# lbs 4k, pbs 4k, xfs 4k, wc 4k
+-_run_test 4096 ""
++# lbs 4k, pbs 4k, xfs 4k, wc bs 4k
++_run_test 4096 4096 "writecache" "--cachevol" ""
++# lbs 4k, pbs 4k, xfs 4k, cache bs 4k
++_run_test 4096 4096 "cache" "--cachevol"  ""
++_run_test 4096 4096 "cache" "--cachepool" ""
+ 
+ aux cleanup_scsi_debug_dev
+ 
+ 
+-# scsi_debug devices with 512 LBS 512 PBS
++# Setup: LBS 512, PBS 512
+ aux prepare_scsi_debug_dev 256 || skip
+ aux prepare_devs 2 64
+ 
+@@ -222,3 +247,4 @@ lvremove $vg/$lv2
+ vgremove $vg
+ 
+ aux cleanup_scsi_debug_dev
++
 
 
