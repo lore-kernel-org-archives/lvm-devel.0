@@ -1,266 +1,79 @@
-From: David Teigland <teigland@sourceware.org>
-Date: Mon,  7 Jun 2021 20:43:23 +0000 (GMT)
-Subject: main - tests: add writecache-cache-blocksize-2
-Message-ID: <20210607204323.DFA1C3938C1C@sourceware.org>
+From: heming.zhao@suse.com <heming.zhao@suse.com>
+Date: Tue, 8 Jun 2021 12:58:58 +0800
+Subject: [LVM2 RFCv2 2/5] lvmlockd: idm: Hook Seagate IDM wrapper APIs
+In-Reply-To: <20210507022516.143385-3-leo.yan@linaro.org>
+References: <20210507022516.143385-1-leo.yan@linaro.org>
+	<20210507022516.143385-3-leo.yan@linaro.org>
+Message-ID: <022070a6-d656-5ec0-6e5f-d83fa885ad25@suse.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=9759f915e78044667681de395bf2694bd5c7f393
-Commit:        9759f915e78044667681de395bf2694bd5c7f393
-Parent:        ff677aa69f8fc31e5733b0650e2324c826ce0794
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Mon Jun 7 15:40:40 2021 -0500
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Mon Jun 7 15:40:40 2021 -0500
+On 5/7/21 10:25 AM, Leo Yan wrote:
+> To allow the IDM locking scheme be used by users, this patch hooks the
+> IDM wrapper; it also introducs a new locking type "idm" and we can use
+> it for global lock with option '-g idm'.
+> 
+> To support IDM locking type, the main change in the data structure is to
+> add pvs path arrary.  The pvs list is transferred from the lvm commands,
+> when lvmlockd core layer receives message, it extracts the message with
+> the keyword "path[idx]".  Finally, the pv list will pass to IDM lock
+> manager as the target drives for sending IDM SCSI commands.
+> 
+> Signed-off-by: Leo Yan <leo.yan@linaro.org>
+> ---
+>   daemons/lvmlockd/lvmlockd-core.c     | 281 ++++++++++++++++++++++++---
+>   daemons/lvmlockd/lvmlockd-internal.h |   4 +-
+>   2 files changed, 257 insertions(+), 28 deletions(-)
+> 
+> diff --git a/daemons/lvmlockd/lvmlockd-core.c b/daemons/lvmlockd/lvmlockd-core.c
+> index 094491029..dc213fd93 100644
+> --- a/daemons/lvmlockd/lvmlockd-core.c
+> +++ b/daemons/lvmlockd/lvmlockd-core.c
+> @@ -421,6 +421,63 @@ struct lockspace *alloc_lockspace(void)
+>   	return ls;
+> ... ...
+>   
+> @@ -4603,12 +4781,14 @@ static void client_recv_action(struct client *cl)
+>   	const char *vg_sysid;
+>   	const char *path;
+>   	const char *str;
+> +	struct pvs pvs;
+> +	char buf[11];	/* p a t h [ x x x x ] \0 */
+>   	int64_t val;
+>   	uint32_t opts = 0;
+>   	int result = 0;
 
-tests: add writecache-cache-blocksize-2
+Hello
 
-inconsistent physical block size of devs used
-for main LV and cache
----
- test/shell/writecache-cache-blocksize-2.sh | 232 +++++++++++++++++++++++++++++
- 1 file changed, 232 insertions(+)
+SUSE build tools detected a minor compiling warning/error on the array buf[]:
 
-diff --git a/test/shell/writecache-cache-blocksize-2.sh b/test/shell/writecache-cache-blocksize-2.sh
-new file mode 100644
-index 000000000..af4f60e1d
---- /dev/null
-+++ b/test/shell/writecache-cache-blocksize-2.sh
-@@ -0,0 +1,232 @@
-+#!/usr/bin/env bash
-+
-+# Copyright (C) 2018 Red Hat, Inc. All rights reserved.
-+#
-+# This copyrighted material is made available to anyone wishing to use,
-+# modify, copy, or redistribute it subject to the terms and conditions
-+# of the GNU General Public License v.2.
-+#
-+# You should have received a copy of the GNU General Public License
-+# along with this program; if not, write to the Free Software Foundation,
-+# Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
-+
-+# Test dm-writecache and dm-cache with different block size combinations
-+
-+SKIP_WITH_LVMPOLLD=1
-+
-+. lib/inittest
-+
-+aux have_writecache 1 0 0 || skip
-+which mkfs.xfs || skip
-+
-+mnt="mnt"
-+mkdir -p $mnt
-+
-+awk 'BEGIN { while (z++ < 16384) printf "A" }' > fileA
-+awk 'BEGIN { while (z++ < 16384) printf "B" }' > fileB
-+awk 'BEGIN { while (z++ < 16384) printf "C" }' > fileC
-+
-+# generate random data
-+dd if=/dev/urandom of=randA bs=512K count=2
-+dd if=/dev/urandom of=randB bs=512K count=3
-+dd if=/dev/urandom of=randC bs=512K count=4
-+
-+_add_new_data_to_mnt() {
-+	mount "$DM_DEV_DIR/$vg/$lv1" $mnt
-+
-+	# add original data
-+	cp randA $mnt
-+	cp randB $mnt
-+	cp randC $mnt
-+	mkdir $mnt/1
-+	cp fileA $mnt/1
-+	cp fileB $mnt/1
-+	cp fileC $mnt/1
-+	mkdir $mnt/2
-+	cp fileA $mnt/2
-+	cp fileB $mnt/2
-+	cp fileC $mnt/2
-+	sync
-+}
-+
-+_add_more_data_to_mnt() {
-+	mkdir $mnt/more
-+	cp fileA $mnt/more
-+	cp fileB $mnt/more
-+	cp fileC $mnt/more
-+	cp randA $mnt/more
-+	cp randB $mnt/more
-+	cp randC $mnt/more
-+	sync
-+}
-+
-+_verify_data_on_mnt() {
-+	diff randA $mnt/randA
-+	diff randB $mnt/randB
-+	diff randC $mnt/randC
-+	diff fileA $mnt/1/fileA
-+	diff fileB $mnt/1/fileB
-+	diff fileC $mnt/1/fileC
-+	diff fileA $mnt/2/fileA
-+	diff fileB $mnt/2/fileB
-+	diff fileC $mnt/2/fileC
-+}
-+
-+_verify_more_data_on_mnt() {
-+	diff randA $mnt/more/randA
-+	diff randB $mnt/more/randB
-+	diff randC $mnt/more/randC
-+	diff fileA $mnt/more/fileA
-+	diff fileB $mnt/more/fileB
-+	diff fileC $mnt/more/fileC
-+}
-+
-+_verify_data_on_lv() {
-+	lvchange -ay $vg/$lv1
-+	mount "$DM_DEV_DIR/$vg/$lv1" $mnt
-+	_verify_data_on_mnt
-+	rm $mnt/randA
-+	rm $mnt/randB
-+	rm $mnt/randC
-+	rm -rf $mnt/1
-+	rm -rf $mnt/2
-+	umount $mnt
-+	lvchange -an $vg/$lv1
-+}
-+
-+# Check that the LBS ($1) and PBS ($2) are accurately reported.
-+_check_env() {
-+
-+	check sysfs "$(< SCSI_DEBUG_DEV)" queue/logical_block_size "$1"
-+	check sysfs "$(< SCSI_DEBUG_DEV)" queue/physical_block_size "$2"
-+
-+	blockdev --getss "$dev1"
-+	blockdev --getpbsz "$dev1"
-+	blockdev --getss "$dev2"
-+	blockdev --getpbsz "$dev2"
-+}
-+
-+#
-+# _run_test $BD1 $BD2 $type $optname "..."
-+#
-+# $BD1:    device to place the main LV on
-+# $BD2:    device to place the cache on
-+# $type    is cache or writecache to use in lvconvert --type $type
-+# $optname is either --cachevol or --cachepool to use in lvconvert
-+# "..." a sector size option to use in mkfs.xfs
-+#
-+
-+_run_test() {
-+	vgcreate $SHARED $vg "$1"
-+	vgextend $vg "$2"
-+	lvcreate -n $lv1 -l 8 -an $vg "$1"
-+	lvcreate -n $lv2 -l 4 -an $vg "$2"
-+	lvchange -ay $vg/$lv1
-+	mkfs.xfs -f $5 "$DM_DEV_DIR/$vg/$lv1" |tee out
-+	_add_new_data_to_mnt
-+	lvconvert --yes --type $3 $4 $lv2 $vg/$lv1
-+
-+	# TODO: check expected LBS of LV1
-+	# blockdev --getss "$DM_DEV_DIR/$vg/$lv1" |tee out
-+	# grep "$N" out
-+	# TODO: check expected PBS of LV1
-+	# blockdev --getpbsz "$DM_DEV_DIR/$vg/$lv1" |tee out
-+	# grep "$N" out
-+
-+	_add_more_data_to_mnt
-+	_verify_data_on_mnt
-+	lvconvert --splitcache $vg/$lv1
-+	check lv_field $vg/$lv1 segtype linear
-+	blockdev --getss "$DM_DEV_DIR/$vg/$lv1"
-+	blockdev --getpbsz "$DM_DEV_DIR/$vg/$lv1"
-+	_verify_data_on_mnt
-+	_verify_more_data_on_mnt
-+	umount $mnt
-+	lvchange -an $vg/$lv1
-+	lvchange -an $vg/$lv2
-+	_verify_data_on_lv
-+	lvremove $vg/$lv1
-+	lvremove $vg/$lv2
-+	vgremove $vg
-+}
-+
-+# Setup: dev1 LBS 512, PBS 4096  (using scsi-debug)
-+#        dev2 LBS 512, PBS 4096  (using scsi-debug)
-+#        dev3 LBS 512, PBS 512   (using loop)
-+#        dev4 LBS 512, PBS 512   (using loop)
-+#
-+
-+aux prepare_scsi_debug_dev 256 sector_size=512 physblk_exp=3
-+aux prepare_devs 2 64
-+
-+# loopa/loopb have LBS 512 PBS 512
-+which fallocate || skip
-+fallocate -l 64M loopa
-+fallocate -l 64M loopb
-+
-+for i in {1..5}; do
-+	LOOP1=$(losetup -f loopa --show || true)
-+	test -n "$LOOP1" && break
-+done
-+for i in {1..5} ; do
-+	LOOP2=$(losetup -f loopb --show || true)
-+	test -n "$LOOP2" && break
-+done
-+
-+# prepare devX mapping so it works for real & fake dev dir
-+d=3
-+for i in "$LOOP1" "$LOOP2"; do
-+	echo "$i"
-+	m=${i##*loop}
-+	test -e "$DM_DEV_DIR/loop$m" || mknod "$DM_DEV_DIR/loop$m" b 7 "$m"
-+	eval "dev$d=\"$DM_DEV_DIR/loop$m\""
-+	d=$(( d + 1 ))
-+done
-+
-+# verify dev1/dev2 have LBS 512 PBS 4096
-+_check_env "512" "4096"
-+
-+# verify dev3/dev4 have LBS 512 PBS 512
-+blockdev --getss "$LOOP1" | grep 512
-+blockdev --getss "$LOOP2" | grep 512
-+blockdev --getpbsz "$LOOP1" | grep 512
-+blockdev --getpbsz "$LOOP2" | grep 512
-+
-+aux extend_filter "a|$dev3|" "a|$dev4|"
-+
-+# place main LV on dev1 with LBS 512, PBS 4096
-+# and the cache on dev3 with LBS 512, PBS 512
-+
-+_run_test "$dev1" "$dev3" "writecache" "--cachevol" ""
-+_run_test "$dev1" "$dev3" "cache" "--cachevol"  ""
-+_run_test "$dev1" "$dev3" "cache" "--cachepool" ""
-+
-+# place main LV on dev3 with LBS 512, PBS 512
-+# and the cache on dev1 with LBS 512, PBS 4096
-+
-+_run_test "$dev3" "$dev1" "writecache" "--cachevol" ""
-+_run_test "$dev3" "$dev1" "cache" "--cachevol"  ""
-+_run_test "$dev3" "$dev1" "cache" "--cachepool" ""
-+
-+# place main LV on dev1 with LBS 512, PBS 4096
-+# and the cache on dev3 with LBS 512, PBS 512
-+# and force xfs sectsz 512
-+
-+_run_test "$dev1" "$dev3" "writecache" "--cachevol" "-s size=512"
-+_run_test "$dev1" "$dev3" "cache" "--cachevol" "-s size=512"
-+_run_test "$dev1" "$dev3" "cache" "--cachepool" "-s size=512"
-+
-+# place main LV on dev3 with LBS 512, PBS 512
-+# and the cache on dev1 with LBS 512, PBS 4096
-+# and force xfs sectsz 4096
-+
-+_run_test "$dev3" "$dev1" "writecache" "--cachevol" "-s size=4096"
-+_run_test "$dev3" "$dev1" "cache" "--cachevol" "-s size=4096"
-+_run_test "$dev3" "$dev1" "cache" "--cachepool" "-s size=4096"
-+
-+
-+losetup -d "$LOOP1" || true
-+losetup -d "$LOOP2" || true
-+rm loopa loopb
-+
-+aux cleanup_scsi_debug_dev
+     [CC] lvmlockd-core.c
+gcc -MT lvmlockd-core.o -MMD -MP -MF lvmlockd-core.d -c -I. -I../.. -I../../include -include configure.h -I../../libdaemon/server -I/usr/include/valgrind  -DHAVE_CONFIG_H -D_FILE_OFFSET_BITS=64  -Wall -Wcast-align -Wfloat-equal -Wformat-security -Winline -Wmissing-format-attribute -Wmissing-include-dirs -Wmissing-noreturn -Wpointer-arith -Wredundant-decls -Wshadow -Wundef -Wwrite-strings -Wclobbered -Wempty-body -Wignored-qualifiers -Wlogical-op -Wtype-limits -Wsync-nand -Wmissing-declarations -Wmissing-prototypes -Wnested-externs -Wold-style-definition -Wstrict-prototypes -Wuninitialized -Wjump-misses-init -Wmissing-parameter-type -Wold-style-declaration -Woverride-init -O2 -g -m64 -fmessage-length=0 -D_FORTIFY_SOURCE=2 -fstack-protector -funwind-tables -fasynchronous-unwind-tables -fPIC -fPIE  -DUSE_SD_NOTIFY  lvmlockd-core.c -o lvmlockd-core.o
+lvmlockd-core.c: In function 'client_thread_main':
+lvmlockd-core.c:4959:37: warning: '%d' directive output may be truncated writing between 1 and 10 bytes into a region of size 6 [-Wformat-truncation=]
+     snprintf(buf, sizeof(buf), "path[%d]", i);
+                                      ^~
+lvmlockd-core.c:4959:31: note: directive argument in the range [0, 2147483647]
+     snprintf(buf, sizeof(buf), "path[%d]", i);
+                                ^~~~~~~~~~
+In file included from /usr/include/stdio.h:862:0,
+                  from ../../device_mapper/all.h:36,
+                  from ../../tools/tool.h:22,
+                  from lvmlockd-core.c:11:
+/usr/include/bits/stdio2.h:64:10: note: '__builtin___snprintf_chk' output between 8 and 17 bytes into a destination of size 11
+    return __builtin___snprintf_chk (__s, __n, __USE_FORTIFY_LEVEL - 1,
+           ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+         __bos (__s), __fmt, __va_arg_pack ());
+         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+make[2]: Leaving directory '/usr/src/packages/BUILD/LVM2.2.03.12/daemons/lvmlockd'
+make[1]: *** [../make.tmpl:353: lvmlockd] Error 2
+make: *** [make.tmpl:353: daemons] Error 2
+error: Bad exit status from /var/tmp/rpm-tmp.y3SyO6 (%build)
+
+Regards
+heming
 
 
