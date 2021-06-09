@@ -1,577 +1,65 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Wed,  9 Jun 2021 12:57:31 +0000 (GMT)
-Subject: main - backup: automatically store data on vg_unlock
-Message-ID: <20210609125731.95E1D397EC11@sourceware.org>
+Date: Wed,  9 Jun 2021 14:21:41 +0000 (GMT)
+Subject: main - archive: avoid abuse of internal flag
+Message-ID: <20210609142141.6E67D3848420@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=bb45e33518b56a06df8a52226e383ca9ce938d0d
-Commit:        bb45e33518b56a06df8a52226e383ca9ce938d0d
-Parent:        ba3707d9539f9cc2e72c5368388ae795776379af
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=17b27464868ac7049624d9b90f68c59200866997
+Commit:        17b27464868ac7049624d9b90f68c59200866997
+Parent:        bb45e33518b56a06df8a52226e383ca9ce938d0d
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Jun 8 19:39:15 2021 +0200
+AuthorDate:    Wed Jun 9 16:16:26 2021 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Wed Jun 9 14:56:13 2021 +0200
+CommitterDate: Wed Jun 9 16:18:20 2021 +0200
 
-backup: automatically store data on vg_unlock
+archive: avoid abuse of internal flag
 
-Previously there have been necessary explicit call of backup (often
-either forgotten or over-used). With this patch the necessity to
-store backup is remember at vg_commit and once the VG is unlocked,
-the committed metadata are automatically store in backup file.
-
-This may possibly alter some printed messages from command when the
-backup is now taken later.
+Since archive is now postponned we use internal variable 'changed'
+to mark we need to commit new metadata.
 ---
- lib/format_text/archiver.c |  1 -
- lib/locking/locking.h      |  7 +++++--
- lib/metadata/lv_manip.c    | 17 +----------------
- lib/metadata/metadata.c    |  4 ++--
- lib/metadata/pv_manip.c    |  1 -
- lib/metadata/raid_manip.c  | 12 ------------
- lib/metadata/vg.c          | 11 +++++++++--
- lib/metadata/vg.h          |  1 +
- tools/lvconvert.c          | 25 -------------------------
- tools/pvmove_poll.c        |  3 ---
- tools/toollib.c            |  2 --
- tools/vgchange.c           |  6 ------
- tools/vgcreate.c           |  2 --
- tools/vgexport.c           |  2 --
- tools/vgextend.c           |  4 ----
- tools/vgimport.c           |  2 --
- tools/vgimportdevices.c    |  1 -
- tools/vgreduce.c           |  1 -
- tools/vgrename.c           |  2 --
- 19 files changed, 18 insertions(+), 86 deletions(-)
+ WHATS_NEW        | 1 +
+ tools/vgchange.c | 4 +++-
+ 2 files changed, 4 insertions(+), 1 deletion(-)
 
-diff --git a/lib/format_text/archiver.c b/lib/format_text/archiver.c
-index 68117f7dc..f1590b460 100644
---- a/lib/format_text/archiver.c
-+++ b/lib/format_text/archiver.c
-@@ -279,7 +279,6 @@ int backup_locally(struct volume_group *vg)
+diff --git a/WHATS_NEW b/WHATS_NEW
+index 04c6dcdf2..2c4704310 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.03.13 - 
+ ===============================
++  Simplified handling of archive() and backup() internal calls.
+   Fix load of kvdo target when it is not present in memory (2.03.12).
  
- int backup(struct volume_group *vg)
- {
--	vg->needs_backup = 0;
- 
- 	/* Unlock memory if possible */
- 	memlock_unlock(vg->cmd);
-diff --git a/lib/locking/locking.h b/lib/locking/locking.h
-index 3e8ae6f0c..a60935d52 100644
---- a/lib/locking/locking.h
-+++ b/lib/locking/locking.h
-@@ -56,8 +56,11 @@ int lock_vol(struct cmd_context *cmd, const char *vol, uint32_t flags, const str
- 
- #define unlock_vg(cmd, vg, vol)	\
- 	do { \
--		if (is_real_vg(vol) && !sync_local_dev_names(cmd)) \
--			stack; \
-+		if (is_real_vg(vol)) { \
-+			if (!sync_local_dev_names(cmd)) \
-+				stack; \
-+			vg_backup_if_needed(vg); \
-+		} \
- 		if (!lock_vol(cmd, vol, LCK_VG_UNLOCK, NULL)) \
- 			stack;	\
- 	} while (0)
-diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
-index 899297f28..eb92d6eca 100644
---- a/lib/metadata/lv_manip.c
-+++ b/lib/metadata/lv_manip.c
-@@ -6178,8 +6178,6 @@ int lv_resize(struct logical_volume *lv,
- 		/* Update lvm pool metadata (drop messages). */
- 		if (!update_pool_lv(lock_lv, 0))
- 			goto_bad;
--
--		backup(vg);
- 	}
- 
- 	/* Check for over provisioning when extended */
-@@ -7024,7 +7022,7 @@ no_remove:
- static int _lv_update_and_reload(struct logical_volume *lv, int origin_only)
- {
- 	struct volume_group *vg = lv->vg;
--	int do_backup = 0, r = 0;
-+	int r = 0;
- 	const struct logical_volume *lock_lv = lv_lock_holder(lv);
- 
- 	log_very_verbose("Updating logical volume %s on disk(s)%s.",
-@@ -7048,8 +7046,6 @@ static int _lv_update_and_reload(struct logical_volume *lv, int origin_only)
- 		return 0;
- 	} else if (!(r = vg_commit(vg)))
- 		stack; /* !vg_commit() has implict vg_revert() */
--	else
--		do_backup = 1;
- 
- 	log_very_verbose("Updating logical volume %s in kernel.",
- 			 display_lvname(lock_lv));
-@@ -7060,9 +7056,6 @@ static int _lv_update_and_reload(struct logical_volume *lv, int origin_only)
- 		r = 0;
- 	}
- 
--	if (do_backup && !critical_section())
--		backup(vg);
--
- 	return r;
- }
- 
-@@ -8595,8 +8588,6 @@ static struct logical_volume *_lv_create_an_lv(struct volume_group *vg,
- 		/* Pool created metadata LV, but better avoid recover when vg_write/commit fails */
- 		return_NULL;
- 
--	backup(vg);
--
- 	if (test_mode()) {
- 		log_verbose("Test mode: Skipping activation, zeroing and signature wiping.");
- 		goto out;
-@@ -8607,8 +8598,6 @@ static struct logical_volume *_lv_create_an_lv(struct volume_group *vg,
- 
- 		if (!lv_add_integrity_to_raid(lv, &lp->integrity_settings, lp->pvh, NULL))
- 			goto revert_new_lv;
--
--		backup(vg);
- 	}
- 
- 	/* Do not scan this LV until properly zeroed/wiped. */
-@@ -8708,7 +8697,6 @@ static struct logical_volume *_lv_create_an_lv(struct volume_group *vg,
- 				goto revert_new_lv;
- 			}
- 		}
--		backup(vg);
- 
- 		if (!lv_active_change(cmd, lv, lp->activate)) {
- 			log_error("Failed to activate thin %s.", lv->name);
-@@ -8829,7 +8817,6 @@ static struct logical_volume *_lv_create_an_lv(struct volume_group *vg,
- 			if (!vg_write(vg) || !vg_commit(vg))
- 				return_NULL; /* Metadata update fails, deep troubles */
- 
--			backup(vg);
- 			/*
- 			 * FIXME We do not actually need snapshot-origin as an active device,
- 			 * as virtual origin is already 'hidden' private device without
-@@ -8873,8 +8860,6 @@ revert_new_lv:
- 	    !lv_remove(lv) || !vg_write(vg) || !vg_commit(vg))
- 		log_error("Manual intervention may be required to remove "
- 			  "abandoned LV(s) before retrying.");
--	else
--		backup(vg);
- 
- 	return NULL;
- }
-diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
-index 6852d2a2a..d5b28a58f 100644
---- a/lib/metadata/metadata.c
-+++ b/lib/metadata/metadata.c
-@@ -991,6 +991,7 @@ static void _vg_move_cached_precommitted_to_committed(struct volume_group *vg)
- 	release_vg(vg->vg_committed);
- 	vg->vg_committed = vg->vg_precommitted;
- 	vg->vg_precommitted = NULL;
-+	vg->needs_backup = 1;
- }
- 
- int lv_has_unknown_segments(const struct logical_volume *lv)
-@@ -3165,8 +3166,7 @@ int vg_commit(struct volume_group *vg)
- 			dm_list_init(&vg->msg_list);
- 			vg->needs_write_and_commit = 0;
- 		}
--		vg->needs_backup = 0;
--        }
-+	}
- 
- 	/* If at least one mda commit succeeded, it was committed */
- 	return ret;
-diff --git a/lib/metadata/pv_manip.c b/lib/metadata/pv_manip.c
-index fd97bbbc2..cfc983174 100644
---- a/lib/metadata/pv_manip.c
-+++ b/lib/metadata/pv_manip.c
-@@ -687,7 +687,6 @@ int pv_resize_single(struct cmd_context *cmd,
- 				  "volume group \"%s\"", pv_name, vg_name);
- 			goto out;
- 		}
--		backup(vg);
- 	}
- 
- 	log_print_unless_silent("Physical volume \"%s\" changed", pv_name);
-diff --git a/lib/metadata/raid_manip.c b/lib/metadata/raid_manip.c
-index 74adf0231..f0d401cde 100644
---- a/lib/metadata/raid_manip.c
-+++ b/lib/metadata/raid_manip.c
-@@ -2210,9 +2210,6 @@ static int _vg_write_lv_suspend_commit_backup(struct volume_group *vg,
- 	} else if (!(r = vg_commit(vg)))
- 		stack; /* !vg_commit() has implicit vg_revert() */
- 
--	if (r && do_backup)
--		backup(vg);
--
- 	return r;
- }
- 
-@@ -2221,8 +2218,6 @@ static int _vg_write_commit_backup(struct volume_group *vg)
- 	if (!vg_write(vg) || !vg_commit(vg))
- 		return_0;
- 
--	backup(vg);
--
- 	return 1;
- }
- 
-@@ -2847,7 +2842,6 @@ static int _raid_add_images(struct logical_volume *lv,
- 				  display_lvname(lv));
- 			return 0;
- 		}
--		backup(lv->vg);
- 	}
- 
- 	return 1;
-@@ -3172,8 +3166,6 @@ static int _raid_remove_images(struct logical_volume *lv, int yes,
- 	if (!lv_update_and_reload_origin(lv))
- 		return_0;
- 
--	backup(lv->vg);
--
- 	return 1;
- }
- 
-@@ -3431,8 +3423,6 @@ int lv_raid_split(struct logical_volume *lv, int yes, const char *split_name,
- 	if (!vg_write(lv->vg) || !vg_commit(lv->vg))
- 		return_0;
- 
--	backup(lv->vg);
--
- 	return 1;
- }
- 
-@@ -3915,8 +3905,6 @@ static int _eliminate_extracted_lvs_optional_write_vg(struct volume_group *vg,
- 	if (vg_write_requested) {
- 		if (!vg_write(vg) || !vg_commit(vg))
- 			return_0;
--
--		backup(vg);
- 	}
- 
- 	/* Wait for events following any deactivation. */
-diff --git a/lib/metadata/vg.c b/lib/metadata/vg.c
-index 428e5dca7..85482552a 100644
---- a/lib/metadata/vg.c
-+++ b/lib/metadata/vg.c
-@@ -739,8 +739,6 @@ int vgreduce_single(struct cmd_context *cmd, struct volume_group *vg,
- 			goto bad;
- 		}
- 
--		backup(vg);
--
- 		log_print_unless_silent("Removed \"%s\" from volume group \"%s\"",
- 				name, vg->name);
- 	}
-@@ -752,3 +750,12 @@ bad:
- 	release_vg(orphan_vg);
- 	return r;
- }
-+
-+void vg_backup_if_needed(struct volume_group *vg)
-+{
-+	if (!vg || !vg->needs_backup)
-+		return;
-+
-+	vg->needs_backup = 0;
-+	backup(vg->vg_committed);
-+}
-diff --git a/lib/metadata/vg.h b/lib/metadata/vg.h
-index 36d1ed155..8ce57acdc 100644
---- a/lib/metadata/vg.h
-+++ b/lib/metadata/vg.h
-@@ -170,6 +170,7 @@ uint32_t vg_mda_used_count(const struct volume_group *vg);
- uint32_t vg_mda_copies(const struct volume_group *vg);
- int vg_set_mda_copies(struct volume_group *vg, uint32_t mda_copies);
- char *vg_profile_dup(const struct volume_group *vg);
-+void vg_backup_if_needed(struct volume_group *vg);
- 
- /*
-  * Returns visible LV count - number of LVs from user perspective
-diff --git a/tools/lvconvert.c b/tools/lvconvert.c
-index c40031fe4..e19c445b1 100644
---- a/tools/lvconvert.c
-+++ b/tools/lvconvert.c
-@@ -1263,8 +1263,6 @@ static int _lvconvert_mirrors(struct cmd_context *cmd,
- 				    new_mimage_count, new_log_count, lp->pvh))
- 		return_0;
- 
--	backup(lv->vg);
--
- 	if (!lp->need_polling)
- 		log_print_unless_silent("Logical volume %s converted.",
- 					display_lvname(lv));
-@@ -1866,8 +1864,6 @@ static int _lvconvert_splitsnapshot(struct cmd_context *cmd, struct logical_volu
- 	if (!vg_remove_snapshot(cow))
- 		return_0;
- 
--	backup(vg);
--
- 	log_print_unless_silent("Logical Volume %s split from its origin.", display_lvname(cow));
- 
- 	return 1;
-@@ -1941,8 +1937,6 @@ static int _lvconvert_split_and_keep_cachevol(struct cmd_context *cmd,
- 	if (!vg_write(lv->vg) || !vg_commit(lv->vg))
- 		return_0;
- 
--	backup(lv->vg);
--
- 	return 1;
- }
- 
-@@ -1989,8 +1983,6 @@ static int _lvconvert_split_and_keep_cachepool(struct cmd_context *cmd,
- 	if (!vg_write(lv->vg) || !vg_commit(lv->vg))
- 		return_0;
- 
--	backup(lv->vg);
--
- 	log_print_unless_silent("Logical volume %s is not cached and %s is unused.",
- 				display_lvname(lv), display_lvname(lv_fast));
- 
-@@ -2224,7 +2216,6 @@ static int _lvconvert_merge_old_snapshot(struct cmd_context *cmd,
- 		/* Store and commit vg but skip starting the merge */
- 		if (!vg_write(lv->vg) || !vg_commit(lv->vg))
- 			return_0;
--		backup(lv->vg);
- 	} else {
- 		/* Perform merge */
- 		if (!lv_update_and_reload(origin))
-@@ -2335,8 +2326,6 @@ static int _lvconvert_merge_thin_snapshot(struct cmd_context *cmd,
- 	log_print_unless_silent("Merging of thin snapshot %s will occur on "
- 				"next activation of %s.",
- 				display_lvname(lv), display_lvname(origin));
--	backup(lv->vg);
--
- 	return 1;
- }
- 
-@@ -2860,8 +2849,6 @@ revert_new_lv:
- 	if (!lv_remove(thin_lv) || !vg_write(vg) || !vg_commit(vg))
- 		log_error("Manual intervention may be required to remove "
- 			  "abandoned LV(s) before retrying.");
--	else
--		backup(vg);
- 
- 	return 0;
- }
-@@ -2999,7 +2986,6 @@ static int _lvconvert_swap_pool_metadata(struct cmd_context *cmd,
- 	if (!vg_write(vg) || !vg_commit(vg))
- 		return_0;
- 
--	backup(vg);
- 	return 1;
- }
- 
-@@ -3472,8 +3458,6 @@ static int _lvconvert_to_pool(struct cmd_context *cmd,
- 	r = 1;
- 
- out:
--	backup(vg);
--
- 	if (r)
- 		log_print_unless_silent("Converted %s to %s pool.",
- 					converted_names, to_cachepool ? "cache" : "thin");
-@@ -3509,8 +3493,6 @@ revert_new_lv:
- 		if (!lv_remove(metadata_lv) || !vg_write(vg) || !vg_commit(vg))
- 			log_error("Manual intervention may be required to remove "
- 				  "abandoned LV(s) before retrying.");
--		else
--			backup(vg);
- 	}
- 
- 	return 0;
-@@ -5701,8 +5683,6 @@ static int _lvconvert_detach_writecache(struct cmd_context *cmd,
- 	if (!lv_detach_writecache_cachevol(lv, noflush))
- 		return_0;
- 
--	backup(lv->vg);
--
- 	log_print_unless_silent("Logical volume %s writecache has been detached.",
- 				display_lvname(lv));
- 	return 1;
-@@ -5827,7 +5807,6 @@ static int _lvconvert_detach_writecache_when_clean(struct cmd_context *cmd,
- 	}
- 
- 	ret = 1;
--	backup(vg);
- 
- out_release:
- 	if (ret)
-@@ -6320,8 +6299,6 @@ static int _lvconvert_integrity_remove(struct cmd_context *cmd, struct logical_v
- 	if (!ret)
- 		return_0;
- 
--	backup(vg);
--
- 	log_print_unless_silent("Logical volume %s has removed integrity.", display_lvname(lv));
- 	return 1;
- }
-@@ -6354,8 +6331,6 @@ static int _lvconvert_integrity_add(struct cmd_context *cmd, struct logical_volu
- 	if (!ret)
- 		return_0;
- 
--	backup(vg);
--
- 	log_print_unless_silent("Logical volume %s has added integrity.", display_lvname(lv));
- 	return 1;
- }
-diff --git a/tools/pvmove_poll.c b/tools/pvmove_poll.c
-index d379596f2..751313cd7 100644
---- a/tools/pvmove_poll.c
-+++ b/tools/pvmove_poll.c
-@@ -120,8 +120,5 @@ int pvmove_finish(struct cmd_context *cmd, struct volume_group *vg,
- 		return 0;
- 	}
- 
--	/* FIXME backup positioning */
--	backup(vg);
--
- 	return 1;
- }
-diff --git a/tools/toollib.c b/tools/toollib.c
-index f337f9fcf..338551015 100644
---- a/tools/toollib.c
-+++ b/tools/toollib.c
-@@ -3224,8 +3224,6 @@ int process_each_lv_in_vg(struct cmd_context *cmd, struct volume_group *vg,
- 	if (vg->needs_write_and_commit && (ret_max == ECMD_PROCESSED) &&
- 	    (!vg_write(vg) || !vg_commit(vg)))
- 		ret_max = ECMD_FAILED;
--	else if (vg->needs_backup)
--		backup(vg);
- 
- 	if (lvargs_supplied) {
- 		/*
+ Version 2.03.12 - 07th May 2021
 diff --git a/tools/vgchange.c b/tools/vgchange.c
-index 625b68d46..9f972acdb 100644
+index 9f972acdb..22038ba9b 100644
 --- a/tools/vgchange.c
 +++ b/tools/vgchange.c
-@@ -684,8 +684,6 @@ static int _vgchange_single(struct cmd_context *cmd, const char *vg_name,
+@@ -640,6 +640,7 @@ static int _vgchange_single(struct cmd_context *cmd, const char *vg_name,
+ 	int ret = ECMD_PROCESSED;
+ 	unsigned i;
+ 	activation_change_t activate;
++	int changed = 0;
+ 
+ 	static const struct {
+ 		int arg;
+@@ -677,10 +678,11 @@ static int _vgchange_single(struct cmd_context *cmd, const char *vg_name,
+ 		if (arg_is_set(cmd, _vgchange_args[i].arg)) {
+ 			if (!_vgchange_args[i].fn(cmd, vg))
+ 				return_ECMD_FAILED;
++			changed = 1;
+ 		}
+ 	}
+ 
+-	if (vg_is_archived(vg)) {
++	if (changed) {
  		if (!vg_write(vg) || !vg_commit(vg))
  			return_ECMD_FAILED;
- 
--		backup(vg);
--
- 		log_print_unless_silent("Volume group \"%s\" successfully changed", vg->name);
- 	}
- 
-@@ -1006,8 +1004,6 @@ static int _vgchange_locktype_single(struct cmd_context *cmd, const char *vg_nam
- 	if (!vg_write(vg) || !vg_commit(vg))
- 		return_ECMD_FAILED;
- 
--	backup(vg);
--
- 	/*
- 	 * When init_vg_sanlock is called for vgcreate, the lockspace remains
- 	 * started and lvmlock remains active, but when called for
-@@ -1202,8 +1198,6 @@ static int _vgchange_systemid_single(struct cmd_context *cmd, const char *vg_nam
- 	if (!vg_write(vg) || !vg_commit(vg))
- 		return_ECMD_FAILED;
- 
--	backup(vg);
--
- 	log_print_unless_silent("Volume group \"%s\" successfully changed", vg->name);
- 
- 	return ECMD_PROCESSED;
-diff --git a/tools/vgcreate.c b/tools/vgcreate.c
-index d6d6bb61d..dde3f1eac 100644
---- a/tools/vgcreate.c
-+++ b/tools/vgcreate.c
-@@ -167,8 +167,6 @@ int vgcreate(struct cmd_context *cmd, int argc, char **argv)
- 
- 	unlock_vg(cmd, vg, vp_new.vg_name);
- 
--	backup(vg);
--
- 	log_print_unless_silent("Volume group \"%s\" successfully created%s%s",
- 				vg->name,
- 				vg->system_id ? " with system ID " : "", vg->system_id ? : "");
-diff --git a/tools/vgexport.c b/tools/vgexport.c
-index 15cc3dd75..526ffed7d 100644
---- a/tools/vgexport.c
-+++ b/tools/vgexport.c
-@@ -54,8 +54,6 @@ static int vgexport_single(struct cmd_context *cmd __attribute__((unused)),
- 	if (!vg_write(vg) || !vg_commit(vg))
- 		goto_bad;
- 
--	backup(vg);
--
- 	log_print_unless_silent("Volume group \"%s\" successfully exported", vg->name);
- 
- 	return ECMD_PROCESSED;
-diff --git a/tools/vgextend.c b/tools/vgextend.c
-index b0f49569f..0856b4c78 100644
---- a/tools/vgextend.c
-+++ b/tools/vgextend.c
-@@ -72,8 +72,6 @@ static int _vgextend_restoremissing(struct cmd_context *cmd __attribute__((unuse
- 	if (!vg_write(vg) || !vg_commit(vg))
- 		return_ECMD_FAILED;
- 
--	backup(vg);
--
- 	log_print_unless_silent("Volume group \"%s\" successfully extended", vg_name);
- 
- 	return ECMD_PROCESSED;
-@@ -116,8 +114,6 @@ static int _vgextend_single(struct cmd_context *cmd, const char *vg_name,
- 	if (!vg_write(vg) || !vg_commit(vg))
- 		goto_out;
- 
--	backup(vg);
--
- 	log_print_unless_silent("Volume group \"%s\" successfully extended", vg_name);
- 	ret = ECMD_PROCESSED;
- out:
-diff --git a/tools/vgimport.c b/tools/vgimport.c
-index 4b25b468f..84b76bd8d 100644
---- a/tools/vgimport.c
-+++ b/tools/vgimport.c
-@@ -46,8 +46,6 @@ static int _vgimport_single(struct cmd_context *cmd,
- 	if (!vg_write(vg) || !vg_commit(vg))
- 		goto_bad;
- 
--	backup(vg);
--
- 	log_print_unless_silent("Volume group \"%s\" successfully imported", vg->name);
- 
- 	return ECMD_PROCESSED;
-diff --git a/tools/vgimportdevices.c b/tools/vgimportdevices.c
-index af0e618aa..1cf7ad31a 100644
---- a/tools/vgimportdevices.c
-+++ b/tools/vgimportdevices.c
-@@ -72,7 +72,6 @@ static int _vgimportdevices_single(struct cmd_context *cmd,
- 	if (updated_pvs) {
- 		if (!vg_write(vg) || !vg_commit(vg))
- 			goto_bad;
--		backup(vg);
- 	}
- 
- 	return ECMD_PROCESSED;
-diff --git a/tools/vgreduce.c b/tools/vgreduce.c
-index c759c6643..f500b553a 100644
---- a/tools/vgreduce.c
-+++ b/tools/vgreduce.c
-@@ -169,7 +169,6 @@ static int _vgreduce_repair_single(struct cmd_context *cmd, const char *vg_name,
- 		return ECMD_FAILED;
- 	}
- 
--	backup(vg);
- 	return ECMD_PROCESSED;
- }
- 
-diff --git a/tools/vgrename.c b/tools/vgrename.c
-index 71b4e1677..d627bd056 100644
---- a/tools/vgrename.c
-+++ b/tools/vgrename.c
-@@ -141,8 +141,6 @@ static int _vgrename_single(struct cmd_context *cmd, const char *vg_name,
- 
- 	lockd_rename_vg_final(cmd, vg, 1);
- 
--	if (!backup(vg))
--		stack;
- 	if (!backup_remove(cmd, vg_name))
- 		stack;
  
 
 
