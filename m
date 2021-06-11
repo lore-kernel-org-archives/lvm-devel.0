@@ -1,44 +1,242 @@
-From: Heming Zhao <heming.zhao@suse.com>
-Date: Wed, 30 Jun 2021 22:32:43 +0800
-Subject: [PATCH 2/3] man: add support for btrfs
-In-Reply-To: <20210630143244.7318-1-heming.zhao@suse.com>
-References: <20210630143244.7318-1-heming.zhao@suse.com>
-Message-ID: <20210630143244.7318-2-heming.zhao@suse.com>
+From: David Teigland <teigland@sourceware.org>
+Date: Fri, 11 Jun 2021 18:28:47 +0000 (GMT)
+Subject: main - lvmdevices: add deviceidtype option
+Message-ID: <20210611182847.DB5023857439@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Signed-off-by: Heming Zhao <heming.zhao@suse.com>
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=440d6ae79fb4df92c7992d3c1689ba4f2d242d6a
+Commit:        440d6ae79fb4df92c7992d3c1689ba4f2d242d6a
+Parent:        8331321070899507b904d8a0ec78b413c826ae32
+Author:        David Teigland <teigland@redhat.com>
+AuthorDate:    Tue Jun 8 14:49:34 2021 -0500
+Committer:     David Teigland <teigland@redhat.com>
+CommitterDate: Fri Jun 11 13:27:18 2021 -0500
+
+lvmdevices: add deviceidtype option
+
+When adding a device to the devices file with --adddev, lvm
+by default chooses the best device ID type for the new device.
+The new --deviceidtype option allows the user to override the
+built in preference.  This is useful if there's a problem with
+the default type, or if a secondary type is preferrable.
+
+If the specified deviceidtype does not produce a device ID,
+then lvm falls back to the preference it would otherwise use.
 ---
- man/fsadm.8_main | 4 ++++
- 1 file changed, 4 insertions(+)
+ lib/device/device_id.c | 32 ++++++++++++++----------
+ man/lvmdevices.8_des   | 68 +++++++++++++++++++++++++++++++++++++++-----------
+ tools/args.h           |  5 ++++
+ tools/command-lines.in |  1 +
+ tools/lvmdevices.c     |  7 ++++--
+ 5 files changed, 84 insertions(+), 29 deletions(-)
 
-diff --git a/man/fsadm.8_main b/man/fsadm.8_main
-index dfff5bb97021..ad924ac3a304 100644
---- a/man/fsadm.8_main
-+++ b/man/fsadm.8_main
-@@ -31,6 +31,7 @@ It tries to use the same API for
- .BR ext2 ,
- .BR ext3 ,
- .BR ext4 ,
-+.BR btrfs ,
- .BR ReiserFS
- and
- .BR XFS
-@@ -119,6 +120,9 @@ Defaults to "\fI/dev\fP" and must be an absolute path.
- .BR tune2fs (8),
- .BR resize2fs (8),
+diff --git a/lib/device/device_id.c b/lib/device/device_id.c
+index 1b98487ab..f158e4f06 100644
+--- a/lib/device/device_id.c
++++ b/lib/device/device_id.c
+@@ -931,6 +931,7 @@ int device_id_add(struct cmd_context *cmd, struct device *dev, const char *pvid_
+ 	/*
+ 	 * Choose the device_id type for the device being added.
+ 	 *
++	 * 0. use an idtype specified by the user
+ 	 * 1. use an idtype specific to a special/virtual device type
+ 	 *    e.g. loop, mpath, crypt, lvmlv, md, etc.
+ 	 * 2. use an idtype specified by user option.
+@@ -939,6 +940,24 @@ int device_id_add(struct cmd_context *cmd, struct device *dev, const char *pvid_
+ 	 * 5. use devname as the last resort.
+ 	 */
+ 
++	if (idtype_arg) {
++		if (!(idtype = idtype_from_str(idtype_arg)))
++			log_warn("WARNING: ignoring unknown device_id type %s.", idtype_arg);
++		else {
++			if (id_arg) {
++				if ((idname = strdup(id_arg)))
++					goto id_done;
++				log_warn("WARNING: ignoring device_id name %s.", id_arg);
++			}
++
++			if ((idname = device_id_system_read(cmd, dev, idtype)))
++				goto id_done;
++
++			log_warn("WARNING: ignoring deviceidtype %s which is not available for device.", idtype_arg);
++			idtype = 0;
++		}
++	}
++
+ 	if (MAJOR(dev->dev) == cmd->dev_types->device_mapper_major) {
+ 		if (_dev_has_mpath_uuid(cmd, dev, &idname)) {
+ 			idtype = DEV_ID_TYPE_MPATH_UUID;
+@@ -972,19 +991,6 @@ int device_id_add(struct cmd_context *cmd, struct device *dev, const char *pvid_
+ 		log_warn("Missing support for DRBD idtype");
+ 	}
+ 
+-	if (idtype_arg) {
+-		if (!(idtype = idtype_from_str(idtype_arg)))
+-			log_warn("WARNING: ignoring unknown device_id type %s.", idtype_arg);
+-		else {
+-			if (id_arg) {
+-				if (!(idname = strdup(id_arg)))
+-					stack;
+-				goto id_done;
+-			}
+-			goto id_name;
+-		}
+-	}
+-
+ 	/*
+ 	 * No device-specific, existing, or user-specified idtypes,
+ 	 * so use first available of sys_wwid / sys_serial / devname.
+diff --git a/man/lvmdevices.8_des b/man/lvmdevices.8_des
+index 015aa1122..2335456ad 100644
+--- a/man/lvmdevices.8_des
++++ b/man/lvmdevices.8_des
+@@ -9,18 +9,18 @@ remove it from the devices file with lvmdevices --deldev.  The
+ vgimportdevices(8) command adds all PVs from a VG to the devices file,
+ and updates the VG metadata to include device IDs of the PVs.
  .P
-+.BR btrfs (8),
-+.BR btrfs-scrub (8),
+-Commands adding new devices to the devices file necessarily look outside
+-the existing devices file to find the devices to add.  pvcreate, vgcreate,
+-and vgextend also look outside the devices file to create new PVs and add
+-them to the devices file.
++Commands that add new devices to the devices file necessarily look outside
++the existing devices file to find the devices being added.  pvcreate,
++vgcreate, and vgextend also look outside the devices file to create new
++PVs and add those PVs to the devices file.
+ .P
+ LVM records devices in the devices file using hardware-specific IDs, such
+ as the WWID, and attempts to use subsystem-specific IDs for virtual device
+-types (which also aim to be as unique and stable as possible.)
+-These device IDs are also written in the VG metadata.  When no hardware or
++types (which also aim to be as unique and stable as possible.) These
++device IDs are also written in the VG metadata.  When no hardware or
+ virtual ID is available, lvm falls back using the unstable device name as
+-the device ID.  When devnames are used, lvm performs extra scanning to
+-find devices if their devname changes, e.g. after reboot.
++the device ID.  When devnames are used as IDs, lvm performs extra scanning
++to find devices if their devname changes, e.g. after reboot.
+ .P
+ When proper device IDs are used, an lvm command will not look at devices
+ outside the devices file, but when devnames are used as a fallback, lvm
+@@ -34,12 +34,13 @@ overriding the devices file.  The listed devices act as a sort of devices
+ file in terms of limiting which devices lvm will see and use.  Devices
+ that are not listed will appear to be missing to the lvm command.
+ .P
+-Multiple devices files can be kept in \fI#DEFAULT_SYS_DIR#/devices\fP, which allows lvm
+-to be used with different sets of devices, e.g. system devices do not need
+-to be exposed to a specific application, and the application can use lvm on
+-its own devices that are not exposed to the system.  The option
+---devicesfile <filename> is used to select the devices file to use with the
+-command.  Without the option set, the default system devices file is used.
++Multiple devices files can be kept \fI#DEFAULT_SYS_DIR#/devices\fP, which
++allows lvm to be used with different sets of devices.  For example, system
++devices do not need to be exposed to a specific application, and the
++application can use lvm on its own devices that are not exposed to the
++system.  The option --devicesfile <filename> is used to select the devices
++file to use with the command.  Without the option set, the default system
++devices file is used.
+ .P
+ Setting --devicesfile "" causes lvm to not use a devices file.
+ .P
+@@ -59,3 +60,42 @@ if it does not yet exist.
+ .P
+ It is recommended to use lvm commands to make changes to the devices file to
+ ensure proper updates.
 +.P
- .BR reiserfstune (8),
- .BR resize_reiserfs (8),
- .P
--- 
-1.8.3.1
-
++The device ID and device ID type are included in the VG metadata and can
++be reported with pvs -o deviceid,deviceidtype.  (Note that the lvmdevices
++command does not update VG metadata, but subsequent lvm commands modifying
++the metadata will include the device ID.)
++.P
++Possible device ID types are:
++.br
++.IP \[bu] 2
++.B sys_wwid
++uses the wwid reported by sysfs.  This is the first choice for non-virtual
++devices.
++.IP \[bu] 2
++.B sys_serial
++uses the serial number reported by sysfs.  This is the second choice for
++non-virtual devices.
++.IP \[bu] 2
++.B mpath_uuid
++is used for dm multipath devices, reported by sysfs.
++.IP \[bu] 2
++.B crypt_uuid
++is used for dm crypt devices, reported by sysfs.
++.IP \[bu] 2
++.B md_uuid
++is used for md devices, reported by sysfs.
++.B lvmlv_uuid
++is used if a PV is placed on top of an lvm LV, reported by sysfs.
++.IP \[bu] 2
++.B loop_file
++is used for loop devices, the backing file name repored by sysfs.
++.IP \[bu] 2
++.B devname
++the device name is used if no other type applies.
++.P
++
++The default choice for device ID type can be overriden using lvmdevices
++--addev --deviceidtype <type>.  If the specified type is available for the
++device it will be used, otherwise the device will be added using the type
++that would otherwise be chosen.
+diff --git a/tools/args.h b/tools/args.h
+index 741c82b9f..d4f23f849 100644
+--- a/tools/args.h
++++ b/tools/args.h
+@@ -228,6 +228,11 @@ arg(detachprofile_ARG, '\0', "detachprofile", 0, 0, 0,
+     "Detaches a metadata profile from a VG or LV.\n"
+     "See \\fBlvm.conf\\fP(5) for more information about profiles.\n")
+ 
++arg(deviceidtype_ARG, '\0', "deviceidtype", string_VAL, 0, 0,
++    "The type of device ID to use for the device.\n"
++    "If the specified type is available for the device,\n"
++    "then it will override the default type that lvm would use.\n")
++
+ arg(devices_ARG, '\0', "devices", pv_VAL, ARG_GROUPABLE, 0,
+     "Devices that the command can use. This option can be repeated\n"
+     "or accepts a comma separated list of devices. This overrides\n"
+diff --git a/tools/command-lines.in b/tools/command-lines.in
+index 67c37ffd0..8607305cb 100644
+--- a/tools/command-lines.in
++++ b/tools/command-lines.in
+@@ -1430,6 +1430,7 @@ ID: lvmdevices_update
+ DESC: Update the devices file to fix incorrect values.
+ 
+ lvmdevices --adddev PV
++OO: --deviceidtype String
+ ID: lvmdevices_edit
+ DESC: Add a device to the devices file.
+ 
+diff --git a/tools/lvmdevices.c b/tools/lvmdevices.c
+index 6b3e05683..3448bdd14 100644
+--- a/tools/lvmdevices.c
++++ b/tools/lvmdevices.c
+@@ -265,6 +265,7 @@ int lvmdevices(struct cmd_context *cmd, int argc, char **argv)
+ 
+ 	if (arg_is_set(cmd, adddev_ARG)) {
+ 		const char *devname;
++		const char *deviceidtype;
+ 
+ 		if (!(devname = arg_str_value(cmd, adddev_ARG, NULL)))
+ 			goto_bad;
+@@ -311,8 +312,10 @@ int lvmdevices(struct cmd_context *cmd, int argc, char **argv)
+ 				 dev_name(dev), dev_filtered_reason(dev));
+ 		}
+ 
+-		/* allow deviceidtype_ARG/deviceid_ARG ? */
+-		if (!device_id_add(cmd, dev, dev->pvid, NULL, NULL))
++		/* also allow deviceid_ARG ? */
++		deviceidtype = arg_str_value(cmd, deviceidtype_ARG, NULL);
++
++		if (!device_id_add(cmd, dev, dev->pvid, deviceidtype, NULL))
+ 			goto_bad;
+ 		if (!device_ids_write(cmd))
+ 			goto_bad;
 
 
