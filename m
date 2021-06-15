@@ -1,198 +1,67 @@
-From: Heming Zhao <heming.zhao@suse.com>
-Date: Wed, 30 Jun 2021 22:32:44 +0800
-Subject: [PATCH 3/3] tests: new test suite of fsadm for btrfs
-In-Reply-To: <20210630143244.7318-1-heming.zhao@suse.com>
-References: <20210630143244.7318-1-heming.zhao@suse.com>
-Message-ID: <20210630143244.7318-3-heming.zhao@suse.com>
+From: David Teigland <teigland@sourceware.org>
+Date: Tue, 15 Jun 2021 19:03:00 +0000 (GMT)
+Subject: main - tests: add some LVM_TEST_LOCK_TYPE_IDM
+Message-ID: <20210615190300.982A0385783E@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-refer legacy patche:
-- Ondrej Kozina <okozina@redhat.com>
-  https://listman.redhat.com/archives/lvm-devel/2012-November/msg00055.html
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=f8742b6df2a34df1867c7da6b1a057d2d23a7a37
+Commit:        f8742b6df2a34df1867c7da6b1a057d2d23a7a37
+Parent:        440d6ae79fb4df92c7992d3c1689ba4f2d242d6a
+Author:        David Teigland <teigland@redhat.com>
+AuthorDate:    Tue Jun 15 14:02:18 2021 -0500
+Committer:     David Teigland <teigland@redhat.com>
+CommitterDate: Tue Jun 15 14:02:45 2021 -0500
 
-Signed-off-by: Heming Zhao <heming.zhao@suse.com>
+tests: add some LVM_TEST_LOCK_TYPE_IDM
+
 ---
- test/shell/fsadm-btrfs.sh | 165 ++++++++++++++++++++++++++++++++++++++++++++++
- 1 file changed, 165 insertions(+)
- create mode 100644 test/shell/fsadm-btrfs.sh
+ test/shell/stress_multi_threads_1.sh | 2 ++
+ test/shell/stress_multi_threads_2.sh | 2 ++
+ test/shell/stress_single_thread.sh   | 2 ++
+ 3 files changed, 6 insertions(+)
 
-diff --git a/test/shell/fsadm-btrfs.sh b/test/shell/fsadm-btrfs.sh
-new file mode 100644
-index 000000000000..cd83a95ace41
---- /dev/null
-+++ b/test/shell/fsadm-btrfs.sh
-@@ -0,0 +1,165 @@
-+#!/usr/bin/env bash
+diff --git a/test/shell/stress_multi_threads_1.sh b/test/shell/stress_multi_threads_1.sh
+index c96fa244b..e76810bbb 100644
+--- a/test/shell/stress_multi_threads_1.sh
++++ b/test/shell/stress_multi_threads_1.sh
+@@ -15,6 +15,8 @@ SKIP_WITH_LVMPOLLD=1
+ 
+ . lib/inittest
+ 
++[ -z "$LVM_TEST_LOCK_TYPE_IDM" ] && skip;
 +
-+# Copyright (C) 2012 Red Hat, Inc. All rights reserved.
-+# This copyrighted material is made available to anyone wishing to use,
-+# modify, copy, or redistribute it subject to the terms and conditions
-+# of the GNU General Public License v.2.
-+#
-+# You should have received a copy of the GNU General Public License
-+# along with this program; if not, write to the Free Software Foundation,
-+# Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+ aux prepare_devs 6
+ get_devs
+ 
+diff --git a/test/shell/stress_multi_threads_2.sh b/test/shell/stress_multi_threads_2.sh
+index a035b5727..4e72b7447 100644
+--- a/test/shell/stress_multi_threads_2.sh
++++ b/test/shell/stress_multi_threads_2.sh
+@@ -15,6 +15,8 @@ SKIP_WITH_LVMPOLLD=1
+ 
+ . lib/inittest
+ 
++[ -z "$LVM_TEST_LOCK_TYPE_IDM" ] && skip;
 +
-+test_description='Exercise fsadm btrfs resize'
+ aux prepare_devs 8
+ get_devs
+ 
+diff --git a/test/shell/stress_single_thread.sh b/test/shell/stress_single_thread.sh
+index e18d4900b..ed9ce13c5 100644
+--- a/test/shell/stress_single_thread.sh
++++ b/test/shell/stress_single_thread.sh
+@@ -13,6 +13,8 @@
+ 
+ SKIP_WITH_LVMPOLLD=1
+ 
++[ -z "$LVM_TEST_LOCK_TYPE_IDM" ] && skip;
 +
-+. lib/inittest
-+
-+aux prepare_vg 1 1024
-+
-+# set to "skip" to avoid testing given fs and test warning result
-+# i.e. check_btrfs=skip
-+check_btrfs=
-+
-+which mkfs.btrfs || check_btrfs=${check_btrfs:-mkfs.btrfs}
-+which btrfs	 || check_btrfs=${check_btrfs:-btrfs}
-+
-+vg_lv=$vg/$lv1
-+vg_lv2=$vg/${lv1}bar
-+vg_lv3=$vg/${lv1}bar2
-+dev_vg_lv="$DM_DEV_DIR/$vg_lv"
-+dev_vg_lv2="$DM_DEV_DIR/$vg_lv2"
-+dev_vg_lv3="$DM_DEV_DIR/$vg_lv3"
-+mount_dir="mnt"
-+mount_space_dir="mnt space dir"
-+# for recursive call
-+export LVM_BINARY=$(which lvm)
-+
-+test ! -d "$mount_dir" && mkdir "$mount_dir"
-+test ! -d "$mount_space_dir" && mkdir "$mount_space_dir"
-+
-+cleanup_mounted_and_teardown()
-+{
-+	umount "$mount_dir" || true
-+	umount "$mount_space_dir" || true
-+	aux teardown
-+}
-+
-+check_missing_btrfs()
-+{
-+	eval local t=$check_btrfs
-+	test -z "$t" && return 0
-+	test "$t" = skip && return 1
-+	# trick for warning test
-+	echo "WARNING: fsadm test skipped btrfs tests, $t tool is missing"
-+	return 1
-+}
-+
-+fscheck_btrfs() {
-+	btrfsck "$1"
-+}
-+scrub_btrfs() {
-+	btrfs scrub start -B "$1"
-+}
-+
-+# btrfs minimal size calculation is complex, we use 64M here.
-+lvcreate -n $lv1 -L64M $vg
-+lvcreate -n ${lv1}bar -L64M $vg
-+lvcreate -n ${lv1}bar2 -L64M $vg
-+trap 'cleanup_mounted_and_teardown' EXIT
-+
-+single_device_test() {
-+	mkfs.btrfs -m single "$dev_vg_lv"
-+	mkfs.btrfs -m single "$dev_vg_lv2"
-+
-+	# kernel limits 256 MB as minimal btrfs resizable size
-+	# you can grow fs from 30MB->256MB
-+	# but you can't grow from 30MB->180MB
-+	fsadm --lvresize resize $vg_lv 256M
-+	fsadm --lvresize resize $vg_lv2 256M
-+
-+	not fsadm -y --lvresize resize $vg_lv 200M
-+	lvresize -L+10M -r $vg_lv
-+	lvreduce -L256M -r $vg_lv
-+	fscheck_btrfs $dev_vg_lv
-+
-+	mount "$dev_vg_lv" "$mount_dir"
-+	mount "$dev_vg_lv2" "$mount_space_dir"
-+
-+	not fsadm -y --lvresize resize $vg_lv 200M
-+	lvresize -L+10M -r $vg_lv
-+	lvreduce -L256M -r $vg_lv
-+	scrub_btrfs $dev_vg_lv
-+	umount "$mount_dir"
-+
-+	not fsadm -y --lvresize resize $vg_lv2 200M
-+	lvresize -L+10M -r $vg_lv2
-+	lvreduce -L256M -r $vg_lv2
-+	scrub_btrfs $dev_vg_lv2
-+	umount "$mount_space_dir"
-+}
-+
-+multiple_devices_test() {
-+	mkfs.btrfs -m single -d single -f "$dev_vg_lv" "$dev_vg_lv2" "$dev_vg_lv3"
-+
-+	fsadm -y --lvresize resize $vg_lv 256M
-+	fsadm -y --lvresize resize $vg_lv2 256M
-+	fsadm -y --lvresize resize $vg_lv3 256M
-+
-+	# check if fsadm is able to get/resize btrfs on
-+	# the right device
-+	lvresize -L+150M $vg_lv
-+	fsadm -y resize $vg_lv 300M
-+	# no space to extend, so failed
-+	not fsadm -y resize $vg_lv2 300M
-+	not fsadm -y resize $vg_lv3 300M
-+	lvreduce -y -L256M -r $vg_lv
-+
-+	lvresize -L+150M $vg_lv2
-+	fsadm -y resize $vg_lv2 300M
-+	not fsadm -y resize $vg_lv3 300M
-+	not fsadm -y resize $vg_lv 300M
-+	lvreduce -y -L256M -r $vg_lv2
-+
-+	lvresize -L+150M $vg_lv3
-+	fsadm -y resize $vg_lv3 300M
-+	not fsadm -y resize $vg_lv2 300M
-+	not fsadm -y resize $vg_lv 300M
-+	lvreduce -y -L256M -r $vg_lv3
-+	fscheck_btrfs $dev_vg_lv
-+
-+	# repeat with mounted fs
-+	mount "$dev_vg_lv" "$mount_dir"
-+	mount "$dev_vg_lv2" "$mount_space_dir"
-+
-+	lvresize -L300M $vg_lv
-+	fsadm -y resize $vg_lv 300M
-+	not fsadm -y resize $vg_lv2 300M
-+	not fsadm -y resize $vg_lv3 300M
-+	lvreduce -y -L256M -r $vg_lv
-+
-+	lvresize -L300M $vg_lv2
-+	fsadm -y resize $vg_lv2 300M
-+	not fsadm -y resize $vg_lv3 300M
-+	not fsadm -y resize $vg_lv 300M
-+	lvreduce -y -L256M -r $vg_lv2
-+
-+	lvresize -L300M $vg_lv3
-+	fsadm -y resize $vg_lv3 300M
-+	not fsadm -y resize $vg_lv2 300M
-+	not fsadm -y resize $vg_lv 300M
-+	lvreduce -y -L256M -r $vg_lv3
-+
-+	scrub_btrfs $dev_vg_lv
-+	umount "$mount_dir"
-+	umount "$mount_space_dir"
-+
-+	lvresize -nf -L300M $vg_lv
-+	lvresize -nf -L300M $vg_lv2
-+}
-+
-+if check_missing_btrfs; then
-+
-+	single_device_test
-+	multiple_devices_test
-+fi
-+
-+vgremove -ff $vg
--- 
-1.8.3.1
-
+ . lib/inittest
+ 
+ aux prepare_vg 3
 
 
