@@ -1,284 +1,86 @@
-From: Tony Asleson <tasleson@redhat.com>
-Date: Fri,  2 Nov 2012 15:33:08 -0500
-Subject: [PATCH 1/3] liblvm: Breakout required operations for re-size into vg_commit
-In-Reply-To: <1351888390-12619-1-git-send-email-tasleson@redhat.com>
-References: <1351888390-12619-1-git-send-email-tasleson@redhat.com>
-Message-ID: <1351888390-12619-2-git-send-email-tasleson@redhat.com>
+From: David Teigland <teigland@sourceware.org>
+Date: Wed, 16 Jun 2021 18:43:15 +0000 (GMT)
+Subject: main - coverity cleanups
+Message-ID: <20210616184315.449723855012@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-When re-sizing a LV with the command line, after the re-size
-occurs the code used to do a vg_write and then a number of
-operations before and after the commit.  As the API requires
-the ability to have the re-size done independantly of the
-write and commit a flag was added so that when we go through
-vg_commit we will do the same required steps to commit the
-lv size change regardless if it was done through the command
-line or the API.
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=71cb54d92f96b8da318c8f8380e7ce0bdf0a11bf
+Commit:        71cb54d92f96b8da318c8f8380e7ce0bdf0a11bf
+Parent:        f70d97b91620bc7c2e5c5ccc39913c54379322c2
+Author:        David Teigland <teigland@redhat.com>
+AuthorDate:    Wed Jun 16 13:22:54 2021 -0500
+Committer:     David Teigland <teigland@redhat.com>
+CommitterDate: Wed Jun 16 13:42:51 2021 -0500
 
-Signed-off-by: Tony Asleson <tasleson@redhat.com>
+coverity cleanups
+
 ---
- lib/format_text/flags.c          |    1 +
- lib/metadata/metadata-exported.h |    3 +-
- lib/metadata/metadata.c          |   87 +++++++++++++++++++++++++++++++++++++-
- tools/lvresize.c                 |   84 ++++++++++--------------------------
- 4 files changed, 113 insertions(+), 62 deletions(-)
+ lib/cache/lvmcache.c   | 5 +++++
+ lib/device/device_id.c | 1 +
+ tools/pvck.c           | 5 +++--
+ 3 files changed, 9 insertions(+), 2 deletions(-)
 
-diff --git a/lib/format_text/flags.c b/lib/format_text/flags.c
-index a3a3d0e..4edf7e1 100644
---- a/lib/format_text/flags.c
-+++ b/lib/format_text/flags.c
-@@ -77,6 +77,7 @@ static const struct flag _lv_flags[] = {
- 	{THIN_POOL, NULL, 0},
- 	{THIN_POOL_DATA, NULL, 0},
- 	{THIN_POOL_METADATA, NULL, 0},
-+	{LV_RESIZE, NULL, 0},
- 	{0, NULL, 0}
- };
+diff --git a/lib/cache/lvmcache.c b/lib/cache/lvmcache.c
+index 017134d7d..a798f5ab8 100644
+--- a/lib/cache/lvmcache.c
++++ b/lib/cache/lvmcache.c
+@@ -854,6 +854,11 @@ next:
+ 				dev_name(dev1), has_lv1 ? "is used for" : "is not used for",
+ 				dev_name(dev2), has_lv2 ? "is used for" : "is not used for");
  
-diff --git a/lib/metadata/metadata-exported.h b/lib/metadata/metadata-exported.h
-index 1ba6550..b1cc985 100644
---- a/lib/metadata/metadata-exported.h
-+++ b/lib/metadata/metadata-exported.h
-@@ -62,8 +62,9 @@
- #define MIRROR_LOG		UINT64_C(0x00020000)	/* LV */
- #define MIRROR_IMAGE		UINT64_C(0x00040000)	/* LV */
++		free((void *)idname1);
++		free((void *)idname2);
++		idname1 = NULL;
++		idname2 = NULL;
++
+ 		change = 0;
  
--#define LV_NOTSYNCED		UINT64_C(0x00080000)	/* LV */
-+#define LV_NOTSYNCED	UINT64_C(0x00080000)	/* LV */
- #define LV_REBUILD		UINT64_C(0x00100000)	/* LV */
-+#define LV_RESIZE		UINT64_C(0x00200000)	/* LV - internal use only */
- //#define PRECOMMITTED		UINT64_C(0x00200000)	/* VG - internal use only */
- #define CONVERTING		UINT64_C(0x00400000)	/* LV */
+ 		if (prev_unchosen1 && !prev_unchosen2) {
+diff --git a/lib/device/device_id.c b/lib/device/device_id.c
+index f158e4f06..65912b9b6 100644
+--- a/lib/device/device_id.c
++++ b/lib/device/device_id.c
+@@ -1132,6 +1132,7 @@ id_done:
  
-diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
-index 549a356..78db45f 100644
---- a/lib/metadata/metadata.c
-+++ b/lib/metadata/metadata.c
-@@ -2696,6 +2696,80 @@ static int _vg_commit_mdas(struct volume_group *vg)
- 	return cache_updated;
- }
- 
-+/* Check to see if we have a lv that was re-sized, if yes then suspend the lv */
-+static int _pre_lv_resize(struct volume_group *vg)
-+{
-+	struct lv_list *lvl = NULL;
-+	struct logical_volume *lock_lv = NULL;
-+
-+	dm_list_iterate_items(lvl, &vg->lvs) {
-+		if (lvl->lv->status & LV_RESIZE) {
-+			if (lv_is_cow(lvl->lv))
-+				lock_lv = origin_from_cow(lvl->lv);
-+			else
-+				lock_lv = lvl->lv;
-+
-+			if (!suspend_lv(vg->cmd, lock_lv)) {
-+				log_error("Failed to suspend %s", lvl->lv->name);
-+				vg_revert(vg);
-+				backup(vg);
-+				return 0;
-+			}
-+		}
-+	}
-+	return 1;
-+}
-+
-+/* If we have lv resize then resume the suspended lv */
-+static int _post_lv_resize(struct volume_group *vg, int ok)
-+{
-+	struct lv_list *lvl = NULL;
-+	struct logical_volume *lock_lv = NULL;
-+
-+	dm_list_iterate_items(lvl, &vg->lvs) {
-+		if (lvl->lv->status & LV_RESIZE) {
-+
-+			/* Clear the flag */
-+			lvl->lv->status &= ~LV_RESIZE;
-+
-+			if (lv_is_cow(lvl->lv))
-+				lock_lv = origin_from_cow(lvl->lv);
-+			else
-+				lock_lv = lvl->lv;
-+
-+			if (!resume_lv(vg->cmd, lock_lv)) {
-+				log_error("Problem reactivating %s", lvl->lv->name);
-+				backup(vg);
-+				return 0;
-+			}
-+
-+			backup(vg);
-+
-+			/* We could have been called after an error has occurred, in that
-+			   case we will not do the next step */
-+			if (ok) {
-+
-+				/*
-+				* Update lvm pool metadata (drop messages) if the pool has been
-+				* resumed and do a pool active/deactivate in other case.
-+				*
-+				* Note: Active thin pool can be waiting for resize.
-+				*
-+				* FIXME: Activate only when thin volume is active
-+				*/
-+				if (lv_is_thin_pool(lvl->lv) &&
-+					!update_pool_lv(lvl->lv, !lv_is_active(lvl->lv))) {
-+					stack;
-+					return 0;
-+				}
-+			}
-+		}
-+	}
-+
-+	return 1;
-+}
-+
-+
- /* Commit pending changes */
- int vg_commit(struct volume_group *vg)
- {
-@@ -2707,9 +2781,15 @@ int vg_commit(struct volume_group *vg)
- 		return cache_updated;
+ 			if (yes_no_prompt("Add device with duplicate PV to devices file?") == 'n') {
+ 				log_print("Device not added.");
++				free((void *)check_idname);
+ 				return 1;
+ 			}
+ 		}
+diff --git a/tools/pvck.c b/tools/pvck.c
+index aba6a9cc8..4e8814737 100644
+--- a/tools/pvck.c
++++ b/tools/pvck.c
+@@ -3053,7 +3053,7 @@ int pvck(struct cmd_context *cmd, int argc, char **argv)
+ 		}
  	}
  
--	if (!lvmetad_vg_update(vg))
-+	if (!_pre_lv_resize(vg))
- 		return 0;
+-	if (arg_is_set(cmd, dump_ARG)) {
++	if ((dump = arg_str_value(cmd, dump_ARG, NULL))) {
+ 		struct stat sb;
  
-+	if (!lvmetad_vg_update(vg)) {
-+		cache_updated = 0;
-+		goto out;
-+	}
-+
-+
- 	cache_updated = _vg_commit_mdas(vg);
- 
- 	if (cache_updated) {
-@@ -2728,6 +2808,11 @@ int vg_commit(struct volume_group *vg)
- 		log_error("Attempt to drop cached metadata failed "
- 			  "after commit for VG %s.", vg->name);
- 
-+out:
-+	if (!_post_lv_resize(vg, cache_updated)) {
-+		cache_updated = 0;
-+	}
-+
- 	/* If at least one mda commit succeeded, it was committed */
- 	return cache_updated;
- }
-diff --git a/tools/lvresize.c b/tools/lvresize.c
-index 4c9580d..a32751d 100644
---- a/tools/lvresize.c
-+++ b/tools/lvresize.c
-@@ -374,7 +374,6 @@ static int _lvresize(struct cmd_context *cmd, struct volume_group *vg,
- 	uint32_t size_rest;
- 	uint32_t pv_extent_count;
- 	alloc_policy_t alloc;
--	struct logical_volume *lock_lv;
- 	struct lv_list *lvl;
- 	struct lv_segment *seg, *uninitialized_var(mirr_seg);
- 	uint32_t seg_extents;
-@@ -824,62 +823,8 @@ static int _lvresize(struct cmd_context *cmd, struct volume_group *vg,
- 		return ECMD_FAILED;
+ 		pv_name = argv[0];
+@@ -3121,7 +3121,7 @@ int pvck(struct cmd_context *cmd, int argc, char **argv)
+ 		}
  	}
  
--	/* store vg on disk(s) */
--	if (!vg_write(vg)) {
--		stack;
--		return ECMD_FAILED;
--	}
--
--	/* If snapshot, must suspend all associated devices */
--	if (lv_is_cow(lv))
--		lock_lv = origin_from_cow(lv);
--	else
--		lock_lv = lv;
--
--	if (!suspend_lv(cmd, lock_lv)) {
--		log_error("Failed to suspend %s", lp->lv_name);
--		vg_revert(vg);
--		backup(vg);
--		return ECMD_FAILED;
--	}
--
--	if (!vg_commit(vg)) {
--		stack;
--		if (!resume_lv(cmd, lock_lv))
--			stack;
--		backup(vg);
--		return ECMD_FAILED;
--	}
--
--	if (!resume_lv(cmd, lock_lv)) {
--		log_error("Problem reactivating %s", lp->lv_name);
--		backup(vg);
--		return ECMD_FAILED;
--	}
--
--	backup(vg);
--
--	/*
--	 * Update lvm pool metadata (drop messages) if the pool has been
--	 * resumed and do a pool active/deactivate in other case.
--	 *
--	 * Note: Active thin pool can be waiting for resize.
--	 *
--	 * FIXME: Activate only when thin volume is active
--	 */
--	if (lv_is_thin_pool(lv) &&
--	    !update_pool_lv(lv, !lv_is_active(lv))) {
--		stack;
--		return ECMD_FAILED;
--	}
--
--	log_print_unless_silent("Logical volume %s successfully resized", lp->lv_name);
--
--	if (lp->resizefs && (lp->resize == LV_EXTEND) &&
--	    !_fsadm_cmd(cmd, vg, lp, FSADM_CMD_RESIZE, NULL)) {
--		stack;
--		return ECMD_FAILED;
--	}
-+	/* Set the flag to tell commit that we have addl. work todo*/
-+	lv->status |= LV_RESIZE;
+-	if ((dump = arg_str_value(cmd, dump_ARG, NULL))) {
++	if (dump) {
+ 		cmd->use_hints = 0;
  
- 	return ECMD_PROCESSED;
- }
-@@ -901,10 +846,29 @@ int lvresize(struct cmd_context *cmd, int argc, char **argv)
- 		return ECMD_FAILED;
- 	}
+ 		if (!strcmp(dump, "metadata"))
+@@ -3145,6 +3145,7 @@ int pvck(struct cmd_context *cmd, int argc, char **argv)
+ 		} else
+ 			log_error("Unknown dump value.");
  
--	if (!(r = _lvresize(cmd, vg, &lp)))
--		stack;
-+	r = _lvresize(cmd, vg, &lp);
- 
--	unlock_and_release_vg(cmd, vg, lp.vg_name);
-+	if (ECMD_PROCESSED == r) {
-+		if (!vg_write(vg)) {
-+			stack;
-+			r = ECMD_FAILED;
-+			goto out;
-+		}
-+
-+		if (!vg_commit(vg)) {
-+			r = ECMD_FAILED;
-+			goto out;
-+		}
-+
-+		log_print_unless_silent("Logical volume %s successfully resized", lp.lv_name);
- 
-+		if (lp.resizefs && (lp.resize == LV_EXTEND) &&
-+			!_fsadm_cmd(cmd, vg, &lp, FSADM_CMD_RESIZE, NULL)) {
-+			r = ECMD_FAILED;
-+		}
-+	}
-+
-+out:
-+	unlock_and_release_vg(cmd, vg, lp.vg_name);
- 	return r;
- }
--- 
-1.7.1
++		free(def);
+ 		if (!ret)
+ 			return ECMD_FAILED;
+ 		return ECMD_PROCESSED;
 
 
