@@ -1,67 +1,58 @@
-From: David Teigland <teigland@sourceware.org>
-Date: Tue, 15 Jun 2021 19:03:00 +0000 (GMT)
-Subject: main - tests: add some LVM_TEST_LOCK_TYPE_IDM
-Message-ID: <20210615190300.982A0385783E@sourceware.org>
+From: Leo Yan <leo.yan@linaro.org>
+Date: Wed, 16 Jun 2021 21:43:54 +0800
+Subject: [PATCH] tests: stress: Change to use $SHARED for vgcreate
+Message-ID: <20210616134354.337017-1-leo.yan@linaro.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=f8742b6df2a34df1867c7da6b1a057d2d23a7a37
-Commit:        f8742b6df2a34df1867c7da6b1a057d2d23a7a37
-Parent:        440d6ae79fb4df92c7992d3c1689ba4f2d242d6a
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Tue Jun 15 14:02:18 2021 -0500
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Tue Jun 15 14:02:45 2021 -0500
+Use the variable $SHARED to replace "--shared" for vgcreate commands.
 
-tests: add some LVM_TEST_LOCK_TYPE_IDM
-
+Signed-off-by: Leo Yan <leo.yan@linaro.org>
 ---
- test/shell/stress_multi_threads_1.sh | 2 ++
- test/shell/stress_multi_threads_2.sh | 2 ++
- test/shell/stress_single_thread.sh   | 2 ++
- 3 files changed, 6 insertions(+)
+ test/shell/stress_multi_threads_1.sh | 4 ++--
+ test/shell/stress_multi_threads_2.sh | 4 ++--
+ 2 files changed, 4 insertions(+), 4 deletions(-)
 
 diff --git a/test/shell/stress_multi_threads_1.sh b/test/shell/stress_multi_threads_1.sh
-index c96fa244b..e76810bbb 100644
+index e76810bbb..c5695eb0b 100644
 --- a/test/shell/stress_multi_threads_1.sh
 +++ b/test/shell/stress_multi_threads_1.sh
-@@ -15,6 +15,8 @@ SKIP_WITH_LVMPOLLD=1
+@@ -22,8 +22,8 @@ get_devs
  
- . lib/inittest
+ pvcreate -M2 "${DEVICES[@]}"
  
-+[ -z "$LVM_TEST_LOCK_TYPE_IDM" ] && skip;
-+
- aux prepare_devs 6
- get_devs
+-vgcreate --shared -M2 "$vg1" "$dev1" "$dev2" "$dev3"
+-vgcreate --shared -M2 "$vg2" "$dev4" "$dev5" "$dev6"
++vgcreate $SHARED -M2 "$vg1" "$dev1" "$dev2" "$dev3"
++vgcreate $SHARED -M2 "$vg2" "$dev4" "$dev5" "$dev6"
  
+ test_vg_thread1()
+ {
 diff --git a/test/shell/stress_multi_threads_2.sh b/test/shell/stress_multi_threads_2.sh
-index a035b5727..4e72b7447 100644
+index 4e72b7447..9b586a263 100644
 --- a/test/shell/stress_multi_threads_2.sh
 +++ b/test/shell/stress_multi_threads_2.sh
-@@ -15,6 +15,8 @@ SKIP_WITH_LVMPOLLD=1
+@@ -26,14 +26,14 @@ test_vg_thread1()
+ {
+ 	for i in {1..1000}
+ 	do
+-		vgcreate --shared -M2 "$vg1" "$dev1" "$dev2" "$dev3"
++		vgcreate $SHARED -M2 "$vg1" "$dev1" "$dev2" "$dev3"
+ 		vgremove -ff $vg1
+ 	done
+ }
  
- . lib/inittest
+ test_vg_thread2()
+ {
+-	vgcreate --shared -M2 "$vg2" "$dev4" "$dev5" "$dev6"
++	vgcreate $SHARED -M2 "$vg2" "$dev4" "$dev5" "$dev6"
  
-+[ -z "$LVM_TEST_LOCK_TYPE_IDM" ] && skip;
-+
- aux prepare_devs 8
- get_devs
- 
-diff --git a/test/shell/stress_single_thread.sh b/test/shell/stress_single_thread.sh
-index e18d4900b..ed9ce13c5 100644
---- a/test/shell/stress_single_thread.sh
-+++ b/test/shell/stress_single_thread.sh
-@@ -13,6 +13,8 @@
- 
- SKIP_WITH_LVMPOLLD=1
- 
-+[ -z "$LVM_TEST_LOCK_TYPE_IDM" ] && skip;
-+
- . lib/inittest
- 
- aux prepare_vg 3
+ 	for i in {1..1000}
+ 	do
+-- 
+2.25.1
 
 
