@@ -1,39 +1,52 @@
-From: Peter Rajnoha <prajnoha@fedoraproject.org>
-Date: Fri,  2 Nov 2012 19:34:17 +0000 (UTC)
-Subject: master - systemd: remove quotes in lvm2-monitor.service ExecStop
-Message-ID: <20121102193417.5DD21A2C51@fedorahosted.org>
+From: Tony Asleson <tasleson@sourceware.org>
+Date: Wed, 16 Jun 2021 17:19:54 +0000 (GMT)
+Subject: main - lvmdbusd: Don't setup search key unless needed
+Message-ID: <20210616171954.147E53987C2C@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=7c7672b3c0916b3cee8aec90f90275a1320acc70
-Commit:        7c7672b3c0916b3cee8aec90f90275a1320acc70
-Parent:        aa07de5a50175a2cee3f8662a23544d43feaf128
-Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Fri Nov 2 20:32:28 2012 +0100
-Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Fri Nov 2 20:32:28 2012 +0100
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=e8f3a63000e692b00070b337e475fd4a38e1f1c9
+Commit:        e8f3a63000e692b00070b337e475fd4a38e1f1c9
+Parent:        27abb03a0d5fb8342741c306b0ce187f41f8e3c1
+Author:        Tony Asleson <tasleson@redhat.com>
+AuthorDate:    Thu Jun 10 13:26:15 2021 -0500
+Committer:     Tony Asleson <tasleson@redhat.com>
+CommitterDate: Wed Jun 16 12:19:02 2021 -0500
 
-systemd: remove quotes in lvm2-monitor.service ExecStop
+lvmdbusd: Don't setup search key unless needed
 
+self.lvm_id is a property which actually executes some code which doesn't
+need to be executed everytime.
 ---
- scripts/lvm2_monitoring_systemd_red_hat.service.in |    2 +-
- 1 files changed, 1 insertions(+), 1 deletions(-)
+ daemons/lvmdbusd/automatedproperties.py | 9 +++++----
+ 1 file changed, 5 insertions(+), 4 deletions(-)
 
-diff --git a/scripts/lvm2_monitoring_systemd_red_hat.service.in b/scripts/lvm2_monitoring_systemd_red_hat.service.in
-index 3cb998b..670d0c4 100644
---- a/scripts/lvm2_monitoring_systemd_red_hat.service.in
-+++ b/scripts/lvm2_monitoring_systemd_red_hat.service.in
-@@ -12,7 +12,7 @@ Type=oneshot
- Environment=LVM_SUPPRESS_LOCKING_FAILURE_MESSAGES=1
- ExecStart=@sbindir@/lvm vgchange --monitor y
- # The lvmetad must be disabled here, it needs https://bugzilla.redhat.com/show_bug.cgi?id=843587 to be resolved first.
--ExecStop="@sbindir@/lvm vgchange --monitor n --config 'global{use_lvmetad=0}'"
-+ExecStop=@sbindir@/lvm vgchange --monitor n --config 'global{use_lvmetad=0}'
- RemainAfterExit=yes
+diff --git a/daemons/lvmdbusd/automatedproperties.py b/daemons/lvmdbusd/automatedproperties.py
+index b5919484d..d9f2c5e9f 100644
+--- a/daemons/lvmdbusd/automatedproperties.py
++++ b/daemons/lvmdbusd/automatedproperties.py
+@@ -157,14 +157,15 @@ class AutomatedProperties(dbus.service.Object):
+ 		if not self._ap_search_method:
+ 			return 0
  
- [Install]
+-		search = self.lvm_id
+-		if search_key:
+-			search = search_key
+-
+ 		# Either we have the new object state or we need to go fetch it
+ 		if object_state:
+ 			new_state = object_state
+ 		else:
++			if search_key:
++				search = search_key
++			else:
++				search = self.lvm_id
++
+ 			new_state = self._ap_search_method([search])[0]
+ 			assert isinstance(new_state, State)
+ 
 
 
