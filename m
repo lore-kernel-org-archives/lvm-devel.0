@@ -1,128 +1,52 @@
-From: Tony Asleson <tasleson@redhat.com>
-Date: Thu, 15 Nov 2012 20:53:22 -0600
-Subject: [PATCH 1/2] lvm2app: Add lv shapshot support
-Message-ID: <1353034403-17049-1-git-send-email-tasleson@redhat.com>
+From: Tony Asleson <tasleson@sourceware.org>
+Date: Thu, 17 Jun 2021 14:17:02 +0000 (GMT)
+Subject: main - lvmdbusd: Wrap json.load in try/except
+Message-ID: <20210617141702.87579385040A@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=f7730406254f023216d0727c82d46de82c124c92
+Commit:        f7730406254f023216d0727c82d46de82c124c92
+Parent:        c474f174cc8b0e855f984bf211f5416b42c644a1
+Author:        Tony Asleson <tasleson@redhat.com>
+AuthorDate:    Mon Jun 14 22:04:09 2021 -0500
+Committer:     Tony Asleson <tasleson@redhat.com>
+CommitterDate: Thu Jun 17 09:14:29 2021 -0500
+
+lvmdbusd: Wrap json.load in try/except
+
+In testing where we inject large amounts of additional output in stderr
+we can occassionally get truncated stdout from lvm.  Catching and dumping
+the json for debug before we re-raise the exception.  As this doesn't
+happen without the error injecting wrapper around lvm, the error seems to
+be with the wrapper.
+
 Signed-off-by: Tony Asleson <tasleson@redhat.com>
 ---
- liblvm/lvm2app.h | 21 +++++++++++++++++++++
- liblvm/lvm_lv.c  | 57 ++++++++++++++++++++++++++++++++++++++++++++++++++++++--
- 2 files changed, 76 insertions(+), 2 deletions(-)
+ daemons/lvmdbusd/cmdhandler.py | 8 +++++++-
+ 1 file changed, 7 insertions(+), 1 deletion(-)
 
-diff --git a/liblvm/lvm2app.h b/liblvm/lvm2app.h
-index d99742c..7515973 100644
---- a/liblvm/lvm2app.h
-+++ b/liblvm/lvm2app.h
-@@ -1377,6 +1377,27 @@ int lvm_lv_rename(lv_t lv, const char *new_name);
-  */
- int lvm_lv_resize(const lv_t lv, uint64_t new_size);
+diff --git a/daemons/lvmdbusd/cmdhandler.py b/daemons/lvmdbusd/cmdhandler.py
+index 91f69abcf..b88bd9896 100644
+--- a/daemons/lvmdbusd/cmdhandler.py
++++ b/daemons/lvmdbusd/cmdhandler.py
+@@ -627,7 +627,13 @@ def lvm_full_report_json():
+ 			assert(type(out) == dict)
+ 			return out
+ 		else:
+-			return json.loads(out)
++			try:
++				return json.loads(out)
++			except json.decoder.JSONDecodeError as joe:
++				log_error("JSONDecodeError %s, \n JSON=\n%s\n" %
++							(str(joe), out))
++				raise joe
++
+ 	return None
  
-+/**
-+ * Create a snapshot of a logical volume
-+ *
-+ * \memberof lv_t
-+ *
-+ * \param   lv
-+ * Logical volume handle.
-+ *
-+ * \param   snap_name
-+ * Name of the snapshot.
-+ *
-+ * \param   max_snap_size
-+ * Max snapshot space to use. If you pass zero the same amount of space as
-+ * the origin will be used.
-+ *
-+ * \return
-+ * Valid lv pointer on success, else NULL on error.
-+ *
-+ */
-+lv_t lvm_lv_snapshot(const lv_t lv, const char *snap_name, uint64_t max_snap_size);
-+
- /************************** physical volume handling ************************/
  
- /**
-diff --git a/liblvm/lvm_lv.c b/liblvm/lvm_lv.c
-index b22ba11..08f9b53 100644
---- a/liblvm/lvm_lv.c
-+++ b/liblvm/lvm_lv.c
-@@ -122,12 +122,19 @@ static void _lv_set_default_params(struct lvcreate_params *lp,
- 	dm_list_init(&lp->tags);
- }
- 
-+static struct segment_type * _get_segtype(struct cmd_context *cmd) {
-+	struct segment_type *rc = get_segtype_from_string(cmd, "striped");
-+	if (!rc) {
-+		log_error(INTERNAL_ERROR "Segtype striped not found.");
-+	}
-+	return rc;
-+}
-+
- /* Set default for linear segment specific LV parameters */
- static int _lv_set_default_linear_params(struct cmd_context *cmd,
- 					  struct lvcreate_params *lp)
- {
--	if (!(lp->segtype = get_segtype_from_string(cmd, "striped"))) {
--		log_error(INTERNAL_ERROR "Segtype striped not found.");
-+	if (!(lp->segtype = _get_segtype(cmd))) {
- 		return 0;
- 	}
- 
-@@ -321,3 +328,49 @@ int lvm_lv_resize(const lv_t lv, uint64_t new_size)
- 
- 	return 0;
- }
-+
-+lv_t lvm_lv_snapshot(const lv_t lv, const char *snap_name, uint64_t max_snap_size)
-+{
-+	struct lvcreate_params lp = { 0 };
-+	uint64_t extents = 0;
-+	uint64_t size = 0;
-+	struct lv_list *lvl = NULL;
-+
-+	if (vg_read_error(lv->vg))
-+		return NULL;
-+	if (!vg_check_write_mode(lv->vg))
-+		return NULL;
-+
-+	/* Determine the correct size */
-+	if (0 == max_snap_size){
-+		size = lv->size;
-+	} else {
-+		size = max_snap_size >> SECTOR_SHIFT;
-+
-+		if (size > lv->size) {
-+			size = lv->size;
-+		}
-+	}
-+
-+	if (!(extents = extents_from_size(lv->vg->cmd, size,
-+					  lv->vg->extent_size))) {
-+		log_error("Unable to create LV snapshot without size.");
-+		return NULL;
-+	}
-+
-+	_lv_set_default_params(&lp, lv->vg, snap_name, extents);
-+
-+	/* Fill out required default input values */
-+	lp.snapshot = 1;
-+	lp.segtype = _get_segtype(lv->vg->cmd);
-+	lp.stripes = 1;
-+	lp.origin = lv->name;
-+
-+	if (!lp.segtype)
-+		return_NULL;
-+	if (!lv_create_single(lv->vg, &lp))
-+		return_NULL;
-+	if (!(lvl = find_lv_in_vg(lv->vg, snap_name)))
-+		return NULL;
-+	return (lv_t) lvl->lv;
-+}
--- 
-1.7.11.7
 
 
