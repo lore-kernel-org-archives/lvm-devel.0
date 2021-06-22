@@ -1,41 +1,44 @@
-From: Ondrej Kozina <okozina@redhat.com>
-Date: Fri, 23 Nov 2012 15:48:37 +0100
-Subject: [PATCH 2/3] - minor change in fsadm man page
-In-Reply-To: <1353682118-17855-1-git-send-email-okozina@redhat.com>
-References: <1353682118-17855-1-git-send-email-okozina@redhat.com>
-Message-ID: <1353682118-17855-3-git-send-email-okozina@redhat.com>
+From: David Teigland <teigland@sourceware.org>
+Date: Tue, 22 Jun 2021 18:38:08 +0000 (GMT)
+Subject: main - device_id: handle scsi_debug wwid
+Message-ID: <20210622183808.0EA8C3877404@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
----
- man/fsadm.8.in | 6 ++++--
- 1 file changed, 4 insertions(+), 2 deletions(-)
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=1139a05939f85bd86a756b451a8f194bc7a72a2c
+Commit:        1139a05939f85bd86a756b451a8f194bc7a72a2c
+Parent:        c35f7722d588009edad22d59c68c82150bb5c216
+Author:        David Teigland <teigland@redhat.com>
+AuthorDate:    Tue Jun 22 13:36:10 2021 -0500
+Committer:     David Teigland <teigland@redhat.com>
+CommitterDate: Tue Jun 22 13:36:10 2021 -0500
 
-diff --git a/man/fsadm.8.in b/man/fsadm.8.in
-index 46be1ff..17874db 100644
---- a/man/fsadm.8.in
-+++ b/man/fsadm.8.in
-@@ -16,7 +16,7 @@ fsadm \- utility to resize or check filesystem on a device
- .SH DESCRIPTION
- fsadm utility checks or resizes the filesystem on a device.
- It tries to use the same API for 
--.IR ext2 ", " ext3 ", " ext4 ", " ReiserFS " and " XFS
-+.IR ext2 ", " ext3 ", " ext4 ", " ReiserFS ", " XFS " and "btrfs
- filesystem.
- .SH OPTIONS
- .TP
-@@ -78,4 +78,6 @@ Defaults to "/dev" and must be an absolute path.
- .BR resize_reiserfs (8),
- .BR xfs_info (8),
- .BR xfs_growfs (8),
--.BR xfs_check (8)
-+.BR xfs_check (8),
-+.BR btrfs (8),
-+.BR btrfsck (8)
--- 
-1.8.0
+device_id: handle scsi_debug wwid
+
+Ignore the wwid value reported by scsi_debug devices
+that begin "t10.Linux   scsi_debug".  The devname
+will be used as the device id.
+---
+ lib/device/device_id.c | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/lib/device/device_id.c b/lib/device/device_id.c
+index 65912b9b6..ffeac3064 100644
+--- a/lib/device/device_id.c
++++ b/lib/device/device_id.c
+@@ -308,6 +308,10 @@ const char *device_id_system_read(struct cmd_context *cmd, struct device *dev, u
+ 
+ 		if (!sysbuf[0])
+ 			_read_sys_block(cmd, dev, "wwid", sysbuf, sizeof(sysbuf));
++
++		/* scsi_debug wwid begins "t10.Linux   scsi_debug ..." */
++		if (strstr(sysbuf, "scsi_debug"))
++			sysbuf[0] = '\0';
+ 	}
+ 
+ 	else if (idtype == DEV_ID_TYPE_SYS_SERIAL)
 
 
