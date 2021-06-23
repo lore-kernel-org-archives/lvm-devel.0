@@ -1,51 +1,72 @@
-From: Alasdair Kergon <agk@fedoraproject.org>
-Date: Mon, 26 Nov 2012 14:57:30 +0000 (UTC)
-Subject: master - filters: Add STEC skd and Violin vtms devices
-Message-ID: <20121126145730.D9FEE35F6@hosted02.fedoraproject.org>
+From: David Teigland <teigland@sourceware.org>
+Date: Wed, 23 Jun 2021 17:41:35 +0000 (GMT)
+Subject: main - writecache: use block size 4096 when no fs is found
+Message-ID: <20210623174135.659AA38515D5@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=8c49aa79e7372a9cea9f7fe114d26a47cc81cdf4
-Commit:        8c49aa79e7372a9cea9f7fe114d26a47cc81cdf4
-Parent:        1ef98310187a7b287255cacd4b56160e48100d03
-Author:        Alasdair G Kergon <agk@redhat.com>
-AuthorDate:    Mon Nov 26 14:55:17 2012 +0000
-Committer:     Alasdair G Kergon <agk@redhat.com>
-CommitterDate: Mon Nov 26 14:55:17 2012 +0000
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=84bd394cf9aaa581b4bf980f764544dda26a0305
+Commit:        84bd394cf9aaa581b4bf980f764544dda26a0305
+Parent:        1139a05939f85bd86a756b451a8f194bc7a72a2c
+Author:        David Teigland <teigland@redhat.com>
+AuthorDate:    Wed Jun 23 12:38:57 2021 -0500
+Committer:     David Teigland <teigland@redhat.com>
+CommitterDate: Wed Jun 23 12:38:57 2021 -0500
 
-filters: Add STEC skd and Violin vtms devices
+writecache: use block size 4096 when no fs is found
 
+When there is no block size constraint from a file system
+or from a user setting, use 4096 rather than 512 because of
+better performance.
 ---
- WHATS_NEW                  |    2 ++
- lib/filters/device-types.h |    2 ++
- 2 files changed, 4 insertions(+), 0 deletions(-)
+ tools/lvconvert.c | 23 +++++------------------
+ 1 file changed, 5 insertions(+), 18 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index 85fcd3e..2c6ad4c 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,7 @@
- Version 2.02.99 - 
- ===================================
-+  Recognise STEC skd devices in filter.
-+  Recognise Violin Memory vtms devices in filter.
-   Add lvm.conf thin pool defs thin_pool_{chunk_size|discards|zero}.
-   Support discards for non-power-of-2 thin pool chunks.
-   Automatically restore MISSING PVs with no MDAs.
-diff --git a/lib/filters/device-types.h b/lib/filters/device-types.h
-index 9efbe68..aec4293 100644
---- a/lib/filters/device-types.h
-+++ b/lib/filters/device-types.h
-@@ -56,5 +56,7 @@ static const device_info_t _device_info[] = {
- 	{"blkext", 1},		/* Extended device partitions */
- 	{"fio", 16},		/* Fusion */
- 	{"mtip32xx", 16},	/* Micron PCIe SSDs */
-+	{"vtms", 16},		/* Violin Memory */
-+	{"skd", 16},		/* STEC */
- 	{"", 0}
- };
+diff --git a/tools/lvconvert.c b/tools/lvconvert.c
+index cbe4fa93a..ab8b42b7e 100644
+--- a/tools/lvconvert.c
++++ b/tools/lvconvert.c
+@@ -5992,24 +5992,13 @@ static int _set_writecache_block_size(struct cmd_context *cmd,
+ 	rv = get_fs_block_size(pathname, &fs_block_size);
+ skip_fs:
+ 	if (!rv || !fs_block_size) {
+-		if (lbs_4k && pbs_4k && !pbs_512) {
++		if (block_size_setting)
++			block_size = block_size_setting;
++		else
+ 			block_size = 4096;
+-		} else if (lbs_512 && pbs_512 && !pbs_4k) {
+-			block_size = 512;
+-		} else if (lbs_512 && pbs_4k) {
+-			if (block_size_setting == 4096)
+-				block_size = 4096;
+-			else
+-				block_size = 512;
+-		} else {
+-			block_size = 512;
+-		}
+ 
+-		if (block_size_setting && (block_size_setting != block_size)) {
+-			log_warn("WARNING: writecache block size %u does not match device block sizes, logical %u physical %u",
+-				 block_size_setting, lbs_4k ? 4096 : 512, pbs_4k ? 4096 : 512);
+-			block_size = block_size_setting;
+-		}
++		log_print("Using writecache block size %u for unknown file system block size, logical block size %u, physical block size %u.",
++			 block_size, lbs_4k ? 4096 : 512, pbs_4k ? 4096 : 512);
+ 
+ 		if (block_size != 512) {
+ 			log_warn("WARNING: unable to detect a file system block size on %s", display_lvname(lv));
+@@ -6021,8 +6010,6 @@ skip_fs:
+ 			}
+ 		}
+ 
+-		log_print("Using writecache block size %u for unknown file system block size, logical block size %u, physical block size %u.",
+-			 block_size, lbs_4k ? 4096 : 512, pbs_4k ? 4096 : 512);
+ 		goto out;
+ 	}
+ 
 
 
