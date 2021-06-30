@@ -1,242 +1,198 @@
-From: David Teigland <teigland@sourceware.org>
-Date: Fri, 11 Jun 2021 18:28:47 +0000 (GMT)
-Subject: main - lvmdevices: add deviceidtype option
-Message-ID: <20210611182847.DB5023857439@sourceware.org>
+From: Heming Zhao <heming.zhao@suse.com>
+Date: Wed, 30 Jun 2021 22:32:44 +0800
+Subject: [PATCH 3/3] tests: new test suite of fsadm for btrfs
+In-Reply-To: <20210630143244.7318-1-heming.zhao@suse.com>
+References: <20210630143244.7318-1-heming.zhao@suse.com>
+Message-ID: <20210630143244.7318-3-heming.zhao@suse.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=440d6ae79fb4df92c7992d3c1689ba4f2d242d6a
-Commit:        440d6ae79fb4df92c7992d3c1689ba4f2d242d6a
-Parent:        8331321070899507b904d8a0ec78b413c826ae32
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Tue Jun 8 14:49:34 2021 -0500
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Fri Jun 11 13:27:18 2021 -0500
+refer legacy patche:
+- Ondrej Kozina <okozina@redhat.com>
+  https://listman.redhat.com/archives/lvm-devel/2012-November/msg00055.html
 
-lvmdevices: add deviceidtype option
-
-When adding a device to the devices file with --adddev, lvm
-by default chooses the best device ID type for the new device.
-The new --deviceidtype option allows the user to override the
-built in preference.  This is useful if there's a problem with
-the default type, or if a secondary type is preferrable.
-
-If the specified deviceidtype does not produce a device ID,
-then lvm falls back to the preference it would otherwise use.
+Signed-off-by: Heming Zhao <heming.zhao@suse.com>
 ---
- lib/device/device_id.c | 32 ++++++++++++++----------
- man/lvmdevices.8_des   | 68 +++++++++++++++++++++++++++++++++++++++-----------
- tools/args.h           |  5 ++++
- tools/command-lines.in |  1 +
- tools/lvmdevices.c     |  7 ++++--
- 5 files changed, 84 insertions(+), 29 deletions(-)
+ test/shell/fsadm-btrfs.sh | 165 ++++++++++++++++++++++++++++++++++++++++++++++
+ 1 file changed, 165 insertions(+)
+ create mode 100644 test/shell/fsadm-btrfs.sh
 
-diff --git a/lib/device/device_id.c b/lib/device/device_id.c
-index 1b98487ab..f158e4f06 100644
---- a/lib/device/device_id.c
-+++ b/lib/device/device_id.c
-@@ -931,6 +931,7 @@ int device_id_add(struct cmd_context *cmd, struct device *dev, const char *pvid_
- 	/*
- 	 * Choose the device_id type for the device being added.
- 	 *
-+	 * 0. use an idtype specified by the user
- 	 * 1. use an idtype specific to a special/virtual device type
- 	 *    e.g. loop, mpath, crypt, lvmlv, md, etc.
- 	 * 2. use an idtype specified by user option.
-@@ -939,6 +940,24 @@ int device_id_add(struct cmd_context *cmd, struct device *dev, const char *pvid_
- 	 * 5. use devname as the last resort.
- 	 */
- 
-+	if (idtype_arg) {
-+		if (!(idtype = idtype_from_str(idtype_arg)))
-+			log_warn("WARNING: ignoring unknown device_id type %s.", idtype_arg);
-+		else {
-+			if (id_arg) {
-+				if ((idname = strdup(id_arg)))
-+					goto id_done;
-+				log_warn("WARNING: ignoring device_id name %s.", id_arg);
-+			}
+diff --git a/test/shell/fsadm-btrfs.sh b/test/shell/fsadm-btrfs.sh
+new file mode 100644
+index 000000000000..cd83a95ace41
+--- /dev/null
++++ b/test/shell/fsadm-btrfs.sh
+@@ -0,0 +1,165 @@
++#!/usr/bin/env bash
 +
-+			if ((idname = device_id_system_read(cmd, dev, idtype)))
-+				goto id_done;
++# Copyright (C) 2012 Red Hat, Inc. All rights reserved.
++# This copyrighted material is made available to anyone wishing to use,
++# modify, copy, or redistribute it subject to the terms and conditions
++# of the GNU General Public License v.2.
++#
++# You should have received a copy of the GNU General Public License
++# along with this program; if not, write to the Free Software Foundation,
++# Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 +
-+			log_warn("WARNING: ignoring deviceidtype %s which is not available for device.", idtype_arg);
-+			idtype = 0;
-+		}
-+	}
++test_description='Exercise fsadm btrfs resize'
 +
- 	if (MAJOR(dev->dev) == cmd->dev_types->device_mapper_major) {
- 		if (_dev_has_mpath_uuid(cmd, dev, &idname)) {
- 			idtype = DEV_ID_TYPE_MPATH_UUID;
-@@ -972,19 +991,6 @@ int device_id_add(struct cmd_context *cmd, struct device *dev, const char *pvid_
- 		log_warn("Missing support for DRBD idtype");
- 	}
- 
--	if (idtype_arg) {
--		if (!(idtype = idtype_from_str(idtype_arg)))
--			log_warn("WARNING: ignoring unknown device_id type %s.", idtype_arg);
--		else {
--			if (id_arg) {
--				if (!(idname = strdup(id_arg)))
--					stack;
--				goto id_done;
--			}
--			goto id_name;
--		}
--	}
--
- 	/*
- 	 * No device-specific, existing, or user-specified idtypes,
- 	 * so use first available of sys_wwid / sys_serial / devname.
-diff --git a/man/lvmdevices.8_des b/man/lvmdevices.8_des
-index 015aa1122..2335456ad 100644
---- a/man/lvmdevices.8_des
-+++ b/man/lvmdevices.8_des
-@@ -9,18 +9,18 @@ remove it from the devices file with lvmdevices --deldev.  The
- vgimportdevices(8) command adds all PVs from a VG to the devices file,
- and updates the VG metadata to include device IDs of the PVs.
- .P
--Commands adding new devices to the devices file necessarily look outside
--the existing devices file to find the devices to add.  pvcreate, vgcreate,
--and vgextend also look outside the devices file to create new PVs and add
--them to the devices file.
-+Commands that add new devices to the devices file necessarily look outside
-+the existing devices file to find the devices being added.  pvcreate,
-+vgcreate, and vgextend also look outside the devices file to create new
-+PVs and add those PVs to the devices file.
- .P
- LVM records devices in the devices file using hardware-specific IDs, such
- as the WWID, and attempts to use subsystem-specific IDs for virtual device
--types (which also aim to be as unique and stable as possible.)
--These device IDs are also written in the VG metadata.  When no hardware or
-+types (which also aim to be as unique and stable as possible.) These
-+device IDs are also written in the VG metadata.  When no hardware or
- virtual ID is available, lvm falls back using the unstable device name as
--the device ID.  When devnames are used, lvm performs extra scanning to
--find devices if their devname changes, e.g. after reboot.
-+the device ID.  When devnames are used as IDs, lvm performs extra scanning
-+to find devices if their devname changes, e.g. after reboot.
- .P
- When proper device IDs are used, an lvm command will not look at devices
- outside the devices file, but when devnames are used as a fallback, lvm
-@@ -34,12 +34,13 @@ overriding the devices file.  The listed devices act as a sort of devices
- file in terms of limiting which devices lvm will see and use.  Devices
- that are not listed will appear to be missing to the lvm command.
- .P
--Multiple devices files can be kept in \fI#DEFAULT_SYS_DIR#/devices\fP, which allows lvm
--to be used with different sets of devices, e.g. system devices do not need
--to be exposed to a specific application, and the application can use lvm on
--its own devices that are not exposed to the system.  The option
----devicesfile <filename> is used to select the devices file to use with the
--command.  Without the option set, the default system devices file is used.
-+Multiple devices files can be kept \fI#DEFAULT_SYS_DIR#/devices\fP, which
-+allows lvm to be used with different sets of devices.  For example, system
-+devices do not need to be exposed to a specific application, and the
-+application can use lvm on its own devices that are not exposed to the
-+system.  The option --devicesfile <filename> is used to select the devices
-+file to use with the command.  Without the option set, the default system
-+devices file is used.
- .P
- Setting --devicesfile "" causes lvm to not use a devices file.
- .P
-@@ -59,3 +60,42 @@ if it does not yet exist.
- .P
- It is recommended to use lvm commands to make changes to the devices file to
- ensure proper updates.
-+.P
-+The device ID and device ID type are included in the VG metadata and can
-+be reported with pvs -o deviceid,deviceidtype.  (Note that the lvmdevices
-+command does not update VG metadata, but subsequent lvm commands modifying
-+the metadata will include the device ID.)
-+.P
-+Possible device ID types are:
-+.br
-+.IP \[bu] 2
-+.B sys_wwid
-+uses the wwid reported by sysfs.  This is the first choice for non-virtual
-+devices.
-+.IP \[bu] 2
-+.B sys_serial
-+uses the serial number reported by sysfs.  This is the second choice for
-+non-virtual devices.
-+.IP \[bu] 2
-+.B mpath_uuid
-+is used for dm multipath devices, reported by sysfs.
-+.IP \[bu] 2
-+.B crypt_uuid
-+is used for dm crypt devices, reported by sysfs.
-+.IP \[bu] 2
-+.B md_uuid
-+is used for md devices, reported by sysfs.
-+.B lvmlv_uuid
-+is used if a PV is placed on top of an lvm LV, reported by sysfs.
-+.IP \[bu] 2
-+.B loop_file
-+is used for loop devices, the backing file name repored by sysfs.
-+.IP \[bu] 2
-+.B devname
-+the device name is used if no other type applies.
-+.P
++. lib/inittest
 +
-+The default choice for device ID type can be overriden using lvmdevices
-+--addev --deviceidtype <type>.  If the specified type is available for the
-+device it will be used, otherwise the device will be added using the type
-+that would otherwise be chosen.
-diff --git a/tools/args.h b/tools/args.h
-index 741c82b9f..d4f23f849 100644
---- a/tools/args.h
-+++ b/tools/args.h
-@@ -228,6 +228,11 @@ arg(detachprofile_ARG, '\0', "detachprofile", 0, 0, 0,
-     "Detaches a metadata profile from a VG or LV.\n"
-     "See \\fBlvm.conf\\fP(5) for more information about profiles.\n")
- 
-+arg(deviceidtype_ARG, '\0', "deviceidtype", string_VAL, 0, 0,
-+    "The type of device ID to use for the device.\n"
-+    "If the specified type is available for the device,\n"
-+    "then it will override the default type that lvm would use.\n")
++aux prepare_vg 1 1024
 +
- arg(devices_ARG, '\0', "devices", pv_VAL, ARG_GROUPABLE, 0,
-     "Devices that the command can use. This option can be repeated\n"
-     "or accepts a comma separated list of devices. This overrides\n"
-diff --git a/tools/command-lines.in b/tools/command-lines.in
-index 67c37ffd0..8607305cb 100644
---- a/tools/command-lines.in
-+++ b/tools/command-lines.in
-@@ -1430,6 +1430,7 @@ ID: lvmdevices_update
- DESC: Update the devices file to fix incorrect values.
- 
- lvmdevices --adddev PV
-+OO: --deviceidtype String
- ID: lvmdevices_edit
- DESC: Add a device to the devices file.
- 
-diff --git a/tools/lvmdevices.c b/tools/lvmdevices.c
-index 6b3e05683..3448bdd14 100644
---- a/tools/lvmdevices.c
-+++ b/tools/lvmdevices.c
-@@ -265,6 +265,7 @@ int lvmdevices(struct cmd_context *cmd, int argc, char **argv)
- 
- 	if (arg_is_set(cmd, adddev_ARG)) {
- 		const char *devname;
-+		const char *deviceidtype;
- 
- 		if (!(devname = arg_str_value(cmd, adddev_ARG, NULL)))
- 			goto_bad;
-@@ -311,8 +312,10 @@ int lvmdevices(struct cmd_context *cmd, int argc, char **argv)
- 				 dev_name(dev), dev_filtered_reason(dev));
- 		}
- 
--		/* allow deviceidtype_ARG/deviceid_ARG ? */
--		if (!device_id_add(cmd, dev, dev->pvid, NULL, NULL))
-+		/* also allow deviceid_ARG ? */
-+		deviceidtype = arg_str_value(cmd, deviceidtype_ARG, NULL);
++# set to "skip" to avoid testing given fs and test warning result
++# i.e. check_btrfs=skip
++check_btrfs=
 +
-+		if (!device_id_add(cmd, dev, dev->pvid, deviceidtype, NULL))
- 			goto_bad;
- 		if (!device_ids_write(cmd))
- 			goto_bad;
++which mkfs.btrfs || check_btrfs=${check_btrfs:-mkfs.btrfs}
++which btrfs	 || check_btrfs=${check_btrfs:-btrfs}
++
++vg_lv=$vg/$lv1
++vg_lv2=$vg/${lv1}bar
++vg_lv3=$vg/${lv1}bar2
++dev_vg_lv="$DM_DEV_DIR/$vg_lv"
++dev_vg_lv2="$DM_DEV_DIR/$vg_lv2"
++dev_vg_lv3="$DM_DEV_DIR/$vg_lv3"
++mount_dir="mnt"
++mount_space_dir="mnt space dir"
++# for recursive call
++export LVM_BINARY=$(which lvm)
++
++test ! -d "$mount_dir" && mkdir "$mount_dir"
++test ! -d "$mount_space_dir" && mkdir "$mount_space_dir"
++
++cleanup_mounted_and_teardown()
++{
++	umount "$mount_dir" || true
++	umount "$mount_space_dir" || true
++	aux teardown
++}
++
++check_missing_btrfs()
++{
++	eval local t=$check_btrfs
++	test -z "$t" && return 0
++	test "$t" = skip && return 1
++	# trick for warning test
++	echo "WARNING: fsadm test skipped btrfs tests, $t tool is missing"
++	return 1
++}
++
++fscheck_btrfs() {
++	btrfsck "$1"
++}
++scrub_btrfs() {
++	btrfs scrub start -B "$1"
++}
++
++# btrfs minimal size calculation is complex, we use 64M here.
++lvcreate -n $lv1 -L64M $vg
++lvcreate -n ${lv1}bar -L64M $vg
++lvcreate -n ${lv1}bar2 -L64M $vg
++trap 'cleanup_mounted_and_teardown' EXIT
++
++single_device_test() {
++	mkfs.btrfs -m single "$dev_vg_lv"
++	mkfs.btrfs -m single "$dev_vg_lv2"
++
++	# kernel limits 256 MB as minimal btrfs resizable size
++	# you can grow fs from 30MB->256MB
++	# but you can't grow from 30MB->180MB
++	fsadm --lvresize resize $vg_lv 256M
++	fsadm --lvresize resize $vg_lv2 256M
++
++	not fsadm -y --lvresize resize $vg_lv 200M
++	lvresize -L+10M -r $vg_lv
++	lvreduce -L256M -r $vg_lv
++	fscheck_btrfs $dev_vg_lv
++
++	mount "$dev_vg_lv" "$mount_dir"
++	mount "$dev_vg_lv2" "$mount_space_dir"
++
++	not fsadm -y --lvresize resize $vg_lv 200M
++	lvresize -L+10M -r $vg_lv
++	lvreduce -L256M -r $vg_lv
++	scrub_btrfs $dev_vg_lv
++	umount "$mount_dir"
++
++	not fsadm -y --lvresize resize $vg_lv2 200M
++	lvresize -L+10M -r $vg_lv2
++	lvreduce -L256M -r $vg_lv2
++	scrub_btrfs $dev_vg_lv2
++	umount "$mount_space_dir"
++}
++
++multiple_devices_test() {
++	mkfs.btrfs -m single -d single -f "$dev_vg_lv" "$dev_vg_lv2" "$dev_vg_lv3"
++
++	fsadm -y --lvresize resize $vg_lv 256M
++	fsadm -y --lvresize resize $vg_lv2 256M
++	fsadm -y --lvresize resize $vg_lv3 256M
++
++	# check if fsadm is able to get/resize btrfs on
++	# the right device
++	lvresize -L+150M $vg_lv
++	fsadm -y resize $vg_lv 300M
++	# no space to extend, so failed
++	not fsadm -y resize $vg_lv2 300M
++	not fsadm -y resize $vg_lv3 300M
++	lvreduce -y -L256M -r $vg_lv
++
++	lvresize -L+150M $vg_lv2
++	fsadm -y resize $vg_lv2 300M
++	not fsadm -y resize $vg_lv3 300M
++	not fsadm -y resize $vg_lv 300M
++	lvreduce -y -L256M -r $vg_lv2
++
++	lvresize -L+150M $vg_lv3
++	fsadm -y resize $vg_lv3 300M
++	not fsadm -y resize $vg_lv2 300M
++	not fsadm -y resize $vg_lv 300M
++	lvreduce -y -L256M -r $vg_lv3
++	fscheck_btrfs $dev_vg_lv
++
++	# repeat with mounted fs
++	mount "$dev_vg_lv" "$mount_dir"
++	mount "$dev_vg_lv2" "$mount_space_dir"
++
++	lvresize -L300M $vg_lv
++	fsadm -y resize $vg_lv 300M
++	not fsadm -y resize $vg_lv2 300M
++	not fsadm -y resize $vg_lv3 300M
++	lvreduce -y -L256M -r $vg_lv
++
++	lvresize -L300M $vg_lv2
++	fsadm -y resize $vg_lv2 300M
++	not fsadm -y resize $vg_lv3 300M
++	not fsadm -y resize $vg_lv 300M
++	lvreduce -y -L256M -r $vg_lv2
++
++	lvresize -L300M $vg_lv3
++	fsadm -y resize $vg_lv3 300M
++	not fsadm -y resize $vg_lv2 300M
++	not fsadm -y resize $vg_lv 300M
++	lvreduce -y -L256M -r $vg_lv3
++
++	scrub_btrfs $dev_vg_lv
++	umount "$mount_dir"
++	umount "$mount_space_dir"
++
++	lvresize -nf -L300M $vg_lv
++	lvresize -nf -L300M $vg_lv2
++}
++
++if check_missing_btrfs; then
++
++	single_device_test
++	multiple_devices_test
++fi
++
++vgremove -ff $vg
+-- 
+1.8.3.1
+
 
 
