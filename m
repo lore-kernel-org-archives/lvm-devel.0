@@ -1,93 +1,195 @@
-From: David Teigland <teigland@sourceware.org>
-Date: Wed, 30 Jun 2021 17:02:45 +0000 (GMT)
-Subject: main - tests: skip tests that require blkid BLOCK_SIZE
-Message-ID: <20210630170245.BBB79385E008@sourceware.org>
+From: Heming Zhao <heming.zhao@suse.com>
+Date: Wed, 30 Jun 2021 22:32:42 +0800
+Subject: [PATCH 1/3] fsadm: add support to resize & check btrfs filesystem
+Message-ID: <20210630143244.7318-1-heming.zhao@suse.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=a47e20a0929bc0d399851c398e7e3d06e97daf65
-Commit:        a47e20a0929bc0d399851c398e7e3d06e97daf65
-Parent:        39f497b9d8d35c77716014a3ba7074a2fc8955ac
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Wed Jun 30 11:56:42 2021 -0500
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Wed Jun 30 11:56:42 2021 -0500
+resize:
+btrfs volume may spanning across multiple block devices. resize action should
+specific subvolume to not to break the filesystem on LV about to get resized
+with lvresize.
 
-tests: skip tests that require blkid BLOCK_SIZE
+this patch finds the mount point first and resizes the filesystem after
+getting the device id since there are maybe several devices underneath btrfs
+filesystem
 
-Recent commit 84bd394cf9aaa581b4bf980f764544dda26a0305
-  "writecache: use block size 4096 when no fs is found"
+check:
+check the data integrity.
+this patch mounts the device first and then runs `btrfs filesystem scrub
+start -B` command
 
-changed the default writecache block size from 512 to 4096
-when no file system is detected.  The fs block size detection
-requires the libblkid BLOCK_SIZE feature, so skip tests on
-systems without this.  Otherwise, 4096 writecache added to
-512 xfs leads fs io or mount failures.
+refer legacy patches:
+- Ondrej Kozina <okozina@redhat.com>
+  https://listman.redhat.com/archives/lvm-devel/2012-November/msg00052.html
+- Lidong Zhong <lzhong@suse.com>
+  https://listman.redhat.com/archives/lvm-devel/2015-March/msg00053.html
+
+Signed-off-by: Heming Zhao <heming.zhao@suse.com>
 ---
- test/shell/lvextend-caches-on-thindata.sh  | 8 ++++++++
- test/shell/writecache-cache-blocksize-2.sh | 8 ++++++++
- test/shell/writecache.sh                   | 8 ++++++++
- 3 files changed, 24 insertions(+)
+ scripts/fsadm.sh | 88 ++++++++++++++++++++++++++++++++++++++++++++++++++++++--
+ 1 file changed, 86 insertions(+), 2 deletions(-)
 
-diff --git a/test/shell/lvextend-caches-on-thindata.sh b/test/shell/lvextend-caches-on-thindata.sh
-index aab571611..ef47d76d0 100644
---- a/test/shell/lvextend-caches-on-thindata.sh
-+++ b/test/shell/lvextend-caches-on-thindata.sh
-@@ -118,6 +118,14 @@ mkdir -p "$mount_dir"
+diff --git a/scripts/fsadm.sh b/scripts/fsadm.sh
+index 9ae422f55edf..a7345c503f77 100755
+--- a/scripts/fsadm.sh
++++ b/scripts/fsadm.sh
+@@ -22,6 +22,7 @@
+ # ext2/ext3/ext4: resize2fs, tune2fs
+ # reiserfs: resize_reiserfs, reiserfstune
+ # xfs: xfs_growfs, xfs_info
++# btrfs: btrfs
+ #
+ # Return values:
+ #   0 success
+@@ -59,6 +60,7 @@ XFS_CHECK="xfs_check"
+ # XFS_REPAIR -n is used when XFS_CHECK is not found
+ XFS_REPAIR="xfs_repair"
+ CRYPTSETUP="cryptsetup"
++BTRFS="btrfs"
  
- aux prepare_devs 6 70 # want 64M of usable space from each dev
+ # user may override lvm location by setting LVM_BINARY
+ LVM=${LVM_BINARY:-lvm}
+@@ -78,6 +80,9 @@ BLOCKCOUNT=
+ MOUNTPOINT=
+ MOUNTED=
+ REMOUNT=
++FINDMNT=
++UUID=
++BTRFS_DEVID=
+ PROCDIR="/proc"
+ PROCMOUNTS="$PROCDIR/mounts"
+ PROCSELFMOUNTINFO="$PROCDIR/self/mountinfo"
+@@ -237,6 +242,33 @@ detect_fs() {
+ 	verbose "\"$FSTYPE\" filesystem found on \"$VOLUME\"."
+ }
  
-+# Tests with fs block sizes require a libblkid version that shows BLOCK_SIZE
-+vgcreate $vg "$dev1"
-+lvcreate -n $lv1 -L50 $vg
-+mkfs.xfs -f "$DM_DEV_DIR/$vg/$lv1"
-+blkid -c /dev/null "$DM_DEV_DIR/$vg/$lv1" | grep BLOCK_SIZE || skip
-+lvchange -an $vg
-+vgremove -ff $vg
++check_findmnt() {
++	FINDMNT=$(which findmnt 2>$NULL)
++	test -n "$FINDMNT"
++}
 +
- # generate random data
- dd if=/dev/urandom of=pattern bs=512K count=1
- 
-diff --git a/test/shell/writecache-cache-blocksize-2.sh b/test/shell/writecache-cache-blocksize-2.sh
-index af4f60e1d..dfb4f19a1 100644
---- a/test/shell/writecache-cache-blocksize-2.sh
-+++ b/test/shell/writecache-cache-blocksize-2.sh
-@@ -159,6 +159,14 @@ _run_test() {
- aux prepare_scsi_debug_dev 256 sector_size=512 physblk_exp=3
- aux prepare_devs 2 64
- 
-+# Tests with fs block sizes require a libblkid version that shows BLOCK_SIZE
-+vgcreate $vg "$dev1"
-+lvcreate -n $lv1 -L50 $vg
-+mkfs.xfs -f "$DM_DEV_DIR/$vg/$lv1"
-+blkid -c /dev/null "$DM_DEV_DIR/$vg/$lv1" | grep BLOCK_SIZE || skip
-+lvchange -an $vg
-+vgremove -ff $vg
++detect_fs_uuid() {
++	UUID=$($BLKID -o value -c $NULL -s UUID "$VOLUME" 2>$NULL)
++	test -n "$UUID"
++}
 +
- # loopa/loopb have LBS 512 PBS 512
- which fallocate || skip
- fallocate -l 64M loopa
-diff --git a/test/shell/writecache.sh b/test/shell/writecache.sh
-index e549b113c..421c5bb4f 100644
---- a/test/shell/writecache.sh
-+++ b/test/shell/writecache.sh
-@@ -25,6 +25,14 @@ check sysfs "$(< SCSI_DEBUG_DEV)" queue/logical_block_size "512"
- check sysfs "$(< SCSI_DEBUG_DEV)" queue/physical_block_size "512"
- aux prepare_devs 2 64
- 
-+# Tests with fs block sizes require a libblkid version that shows BLOCK_SIZE
-+vgcreate $vg "$dev1"
-+lvcreate -n $lv1 -L50 $vg
-+mkfs.xfs -f "$DM_DEV_DIR/$vg/$lv1"
-+blkid -c /dev/null "$DM_DEV_DIR/$vg/$lv1" | grep BLOCK_SIZE || skip
-+lvchange -an $vg
-+vgremove -ff $vg
++#find the mountpoint of this device
++detect_mounted_findmnt() {
++	local TMP
++	local STR_IFS=$IFS
++	IFS=" $(echo -n -e '\t')"
 +
- # scsi_debug devices with 512 LBS and 4K PBS
- #aux prepare_scsi_debug_dev 256 sector_size=512 physblk_exp=3
- #check sysfs "$(< SCSI_DEBUG_DEV)" queue/logical_block_size "512"
++	read -r TMP<<EOF
++$($FINDMNT -nuP -o TARGET,UUID 2>$NULL | $GREP "$UUID")
++EOF
++
++	TMP=${TMP##*TARGET=\"}
++	TMP=${TMP%%\"*}
++	MOUNTED=$TMP
++	test -n "$MOUNTED"
++
++	IFS=$STR_IFS
++}
+ 
+ # Check that passed mounted MAJOR:MINOR is not matching $MAJOR:MINOR of resized $VOLUME
+ validate_mounted_major_minor() {
+@@ -365,7 +397,11 @@ detect_mounted_with_proc_mounts() {
+ # check if the given device is already mounted and where
+ # FIXME: resolve swap usage and device stacking
+ detect_mounted() {
+-	if test -e "$PROCSELFMOUNTINFO"; then
++	if test "$FSTYPE" = "btrfs" ; then
++		check_findmnt || error "Need 'findmnt' utility to work with btrfs filesystem"
++		detect_fs_uuid || verbose "Can't get fs UUID from \"$VOLUME\" volume"
++		detect_mounted_findmnt
++	elif test -e "$PROCSELFMOUNTINFO"; then
+ 		detect_mounted_with_proc_self_mountinfo
+ 	elif test -e "$PROCMOUNTS"; then
+ 		detect_mounted_with_proc_mounts
+@@ -662,6 +698,47 @@ resize_crypt() {
+ 	dry "$CRYPTSETUP" resize "$1" --size $CRYPT_RESIZE_BLOCKS || error "$CRYPTSETUP failed to resize device $1"
+ }
+ 
++########################
++# Resize btrfs filesystem
++# - mounted for upsize/downsize
++# - cannot resize when unmounted
++########################
++resize_btrfs() {
++	detect_mounted
++	MOUNTPOINT=$MOUNTED
++	if [ -z "$MOUNTED" ]; then
++		MOUNTPOINT=$TEMPDIR
++		temp_mount || error "Cannot mount Btrfs filesystem"
++	fi
++
++	verbose "Parsing $BTRFS filesystem show \"$MOUNTPOINT\""
++	for i in $(LC_ALL=C "$BTRFS" filesystem show "$MOUNTPOINT"); do
++		case "$i" in
++		  *"$VOLUME") BTRFS_DEVID=${i##*devid};;
++		esac
++	done
++
++	# If dev doesn't locate in "/dev", 'btrfs filesystem show' will mistakely
++	# report path. Below is a work around to get correct lvm dev path.
++	if [ -z "$BTRFS_DEVID" ];then
++		for i in $(LC_ALL=C "$BTRFS" filesystem show "$MOUNTPOINT"); do
++			case "$i" in
++				*" path "*)
++					path_str=${i##*path}
++					path_str=$(echo $path_str|sed 's/^[ \t]*//g'|sed 's/[ \t]*$'//g)
++					result=$(echo $VOLUME | grep -E "${path_str}$")
++					test -n "$result" && BTRFS_DEVID=${i##*devid}
++					;;
++			esac
++		done
++	fi
++	BTRFS_DEVID=${BTRFS_DEVID%%size*}
++	BTRFS_DEVID=$(echo $BTRFS_DEVID|sed 's/^[ \t]*//g'|sed 's/[ \t]*$'//g)
++	decode_size $1 1
++	verbose "Resizing filesystem on device \"$VOLUME\" to $NEWSIZE bytes(btrfs devid: $BTRFS_DEVID) "
++	dry "$BTRFS" filesystem resize "$BTRFS_DEVID":"$NEWSIZE" "$MOUNTPOINT"
++}
++
+ ####################
+ # Resize filesystem
+ ####################
+@@ -685,6 +762,7 @@ resize() {
+ 	  "crypto_LUKS")
+ 		which "$CRYPTSETUP" >"$NULL" 2>&1 || error "$CRYPTSETUP utility required to resize LUKS volume"
+ 		CMD=resize_luks ;;
++	  "btrfs") CMD=resize_btrfs ;;
+ 	  *) error "Filesystem \"$FSTYPE\" on device \"$VOLUME\" is not supported by this tool." ;;
+ 	esac
+ 
+@@ -762,6 +840,12 @@ check() {
+ 		which "$CRYPTSETUP" >"$NULL" 2>&1 || error "$CRYPTSETUP utility required."
+ 		check_luks || error "Crypto luks check failed."
+ 		;;
++	  "btrfs") #mount the device first and then run scrub
++		 MOUNTPOINT=$TEMPDIR
++		 temp_mount || error "Cannot mount btrfs filesystem"
++		 dry "$BTRFS" scrub start -B "$VOLUME"
++		 test "$MOUNTPOINT" = "$TEMPDIR" && MOUNTPOINT="" temp_umount
++		 ;;
+ 	  *)
+ 		error "Filesystem \"$FSTYPE\" on device \"$VOLUME\" is not supported by this tool." ;;
+ 	esac
+@@ -780,7 +864,7 @@ test -n "${FSADM_RUNNING-}" && exit 0
+ for i in "$TUNE_EXT" "$RESIZE_EXT" "$TUNE_REISER" "$RESIZE_REISER" \
+ 	"$TUNE_XFS" "$RESIZE_XFS" "$MOUNT" "$UMOUNT" "$MKDIR" \
+ 	"$RMDIR" "$BLOCKDEV" "$BLKID" "$GREP" "$READLINK" \
+-	"$DATE" "$FSCK" "$XFS_CHECK" "$XFS_REPAIR" "$LVM" ; do
++	"$DATE" "$FSCK" "$XFS_CHECK" "$XFS_REPAIR" "$LVM" "$BTRFS" ; do
+ 	test -n "$i" || error "Required command definitions in the script are missing!"
+ done
+ 
+-- 
+1.8.3.1
+
 
 
