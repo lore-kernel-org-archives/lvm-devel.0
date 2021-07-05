@@ -1,41 +1,89 @@
-From: Heinz Mauelshagen <heinzm@sourceware.org>
-Date: Wed, 29 Mar 2017 18:44:49 -0400
-Subject: master - man-generator: catch missing command name
-Message-ID: <201703292244.v2TMinMp016503@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: Zhong Lidong <lidong.zhong@suse.com>
+Date: Mon, 5 Jul 2021 16:00:48 +0800
+Subject: lvconvert: fix the size of log device when converting from linear to mirror
+Message-ID: <f2b4e94e-ef67-33fb-d818-8518ac33ad4b@suse.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=2f1fd1584efc46e69453a38788ad22470f73698a
-Commit:        2f1fd1584efc46e69453a38788ad22470f73698a
-Parent:        df86ee8c2198abfbc8429813614636511be66402
-Author:        Heinz Mauelshagen <heinzm@redhat.com>
-AuthorDate:    Thu Mar 30 00:39:26 2017 +0200
-Committer:     Heinz Mauelshagen <heinzm@redhat.com>
-CommitterDate: Thu Mar 30 00:44:34 2017 +0200
+When converting a large linear device to mirror with --stripes parameter
+in lvconvert command, it will report the following error:
 
-man-generator: catch missing command name
+ioctl/libdm-iface.c:1895    device-mapper: reload ioctl on  (254:0)
+failed: Invalid argument
 
+and the related kernel messages:
+
+kernel: [ 2290.698171] device-mapper: dirty region log: log device 254:1
+too small: need 7078912 bytes
+kernel: [ 2290.698248] device-mapper: table: 254:0: mirror: Error
+creating mirror dirty log
+kernel: [ 2290.698251] device-mapper: ioctl: error adding target to table
+
+Steps to reproduce this problem
+~$:pvs
+  PV         VG Fmt  Attr PSize  PFree
+  /dev/loop0 vg lvm2 a--  10.00t 10.00t
+  /dev/loop1 vg lvm2 a--  10.00t 10.00t
+  /dev/loop2 vg lvm2 a--  10.00t 10.00t
+  /dev/loop3    lvm2 ---  10.00t 10.00t
+  /dev/loop4    lvm2 ---  10.00t 10.00t
+  /dev/loop5    lvm2 ---  10.00t 10.00t
+
+~$:lvcreate -nlv  -L27T vg
+  Logical volume "lv" created.
+
+~$:vgextend vg /dev/loop[3-5]
+  Volume group "vg" successfully extended
+
+~$:lvconvert  --type mirror --mirrors 1 --stripes 3 -I256  /dev/vg/lv
+/dev/loop3 /dev/loop4 /dev/loop5
+  device-mapper: reload ioctl on  (254:0) failed: Invalid argument
+  Failed to lock logical volume vg/lv.
+~$: lvs
+  WARNING: Reading VG vg from disk because lvmetad metadata is invalid.
+  LV      VG Attr       LSize  Pool Origin Data%  Meta%  Move Log
+Cpy%Sync Convert
+  lv      vg -wi-a----- 27.00t
+  lv_mlog vg -wi-a-----  4.00m
+~$: pvs
+  PV         VG Fmt  Attr PSize  PFree
+  /dev/loop0 vg lvm2 a--  10.00t     0
+  /dev/loop1 vg lvm2 a--  10.00t     0
+  /dev/loop2 vg lvm2 a--  10.00t  3.00t
+  /dev/loop3 vg lvm2 a--  10.00t 10.00t
+  /dev/loop4 vg lvm2 a--  10.00t 10.00t
+  /dev/loop5 vg lvm2 a--  10.00t 10.00t
+
+Analysis: In kernel space the required log size depends on the whole
+target device size.But in user space, the log size is calculated from
+the whole target devices size divided by allocation area number, which
+leads to the mismatch here.
+
+Signed-off-by: Lidong Zhong <lidong.zhong@suse.com>
 ---
- tools/command.c |    4 ++++
- 1 files changed, 4 insertions(+), 0 deletions(-)
+ lib/metadata/lv_manip.c | 3 +--
+ 1 file changed, 1 insertion(+), 2 deletions(-)
 
-diff --git a/tools/command.c b/tools/command.c
-index 8a739f0..9a80812 100644
---- a/tools/command.c
-+++ b/tools/command.c
-@@ -3439,6 +3439,10 @@ int main(int argc, char *argv[])
- 
- 	if (optind < argc)
- 		cmdname = strdup(argv[optind++]);
-+	else {
-+		log_error("Missing command name");
-+		exit(EXIT_FAILURE);
-+	}
- 
- 	if (optind < argc)
- 		desfile = argv[optind++];
+diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
+index 7e66afd9c..e8d67c79b 100644
+--- a/lib/metadata/lv_manip.c
++++ b/lib/metadata/lv_manip.c
+@@ -3730,8 +3730,7 @@ static struct alloc_handle *_alloc_init(struct
+cmd_context *cmd,
+ 	} else {
+ 		ah->log_area_count = metadata_area_count;
+ 		ah->log_len = !metadata_area_count ? 0 :
+-			_mirror_log_extents(ah->region_size, extent_size,
+-					    (existing_extents + new_extents) / ah->area_multiple);
++			_mirror_log_extents(ah->region_size, extent_size, existing_extents +
+new_extents);
+ 	}
+
+ 	if (total_extents || existing_extents)
+-- 
+2.26.2
 
 
