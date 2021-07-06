@@ -1,240 +1,162 @@
 From: David Teigland <teigland@sourceware.org>
-Date: Tue,  6 Jul 2021 15:10:59 +0000 (GMT)
-Subject: main - scan: move metadata vgname check
-Message-ID: <20210706151059.43C4F388CC01@sourceware.org>
+Date: Tue,  6 Jul 2021 15:18:51 +0000 (GMT)
+Subject: main - pvscan: skip indexing devices used by LVs
+Message-ID: <20210706151851.02259388E822@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=b876dbfc245b8fe0a4c433b39d214652455c3f9e
-Commit:        b876dbfc245b8fe0a4c433b39d214652455c3f9e
-Parent:        e035e323508383fdcd9df0ef036d276a9c9909ab
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=d5a06f9a7df5a43b2e2311db62ff8d3011217d74
+Commit:        d5a06f9a7df5a43b2e2311db62ff8d3011217d74
+Parent:        b876dbfc245b8fe0a4c433b39d214652455c3f9e
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Tue Jun 29 12:40:03 2021 -0500
+AuthorDate:    Thu Jul 1 17:25:43 2021 -0500
 Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Tue Jul 6 10:10:23 2021 -0500
+CommitterDate: Tue Jul 6 10:18:07 2021 -0500
 
-scan: move metadata vgname check
+pvscan: skip indexing devices used by LVs
 
-There have been two separate checks for metadata
-validity: first that the metadata text begins with
-a valid VG name, and second the checksum of the
-metadata text.  These happen in different places,
-which means there have been two separate error paths
-for invalid metadata.  This also causes large metadata
-to be read in multiple parts, the first part is read
-just to check the vgname, and then remaining parts are
-read later when the full metadata is needed.
+dev_cache_index_devs() is taking a large amount of time
+when there are many PVs.  The index keeps track of
+devices that are currently in use by active LVs.  This
+info is used to print warnings for users in some limited
+cases.
 
-This patch moves the vg name verification so it's
-done just before the checksum verification, which
-results in a single error path for invalid metadata,
-and causes the entire metadata to be read together
-rather that in parts from different parts of the code.
+The checks/warnings that are enabled by the index are not
+needed by pvscan --cache, so disable it in this case.
+
+This may be expanded to other cases in future commits.
+dev_cache_index_devs should also be improved in another
+commit to avoid the extreme delays with many devices.
 ---
- lib/config/config.c           | 25 +++++++++++-
- lib/format_text/format-text.c | 94 +++++--------------------------------------
- 2 files changed, 33 insertions(+), 86 deletions(-)
+ lib/commands/toolcontext.c | 1 +
+ lib/commands/toolcontext.h | 1 +
+ lib/device/dev-cache.c     | 9 +++++----
+ lib/device/dev-cache.h     | 2 +-
+ lib/metadata/metadata.c    | 3 ++-
+ tools/lvmdevices.c         | 2 +-
+ tools/pvscan.c             | 2 ++
+ 7 files changed, 13 insertions(+), 7 deletions(-)
 
-diff --git a/lib/config/config.c b/lib/config/config.c
-index 485063a3d..25a87c983 100644
---- a/lib/config/config.c
-+++ b/lib/config/config.c
-@@ -501,6 +501,9 @@ int config_file_read_fd(struct dm_config_tree *cft, struct device *dev, dev_io_r
- 			checksum_fn_t checksum_fn, uint32_t checksum,
- 			int checksum_only, int no_dup_node_check)
- {
-+	char namebuf[NAME_LEN + 1] __attribute__((aligned(8)));
-+	int namelen = 0;
-+	int bad_name = 0;
- 	char *fb, *fe;
- 	int r = 0;
- 	int sz, use_plain_read = 1;
-@@ -548,6 +551,23 @@ int config_file_read_fd(struct dm_config_tree *cft, struct device *dev, dev_io_r
+diff --git a/lib/commands/toolcontext.c b/lib/commands/toolcontext.c
+index e2be89d0f..b295a20ef 100644
+--- a/lib/commands/toolcontext.c
++++ b/lib/commands/toolcontext.c
+@@ -1608,6 +1608,7 @@ struct cmd_context *create_toolcontext(unsigned is_clvmd,
+ 	cmd->handles_missing_pvs = 0;
+ 	cmd->handles_unknown_segments = 0;
+ 	cmd->hosttags = 0;
++	cmd->check_devs_used = 1;
+ 	dm_list_init(&cmd->arg_value_groups);
+ 	dm_list_init(&cmd->formats);
+ 	dm_list_init(&cmd->segtypes);
+diff --git a/lib/commands/toolcontext.h b/lib/commands/toolcontext.h
+index a47b7d760..34808ce46 100644
+--- a/lib/commands/toolcontext.h
++++ b/lib/commands/toolcontext.h
+@@ -192,6 +192,7 @@ struct cmd_context {
+ 	unsigned filter_nodata_only:1;          /* only use filters that do not require data from the dev */
+ 	unsigned run_by_dmeventd:1;		/* command is being run by dmeventd */
+ 	unsigned sysinit:1;			/* --sysinit is used */
++	unsigned check_devs_used:1;		/* check devs used by LVs */
  
- 	fb = buf;
- 
-+	if (!(dev->flags & DEV_REGULAR)) {
-+		memcpy(namebuf, buf, NAME_LEN);
-+
-+		while (namebuf[namelen] && !isspace(namebuf[namelen]) && namebuf[namelen] != '{' && namelen < (NAME_LEN - 1))
-+			namelen++;
-+		namebuf[namelen] = '\0';
-+
-+		/*
-+		 * Check that the text metadata begins with a valid name.
-+		 */
-+		if (!validate_name(namebuf)) {
-+			log_warn("WARNING: Metadata location on %s at offset %llu begins with invalid name.",
-+				 dev_name(dev), (unsigned long long)offset);
-+			bad_name = 1;
-+		}
-+	}
-+
  	/*
- 	 * The checksum passed in is the checksum from the mda_header
- 	 * preceding this metadata.  They should always match.
-@@ -557,10 +577,13 @@ int config_file_read_fd(struct dm_config_tree *cft, struct device *dev, dev_io_r
- 	if (checksum_fn && checksum !=
- 	    (checksum_fn(checksum_fn(INITIAL_CRC, (const uint8_t *)fb, size),
- 			 (const uint8_t *)(fb + size), size2))) {
--		log_error("%s: Checksum error at offset %" PRIu64, dev_name(dev), (uint64_t) offset);
-+		log_warn("WARNING: Checksum error on %s@offset %llu.", dev_name(dev), (unsigned long long)offset);
- 		goto out;
- 	}
- 
-+	if (bad_name)
-+		goto out;
-+
- 	if (!checksum_only) {
- 		fe = fb + size + size2;
- 		if (no_dup_node_check) {
-diff --git a/lib/format_text/format-text.c b/lib/format_text/format-text.c
-index dd550a6eb..26e55cec4 100644
---- a/lib/format_text/format-text.c
-+++ b/lib/format_text/format-text.c
-@@ -296,24 +296,11 @@ static struct raw_locn *_read_metadata_location_vg(struct cmd_context *cmd,
- 				       const char *vgname,
- 				       int *precommitted)
- {
--	size_t len;
--	char vgnamebuf[NAME_LEN + 2] __attribute__((aligned(8)));
- 	struct raw_locn *rlocn, *rlocn_precommitted;
--	struct lvmcache_info *info;
--	struct lvmcache_vgsummary vgsummary_orphan = {
--		.vgname = FMT_TEXT_ORPHAN_VG_NAME,
--	};
--	int rlocn_was_ignored;
--
--	dm_list_init(&vgsummary_orphan.pvsummaries);
--
--	memcpy(&vgsummary_orphan.vgid, FMT_TEXT_ORPHAN_VG_NAME, sizeof(FMT_TEXT_ORPHAN_VG_NAME));
- 
- 	rlocn = mdah->raw_locns;	/* Slot 0 */
- 	rlocn_precommitted = rlocn + 1;	/* Slot 1 */
- 
--	rlocn_was_ignored = rlocn_is_ignored(rlocn);
--
- 	/* Should we use precommitted metadata? */
- 	if (*precommitted && rlocn_precommitted->size &&
- 	    (rlocn_precommitted->offset != rlocn->offset)) {
-@@ -338,42 +325,7 @@ static struct raw_locn *_read_metadata_location_vg(struct cmd_context *cmd,
- 	if (!rlocn->offset && !rlocn->size)
- 		return NULL;
- 
--	/*
--	 * Don't try to check existing metadata
--	 * if given vgname is an empty string.
--	 */
--	if (!vgname || !*vgname)
--		return rlocn;
--
--	/*
--	 * If live rlocn has ignored flag, data will be out-of-date so skip further checks.
--	 */
--	if (rlocn_was_ignored)
--		return rlocn;
--
--	/*
--	 * Verify that the VG metadata pointed to by the rlocn
--	 * begins with a valid vgname.
--	 */
--	memset(vgnamebuf, 0, sizeof(vgnamebuf));
--
--	if (!dev_read_bytes(dev_area->dev, dev_area->start + rlocn->offset, NAME_LEN, vgnamebuf))
--		goto fail;
--
--	if (!strncmp(vgnamebuf, vgname, len = strlen(vgname)) &&
--	    (isspace(vgnamebuf[len]) || vgnamebuf[len] == '{'))
--		return rlocn;
-- fail:
--	log_error("Metadata on %s at %llu has wrong VG name \"%s\" expected %s.",
--		  dev_name(dev_area->dev),
--		  (unsigned long long)(dev_area->start + rlocn->offset),
--		  vgnamebuf, vgname);
--
--	if ((info = lvmcache_info_from_pvid(dev_area->dev->pvid, dev_area->dev, 0)) &&
--	    !lvmcache_update_vgname_and_id(cmd, info, &vgsummary_orphan))
--		stack;
--
--	return NULL;
-+	return rlocn;
+ 	 * Devices and filtering.
+diff --git a/lib/device/dev-cache.c b/lib/device/dev-cache.c
+index d7fa93fd6..bb0d0f211 100644
+--- a/lib/device/dev-cache.c
++++ b/lib/device/dev-cache.c
+@@ -1139,7 +1139,7 @@ static int _insert(const char *path, const struct stat *info,
+ 	return 1;
  }
  
- /*
-@@ -487,9 +439,13 @@ static struct volume_group *_vg_read_raw_area(struct cmd_context *cmd,
- 				rlocn->checksum,
- 				&when, &desc);
- 
--	if (!vg) {
--		/* FIXME: detect and handle errors, and distinguish from the optimization
--		   that skips parsing the metadata which also returns NULL. */
-+	if (!vg && !*use_previous_vg) {
-+		log_warn("WARNING: failed to read metadata text on %s at %llu size %llu for VG %s.",
-+			 dev_name(area->dev),
-+			 (unsigned long long)(area->start + rlocn->offset),
-+			 (unsigned long long)rlocn->size,
-+			 vgname);
-+		return NULL;
- 	}
- 
- 	log_debug_metadata("Found metadata on %s at %llu size %llu for VG %s",
-@@ -498,7 +454,7 @@ static struct volume_group *_vg_read_raw_area(struct cmd_context *cmd,
- 			   (unsigned long long)rlocn->size,
- 			   vgname);
- 
--	if (vg && precommitted)
-+	if (precommitted)
- 		vg->status |= PRECOMMITTED;
- 
-       out:
-@@ -1533,8 +1489,6 @@ int read_metadata_location_summary(const struct format_type *fmt,
+-void dev_cache_scan(void)
++void dev_cache_scan(struct cmd_context *cmd)
  {
- 	struct raw_locn *rlocn;
- 	uint32_t wrap = 0;
--	unsigned int len = 0;
--	char namebuf[NAME_LEN + 1] __attribute__((aligned(8)));
- 	uint64_t max_size;
+ 	log_debug_devs("Creating list of system devices.");
  
- 	if (!mdah) {
-@@ -1563,36 +1517,6 @@ int read_metadata_location_summary(const struct format_type *fmt,
- 		return 0;
- 	}
+@@ -1147,7 +1147,8 @@ void dev_cache_scan(void)
  
--	/*
--	 * This code reading the start of the metadata area and verifying that
--	 * it looks like a vgname can be removed.  The checksum verifies it.
--	 */
--	log_debug_metadata("Reading metadata_vgname summary from %s at %llu",
--			   dev_name(dev_area->dev),
--			   (unsigned long long)(dev_area->start + rlocn->offset));
--
--	memset(namebuf, 0, sizeof(namebuf));
--
--	if (!dev_read_bytes(dev_area->dev, dev_area->start + rlocn->offset, NAME_LEN, namebuf))
--		stack;
--
--	while (namebuf[len] && !isspace(namebuf[len]) && namebuf[len] != '{' &&
--	       len < (NAME_LEN - 1))
--		len++;
--
--	namebuf[len] = '\0';
--
--	/*
--	 * Check that the text metadata in the circular buffer begins with a
--	 * valid vg name.
--	 */
--	if (!validate_name(namebuf)) {
--		log_warn("WARNING: Metadata location on %s@%llu begins with invalid VG name.",
--			  dev_name(dev_area->dev),
--			  (unsigned long long)(dev_area->start + rlocn->offset));
--		return 0;
--	}
--
+ 	_insert_dirs(&_cache.dirs);
+ 
+-	(void) dev_cache_index_devs();
++	if (cmd->check_devs_used)
++		(void) dev_cache_index_devs();
+ }
+ 
+ int dev_cache_has_scanned(void)
+@@ -1583,7 +1584,7 @@ struct device *dev_cache_get_by_devt(struct cmd_context *cmd, dev_t dev, struct
+ 
+ 		log_debug_devs("Device num not found in dev_cache repeat dev_cache_scan for %d:%d",
+ 				(int)MAJOR(dev), (int)MINOR(dev));
+-		dev_cache_scan();
++		dev_cache_scan(cmd);
+ 		d = (struct device *) btree_lookup(_cache.devices, (uint32_t) dev);
+ 
+ 		if (!d)
+@@ -1953,7 +1954,7 @@ int setup_devices(struct cmd_context *cmd)
+ 	 * This will not open or read any devices, but may look at sysfs properties.
+ 	 * This list of devs comes from looking /dev entries, or from asking libudev.
+ 	 */
+-	dev_cache_scan();
++	dev_cache_scan(cmd);
+ 
  	/*
- 	 * This function is used to read the vg summary during label scan.
- 	 * Save the text start location and checksum during scan.  After the VG
+ 	 * Match entries from cmd->use_devices with device structs in dev-cache.
+diff --git a/lib/device/dev-cache.h b/lib/device/dev-cache.h
+index 9b7e39d33..c3f5eddda 100644
+--- a/lib/device/dev-cache.h
++++ b/lib/device/dev-cache.h
+@@ -48,7 +48,7 @@ int dev_cache_exit(void);
+  */
+ int dev_cache_check_for_open_devices(void);
+ 
+-void dev_cache_scan(void);
++void dev_cache_scan(struct cmd_context *cmd);
+ int dev_cache_has_scanned(void);
+ 
+ int dev_cache_add_dir(const char *path);
+diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
+index d5b28a58f..0cbf67869 100644
+--- a/lib/metadata/metadata.c
++++ b/lib/metadata/metadata.c
+@@ -5132,7 +5132,8 @@ struct volume_group *vg_read(struct cmd_context *cmd, const char *vg_name, const
+ 	if (!check_pv_dev_sizes(vg))
+ 		log_warn("WARNING: One or more devices used as PVs in VG %s have changed sizes.", vg->name);
+ 
+-	_check_devs_used_correspond_with_vg(vg);
++	if (cmd->check_devs_used)
++		_check_devs_used_correspond_with_vg(vg);
+ 
+ 	if (!_access_vg_lock_type(cmd, vg, lockd_state, &failure)) {
+ 		/* Either FAILED_LOCK_TYPE or FAILED_LOCK_MODE were set. */
+diff --git a/tools/lvmdevices.c b/tools/lvmdevices.c
+index 3448bdd14..5117277a0 100644
+--- a/tools/lvmdevices.c
++++ b/tools/lvmdevices.c
+@@ -171,7 +171,7 @@ int lvmdevices(struct cmd_context *cmd, int argc, char **argv)
+ 		log_error("Failed to read the devices file.");
+ 		return ECMD_FAILED;
+ 	}
+-	dev_cache_scan();
++	dev_cache_scan(cmd);
+ 	device_ids_match(cmd);
+ 
+ 	if (arg_is_set(cmd, check_ARG) || arg_is_set(cmd, update_ARG)) {
+diff --git a/tools/pvscan.c b/tools/pvscan.c
+index f8d27372b..464501ad5 100644
+--- a/tools/pvscan.c
++++ b/tools/pvscan.c
+@@ -1627,6 +1627,8 @@ int pvscan_cache_cmd(struct cmd_context *cmd, int argc, char **argv)
+ 
+ 	dm_list_init(&complete_vgnames);
+ 
++	cmd->check_devs_used = 0;
++
+ 	if (do_activate &&
+ 	    !find_config_tree_bool(cmd, global_event_activation_CFG, NULL)) {
+ 		log_verbose("Ignoring pvscan --cache -aay because event_activation is disabled.");
 
 
