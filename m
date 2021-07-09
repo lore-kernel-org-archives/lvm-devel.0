@@ -1,83 +1,147 @@
-From: Lidong Zhong <lidong.zhong@suse.com>
-Date: Wed,  7 Jul 2021 13:58:11 +0800
-Subject: [RFC PATCH] lvconvert: fix the size of log device when converting from linear to mirror
-Message-ID: <20210707055811.10008-1-lidong.zhong@suse.com>
+From: Zdenek Kabelac <zkabelac@sourceware.org>
+Date: Fri,  9 Jul 2021 12:59:20 +0000 (GMT)
+Subject: main - configure: updates
+Message-ID: <20210709125920.3E8FA384BC11@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-When converting a large linear device to mirror with --stripes parameter
-in lvconvert command, it will report the following error:
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=3a92d633a5a23377aa0d5d4ed5a01db8ca14cf69
+Commit:        3a92d633a5a23377aa0d5d4ed5a01db8ca14cf69
+Parent:        d5a06f9a7df5a43b2e2311db62ff8d3011217d74
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Fri Jul 9 14:42:26 2021 +0200
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Fri Jul 9 14:57:59 2021 +0200
 
-ioctl/libdm-iface.c:1895    device-mapper: reload ioctl on  (254:0) failed: Invalid argument
+configure: updates
 
-and the related kernel messages:
-
-kernel: [ 2290.698171] device-mapper: dirty region log: log device 254:1 too small: need 7078912 bytes
-kernel: [ 2290.698248] device-mapper: table: 254:0: mirror: Error creating mirror dirty log
-kernel: [ 2290.698251] device-mapper: ioctl: error adding target to table
-
-Steps to reproduce this problem
-~$:pvs
-  PV         VG Fmt  Attr PSize  PFree
-  /dev/loop0 vg lvm2 a--  10.00t 10.00t
-  /dev/loop1 vg lvm2 a--  10.00t 10.00t
-  /dev/loop2 vg lvm2 a--  10.00t 10.00t
-  /dev/loop3    lvm2 ---  10.00t 10.00t
-  /dev/loop4    lvm2 ---  10.00t 10.00t
-  /dev/loop5    lvm2 ---  10.00t 10.00t
-
-~$:lvcreate -nlv  -L27T vg
-  Logical volume "lv" created.
-
-~$:vgextend vg /dev/loop[3-5]
-  Volume group "vg" successfully extended
-
-~$:lvconvert  --type mirror --mirrors 1 --stripes 3 -I256  /dev/vg/lv /dev/loop3 /dev/loop4 /dev/loop5
-  device-mapper: reload ioctl on  (254:0) failed: Invalid argument
-  Failed to lock logical volume vg/lv.
-~$: lvs
-  WARNING: Reading VG vg from disk because lvmetad metadata is invalid.
-  LV      VG Attr       LSize  Pool Origin Data%  Meta%  Move Log Cpy%Sync Convert
-  lv      vg -wi-a----- 27.00t
-  lv_mlog vg -wi-a-----  4.00m
-~$: pvs
-  PV         VG Fmt  Attr PSize  PFree
-  /dev/loop0 vg lvm2 a--  10.00t     0
-  /dev/loop1 vg lvm2 a--  10.00t     0
-  /dev/loop2 vg lvm2 a--  10.00t  3.00t
-  /dev/loop3 vg lvm2 a--  10.00t 10.00t
-  /dev/loop4 vg lvm2 a--  10.00t 10.00t
-  /dev/loop5 vg lvm2 a--  10.00t 10.00t
-
-Analysis: In kernel space the required log size depends on the whole
-target device size.But in user space, the log size is calculated from
-the whole target devices size divided by allocation area number, which
-leads to the mismatch here.
-
-Signed-off-by: Lidong Zhong <lidong.zhong@suse.com>
 ---
- lib/metadata/lv_manip.c | 3 +--
- 1 file changed, 1 insertion(+), 2 deletions(-)
+ configure              | 26 ++++++++++++++------------
+ include/configure.h.in |  6 +++---
+ 2 files changed, 17 insertions(+), 15 deletions(-)
 
-diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
-index 7e66afd9c..e8d67c79b 100644
---- a/lib/metadata/lv_manip.c
-+++ b/lib/metadata/lv_manip.c
-@@ -3730,8 +3730,7 @@ static struct alloc_handle *_alloc_init(struct cmd_context *cmd,
- 	} else {
- 		ah->log_area_count = metadata_area_count;
- 		ah->log_len = !metadata_area_count ? 0 :
--			_mirror_log_extents(ah->region_size, extent_size,
--					    (existing_extents + new_extents) / ah->area_multiple);
-+			_mirror_log_extents(ah->region_size, extent_size, existing_extents + new_extents);
- 	}
+diff --git a/configure b/configure
+index e2299ee91..3a9888528 100755
+--- a/configure
++++ b/configure
+@@ -747,7 +747,6 @@ BUILD_DMFILEMAPD
+ BUILD_LOCKDDLM_CONTROL
+ BUILD_LOCKDDLM
+ BUILD_LOCKDSANLOCK
+-BUILD_LOCKDIDM
+ BUILD_LVMLOCKD
+ BUILD_LVMPOLLD
+ BUILD_LVMDBUSD
+@@ -773,18 +772,18 @@ UDEV_LIBS
+ UDEV_CFLAGS
+ SYSTEMD_LIBS
+ SYSTEMD_CFLAGS
+-BLKID_LIBS
+-BLKID_CFLAGS
+ NOTIFY_DBUS_LIBS
+ NOTIFY_DBUS_CFLAGS
++BLKID_LIBS
++BLKID_CFLAGS
++LOCKD_IDM_LIBS
++LOCKD_IDM_CFLAGS
+ LOCKD_DLM_CONTROL_LIBS
+ LOCKD_DLM_CONTROL_CFLAGS
+ LOCKD_DLM_LIBS
+ LOCKD_DLM_CFLAGS
+ LOCKD_SANLOCK_LIBS
+ LOCKD_SANLOCK_CFLAGS
+-LOCKD_IDM_LIBS
+-LOCKD_IDM_CFLAGS
+ VALGRIND_LIBS
+ VALGRIND_CFLAGS
+ GENPNG
+@@ -1025,10 +1024,10 @@ LOCKD_DLM_CONTROL_CFLAGS
+ LOCKD_DLM_CONTROL_LIBS
+ LOCKD_IDM_CFLAGS
+ LOCKD_IDM_LIBS
+-NOTIFY_DBUS_CFLAGS
+-NOTIFY_DBUS_LIBS
+ BLKID_CFLAGS
+ BLKID_LIBS
++NOTIFY_DBUS_CFLAGS
++NOTIFY_DBUS_LIBS
+ SYSTEMD_CFLAGS
+ SYSTEMD_LIBS
+ UDEV_CFLAGS
+@@ -1843,13 +1842,13 @@ Some influential environment variables:
+               C compiler flags for LOCKD_IDM, overriding pkg-config
+   LOCKD_IDM_LIBS
+               linker flags for LOCKD_IDM, overriding pkg-config
++  BLKID_CFLAGS
++              C compiler flags for BLKID, overriding pkg-config
++  BLKID_LIBS  linker flags for BLKID, overriding pkg-config
+   NOTIFY_DBUS_CFLAGS
+               C compiler flags for NOTIFY_DBUS, overriding pkg-config
+   NOTIFY_DBUS_LIBS
+               linker flags for NOTIFY_DBUS, overriding pkg-config
+-  BLKID_CFLAGS
+-              C compiler flags for BLKID, overriding pkg-config
+-  BLKID_LIBS  linker flags for BLKID, overriding pkg-config
+   SYSTEMD_CFLAGS
+               C compiler flags for SYSTEMD, overriding pkg-config
+   SYSTEMD_LIBS
+@@ -11260,7 +11259,7 @@ fi
  
- 	if (total_extents || existing_extents)
--- 
-2.26.2
-
+ 
+ if test $pkg_failed = yes; then
+-	{ $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
++   	{ $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
+ $as_echo "no" >&6; }
+ 
+ if $PKG_CONFIG --atleast-pkgconfig-version 0.20; then
+@@ -11278,7 +11277,7 @@ fi
+ 
+ 	$bailout
+ elif test $pkg_failed = untried; then
+-	{ $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
++     	{ $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
+ $as_echo "no" >&6; }
+ 	$bailout
+ else
+@@ -11286,6 +11285,7 @@ else
+ 	LOCKD_IDM_LIBS=$pkg_cv_LOCKD_IDM_LIBS
+         { $as_echo "$as_me:${as_lineno-$LINENO}: result: yes" >&5
+ $as_echo "yes" >&6; }
++	HAVE_LOCKD_IDM=yes
+ fi
+ 
+ pkg_failed=no
+@@ -14350,6 +14350,8 @@ _ACEOF
+ 
+ 
+ 
++
++
+ 
+ 
+ 
+diff --git a/include/configure.h.in b/include/configure.h.in
+index bcb282660..08f696167 100644
+--- a/include/configure.h.in
++++ b/include/configure.h.in
+@@ -558,12 +558,12 @@
+ /* Define to 1 to include code that uses lvmlockd dlm option. */
+ #undef LOCKDDLM_SUPPORT
+ 
+-/* Define to 1 to include code that uses lvmlockd sanlock option. */
+-#undef LOCKDSANLOCK_SUPPORT
+-
+ /* Define to 1 to include code that uses lvmlockd IDM option. */
+ #undef LOCKDIDM_SUPPORT
+ 
++/* Define to 1 to include code that uses lvmlockd sanlock option. */
++#undef LOCKDSANLOCK_SUPPORT
++
+ /* Define to 1 if `lstat' dereferences a symlink specified with a trailing
+    slash. */
+ #undef LSTAT_FOLLOWS_SLASHED_SYMLINK
 
 
