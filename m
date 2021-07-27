@@ -1,41 +1,41 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Tue, 27 Jul 2021 22:50:28 +0000 (GMT)
-Subject: main - pvck: ensure buffer is 0 terminated
-Message-ID: <20210727225028.72990383B82C@sourceware.org>
+Date: Tue, 27 Jul 2021 22:50:29 +0000 (GMT)
+Subject: main - cov: memleak dir descriptor
+Message-ID: <20210727225029.9784E385040A@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=308c6f31c3d79b370b163660f3ec38042a00289f
-Commit:        308c6f31c3d79b370b163660f3ec38042a00289f
-Parent:        01081b21006abe4d9a0102541982cb0fcaeb22dc
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=ec9dd728aa00de692f4b003e12394aa9cdda9446
+Commit:        ec9dd728aa00de692f4b003e12394aa9cdda9446
+Parent:        308c6f31c3d79b370b163660f3ec38042a00289f
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Jul 27 15:12:56 2021 +0200
+AuthorDate:    Tue Jul 27 15:36:48 2021 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Wed Jul 28 00:49:22 2021 +0200
 
-pvck: ensure buffer is 0 terminated
+cov: memleak dir descriptor
 
-Since readed metadata buffer is passed to printf(),
-ensure the buffer is '\0' terminated.
+opendir() missed closedir().
 ---
- tools/pvck.c | 2 +-
- 1 file changed, 1 insertion(+), 1 deletion(-)
+ lib/device/dev-type.c | 3 +++
+ 1 file changed, 3 insertions(+)
 
-diff --git a/tools/pvck.c b/tools/pvck.c
-index d81966966..b15158746 100644
---- a/tools/pvck.c
-+++ b/tools/pvck.c
-@@ -898,7 +898,7 @@ static int _dump_current_text(struct device *dev, struct devicefile *def,
- 	int ri = rlocn_index; /* 0 or 1 */
- 	int bad = 0;
+diff --git a/lib/device/dev-type.c b/lib/device/dev-type.c
+index 067a9ffad..89791bebe 100644
+--- a/lib/device/dev-type.c
++++ b/lib/device/dev-type.c
+@@ -180,6 +180,9 @@ int dev_is_used_by_active_lv(struct cmd_context *cmd, struct device *dev, int *u
+ 		}
+ 	}
  
--	if (!(meta_buf = zalloc(meta_size))) {
-+	if (!(meta_buf = zalloc(meta_size + 1))) {
- 		log_print("CHECK: mda_header_%d.raw_locn[%d] no mem for metadata text size %llu", mn, ri,
- 			  (unsigned long long)meta_size);
- 		return 0;
++	if (closedir(d))
++		log_sys_debug("closedir", holders_path);
++
+ 	if (used_by_lv_count)
+ 		*used_by_lv_count = used_count;
+ 	if (used_by_dm_name)
 
 
