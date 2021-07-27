@@ -1,44 +1,40 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Tue, 27 Jul 2021 22:50:36 +0000 (GMT)
-Subject: main - cov: raid: no more checks with missing areas
-Message-ID: <20210727225036.7EC30385040A@sourceware.org>
+Date: Tue, 27 Jul 2021 22:50:37 +0000 (GMT)
+Subject: main - cov: add explicit check for vg existence
+Message-ID: <20210727225037.9FAAE385040A@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=f4b49dae1eb982e36e748fa8e1fc2af59025c9c7
-Commit:        f4b49dae1eb982e36e748fa8e1fc2af59025c9c7
-Parent:        b2db01b530e995a80abe3379019503a8cae72b10
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=a4eb378fe41218793f4c7e97b0d82d33643b5a67
+Commit:        a4eb378fe41218793f4c7e97b0d82d33643b5a67
+Parent:        f4b49dae1eb982e36e748fa8e1fc2af59025c9c7
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Jul 27 17:01:17 2021 +0200
+AuthorDate:    Tue Jul 27 17:03:38 2021 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Wed Jul 28 00:49:28 2021 +0200
 
-cov: raid: no more checks with missing areas
+cov: add explicit check for vg existence
 
-Since ->areas is directly dereferenced we need to stop
-validation right here.
+Since we check !vg - add check before accessing ->status.
 ---
- lib/metadata/merge.c | 4 +++-
- 1 file changed, 3 insertions(+), 1 deletion(-)
+ lib/format_text/format-text.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
 
-diff --git a/lib/metadata/merge.c b/lib/metadata/merge.c
-index f29cf64ec..8eff74297 100644
---- a/lib/metadata/merge.c
-+++ b/lib/metadata/merge.c
-@@ -270,8 +270,10 @@ static void _check_raid_seg(struct lv_segment *seg, int *error_count)
- 	if (!seg->area_count)
- 		raid_seg_error("zero area count");
+diff --git a/lib/format_text/format-text.c b/lib/format_text/format-text.c
+index 26e55cec4..0441342a1 100644
+--- a/lib/format_text/format-text.c
++++ b/lib/format_text/format-text.c
+@@ -454,7 +454,7 @@ static struct volume_group *_vg_read_raw_area(struct cmd_context *cmd,
+ 			   (unsigned long long)rlocn->size,
+ 			   vgname);
  
--	if (!seg->areas)
-+	if (!seg->areas) {
- 		raid_seg_error("zero areas");
-+		return;
-+	}
+-	if (precommitted)
++	if (vg && precommitted)
+ 		vg->status |= PRECOMMITTED;
  
- 	if (seg->extents_copied > seg->len)
- 		raid_seg_error_val("extents_copied too large", seg->extents_copied);
+       out:
 
 
