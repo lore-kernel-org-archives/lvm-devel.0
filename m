@@ -1,76 +1,65 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Fri, 23 Jul 2021 14:38:21 +0000 (GMT)
-Subject: main - tests: extend vgmerge testing
-Message-ID: <20210723143821.9D19A383582C@sourceware.org>
+Date: Tue, 27 Jul 2021 22:50:30 +0000 (GMT)
+Subject: main - cov: remove unneeded includes
+Message-ID: <20210727225030.BAF67383B82C@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=8ebcbe9ace6e5c88a35cf62cd04b853ca7551a2b
-Commit:        8ebcbe9ace6e5c88a35cf62cd04b853ca7551a2b
-Parent:        4b856476e96777842ea6c9b42654c369a6b22db4
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=69379df8f35404269e5aa4a275a7686a87076f27
+Commit:        69379df8f35404269e5aa4a275a7686a87076f27
+Parent:        ec9dd728aa00de692f4b003e12394aa9cdda9446
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Jul 23 16:34:50 2021 +0200
+AuthorDate:    Tue Jul 27 15:04:09 2021 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Fri Jul 23 16:36:31 2021 +0200
+CommitterDate: Wed Jul 28 00:49:28 2021 +0200
 
-tests: extend vgmerge testing
+cov: remove unneeded includes
 
 ---
- test/shell/vgmerge-operation.sh | 42 +++++++++++++++++++++++++++++++++++++++++
- 1 file changed, 42 insertions(+)
+ lib/filters/filter-mpath.c | 2 --
+ lib/metadata/lv_manip.c    | 1 -
+ lib/metadata/pv_manip.c    | 1 -
+ 3 files changed, 4 deletions(-)
 
-diff --git a/test/shell/vgmerge-operation.sh b/test/shell/vgmerge-operation.sh
-index 21889e95d..0bf517d38 100644
---- a/test/shell/vgmerge-operation.sh
-+++ b/test/shell/vgmerge-operation.sh
-@@ -80,3 +80,45 @@ grep "Duplicate logical volume name \"$lv1\" in \"$vg2\" and \"$vg1" err
- check pvlv_counts $vg1 2 1 0
- check pvlv_counts $vg2 2 1 0
- vgremove -f $vg1 $vg2
-+
-+
-+# 'vgmerge' handle pmspare for merged VG
-+if aux have_thin 1 5 0; then
-+
-+# With disabled pmspare nothing is created
-+vgcreate $vg1 "$dev1" "$dev2"
-+vgcreate $vg2 "$dev3" "$dev4"
-+lvcreate -T -L8M $vg1/pool1 --poolmetadatasize 8M --poolmetadataspare n
-+lvcreate -T -L8M $vg2/pool2 --poolmetadatasize 4M --poolmetadataspare n
-+vgchange -an $vg1 $vg2
-+
-+vgmerge --poolmetadataspare n $vg1 $vg2
-+check lv_not_exists $vg/lvol0_pmspare
-+vgremove -ff $vg1
-+
-+
-+# With pmspare handling there are one created
-+vgcreate $vg1 "$dev1" "$dev2"
-+vgcreate $vg2 "$dev3" "$dev4"
-+lvcreate -T -L8M $vg1/pool1 --poolmetadatasize 8M --poolmetadataspare n
-+lvcreate -T -L8M $vg2/pool2 --poolmetadatasize 4M --poolmetadataspare n
-+vgchange -an $vg1 $vg2
-+
-+vgmerge $vg1 $vg2
-+check lv_field $vg1/lvol0_pmspare size "8.00m"
-+vgremove -ff $vg1
-+
-+
-+# When merged, bigger pmspare is preserved
-+vgcreate $vg1 "$dev1" "$dev2"
-+vgcreate $vg2 "$dev3" "$dev4"
-+lvcreate -T -L8M $vg1/pool1 --poolmetadatasize 8M
-+lvcreate -T -L8M $vg2/pool2 --poolmetadatasize 4M
-+vgchange -an $vg1 $vg2
-+
-+vgmerge $vg1 $vg2
-+
-+check lv_field $vg1/lvol0_pmspare size "8.00m"
-+vgremove -ff $vg1
-+
-+fi
+diff --git a/lib/filters/filter-mpath.c b/lib/filters/filter-mpath.c
+index ebd40a457..982e23400 100644
+--- a/lib/filters/filter-mpath.c
++++ b/lib/filters/filter-mpath.c
+@@ -15,8 +15,6 @@
+ #include "base/memory/zalloc.h"
+ #include "lib/misc/lib.h"
+ #include "lib/filters/filter.h"
+-#include "lib/activate/activate.h"
+-#include "lib/commands/toolcontext.h"
+ 
+ #ifdef __linux__
+ 
+diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
+index 7e66afd9c..a26d3d533 100644
+--- a/lib/metadata/lv_manip.c
++++ b/lib/metadata/lv_manip.c
+@@ -23,7 +23,6 @@
+ #include "lib/metadata/pv_alloc.h"
+ #include "lib/display/display.h"
+ #include "lib/metadata/segtype.h"
+-#include "lib/format_text/archiver.h"
+ #include "lib/activate/activate.h"
+ #include "lib/datastruct/str_list.h"
+ #include "lib/config/defaults.h"
+diff --git a/lib/metadata/pv_manip.c b/lib/metadata/pv_manip.c
+index cfc983174..2b970f0ba 100644
+--- a/lib/metadata/pv_manip.c
++++ b/lib/metadata/pv_manip.c
+@@ -20,7 +20,6 @@
+ #include "lib/locking/locking.h"
+ #include "lib/config/defaults.h"
+ #include "lib/display/display.h"
+-#include "lib/format_text/archiver.h"
+ 
+ static struct pv_segment *_alloc_pv_segment(struct dm_pool *mem,
+ 					    struct physical_volume *pv,
 
 
