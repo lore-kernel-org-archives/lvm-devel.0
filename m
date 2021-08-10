@@ -1,74 +1,58 @@
-From: Marian Csontos <mcsontos@sourceware.org>
-Date: Mon,  9 Aug 2021 14:27:14 +0000 (GMT)
-Subject: main - make: generate
-Message-ID: <20210809142714.C61E1385C411@sourceware.org>
+From: Wu Guanghao <wuguanghao3@huawei.com>
+Date: Tue, 10 Aug 2021 09:26:49 +0800
+Subject: [PATCH]pvscan: Increase orphans global lock to prevent lvmetad from being modified when pvscan --cache is executed
+Message-ID: <fca2aa5b-2d64-edc4-4810-b4cabbef6cf8@huawei.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=b328cfee5288c14e771404821baa646b5f378a3c
-Commit:        b328cfee5288c14e771404821baa646b5f378a3c
-Parent:        d0ab5bf7f98da83cd5d7ec393554dff309482cf4
-Author:        root <root@bot-frawhide-x86-64.lab.eng.brq.redhat.com>
-AuthorDate:    Thu Aug 5 21:38:43 2021 +0200
-Committer:     root <root@bot-frawhide-x86-64.lab.eng.brq.redhat.com>
-CommitterDate: Thu Aug 5 21:38:43 2021 +0200
+Hi,
 
-make: generate
+Appeared by accident during the test,the metadata of the disk is inconsistent with the data saved by lvmetad.
 
+start pvscan --cache x:x (read metadata from disk, no vg info)
+								pvcreate /dev/sdb
+								vgcreate vg /dev/sdb
+								(write vg information to metadata, and update lvmetad)
+
+finish pvscan --cache x:x (No vg information in metadata,overwrite lvmetad)
+
+# vgs
+couldn't find vg
+
+
+Signed-off-by: Wu Guanghao <wuguanghao3@huawei.com>
 ---
- conf/example.conf.in | 28 +++++++++++-----------------
- 1 file changed, 11 insertions(+), 17 deletions(-)
+ tools/pvscan.c | 6 ++++++
+ 1 file changed, 6 insertions(+)
 
-diff --git a/conf/example.conf.in b/conf/example.conf.in
-index 50cf6f42b..2dc6dd9e6 100644
---- a/conf/example.conf.in
-+++ b/conf/example.conf.in
-@@ -67,25 +67,13 @@ devices {
- 	# setting applies only to the udev-managed device directory; other
- 	# directories will be scanned fully. LVM needs to be compiled with
- 	# udev support for this setting to apply.
--	obtain_device_list_from_udev = 1
-+	obtain_device_list_from_udev = 0
- 
- 	# Configuration option devices/external_device_info_source.
--	# Select an external device information source.
--	# Some information may already be available in the system and LVM can
--	# use this information to determine the exact type or use of devices it
--	# processes. Using an existing external device information source can
--	# speed up device processing as LVM does not need to run its own native
--	# routines to acquire this information. For example, this information
--	# is used to drive LVM filtering like MD component detection, multipath
--	# component detection, partition detection and others.
--	#
--	# Accepted values:
--	#   none
--	#     No external device information source is used.
--	#   udev
--	#     Reuse existing udev database records. Applicable only if LVM is
--	#     compiled with udev support.
--	#
-+	# Enable device information from udev.
-+	# If set to "udev", lvm will supplement its own native device information
-+	# with information from libudev. This can potentially improve the detection
-+	# of MD component devices and multipath component devices.
- 	external_device_info_source = "none"
- 
- 	# Configuration option devices/hints.
-@@ -232,6 +220,12 @@ devices {
- 	# Ignore devices that are components of DM multipath devices.
- 	multipath_component_detection = 1
- 
-+	# Configuration option devices/multipath_wwids_file.
-+	# The path to the multipath wwids file used for multipath component detection.
-+	# Set this to an empty string to disable the use of the multipath wwids file.
-+	# This configuration option has an automatic default value.
-+	# multipath_wwids_file = "/etc/multipath/wwids"
+diff --git a/tools/pvscan.c b/tools/pvscan.c
+index 2e7a864de..51b5daa9a 100644
+--- a/tools/pvscan.c
++++ b/tools/pvscan.c
+@@ -491,6 +491,11 @@ static int _pvscan_cache(struct cmd_context *cmd, int argc, char **argv)
+                return ECMD_FAILED;
+        }
+
++       if (!lock_vol(cmd, VG_ORPHANS, LCK_VG_READ, NULL)) {
++               log_error("Can't get lock for orphan PVs.");
++               return ECMD_FAILED;
++       }
 +
- 	# Configuration option devices/md_component_detection.
- 	# Enable detection and exclusion of MD component devices.
- 	# An MD component device is a block device that MD uses as part
+        /*
+         * This a special case where use_lvmetad=1 in lvm.conf but pvscan
+         * cannot use lvmetad for some reason.  In this case pvscan should
+@@ -780,6 +785,7 @@ out:
+
+        if (!sync_local_dev_names(cmd))
+                stack;
++       unlock_vg(cmd, NULL, VG_ORPHANS);
+        unlock_vg(cmd, NULL, VG_GLOBAL);
+        return ret;
+ }
+--
+2.23.0
 
 
