@@ -1,58 +1,51 @@
-From: Wu Guanghao <wuguanghao3@huawei.com>
-Date: Tue, 10 Aug 2021 09:26:49 +0800
-Subject: [PATCH]pvscan: Increase orphans global lock to prevent lvmetad from being modified when pvscan --cache is executed
-Message-ID: <fca2aa5b-2d64-edc4-4810-b4cabbef6cf8@huawei.com>
+From: Marian Csontos <mcsontos@sourceware.org>
+Date: Wed, 11 Aug 2021 15:13:11 +0000 (GMT)
+Subject: main - WHATS_NEW: update
+Message-ID: <20210811151311.993083857413@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Hi,
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=7dfaf5dc1348e8c06cdc9b1ec23b70c6aad5f30f
+Commit:        7dfaf5dc1348e8c06cdc9b1ec23b70c6aad5f30f
+Parent:        b328cfee5288c14e771404821baa646b5f378a3c
+Author:        Marian Csontos <mcsontos@redhat.com>
+AuthorDate:    Tue Aug 10 14:19:24 2021 +0200
+Committer:     Marian Csontos <mcsontos@redhat.com>
+CommitterDate: Tue Aug 10 14:19:24 2021 +0200
 
-Appeared by accident during the test,the metadata of the disk is inconsistent with the data saved by lvmetad.
+WHATS_NEW: update
 
-start pvscan --cache x:x (read metadata from disk, no vg info)
-								pvcreate /dev/sdb
-								vgcreate vg /dev/sdb
-								(write vg information to metadata, and update lvmetad)
-
-finish pvscan --cache x:x (No vg information in metadata,overwrite lvmetad)
-
-# vgs
-couldn't find vg
-
-
-Signed-off-by: Wu Guanghao <wuguanghao3@huawei.com>
 ---
- tools/pvscan.c | 6 ++++++
- 1 file changed, 6 insertions(+)
+ WHATS_NEW | 9 +++++++++
+ 1 file changed, 9 insertions(+)
 
-diff --git a/tools/pvscan.c b/tools/pvscan.c
-index 2e7a864de..51b5daa9a 100644
---- a/tools/pvscan.c
-+++ b/tools/pvscan.c
-@@ -491,6 +491,11 @@ static int _pvscan_cache(struct cmd_context *cmd, int argc, char **argv)
-                return ECMD_FAILED;
-        }
-
-+       if (!lock_vol(cmd, VG_ORPHANS, LCK_VG_READ, NULL)) {
-+               log_error("Can't get lock for orphan PVs.");
-+               return ECMD_FAILED;
-+       }
-+
-        /*
-         * This a special case where use_lvmetad=1 in lvm.conf but pvscan
-         * cannot use lvmetad for some reason.  In this case pvscan should
-@@ -780,6 +785,7 @@ out:
-
-        if (!sync_local_dev_names(cmd))
-                stack;
-+       unlock_vg(cmd, NULL, VG_ORPHANS);
-        unlock_vg(cmd, NULL, VG_GLOBAL);
-        return ret;
- }
---
-2.23.0
+diff --git a/WHATS_NEW b/WHATS_NEW
+index 4fcd9f3c5..72060b40a 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,11 +1,20 @@
+ Version 2.03.13 - 
+ ===============================
++  Changes in udev support:
++  - obtain_device_list_from_udev defaults to 0.
++  - see devices/external_device_info_source,
++    devices/obtain_device_list_from_udev, and devices/multipath_wwids_file help
++    in lvm.conf
++  Fix devices file handling of loop with deleted backing file.
++  Fix devices file handling of scsi_debug WWIDs.
++  Fix many static analysis issues.
+   Support --poolmetadataspare with vgsplit and vgmerge.
+   Fix detection of active components of external origin volume.
+   Add vdoimport tool to support conversion of VDO volumes.
+   Support configurable allocation/vdo_pool_header_size.
+   Fix handling of lvconvert --type vdo-pool --virtualsize.
+   Simplified handling of archive() and backup() internal calls.
++  Add 'idm' locking type for IDM lock manager.
+   Fix load of kvdo target when it is not present in memory (2.03.12).
+ 
+ Version 2.03.12 - 07th May 2021
 
 
