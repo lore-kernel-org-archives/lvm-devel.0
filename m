@@ -1,43 +1,37 @@
-From: David Teigland <teigland@sourceware.org>
-Date: Thu, 12 Aug 2021 20:53:07 +0000 (GMT)
-Subject: main - toolcontext.h: use bit field in struct
-Message-ID: <20210812205307.0CF4E3833003@sourceware.org>
+From: Yi Wang <wang.yi59@zte.com.cn>
+Date: Fri, 13 Aug 2021 13:49:13 +0800
+Subject: [PATCH] lvchange: fix lvchange refresh failed for dm suspend or resume failed
+Message-ID: <20210813054913.4868-1-wang.yi59@zte.com.cn>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=e5c0562654b8449f91c423e92e9b78d4ce986dc3
-Commit:        e5c0562654b8449f91c423e92e9b78d4ce986dc3
-Parent:        59209ef04944e8f8fac2836be1d875a080c58a9e
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Thu Aug 12 15:51:43 2021 -0500
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Thu Aug 12 15:51:43 2021 -0500
+When multiple lvchange refresh processes executed at the same time,
+suspend/resume ioctl on the same dm, some of these commands will be failed
+for dm aready change status, and ioctl will return EINVAL in _do_dm_ioctl function.
+to avoid this problem, add READ_FOR_ACTIVATE flags in lvchange refresh process,
+it will hold LCK_WRITE lock and avoid suspend/resume dm at the same time.
 
-toolcontext.h: use bit field in struct
-
-Two recent additions should have used a bit instead
-of an entire int.
+Signed-off-by: Long YunJian <long.yunjian@zte.com.cn>
+Signed-off-by: Yi Wang <wang.yi59@zte.com.cn>
 ---
- lib/commands/toolcontext.h | 4 ++--
- 1 file changed, 2 insertions(+), 2 deletions(-)
+ tools/lvchange.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
 
-diff --git a/lib/commands/toolcontext.h b/lib/commands/toolcontext.h
-index 0911b05f1..1a1785bfe 100644
---- a/lib/commands/toolcontext.h
-+++ b/lib/commands/toolcontext.h
-@@ -193,8 +193,8 @@ struct cmd_context {
- 	unsigned run_by_dmeventd:1;		/* command is being run by dmeventd */
- 	unsigned sysinit:1;			/* --sysinit is used */
- 	unsigned check_devs_used:1;		/* check devs used by LVs */
--	unsigned print_device_id_not_found;	/* print devices file entries not found */
--	unsigned ignore_device_name_mismatch;   /* skip updating devices file names */
-+	unsigned print_device_id_not_found:1;	/* print devices file entries not found */
-+	unsigned ignore_device_name_mismatch:1; /* skip updating devices file names */
+diff --git a/tools/lvchange.c b/tools/lvchange.c
+index d4c40df47..0525bc53c 100644
+--- a/tools/lvchange.c
++++ b/tools/lvchange.c
+@@ -1622,7 +1622,7 @@ int lvchange_refresh_cmd(struct cmd_context *cmd, int argc, char **argv)
+ 	cmd->lockd_vg_default_sh = 1;
+ 	cmd->ignore_device_name_mismatch = 1;
  
- 	/*
- 	 * Devices and filtering.
-
-
+-	return process_each_lv(cmd, argc, argv, NULL, NULL, 0,
++	return process_each_lv(cmd, argc, argv, NULL, NULL, READ_FOR_ACTIVATE,
+ 			       NULL, &_lvchange_refresh_check, &_lvchange_refresh_single);
+ }
+ 
+-- 
+2.18.1
