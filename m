@@ -1,67 +1,80 @@
 From: David Teigland <teigland@sourceware.org>
-Date: Fri, 20 Aug 2021 19:51:30 +0000 (GMT)
-Subject: main - lvmdevices: check yes option for adding duplicate
-Message-ID: <20210820195130.9C161385801E@sourceware.org>
+Date: Fri, 20 Aug 2021 19:51:35 +0000 (GMT)
+Subject: main - devices file: recognize old locking_type 0
+Message-ID: <20210820195135.39B963858024@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=b0bda7c25b19d9254f65dec4a8e1011204de98e6
-Commit:        b0bda7c25b19d9254f65dec4a8e1011204de98e6
-Parent:        96b777167c63eaf2e8ef1a2e7a92dc6c66cbcd6a
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=8b723139363a6b55e57ba4e9d599ff2efbae7d23
+Commit:        8b723139363a6b55e57ba4e9d599ff2efbae7d23
+Parent:        9e79a022ea391a3cfb9e9f95f10ecfe7a277e794
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Wed Aug 18 16:26:11 2021 -0500
+AuthorDate:    Fri Aug 20 10:32:16 2021 -0500
 Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Thu Aug 19 13:00:43 2021 -0500
+CommitterDate: Fri Aug 20 14:51:13 2021 -0500
 
-lvmdevices: check yes option for adding duplicate
+devices file: recognize old locking_type 0
 
+if the old locking_type is 0, set cmd->nolocking so that
+it will be applied to the devices file lock.
 ---
- lib/commands/toolcontext.h | 1 +
- lib/device/device_id.c     | 3 ++-
- tools/lvmcmdline.c         | 2 ++
- 3 files changed, 5 insertions(+), 1 deletion(-)
+ tools/lvmcmdline.c | 14 ++++++--------
+ 1 file changed, 6 insertions(+), 8 deletions(-)
 
-diff --git a/lib/commands/toolcontext.h b/lib/commands/toolcontext.h
-index 1a1785bfe..a19a9dea2 100644
---- a/lib/commands/toolcontext.h
-+++ b/lib/commands/toolcontext.h
-@@ -30,6 +30,7 @@ struct config_info {
- 	int verbose;
- 	int silent;
- 	int test;
-+	int yes;
- 	int syslog;
- 	int activation;
- 	int suffix;
-diff --git a/lib/device/device_id.c b/lib/device/device_id.c
-index 164a3e2ba..bca6b4f1f 100644
---- a/lib/device/device_id.c
-+++ b/lib/device/device_id.c
-@@ -1138,7 +1138,8 @@ id_done:
- 				 du_pvid->dev ? dev_name(du_pvid->dev) : "none", du_pvid->idname,
- 				 pvid);
- 
--			if (yes_no_prompt("Add device with duplicate PV to devices file?") == 'n') {
-+			if (!cmd->current_settings.yes &&
-+			    yes_no_prompt("Add device with duplicate PV to devices file?") == 'n') {
- 				log_print("Device not added.");
- 				free((void *)check_idname);
- 				return 1;
 diff --git a/tools/lvmcmdline.c b/tools/lvmcmdline.c
-index 4b63d48e3..47ab2f3d8 100644
+index 12105423c..27c41412d 100644
 --- a/tools/lvmcmdline.c
 +++ b/tools/lvmcmdline.c
-@@ -2446,6 +2446,8 @@ static int _get_current_settings(struct cmd_context *cmd)
- 	if (arg_is_set(cmd, test_ARG))
- 		cmd->current_settings.test = arg_is_set(cmd, test_ARG);
+@@ -3026,7 +3026,6 @@ int lvm_run_command(struct cmd_context *cmd, int argc, char **argv)
+ 	struct dm_config_tree *config_string_cft, *config_profile_command_cft, *config_profile_metadata_cft;
+ 	int ret = 0;
+ 	int locking_type;
+-	int nolocking = 0;
+ 	int readonly = 0;
+ 	int sysinit = 0;
+ 	int monitoring;
+@@ -3191,6 +3190,10 @@ int lvm_run_command(struct cmd_context *cmd, int argc, char **argv)
+ 	}
  
-+	cmd->current_settings.yes = arg_count(cmd, yes_ARG);
+ 	cmd->ignorelockingfailure = arg_is_set(cmd, ignorelockingfailure_ARG);
++	cmd->nolocking = arg_is_set(cmd, nolocking_ARG);
 +
- 	if (arg_is_set(cmd, driverloaded_ARG)) {
- 		cmd->current_settings.activation =
- 		    arg_int_value(cmd, driverloaded_ARG,
++	if (_cmd_no_meta_proc(cmd))
++		cmd->nolocking = 1;
+ 
+ 	/* Defaults to 1 if not set. */
+ 	locking_type = find_config_tree_int(cmd, global_locking_type_CFG, NULL);
+@@ -3200,7 +3203,7 @@ int lvm_run_command(struct cmd_context *cmd, int argc, char **argv)
+ 
+ 	if ((locking_type == 0) || (locking_type == 5)) {
+ 		log_warn("WARNING: locking_type (%d) is deprecated, using --nolocking.", locking_type);
+-		nolocking = 1;
++		cmd->nolocking = 1;
+ 
+ 	} else if (locking_type == 4) {
+ 		log_warn("WARNING: locking_type (%d) is deprecated, using --sysinit --readonly.", locking_type);
+@@ -3211,18 +3214,13 @@ int lvm_run_command(struct cmd_context *cmd, int argc, char **argv)
+ 		log_warn("WARNING: locking_type (%d) is deprecated, using file locking.", locking_type);
+ 	}
+ 
+-	cmd->nolocking = arg_is_set(cmd, nolocking_ARG);
+-
+-	if (cmd->nolocking || _cmd_no_meta_proc(cmd))
+-		nolocking = 1;
+-
+ 	if ((cmd->sysinit = arg_is_set(cmd, sysinit_ARG)))
+ 		sysinit = 1;
+ 
+ 	if (arg_is_set(cmd, readonly_ARG))
+ 		readonly = 1;
+ 
+-	if (nolocking) {
++	if (cmd->nolocking) {
+ 		if (!_cmd_no_meta_proc(cmd))
+ 			log_warn("WARNING: File locking is disabled.");
+ 	} else {
 
 
