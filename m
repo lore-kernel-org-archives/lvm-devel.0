@@ -1,207 +1,194 @@
-From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Fri, 27 May 2016 13:47:54 +0000 (UTC)
-Subject: master - report: convert more options to use single status
-Message-ID: <20160527134754.0B0DE607A7@fedorahosted.org>
+From: David Teigland <teigland@sourceware.org>
+Date: Mon, 23 Aug 2021 20:54:57 +0000 (GMT)
+Subject: main - devices: restrict device id types to specific major numbers
+Message-ID: <20210823205457.761383858C2C@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=ecfb90de7405e55d79239d70838a31c66f2e926a
-Commit:        ecfb90de7405e55d79239d70838a31c66f2e926a
-Parent:        80603ad49aeec70c9a3f391236668f212342d10a
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed May 25 16:26:10 2016 +0200
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Fri May 27 15:47:24 2016 +0200
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=0969e90d45932d2903d2822701b32edfb2cf31cf
+Commit:        0969e90d45932d2903d2822701b32edfb2cf31cf
+Parent:        a6a8443a07f891246fa68bda9cc8e3937b6ddbb6
+Author:        David Teigland <teigland@redhat.com>
+AuthorDate:    Mon Aug 23 15:01:26 2021 -0500
+Committer:     David Teigland <teigland@redhat.com>
+CommitterDate: Mon Aug 23 15:54:41 2021 -0500
 
-report: convert more options to use single status
+devices: restrict device id types to specific major numbers
 
-Convert fields into using a single status ioctl call per LV.
-This is a bit tricky since when there are more complicated
-stacks, at this moment its undefined which values should be shown.
-
-It's clear we need to cache more then single ioctl per LV,
-but also we need to define more explicitely relation between
-reported values for snapshots.
-
-This patch is not a final state, rather a transitional step.
-It should not be giving more 'worst' values then previous
-many-ioctl-calls-per-lv solution.
+Some device id types can only be used with specific device major
+numbers, so use this restriction to avoid some comparisions.
+This is more efficient, and can avoid some incorrect matches.
 ---
- WHATS_NEW            |    1 +
- lib/report/columns.h |   16 +++++-----
- lib/report/report.c  |   82 +++++++++++++------------------------------------
- 3 files changed, 31 insertions(+), 68 deletions(-)
+ lib/device/device_id.c  | 53 +++++++++++++++++++++++++++++++++++++++++++++----
+ test/shell/lvm-on-md.sh | 21 +++++++++++++++-----
+ 2 files changed, 65 insertions(+), 9 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index 9f270c6..7eac3a7 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.02.155 - 
- ================================
-+  When reporting Data%,Snap%,Meta%,Cpy%Sync use single ioctl per LV.
-   Add lvseg_percent_with_info_and_seg_status() for percent retrieval.
-   Enhance internal seg_status handling to understand snapshots better.
-   When refresh failed in suspend, call resume upon error path.
-diff --git a/lib/report/columns.h b/lib/report/columns.h
-index a17b3eb..212f9ed 100644
---- a/lib/report/columns.h
-+++ b/lib/report/columns.h
-@@ -62,18 +62,18 @@ FIELD(LVS, lv, SIZ, "Rahead", lvid, 0, lvreadahead, lv_read_ahead, "Read ahead s
- FIELD(LVS, lv, SIZ, "LSize", size, 0, size64, lv_size, "Size of LV in current units.", 0)
- FIELD(LVS, lv, SIZ, "MSize", lvid, 0, lvmetadatasize, lv_metadata_size, "For thin and cache pools, the size of the LV that holds the metadata.", 0)
- FIELD(LVS, lv, NUM, "#Seg", lvid, 0, lvsegcount, seg_count, "Number of segments in LV.", 0)
--FIELD(LVS, lv, STR, "Origin", lvid, 0, origin, origin, "For snapshots, the origin device of this LV.", 0)
--FIELD(LVS, lv, STR, "Origin UUID", lvid, 38, originuuid, origin_uuid, "For snapshots, the UUID of origin device of this LV.", 0)
-+FIELD(LVS, lv, STR, "Origin", lvid, 0, origin, origin, "For snapshots and thins, the origin device of this LV.", 0)
-+FIELD(LVS, lv, STR, "Origin UUID", lvid, 38, originuuid, origin_uuid, "For snapshots and thins, the UUID of origin device of this LV.", 0)
- FIELD(LVS, lv, SIZ, "OSize", lvid, 0, originsize, origin_size, "For snapshots, the size of the origin device of this LV.", 0)
- FIELD(LVS, lv, STR_LIST, "Ancestors", lvid, 0, lvancestors, lv_ancestors, "LV ancestors ignoring any stored history of the ancestry chain.", 0)
- FIELD(LVS, lv, STR_LIST, "FAncestors", lvid, 0, lvfullancestors, lv_full_ancestors, "LV ancestors including stored history of the ancestry chain.", 0)
- FIELD(LVS, lv, STR_LIST, "Descendants", lvid, 0, lvdescendants, lv_descendants, "LV descendants ignoring any stored history of the ancestry chain.", 0)
- FIELD(LVS, lv, STR_LIST, "FDescendants", lvid, 0, lvfulldescendants, lv_full_descendants, "LV descendants including stored history of the ancestry chain.", 0)
--FIELD(LVS, lv, PCT, "Data%", lvid, 6, datapercent, data_percent, "For snapshot and thin pools and volumes, the percentage full if LV is active.", 0)
--FIELD(LVS, lv, PCT, "Snap%", lvid, 6, snpercent, snap_percent, "For snapshots, the percentage full if LV is active.", 0)
--FIELD(LVS, lv, PCT, "Meta%", lvid, 6, metadatapercent, metadata_percent, "For thin pools, the percentage of metadata full if LV is active.", 0)
--FIELD(LVS, lv, PCT, "Cpy%Sync", lvid, 0, copypercent, copy_percent, "For RAID, mirrors and pvmove, current percentage in-sync.", 0)
--FIELD(LVS, lv, PCT, "Cpy%Sync", lvid, 0, copypercent, sync_percent, "For RAID, mirrors and pvmove, current percentage in-sync.", 0)
-+FIELD(LVSSTATUS, lv, PCT, "Data%", lvid, 6, datapercent, data_percent, "For snapshot, cache and thin pools and volumes, the percentage full if LV is active.", 0)
-+FIELD(LVSSTATUS, lv, PCT, "Snap%", lvid, 6, snpercent, snap_percent, "For snapshots, the percentage full if LV is active.", 0)
-+FIELD(LVSSTATUS, lv, PCT, "Meta%", lvid, 6, metadatapercent, metadata_percent, "For cache and thin pools, the percentage of metadata full if LV is active.", 0)
-+FIELD(LVSSTATUS, lv, PCT, "Cpy%Sync", lvid, 0, copypercent, copy_percent, "For Cache, RAID, mirrors and pvmove, current percentage in-sync.", 0)
-+FIELD(LVSSTATUS, lv, PCT, "Cpy%Sync", lvid, 0, copypercent, sync_percent, "For Cache, RAID, mirrors and pvmove, current percentage in-sync.", 0)
- FIELD(LVS, lv, NUM, "Mismatches", lvid, 0, raidmismatchcount, raid_mismatch_count, "For RAID, number of mismatches found or repaired.", 0)
- FIELD(LVS, lv, STR, "SyncAction", lvid, 0, raidsyncaction, raid_sync_action, "For RAID, the current synchronization action being performed.", 0)
- FIELD(LVS, lv, NUM, "WBehind", lvid, 0, raidwritebehind, raid_write_behind, "For RAID1, the number of outstanding writes allowed to writemostly devices.", 0)
-@@ -120,7 +120,7 @@ FIELD(LVSSTATUS, lv, STR_LIST, "KCacheSettings", lvid, 18, kernel_cache_settings
- FIELD(LVSSTATUS, lv, STR, "KCachePolicy", lvid, 18, kernel_cache_policy, kernel_cache_policy, "Cache policy used in kernel.", 0)
- FIELD(LVSSTATUS, lv, STR, "Health", lvid, 15, lvhealthstatus, lv_health_status, "LV health status.", 0)
- FIELD(LVSSTATUS, lv, STR, "KDiscards", lvid, 0, kdiscards, kernel_discards, "For thin pools, how discards are handled in kernel.", 0)
--FIELD(LVSSTATUS, lv, BIN, "CheckNeeded", lvid, 15, lvcheckneeded, lv_check_needed, "For thin pools, whether metadata check is needed.", 0)
-+FIELD(LVSSTATUS, lv, BIN, "CheckNeeded", lvid, 15, lvcheckneeded, lv_check_needed, "For thin pools and cache volumes, whether metadata check is needed.", 0)
+diff --git a/lib/device/device_id.c b/lib/device/device_id.c
+index 391309ccd..649c4bba9 100644
+--- a/lib/device/device_id.c
++++ b/lib/device/device_id.c
+@@ -321,17 +321,24 @@ const char *device_id_system_read(struct cmd_context *cmd, struct device *dev, u
+ 	else if (idtype == DEV_ID_TYPE_SYS_SERIAL)
+ 		read_sys_block(cmd, dev, "device/serial", sysbuf, sizeof(sysbuf));
  
- FIELD(LABEL, label, STR, "Fmt", type, 0, pvfmt, pv_fmt, "Type of metadata.", 0)
- FIELD(LABEL, label, STR, "PV UUID", type, 38, pvuuid, pv_uuid, "Unique identifier.", 0)
-diff --git a/lib/report/report.c b/lib/report/report.c
-index fd084f1..56c6f5b 100644
---- a/lib/report/report.c
-+++ b/lib/report/report.c
-@@ -2812,28 +2812,11 @@ static int _snpercent_disp(struct dm_report *rh, struct dm_pool *mem __attribute
- 			   struct dm_report_field *field,
- 			   const void *data, void *private __attribute__((unused)))
- {
--	const struct logical_volume *lv = (const struct logical_volume *) data;
--	dm_percent_t snap_percent;
--
--	if ((lv_is_cow(lv) || lv_is_merging_origin(lv)) &&
--	    lv_snapshot_percent(lv, &snap_percent)) {
--		if ((snap_percent != DM_PERCENT_INVALID) &&
--		    (snap_percent != LVM_PERCENT_MERGE_FAILED))
--			return dm_report_field_percent(rh, field, &snap_percent);
--
--		if (!lv_is_merging_origin(lv)) {
--			snap_percent = DM_PERCENT_100;
--			return dm_report_field_percent(rh, field, &snap_percent);
--		}
-+	const struct lv_with_info_and_seg_status *lvdm = (const struct lv_with_info_and_seg_status *) data;
+-	else if (idtype == DEV_ID_TYPE_MPATH_UUID)
++	else if (idtype == DEV_ID_TYPE_MPATH_UUID) {
+ 		read_sys_block(cmd, dev, "dm/uuid", sysbuf, sizeof(sysbuf));
++		/* if (strncmp(sysbuf, "mpath", 5)) sysbuf[0] = '\0'; */
++	}
  
--		/*
--		 * on activate merge that hasn't started yet would
--		 * otherwise display incorrect snap% in origin
--		 */
--	}
-+	dm_percent_t percent = lvseg_percent_with_info_and_seg_status(lvdm, PERCENT_GET_DATA);
+-	else if (idtype == DEV_ID_TYPE_CRYPT_UUID)
++	else if (idtype == DEV_ID_TYPE_CRYPT_UUID) {
+ 		read_sys_block(cmd, dev, "dm/uuid", sysbuf, sizeof(sysbuf));
++		/* if (strncmp(sysbuf, "CRYPT", 5)) sysbuf[0] = '\0'; */
++	}
  
--	snap_percent = DM_PERCENT_INVALID;
--	return dm_report_field_percent(rh, field, &snap_percent);
-+	return dm_report_field_percent(rh, field, &percent);
+-	else if (idtype == DEV_ID_TYPE_LVMLV_UUID)
++	else if (idtype == DEV_ID_TYPE_LVMLV_UUID) {
+ 		read_sys_block(cmd, dev, "dm/uuid", sysbuf, sizeof(sysbuf));
++		/* if (strncmp(sysbuf, "LVM", 3)) sysbuf[0] = '\0'; */
++	}
+ 
+-	else if (idtype == DEV_ID_TYPE_MD_UUID)
++	else if (idtype == DEV_ID_TYPE_MD_UUID) {
+ 		read_sys_block(cmd, dev, "md/uuid", sysbuf, sizeof(sysbuf));
++	}
+ 
+ 	else if (idtype == DEV_ID_TYPE_LOOP_FILE) {
+ 		read_sys_block(cmd, dev, "loop/backing_file", sysbuf, sizeof(sysbuf));
+@@ -1292,6 +1299,36 @@ void device_id_pvremove(struct cmd_context *cmd, struct device *dev)
+ 	}
  }
  
- static int _copypercent_disp(struct dm_report *rh,
-@@ -2841,20 +2824,20 @@ static int _copypercent_disp(struct dm_report *rh,
- 			     struct dm_report_field *field,
- 			     const void *data, void *private __attribute__((unused)))
- {
--	const struct logical_volume *lv = (const struct logical_volume *) data;
--	struct lv_status_cache *status;
-+	const struct lv_with_info_and_seg_status *lvdm = (const struct lv_with_info_and_seg_status *) data;
++static int _idtype_compatible_with_major_number(struct cmd_context *cmd, int idtype, int major)
++{
++	if (idtype == DEV_ID_TYPE_MPATH_UUID ||
++	    idtype == DEV_ID_TYPE_CRYPT_UUID ||
++	    idtype == DEV_ID_TYPE_LVMLV_UUID)
++		return (major == cmd->dev_types->device_mapper_major);
 +
-+	const struct logical_volume *lv = lvdm->lv;
- 	dm_percent_t percent = DM_PERCENT_INVALID;
++	if (idtype == DEV_ID_TYPE_MD_UUID)
++		return (major == cmd->dev_types->md_major);
++
++	if (idtype == DEV_ID_TYPE_LOOP_FILE)
++		return (major == cmd->dev_types->loop_major);
++
++	if (major == cmd->dev_types->device_mapper_major)
++		return (idtype == DEV_ID_TYPE_MPATH_UUID ||
++			idtype == DEV_ID_TYPE_CRYPT_UUID ||
++			idtype == DEV_ID_TYPE_LVMLV_UUID ||
++			idtype == DEV_ID_TYPE_DEVNAME);
++
++	if (major == cmd->dev_types->md_major)
++		return (idtype == DEV_ID_TYPE_MD_UUID ||
++			idtype == DEV_ID_TYPE_DEVNAME);
++
++	if (major == cmd->dev_types->loop_major)
++		return (idtype == DEV_ID_TYPE_LOOP_FILE ||
++			idtype == DEV_ID_TYPE_DEVNAME);
++
++	return 1;
++}
++
+ /*
+  * check for dev->ids entry with du->idtype, if found compare it,
+  * if not, system_read of this type and add entry to dev->ids, compare it.
+@@ -1307,6 +1344,14 @@ static int _match_du_to_dev(struct cmd_context *cmd, struct dev_use *du, struct
+ 	if (!du->idname || !du->idtype)
+ 		return 0;
  
--	if (((lv_is_raid(lv) && !seg_is_any_raid0(first_seg(lv)) && lv_raid_percent(lv, &percent)) ||
--	     (lv_is_mirror(lv) && lv_mirror_percent(lv->vg->cmd, lv, 0, &percent, NULL))) &&
--	    (percent != DM_PERCENT_INVALID)) {
-+	/* TODO: just cache passes through lvseg_percent... */
-+	if (lv_is_cache(lv) || lv_is_used_cache_pool(lv))
-+		percent = lvseg_percent_with_info_and_seg_status(lvdm, PERCENT_GET_DIRTY);
-+	else if (((lv_is_raid(lv) && !seg_is_any_raid0(first_seg(lv)) &&
-+		   lv_raid_percent(lv, &percent)) ||
-+		  (lv_is_mirror(lv) &&
-+		   lv_mirror_percent(lv->vg->cmd, lv, 0, &percent, NULL))) &&
-+		 (percent != DM_PERCENT_INVALID))
- 		percent = copy_percent(lv);
--	} else if (lv_is_cache(lv) || lv_is_used_cache_pool(lv)) {
--		if (lv_cache_status(lv, &status)) {
--			percent = status->dirty_usage;
--			dm_pool_destroy(status->mem);
--		}
--	}
++	/*
++	 * Some idtypes can only match devices with a specific major number,
++	 * so we can skip trying to match certain du entries based simply on
++	 * the major number of dev.
++	 */
++	if (!_idtype_compatible_with_major_number(cmd, du->idtype, (int)MAJOR(dev->dev)))
++		return 0;
++
+ 	if (!dev_get_partition_number(dev, &part)) {
+ 		log_debug("compare %s failed to get dev partition", dev_name(dev));
+ 		return 0;
+diff --git a/test/shell/lvm-on-md.sh b/test/shell/lvm-on-md.sh
+index d2810b8cf..f932ca623 100644
+--- a/test/shell/lvm-on-md.sh
++++ b/test/shell/lvm-on-md.sh
+@@ -13,19 +13,23 @@
+ SKIP_WITH_LVMPOLLD=1
+ SKIP_WITH_LVMLOCKD=1
  
- 	return dm_report_field_percent(rh, field, &percent);
++. lib/inittest
++
+ RUNDIR="/run"
+ test -d "$RUNDIR" || RUNDIR="/var/run"
+ PVS_ONLINE_DIR="$RUNDIR/lvm/pvs_online"
+ VGS_ONLINE_DIR="$RUNDIR/lvm/vgs_online"
+ HINTS="$RUNDIR/lvm/hints"
+ 
++DFDIR="$LVM_SYSTEM_DIR/devices"
++DF="$DFDIR/system.devices"
++
+ _clear_online_files() {
+         # wait till udev is finished
+         aux udev_wait
+         rm -f "$PVS_ONLINE_DIR"/* "$VGS_ONLINE_DIR"/*
  }
-@@ -2937,22 +2920,9 @@ static int _datapercent_disp(struct dm_report *rh, struct dm_pool *mem,
- 			     struct dm_report_field *field,
- 			     const void *data, void *private)
- {
--	const struct logical_volume *lv = (const struct logical_volume *) data;
--	dm_percent_t percent = DM_PERCENT_INVALID;
--	struct lv_status_cache *status;
-+	const struct lv_with_info_and_seg_status *lvdm = (const struct lv_with_info_and_seg_status *) data;
  
--	if (lv_is_cow(lv))
--		return _snpercent_disp(rh, mem, field, data, private);
--	else if (lv_is_thin_pool(lv))
--		(void) lv_thin_pool_percent(lv, 0, &percent);
--	else if (lv_is_thin_volume(lv))
--		(void) lv_thin_percent(lv, 0, &percent);
--	else if (lv_is_cache(lv) || lv_is_used_cache_pool(lv)) {
--		if (lv_cache_status(lv, &status)) {
--			percent = status->data_usage;
--			dm_pool_destroy(status->mem);
--		}
--	}
-+	dm_percent_t percent = lvseg_percent_with_info_and_seg_status(lvdm, PERCENT_GET_DATA);
+-. lib/inittest
  
- 	return dm_report_field_percent(rh, field, &percent);
- }
-@@ -2962,20 +2932,12 @@ static int _metadatapercent_disp(struct dm_report *rh,
- 				 struct dm_report_field *field,
- 				 const void *data, void *private)
- {
--	const struct logical_volume *lv = (const struct logical_volume *) data;
-+	const struct lv_with_info_and_seg_status *lvdm = (const struct lv_with_info_and_seg_status *) data;
- 	dm_percent_t percent = DM_PERCENT_INVALID;
--	struct lv_status_cache *status;
+ # This stops lvm from taking advantage of hints which
+ # will have already excluded md components.
+@@ -35,7 +39,8 @@ _clear_online_files() {
+ # want to rely on that ability in this test.
+ aux lvmconf "devices/md_component_detection = 1" \
+ 	"devices/hints = \"none\"" \
+-	"devices/obtain_device_list_from_udev = 0"
++	"devices/obtain_device_list_from_udev = 0" \
++	"devices/search_for_devnames = \"none\""
  
--	if (lv_is_thin_pool(lv))
--		(void) lv_thin_pool_percent(lv, 1, &percent);
--	else if (lv_is_thin_volume(lv))
--		(void) lv_thin_percent(lv, 1, &percent);
--	else if (lv_is_cache(lv) || lv_is_used_cache_pool(lv)) {
--		if (lv_cache_status(lv, &status)) {
--			percent = status->metadata_usage;
--			dm_pool_destroy(status->mem);
--		}
--	}
-+	if (lv_is_thin_pool(lvdm->lv) ||
-+	    lv_is_used_cache_pool(lvdm->lv))
-+		percent = lvseg_percent_with_info_and_seg_status(lvdm, PERCENT_GET_METADATA);
+ aux extend_filter_md "a|/dev/md|"
  
- 	return dm_report_field_percent(rh, field, &percent);
- }
+@@ -54,6 +59,9 @@ mddev=$(< MD_DEV)
+ 
+ vgcreate $vg "$mddev"
+ 
++lvmdevices || true
++pvs -o+deviceidtype,deviceid
++
+ PVIDMD=$(get pv_field "$mddev" uuid | tr -d - )
+ 
+ lvcreate -n $lv1 -l 2 $vg
+@@ -158,7 +166,10 @@ done
+ # Repeat tests using the default config settings
+ 
+ aux lvmconf "devices/hints = \"all\"" \
+-	"devices/obtain_device_list_from_udev = 1"
++	"devices/obtain_device_list_from_udev = 1" \
++	"devices/search_for_devnames = \"none\""
++
++rm $DF || true
+ 
+ # create 2 disk MD raid0 array
+ # by default using metadata format 1.0 with data@the end of device
+@@ -216,7 +227,7 @@ aux udev_wait
+ # duplicate PVs which are eventually recognized as md components
+ # and dropped.
+ pvs 2>&1|tee out1
+-grep -v WARNING out1 > out2
++grep -v -e WARNING -e "Devices file PVID" out1 > out2
+ not grep "Not using device" out2
+ not grep "$mddev" out2
+ not grep "$dev1" out2
+@@ -225,7 +236,7 @@ grep "$dev3" out2
+ cat "$HINTS"
+ 
+ pvs 2>&1|tee out1
+-grep -v WARNING out1 > out2
++grep -v -e WARNING -e "Devices file PVID" out1 > out2
+ not grep "Not using device" out2
+ not grep "$mddev" out2
+ not grep "$dev1" out2
 
 
