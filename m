@@ -1,39 +1,44 @@
-From: Wu Guanghao <wuguanghao3@huawei.com>
-Date: Mon, 30 Aug 2021 15:14:17 +0800
-Subject: [PATCH 3/3] read_adopt_file: fix memory leak
-In-Reply-To: <ad63f240-4bc9-9d54-616c-5c7306b5ee98@huawei.com>
-References: <ad63f240-4bc9-9d54-616c-5c7306b5ee98@huawei.com>
-Message-ID: <bc6154a0-8e1f-8a1d-0350-a045a30c4c00@huawei.com>
+From: Zdenek Kabelac <zkabelac@sourceware.org>
+Date: Tue, 31 Aug 2021 20:06:06 +0000 (GMT)
+Subject: main - vdo: skip zeroing for VDO LV
+Message-ID: <20210831200606.E488E3858C27@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-When exiting abnormally, forget to release ls
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=88360b0c512d96dfe05c11362ff389ef6bfec6b4
+Commit:        88360b0c512d96dfe05c11362ff389ef6bfec6b4
+Parent:        62c599f78151e65105c92c87ac406e3f3f360b1a
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Thu Aug 26 23:04:56 2021 +0200
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Tue Aug 31 22:05:47 2021 +0200
 
-Signed-off-by: Wu Guanghao <wuguanghao3@huawei.com>
+vdo: skip zeroing for VDO LV
+
+Since VDO is always returns 'zero' on unprovisioned read
+and every provisioned block is always 'zeroed' on partial writes,
+we can avoid 'zeroing' of such LVs.
 ---
- daemons/lvmlockd/lvmlockd-core.c | 4 +++-
- 1 file changed, 3 insertions(+), 1 deletion(-)
+ lib/metadata/lv_manip.c | 4 ++++
+ 1 file changed, 4 insertions(+)
 
-diff --git a/daemons/lvmlockd/lvmlockd-core.c b/daemons/lvmlockd/lvmlockd-core.c
-index d4d7f106f..71d708603 100644
---- a/daemons/lvmlockd/lvmlockd-core.c
-+++ b/daemons/lvmlockd/lvmlockd-core.c
-@@ -970,8 +970,10 @@ static int read_adopt_file(struct list_head *vg_lockd)
-
-                        memcpy(ls->vg_uuid, vg_uuid, 64);
-
--                       if ((ls->lm_type = str_to_lm(lm_type_str)) < 0)
-+                       if ((ls->lm_type = str_to_lm(lm_type_str)) < 0) {
-+                               free(ls);
-                                goto fail;
-+                       }
-
-                        list_add(&ls->list, vg_lockd);
-
---
-2.23.0
+diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
+index a26d3d533..730e3f0df 100644
+--- a/lib/metadata/lv_manip.c
++++ b/lib/metadata/lv_manip.c
+@@ -8073,6 +8073,10 @@ static int _should_wipe_lv(struct lvcreate_params *lp,
+ 	     first_seg(first_seg(lv)->pool_lv)->zero_new_blocks))
+ 		return 0;
+ 
++	/* VDO LV do not need to be zeroed */
++	if (lv_is_vdo(lv))
++		return 0;
++
+ 	if (warn && (lv_passes_readonly_filter(lv))) {
+ 		log_warn("WARNING: Read-only activated logical volume %s not zeroed.",
+ 			 display_lvname(lv));
 
 
