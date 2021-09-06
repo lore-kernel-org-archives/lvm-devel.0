@@ -1,93 +1,197 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Mon,  6 Sep 2021 13:25:10 +0000 (GMT)
-Subject: main - vdo: better message for missing device
-Message-ID: <20210906132510.657513858414@sourceware.org>
+Date: Mon,  6 Sep 2021 13:25:11 +0000 (GMT)
+Subject: main - vdo: more lvm_import_vdo fixes
+Message-ID: <20210906132511.857A03858414@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=3287d37f440ca272b52f900fc60ee5effcf73697
-Commit:        3287d37f440ca272b52f900fc60ee5effcf73697
-Parent:        8d5b7de54f21ce5e34d533599f9d5a42f2977cd5
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=89595a366554191c3df1a18e1f82b79c450a21ad
+Commit:        89595a366554191c3df1a18e1f82b79c450a21ad
+Parent:        3287d37f440ca272b52f900fc60ee5effcf73697
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed Sep 1 15:46:04 2021 +0200
+AuthorDate:    Mon Sep 6 15:06:32 2021 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Mon Sep 6 15:19:51 2021 +0200
 
-vdo: better message for missing device
+vdo: more lvm_import_vdo fixes
 
-Show readable message when passed device cannot be accessed.
-And use STAT shell var wrapper to call 'stat' command.
+Do not call 'dmsetup info' for non-dm devices.
+
+Better handling for VGNAME and LVNAME - so when convering LV as
+backend device automatically recognize it and reuse LV name for VDOLV.
+
+Add prompt for final confirmation before actual conversion is started
+(once confirmed, lvm2 commands no longer prompts to avoid leaving
+conversion in the middle of its process.)
 ---
- scripts/lvm_import_vdo.sh | 19 ++++++++++---------
- 1 file changed, 10 insertions(+), 9 deletions(-)
+ scripts/lvm_import_vdo.sh | 48 ++++++++++++++++++++++++++++++++++------
+ test/shell/vdo-convert.sh | 56 +++++++++++++++++++++++++++++++++++++++++++++++
+ 2 files changed, 97 insertions(+), 7 deletions(-)
 
 diff --git a/scripts/lvm_import_vdo.sh b/scripts/lvm_import_vdo.sh
-index 65d2eee38..685821f13 100755
+index 685821f13..39a320c84 100755
 --- a/scripts/lvm_import_vdo.sh
 +++ b/scripts/lvm_import_vdo.sh
-@@ -19,7 +19,7 @@
- # Needed utilities:
- #  lvm, dmsetup,
- #  vdo,
--#  grep, awk, sed, blockdev, readlink, mkdir
-+#  grep, awk, sed, blockdev, readlink, stat, mkdir
- #
- # Conversion is using  'vdo convert' support from VDO manager to move
- # existing VDO header by 2M which makes space to place in PV header
-@@ -40,6 +40,7 @@ VDOCONF=${VDOCONF:-}
- BLOCKDEV="blockdev"
- READLINK="readlink"
- READLINK_E="-e"
-+STAT="stat"
- MKDIR="mkdir"
- DMSETUP="dmsetup"
+@@ -50,6 +50,7 @@ DM_DEV_DIR="${DM_DEV_DIR:-/dev}"
+ DEVICENAME=""
+ DEVMAJOR=0
+ DEVMINOR=0
++PROMPTING=""
  
-@@ -156,8 +157,8 @@ detect_lv_() {
- 	local MAJORMINOR
+ DRY=0
+ VERB=""
+@@ -57,7 +58,8 @@ FORCE=""
+ YES=""
  
- 	DEVICE=${1/#"${DM_DEV_DIR}/"/}
--	DEVICE=$("$READLINK" $READLINK_E "$DM_DEV_DIR/$DEVICE")
--	test -n "$DEVICE" || error "Cannot get readlink \"$1\"."
-+	DEVICE=$("$READLINK" $READLINK_E "$DM_DEV_DIR/$DEVICE" || true)
-+	test -n "$DEVICE" || error "Readlink cannot access device \"$1\"."
- 	RDEVICE=$DEVICE
- 	case "$RDEVICE" in
- 	  # hardcoded /dev  since udev does not create these entries elsewhere
-@@ -168,9 +169,9 @@ detect_lv_() {
- 		DEVMINOR=${MAJORMINOR##*:}
- 		;;
- 	  *)
--		STAT=$(stat --format "DEVMAJOR=\$((0x%t)) DEVMINOR=\$((0x%T))" "$RDEVICE")
--		test -n "$STAT" || error "Cannot get major:minor for \"$DEVICE\"."
--		eval "$STAT"
-+		RSTAT=$("$STAT" --format "DEVMAJOR=\$((0x%t)) DEVMINOR=\$((0x%T))" "$RDEVICE" || true)
-+		test -n "$RSTAT" || error "Cannot get major:minor for \"$DEVICE\"."
-+		eval "$RSTAT"
+ # default name for converted VG and its VDO LV
+-NAME="vdovg/vdolvol"
++DEFAULT_NAME="vdovg/vdolvol"
++NAME=""
+ 
+ # help message
+ tool_usage() {
+@@ -100,6 +102,7 @@ dry() {
+ cleanup() {
+ 	trap '' 2
+ 
++	test -z "$PROMPTING" || echo "No"
+ 	rm -rf "$TEMPDIR"
+ 	# error exit status for break
+ 	exit "${1:-1}"
+@@ -175,7 +178,9 @@ detect_lv_() {
  		;;
  	esac
  
-@@ -269,8 +270,8 @@ convert2lvm_() {
- 	for i in $(awk '/.*device:/ {print $2}' "$TEMPDIR/vdoconf.yml") ; do
- 		local DEV
- 		DEV=$("$READLINK" $READLINK_E "$i") || continue
--		STAT=$(stat --format "MAJOR=\$((0x%t)) MINOR=\$((0x%T))" "$DEV" 2>/dev/null) || continue
--		eval "$STAT"
-+		RSTAT=$("$STAT" --format "MAJOR=\$((0x%t)) MINOR=\$((0x%T))" "$DEV" 2>/dev/null) || continue
-+		eval "$RSTAT"
- 		test "$MAJOR" = "$DEVMAJOR" && test "$MINOR" = "$DEVMINOR" && {
- 			test -z "$FOUND" || error "VDO configuration contains duplicate entries $FOUND and $i"
- 			FOUND=$i
-@@ -287,7 +288,7 @@ convert2lvm_() {
- 	DM_OPEN="$("$DMSETUP" info -c -o open  "$VDONAME" --noheadings --nameprefixes 2>/dev/null || true)"
- 	case "$DM_OPEN" in
- 	Device*) ;; # no devices
--	*) 	eval "$DM_OPEN"
-+	*)	eval "$DM_OPEN"
- 		test "${DM_OPEN:-0}" -eq 0 || error "Cannot converted VDO volume \"$VDONAME\" which is in use!"
- 		;;
+-	DEV="$("$DMSETUP" info -c -j "$DEVMAJOR" -m "$DEVMINOR" -o uuid,name --noheadings --nameprefixes --separator ' ' 2>/dev/null)"
++	test "$DEVMAJOR" != "$(grep device-mapper /proc/devices | cut -f1 -d' ')" && return
++
++	DEV="$("$DMSETUP" info -c -j "$DEVMAJOR" -m "$DEVMINOR" -o uuid,name --noheadings --nameprefixes --separator ' ')"
+ 	case "$DEV" in
+ 	Device*)  ;; # no devices
+ 	*)	eval "$DEV" ;;
+@@ -244,15 +249,31 @@ convert2lvm_() {
+ 	detect_lv_ "$DEVICE"
+ 	case "$DM_UUID" in
+ 		LVM-*)	eval "$("$DMSETUP" splitname --nameprefixes --noheadings --separator ' ' "$DM_NAME")"
+-			if [ -z "$VGNAME" ] || [ "$VGNAME" = "$LVNAME" ]  ; then
++			if [ -z "$VGNAME" ] || [ "$VGNAME" = "$LVNAME" ] ; then
+ 				VGNAME=$DM_VG_NAME
+-				LVNAME=$DM_LV_NAME
++				verbose "Using existing volume group name $VGNAME."
++				test -n "$LVNAME" || LVNAME=$DM_LV_NAME
+ 			elif test "$VGNAME" != "$DM_VG_NAME" ; then
+-				error "Volume group name \"$VGNAME\" does not match name \"$DM_VG_NAME\" for device \"$DEVICE\"."
++				error "Volume group name \"$VGNAME\" does not match name \"$DM_VG_NAME\" for VDO device \"$DEVICE\"."
+ 			fi
+ 			;;
+-		*) IS_LV=0
+-			# Check $VGNANE does not already exists
++		*)	IS_LV=0
++			# Check if we need to generate unused $VGNANE
++			if [ -z "$VGNAME" ] || [ "$VGNAME" = "$LVNAME" ] ; then
++				VGNAME=${DEFAULT_NAME%/*}
++				# Find largest matching VG name to our 'default' vgname
++				LASTVGNAME=$(LC_ALL=C "$LVM" vgs -oname -O-name --noheadings -S name=~${VGNAME} | grep -E "$VGNAME[0-9]? ?" | head -1)
++				if test -n "$LASTVGNAME" ; then
++					LASTVGNAME=${LASTVGNAME#*${VGNAME}}
++					# If the number is becoming too high, try some random number
++					test "$LASTVGNAME" -gt 99999999 2>/dev/null && LASTVGNAME=$RANDOM
++					# Generate new unused VG name
++					VGNAME="${VGNAME}$(( ${LASTVGNAME} + 1 ))"
++					verbose "Selected unused volume group name $VGNAME."
++				fi
++			fi
++			# New VG is created, LV name should be always unused.
++			test -n "$LVNAME" || LVNAME=${DEFAULT_NAME#*/}
+ 			"$LVM" vgs "$VGNAME" >/dev/null 2>&1 && error "Cannot use already existing volume group name \"$VGNAME\"."
+ 			;;
  	esac
+@@ -328,6 +349,19 @@ EOF
+ )
+ 	verbose "VDO conversion paramaters: $PARAMS"
+ 
++	# If user has not provided '--yes', prompt before conversion
++	if test -z "$YES" ; then
++		PROMPTING=yes
++		echo -n "Convert VDO device \"$DEVICE\" to VDO LV \"$VGNAME/$LVNAME\"? [y|N]: "
++		read -n 1 -s ANSWER
++		case "${ANSWER:0:1}" in
++			y|Y )  echo "Yes" ;;
++			* )    echo "No" ; PROMPTING=""; exit ;;
++		esac
++		PROMPTING=""
++		YES="-y" # From now, now prompting
++	fi
++
+ 	verbose "Stopping VDO volume."
+ 	dry "$VDO" stop $VDOCONF --name "$VDONAME"
+ 
+diff --git a/test/shell/vdo-convert.sh b/test/shell/vdo-convert.sh
+index 493f415d4..632f86a36 100644
+--- a/test/shell/vdo-convert.sh
++++ b/test/shell/vdo-convert.sh
+@@ -122,3 +122,59 @@ fsck -n "$DM_DEV_DIR/$vg1/$lv2"
+ 
+ vgremove -f $vg1
+ 
++aux teardown_devs
++
++
++# Check with some real non-DM device from system
++# this needs to dropping DM_DEV_DIR
++
++aux prepare_loop 60000 || skip
++
++test -f LOOP
++LOOP=$(< LOOP)
++
++aux extend_filter "a|$LOOP|"
++aux extend_devices "$LOOP"
++
++#
++# Unfortunatelly generates this in syslog:
++#
++# vdo-start-by-dev at loop0.service: Main process exited, code=exited, status=1/FAILURE
++# vdo-start-by-dev@loop0.service: Failed with result 'exit-code'.
++# Failed to start Start VDO volume backed by loop0.
++#
++# TODO:  Could be handled by:
++#
++# systemctl mask vdo-start-by-dev@
++# systemctl unmask vdo-start-by-dev@
++#
++# automate...
++#
++vdo create $VDOCONF --name "$VDONAME" --device="$LOOP" --vdoLogicalSize=23G \
++	--blockMapCacheSize 192 \
++	--blockMapPeriod 2048 \
++	--emulate512 disabled \
++	--indexMem 0.5 \
++	--maxDiscardSize 10 \
++	--sparseIndex disabled \
++	--vdoAckThreads 2 \
++	--vdoBioRotationInterval 8 \
++	--vdoBioThreads 2 \
++	--vdoCpuThreads 5 \
++	--vdoHashZoneThreads 3 \
++	--vdoLogicalThreads 3 \
++	--writePolicy async-unsafe
++
++# Get VDO table line
++dmsetup table "$VDONAME" | tr " " "\n" | sed -e '5,6d' -e '12d' | tee vdo-orig
++
++DM_DEV_DIR= lvm_import_vdo -y --name $vg/$lv "$LOOP"
++lvs -a $vg
++
++dmsetup table "$vg-${lv}_vpool-vpool" | tr " " "\n" | sed -e '5,6d' -e '12d' | tee new-vdo-lv
++
++# Check there is a match between VDO and LV managed volume
++# (when differentiating parameters are deleted first)
++diff -u vdo-orig new-vdo-lv || die "Found mismatching VDO table lines!"
++
++check lv_field $vg/$lv size "23.00g"
 
 
