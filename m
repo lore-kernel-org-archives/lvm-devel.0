@@ -1,48 +1,33 @@
-From: Adrian Ratiu <adrian.ratiu@collabora.com>
-Date: Thu,  9 Sep 2021 17:51:47 +0300
-Subject: [PATCH] man-generator: initialize struct stat to avoid MSAN error
-Message-ID: <20210909145147.1545231-1-adrian.ratiu@collabora.com>
+From: Zhiqiang Liu <liuzhiqiang26@huawei.com>
+Date: Fri, 10 Sep 2021 10:21:50 +0800
+Subject: [PATCH 0/3] cov: fix memory leak caused by abnormal exit
+In-Reply-To: <ad63f240-4bc9-9d54-616c-5c7306b5ee98@huawei.com>
+References: <ad63f240-4bc9-9d54-616c-5c7306b5ee98@huawei.com>
+Message-ID: <8dfc7c3b-6be6-bea4-6b13-11b1bffc0215@huawei.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-When building lvm2 in Gentoo/ChromeOS with the ASAN memory
-sanitizer enabled, man-generator fails with the following
-error. Initializing makes the error go away.
+ping...
 
-* SUMMARY: MemorySanitizer: use-of-uninitialized-value /build/amd64-generic/tmp/portage/sys-fs/lvm2-2.02.187-r3/work/LVM2.2.02.187/tools/man-generator.c:3316:6 in _include_description_file
-* Exiting
-* ASAN error detected:
-* ==2548047==WARNING: MemorySanitizer: use-of-uninitialized-value
-*     #0 0x558b00ab4730 in _include_description_file /build/amd64-generic/tmp/portage/sys-fs/lvm2-2.02.187-r3/work/LVM2.2.02.187/tools/man-generator.c:3316:6
-*     #1 0x558b00ab4730 in _print_man /build/amd64-generic/tmp/portage/sys-fs/lvm2-2.02.187-r3/work/LVM2.2.02.187/tools/man-generator.c:3426:21
-*     #2 0x558b00ab4730 in main /build/amd64-generic/tmp/portage/sys-fs/lvm2-2.02.187-r3/work/LVM2.2.02.187/tools/man-generator.c:3570:7
-*     #0 0x7fa9b2cbb807 in find_derivation /var/tmp/portage/cross-x86_64-cros-linux-gnu/glibc-2.33-r8/work/glibc-2.33/iconv/gconv_db.c:583:15
-*     #1 0x558b00a29559 in ?? ??:0
-*
-*   Uninitialized value was created by an allocation of 'statbuf.i.i' in the stack frame of function 'main'
-*     #0 0x558b00ab1d4d in main /build/amd64-generic/tmp/portage/sys-fs/lvm2-2.02.187-r3/work/LVM2.2.02.187/tools/man-generator.c:3505
----
- tools/command.c | 2 +-
- 1 file changed, 1 insertion(+), 1 deletion(-)
-
-diff --git a/tools/command.c b/tools/command.c
-index 7205969e1..c019045e7 100644
---- a/tools/command.c
-+++ b/tools/command.c
-@@ -3525,7 +3525,7 @@ static int _include_description_file(char *name, char *des_file)
- 	char *buf;
- 	int fd, r = 0;
- 	ssize_t sz;
--	struct stat statbuf;
-+	struct stat statbuf = {0};
- 
- 	if ((fd = open(des_file, O_RDONLY)) < 0) {
- 		log_error("Failed to open description file %s.", des_file);
--- 
-2.33.0
-
+On 2021/8/30 15:12, Wu Guanghao wrote:
+> Several possible memory leaks were discovered through tool scans
+>
+> wuguanghao (3):
+>   cmdlib_lvm2_init: release cmd after registration failed
+>   read_adopt_file: Set the default value of r to NULL,
+>         and release r when exiting abnormally
+>   read_adopt_file: fix memory leak
+>
+>  daemons/lvmlockd/lvmlockd-core.c | 7 +++++--
+>  tools/lvmcmdlib.c                | 4 +++-
+>  2 files changed, 8 insertions(+), 3 deletions(-)
+>
+> --
+> 2.23.0
+>
+> .
 
 
