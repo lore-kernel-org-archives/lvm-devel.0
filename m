@@ -1,52 +1,40 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Mon, 13 Sep 2021 10:36:01 +0000 (GMT)
-Subject: main - filters: fix memleak on mpath filter destroy
-Message-ID: <20210913103601.5387A3858002@sourceware.org>
+Date: Mon, 13 Sep 2021 10:35:59 +0000 (GMT)
+Subject: main - vdo: man page updates
+Message-ID: <20210913103559.12FCE3858006@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=30050769b1490e293d9e0f7ed37d83c3e56bb6b3
-Commit:        30050769b1490e293d9e0f7ed37d83c3e56bb6b3
-Parent:        3b24c0fe4e197383101eae53b14f19586cf2eda1
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=812653d59806439379d80bb8124f6962ae42d46a
+Commit:        812653d59806439379d80bb8124f6962ae42d46a
+Parent:        9db4ddabc1cf912dee30e0e6293767f01c976a4a
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Sun Sep 12 16:13:27 2021 +0200
+AuthorDate:    Fri Sep 10 01:15:01 2021 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Mon Sep 13 12:34:41 2021 +0200
 
-filters: fix memleak on mpath filter destroy
+vdo: man page updates
 
-Missing free() leaks filter structure.
 ---
- WHATS_NEW                  | 1 +
- lib/filters/filter-mpath.c | 2 ++
- 2 files changed, 3 insertions(+)
+ man/lvm_import_vdo.8_main | 3 +++
+ 1 file changed, 3 insertions(+)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index 7d4cea1d6..9ff0be667 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.03.14 - 
- ==================================
-+  Fix memleak in mpath filter.
-   Support newer location for VDO statistics.
-   Add support for VDO async-unsage write policy.
-   Improve lvm_import_vdo script.
-diff --git a/lib/filters/filter-mpath.c b/lib/filters/filter-mpath.c
-index 982e23400..7644a5b0a 100644
---- a/lib/filters/filter-mpath.c
-+++ b/lib/filters/filter-mpath.c
-@@ -37,6 +37,8 @@ static void _destroy(struct dev_filter *f)
- {
- 	if (f->use_count)
- 		log_error(INTERNAL_ERROR "Destroying mpath filter while in use %u times.", f->use_count);
-+
-+	free(f);
- }
- 
- struct dev_filter *mpath_filter_create(struct dev_types *dt)
+diff --git a/man/lvm_import_vdo.8_main b/man/lvm_import_vdo.8_main
+index d970eeb40..c812c5e01 100644
+--- a/man/lvm_import_vdo.8_main
++++ b/man/lvm_import_vdo.8_main
+@@ -45,6 +45,9 @@ Specifies the name of converted VDO LV. When the name is not specified,
+ some automatic name is selected. In case the converted VDO volume is
+ already using LV a backend device, the name of this LV is used for VDO LV.
+ In this case also the of volume group must stay same.
++Automatic name may change between releases and currently selects
++"vdolv" as LV name and VG name is selected from sequence
++"vdovg", "vdovg1", ...
+ .
+ .TP
+ .BR -v | --verbose
 
 
