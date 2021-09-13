@@ -1,62 +1,50 @@
-From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Thu, 16 Sep 2021 21:59:11 +0200
-Subject: thin vol write performance variance
-In-Reply-To: <CAFe+wq3DUszqSVG6O5vOSMBv-EsAQ3Nru5jrhSK1nbz4uUPNgA@mail.gmail.com>
-References: <CAFe+wq3DUszqSVG6O5vOSMBv-EsAQ3Nru5jrhSK1nbz4uUPNgA@mail.gmail.com>
-Message-ID: <0e77c758-d804-61b6-73f1-3a268b03b6b2@redhat.com>
+From: Zdenek Kabelac <zkabelac@sourceware.org>
+Date: Mon, 13 Sep 2021 10:36:09 +0000 (GMT)
+Subject: main - cov: fix copy from tmp_name buffer
+Message-ID: <20210913103609.3BECE3858006@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Dne 15. 09. 21 v 9:02 Lakshmi Narasimhan Sundararajan napsal(a):
-> Hi Team,
-> A very good day to you.
-> 
-> I have a lvm2 thin pool and thin volumes in my environment.
-> I see a huge variance in write performance over those thin volumes.
-> As one can observe from the logs below, the same quantum of write
-> (~1.5G) to the thin volume (/dev/pwx0/608561273872404373) completes
-> between 2s to 40s.
-> The metadata is  defined as 128 sectors (64KB) on the thin pool.
-> I understand that there is a late mapping of segments to thin volumes
-> as IO requests come in.
-> Is there a way to test/quantity that the overhead is because of this
-> lazy mapping?
-> Are there any other config/areas that I can tune to control this behavior?
-> Are there any tunables/ioctl to control mapping regions ahead of time
-> (ala readahead)?
-> Any other options available to confirm this behavior is because of the
-> lazy mapping and ways to improve it?
-> 
-> My intention is to improve this behavior and control the variance to a
-> more tight bound.
-> Looking forward to your inputs in helping me understand this better.
-> 
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=aa522d586227ecafb18d671cab284ae27ca65eed
+Commit:        aa522d586227ecafb18d671cab284ae27ca65eed
+Parent:        7af0a1b9d87827f0d15e6b062b753ee3043f75dc
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Thu Sep 9 22:32:09 2021 +0200
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Mon Sep 13 12:34:41 2021 +0200
 
-Hi
+cov: fix copy from tmp_name buffer
 
-I think we need to 'decipher' first some origins of your problems.
+Mask for strncpy() Coverity report warning would
+actually need to copy buffer from 'tmp_name' instead of 'str'.
 
-So what is your backend 'storage' in use?
-Do you use fast device like ssd/nvme to store thin-pool metadata?
+But replace it directly with single 'strncpy()' again for better readbility,
+just mask out the warning reported for this strncpy instance
+(so we do not need to put comment fro every call of strcpy_name_len).
+---
+ daemons/lvmlockd/lvmlockd-sanlock.c | 7 ++-----
+ 1 file changed, 2 insertions(+), 5 deletions(-)
 
-Do you measure your time *after* sync all of 'unwritten/buffered' data on disk ?
-
-What is actually your hw in use  - RAM, CPU ?
-
-Which kernel and lvm2 version is being used ?
-
-Do you use/need zeroing of provisioned blocks (which may impact performance 
-and can be disabled with lvcreate -Zn) ?
-
-Do you measure writes while provisioning thin chunks or on already provisioned 
-device?
-
-
-Regards
-
-Zdenek
+diff --git a/daemons/lvmlockd/lvmlockd-sanlock.c b/daemons/lvmlockd/lvmlockd-sanlock.c
+index b351b1d44..13567cf95 100644
+--- a/daemons/lvmlockd/lvmlockd-sanlock.c
++++ b/daemons/lvmlockd/lvmlockd-sanlock.c
+@@ -234,11 +234,8 @@ static uint64_t daemon_test_lv_count;
+  */
+ static void strcpy_name_len(char *buf, char *str, int len)
+ {
+-	char tmp_name[SANLK_NAME_LEN + 1] = { 0 };
+-
+-	strncpy(tmp_name, str, SANLK_NAME_LEN);
+-
+-	memcpy(buf, str, SANLK_NAME_LEN);
++	/* coverity[buffer_size_warning] */
++	strncpy(buf, str, SANLK_NAME_LEN);
+ }
+ 
+ static int lock_lv_name_from_args(char *vg_args, char *lock_lv_name)
 
 
