@@ -1,284 +1,104 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Mon, 20 Sep 2021 13:30:16 +0000 (GMT)
-Subject: main - cov: ignore syscall
-Message-ID: <20210920133016.9F42C3858C3B@sourceware.org>
+Date: Mon, 13 Sep 2021 10:36:13 +0000 (GMT)
+Subject: main - cov: initialize attr
+Message-ID: <20210913103613.BC8E33858006@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=efaab93491751ccf39108d076745c6774b263232
-Commit:        efaab93491751ccf39108d076745c6774b263232
-Parent:        055406bb398ddf60f18c545baffcec4ee4d5646e
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=a8ee13900db58b018e143fbf6a3435c7803e82fe
+Commit:        a8ee13900db58b018e143fbf6a3435c7803e82fe
+Parent:        be1c2a1ae2da445309f04ac4e3ed7470ff29d436
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Mon Sep 20 01:45:55 2021 +0200
+AuthorDate:    Fri Sep 10 22:32:26 2021 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Mon Sep 20 14:26:09 2021 +0200
+CommitterDate: Mon Sep 13 12:34:41 2021 +0200
 
-cov: ignore syscall
+cov: initialize attr
 
 ---
- daemons/lvmlockd/lvmlockd-core.c   |  6 +++---
- lib/device/bcache.c                |  2 +-
- test/lib/brick-shelltest.h         | 36 ++++++++++++++++++------------------
- test/lib/not.c                     |  2 +-
- test/unit/activation-generator_t.c |  4 ++--
- test/unit/percent_t.c              | 26 +++++++++++++-------------
- 6 files changed, 38 insertions(+), 38 deletions(-)
+ lib/activate/activate.c    | 2 +-
+ lib/metadata/cache_manip.c | 2 +-
+ lib/metadata/lv_manip.c    | 2 +-
+ lib/metadata/raid_manip.c  | 4 ++--
+ lib/misc/lvm-exec.c        | 2 +-
+ 5 files changed, 6 insertions(+), 6 deletions(-)
 
-diff --git a/daemons/lvmlockd/lvmlockd-core.c b/daemons/lvmlockd/lvmlockd-core.c
-index 701372220..c1785a764 100644
---- a/daemons/lvmlockd/lvmlockd-core.c
-+++ b/daemons/lvmlockd/lvmlockd-core.c
-@@ -919,7 +919,7 @@ static void write_adopt_file(void)
- 	pthread_mutex_unlock(&lockspaces_mutex);
- 
- 	fflush(fp);
--	fclose(fp);
-+	(void) fclose(fp);
- }
- 
- static int read_adopt_file(struct list_head *vg_lockd)
-@@ -1010,11 +1010,11 @@ static int read_adopt_file(struct list_head *vg_lockd)
- 		}
- 	}
- 
--	fclose(fp);
-+	(void) fclose(fp);
- 	return 0;
- 
- fail:
--	fclose(fp);
-+	(void) fclose(fp);
- 	return -1;
- }
- 
-diff --git a/lib/device/bcache.c b/lib/device/bcache.c
-index be25cc7e2..790ff71d3 100644
---- a/lib/device/bcache.c
-+++ b/lib/device/bcache.c
-@@ -734,7 +734,7 @@ static void _block_remove(struct block *b)
-         k.parts.di = b->di;
-         k.parts.b = b->index;
- 
--	radix_tree_remove(b->cache->rtree, k.bytes, k.bytes + sizeof(k.bytes));
-+	(void) radix_tree_remove(b->cache->rtree, k.bytes, k.bytes + sizeof(k.bytes));
- }
- 
- //----------------------------------------------------------------
-diff --git a/test/lib/brick-shelltest.h b/test/lib/brick-shelltest.h
-index 6bc02e0d2..517c0f7d9 100644
---- a/test/lib/brick-shelltest.h
-+++ b/test/lib/brick-shelltest.h
-@@ -102,7 +102,7 @@ struct dir {
-         if ( !d )
-             throw syserr( "error opening directory", p );
-     }
--    ~dir() { closedir( d ); }
-+    ~dir() { (void) closedir( d ); }
- };
- 
- typedef std::vector< std::string > Listing;
-@@ -111,8 +111,8 @@ inline void fsync_name( std::string n )
+diff --git a/lib/activate/activate.c b/lib/activate/activate.c
+index b44efc617..727bd2386 100644
+--- a/lib/activate/activate.c
++++ b/lib/activate/activate.c
+@@ -1491,7 +1491,7 @@ int lvs_in_vg_opened(const struct volume_group *vg)
+  */
+ int raid4_is_supported(struct cmd_context *cmd, const struct segment_type *segtype)
  {
-     int fd = open( n.c_str(), O_WRONLY );
-     if ( fd >= 0 ) {
--        fsync( fd );
--        close( fd );
-+        (void) fsync( fd );
-+        (void) close( fd );
-     }
- }
+-	unsigned attrs;
++	unsigned attrs = 0;
  
-@@ -464,8 +464,8 @@ struct FileSink : FdSink {
+ 	if (segtype_is_raid4(segtype) &&
+ 	    (!segtype->ops->target_present ||
+diff --git a/lib/metadata/cache_manip.c b/lib/metadata/cache_manip.c
+index 98821430f..b717e8a36 100644
+--- a/lib/metadata/cache_manip.c
++++ b/lib/metadata/cache_manip.c
+@@ -749,7 +749,7 @@ static const char *_get_default_cache_policy(struct cmd_context *cmd)
+ static cache_metadata_format_t _get_default_cache_metadata_format(struct cmd_context *cmd)
+ {
+ 	const struct segment_type *segtype = get_segtype_from_string(cmd, SEG_TYPE_NAME_CACHE);
+-	unsigned attr;
++	unsigned attr = 0;
+ 	cache_metadata_format_t f;
  
-     ~FileSink() {
-         if ( fd >= 0 ) {
--            fsync( fd );
--            close( fd );
-+            (void) fsync( fd );
-+            (void) close( fd );
-         }
-     }
- };
-@@ -515,7 +515,7 @@ struct Source {
-     Source( int _fd = -1 ) : fd( _fd ) {}
-     virtual ~Source() {
-         if ( fd >= 0 )
--            ::close( fd );
-+            (void) ::close( fd );
-     }
- };
+ 	if (!segtype ||
+diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
+index 4697ebbd8..e2efbf03a 100644
+--- a/lib/metadata/lv_manip.c
++++ b/lib/metadata/lv_manip.c
+@@ -5216,7 +5216,7 @@ static int _lvresize_check(struct logical_volume *lv,
  
-@@ -570,7 +570,7 @@ struct KMsg : Source {
-                 can_clear = false;
-         } else if ( lseek( fd, 0L, SEEK_END ) == (off_t) -1 ) {
-             fprintf( stderr, "lseek log %s %s\n", read_msg, strerror( errno ) );
--            close(fd);
-+            (void) close(fd);
-             fd = -1;
-         }
- #endif
-@@ -712,13 +712,13 @@ struct TestProcess
-         if ( !interactive ) {
-             int devnull = ::open( "/dev/null", O_RDONLY );
-             if ( devnull >= 0 ) { /* gcc really doesn't like to not have stdin */
--                dup2( devnull, STDIN_FILENO );
--                close( devnull );
-+                (void) dup2( devnull, STDIN_FILENO );
-+                (void) close( devnull );
-             } else
--                close( STDIN_FILENO );
--            dup2( fd, STDOUT_FILENO );
--            dup2( fd, STDERR_FILENO );
--            close( fd );
-+                (void) close( STDIN_FILENO );
-+            (void) dup2( fd, STDOUT_FILENO );
-+            (void) dup2( fd, STDERR_FILENO );
-+            (void) close( fd );
-         }
+ 	if (lv_is_raid(lv) &&
+ 	    lp->resize == LV_REDUCE) {
+-		unsigned attrs;
++		unsigned attrs = 0;
+ 		const struct segment_type *segtype = first_seg(lv)->segtype;
  
-         setpgid( 0, 0 );
-@@ -804,7 +804,7 @@ struct TestCase {
-                 if ( waitpid( pid, &status, WNOHANG ) == 0 ) {
-                     system( "echo t > /proc/sysrq-trigger 2> /dev/null" );
-                     kill( -pid, SIGKILL );
--                    waitpid( pid, &status, 0 );
-+                    (void) waitpid( pid, &status, 0 );
-                 }
-                 timeout = true;
-                 io.sync( true );
-@@ -897,7 +897,7 @@ struct TestCase {
+ 		if (!segtype->ops->target_present ||
+diff --git a/lib/metadata/raid_manip.c b/lib/metadata/raid_manip.c
+index f0d401cde..60a10332e 100644
+--- a/lib/metadata/raid_manip.c
++++ b/lib/metadata/raid_manip.c
+@@ -46,7 +46,7 @@ static int _check_restriping(uint32_t new_stripes, struct logical_volume *lv)
+  */
+ static int _reshape_is_supported(struct cmd_context *cmd, const struct segment_type *segtype)
+ {
+-	unsigned attrs;
++	unsigned attrs = 0;
  
-     void parent()
-     {
--        ::close( child.fd );
-+        (void) ::close( child.fd );
-         setupIO();
+ 	if (!segtype->ops->target_present ||
+             !segtype->ops->target_present(cmd, NULL, &attrs) ||
+@@ -65,7 +65,7 @@ static int _reshape_is_supported(struct cmd_context *cmd, const struct segment_t
+ static int _rebuild_with_emptymeta_is_supported(struct cmd_context *cmd,
+ 						const struct segment_type *segtype)
+ {
+-	unsigned attrs;
++	unsigned attrs = 0;
  
-         journal->started( id() );
-@@ -957,9 +957,9 @@ struct TestCase {
-             exit(201);
-         } else if (pid == 0) {
-             io.close();
--            chdir( options.workdir.c_str() );
-+            (void) chdir( options.workdir.c_str() );
-             if ( !options.flavour_envvar.empty() )
--                setenv( options.flavour_envvar.c_str(), flavour.c_str(), 1 );
-+                (void) setenv( options.flavour_envvar.c_str(), flavour.c_str(), 1 );
-             child.exec();
-         } else {
-             parent();
-@@ -1053,7 +1053,7 @@ struct Main {
-         if ( options.cont )
-             journal.read();
-         else
--            ::unlink( journal.location.c_str() );
-+            (void) ::unlink( journal.location.c_str() );
-     }
+ 	if (!segtype->ops->target_present ||
+             !segtype->ops->target_present(cmd, NULL, &attrs) ||
+diff --git a/lib/misc/lvm-exec.c b/lib/misc/lvm-exec.c
+index c60897ca6..77a2e0653 100644
+--- a/lib/misc/lvm-exec.c
++++ b/lib/misc/lvm-exec.c
+@@ -50,7 +50,7 @@ int exec_cmd(struct cmd_context *cmd, const char *const argv[],
+ 	     int *rstatus, int sync_needed)
+ {
+ 	pid_t pid;
+-	int status;
++	int status = 0;
+ 	char buf[PATH_MAX * 2];
  
-     int run() {
-diff --git a/test/lib/not.c b/test/lib/not.c
-index 0cff13062..0245c3475 100644
---- a/test/lib/not.c
-+++ b/test/lib/not.c
-@@ -80,7 +80,7 @@ int main(int args, char **argv) {
- 			val = "5";
- 
- 		if (val)
--			setenv("LVM_EXPECTED_EXIT_STATUS", val, 1);
-+			(void) setenv("LVM_EXPECTED_EXIT_STATUS", val, 1);
- 
- 		execvp(argv[1], &argv[1]);
- 		/* should not be accessible */
-diff --git a/test/unit/activation-generator_t.c b/test/unit/activation-generator_t.c
-index 7a2aa337b..f1e2aeda4 100644
---- a/test/unit/activation-generator_t.c
-+++ b/test/unit/activation-generator_t.c
-@@ -185,7 +185,7 @@ static const char *_fake_lvmconfig(const char *output)
- 	fprintf(fp, "%s", output);
- 	fprintf(fp, "EOF\n");
- 
--	fclose(fp);
-+	(void) fclose(fp);
- 	if (chmod(path, 0770))
- 		test_fail("chmod 0777 failed on path %s", path);
- 
-@@ -234,7 +234,7 @@ static void _test_get_config(void *fixture)
- 				test_fail("_get_config() <- '%s' unexpectedly succeeded", t->output);
- 		}
- 
--		unlink(path);
-+		(void) unlink(path);
- 	}
- }
- 
-diff --git a/test/unit/percent_t.c b/test/unit/percent_t.c
-index 9b349a97c..3575e12b3 100644
---- a/test/unit/percent_t.c
-+++ b/test/unit/percent_t.c
-@@ -31,25 +31,25 @@ static void test_percent_100(void *fixture)
- 	T_ASSERT_EQUAL(p1_100, DM_PERCENT_100);
- 	T_ASSERT_NOT_EQUAL(n_100, DM_PERCENT_100);
- 
--        dm_snprintf(buf, sizeof(buf), "%.2f", dm_percent_to_float(p_100));
-+	(void) dm_snprintf(buf, sizeof(buf), "%.2f", dm_percent_to_float(p_100));
- 	T_ASSERT_EQUAL(strcmp(buf, "100.00"), 0);
- 
--	dm_snprintf(buf, sizeof(buf), "%.2f", dm_percent_to_float(p1_100));
-+	(void) dm_snprintf(buf, sizeof(buf), "%.2f", dm_percent_to_float(p1_100));
- 	T_ASSERT_EQUAL(strcmp(buf, "100.00"), 0);
- 
--	dm_snprintf(buf, sizeof(buf), "%.2f", dm_percent_to_float(n_100));
-+	(void) dm_snprintf(buf, sizeof(buf), "%.2f", dm_percent_to_float(n_100));
- 	T_ASSERT_NOT_EQUAL(strcmp(buf, "99.99"), 0); /* Would like to gett */
- 
--	dm_snprintf(buf, sizeof(buf), "%.2f", dm_percent_to_round_float(n_100, 2));
-+	(void) dm_snprintf(buf, sizeof(buf), "%.2f", dm_percent_to_round_float(n_100, 2));
- 	T_ASSERT_EQUAL(strcmp(buf, "99.99"), 0);
- 
--	dm_snprintf(buf, sizeof(buf), "%.3f", dm_percent_to_round_float(n_100, 3));
-+	(void) dm_snprintf(buf, sizeof(buf), "%.3f", dm_percent_to_round_float(n_100, 3));
- 	T_ASSERT_EQUAL(strcmp(buf, "99.999"), 0);
- 
--	dm_snprintf(buf, sizeof(buf), "%.4f", dm_percent_to_round_float(n_100, 4));
-+	(void) dm_snprintf(buf, sizeof(buf), "%.4f", dm_percent_to_round_float(n_100, 4));
- 	T_ASSERT_EQUAL(strcmp(buf, "99.9999"), 0);
- 
--	dm_snprintf(buf, sizeof(buf), "%d", (int)dm_percent_to_round_float(n_100, 0));
-+	(void) dm_snprintf(buf, sizeof(buf), "%d", (int)dm_percent_to_round_float(n_100, 0));
- 	T_ASSERT_EQUAL(strcmp(buf, "99"), 0);
- }
- 
-@@ -66,22 +66,22 @@ static void test_percent_0(void *fixture)
- 	T_ASSERT_EQUAL(p1_0, DM_PERCENT_0);
- 	T_ASSERT_NOT_EQUAL(n_0, DM_PERCENT_0);
- 
--        dm_snprintf(buf, sizeof(buf), "%.2f", dm_percent_to_float(p_0));
-+	(void) dm_snprintf(buf, sizeof(buf), "%.2f", dm_percent_to_float(p_0));
- 	T_ASSERT_EQUAL(strcmp(buf, "0.00"), 0);
- 
--	dm_snprintf(buf, sizeof(buf), "%.2f", dm_percent_to_float(p1_0));
-+	(void) dm_snprintf(buf, sizeof(buf), "%.2f", dm_percent_to_float(p1_0));
- 	T_ASSERT_EQUAL(strcmp(buf, "0.00"), 0);
- 
--	dm_snprintf(buf, sizeof(buf), "%.2f", dm_percent_to_float(n_0));
-+	(void) dm_snprintf(buf, sizeof(buf), "%.2f", dm_percent_to_float(n_0));
- 	T_ASSERT_NOT_EQUAL(strcmp(buf, "0.01"), 0);
- 
--	dm_snprintf(buf, sizeof(buf), "%.2f", dm_percent_to_round_float(n_0, 2));
-+	(void) dm_snprintf(buf, sizeof(buf), "%.2f", dm_percent_to_round_float(n_0, 2));
- 	T_ASSERT_EQUAL(strcmp(buf, "0.01"), 0);
- 
--	dm_snprintf(buf, sizeof(buf), "%.3f", dm_percent_to_round_float(n_0, 3));
-+	(void) dm_snprintf(buf, sizeof(buf), "%.3f", dm_percent_to_round_float(n_0, 3));
- 	T_ASSERT_EQUAL(strcmp(buf, "0.001"), 0);
- 
--	dm_snprintf(buf, sizeof(buf), "%d", (int)dm_percent_to_round_float(n_0, 0));
-+	(void) dm_snprintf(buf, sizeof(buf), "%d", (int)dm_percent_to_round_float(n_0, 0));
- 	T_ASSERT_EQUAL(strcmp(buf, "1"), 0);
- }
- 
+ 	if (rstatus)
 
 
