@@ -1,45 +1,40 @@
-From: Zdenek Kabelac <zdenek.kabelac@gmail.com>
-Date: Fri, 10 Sep 2021 17:00:57 +0200
-Subject: [PATCH 1/3] cmdlib_lvm2_init: release cmd after registration failed
-In-Reply-To: <e542f440-3c6d-e081-4fa7-2b71f71c448b@huawei.com>
-References: <ad63f240-4bc9-9d54-616c-5c7306b5ee98@huawei.com>
-	<e542f440-3c6d-e081-4fa7-2b71f71c448b@huawei.com>
-Message-ID: <098c7489-ffaf-fe4c-aa17-f455c91fcf03@gmail.com>
+From: Zdenek Kabelac <zkabelac@sourceware.org>
+Date: Mon, 13 Sep 2021 10:35:57 +0000 (GMT)
+Subject: main - vdo: lvm_import_vdo script needs to continue when vgname does not exist
+Message-ID: <20210913103557.E71453858003@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Dne 30. 08. 21 v 9:13 Wu Guanghao napsal(a):
-> The cmd memory space is allocated by zalloc, and the registration fails and is not released
-> 
-> Signed-off-by: Wu Guanghao <wuguanghao3@huawei.com>
-> ---
->   tools/lvmcmdlib.c | 4 +++-
->   1 file changed, 3 insertions(+), 1 deletion(-)
-> 
-> diff --git a/tools/lvmcmdlib.c b/tools/lvmcmdlib.c
-> index 152d176b2..6b326893c 100644
-> --- a/tools/lvmcmdlib.c
-> +++ b/tools/lvmcmdlib.c
-> @@ -33,8 +33,10 @@ void *cmdlib_lvm2_init(unsigned static_compile, unsigned threaded)
->          if (!(cmd = init_lvm(1, 1, threaded)))
->                  return NULL;
-> 
-> -       if (!lvm_register_commands(cmd, NULL))
-> +       if (!lvm_register_commands(cmd, NULL)) {
-> +               free(cmd);
->                  return NULL;
-> +       }
-> 
->          return (void *) cmd;
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=9db4ddabc1cf912dee30e0e6293767f01c976a4a
+Commit:        9db4ddabc1cf912dee30e0e6293767f01c976a4a
+Parent:        bd2dae464386033241afa35934cdeddfe47f6a77
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Thu Sep 9 18:10:13 2021 +0200
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Mon Sep 13 12:34:41 2021 +0200
 
+vdo: lvm_import_vdo script needs to continue when vgname does not exist
 
-Well - all possible paths leading to 'return 0' from lvm_register_commands() 
-are essentially  internal errors - so app should crash anyway,
-but I guess it does no harm to add 'free()' call - so I'll push it.
+When the script cannot find vgname - it needs to continue to run.
+---
+ scripts/lvm_import_vdo.sh | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
 
-Zdenek
+diff --git a/scripts/lvm_import_vdo.sh b/scripts/lvm_import_vdo.sh
+index 39a320c84..a72056721 100755
+--- a/scripts/lvm_import_vdo.sh
++++ b/scripts/lvm_import_vdo.sh
+@@ -262,7 +262,7 @@ convert2lvm_() {
+ 			if [ -z "$VGNAME" ] || [ "$VGNAME" = "$LVNAME" ] ; then
+ 				VGNAME=${DEFAULT_NAME%/*}
+ 				# Find largest matching VG name to our 'default' vgname
+-				LASTVGNAME=$(LC_ALL=C "$LVM" vgs -oname -O-name --noheadings -S name=~${VGNAME} | grep -E "$VGNAME[0-9]? ?" | head -1)
++				LASTVGNAME=$(LC_ALL=C "$LVM" vgs -oname -O-name --noheadings -S name=~${VGNAME} | grep -E "$VGNAME[0-9]? ?" | head -1 || true)
+ 				if test -n "$LASTVGNAME" ; then
+ 					LASTVGNAME=${LASTVGNAME#*${VGNAME}}
+ 					# If the number is becoming too high, try some random number
 
 
