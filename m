@@ -1,55 +1,51 @@
-From: Mikulas Patocka <mpatocka@redhat.com>
-Date: Fri, 16 May 2008 11:00:03 -0400 (EDT)
-Subject: Re: Deactivating volume with mounted snapshot
-In-Reply-To: <Pine.LNX.4.64.0805161032390.27053@engineering.redhat.com>
-References: <Pine.LNX.4.64.0805141624070.380@engineering.redhat.com>
-	<20080514223205.GM10723@agk.fab.redhat.com>
-	<Pine.LNX.4.64.0805141919200.843@engineering.redhat.com>
-	<20080514234308.GQ10723@agk.fab.redhat.com>
-	<Pine.LNX.4.64.0805142017580.12073@engineering.redhat.com>
-	<20080515111734.GS10723@agk.fab.redhat.com>
-	<Pine.LNX.4.64.0805161010500.27053@engineering.redhat.com>
-	<Pine.LNX.4.64.0805161032390.27053@engineering.redhat.com>
-Message-ID: <Pine.LNX.4.64.0805161051450.7712@engineering.redhat.com>
+From: Zdenek Kabelac <zkabelac@sourceware.org>
+Date: Mon, 13 Sep 2021 10:36:08 +0000 (GMT)
+Subject: main - tests: increase size of thin-pool for newer mkfs
+Message-ID: <20210913103608.1C92E3858002@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On Fri, 16 May 2008, Mikulas Patocka wrote:
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=7af0a1b9d87827f0d15e6b062b753ee3043f75dc
+Commit:        7af0a1b9d87827f0d15e6b062b753ee3043f75dc
+Parent:        fc5f9924c74d9a2d930fe37480aeb70e9aa1c856
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Sun Sep 12 21:20:38 2021 +0200
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Mon Sep 13 12:34:41 2021 +0200
 
->> I put a printk points at ctr/dtr/suspend/resume functions into origin and 
->> snapshot and observed their calls when activating/deactivating, 
->> adding/removing a snapshot and adding/removing the first/last snapshot.
->> 
->> Because "active" variable was never reset to zero, it had effect only 
->> between snapshot ctr (set to 0) and snapshot resume (set to 1). When it was 
->> set to 0, the snapshot didn't allocate exceptions. After the patch, the 
->> snapshot always allocates exceptions (between snapshot ctr and snapshot dtr 
->> calls).
->> 
->> The change in the patch is safe because when someone is creating snapshot 
->> and simultaneously writing to the origin device, it is unspecified, which 
->> write requests trigger reallocations in the snapshot and which not.
->
-> Milan said that there is xfs freeze called between that (it is called just 
-> before origin suspend) --- and it's fact that dropping an "active" variable 
-> would make unclean snapshot on xfs.
->
-> So I'll change it so that no exceptions are reallocated if active is zero and 
-> the exception store is empty. That will make both xfs freeze and snapshot 
-> merging safe.
->
-> Mikulas
+tests: increase size of thin-pool for newer mkfs
 
-... or maybe the best method would be to not merge if the origin is not in 
-resumed state. That would solve all the possible problems with interaction 
-with userspace. It needs some changing of the structures (making the 
-snapshots point to the origin device), but I intended to do it anyway. 
-Calling read_lock and __lookup_origin each time something needs doesn't 
-seem nice to me and I'd like to replace this with a pointer.
+Looks like newer version of mkfs.ext4 consumes more 'real' disk space,
+when formating virtual volumes - so double the size of thin-pool to
+have enough backend chunks for provisioning.
+---
+ test/shell/pvmove-thin-segtypes.sh | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
 
-Mikulas
+diff --git a/test/shell/pvmove-thin-segtypes.sh b/test/shell/pvmove-thin-segtypes.sh
+index 08685c886..f8c65f583 100644
+--- a/test/shell/pvmove-thin-segtypes.sh
++++ b/test/shell/pvmove-thin-segtypes.sh
+@@ -38,7 +38,7 @@ do
+ 
+ # Testing pvmove of thin LV
+ lvcreate -aey -l 2 -n ${lv1}_foo $vg "$dev1"
+-lvcreate -aey -T $vg/${lv1}_pool -l 4 -V 8 -n $lv1 "$dev1"
++lvcreate -aey -T $vg/${lv1}_pool -l8 -V 8 -n $lv1 "$dev1"
+ check lv_tree_on $vg ${lv1}_foo "$dev1"
+ check lv_tree_on $vg $lv1 "$dev1"
+ aux mkdev_md5sum $vg $lv1
+@@ -54,7 +54,7 @@ lvremove -ff $vg
+ 
+ # Testing pvmove of thin LV on RAID
+ lvcreate -aey -l 2 -n ${lv1}_foo $vg "$dev1"
+-lvcreate -aey --type raid1 -m 1 -l 4 -n ${lv1}_raid1_pool $vg "$dev1" "$dev2"
++lvcreate -aey --type raid1 -m 1 -l 8 -n ${lv1}_raid1_pool $vg "$dev1" "$dev2"
+ lvcreate -aey --type raid1 -m 1 -L 2 -n ${lv1}_raid1_meta $vg "$dev1" "$dev2"
+ lvconvert --yes --thinpool $vg/${lv1}_raid1_pool \
+         --poolmetadata ${lv1}_raid1_meta
 
 
