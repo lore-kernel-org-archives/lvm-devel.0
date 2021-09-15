@@ -1,94 +1,40 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Wed, 15 Sep 2021 13:26:29 +0000 (GMT)
-Subject: main - cleanup: free already does NULL check
-Message-ID: <20210915132629.DACF83858414@sourceware.org>
+Date: Wed, 15 Sep 2021 13:26:27 +0000 (GMT)
+Subject: main - clang: keep metaname initialized
+Message-ID: <20210915132627.9AA383858413@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=ed59b50512f966125b972f9d2eafee3058f8063f
-Commit:        ed59b50512f966125b972f9d2eafee3058f8063f
-Parent:        73087c2c0fd51b1ff543580dadbf3d02dd49a35d
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=dd5f8b3f8c18ff57525ec5c5b35c6e1d218b1000
+Commit:        dd5f8b3f8c18ff57525ec5c5b35c6e1d218b1000
+Parent:        1a5c79d1d18cf887646edbdd7e798d93a2f9783f
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed Sep 15 14:08:12 2021 +0200
+AuthorDate:    Wed Sep 15 14:07:19 2021 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Wed Sep 15 15:24:56 2021 +0200
 
-cleanup: free already does NULL check
+clang: keep metaname initialized
 
-Drop extra check for NULL before calling free().
-Also drop zeroing data that will be free().
+Never access uninitialized metaname buffer.
 ---
- daemons/lvmlockd/lvmlockd-core.c | 19 +++++--------------
- daemons/lvmlockd/lvmlockd-idm.c  |  8 ++++----
- 2 files changed, 9 insertions(+), 18 deletions(-)
+ lib/metadata/integrity_manip.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
 
-diff --git a/daemons/lvmlockd/lvmlockd-core.c b/daemons/lvmlockd/lvmlockd-core.c
-index e53eebfe7..35c9b6c25 100644
---- a/daemons/lvmlockd/lvmlockd-core.c
-+++ b/daemons/lvmlockd/lvmlockd-core.c
-@@ -438,18 +438,11 @@ static void free_pvs_path(struct pvs *pvs)
+diff --git a/lib/metadata/integrity_manip.c b/lib/metadata/integrity_manip.c
+index c2fd7504c..e053ac5f6 100644
+--- a/lib/metadata/integrity_manip.c
++++ b/lib/metadata/integrity_manip.c
+@@ -86,7 +86,7 @@ static int _lv_create_integrity_metadata(struct cmd_context *cmd,
+ 				struct lvcreate_params *lp,
+ 				struct logical_volume **meta_lv)
  {
- 	int i;
- 
--	for (i = 0; i < pvs->num; i++) {
--		if (!pvs->path[i])
--			continue;
--
-+	for (i = 0; i < pvs->num; i++)
- 		free((char *)pvs->path[i]);
--		pvs->path[i] = NULL;
--	}
- 
--	if (!pvs->path) {
--		free(pvs->path);
--		pvs->path = NULL;
--	}
-+	free(pvs->path);
-+	pvs->path = NULL;
- }
- 
- static char **alloc_and_copy_pvs_path(struct pvs *dst, struct pvs *src)
-@@ -563,10 +556,8 @@ static struct lock *alloc_lock(void)
- 
- static void free_action(struct action *act)
- {
--	if (act->path) {
--		free(act->path);
--		act->path = NULL;
--	}
-+	free(act->path);
-+	act->path = NULL;
- 
- 	free_pvs_path(&act->pvs);
- 
-diff --git a/daemons/lvmlockd/lvmlockd-idm.c b/daemons/lvmlockd/lvmlockd-idm.c
-index e9f50535c..e13fb62ae 100644
---- a/daemons/lvmlockd/lvmlockd-idm.c
-+++ b/daemons/lvmlockd/lvmlockd-idm.c
-@@ -456,8 +456,9 @@ int lm_add_lockspace_idm(struct lockspace *ls, int adopt)
- fail:
- 	if (lmi && lmi->sock)
- 		close(lmi->sock);
--	if (lmi)
--		free(lmi);
-+
-+	free(lmi);
-+
- 	return rv;
- }
- 
-@@ -506,8 +507,7 @@ int lm_rem_resource_idm(struct lockspace *ls, struct resource *r)
- {
- 	struct rd_idm *rdi = (struct rd_idm *)r->lm_data;
- 
--	if (rdi->vb)
--		free(rdi->vb);
-+	free(rdi->vb);
- 
- 	memset(rdi, 0, sizeof(struct rd_idm));
- 	r->lm_init = 0;
+-	char metaname[NAME_LEN];
++	char metaname[NAME_LEN] = { 0 };
+ 	uint64_t lv_size_bytes, meta_bytes, meta_sectors;
+ 	struct logical_volume *lv;
+ 	struct lvcreate_params lp_meta = {
 
 
