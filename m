@@ -1,40 +1,49 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Wed, 15 Sep 2021 13:26:27 +0000 (GMT)
-Subject: main - clang: keep metaname initialized
-Message-ID: <20210915132627.9AA383858413@sourceware.org>
+Date: Wed, 15 Sep 2021 13:26:31 +0000 (GMT)
+Subject: main - debug: change message level
+Message-ID: <20210915132631.06C833858418@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=dd5f8b3f8c18ff57525ec5c5b35c6e1d218b1000
-Commit:        dd5f8b3f8c18ff57525ec5c5b35c6e1d218b1000
-Parent:        1a5c79d1d18cf887646edbdd7e798d93a2f9783f
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=944e560e960964217c7525a18c60bf17ca046e0c
+Commit:        944e560e960964217c7525a18c60bf17ca046e0c
+Parent:        ed59b50512f966125b972f9d2eafee3058f8063f
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed Sep 15 14:07:19 2021 +0200
+AuthorDate:    Wed Sep 15 14:04:04 2021 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Wed Sep 15 15:24:56 2021 +0200
 
-clang: keep metaname initialized
+debug: change message level
 
-Never access uninitialized metaname buffer.
+These message do not cause command error - switch to debug.
 ---
- lib/metadata/integrity_manip.c | 2 +-
- 1 file changed, 1 insertion(+), 1 deletion(-)
+ lib/mm/memlock.c | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
 
-diff --git a/lib/metadata/integrity_manip.c b/lib/metadata/integrity_manip.c
-index c2fd7504c..e053ac5f6 100644
---- a/lib/metadata/integrity_manip.c
-+++ b/lib/metadata/integrity_manip.c
-@@ -86,7 +86,7 @@ static int _lv_create_integrity_metadata(struct cmd_context *cmd,
- 				struct lvcreate_params *lp,
- 				struct logical_volume **meta_lv)
- {
--	char metaname[NAME_LEN];
-+	char metaname[NAME_LEN] = { 0 };
- 	uint64_t lv_size_bytes, meta_bytes, meta_sectors;
- 	struct logical_volume *lv;
- 	struct lvcreate_params lp_meta = {
+diff --git a/lib/mm/memlock.c b/lib/mm/memlock.c
+index 1e6cedc5f..3d1a3927c 100644
+--- a/lib/mm/memlock.c
++++ b/lib/mm/memlock.c
+@@ -357,7 +357,7 @@ static int _memlock_maps(struct cmd_context *cmd, lvmlock_t lock, size_t *mstats
+ 			_maps_buffer = line;
+ 		}
+ 		if (lseek(_maps_fd, 0, SEEK_SET))
+-			log_sys_error("lseek", _procselfmaps);
++			log_sys_debug("lseek", _procselfmaps);
+ 		for (len = 0 ; len < _maps_len; len += n) {
+ 			if (!(n = read(_maps_fd, _maps_buffer + len, _maps_len - len)))
+ 				break; /* EOF */
+@@ -561,7 +561,7 @@ static void _unlock_mem(struct cmd_context *cmd)
+ 	if (!_use_mlockall) {
+ 		_restore_mmap();
+ 		if (close(_maps_fd))
+-			log_sys_error("close", _procselfmaps);
++			log_sys_debug("close", _procselfmaps);
+ 		free(_maps_buffer);
+ 		_maps_buffer = NULL;
+ 		if (_mstats < unlock_mstats) {
 
 
