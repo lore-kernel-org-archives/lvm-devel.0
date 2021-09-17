@@ -1,50 +1,63 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Mon, 13 Sep 2021 10:36:09 +0000 (GMT)
-Subject: main - cov: fix copy from tmp_name buffer
-Message-ID: <20210913103609.3BECE3858006@sourceware.org>
+Date: Fri, 17 Sep 2021 14:50:49 +0000 (GMT)
+Subject: main - lvm_import_vdo: --dry-run automatically verbose
+Message-ID: <20210917145049.1D5CB3858D29@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=aa522d586227ecafb18d671cab284ae27ca65eed
-Commit:        aa522d586227ecafb18d671cab284ae27ca65eed
-Parent:        7af0a1b9d87827f0d15e6b062b753ee3043f75dc
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=3817392d87f24c2d350f801daac2ee16358c1ecf
+Commit:        3817392d87f24c2d350f801daac2ee16358c1ecf
+Parent:        944e560e960964217c7525a18c60bf17ca046e0c
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu Sep 9 22:32:09 2021 +0200
+AuthorDate:    Fri Sep 17 16:49:17 2021 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Mon Sep 13 12:34:41 2021 +0200
+CommitterDate: Fri Sep 17 16:49:17 2021 +0200
 
-cov: fix copy from tmp_name buffer
+lvm_import_vdo: --dry-run automatically verbose
 
-Mask for strncpy() Coverity report warning would
-actually need to copy buffer from 'tmp_name' instead of 'str'.
-
-But replace it directly with single 'strncpy()' again for better readbility,
-just mask out the warning reported for this strncpy instance
-(so we do not need to put comment fro every call of strcpy_name_len).
+Dry-run is way more usable when it's verbose.
 ---
- daemons/lvmlockd/lvmlockd-sanlock.c | 7 ++-----
- 1 file changed, 2 insertions(+), 5 deletions(-)
+ man/lvm_import_vdo.8_main | 2 +-
+ scripts/lvm_import_vdo.sh | 4 ++--
+ 2 files changed, 3 insertions(+), 3 deletions(-)
 
-diff --git a/daemons/lvmlockd/lvmlockd-sanlock.c b/daemons/lvmlockd/lvmlockd-sanlock.c
-index b351b1d44..13567cf95 100644
---- a/daemons/lvmlockd/lvmlockd-sanlock.c
-+++ b/daemons/lvmlockd/lvmlockd-sanlock.c
-@@ -234,11 +234,8 @@ static uint64_t daemon_test_lv_count;
-  */
- static void strcpy_name_len(char *buf, char *str, int len)
- {
--	char tmp_name[SANLK_NAME_LEN + 1] = { 0 };
--
--	strncpy(tmp_name, str, SANLK_NAME_LEN);
--
--	memcpy(buf, str, SANLK_NAME_LEN);
-+	/* coverity[buffer_size_warning] */
-+	strncpy(buf, str, SANLK_NAME_LEN);
- }
+diff --git a/man/lvm_import_vdo.8_main b/man/lvm_import_vdo.8_main
+index c812c5e01..23755a3aa 100644
+--- a/man/lvm_import_vdo.8_main
++++ b/man/lvm_import_vdo.8_main
+@@ -59,7 +59,7 @@ Answer "yes" at any prompts.
+ .
+ .TP
+ .BR --dry-run
+-Print commands without running them.
++Print verbosely commands without running them.
+ .
+ .
+ .SH DIAGNOSTICS
+diff --git a/scripts/lvm_import_vdo.sh b/scripts/lvm_import_vdo.sh
+index 06cdb106d..7dc326d9f 100755
+--- a/scripts/lvm_import_vdo.sh
++++ b/scripts/lvm_import_vdo.sh
+@@ -73,7 +73,7 @@ tool_usage() {
+ 	echo "	  -n | --name	      Specifies VG/LV name for converted VDO volume"
+ 	echo "	  -v | --verbose      Be verbose"
+ 	echo "	  -y | --yes	      Answer \"yes\" at any prompts"
+-	echo "	       --dry-run      Print commands without running them"
++	echo "	       --dry-run      Print verbosely commands without running them"
  
- static int lock_lv_name_from_args(char *vg_args, char *lock_lv_name)
+ 	exit
+ }
+@@ -434,7 +434,7 @@ do
+ 	  "-n"|"--name"   ) shift; NAME=$1 ;;
+ 	  "-v"|"--verbose") VERB="-v" ;;
+ 	  "-y"|"--yes"    ) YES="-y" ;;
+-	  "--dry-run"     ) DRY="1" ;;
++	  "--dry-run"     ) DRY="1" ; VERB="-v" ;;
+ 	  "-*") error "Wrong argument \"$1\". (see: $TOOL --help)" ;;
+ 	  *) DEVICENAME=$1 ;;  # device name does not start with '-'
+ 	esac
 
 
