@@ -1,51 +1,41 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Mon, 20 Sep 2021 13:29:55 +0000 (GMT)
-Subject: main - gcc-fanalyzer: rewrite _fetch_string
-Message-ID: <20210920132955.334913858C60@sourceware.org>
+Date: Mon, 20 Sep 2021 13:29:47 +0000 (GMT)
+Subject: main - clang: ensure new_len is at least 1
+Message-ID: <20210920132947.4E41F3858C60@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=909401226cd7219fa07389bc396723b0c01cd9dd
-Commit:        909401226cd7219fa07389bc396723b0c01cd9dd
-Parent:        30b188857c51144cd4103850f93287004cc5acaa
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=834f17bb3388ffe7f51aeede15d957a63bcda715
+Commit:        834f17bb3388ffe7f51aeede15d957a63bcda715
+Parent:        0d9f3dbd954b04e08a27154376b60fe9aca23b0c
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Mon Sep 20 13:51:20 2021 +0200
+AuthorDate:    Mon Sep 20 10:17:50 2021 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Mon Sep 20 14:18:13 2021 +0200
+CommitterDate: Mon Sep 20 10:51:30 2021 +0200
 
-gcc-fanalyzer: rewrite _fetch_string
+clang: ensure new_len is at least 1
 
-Slightly more optimal code, that is less confusing analyzers.
 ---
- daemons/dmeventd/libdevmapper-event.c | 12 ++++--------
- 1 file changed, 4 insertions(+), 8 deletions(-)
+ test/unit/run.c | 4 +++-
+ 1 file changed, 3 insertions(+), 1 deletion(-)
 
-diff --git a/daemons/dmeventd/libdevmapper-event.c b/daemons/dmeventd/libdevmapper-event.c
-index 7e09ff07b..237be9fec 100644
---- a/daemons/dmeventd/libdevmapper-event.c
-+++ b/daemons/dmeventd/libdevmapper-event.c
-@@ -709,15 +709,11 @@ int dm_event_unregister_handler(const struct dm_event_handler *dmevh)
- static char *_fetch_string(char **src, const int delimiter)
- {
- 	char *p, *ret;
-+	size_t len = (p = strchr(*src, delimiter)) ?
-+		p - *src : strlen(*src);
+diff --git a/test/unit/run.c b/test/unit/run.c
+index 9cbb60506..206857159 100644
+--- a/test/unit/run.c
++++ b/test/unit/run.c
+@@ -125,7 +125,9 @@ static void _print_path_delta(FILE *stream,
+ 			fprintf(stream, "\n");
+ 	}
  
--	if ((p = strchr(*src, delimiter)))
--		*p = 0;
--
--	if ((ret = strdup(*src)))
--		*src += strlen(ret) + 1;
--
--	if (p)
--		*p = delimiter;
-+	if ((ret = strndup(*src, len)))
-+		*src += len + 1;
- 
- 	return ret;
- }
+-	len = common_prefix * 2 + (new[new_len - 1].e - new[new_len - 1].b);
++	if (new_len > 0)
++		len = common_prefix * 2 + (new[new_len - 1].e - new[new_len - 1].b);
++
+ 	fprintf(stream, "  ");
+ 	for (d = len; d < 60; d++)
+ 		fprintf(stream, ".");
 
 
