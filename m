@@ -1,104 +1,77 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Mon, 13 Sep 2021 10:36:13 +0000 (GMT)
-Subject: main - cov: initialize attr
-Message-ID: <20210913103613.BC8E33858006@sourceware.org>
+Date: Mon, 20 Sep 2021 13:30:09 +0000 (GMT)
+Subject: main - cov: make read buffer obviously zero ended
+Message-ID: <20210920133009.D7A953858C60@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=a8ee13900db58b018e143fbf6a3435c7803e82fe
-Commit:        a8ee13900db58b018e143fbf6a3435c7803e82fe
-Parent:        be1c2a1ae2da445309f04ac4e3ed7470ff29d436
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=752a9ec4b44198554b9f998ed6e4a837878fc49f
+Commit:        752a9ec4b44198554b9f998ed6e4a837878fc49f
+Parent:        6c87e98ee367e1ff410470c09e6131697f0a7660
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Sep 10 22:32:26 2021 +0200
+AuthorDate:    Mon Sep 20 01:57:06 2021 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Mon Sep 13 12:34:41 2021 +0200
+CommitterDate: Mon Sep 20 14:26:09 2021 +0200
 
-cov: initialize attr
+cov: make read buffer obviously zero ended
 
+Coverity doesn't get the idea from memset() here.
 ---
- lib/activate/activate.c    | 2 +-
- lib/metadata/cache_manip.c | 2 +-
- lib/metadata/lv_manip.c    | 2 +-
- lib/metadata/raid_manip.c  | 4 ++--
- lib/misc/lvm-exec.c        | 2 +-
- 5 files changed, 6 insertions(+), 6 deletions(-)
+ lib/config/config.c | 2 +-
+ tools/pvck.c        | 5 ++---
+ tools/pvscan.c      | 1 +
+ 3 files changed, 4 insertions(+), 4 deletions(-)
 
-diff --git a/lib/activate/activate.c b/lib/activate/activate.c
-index b44efc617..727bd2386 100644
---- a/lib/activate/activate.c
-+++ b/lib/activate/activate.c
-@@ -1491,7 +1491,7 @@ int lvs_in_vg_opened(const struct volume_group *vg)
-  */
- int raid4_is_supported(struct cmd_context *cmd, const struct segment_type *segtype)
- {
--	unsigned attrs;
-+	unsigned attrs = 0;
+diff --git a/lib/config/config.c b/lib/config/config.c
+index 25a87c983..aedbb2b1e 100644
+--- a/lib/config/config.c
++++ b/lib/config/config.c
+@@ -522,7 +522,7 @@ int config_file_read_fd(struct dm_config_tree *cft, struct device *dev, dev_io_r
+ 	if (!(dev->flags & DEV_REGULAR) || size2)
+ 		use_plain_read = 0;
  
- 	if (segtype_is_raid4(segtype) &&
- 	    (!segtype->ops->target_present ||
-diff --git a/lib/metadata/cache_manip.c b/lib/metadata/cache_manip.c
-index 98821430f..b717e8a36 100644
---- a/lib/metadata/cache_manip.c
-+++ b/lib/metadata/cache_manip.c
-@@ -749,7 +749,7 @@ static const char *_get_default_cache_policy(struct cmd_context *cmd)
- static cache_metadata_format_t _get_default_cache_metadata_format(struct cmd_context *cmd)
- {
- 	const struct segment_type *segtype = get_segtype_from_string(cmd, SEG_TYPE_NAME_CACHE);
--	unsigned attr;
-+	unsigned attr = 0;
- 	cache_metadata_format_t f;
+-	if (!(buf = malloc(size + size2))) {
++	if (!(buf = zalloc(size + size2))) {
+ 		log_error("Failed to allocate circular buffer.");
+ 		return 0;
+ 	}
+diff --git a/tools/pvck.c b/tools/pvck.c
+index 629e1feee..0d1bc1b17 100644
+--- a/tools/pvck.c
++++ b/tools/pvck.c
+@@ -2955,7 +2955,7 @@ static int _read_metadata_file(struct cmd_context *cmd, struct metadata_file *mf
+ 		goto out;
+ 	}
  
- 	if (!segtype ||
-diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
-index 4697ebbd8..e2efbf03a 100644
---- a/lib/metadata/lv_manip.c
-+++ b/lib/metadata/lv_manip.c
-@@ -5216,7 +5216,7 @@ static int _lvresize_check(struct logical_volume *lv,
+-	if (!(text_buf = zalloc(text_size + 1)))
++	if (!(text_buf = malloc(text_size + 1)))
+ 		goto_out;
  
- 	if (lv_is_raid(lv) &&
- 	    lp->resize == LV_REDUCE) {
--		unsigned attrs;
-+		unsigned attrs = 0;
- 		const struct segment_type *segtype = first_seg(lv)->segtype;
+ 	rv = read(fd, text_buf, text_size);
+@@ -2964,8 +2964,7 @@ static int _read_metadata_file(struct cmd_context *cmd, struct metadata_file *mf
+ 		free(text_buf);
+ 		goto out;
+ 	}
+-
+-	text_size += 1; /* null terminating byte */
++	text_buf[text_size++] = 0; /* null terminating byte */
  
- 		if (!segtype->ops->target_present ||
-diff --git a/lib/metadata/raid_manip.c b/lib/metadata/raid_manip.c
-index f0d401cde..60a10332e 100644
---- a/lib/metadata/raid_manip.c
-+++ b/lib/metadata/raid_manip.c
-@@ -46,7 +46,7 @@ static int _check_restriping(uint32_t new_stripes, struct logical_volume *lv)
-  */
- static int _reshape_is_supported(struct cmd_context *cmd, const struct segment_type *segtype)
- {
--	unsigned attrs;
-+	unsigned attrs = 0;
+ 	if (close(fd))
+ 		stack;
+diff --git a/tools/pvscan.c b/tools/pvscan.c
+index ec33c9a9a..b19b74b3e 100644
+--- a/tools/pvscan.c
++++ b/tools/pvscan.c
+@@ -223,6 +223,7 @@ static int _online_pvid_file_read(char *path, int *major, int *minor, char *vgna
+ 		log_warn("No info in %s", path);
+ 		return 0;
+ 	}
++	buf[rv] = 0; /* \0 terminated buffer */
  
- 	if (!segtype->ops->target_present ||
-             !segtype->ops->target_present(cmd, NULL, &attrs) ||
-@@ -65,7 +65,7 @@ static int _reshape_is_supported(struct cmd_context *cmd, const struct segment_t
- static int _rebuild_with_emptymeta_is_supported(struct cmd_context *cmd,
- 						const struct segment_type *segtype)
- {
--	unsigned attrs;
-+	unsigned attrs = 0;
- 
- 	if (!segtype->ops->target_present ||
-             !segtype->ops->target_present(cmd, NULL, &attrs) ||
-diff --git a/lib/misc/lvm-exec.c b/lib/misc/lvm-exec.c
-index c60897ca6..77a2e0653 100644
---- a/lib/misc/lvm-exec.c
-+++ b/lib/misc/lvm-exec.c
-@@ -50,7 +50,7 @@ int exec_cmd(struct cmd_context *cmd, const char *const argv[],
- 	     int *rstatus, int sync_needed)
- {
- 	pid_t pid;
--	int status;
-+	int status = 0;
- 	char buf[PATH_MAX * 2];
- 
- 	if (rstatus)
+ 	if (sscanf(buf, "%d:%d", major, minor) != 2) {
+ 		log_warn("No device numbers in %s", path);
 
 
