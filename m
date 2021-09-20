@@ -1,63 +1,45 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Fri, 17 Sep 2021 14:50:49 +0000 (GMT)
-Subject: main - lvm_import_vdo: --dry-run automatically verbose
-Message-ID: <20210917145049.1D5CB3858D29@sourceware.org>
+Date: Mon, 20 Sep 2021 13:29:48 +0000 (GMT)
+Subject: main - gcc-fanalyzer: notices 'du' could be NULL
+Message-ID: <20210920132948.6D55D3858C60@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=3817392d87f24c2d350f801daac2ee16358c1ecf
-Commit:        3817392d87f24c2d350f801daac2ee16358c1ecf
-Parent:        944e560e960964217c7525a18c60bf17ca046e0c
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=e15d1e53c181b804b12f059788ed111d42353be9
+Commit:        e15d1e53c181b804b12f059788ed111d42353be9
+Parent:        834f17bb3388ffe7f51aeede15d957a63bcda715
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Sep 17 16:49:17 2021 +0200
+AuthorDate:    Fri Sep 17 23:51:12 2021 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Fri Sep 17 16:49:17 2021 +0200
+CommitterDate: Mon Sep 20 10:51:30 2021 +0200
 
-lvm_import_vdo: --dry-run automatically verbose
+gcc-fanalyzer: notices 'du' could be NULL
 
-Dry-run is way more usable when it's verbose.
+Ensure only nonNULL 'du' pointer is dereference altough the comment
+to the last assign 'du' pointer already suggest 'NULL' case should not happen.
+So just being explicit.
+
+mer du
 ---
- man/lvm_import_vdo.8_main | 2 +-
- scripts/lvm_import_vdo.sh | 4 ++--
- 2 files changed, 3 insertions(+), 3 deletions(-)
+ lib/device/device_id.c | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
 
-diff --git a/man/lvm_import_vdo.8_main b/man/lvm_import_vdo.8_main
-index c812c5e01..23755a3aa 100644
---- a/man/lvm_import_vdo.8_main
-+++ b/man/lvm_import_vdo.8_main
-@@ -59,7 +59,7 @@ Answer "yes" at any prompts.
- .
- .TP
- .BR --dry-run
--Print commands without running them.
-+Print verbosely commands without running them.
- .
- .
- .SH DIAGNOSTICS
-diff --git a/scripts/lvm_import_vdo.sh b/scripts/lvm_import_vdo.sh
-index 06cdb106d..7dc326d9f 100755
---- a/scripts/lvm_import_vdo.sh
-+++ b/scripts/lvm_import_vdo.sh
-@@ -73,7 +73,7 @@ tool_usage() {
- 	echo "	  -n | --name	      Specifies VG/LV name for converted VDO volume"
- 	echo "	  -v | --verbose      Be verbose"
- 	echo "	  -y | --yes	      Answer \"yes\" at any prompts"
--	echo "	       --dry-run      Print commands without running them"
-+	echo "	       --dry-run      Print verbosely commands without running them"
- 
- 	exit
- }
-@@ -434,7 +434,7 @@ do
- 	  "-n"|"--name"   ) shift; NAME=$1 ;;
- 	  "-v"|"--verbose") VERB="-v" ;;
- 	  "-y"|"--yes"    ) YES="-y" ;;
--	  "--dry-run"     ) DRY="1" ;;
-+	  "--dry-run"     ) DRY="1" ; VERB="-v" ;;
- 	  "-*") error "Wrong argument \"$1\". (see: $TOOL --help)" ;;
- 	  *) DEVICENAME=$1 ;;  # device name does not start with '-'
- 	esac
+diff --git a/lib/device/device_id.c b/lib/device/device_id.c
+index 649c4bba9..742ce62bd 100644
+--- a/lib/device/device_id.c
++++ b/lib/device/device_id.c
+@@ -2144,7 +2144,8 @@ void device_ids_find_renamed_devs(struct cmd_context *cmd, struct dm_list *dev_l
+ 			/* I don't think this would happen */
+ 			log_warn("WARNING: new device %s for PVID %s does not pass filter %s.",
+ 				 dev_name(dev), dil->pvid, dev_filtered_reason(dev));
+-			du->dev = NULL;
++			if (du) /* Should not happen 'du' is NULL */
++				du->dev = NULL;
+ 			dev->flags &= ~DEV_MATCHED_USE_ID;
+ 		}
+ 	}
 
 
