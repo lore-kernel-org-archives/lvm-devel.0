@@ -1,49 +1,51 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Mon, 20 Sep 2021 13:29:52 +0000 (GMT)
-Subject: main - gcc-fanalyzer: better losetup error path
-Message-ID: <20210920132952.E9C5F3858C3B@sourceware.org>
+Date: Mon, 20 Sep 2021 13:29:55 +0000 (GMT)
+Subject: main - gcc-fanalyzer: rewrite _fetch_string
+Message-ID: <20210920132955.334913858C60@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=951263865603dd9b431c8625c8feefe216cf0c74
-Commit:        951263865603dd9b431c8625c8feefe216cf0c74
-Parent:        3e21c8524e8b31e61fe4db99664319e2823f1a53
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=909401226cd7219fa07389bc396723b0c01cd9dd
+Commit:        909401226cd7219fa07389bc396723b0c01cd9dd
+Parent:        30b188857c51144cd4103850f93287004cc5acaa
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Sat Sep 18 21:00:49 2021 +0200
+AuthorDate:    Mon Sep 20 13:51:20 2021 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Mon Sep 20 13:58:57 2021 +0200
+CommitterDate: Mon Sep 20 14:18:13 2021 +0200
 
-gcc-fanalyzer: better losetup error path
+gcc-fanalyzer: rewrite _fetch_string
 
-Fix leaking memory on error path on _process_losetup_switches().
-However real impact is close to zero as dm-loop target isn't really used.
+Slightly more optimal code, that is less confusing analyzers.
 ---
- libdm/dm-tools/dmsetup.c | 3 +++
- 1 file changed, 3 insertions(+)
+ daemons/dmeventd/libdevmapper-event.c | 12 ++++--------
+ 1 file changed, 4 insertions(+), 8 deletions(-)
 
-diff --git a/libdm/dm-tools/dmsetup.c b/libdm/dm-tools/dmsetup.c
-index a3d1248bc..f431f7509 100644
---- a/libdm/dm-tools/dmsetup.c
-+++ b/libdm/dm-tools/dmsetup.c
-@@ -6762,6 +6762,8 @@ static int _process_losetup_switches(const char *base, int *argcp, char ***argvp
- 	if (!_table ||
- 	    !_loop_table(_table, (size_t) LOOP_TABLE_SIZE, loop_file, device_name, offset)) {
- 		log_error("Could not build device-mapper table for %s.", (*argvp)[0]);
-+		free(loop_file);
-+		free(_table);
- 		free(device_name);
- 		return 0;
- 	}
-@@ -6770,6 +6772,7 @@ static int _process_losetup_switches(const char *base, int *argcp, char ***argvp
- 	_command = "create";
- 	(*argvp)[0] = device_name ;
- 	*argcp = 1;
-+	free(loop_file);
+diff --git a/daemons/dmeventd/libdevmapper-event.c b/daemons/dmeventd/libdevmapper-event.c
+index 7e09ff07b..237be9fec 100644
+--- a/daemons/dmeventd/libdevmapper-event.c
++++ b/daemons/dmeventd/libdevmapper-event.c
+@@ -709,15 +709,11 @@ int dm_event_unregister_handler(const struct dm_event_handler *dmevh)
+ static char *_fetch_string(char **src, const int delimiter)
+ {
+ 	char *p, *ret;
++	size_t len = (p = strchr(*src, delimiter)) ?
++		p - *src : strlen(*src);
  
- 	return 1;
+-	if ((p = strchr(*src, delimiter)))
+-		*p = 0;
+-
+-	if ((ret = strdup(*src)))
+-		*src += strlen(ret) + 1;
+-
+-	if (p)
+-		*p = delimiter;
++	if ((ret = strndup(*src, len)))
++		*src += len + 1;
+ 
+ 	return ret;
  }
 
 
