@@ -1,41 +1,44 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Mon, 13 Sep 2021 10:36:11 +0000 (GMT)
-Subject: main - cov: keep 64bit arithmetic
-Message-ID: <20210913103611.7E03C3858002@sourceware.org>
+Date: Mon, 20 Sep 2021 13:30:01 +0000 (GMT)
+Subject: main - cov: check fid instance is created
+Message-ID: <20210920133001.ECC7C3858C60@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=3ce8db8b889cbebdfe13aa394f5b6a9a9d00e25c
-Commit:        3ce8db8b889cbebdfe13aa394f5b6a9a9d00e25c
-Parent:        a7258ae39421f60c41f9ec79242f31b468a7460e
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=f410035181d8c524ffc5d0f3edf512e8506b47d9
+Commit:        f410035181d8c524ffc5d0f3edf512e8506b47d9
+Parent:        e1840dd9e0b3be55281466e60a9a07cce068db4f
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu Sep 9 22:35:11 2021 +0200
+AuthorDate:    Mon Sep 20 02:09:16 2021 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Mon Sep 13 12:34:41 2021 +0200
+CommitterDate: Mon Sep 20 14:26:09 2021 +0200
 
-cov: keep 64bit arithmetic
+cov: check fid instance is created
 
-Highly unlikely this case will ever need 64bit math, but just in case,
-keep the expression as 64bit.
 ---
- lib/report/report.c | 2 +-
- 1 file changed, 1 insertion(+), 1 deletion(-)
+ tools/pvscan.c | 7 ++++++-
+ 1 file changed, 6 insertions(+), 1 deletion(-)
 
-diff --git a/lib/report/report.c b/lib/report/report.c
-index 222d3f4b6..0fd0f30ac 100644
---- a/lib/report/report.c
-+++ b/lib/report/report.c
-@@ -2342,7 +2342,7 @@ static int _lv_size_disp(struct dm_report *rh, struct dm_pool *mem,
- 	uint64_t size = lv->le_count;
+diff --git a/tools/pvscan.c b/tools/pvscan.c
+index d24ee5724..ec33c9a9a 100644
+--- a/tools/pvscan.c
++++ b/tools/pvscan.c
+@@ -1234,7 +1234,12 @@ static int _online_devs(struct cmd_context *cmd, int do_all, struct dm_list *pvs
+ 		}
  
- 	if (seg && !lv_is_raid_image(lv))
--		size -= seg->reshape_len * (seg->area_count > 2 ? (seg->area_count - seg->segtype->parity_devs) : 1);
-+		size -= (uint64_t) seg->reshape_len * (seg->area_count > 2 ? (seg->area_count - seg->segtype->parity_devs) : 1);
+ 		fmt = lvmcache_fmt(info);
+-		fid = fmt->ops->create_instance(fmt, &fic);
++		if (!(fid = fmt->ops->create_instance(fmt, &fic))) {
++			log_error("pvscan[%d] failed to create format instance.", getpid());
++			ret = 0;
++			continue;
++		}
++
+ 		vg = NULL;
  
- 	size *= lv->vg->extent_size;
- 
+ 		mda1 = lvmcache_get_dev_mda(dev, 1);
 
 
