@@ -1,39 +1,61 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Mon, 20 Sep 2021 14:26:31 +0000 (GMT)
-Subject: main - gcc: avoid warns on missing braces with older version
-Message-ID: <20210920142631.75DE33858D3C@sourceware.org>
+Date: Mon, 20 Sep 2021 14:26:32 +0000 (GMT)
+Subject: main - gcc: avoid name colision with function pv_id() from metadata.h
+Message-ID: <20210920142632.95C7C3858C60@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=2e990d1fec93126017124d3db754aeed5b6c7dc3
-Commit:        2e990d1fec93126017124d3db754aeed5b6c7dc3
-Parent:        1a8a33ae9b39567e2a2cc399f13cebecb5fa2dea
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=133686ebc79b29316d5f913bcce3fe21bbfea9ec
+Commit:        133686ebc79b29316d5f913bcce3fe21bbfea9ec
+Parent:        2e990d1fec93126017124d3db754aeed5b6c7dc3
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Mon Sep 20 16:11:49 2021 +0200
+AuthorDate:    Mon Sep 20 16:12:10 2021 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Mon Sep 20 16:11:49 2021 +0200
+CommitterDate: Mon Sep 20 16:12:10 2021 +0200
 
-gcc: avoid warns on missing braces with older version
+gcc: avoid name colision with function pv_id() from metadata.h
 
 ---
- libdm/libdm-stats.c | 2 +-
- 1 file changed, 1 insertion(+), 1 deletion(-)
+ lib/cache/lvmcache.c | 8 ++++----
+ 1 file changed, 4 insertions(+), 4 deletions(-)
 
-diff --git a/libdm/libdm-stats.c b/libdm/libdm-stats.c
-index 6cfa23384..62b28b69d 100644
---- a/libdm/libdm-stats.c
-+++ b/libdm/libdm-stats.c
-@@ -4519,7 +4519,7 @@ static int _stats_unmap_regions(struct dm_stats *dms, uint64_t group_id,
- 	struct dm_stats_region *region = NULL;
- 	struct dm_stats_group *group = NULL;
- 	uint64_t nr_kept, nr_old;
--	struct _extent ext = { 0 };
-+	struct _extent ext = { .id = 0 };
- 	int64_t i;
+diff --git a/lib/cache/lvmcache.c b/lib/cache/lvmcache.c
+index 655da164c..d94d174b6 100644
+--- a/lib/cache/lvmcache.c
++++ b/lib/cache/lvmcache.c
+@@ -477,14 +477,14 @@ struct lvmcache_info *lvmcache_info_from_pvid(const char *pvid_arg, struct devic
+ 	return info;
+ }
  
- 	group = &dms->groups[group_id];
+-struct lvmcache_info *lvmcache_info_from_pv_id(const struct id *pv_id, struct device *dev, int valid_only)
++struct lvmcache_info *lvmcache_info_from_pv_id(const struct id *pvid, struct device *dev, int valid_only)
+ {
+ 	/*
+ 	 * Since we know that lvmcache_info_from_pvid directly above
+ 	 * does not assume pvid_arg is null-terminated, we make an
+ 	 * exception here and cast a struct id to char *.
+ 	 */
+-	return lvmcache_info_from_pvid((const char *)pv_id, dev, valid_only);
++	return lvmcache_info_from_pvid((const char *)pvid, dev, valid_only);
+ }
+ 
+ const struct format_type *lvmcache_fmt_from_info(struct lvmcache_info *info)
+@@ -1391,11 +1391,11 @@ int lvmcache_get_vgnameids(struct cmd_context *cmd,
+ 	return 1;
+ }
+ 
+-struct device *lvmcache_device_from_pv_id(struct cmd_context *cmd, const struct id *pv_id, uint64_t *label_sector)
++struct device *lvmcache_device_from_pv_id(struct cmd_context *cmd, const struct id *pvid, uint64_t *label_sector)
+ {
+ 	struct lvmcache_info *info;
+ 
+-	if ((info = lvmcache_info_from_pv_id(pv_id, NULL, 0))) {
++	if ((info = lvmcache_info_from_pv_id(pvid, NULL, 0))) {
+ 		if (info->label && label_sector)
+ 			*label_sector = info->label->sector;
+ 		return info->dev;
 
 
