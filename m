@@ -1,39 +1,60 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Mon, 20 Sep 2021 13:29:43 +0000 (GMT)
-Subject: main - cleanup: typo fix
-Message-ID: <20210920132943.E4CBF3858C60@sourceware.org>
+Date: Mon, 20 Sep 2021 13:29:49 +0000 (GMT)
+Subject: main - gcc-fanalyzer: explicit test null not pass
+Message-ID: <20210920132949.8C7193858C3B@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=a0bbdfba7fa300cec657c8a1bac2af062bea3439
-Commit:        a0bbdfba7fa300cec657c8a1bac2af062bea3439
-Parent:        3817392d87f24c2d350f801daac2ee16358c1ecf
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=5126ac7c3aa4f9f47a36c66095246d5b13871e61
+Commit:        5126ac7c3aa4f9f47a36c66095246d5b13871e61
+Parent:        e15d1e53c181b804b12f059788ed111d42353be9
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Sep 17 22:42:41 2021 +0200
+AuthorDate:    Sat Sep 18 00:26:24 2021 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Fri Sep 17 22:42:41 2021 +0200
+CommitterDate: Mon Sep 20 10:51:30 2021 +0200
 
-cleanup: typo fix
+gcc-fanalyzer: explicit test null not pass
 
+Make analyzer explicitelly aware we can't get NULL here.
 ---
- scripts/lvm_import_vdo.sh | 2 +-
- 1 file changed, 1 insertion(+), 1 deletion(-)
+ lib/metadata/mirror.c | 5 +++++
+ tools/vgcfgrestore.c  | 5 ++++-
+ 2 files changed, 9 insertions(+), 1 deletion(-)
 
-diff --git a/scripts/lvm_import_vdo.sh b/scripts/lvm_import_vdo.sh
-index 7dc326d9f..5fda9db1e 100755
---- a/scripts/lvm_import_vdo.sh
-+++ b/scripts/lvm_import_vdo.sh
-@@ -310,7 +310,7 @@ convert2lvm_() {
- 	case "$DM_OPEN" in
- 	Device*) ;; # no devices
- 	*)	eval "$DM_OPEN"
--		test "${DM_OPEN:-0}" -eq 0 || error "Cannot converted VDO volume \"$VDONAME\" which is in use!"
-+		test "${DM_OPEN:-0}" -eq 0 || error "Cannot convert VDO volume \"$VDONAME\" which is in use!"
- 		;;
- 	esac
+diff --git a/lib/metadata/mirror.c b/lib/metadata/mirror.c
+index 050341a03..e2bf191a1 100644
+--- a/lib/metadata/mirror.c
++++ b/lib/metadata/mirror.c
+@@ -657,6 +657,11 @@ static int _split_mirror_images(struct logical_volume *lv,
+ 		dm_list_add(&split_images, &lvl->list);
+ 	}
  
++	if (!new_lv) {
++		log_error(INTERNAL_ERROR "New LV not found.");
++		return 0;
++	}
++
+ 	new_lv->name = dm_pool_strdup(lv->vg->vgmem, split_name);
+ 	if (!new_lv->name) {
+ 		log_error("Unable to rename newly split LV.");
+diff --git a/tools/vgcfgrestore.c b/tools/vgcfgrestore.c
+index e05c28688..e49313d14 100644
+--- a/tools/vgcfgrestore.c
++++ b/tools/vgcfgrestore.c
+@@ -104,7 +104,10 @@ int vgcfgrestore(struct cmd_context *cmd, int argc, char **argv)
+ 		return ECMD_PROCESSED;
+ 	}
+ 
+-	if (!_check_all_dm_devices(vg_name, &found)) {
++	if (!vg_name) {
++		log_error(INTERNAL_ERROR "VG name is not set.");
++		return ECMD_FAILED;
++	} else if (!_check_all_dm_devices(vg_name, &found)) {
+ 		log_warn("WARNING: Failed to check for active volumes in volume group \"%s\".", vg_name);
+ 	} else if (found) {
+ 		log_warn("WARNING: Found %u active volume(s) in volume group \"%s\".",
 
 
