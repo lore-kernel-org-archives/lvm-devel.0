@@ -1,97 +1,129 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Mon, 20 Sep 2021 13:30:06 +0000 (GMT)
-Subject: main - cov: handle better leak reports
-Message-ID: <20210920133006.799DA3858C60@sourceware.org>
+Date: Mon, 20 Sep 2021 13:30:14 +0000 (GMT)
+Subject: main - cov: test for fixture being NULL pointer
+Message-ID: <20210920133014.601D43858C60@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=3e7e9cc5e6abc4ddb1777e7c7b9d7bc42a7f57a7
-Commit:        3e7e9cc5e6abc4ddb1777e7c7b9d7bc42a7f57a7
-Parent:        825e49a2447810a806905723bc91072eb7b8b423
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=9721f3e0ff6fd841b62b6bcccceee2ebb914e96b
+Commit:        9721f3e0ff6fd841b62b6bcccceee2ebb914e96b
+Parent:        3f946bfce72952bc9e775ec41278dd33afbc9eb1
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Sun Sep 19 20:27:34 2021 +0200
+AuthorDate:    Mon Sep 20 10:28:07 2021 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Mon Sep 20 14:26:09 2021 +0200
 
-cov: handle better leak reports
+cov: test for fixture being NULL pointer
 
-Rewrite code so the leaks are eliminated from Coverity.
+Explicit check for teoretical NULL pointer passed as fixture.
 ---
- tools/command.c | 33 ++++++++++++++++++++++-----------
- 1 file changed, 22 insertions(+), 11 deletions(-)
+ test/unit/bcache_t.c       |  8 +++++---
+ test/unit/bcache_utils_t.c | 12 +++++++-----
+ test/unit/bitset_t.c       |  3 ++-
+ test/unit/io_engine_t.c    | 16 +++++++++-------
+ test/unit/radix_tree_t.c   |  3 ++-
+ 5 files changed, 25 insertions(+), 17 deletions(-)
 
-diff --git a/tools/command.c b/tools/command.c
-index 37f6a6153..48f572f7e 100644
---- a/tools/command.c
-+++ b/tools/command.c
-@@ -757,6 +757,9 @@ static void _set_opt_def(struct cmd_context *cmdtool, struct command *cmd, char
- 			def->num = (uint64_t)atoi(name);
+diff --git a/test/unit/bcache_t.c b/test/unit/bcache_t.c
+index 3231b76e0..2668d3ff6 100644
+--- a/test/unit/bcache_t.c
++++ b/test/unit/bcache_t.c
+@@ -349,10 +349,12 @@ static struct fixture *_fixture_init(sector_t block_size, unsigned nr_cache_bloc
  
- 		if (val_enum == conststr_VAL) {
-+#ifdef MAN_PAGE_GENERATOR
-+			free((void*)def->str);
-+#endif
- 			def->str = dm_pool_strdup(cmdtool->libmem, name);
+ static void _fixture_exit(struct fixture *f)
+ {
+-	_expect(f->me, E_DESTROY);
+-	bcache_destroy(f->cache);
++	if (f) {
++		_expect(f->me, E_DESTROY);
++		bcache_destroy(f->cache);
  
- 			if (!def->str) {
-@@ -1539,20 +1542,27 @@ int define_commands(struct cmd_context *cmdtool, const char *run_name)
- 		 */
+-	free(f);
++		free(f);
++	}
+ }
  
- 		if (_is_desc_line(line_argv[0]) && !skip && cmd) {
--			char *desc = dm_pool_strdup(cmdtool->libmem, line_orig);
--			if (cmd->desc && desc) {
--				int newlen = strlen(cmd->desc) + strlen(desc) + 2;
-+			if (cmd->desc) {
-+				size_t newlen = strlen(cmd->desc) + strlen(line_orig) + 2;
- 				char *newdesc = dm_pool_alloc(cmdtool->libmem, newlen);
--				if (newdesc) {
--					snprintf(newdesc, newlen, "%s %s", cmd->desc, desc);
--					cmd->desc = newdesc;
--				} else {
-+
-+				if (!newdesc) {
- 					/* FIXME */
- 					stack;
- 					return 0;
- 				}
--			} else
--				cmd->desc = desc;
-+
-+				snprintf(newdesc, newlen, "%s %s", cmd->desc, line_orig);
-+#ifdef MAN_PAGE_GENERATOR
-+				free((void*)cmd->desc);
-+#endif
-+				cmd->desc = newdesc;
-+			} else if (!(cmd->desc = dm_pool_strdup(cmdtool->libmem, line_orig))) {
-+				/* FIXME */
-+				stack;
-+				return 0;
-+			}
-+
- 			continue;
- 		}
+ static void *_small_fixture_init(void)
+diff --git a/test/unit/bcache_utils_t.c b/test/unit/bcache_utils_t.c
+index df2826977..48dab142e 100644
+--- a/test/unit/bcache_utils_t.c
++++ b/test/unit/bcache_utils_t.c
+@@ -109,11 +109,13 @@ static void _fix_exit(void *fixture)
+ {
+         struct fixture *f = fixture;
  
-@@ -1572,6 +1582,9 @@ int define_commands(struct cmd_context *cmdtool, const char *run_name)
- 		}
+-	bcache_destroy(f->cache);
+-	close(f->fd);
+-	bcache_clear_fd(f->di);
+-	unlink(f->fname);
+-        free(f);
++	if (f) {
++		bcache_destroy(f->cache);
++		(void) close(f->fd);
++		bcache_clear_fd(f->di);
++		(void) unlink(f->fname);
++		free(f);
++	}
+ }
  
- 		if (_is_id_line(line_argv[0]) && cmd) {
-+#ifdef MAN_PAGE_GENERATOR
-+			free((void*)cmd->command_id);
-+#endif
- 			cmd->command_id = dm_pool_strdup(cmdtool->libmem, line_argv[1]);
+ //----------------------------------------------------------------
+diff --git a/test/unit/bitset_t.c b/test/unit/bitset_t.c
+index 4ee4f1c22..1e74e12d2 100644
+--- a/test/unit/bitset_t.c
++++ b/test/unit/bitset_t.c
+@@ -31,7 +31,8 @@ static void *_mem_init(void) {
  
- 			if (!cmd->command_id) {
-@@ -3674,8 +3687,6 @@ static int _print_man(char *name, char *des_file, int secondary)
- 				printf(".P\n");
- 			}
- 		}
--
--		continue;
- 	}
+ static void _mem_exit(void *mem)
+ {
+-	dm_pool_destroy(mem);
++	if (mem)
++		dm_pool_destroy(mem);
+ }
  
- 	return 1;
+ static void test_get_next(void *fixture)
+diff --git a/test/unit/io_engine_t.c b/test/unit/io_engine_t.c
+index 89fa4b787..d45d8ffa7 100644
+--- a/test/unit/io_engine_t.c
++++ b/test/unit/io_engine_t.c
+@@ -104,13 +104,15 @@ static void _fix_exit(void *fixture)
+ {
+         struct fixture *f = fixture;
+ 
+-	close(f->fd);
+-	bcache_clear_fd(f->di);
+-	unlink(f->fname);
+-        free(f->data);
+-        if (f->e)
+-                f->e->destroy(f->e);
+-        free(f);
++	if (f) {
++		(void) close(f->fd);
++		bcache_clear_fd(f->di);
++		(void) unlink(f->fname);
++		free(f->data);
++		if (f->e)
++			f->e->destroy(f->e);
++		free(f);
++	}
+ }
+ 
+ static void _test_create(void *fixture)
+diff --git a/test/unit/radix_tree_t.c b/test/unit/radix_tree_t.c
+index 54bc40670..88c8bd5a7 100644
+--- a/test/unit/radix_tree_t.c
++++ b/test/unit/radix_tree_t.c
+@@ -28,7 +28,8 @@ static void *rt_init(void)
+ 
+ static void rt_exit(void *fixture)
+ {
+-	radix_tree_destroy(fixture);
++	if (fixture)
++		radix_tree_destroy(fixture);
+ }
+ 
+ static void test_create_destroy(void *fixture)
 
 
