@@ -1,62 +1,97 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Mon, 20 Sep 2021 13:30:07 +0000 (GMT)
-Subject: main - cov: ensure data is not derefenced
-Message-ID: <20210920133007.98D813858C60@sourceware.org>
+Date: Mon, 20 Sep 2021 13:30:06 +0000 (GMT)
+Subject: main - cov: handle better leak reports
+Message-ID: <20210920133006.799DA3858C60@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=bfc6fe2bac8ac262075271c2f6649b28cd04f883
-Commit:        bfc6fe2bac8ac262075271c2f6649b28cd04f883
-Parent:        3e7e9cc5e6abc4ddb1777e7c7b9d7bc42a7f57a7
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=3e7e9cc5e6abc4ddb1777e7c7b9d7bc42a7f57a7
+Commit:        3e7e9cc5e6abc4ddb1777e7c7b9d7bc42a7f57a7
+Parent:        825e49a2447810a806905723bc91072eb7b8b423
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Mon Sep 20 01:46:43 2021 +0200
+AuthorDate:    Sun Sep 19 20:27:34 2021 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Mon Sep 20 14:26:09 2021 +0200
 
-cov: ensure data is not derefenced
+cov: handle better leak reports
 
-Ensure all hypothetical paths cannot dereference NULL *(u->data).
+Rewrite code so the leaks are eliminated from Coverity.
 ---
- lib/device/bcache-utils.c | 10 ++++++----
- 1 file changed, 6 insertions(+), 4 deletions(-)
+ tools/command.c | 33 ++++++++++++++++++++++-----------
+ 1 file changed, 22 insertions(+), 11 deletions(-)
 
-diff --git a/lib/device/bcache-utils.c b/lib/device/bcache-utils.c
-index 85ec07aa6..82adb89a9 100644
---- a/lib/device/bcache-utils.c
-+++ b/lib/device/bcache-utils.c
-@@ -164,8 +164,10 @@ static bool _write_partial(struct updater *u, int di, block_address bb,
- 	if (!bcache_get(u->cache, di, bb, GF_DIRTY, &b))
- 		return false;
+diff --git a/tools/command.c b/tools/command.c
+index 37f6a6153..48f572f7e 100644
+--- a/tools/command.c
++++ b/tools/command.c
+@@ -757,6 +757,9 @@ static void _set_opt_def(struct cmd_context *cmdtool, struct command *cmd, char
+ 			def->num = (uint64_t)atoi(name);
  
--	memcpy(((unsigned char *) b->data) + offset, u->data, len);
--	u->data = ((unsigned char *) u->data) + len;
-+	if (u->data) {
-+		memcpy(((unsigned char *) b->data) + offset, u->data, len);
-+		u->data = ((unsigned char *) u->data) + len;
-+	}
+ 		if (val_enum == conststr_VAL) {
++#ifdef MAN_PAGE_GENERATOR
++			free((void*)def->str);
++#endif
+ 			def->str = dm_pool_strdup(cmdtool->libmem, name);
  
- 	bcache_put(b);
- 	return true;
-@@ -246,7 +248,7 @@ bool bcache_zero_bytes(struct bcache *cache, int di, uint64_t start, size_t len)
- static bool _set_partial(struct updater *u, int di, block_address bb, uint64_t offset, size_t len)
- {
- 	struct block *b;
--	uint8_t val = *((uint8_t *) u->data);
-+	uint8_t val = (u->data) ? *((uint8_t *) u->data) : 0;
+ 			if (!def->str) {
+@@ -1539,20 +1542,27 @@ int define_commands(struct cmd_context *cmdtool, const char *run_name)
+ 		 */
  
- 	if (!bcache_get(u->cache, di, bb, GF_DIRTY, &b))
- 		return false;
-@@ -260,7 +262,7 @@ static bool _set_partial(struct updater *u, int di, block_address bb, uint64_t o
- static bool _set_whole(struct updater *u, int di, block_address bb, block_address be)
- {
- 	struct block *b;
--	uint8_t val = *((uint8_t *) u->data);
-+	uint8_t val = (u->data) ? *((uint8_t *) u->data) : 0;
-         uint64_t len = bcache_block_sectors(u->cache) * 512;
+ 		if (_is_desc_line(line_argv[0]) && !skip && cmd) {
+-			char *desc = dm_pool_strdup(cmdtool->libmem, line_orig);
+-			if (cmd->desc && desc) {
+-				int newlen = strlen(cmd->desc) + strlen(desc) + 2;
++			if (cmd->desc) {
++				size_t newlen = strlen(cmd->desc) + strlen(line_orig) + 2;
+ 				char *newdesc = dm_pool_alloc(cmdtool->libmem, newlen);
+-				if (newdesc) {
+-					snprintf(newdesc, newlen, "%s %s", cmd->desc, desc);
+-					cmd->desc = newdesc;
+-				} else {
++
++				if (!newdesc) {
+ 					/* FIXME */
+ 					stack;
+ 					return 0;
+ 				}
+-			} else
+-				cmd->desc = desc;
++
++				snprintf(newdesc, newlen, "%s %s", cmd->desc, line_orig);
++#ifdef MAN_PAGE_GENERATOR
++				free((void*)cmd->desc);
++#endif
++				cmd->desc = newdesc;
++			} else if (!(cmd->desc = dm_pool_strdup(cmdtool->libmem, line_orig))) {
++				/* FIXME */
++				stack;
++				return 0;
++			}
++
+ 			continue;
+ 		}
  
- 	for (; bb != be; bb++) {
+@@ -1572,6 +1582,9 @@ int define_commands(struct cmd_context *cmdtool, const char *run_name)
+ 		}
+ 
+ 		if (_is_id_line(line_argv[0]) && cmd) {
++#ifdef MAN_PAGE_GENERATOR
++			free((void*)cmd->command_id);
++#endif
+ 			cmd->command_id = dm_pool_strdup(cmdtool->libmem, line_argv[1]);
+ 
+ 			if (!cmd->command_id) {
+@@ -3674,8 +3687,6 @@ static int _print_man(char *name, char *des_file, int secondary)
+ 				printf(".P\n");
+ 			}
+ 		}
+-
+-		continue;
+ 	}
+ 
+ 	return 1;
 
 
