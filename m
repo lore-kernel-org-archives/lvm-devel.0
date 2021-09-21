@@ -1,40 +1,41 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Mon, 13 Sep 2021 10:36:14 +0000 (GMT)
-Subject: main - cov: initilized more struct members
-Message-ID: <20210913103614.DBD643858002@sourceware.org>
+Date: Tue, 21 Sep 2021 19:51:05 +0000 (GMT)
+Subject: main - cov: check strchr for NULL
+Message-ID: <20210921195105.11C373858D39@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=f5f1cdfa70ad2ec907fba8b9f5d0c1a251571c80
-Commit:        f5f1cdfa70ad2ec907fba8b9f5d0c1a251571c80
-Parent:        a8ee13900db58b018e143fbf6a3435c7803e82fe
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=7bd55f8c152041101a27c83a96b794fdbb366460
+Commit:        7bd55f8c152041101a27c83a96b794fdbb366460
+Parent:        377e326156c74ef7aa7f5ac286bdabe3143a0b49
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu Sep 9 23:07:40 2021 +0200
+AuthorDate:    Tue Sep 21 18:24:30 2021 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Mon Sep 13 12:34:41 2021 +0200
+CommitterDate: Tue Sep 21 21:03:47 2021 +0200
 
-cov: initilized more struct members
+cov: check strchr for NULL
 
-For some hypothetical path, make these vars defined.
+Although unlikely, ensuring coverity we not use NULL.
 ---
- tools/toollib.c | 2 ++
- 1 file changed, 2 insertions(+)
+ daemons/lvmlockd/lvmlockd-dlm.c | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
 
-diff --git a/tools/toollib.c b/tools/toollib.c
-index 9d488c5a7..3bb04f92c 100644
---- a/tools/toollib.c
-+++ b/tools/toollib.c
-@@ -4010,6 +4010,8 @@ static int _process_duplicate_pvs(struct cmd_context *cmd,
- 	};
+diff --git a/daemons/lvmlockd/lvmlockd-dlm.c b/daemons/lvmlockd/lvmlockd-dlm.c
+index 68d18607c..1305c3dc2 100644
+--- a/daemons/lvmlockd/lvmlockd-dlm.c
++++ b/daemons/lvmlockd/lvmlockd-dlm.c
+@@ -801,7 +801,8 @@ int lm_refresh_lv_start_dlm(struct action *act)
+ 	strncpy(path, act->path, PATH_MAX-1);
  
- 	struct volume_group dummy_vg = {
-+		.cmd = cmd,
-+		.vgmem = cmd->mem,
- 		.extent_size = 1,
- 		.fid = &dummy_fid,
- 		.name = "",
+ 	/* skip past dev */
+-	p = strchr(path + 1, '/');
++	if (!(p = strchr(path + 1, '/')))
++		return -EINVAL;
+ 
+ 	/* skip past slashes */
+ 	while (*p == '/')
 
 
