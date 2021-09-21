@@ -1,46 +1,39 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Tue, 21 Sep 2021 19:51:08 +0000 (GMT)
-Subject: main - cov: check dev_get_size result
-Message-ID: <20210921195108.6F4A83858D39@sourceware.org>
+Date: Tue, 21 Sep 2021 19:51:06 +0000 (GMT)
+Subject: main - cov: check for function result
+Message-ID: <20210921195106.313E33858C3A@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=e6d35874827f14d392c4ba4f8608eb0444230c7b
-Commit:        e6d35874827f14d392c4ba4f8608eb0444230c7b
-Parent:        30e27d2f8b8fbe3031c0e2863a22c77b577019a0
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=a13dfcbc77bcfdb4bfcff659fde8e11f73225643
+Commit:        a13dfcbc77bcfdb4bfcff659fde8e11f73225643
+Parent:        7bd55f8c152041101a27c83a96b794fdbb366460
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Sep 21 18:50:26 2021 +0200
+AuthorDate:    Tue Sep 21 18:45:08 2021 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Tue Sep 21 21:03:47 2021 +0200
 
-cov: check dev_get_size result
+cov: check for function result
 
-Check we have obtained some device size out of dev_get_size().
 ---
- tools/pvscan.c | 8 ++++++--
- 1 file changed, 6 insertions(+), 2 deletions(-)
+ test/unit/radix_tree_t.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
 
-diff --git a/tools/pvscan.c b/tools/pvscan.c
-index b19b74b3e..a0be17e8e 100644
---- a/tools/pvscan.c
-+++ b/tools/pvscan.c
-@@ -1268,8 +1268,12 @@ static int _online_devs(struct cmd_context *cmd, int do_all, struct dm_list *pvs
- 		}
+diff --git a/test/unit/radix_tree_t.c b/test/unit/radix_tree_t.c
+index be24ce76d..b80e4f8ab 100644
+--- a/test/unit/radix_tree_t.c
++++ b/test/unit/radix_tree_t.c
+@@ -800,7 +800,7 @@ static void __invalidate(struct radix_tree *rt, int fd)
  
- 		devsize = dev->size;
--		if (!devsize)
--			dev_get_size(dev, &devsize);
-+		if (!devsize &&
-+		    !dev_get_size(dev, &devsize)) {
-+			log_print("pvscan[%d] PV %s can get device size.", getpid(), dev_name(dev));
-+			release_vg(vg);
-+			continue;
-+		}
- 		do_full_check = 0;
+ 	k.parts.fd = fd;
+ 	radix_tree_remove_prefix(rt, k.bytes, k.bytes + sizeof(k.parts.fd));
+-	radix_tree_is_well_formed(rt);
++	T_ASSERT(radix_tree_is_well_formed(rt));
+ }
  
- 		/* If use_full_md_check is set then this has already been done by filter. */
+ static void test_bcache_scenario3(void *fixture)
 
 
