@@ -1,41 +1,41 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Tue, 21 Sep 2021 19:51:05 +0000 (GMT)
-Subject: main - cov: check strchr for NULL
-Message-ID: <20210921195105.11C373858D39@sourceware.org>
+Date: Tue, 21 Sep 2021 19:51:07 +0000 (GMT)
+Subject: main - cov: sanitize function environment
+Message-ID: <20210921195107.503A73858D39@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=7bd55f8c152041101a27c83a96b794fdbb366460
-Commit:        7bd55f8c152041101a27c83a96b794fdbb366460
-Parent:        377e326156c74ef7aa7f5ac286bdabe3143a0b49
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=30e27d2f8b8fbe3031c0e2863a22c77b577019a0
+Commit:        30e27d2f8b8fbe3031c0e2863a22c77b577019a0
+Parent:        a13dfcbc77bcfdb4bfcff659fde8e11f73225643
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Sep 21 18:24:30 2021 +0200
+AuthorDate:    Tue Sep 21 18:46:52 2021 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Tue Sep 21 21:03:47 2021 +0200
 
-cov: check strchr for NULL
+cov: sanitize function environment
 
-Although unlikely, ensuring coverity we not use NULL.
+Coverity can see that function is either used with 'dev' or 'def'.
 ---
- daemons/lvmlockd/lvmlockd-dlm.c | 3 ++-
- 1 file changed, 2 insertions(+), 1 deletion(-)
+ tools/pvck.c | 3 +++
+ 1 file changed, 3 insertions(+)
 
-diff --git a/daemons/lvmlockd/lvmlockd-dlm.c b/daemons/lvmlockd/lvmlockd-dlm.c
-index 68d18607c..1305c3dc2 100644
---- a/daemons/lvmlockd/lvmlockd-dlm.c
-+++ b/daemons/lvmlockd/lvmlockd-dlm.c
-@@ -801,7 +801,8 @@ int lm_refresh_lv_start_dlm(struct action *act)
- 	strncpy(path, act->path, PATH_MAX-1);
+diff --git a/tools/pvck.c b/tools/pvck.c
+index 0d1bc1b17..b96b1c784 100644
+--- a/tools/pvck.c
++++ b/tools/pvck.c
+@@ -379,6 +379,9 @@ static bool _read_bytes(struct device *dev, struct devicefile *def, uint64_t sta
+ 	if (dev)
+ 		return dev_read_bytes(dev, start, len, data);
  
- 	/* skip past dev */
--	p = strchr(path + 1, '/');
-+	if (!(p = strchr(path + 1, '/')))
-+		return -EINVAL;
- 
- 	/* skip past slashes */
- 	while (*p == '/')
++	if (!def)
++		return false;
++
+ 	off = lseek(def->fd, start, SEEK_SET);
+ 	if (off != start)
+ 		return false;
 
 
