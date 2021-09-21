@@ -1,48 +1,44 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Tue, 21 Sep 2021 19:51:09 +0000 (GMT)
-Subject: main - cov: ignore leak of fd descriptor
-Message-ID: <20210921195109.8E4393858D39@sourceware.org>
+Date: Tue, 21 Sep 2021 19:51:10 +0000 (GMT)
+Subject: main - tests: raise required version for conversion
+Message-ID: <20210921195110.ADC643858C3A@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=b0d40109a67a99bf568c168a31f37955a07d7da4
-Commit:        b0d40109a67a99bf568c168a31f37955a07d7da4
-Parent:        e6d35874827f14d392c4ba4f8608eb0444230c7b
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=4cfa80f02f769f723fad37d3e1d8697a106ee603
+Commit:        4cfa80f02f769f723fad37d3e1d8697a106ee603
+Parent:        b0d40109a67a99bf568c168a31f37955a07d7da4
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Sep 21 20:20:53 2021 +0200
+AuthorDate:    Tue Sep 21 21:43:02 2021 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Tue Sep 21 21:03:47 2021 +0200
+CommitterDate: Tue Sep 21 21:43:02 2021 +0200
 
-cov: ignore leak of fd descriptor
+tests: raise required version for conversion
 
-There is no 'fd' leak.
+Real conversion needs this version driver.
+TODO: handle properly older versions.
 ---
- libdm/dm-tools/dmfilemapd.c | 9 ++++-----
- 1 file changed, 4 insertions(+), 5 deletions(-)
+ test/shell/vdo-convert.sh | 5 +++++
+ 1 file changed, 5 insertions(+)
 
-diff --git a/libdm/dm-tools/dmfilemapd.c b/libdm/dm-tools/dmfilemapd.c
-index d7ca71d7e..d547e59d5 100644
---- a/libdm/dm-tools/dmfilemapd.c
-+++ b/libdm/dm-tools/dmfilemapd.c
-@@ -671,12 +671,11 @@ static int _daemonise(struct filemap_monitor *fm)
- 			(void) close(fd);
- 	}
- 	/* TODO: Use libdaemon/server/daemon-server.c _daemonise() */
--	for (ffd = (int) sysconf(_SC_OPEN_MAX) - 1; ffd > STDERR_FILENO; --ffd) {
--		if (ffd == fm->fd)
--			continue;
--		(void) close(ffd);
--	}
-+	for (ffd = (int) sysconf(_SC_OPEN_MAX) - 1; ffd > STDERR_FILENO; --ffd)
-+		if (ffd != fm->fd)
-+			(void) close(ffd);
+diff --git a/test/shell/vdo-convert.sh b/test/shell/vdo-convert.sh
+index f82529a2d..2a2026c2e 100644
+--- a/test/shell/vdo-convert.sh
++++ b/test/shell/vdo-convert.sh
+@@ -40,6 +40,11 @@ aux prepare_devs 2 10000
+ aux extend_filter_LVMTEST
  
-+	/* coverity[leaked_handle] no leak */
- 	return 1;
- }
  
++
++
++# Conversion can be made with this version of vdo driver
++aux have_vdo 6 2 5 || skip
++
+ #
+ #  Check conversion of VDO volume made on some LV
+ #
 
 
