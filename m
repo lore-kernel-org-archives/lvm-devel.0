@@ -1,39 +1,48 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Tue, 21 Sep 2021 19:51:06 +0000 (GMT)
-Subject: main - cov: check for function result
-Message-ID: <20210921195106.313E33858C3A@sourceware.org>
+Date: Tue, 21 Sep 2021 19:51:09 +0000 (GMT)
+Subject: main - cov: ignore leak of fd descriptor
+Message-ID: <20210921195109.8E4393858D39@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=a13dfcbc77bcfdb4bfcff659fde8e11f73225643
-Commit:        a13dfcbc77bcfdb4bfcff659fde8e11f73225643
-Parent:        7bd55f8c152041101a27c83a96b794fdbb366460
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=b0d40109a67a99bf568c168a31f37955a07d7da4
+Commit:        b0d40109a67a99bf568c168a31f37955a07d7da4
+Parent:        e6d35874827f14d392c4ba4f8608eb0444230c7b
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Sep 21 18:45:08 2021 +0200
+AuthorDate:    Tue Sep 21 20:20:53 2021 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Tue Sep 21 21:03:47 2021 +0200
 
-cov: check for function result
+cov: ignore leak of fd descriptor
 
+There is no 'fd' leak.
 ---
- test/unit/radix_tree_t.c | 2 +-
- 1 file changed, 1 insertion(+), 1 deletion(-)
+ libdm/dm-tools/dmfilemapd.c | 9 ++++-----
+ 1 file changed, 4 insertions(+), 5 deletions(-)
 
-diff --git a/test/unit/radix_tree_t.c b/test/unit/radix_tree_t.c
-index be24ce76d..b80e4f8ab 100644
---- a/test/unit/radix_tree_t.c
-+++ b/test/unit/radix_tree_t.c
-@@ -800,7 +800,7 @@ static void __invalidate(struct radix_tree *rt, int fd)
+diff --git a/libdm/dm-tools/dmfilemapd.c b/libdm/dm-tools/dmfilemapd.c
+index d7ca71d7e..d547e59d5 100644
+--- a/libdm/dm-tools/dmfilemapd.c
++++ b/libdm/dm-tools/dmfilemapd.c
+@@ -671,12 +671,11 @@ static int _daemonise(struct filemap_monitor *fm)
+ 			(void) close(fd);
+ 	}
+ 	/* TODO: Use libdaemon/server/daemon-server.c _daemonise() */
+-	for (ffd = (int) sysconf(_SC_OPEN_MAX) - 1; ffd > STDERR_FILENO; --ffd) {
+-		if (ffd == fm->fd)
+-			continue;
+-		(void) close(ffd);
+-	}
++	for (ffd = (int) sysconf(_SC_OPEN_MAX) - 1; ffd > STDERR_FILENO; --ffd)
++		if (ffd != fm->fd)
++			(void) close(ffd);
  
- 	k.parts.fd = fd;
- 	radix_tree_remove_prefix(rt, k.bytes, k.bytes + sizeof(k.parts.fd));
--	radix_tree_is_well_formed(rt);
-+	T_ASSERT(radix_tree_is_well_formed(rt));
++	/* coverity[leaked_handle] no leak */
+ 	return 1;
  }
  
- static void test_bcache_scenario3(void *fixture)
 
 
