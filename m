@@ -1,44 +1,1384 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Tue, 21 Sep 2021 19:51:10 +0000 (GMT)
-Subject: main - tests: raise required version for conversion
-Message-ID: <20210921195110.ADC643858C3A@sourceware.org>
+Date: Thu, 23 Sep 2021 14:52:32 +0000 (GMT)
+Subject: main - make: generate
+Message-ID: <20210923145232.BB5933858D34@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=4cfa80f02f769f723fad37d3e1d8697a106ee603
-Commit:        4cfa80f02f769f723fad37d3e1d8697a106ee603
-Parent:        b0d40109a67a99bf568c168a31f37955a07d7da4
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=4515acf73430a8734f477b10ae6e3473d02999ae
+Commit:        4515acf73430a8734f477b10ae6e3473d02999ae
+Parent:        4cfa80f02f769f723fad37d3e1d8697a106ee603
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Sep 21 21:43:02 2021 +0200
+AuthorDate:    Wed Sep 22 14:48:58 2021 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Tue Sep 21 21:43:02 2021 +0200
+CommitterDate: Wed Sep 22 14:48:58 2021 +0200
 
-tests: raise required version for conversion
+make: generate
 
-Real conversion needs this version driver.
-TODO: handle properly older versions.
 ---
- test/shell/vdo-convert.sh | 5 +++++
- 1 file changed, 5 insertions(+)
+ man/lvchange.8_pregen        | 11 +++++++++++
+ man/lvconvert.8_pregen       | 11 +++++++++++
+ man/lvcreate.8_pregen        | 11 +++++++++++
+ man/lvdisplay.8_pregen       |  9 +++++++++
+ man/lvextend.8_pregen        | 11 +++++++++++
+ man/lvm-fullreport.8_pregen  |  9 +++++++++
+ man/lvm-lvpoll.8_pregen      |  9 +++++++++
+ man/lvmconfig.8_pregen       |  9 +++++++++
+ man/lvmdevices.8_pregen      | 13 +++++++++++++
+ man/lvmdiskscan.8_pregen     |  9 +++++++++
+ man/lvreduce.8_pregen        |  9 +++++++++
+ man/lvremove.8_pregen        |  9 +++++++++
+ man/lvrename.8_pregen        |  9 +++++++++
+ man/lvresize.8_pregen        | 11 +++++++++++
+ man/lvs.8_pregen             |  9 +++++++++
+ man/lvscan.8_pregen          |  9 +++++++++
+ man/pvchange.8_pregen        |  9 +++++++++
+ man/pvck.8_pregen            | 11 +++++++++++
+ man/pvcreate.8_pregen        |  9 +++++++++
+ man/pvdisplay.8_pregen       |  9 +++++++++
+ man/pvmove.8_pregen          |  9 +++++++++
+ man/pvremove.8_pregen        |  9 +++++++++
+ man/pvresize.8_pregen        |  9 +++++++++
+ man/pvs.8_pregen             |  9 +++++++++
+ man/pvscan.8_pregen          |  9 +++++++++
+ man/vgcfgbackup.8_pregen     |  9 +++++++++
+ man/vgcfgrestore.8_pregen    | 11 +++++++++++
+ man/vgchange.8_pregen        | 11 +++++++++++
+ man/vgck.8_pregen            |  9 +++++++++
+ man/vgconvert.8_pregen       |  9 +++++++++
+ man/vgcreate.8_pregen        |  9 +++++++++
+ man/vgdisplay.8_pregen       |  9 +++++++++
+ man/vgexport.8_pregen        |  9 +++++++++
+ man/vgextend.8_pregen        |  9 +++++++++
+ man/vgimport.8_pregen        |  9 +++++++++
+ man/vgimportclone.8_pregen   |  9 +++++++++
+ man/vgimportdevices.8_pregen |  9 +++++++++
+ man/vgmerge.8_pregen         |  9 +++++++++
+ man/vgmknodes.8_pregen       |  9 +++++++++
+ man/vgreduce.8_pregen        | 11 +++++++++++
+ man/vgremove.8_pregen        |  9 +++++++++
+ man/vgrename.8_pregen        |  9 +++++++++
+ man/vgs.8_pregen             |  9 +++++++++
+ man/vgscan.8_pregen          |  9 +++++++++
+ man/vgsplit.8_pregen         |  9 +++++++++
+ 45 files changed, 427 insertions(+)
 
-diff --git a/test/shell/vdo-convert.sh b/test/shell/vdo-convert.sh
-index f82529a2d..2a2026c2e 100644
---- a/test/shell/vdo-convert.sh
-+++ b/test/shell/vdo-convert.sh
-@@ -40,6 +40,11 @@ aux prepare_devs 2 10000
- aux extend_filter_LVMTEST
- 
- 
-+
-+
-+# Conversion can be made with this version of vdo driver
-+aux have_vdo 6 2 5 || skip
-+
- #
- #  Check conversion of VDO volume made on some LV
- #
+diff --git a/man/lvchange.8_pregen b/man/lvchange.8_pregen
+index 3cfa7330d..2ecd491d7 100644
+--- a/man/lvchange.8_pregen
++++ b/man/lvchange.8_pregen
+@@ -82,6 +82,8 @@ lvchange \(em Change the attributes of logical volume(s)
+     \fB--\fP[\fBraid\fP]\fBminrecoveryrate\fP \fISize\fP[k|UNIT]
+ .br
+     \fB--monitor\fP \fBy\fP|\fBn\fP
++.br
++    \fB--nohints\fP
+ .br
+     \fB--nolocking\fP
+ .br
+@@ -423,6 +425,8 @@ Common options for lvm:
+ .br
+ [    \fB--longhelp\fP ]
+ .br
++[    \fB--nohints\fP ]
++.br
+ [    \fB--nolocking\fP ]
+ .br
+ [    \fB--profile\fP \fIString\fP ]
+@@ -725,6 +729,13 @@ automated maintenance for the LV in reponse to specific events.
+ See \fBdmeventd\fP(8) for more information.
+ .
+ .HP
++\fB--nohints\fP
++.br
++Do not use the hints file to locate devices for PVs. A command may read
++more devices to find PVs when hints are not used. The command will still
++perform standard hint file invalidation where appropriate.
++.
++.HP
+ \fB--nolocking\fP
+ .br
+ Disable locking.
+diff --git a/man/lvconvert.8_pregen b/man/lvconvert.8_pregen
+index 4fafe5d29..db52c588a 100644
+--- a/man/lvconvert.8_pregen
++++ b/man/lvconvert.8_pregen
+@@ -86,6 +86,8 @@ lvconvert \(em Change logical volume layout
+  \fB-m\fP|\fB--mirrors\fP [\fB+\fP|\fB-\fP]\fINumber\fP
+ .br
+  \fB-n\fP|\fB--name\fP \fIString\fP
++.br
++    \fB--nohints\fP
+ .br
+     \fB--nolocking\fP
+ .br
+@@ -967,6 +969,8 @@ Common options for lvm:
+ .br
+ [    \fB--longhelp\fP ]
+ .br
++[    \fB--nohints\fP ]
++.br
+ [    \fB--nolocking\fP ]
+ .br
+ [    \fB--profile\fP \fIString\fP ]
+@@ -1276,6 +1280,13 @@ When unspecified, a default name of "lvol#" is
+ generated, where # is a number generated by LVM.
+ .
+ .HP
++\fB--nohints\fP
++.br
++Do not use the hints file to locate devices for PVs. A command may read
++more devices to find PVs when hints are not used. The command will still
++perform standard hint file invalidation where appropriate.
++.
++.HP
+ \fB--nolocking\fP
+ .br
+ Disable locking.
+diff --git a/man/lvcreate.8_pregen b/man/lvcreate.8_pregen
+index b642ad0c2..931613285 100644
+--- a/man/lvcreate.8_pregen
++++ b/man/lvcreate.8_pregen
+@@ -96,6 +96,8 @@ lvcreate \(em Create a logical volume
+     \fB--monitor\fP \fBy\fP|\fBn\fP
+ .br
+  \fB-n\fP|\fB--name\fP \fIString\fP
++.br
++    \fB--nohints\fP
+ .br
+     \fB--nolocking\fP
+ .br
+@@ -809,6 +811,8 @@ Common options for lvm:
+ .br
+ [    \fB--longhelp\fP ]
+ .br
++[    \fB--nohints\fP ]
++.br
+ [    \fB--nolocking\fP ]
+ .br
+ [    \fB--profile\fP \fIString\fP ]
+@@ -1163,6 +1167,13 @@ When unspecified, a default name of "lvol#" is
+ generated, where # is a number generated by LVM.
+ .
+ .HP
++\fB--nohints\fP
++.br
++Do not use the hints file to locate devices for PVs. A command may read
++more devices to find PVs when hints are not used. The command will still
++perform standard hint file invalidation where appropriate.
++.
++.HP
+ \fB--nolocking\fP
+ .br
+ Disable locking.
+diff --git a/man/lvdisplay.8_pregen b/man/lvdisplay.8_pregen
+index 8ff34bc08..f74b49190 100644
+--- a/man/lvdisplay.8_pregen
++++ b/man/lvdisplay.8_pregen
+@@ -114,6 +114,8 @@ Common options for lvm:
+ .br
+ [    \fB--longhelp\fP ]
+ .br
++[    \fB--nohints\fP ]
++.br
+ [    \fB--nolocking\fP ]
+ .br
+ [    \fB--profile\fP \fIString\fP ]
+@@ -257,6 +259,13 @@ Suppress the headings line that is normally the first line of output.
+ Useful if grepping the output.
+ .
+ .HP
++\fB--nohints\fP
++.br
++Do not use the hints file to locate devices for PVs. A command may read
++more devices to find PVs when hints are not used. The command will still
++perform standard hint file invalidation where appropriate.
++.
++.HP
+ \fB--nolocking\fP
+ .br
+ Disable locking.
+diff --git a/man/lvextend.8_pregen b/man/lvextend.8_pregen
+index fa0aec63a..c0c32dd95 100644
+--- a/man/lvextend.8_pregen
++++ b/man/lvextend.8_pregen
+@@ -46,6 +46,8 @@ lvextend \(em Add space to a logical volume
+  \fB-m\fP|\fB--mirrors\fP \fINumber\fP
+ .br
+  \fB-n\fP|\fB--nofsck\fP
++.br
++    \fB--nohints\fP
+ .br
+     \fB--nolocking\fP
+ .br
+@@ -255,6 +257,8 @@ Common options for lvm:
+ .br
+ [    \fB--longhelp\fP ]
+ .br
++[    \fB--nohints\fP ]
++.br
+ [    \fB--nolocking\fP ]
+ .br
+ [    \fB--profile\fP \fIString\fP ]
+@@ -396,6 +400,13 @@ requires it. You may need to use --force to proceed with
+ this option.
+ .
+ .HP
++\fB--nohints\fP
++.br
++Do not use the hints file to locate devices for PVs. A command may read
++more devices to find PVs when hints are not used. The command will still
++perform standard hint file invalidation where appropriate.
++.
++.HP
+ \fB--nolocking\fP
+ .br
+ Disable locking.
+diff --git a/man/lvm-fullreport.8_pregen b/man/lvm-fullreport.8_pregen
+index 399d4ff9a..19e6c4e56 100644
+--- a/man/lvm-fullreport.8_pregen
++++ b/man/lvm-fullreport.8_pregen
+@@ -110,6 +110,8 @@ Common options for lvm:
+ .br
+ [    \fB--longhelp\fP ]
+ .br
++[    \fB--nohints\fP ]
++.br
+ [    \fB--nolocking\fP ]
+ .br
+ [    \fB--profile\fP \fIString\fP ]
+@@ -231,6 +233,13 @@ Suppress the headings line that is normally the first line of output.
+ Useful if grepping the output.
+ .
+ .HP
++\fB--nohints\fP
++.br
++Do not use the hints file to locate devices for PVs. A command may read
++more devices to find PVs when hints are not used. The command will still
++perform standard hint file invalidation where appropriate.
++.
++.HP
+ \fB--nolocking\fP
+ .br
+ Disable locking.
+diff --git a/man/lvm-lvpoll.8_pregen b/man/lvm-lvpoll.8_pregen
+index cf18ebeec..e826a033e 100644
+--- a/man/lvm-lvpoll.8_pregen
++++ b/man/lvm-lvpoll.8_pregen
+@@ -66,6 +66,8 @@ Common options for lvm:
+ .br
+ [    \fB--longhelp\fP ]
+ .br
++[    \fB--nohints\fP ]
++.br
+ [    \fB--nolocking\fP ]
+ .br
+ [    \fB--profile\fP \fIString\fP ]
+@@ -158,6 +160,13 @@ See \fBlvmlockd\fP(8) for more information.
+ Display long help text.
+ .
+ .HP
++\fB--nohints\fP
++.br
++Do not use the hints file to locate devices for PVs. A command may read
++more devices to find PVs when hints are not used. The command will still
++perform standard hint file invalidation where appropriate.
++.
++.HP
+ \fB--nolocking\fP
+ .br
+ Disable locking.
+diff --git a/man/lvmconfig.8_pregen b/man/lvmconfig.8_pregen
+index 6cdb577c1..ee0ab0255 100644
+--- a/man/lvmconfig.8_pregen
++++ b/man/lvmconfig.8_pregen
+@@ -107,6 +107,8 @@ Common options for lvm:
+ .br
+ [    \fB--longhelp\fP ]
+ .br
++[    \fB--nohints\fP ]
++.br
+ [    \fB--nolocking\fP ]
+ .br
+ [    \fB--profile\fP \fIString\fP ]
+@@ -238,6 +240,13 @@ The metadata profile to use for command configuration.
+ See \fBlvm.conf\fP(5) for more information about profiles.
+ .
+ .HP
++\fB--nohints\fP
++.br
++Do not use the hints file to locate devices for PVs. A command may read
++more devices to find PVs when hints are not used. The command will still
++perform standard hint file invalidation where appropriate.
++.
++.HP
+ \fB--nolocking\fP
+ .br
+ Disable locking.
+diff --git a/man/lvmdevices.8_pregen b/man/lvmdevices.8_pregen
+index e581a8d01..d2c18d90b 100644
+--- a/man/lvmdevices.8_pregen
++++ b/man/lvmdevices.8_pregen
+@@ -41,6 +41,8 @@ lvmdevices \(em Manage the devices file
+     \fB--lockopt\fP \fIString\fP
+ .br
+     \fB--longhelp\fP
++.br
++    \fB--nohints\fP
+ .br
+     \fB--nolocking\fP
+ .br
+@@ -239,6 +241,8 @@ Find the device with the given PVID and add it to the devices file.
+ .br
+ .RS 4
+ .ad l
++[    \fB--deviceidtype\fP \fIString\fP ]
++.br
+ [ COMMON_OPTIONS ]
+ .ad b
+ .RE
+@@ -288,6 +292,8 @@ Common options for lvm:
+ .br
+ [    \fB--longhelp\fP ]
+ .br
++[    \fB--nohints\fP ]
++.br
+ [    \fB--nolocking\fP ]
+ .br
+ [    \fB--profile\fP \fIString\fP ]
+@@ -390,6 +396,13 @@ See \fBlvmlockd\fP(8) for more information.
+ Display long help text.
+ .
+ .HP
++\fB--nohints\fP
++.br
++Do not use the hints file to locate devices for PVs. A command may read
++more devices to find PVs when hints are not used. The command will still
++perform standard hint file invalidation where appropriate.
++.
++.HP
+ \fB--nolocking\fP
+ .br
+ Disable locking.
+diff --git a/man/lvmdiskscan.8_pregen b/man/lvmdiskscan.8_pregen
+index 5f31e8115..42b9c50f3 100644
+--- a/man/lvmdiskscan.8_pregen
++++ b/man/lvmdiskscan.8_pregen
+@@ -64,6 +64,8 @@ Common options for lvm:
+ .br
+ [    \fB--longhelp\fP ]
+ .br
++[    \fB--nohints\fP ]
++.br
+ [    \fB--nolocking\fP ]
+ .br
+ [    \fB--profile\fP \fIString\fP ]
+@@ -139,6 +141,13 @@ Display long help text.
+ Only report PVs.
+ .
+ .HP
++\fB--nohints\fP
++.br
++Do not use the hints file to locate devices for PVs. A command may read
++more devices to find PVs when hints are not used. The command will still
++perform standard hint file invalidation where appropriate.
++.
++.HP
+ \fB--nolocking\fP
+ .br
+ Disable locking.
+diff --git a/man/lvreduce.8_pregen b/man/lvreduce.8_pregen
+index 0a659e1c8..bfa7c720c 100644
+--- a/man/lvreduce.8_pregen
++++ b/man/lvreduce.8_pregen
+@@ -86,6 +86,8 @@ Common options for lvm:
+ .br
+ [    \fB--longhelp\fP ]
+ .br
++[    \fB--nohints\fP ]
++.br
+ [    \fB--nolocking\fP ]
+ .br
+ [    \fB--profile\fP \fIString\fP ]
+@@ -197,6 +199,13 @@ requires it. You may need to use --force to proceed with
+ this option.
+ .
+ .HP
++\fB--nohints\fP
++.br
++Do not use the hints file to locate devices for PVs. A command may read
++more devices to find PVs when hints are not used. The command will still
++perform standard hint file invalidation where appropriate.
++.
++.HP
+ \fB--nolocking\fP
+ .br
+ Disable locking.
+diff --git a/man/lvremove.8_pregen b/man/lvremove.8_pregen
+index a5ed82666..86252a627 100644
+--- a/man/lvremove.8_pregen
++++ b/man/lvremove.8_pregen
+@@ -92,6 +92,8 @@ Common options for lvm:
+ .br
+ [    \fB--longhelp\fP ]
+ .br
++[    \fB--nohints\fP ]
++.br
+ [    \fB--nolocking\fP ]
+ .br
+ [    \fB--profile\fP \fIString\fP ]
+@@ -174,6 +176,13 @@ See \fBlvmlockd\fP(8) for more information.
+ Display long help text.
+ .
+ .HP
++\fB--nohints\fP
++.br
++Do not use the hints file to locate devices for PVs. A command may read
++more devices to find PVs when hints are not used. The command will still
++perform standard hint file invalidation where appropriate.
++.
++.HP
+ \fB--nohistory\fP
+ .br
+ Do not record history of LVs being removed.
+diff --git a/man/lvrename.8_pregen b/man/lvrename.8_pregen
+index 5b5975fa3..072699ff6 100644
+--- a/man/lvrename.8_pregen
++++ b/man/lvrename.8_pregen
+@@ -76,6 +76,8 @@ Common options for lvm:
+ .br
+ [    \fB--longhelp\fP ]
+ .br
++[    \fB--nohints\fP ]
++.br
+ [    \fB--nolocking\fP ]
+ .br
+ [    \fB--profile\fP \fIString\fP ]
+@@ -152,6 +154,13 @@ See \fBlvmlockd\fP(8) for more information.
+ Display long help text.
+ .
+ .HP
++\fB--nohints\fP
++.br
++Do not use the hints file to locate devices for PVs. A command may read
++more devices to find PVs when hints are not used. The command will still
++perform standard hint file invalidation where appropriate.
++.
++.HP
+ \fB--nolocking\fP
+ .br
+ Disable locking.
+diff --git a/man/lvresize.8_pregen b/man/lvresize.8_pregen
+index 36c1760fc..d1c50ba52 100644
+--- a/man/lvresize.8_pregen
++++ b/man/lvresize.8_pregen
+@@ -44,6 +44,8 @@ lvresize \(em Resize a logical volume
+     \fB--longhelp\fP
+ .br
+  \fB-n\fP|\fB--nofsck\fP
++.br
++    \fB--nohints\fP
+ .br
+     \fB--nolocking\fP
+ .br
+@@ -213,6 +215,8 @@ Common options for lvm:
+ .br
+ [    \fB--longhelp\fP ]
+ .br
++[    \fB--nohints\fP ]
++.br
+ [    \fB--nolocking\fP ]
+ .br
+ [    \fB--profile\fP \fIString\fP ]
+@@ -349,6 +353,13 @@ requires it. You may need to use --force to proceed with
+ this option.
+ .
+ .HP
++\fB--nohints\fP
++.br
++Do not use the hints file to locate devices for PVs. A command may read
++more devices to find PVs when hints are not used. The command will still
++perform standard hint file invalidation where appropriate.
++.
++.HP
+ \fB--nolocking\fP
+ .br
+ Disable locking.
+diff --git a/man/lvs.8_pregen b/man/lvs.8_pregen
+index d822347a1..9e185b5b4 100644
+--- a/man/lvs.8_pregen
++++ b/man/lvs.8_pregen
+@@ -110,6 +110,8 @@ Common options for lvm:
+ .br
+ [    \fB--longhelp\fP ]
+ .br
++[    \fB--nohints\fP ]
++.br
+ [    \fB--nolocking\fP ]
+ .br
+ [    \fB--profile\fP \fIString\fP ]
+@@ -241,6 +243,13 @@ Suppress the headings line that is normally the first line of output.
+ Useful if grepping the output.
+ .
+ .HP
++\fB--nohints\fP
++.br
++Do not use the hints file to locate devices for PVs. A command may read
++more devices to find PVs when hints are not used. The command will still
++perform standard hint file invalidation where appropriate.
++.
++.HP
+ \fB--nolocking\fP
+ .br
+ Disable locking.
+diff --git a/man/lvscan.8_pregen b/man/lvscan.8_pregen
+index 40438a7d2..7a1bfeb65 100644
+--- a/man/lvscan.8_pregen
++++ b/man/lvscan.8_pregen
+@@ -69,6 +69,8 @@ Common options for lvm:
+ .br
+ [    \fB--longhelp\fP ]
+ .br
++[    \fB--nohints\fP ]
++.br
+ [    \fB--nolocking\fP ]
+ .br
+ [    \fB--profile\fP \fIString\fP ]
+@@ -157,6 +159,13 @@ See \fBlvmlockd\fP(8) for more information.
+ Display long help text.
+ .
+ .HP
++\fB--nohints\fP
++.br
++Do not use the hints file to locate devices for PVs. A command may read
++more devices to find PVs when hints are not used. The command will still
++perform standard hint file invalidation where appropriate.
++.
++.HP
+ \fB--nolocking\fP
+ .br
+ Disable locking.
+diff --git a/man/pvchange.8_pregen b/man/pvchange.8_pregen
+index 577352d2a..f2f96a180 100644
+--- a/man/pvchange.8_pregen
++++ b/man/pvchange.8_pregen
+@@ -113,6 +113,8 @@ Common options for lvm:
+ .br
+ [    \fB--longhelp\fP ]
+ .br
++[    \fB--nohints\fP ]
++.br
+ [    \fB--nolocking\fP ]
+ .br
+ [    \fB--profile\fP \fIString\fP ]
+@@ -225,6 +227,13 @@ not store metadata in the metadata areas of the PV.
+ If no, lvm will store metadata on the PV.
+ .
+ .HP
++\fB--nohints\fP
++.br
++Do not use the hints file to locate devices for PVs. A command may read
++more devices to find PVs when hints are not used. The command will still
++perform standard hint file invalidation where appropriate.
++.
++.HP
+ \fB--nolocking\fP
+ .br
+ Disable locking.
+diff --git a/man/pvck.8_pregen b/man/pvck.8_pregen
+index 6e55916a3..225ac7dc1 100644
+--- a/man/pvck.8_pregen
++++ b/man/pvck.8_pregen
+@@ -38,6 +38,8 @@ pvck \(em Check metadata on physical volumes
+     \fB--lockopt\fP \fIString\fP
+ .br
+     \fB--longhelp\fP
++.br
++    \fB--nohints\fP
+ .br
+     \fB--nolocking\fP
+ .br
+@@ -309,6 +311,8 @@ Common options for lvm:
+ .br
+ [    \fB--longhelp\fP ]
+ .br
++[    \fB--nohints\fP ]
++.br
+ [    \fB--nolocking\fP ]
+ .br
+ [    \fB--profile\fP \fIString\fP ]
+@@ -408,6 +412,13 @@ See \fBlvmlockd\fP(8) for more information.
+ Display long help text.
+ .
+ .HP
++\fB--nohints\fP
++.br
++Do not use the hints file to locate devices for PVs. A command may read
++more devices to find PVs when hints are not used. The command will still
++perform standard hint file invalidation where appropriate.
++.
++.HP
+ \fB--nolocking\fP
+ .br
+ Disable locking.
+diff --git a/man/pvcreate.8_pregen b/man/pvcreate.8_pregen
+index 26e5141fe..1d9914ccf 100644
+--- a/man/pvcreate.8_pregen
++++ b/man/pvcreate.8_pregen
+@@ -162,6 +162,8 @@ Common options for lvm:
+ .br
+ [    \fB--longhelp\fP ]
+ .br
++[    \fB--nohints\fP ]
++.br
+ [    \fB--nolocking\fP ]
+ .br
+ [    \fB--profile\fP \fIString\fP ]
+@@ -296,6 +298,13 @@ Specifies the type of on-disk metadata to use.
+ \fBlvm1\fP (or just \fB1\fP) is no longer used.
+ .
+ .HP
++\fB--nohints\fP
++.br
++Do not use the hints file to locate devices for PVs. A command may read
++more devices to find PVs when hints are not used. The command will still
++perform standard hint file invalidation where appropriate.
++.
++.HP
+ \fB--nolocking\fP
+ .br
+ Disable locking.
+diff --git a/man/pvdisplay.8_pregen b/man/pvdisplay.8_pregen
+index ff5d9f50a..af8f0804c 100644
+--- a/man/pvdisplay.8_pregen
++++ b/man/pvdisplay.8_pregen
+@@ -112,6 +112,8 @@ Common options for lvm:
+ .br
+ [    \fB--longhelp\fP ]
+ .br
++[    \fB--nohints\fP ]
++.br
+ [    \fB--nolocking\fP ]
+ .br
+ [    \fB--profile\fP \fIString\fP ]
+@@ -245,6 +247,13 @@ Suppress the headings line that is normally the first line of output.
+ Useful if grepping the output.
+ .
+ .HP
++\fB--nohints\fP
++.br
++Do not use the hints file to locate devices for PVs. A command may read
++more devices to find PVs when hints are not used. The command will still
++perform standard hint file invalidation where appropriate.
++.
++.HP
+ \fB--nolocking\fP
+ .br
+ Disable locking.
+diff --git a/man/pvmove.8_pregen b/man/pvmove.8_pregen
+index a764ed9ca..095b592a4 100644
+--- a/man/pvmove.8_pregen
++++ b/man/pvmove.8_pregen
+@@ -116,6 +116,8 @@ Common options for lvm:
+ .br
+ [    \fB--longhelp\fP ]
+ .br
++[    \fB--nohints\fP ]
++.br
+ [    \fB--nolocking\fP ]
+ .br
+ [    \fB--profile\fP \fIString\fP ]
+@@ -248,6 +250,13 @@ Display long help text.
+ Move only the extents belonging to the named LV.
+ .
+ .HP
++\fB--nohints\fP
++.br
++Do not use the hints file to locate devices for PVs. A command may read
++more devices to find PVs when hints are not used. The command will still
++perform standard hint file invalidation where appropriate.
++.
++.HP
+ \fB--nolocking\fP
+ .br
+ Disable locking.
+diff --git a/man/pvremove.8_pregen b/man/pvremove.8_pregen
+index b34f2a042..834a51678 100644
+--- a/man/pvremove.8_pregen
++++ b/man/pvremove.8_pregen
+@@ -65,6 +65,8 @@ Common options for lvm:
+ .br
+ [    \fB--longhelp\fP ]
+ .br
++[    \fB--nohints\fP ]
++.br
+ [    \fB--nolocking\fP ]
+ .br
+ [    \fB--profile\fP \fIString\fP ]
+@@ -141,6 +143,13 @@ See \fBlvmlockd\fP(8) for more information.
+ Display long help text.
+ .
+ .HP
++\fB--nohints\fP
++.br
++Do not use the hints file to locate devices for PVs. A command may read
++more devices to find PVs when hints are not used. The command will still
++perform standard hint file invalidation where appropriate.
++.
++.HP
+ \fB--nolocking\fP
+ .br
+ Disable locking.
+diff --git a/man/pvresize.8_pregen b/man/pvresize.8_pregen
+index ea309b311..c2f7b6bb4 100644
+--- a/man/pvresize.8_pregen
++++ b/man/pvresize.8_pregen
+@@ -60,6 +60,8 @@ Common options for lvm:
+ .br
+ [    \fB--longhelp\fP ]
+ .br
++[    \fB--nohints\fP ]
++.br
+ [    \fB--nolocking\fP ]
+ .br
+ [    \fB--profile\fP \fIString\fP ]
+@@ -130,6 +132,13 @@ See \fBlvmlockd\fP(8) for more information.
+ Display long help text.
+ .
+ .HP
++\fB--nohints\fP
++.br
++Do not use the hints file to locate devices for PVs. A command may read
++more devices to find PVs when hints are not used. The command will still
++perform standard hint file invalidation where appropriate.
++.
++.HP
+ \fB--nolocking\fP
+ .br
+ Disable locking.
+diff --git a/man/pvs.8_pregen b/man/pvs.8_pregen
+index 08b5600f5..11313f50c 100644
+--- a/man/pvs.8_pregen
++++ b/man/pvs.8_pregen
+@@ -108,6 +108,8 @@ Common options for lvm:
+ .br
+ [    \fB--longhelp\fP ]
+ .br
++[    \fB--nohints\fP ]
++.br
+ [    \fB--nolocking\fP ]
+ .br
+ [    \fB--profile\fP \fIString\fP ]
+@@ -231,6 +233,13 @@ Suppress the headings line that is normally the first line of output.
+ Useful if grepping the output.
+ .
+ .HP
++\fB--nohints\fP
++.br
++Do not use the hints file to locate devices for PVs. A command may read
++more devices to find PVs when hints are not used. The command will still
++perform standard hint file invalidation where appropriate.
++.
++.HP
+ \fB--nolocking\fP
+ .br
+ Disable locking.
+diff --git a/man/pvscan.8_pregen b/man/pvscan.8_pregen
+index 8025d6c34..902a3527a 100644
+--- a/man/pvscan.8_pregen
++++ b/man/pvscan.8_pregen
+@@ -158,6 +158,8 @@ Common options for lvm:
+ .br
+ [    \fB--longhelp\fP ]
+ .br
++[    \fB--nohints\fP ]
++.br
+ [    \fB--nolocking\fP ]
+ .br
+ [    \fB--profile\fP \fIString\fP ]
+@@ -260,6 +262,13 @@ The major number of a device.
+ The minor number of a device.
+ .
+ .HP
++\fB--nohints\fP
++.br
++Do not use the hints file to locate devices for PVs. A command may read
++more devices to find PVs when hints are not used. The command will still
++perform standard hint file invalidation where appropriate.
++.
++.HP
+ \fB--nolocking\fP
+ .br
+ Disable locking.
+diff --git a/man/vgcfgbackup.8_pregen b/man/vgcfgbackup.8_pregen
+index ce7102595..ae9b476f5 100644
+--- a/man/vgcfgbackup.8_pregen
++++ b/man/vgcfgbackup.8_pregen
+@@ -85,6 +85,8 @@ Common options for lvm:
+ .br
+ [    \fB--longhelp\fP ]
+ .br
++[    \fB--nohints\fP ]
++.br
+ [    \fB--nolocking\fP ]
+ .br
+ [    \fB--profile\fP \fIString\fP ]
+@@ -174,6 +176,13 @@ See \fBlvmlockd\fP(8) for more information.
+ Display long help text.
+ .
+ .HP
++\fB--nohints\fP
++.br
++Do not use the hints file to locate devices for PVs. A command may read
++more devices to find PVs when hints are not used. The command will still
++perform standard hint file invalidation where appropriate.
++.
++.HP
+ \fB--nolocking\fP
+ .br
+ Disable locking.
+diff --git a/man/vgcfgrestore.8_pregen b/man/vgcfgrestore.8_pregen
+index 841626728..2c4d18e30 100644
+--- a/man/vgcfgrestore.8_pregen
++++ b/man/vgcfgrestore.8_pregen
+@@ -39,6 +39,8 @@ vgcfgrestore \(em Restore volume group configuration
+     \fB--longhelp\fP
+ .br
+  \fB-M\fP|\fB--metadatatype\fP \fBlvm2\fP
++.br
++    \fB--nohints\fP
+ .br
+     \fB--nolocking\fP
+ .br
+@@ -166,6 +168,8 @@ Common options for lvm:
+ .br
+ [    \fB--longhelp\fP ]
+ .br
++[    \fB--nohints\fP ]
++.br
+ [    \fB--nolocking\fP ]
+ .br
+ [    \fB--profile\fP \fIString\fP ]
+@@ -264,6 +268,13 @@ Specifies the type of on-disk metadata to use.
+ \fBlvm1\fP (or just \fB1\fP) is no longer used.
+ .
+ .HP
++\fB--nohints\fP
++.br
++Do not use the hints file to locate devices for PVs. A command may read
++more devices to find PVs when hints are not used. The command will still
++perform standard hint file invalidation where appropriate.
++.
++.HP
+ \fB--nolocking\fP
+ .br
+ Disable locking.
+diff --git a/man/vgchange.8_pregen b/man/vgchange.8_pregen
+index 31fc458da..19797daa4 100644
+--- a/man/vgchange.8_pregen
++++ b/man/vgchange.8_pregen
+@@ -70,6 +70,8 @@ vgchange \(em Change volume group attributes
+     \fB--metadataprofile\fP \fIString\fP
+ .br
+     \fB--monitor\fP \fBy\fP|\fBn\fP
++.br
++    \fB--nohints\fP
+ .br
+     \fB--nolocking\fP
+ .br
+@@ -423,6 +425,8 @@ Common options for lvm:
+ .br
+ [    \fB--longhelp\fP ]
+ .br
++[    \fB--nohints\fP ]
++.br
+ [    \fB--nolocking\fP ]
+ .br
+ [    \fB--profile\fP \fIString\fP ]
+@@ -655,6 +659,13 @@ automated maintenance for the LV in reponse to specific events.
+ See \fBdmeventd\fP(8) for more information.
+ .
+ .HP
++\fB--nohints\fP
++.br
++Do not use the hints file to locate devices for PVs. A command may read
++more devices to find PVs when hints are not used. The command will still
++perform standard hint file invalidation where appropriate.
++.
++.HP
+ \fB--nolocking\fP
+ .br
+ Disable locking.
+diff --git a/man/vgck.8_pregen b/man/vgck.8_pregen
+index ae312424a..5e575f6f7 100644
+--- a/man/vgck.8_pregen
++++ b/man/vgck.8_pregen
+@@ -76,6 +76,8 @@ Common options for lvm:
+ .br
+ [    \fB--longhelp\fP ]
+ .br
++[    \fB--nohints\fP ]
++.br
+ [    \fB--nolocking\fP ]
+ .br
+ [    \fB--profile\fP \fIString\fP ]
+@@ -146,6 +148,13 @@ See \fBlvmlockd\fP(8) for more information.
+ Display long help text.
+ .
+ .HP
++\fB--nohints\fP
++.br
++Do not use the hints file to locate devices for PVs. A command may read
++more devices to find PVs when hints are not used. The command will still
++perform standard hint file invalidation where appropriate.
++.
++.HP
+ \fB--nolocking\fP
+ .br
+ Disable locking.
+diff --git a/man/vgconvert.8_pregen b/man/vgconvert.8_pregen
+index d18e7af08..baf3b5bdd 100644
+--- a/man/vgconvert.8_pregen
++++ b/man/vgconvert.8_pregen
+@@ -71,6 +71,8 @@ Common options for lvm:
+ .br
+ [    \fB--longhelp\fP ]
+ .br
++[    \fB--nohints\fP ]
++.br
+ [    \fB--nolocking\fP ]
+ .br
+ [    \fB--profile\fP \fIString\fP ]
+@@ -183,6 +185,13 @@ Specifies the type of on-disk metadata to use.
+ \fBlvm1\fP (or just \fB1\fP) is no longer used.
+ .
+ .HP
++\fB--nohints\fP
++.br
++Do not use the hints file to locate devices for PVs. A command may read
++more devices to find PVs when hints are not used. The command will still
++perform standard hint file invalidation where appropriate.
++.
++.HP
+ \fB--nolocking\fP
+ .br
+ Disable locking.
+diff --git a/man/vgcreate.8_pregen b/man/vgcreate.8_pregen
+index 7e357a548..b0d9a04de 100644
+--- a/man/vgcreate.8_pregen
++++ b/man/vgcreate.8_pregen
+@@ -111,6 +111,8 @@ Common options for lvm:
+ .br
+ [    \fB--longhelp\fP ]
+ .br
++[    \fB--nohints\fP ]
++.br
+ [    \fB--nolocking\fP ]
+ .br
+ [    \fB--profile\fP \fIString\fP ]
+@@ -290,6 +292,13 @@ Specifies the type of on-disk metadata to use.
+ \fBlvm1\fP (or just \fB1\fP) is no longer used.
+ .
+ .HP
++\fB--nohints\fP
++.br
++Do not use the hints file to locate devices for PVs. A command may read
++more devices to find PVs when hints are not used. The command will still
++perform standard hint file invalidation where appropriate.
++.
++.HP
+ \fB--nolocking\fP
+ .br
+ Disable locking.
+diff --git a/man/vgdisplay.8_pregen b/man/vgdisplay.8_pregen
+index 467f74506..50fb24bd6 100644
+--- a/man/vgdisplay.8_pregen
++++ b/man/vgdisplay.8_pregen
+@@ -109,6 +109,8 @@ Common options for lvm:
+ .br
+ [    \fB--longhelp\fP ]
+ .br
++[    \fB--nohints\fP ]
++.br
+ [    \fB--nolocking\fP ]
+ .br
+ [    \fB--profile\fP \fIString\fP ]
+@@ -237,6 +239,13 @@ Suppress the headings line that is normally the first line of output.
+ Useful if grepping the output.
+ .
+ .HP
++\fB--nohints\fP
++.br
++Do not use the hints file to locate devices for PVs. A command may read
++more devices to find PVs when hints are not used. The command will still
++perform standard hint file invalidation where appropriate.
++.
++.HP
+ \fB--nolocking\fP
+ .br
+ Disable locking.
+diff --git a/man/vgexport.8_pregen b/man/vgexport.8_pregen
+index 0e6e0b164..429483894 100644
+--- a/man/vgexport.8_pregen
++++ b/man/vgexport.8_pregen
+@@ -97,6 +97,8 @@ Common options for lvm:
+ .br
+ [    \fB--longhelp\fP ]
+ .br
++[    \fB--nohints\fP ]
++.br
+ [    \fB--nolocking\fP ]
+ .br
+ [    \fB--profile\fP \fIString\fP ]
+@@ -171,6 +173,13 @@ See \fBlvmlockd\fP(8) for more information.
+ Display long help text.
+ .
+ .HP
++\fB--nohints\fP
++.br
++Do not use the hints file to locate devices for PVs. A command may read
++more devices to find PVs when hints are not used. The command will still
++perform standard hint file invalidation where appropriate.
++.
++.HP
+ \fB--nolocking\fP
+ .br
+ Disable locking.
+diff --git a/man/vgextend.8_pregen b/man/vgextend.8_pregen
+index e5e01c4c5..6a7ab2bee 100644
+--- a/man/vgextend.8_pregen
++++ b/man/vgextend.8_pregen
+@@ -89,6 +89,8 @@ Common options for lvm:
+ .br
+ [    \fB--longhelp\fP ]
+ .br
++[    \fB--nohints\fP ]
++.br
+ [    \fB--nolocking\fP ]
+ .br
+ [    \fB--profile\fP \fIString\fP ]
+@@ -214,6 +216,13 @@ Specifies the type of on-disk metadata to use.
+ \fBlvm1\fP (or just \fB1\fP) is no longer used.
+ .
+ .HP
++\fB--nohints\fP
++.br
++Do not use the hints file to locate devices for PVs. A command may read
++more devices to find PVs when hints are not used. The command will still
++perform standard hint file invalidation where appropriate.
++.
++.HP
+ \fB--nolocking\fP
+ .br
+ Disable locking.
+diff --git a/man/vgimport.8_pregen b/man/vgimport.8_pregen
+index c0b815b65..70f8b76f6 100644
+--- a/man/vgimport.8_pregen
++++ b/man/vgimport.8_pregen
+@@ -85,6 +85,8 @@ Common options for lvm:
+ .br
+ [    \fB--longhelp\fP ]
+ .br
++[    \fB--nohints\fP ]
++.br
+ [    \fB--nolocking\fP ]
+ .br
+ [    \fB--profile\fP \fIString\fP ]
+@@ -166,6 +168,13 @@ See \fBlvmlockd\fP(8) for more information.
+ Display long help text.
+ .
+ .HP
++\fB--nohints\fP
++.br
++Do not use the hints file to locate devices for PVs. A command may read
++more devices to find PVs when hints are not used. The command will still
++perform standard hint file invalidation where appropriate.
++.
++.HP
+ \fB--nolocking\fP
+ .br
+ Disable locking.
+diff --git a/man/vgimportclone.8_pregen b/man/vgimportclone.8_pregen
+index ee9bbe66c..9bc8a4654 100644
+--- a/man/vgimportclone.8_pregen
++++ b/man/vgimportclone.8_pregen
+@@ -66,6 +66,8 @@ Common options for lvm:
+ .br
+ [    \fB--longhelp\fP ]
+ .br
++[    \fB--nohints\fP ]
++.br
+ [    \fB--nolocking\fP ]
+ .br
+ [    \fB--profile\fP \fIString\fP ]
+@@ -156,6 +158,13 @@ See \fBlvmlockd\fP(8) for more information.
+ Display long help text.
+ .
+ .HP
++\fB--nohints\fP
++.br
++Do not use the hints file to locate devices for PVs. A command may read
++more devices to find PVs when hints are not used. The command will still
++perform standard hint file invalidation where appropriate.
++.
++.HP
+ \fB--nolocking\fP
+ .br
+ Disable locking.
+diff --git a/man/vgimportdevices.8_pregen b/man/vgimportdevices.8_pregen
+index 364ef52a4..30bbb906e 100644
+--- a/man/vgimportdevices.8_pregen
++++ b/man/vgimportdevices.8_pregen
+@@ -90,6 +90,8 @@ Common options for lvm:
+ .br
+ [    \fB--longhelp\fP ]
+ .br
++[    \fB--nohints\fP ]
++.br
+ [    \fB--nolocking\fP ]
+ .br
+ [    \fB--profile\fP \fIString\fP ]
+@@ -170,6 +172,13 @@ See \fBlvmlockd\fP(8) for more information.
+ Display long help text.
+ .
+ .HP
++\fB--nohints\fP
++.br
++Do not use the hints file to locate devices for PVs. A command may read
++more devices to find PVs when hints are not used. The command will still
++perform standard hint file invalidation where appropriate.
++.
++.HP
+ \fB--nolocking\fP
+ .br
+ Disable locking.
+diff --git a/man/vgmerge.8_pregen b/man/vgmerge.8_pregen
+index e2292182a..f98ad7403 100644
+--- a/man/vgmerge.8_pregen
++++ b/man/vgmerge.8_pregen
+@@ -63,6 +63,8 @@ Common options for lvm:
+ .br
+ [    \fB--longhelp\fP ]
+ .br
++[    \fB--nohints\fP ]
++.br
+ [    \fB--nolocking\fP ]
+ .br
+ [    \fB--profile\fP \fIString\fP ]
+@@ -144,6 +146,13 @@ See \fBlvmlockd\fP(8) for more information.
+ Display long help text.
+ .
+ .HP
++\fB--nohints\fP
++.br
++Do not use the hints file to locate devices for PVs. A command may read
++more devices to find PVs when hints are not used. The command will still
++perform standard hint file invalidation where appropriate.
++.
++.HP
+ \fB--nolocking\fP
+ .br
+ Disable locking.
+diff --git a/man/vgmknodes.8_pregen b/man/vgmknodes.8_pregen
+index 10f235949..7432befb0 100644
+--- a/man/vgmknodes.8_pregen
++++ b/man/vgmknodes.8_pregen
+@@ -70,6 +70,8 @@ Common options for lvm:
+ .br
+ [    \fB--longhelp\fP ]
+ .br
++[    \fB--nohints\fP ]
++.br
+ [    \fB--nolocking\fP ]
+ .br
+ [    \fB--profile\fP \fIString\fP ]
+@@ -146,6 +148,13 @@ See \fBlvmlockd\fP(8) for more information.
+ Display long help text.
+ .
+ .HP
++\fB--nohints\fP
++.br
++Do not use the hints file to locate devices for PVs. A command may read
++more devices to find PVs when hints are not used. The command will still
++perform standard hint file invalidation where appropriate.
++.
++.HP
+ \fB--nolocking\fP
+ .br
+ Disable locking.
+diff --git a/man/vgreduce.8_pregen b/man/vgreduce.8_pregen
+index 1509e4bd0..1b897a6d3 100644
+--- a/man/vgreduce.8_pregen
++++ b/man/vgreduce.8_pregen
+@@ -37,6 +37,8 @@ vgreduce \(em Remove physical volume(s) from a volume group
+     \fB--longhelp\fP
+ .br
+     \fB--mirrorsonly\fP
++.br
++    \fB--nohints\fP
+ .br
+     \fB--nolocking\fP
+ .br
+@@ -146,6 +148,8 @@ Common options for lvm:
+ .br
+ [    \fB--longhelp\fP ]
+ .br
++[    \fB--nohints\fP ]
++.br
+ [    \fB--nolocking\fP ]
+ .br
+ [    \fB--profile\fP \fIString\fP ]
+@@ -238,6 +242,13 @@ Display long help text.
+ Only remove missing PVs from mirror LVs.
+ .
+ .HP
++\fB--nohints\fP
++.br
++Do not use the hints file to locate devices for PVs. A command may read
++more devices to find PVs when hints are not used. The command will still
++perform standard hint file invalidation where appropriate.
++.
++.HP
+ \fB--nolocking\fP
+ .br
+ Disable locking.
+diff --git a/man/vgremove.8_pregen b/man/vgremove.8_pregen
+index cf5c48ce4..0b6ebb522 100644
+--- a/man/vgremove.8_pregen
++++ b/man/vgremove.8_pregen
+@@ -71,6 +71,8 @@ Common options for lvm:
+ .br
+ [    \fB--longhelp\fP ]
+ .br
++[    \fB--nohints\fP ]
++.br
+ [    \fB--nolocking\fP ]
+ .br
+ [    \fB--profile\fP \fIString\fP ]
+@@ -147,6 +149,13 @@ See \fBlvmlockd\fP(8) for more information.
+ Display long help text.
+ .
+ .HP
++\fB--nohints\fP
++.br
++Do not use the hints file to locate devices for PVs. A command may read
++more devices to find PVs when hints are not used. The command will still
++perform standard hint file invalidation where appropriate.
++.
++.HP
+ \fB--nolocking\fP
+ .br
+ Disable locking.
+diff --git a/man/vgrename.8_pregen b/man/vgrename.8_pregen
+index 24ff24744..c600a3fcf 100644
+--- a/man/vgrename.8_pregen
++++ b/man/vgrename.8_pregen
+@@ -89,6 +89,8 @@ Common options for lvm:
+ .br
+ [    \fB--longhelp\fP ]
+ .br
++[    \fB--nohints\fP ]
++.br
+ [    \fB--nolocking\fP ]
+ .br
+ [    \fB--profile\fP \fIString\fP ]
+@@ -171,6 +173,13 @@ See \fBlvmlockd\fP(8) for more information.
+ Display long help text.
+ .
+ .HP
++\fB--nohints\fP
++.br
++Do not use the hints file to locate devices for PVs. A command may read
++more devices to find PVs when hints are not used. The command will still
++perform standard hint file invalidation where appropriate.
++.
++.HP
+ \fB--nolocking\fP
+ .br
+ Disable locking.
+diff --git a/man/vgs.8_pregen b/man/vgs.8_pregen
+index ffb4ddc41..63d1c7dc3 100644
+--- a/man/vgs.8_pregen
++++ b/man/vgs.8_pregen
+@@ -106,6 +106,8 @@ Common options for lvm:
+ .br
+ [    \fB--longhelp\fP ]
+ .br
++[    \fB--nohints\fP ]
++.br
+ [    \fB--nolocking\fP ]
+ .br
+ [    \fB--profile\fP \fIString\fP ]
+@@ -228,6 +230,13 @@ Suppress the headings line that is normally the first line of output.
+ Useful if grepping the output.
+ .
+ .HP
++\fB--nohints\fP
++.br
++Do not use the hints file to locate devices for PVs. A command may read
++more devices to find PVs when hints are not used. The command will still
++perform standard hint file invalidation where appropriate.
++.
++.HP
+ \fB--nolocking\fP
+ .br
+ Disable locking.
+diff --git a/man/vgscan.8_pregen b/man/vgscan.8_pregen
+index 959e16190..bd554fa82 100644
+--- a/man/vgscan.8_pregen
++++ b/man/vgscan.8_pregen
+@@ -63,6 +63,8 @@ Common options for lvm:
+ .br
+ [    \fB--longhelp\fP ]
+ .br
++[    \fB--nohints\fP ]
++.br
+ [    \fB--nolocking\fP ]
+ .br
+ [    \fB--profile\fP \fIString\fP ]
+@@ -145,6 +147,13 @@ Also checks the LVM special files in /dev that are needed for active
+ LVs and creates any missing ones and removes unused ones.
+ .
+ .HP
++\fB--nohints\fP
++.br
++Do not use the hints file to locate devices for PVs. A command may read
++more devices to find PVs when hints are not used. The command will still
++perform standard hint file invalidation where appropriate.
++.
++.HP
+ \fB--nolocking\fP
+ .br
+ Disable locking.
+diff --git a/man/vgsplit.8_pregen b/man/vgsplit.8_pregen
+index 8a0ae597e..f45cfcabc 100644
+--- a/man/vgsplit.8_pregen
++++ b/man/vgsplit.8_pregen
+@@ -106,6 +106,8 @@ Common options for lvm:
+ .br
+ [    \fB--longhelp\fP ]
+ .br
++[    \fB--nohints\fP ]
++.br
+ [    \fB--nolocking\fP ]
+ .br
+ [    \fB--profile\fP \fIString\fP ]
+@@ -232,6 +234,13 @@ Specifies the type of on-disk metadata to use.
+ Move only PVs used by the named LV.
+ .
+ .HP
++\fB--nohints\fP
++.br
++Do not use the hints file to locate devices for PVs. A command may read
++more devices to find PVs when hints are not used. The command will still
++perform standard hint file invalidation where appropriate.
++.
++.HP
+ \fB--nolocking\fP
+ .br
+ Disable locking.
 
 
