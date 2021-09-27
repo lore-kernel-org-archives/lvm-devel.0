@@ -1,75 +1,70 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Mon, 13 Sep 2021 10:36:17 +0000 (GMT)
-Subject: main - cov: hide false positive warning
-Message-ID: <20210913103617.27A003858002@sourceware.org>
+Date: Mon, 27 Sep 2021 16:57:49 +0000 (GMT)
+Subject: main - make: replace legacy use rindex with strrchr
+Message-ID: <20210927165749.DB229385840B@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=a14371e4952f7a1b079a795c13927cea2eb196b6
-Commit:        a14371e4952f7a1b079a795c13927cea2eb196b6
-Parent:        63930f576a29d701894586c6ef1f90bf63f321d1
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=9971459d19e93ff652eeaff165da72e51b256299
+Commit:        9971459d19e93ff652eeaff165da72e51b256299
+Parent:        e585c10fade006e5fe3643b76b09501d54c20c9b
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Sep 10 09:58:26 2021 +0200
+AuthorDate:    Fri Sep 24 17:40:35 2021 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Mon Sep 13 12:34:41 2021 +0200
+CommitterDate: Mon Sep 27 18:56:14 2021 +0200
 
-cov: hide false positive warning
+make: replace legacy use rindex with strrchr
 
-Here we have valid use case of strncpy() which just need
-to fill precise buffer size - so no explicit \0 on buffer
-end is needed.
+Seems already dropped by some systems.
+
+Reported-by: adamboardman of gemian
 ---
- daemons/lvmlockd/lvmlockd-core.c  | 1 +
- device_mapper/ioctl/libdm-iface.c | 2 ++
- libdm/ioctl/libdm-iface.c         | 2 ++
- 3 files changed, 5 insertions(+)
+ device_mapper/libdm-deptree.c | 2 +-
+ lib/activate/dev_manager.c    | 2 +-
+ libdm/libdm-deptree.c         | 2 +-
+ 3 files changed, 3 insertions(+), 3 deletions(-)
 
-diff --git a/daemons/lvmlockd/lvmlockd-core.c b/daemons/lvmlockd/lvmlockd-core.c
-index c570b9d14..a3964c857 100644
---- a/daemons/lvmlockd/lvmlockd-core.c
-+++ b/daemons/lvmlockd/lvmlockd-core.c
-@@ -2989,6 +2989,7 @@ static int add_lockspace_thread(const char *ls_name,
- 	}
+diff --git a/device_mapper/libdm-deptree.c b/device_mapper/libdm-deptree.c
+index a0f386e77..e4bf4c814 100644
+--- a/device_mapper/libdm-deptree.c
++++ b/device_mapper/libdm-deptree.c
+@@ -604,7 +604,7 @@ static struct dm_tree_node *_find_dm_tree_node_by_uuid(struct dm_tree *dtree,
+ 	default_uuid_prefix = dm_uuid_prefix();
+ 	default_uuid_prefix_len = strlen(default_uuid_prefix);
  
- 	if (vg_uuid)
-+		/* coverity[buffer_size_warning] */
- 		strncpy(ls->vg_uuid, vg_uuid, 64);
+-	if (suffix_list && (suffix_position = rindex(uuid, '-'))) {
++	if (suffix_list && (suffix_position = strrchr(uuid, '-'))) {
+ 		while ((suffix = suffix_list[i++])) {
+ 			if (strcmp(suffix_position + 1, suffix))
+ 				continue;
+diff --git a/lib/activate/dev_manager.c b/lib/activate/dev_manager.c
+index a8516d661..a73a556b2 100644
+--- a/lib/activate/dev_manager.c
++++ b/lib/activate/dev_manager.c
+@@ -838,7 +838,7 @@ static int _info(struct cmd_context *cmd,
+ 		return 1;
  
- 	if (vg_name)
-diff --git a/device_mapper/ioctl/libdm-iface.c b/device_mapper/ioctl/libdm-iface.c
-index a2a56be45..b4f7a986d 100644
---- a/device_mapper/ioctl/libdm-iface.c
-+++ b/device_mapper/ioctl/libdm-iface.c
-@@ -1250,9 +1250,11 @@ static struct dm_ioctl *_flatten(struct dm_task *dmt, unsigned repeat_count)
- 	/* FIXME Until resume ioctl supplies name, use dev_name for readahead */
- 	if (DEV_NAME(dmt) && (dmt->type != DM_DEVICE_RESUME || dmt->minor < 0 ||
- 			      dmt->major < 0))
-+		/* coverity[buffer_size_warning] */
- 		strncpy(dmi->name, DEV_NAME(dmt), sizeof(dmi->name));
+ 	/* Check for original version of dlid before the suffixes got added in 2.02.106 */
+-	if ((suffix_position = rindex(dlid, '-'))) {
++	if ((suffix_position = strrchr(dlid, '-'))) {
+ 		while ((suffix = uuid_suffix_list[i++])) {
+ 			if (strcmp(suffix_position + 1, suffix))
+ 				continue;
+diff --git a/libdm/libdm-deptree.c b/libdm/libdm-deptree.c
+index d7fb5ef13..c14b6ef56 100644
+--- a/libdm/libdm-deptree.c
++++ b/libdm/libdm-deptree.c
+@@ -566,7 +566,7 @@ static struct dm_tree_node *_find_dm_tree_node_by_uuid(struct dm_tree *dtree,
+ 	default_uuid_prefix = dm_uuid_prefix();
+ 	default_uuid_prefix_len = strlen(default_uuid_prefix);
  
- 	if (DEV_UUID(dmt))
-+		/* coverity[buffer_size_warning] */
- 		strncpy(dmi->uuid, DEV_UUID(dmt), sizeof(dmi->uuid));
- 
- 	if (dmt->type == DM_DEVICE_SUSPEND)
-diff --git a/libdm/ioctl/libdm-iface.c b/libdm/ioctl/libdm-iface.c
-index 47f14398c..d8f1c389d 100644
---- a/libdm/ioctl/libdm-iface.c
-+++ b/libdm/ioctl/libdm-iface.c
-@@ -1245,9 +1245,11 @@ static struct dm_ioctl *_flatten(struct dm_task *dmt, unsigned repeat_count)
- 	     (dmt->minor < 0) || (dmt->major < 0)))
- 		/* When RESUME or RELOAD sets maj:min and dev_name, use just maj:min,
- 		 * passed dev_name is useful for better error/debug messages */
-+		/* coverity[buffer_size_warning] */
- 		strncpy(dmi->name, DEV_NAME(dmt), sizeof(dmi->name));
- 
- 	if (DEV_UUID(dmt))
-+		/* coverity[buffer_size_warning] */
- 		strncpy(dmi->uuid, DEV_UUID(dmt), sizeof(dmi->uuid));
- 
- 	if (dmt->type == DM_DEVICE_SUSPEND)
+-	if (suffix_list && (suffix_position = rindex(uuid, '-'))) {
++	if (suffix_list && (suffix_position = strrchr(uuid, '-'))) {
+ 		while ((suffix = suffix_list[i++])) {
+ 			if (strcmp(suffix_position + 1, suffix))
+ 				continue;
 
 
