@@ -1,39 +1,42 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Mon, 27 Sep 2021 16:57:54 +0000 (GMT)
-Subject: main - cov; matching enum type
-Message-ID: <20210927165754.6724B385840B@sourceware.org>
+Date: Mon, 27 Sep 2021 16:57:55 +0000 (GMT)
+Subject: main - cleanup: use first parameter uint
+Message-ID: <20210927165755.8660B3858408@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=614d150a8c7387744804b90fddea99c7fb4511f2
-Commit:        614d150a8c7387744804b90fddea99c7fb4511f2
-Parent:        bf0d558067926e716a370165e323187cf44c050a
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=9668427fe8d08f2c0e3f778c53bc00181478f71c
+Commit:        9668427fe8d08f2c0e3f778c53bc00181478f71c
+Parent:        614d150a8c7387744804b90fddea99c7fb4511f2
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Sep 24 22:14:53 2021 +0200
+AuthorDate:    Fri Sep 24 22:16:07 2021 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Mon Sep 27 18:56:14 2021 +0200
 
-cov; matching enum type
+cleanup: use first parameter uint
 
+Easier with struct zeroing and matching assing of type uint.
 ---
- tools/lvconvert.c | 2 +-
+ tools/lvcreate.c | 2 +-
  1 file changed, 1 insertion(+), 1 deletion(-)
 
-diff --git a/tools/lvconvert.c b/tools/lvconvert.c
-index a7fb848be..34b82ea02 100644
---- a/tools/lvconvert.c
-+++ b/tools/lvconvert.c
-@@ -95,7 +95,7 @@ struct convert_poll_id_list {
- };
+diff --git a/tools/lvcreate.c b/tools/lvcreate.c
+index 0def23639..0121c09a8 100644
+--- a/tools/lvcreate.c
++++ b/tools/lvcreate.c
+@@ -18,9 +18,9 @@
+ #include <fcntl.h>
  
- /* FIXME Temporary function until the enum replaces the separate variables */
--static void _set_conv_type(struct lvconvert_params *lp, int conv_type)
-+static void _set_conv_type(struct lvconvert_params *lp, conversion_type_t conv_type)
- {
- 	if (lp->conv_type != CONV_OTHER)
- 		log_error(INTERNAL_ERROR "Changing conv_type from %d to %d.", lp->conv_type, conv_type);
+ struct lvcreate_cmdline_params {
+-	percent_type_t percent;
+ 	uint64_t size;
+ 	uint64_t virtual_size; /* snapshot, thin */
++	percent_type_t percent;
+ 	char **pvs;
+ 	uint32_t pv_count;
+ };
 
 
