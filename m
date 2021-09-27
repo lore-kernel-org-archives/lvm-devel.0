@@ -1,51 +1,60 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Mon, 27 Sep 2021 16:57:53 +0000 (GMT)
-Subject: main - cov: ignoring
-Message-ID: <20210927165753.477123858408@sourceware.org>
+Date: Mon, 27 Sep 2021 16:57:56 +0000 (GMT)
+Subject: main - cleanup: reuse existing code for free path
+Message-ID: <20210927165756.A5A63385840B@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=bf0d558067926e716a370165e323187cf44c050a
-Commit:        bf0d558067926e716a370165e323187cf44c050a
-Parent:        dab4acb8f8b379f27bdd5cd2f9014385948cdcc0
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=a8a958cc04da2c23e2a7a168ae19f05d4fcab1ae
+Commit:        a8a958cc04da2c23e2a7a168ae19f05d4fcab1ae
+Parent:        9668427fe8d08f2c0e3f778c53bc00181478f71c
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Sep 24 22:08:26 2021 +0200
+AuthorDate:    Mon Sep 27 11:42:45 2021 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Mon Sep 27 18:56:14 2021 +0200
 
-cov: ignoring
+cleanup: reuse existing code for free path
 
 ---
- test/lib/not.c | 1 +
- tools/lvm.c    | 1 +
- 2 files changed, 2 insertions(+)
+ lib/format_text/format-text.c | 16 ++++------------
+ 1 file changed, 4 insertions(+), 12 deletions(-)
 
-diff --git a/test/lib/not.c b/test/lib/not.c
-index 0245c3475..751c95b3d 100644
---- a/test/lib/not.c
-+++ b/test/lib/not.c
-@@ -82,6 +82,7 @@ int main(int args, char **argv) {
- 		if (val)
- 			(void) setenv("LVM_EXPECTED_EXIT_STATUS", val, 1);
+diff --git a/lib/format_text/format-text.c b/lib/format_text/format-text.c
+index b2bbf3c66..e8b1865f8 100644
+--- a/lib/format_text/format-text.c
++++ b/lib/format_text/format-text.c
+@@ -964,12 +964,8 @@ static int _vg_write_raw(struct format_instance *fid, struct volume_group *vg,
+ 	r = 1;
  
-+		/* coverity[os_cmd_sink] intentionally passing argv + 1 */
- 		execvp(argv[1], &argv[1]);
- 		/* should not be accessible */
- 		return FAILURE;
-diff --git a/tools/lvm.c b/tools/lvm.c
-index cc67e924a..e80113e0d 100644
---- a/tools/lvm.c
-+++ b/tools/lvm.c
-@@ -19,6 +19,7 @@
+       out:
+-	if (!r) {
+-		free(fidtc->write_buf);
+-		fidtc->write_buf = NULL;
+-		fidtc->write_buf_size = 0;
+-		fidtc->new_metadata_size = 0;
+-	}
++	if (!r)
++		free_text_fidtc(vg);
  
- int main(int argc, char **argv)
- {
-+	/* coverity[os_cmd_sink] intentionally passing argv */
- 	return lvm2_main(argc, argv);
+ 	return r;
  }
+@@ -1154,12 +1150,8 @@ static int _vg_commit_raw_rlocn(struct format_instance *fid,
+ 	r = 1;
  
+       out:
+-	if (!precommit && !fidtc->preserve) {
+-		free(fidtc->write_buf);
+-		fidtc->write_buf = NULL;
+-		fidtc->write_buf_size = 0;
+-		fidtc->new_metadata_size = 0;
+-	}
++	if (!precommit && !fidtc->preserve)
++		free_text_fidtc(vg);
+ 
+ 	return r;
+ }
 
 
