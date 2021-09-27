@@ -1,39 +1,108 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Mon, 27 Sep 2021 16:57:57 +0000 (GMT)
-Subject: main - cleanup: use already known lv size
-Message-ID: <20210927165757.C59363858408@sourceware.org>
+Date: Mon, 27 Sep 2021 16:57:58 +0000 (GMT)
+Subject: main - debug: shorter code
+Message-ID: <20210927165758.E50E6385840F@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=f74d30d411af0849e4c7f5ac6027899a32b48f52
-Commit:        f74d30d411af0849e4c7f5ac6027899a32b48f52
-Parent:        a8a958cc04da2c23e2a7a168ae19f05d4fcab1ae
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=e3b4c365a4d9fc3f88dcfaca6dff89b924fc4851
+Commit:        e3b4c365a4d9fc3f88dcfaca6dff89b924fc4851
+Parent:        f74d30d411af0849e4c7f5ac6027899a32b48f52
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Mon Sep 27 11:00:53 2021 +0200
+AuthorDate:    Mon Sep 27 11:52:16 2021 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Mon Sep 27 18:56:14 2021 +0200
 
-cleanup: use already known lv size
+debug: shorter code
 
 ---
- lib/metadata/lv.c | 2 +-
- 1 file changed, 1 insertion(+), 1 deletion(-)
+ lib/format_text/format-text.c | 71 ++++++++++---------------------------------
+ 1 file changed, 16 insertions(+), 55 deletions(-)
 
-diff --git a/lib/metadata/lv.c b/lib/metadata/lv.c
-index 475f21191..21aa3b422 100644
---- a/lib/metadata/lv.c
-+++ b/lib/metadata/lv.c
-@@ -951,7 +951,7 @@ uint64_t lv_origin_size(const struct logical_volume *lv)
- 	struct lv_segment *seg;
+diff --git a/lib/format_text/format-text.c b/lib/format_text/format-text.c
+index e8b1865f8..c880f0eb6 100644
+--- a/lib/format_text/format-text.c
++++ b/lib/format_text/format-text.c
+@@ -1082,61 +1082,22 @@ static int _vg_commit_raw_rlocn(struct format_instance *fid,
  
- 	if (lv_is_cow(lv))
--		return (uint64_t) find_snapshot(lv)->len * lv->vg->extent_size;
-+		return find_snapshot(lv)->lv->size;
+ 	rlocn_set_ignored(rlocn_slot0, mda_is_ignored(mda));
  
- 	if (lv_is_thin_volume(lv) && (seg = first_seg(lv)) &&
- 	    seg->external_lv)
+-	if (mdac->rlocn.size) {
+-		if (precommit) {
+-			log_debug_metadata("VG %s metadata precommit seq %u on %s mda header at %llu %s",
+-					   vg->name, vg->seqno, dev_name(mdac->area.dev),
+-					   (unsigned long long)mdac->area.start,
+-					   mda_is_ignored(mda) ? "(ignored)" : "(used)");
+-
+-			log_debug_metadata("VG %s metadata precommit slot0 offset %llu size %llu slot1 offset %llu size %llu",
+-					   vg->name,
+-					   (unsigned long long)mdab->raw_locns[0].offset,
+-					   (unsigned long long)mdab->raw_locns[0].size,
+-					   (unsigned long long)mdab->raw_locns[1].offset,
+-					   (unsigned long long)mdab->raw_locns[1].size);
+-
+-		} else {
+-			log_debug_metadata("VG %s metadata commit seq %u on %s mda header at %llu %s",
+-					   vg->name, vg->seqno, dev_name(mdac->area.dev),
+-					   (unsigned long long)mdac->area.start,
+-					   mda_is_ignored(mda) ? "(ignored)" : "(used)");
+-
+-			log_debug_metadata("VG %s metadata commit slot0 offset %llu size %llu slot1 offset %llu size %llu",
+-					   vg->name,
+-					   (unsigned long long)mdab->raw_locns[0].offset,
+-					   (unsigned long long)mdab->raw_locns[0].size,
+-					   (unsigned long long)mdab->raw_locns[1].offset,
+-					   (unsigned long long)mdab->raw_locns[1].size);
+-		}
+-	} else {
+-		if (precommit) {
+-			log_debug_metadata("VG %s metadata precommit empty seq %u on %s mda header at %llu %s",
+-					   vg->name, vg->seqno, dev_name(mdac->area.dev),
+-					   (unsigned long long)mdac->area.start,
+-					   mda_is_ignored(mda) ? "(ignored)" : "(used)");
+-
+-			log_debug_metadata("VG %s metadata precommit empty slot0 offset %llu size %llu slot1 offset %llu size %llu",
+-					   vg->name,
+-					   (unsigned long long)mdab->raw_locns[0].offset,
+-					   (unsigned long long)mdab->raw_locns[0].size,
+-					   (unsigned long long)mdab->raw_locns[1].offset,
+-					   (unsigned long long)mdab->raw_locns[1].size);
+-
+-		} else {
+-			log_debug_metadata("VG %s metadata commit empty seq %u on %s mda header at %llu %s",
+-					   vg->name, vg->seqno, dev_name(mdac->area.dev),
+-					   (unsigned long long)mdac->area.start,
+-					   mda_is_ignored(mda) ? "(ignored)" : "(used)");
+-
+-			log_debug_metadata("VG %s metadata commit empty slot0 offset %llu size %llu slot1 offset %llu size %llu",
+-					   vg->name,
+-					   (unsigned long long)mdab->raw_locns[0].offset,
+-					   (unsigned long long)mdab->raw_locns[0].size,
+-					   (unsigned long long)mdab->raw_locns[1].offset,
+-					   (unsigned long long)mdab->raw_locns[1].size);
+-		}
+-	}
++	log_debug_metadata("VG %s metadata %scommit %sseq %u on %s mda header at %llu %s.",
++			   vg->name,
++			   (precommit) ? "pre" : "",
++			   (!mdac->rlocn.size) ? "empty ": "",
++			   vg->seqno, dev_name(mdac->area.dev),
++			   (unsigned long long)mdac->area.start,
++			   mda_is_ignored(mda) ? "(ignored)" : "(used)");
++
++	log_debug_metadata("VG %s metadata %scommit %sslot0 offset %llu size %llu slot1 offset %llu size %llu.",
++			   vg->name,
++			   (precommit) ? "pre" : "",
++			   (!mdac->rlocn.size) ? "empty ": "",
++			   (unsigned long long)mdab->raw_locns[0].offset,
++			   (unsigned long long)mdab->raw_locns[0].size,
++			   (unsigned long long)mdab->raw_locns[1].offset,
++			   (unsigned long long)mdab->raw_locns[1].size);
+ 
+ 	rlocn_set_ignored(mdab->raw_locns, mda_is_ignored(mda));
+ 
 
 
