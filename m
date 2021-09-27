@@ -1,40 +1,42 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Mon, 27 Sep 2021 16:57:47 +0000 (GMT)
-Subject: main - make: fix compilation for some compiler
-Message-ID: <20210927165747.9BAE0385840B@sourceware.org>
+Date: Mon, 27 Sep 2021 16:57:48 +0000 (GMT)
+Subject: main - make: fix compilation for undefined RAID_INTERNAL
+Message-ID: <20210927165748.BB5693858408@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=6c85ea50de2fbdf2c923b0739171661ecdd63832
-Commit:        6c85ea50de2fbdf2c923b0739171661ecdd63832
-Parent:        ef21ed78ae5a3dd0b30e4b247ec3774347cadb4d
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=e585c10fade006e5fe3643b76b09501d54c20c9b
+Commit:        e585c10fade006e5fe3643b76b09501d54c20c9b
+Parent:        6c85ea50de2fbdf2c923b0739171661ecdd63832
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Sep 24 17:18:30 2021 +0200
+AuthorDate:    Fri Sep 24 17:36:29 2021 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Mon Sep 27 18:56:14 2021 +0200
 
-make: fix compilation for some compiler
+make: fix compilation for undefined RAID_INTERNAL
 
 Reported-by: adamboardman of gemian
 ---
- tools/toollib.c | 2 +-
+ lib/metadata/segtype.h | 2 +-
  1 file changed, 1 insertion(+), 1 deletion(-)
 
-diff --git a/tools/toollib.c b/tools/toollib.c
-index 606d35981..7e35f6f22 100644
---- a/tools/toollib.c
-+++ b/tools/toollib.c
-@@ -49,7 +49,7 @@ int become_daemon(struct cmd_context *cmd, int skip_lvm)
- 	int null_fd;
- 	pid_t pid;
- 	struct sigaction act = {
--		{_sigchld_handler},
-+		.sa_handler = _sigchld_handler,
- 		.sa_flags = SA_NOCLDSTOP,
- 	};
+diff --git a/lib/metadata/segtype.h b/lib/metadata/segtype.h
+index d7cfc2b72..2f4949267 100644
+--- a/lib/metadata/segtype.h
++++ b/lib/metadata/segtype.h
+@@ -326,9 +326,9 @@ struct segment_type *init_unknown_segtype(struct cmd_context *cmd,
+  */
+ #define RAID_FEATURE_NEW_DEVICES_ACCEPT_REBUILD	(1U << 6) /* version 1.9.0 */
  
++bool raid_is_available(const struct logical_volume *lv);
+ #ifdef RAID_INTERNAL
+ int init_raid_segtypes(struct cmd_context *cmd, struct segtype_library *seglib);
+-bool raid_is_available(const struct logical_volume *lv);
+ #endif
+ 
+ #define THIN_FEATURE_DISCARDS			(1U << 0)
 
 
