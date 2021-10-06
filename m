@@ -1,43 +1,64 @@
-From: Marian Csontos <mcsontos@sourceware.org>
-Date: Wed, 20 Oct 2021 10:22:39 +0000 (GMT)
-Subject: v2_03_14 tag - deleted
-Message-ID: <20211020102239.C7F6C3858C3A@sourceware.org>
+From: Zdenek Kabelac <zkabelac@sourceware.org>
+Date: Wed,  6 Oct 2021 13:47:54 +0000 (GMT)
+Subject: main - cleanup: all lvmcache_add users pass char with 0
+Message-ID: <20211006134754.5A9A6385BF86@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-tag: v2_03_14 - deleted with refnum:
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=79e65a3596dc4fef1d7ac74fe727e9c24a539afb
+Commit:        79e65a3596dc4fef1d7ac74fe727e9c24a539afb
+Parent:        5ccb373d869ca23afc10416c2319331eb108e16b
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Fri Oct 1 14:10:39 2021 +0200
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Wed Oct 6 15:43:31 2021 +0200
 
-tag v2_03_14
+cleanup: all lvmcache_add users pass char with 0
 
-Release 2.03.14
+No local copy needed, both users submit zero-end string as pv/vgid.
+---
+ lib/cache/lvmcache.c | 12 +++---------
+ 1 file changed, 3 insertions(+), 9 deletions(-)
 
-- New udev autoactivation.
-- vdoimport renamed to lvm_import_vdo.
-- Add IMA support with 'dmsetup measure' command.
-- Improved VDO support.
-- New appmachineid option for global/system_id_source config option.
-- New log/journal config option (and --journal CLI option)
-- Many bug fixes, improvements, and clean ups.
------BEGIN PGP SIGNATURE-----
-Version: GnuPG v2.0.22 (GNU/Linux)
-
-iQIcBAABAgAGBQJhb+qfAAoJELkRJDHlCQOfgVwP/0YuD/B/WbPvaq8ArfoCaWOO
-dARd2coatQH9vBX8fw7S4hbV9EFNKCdgG8esMz3DIXq79OnR2awf6mAtUFQx7MMm
-yYYd7kKzvULDM5Z5qKX6s+PAjdGo3R6/SAYKNq+acSZMzDpHs+1mNP5wp1tF1s9a
-NK4f3MGYSKJW5ne09YZi9OEPQ6ku/MX/9uPo8UqwLAVReRFJkUeEsZDpjdVI/2AY
-LOKuoxVZZypG/ixH5im41xpd8Roji6GG7P0n3ysdbIjy1hBnFR85gl6RaEN1nM+Q
-HaiYhsqGB7WE4F0+0Dj4q1PnLMvX1NoHlliiqWlZYOoZkjTsSr5q8cZNgTTfAv8d
-dhG69KSUgqyxl3FWXYqNMqrfCLSdZhgqMb2Z+xBIH3hI3SX9rEuxzw74ZbFdlqUW
-YhCiv4ZU26Z0u5SBtpuK8STANZKsSm+tNL1Nh7sLrBJvMdWxbdI5D3joI87o0I+P
-X8I89kOm9hwgfSSdqbxFI4hPMT54DqanCe/jkLZCbp+fI5ZQx8THlYjXTTHJRvdG
-SMTHVm+7dObIWdsFDcJXHQ2eEVcBgabPljbxjSrWDBr4sIVzF24VVab80lTib37B
-anRZgtGZglCGghrhP6Q7jjVtKPDWraQwLi9uK60gjTHkO6O/a91sMHWngerFixRD
-zd2uqSo/i+6v+iIuKWIj
-=vQTo
------END PGP SIGNATURE-----
-819a35cc9133889b5efc4833d8191e3e71396552 post-release
+diff --git a/lib/cache/lvmcache.c b/lib/cache/lvmcache.c
+index 7a7634074..e04f00f2d 100644
+--- a/lib/cache/lvmcache.c
++++ b/lib/cache/lvmcache.c
+@@ -2166,8 +2166,8 @@ struct lvmcache_info *lvmcache_add(struct cmd_context *cmd, struct labeller *lab
+ 				   const char *vgname, const char *vgid_arg, uint32_t vgstatus,
+ 				   int *is_duplicate)
+ {
+-	char pvid[ID_LEN + 1] __attribute__((aligned(8))) = { 0 };
+-	char vgid[ID_LEN + 1] __attribute__((aligned(8))) = { 0 };
++	const char *pvid = pvid_arg;
++	const char *vgid = vgid_arg;
+ 	char pvid_dashed[64] __attribute__((aligned(8)));
+ 	struct lvmcache_vgsummary vgsummary = { 0 };
+ 	struct lvmcache_info *info;
+@@ -2175,12 +2175,6 @@ struct lvmcache_info *lvmcache_add(struct cmd_context *cmd, struct labeller *lab
+ 	struct device_list *devl;
+ 	int created = 0;
+ 
+-	/* pvid_arg and vgid_arg may not be null terminated */
+-	memcpy(pvid, pvid_arg, ID_LEN);
+-
+-	if (vgid_arg)
+-		memcpy(vgid, vgid_arg, ID_LEN);
+-
+ 	if (!id_write_format((const struct id *)&pvid, pvid_dashed, sizeof(pvid_dashed)))
+ 		stack;
+ 
+@@ -2282,7 +2276,7 @@ struct lvmcache_info *lvmcache_add(struct cmd_context *cmd, struct labeller *lab
+ update_vginfo:
+ 	vgsummary.vgstatus = vgstatus;
+ 	vgsummary.vgname = vgname;
+-	if (vgid[0])
++	if (vgid && vgid[0])
+ 		memcpy(vgsummary.vgid, vgid, ID_LEN);
+ 
+ 	if (!lvmcache_update_vgname_and_id(cmd, info, &vgsummary)) {
 
 
