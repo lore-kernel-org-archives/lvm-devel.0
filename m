@@ -1,46 +1,68 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Fri, 15 Oct 2021 08:12:13 +0000 (GMT)
-Subject: main - makefile: enhance run-unit-test target
-Message-ID: <20211015081213.EFFE13857C6E@sourceware.org>
+Date: Wed,  6 Oct 2021 13:47:48 +0000 (GMT)
+Subject: main - debug: fix stack tracing
+Message-ID: <20211006134748.ADDBC385C409@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=2e2d67378007ee850792396f933900e71f0ea80d
-Commit:        2e2d67378007ee850792396f933900e71f0ea80d
-Parent:        037165300ea1f6d9c9f8587360792505b2f3988d
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=b7e9ec0cbf55e4a4e1f027be49bf45b11beb5a76
+Commit:        b7e9ec0cbf55e4a4e1f027be49bf45b11beb5a76
+Parent:        e30f3c84109b7e131da2497965aee83d73c604e3
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Oct 15 09:45:26 2021 +0200
+AuthorDate:    Fri Oct 1 13:44:17 2021 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Fri Oct 15 09:55:54 2021 +0200
+CommitterDate: Wed Oct 6 15:39:58 2021 +0200
 
-makefile: enhance run-unit-test target
+debug: fix stack tracing
 
-Use TMPDIR for executing test and also ensure
-all libraries linked to the test are from builddir.
+Emit stack trace only on log_error path, and avoid on 'expected'
+not-found path.
 ---
- test/unit/Makefile | 7 ++++++-
- 1 file changed, 6 insertions(+), 1 deletion(-)
+ lib/metadata/metadata.c | 8 ++++----
+ 1 file changed, 4 insertions(+), 4 deletions(-)
 
-diff --git a/test/unit/Makefile b/test/unit/Makefile
-index 455c18d2a..5826f41c2 100644
---- a/test/unit/Makefile
-+++ b/test/unit/Makefile
-@@ -54,7 +54,12 @@ $(UNIT_TARGET): $(UNIT_OBJECTS) $(LVMINTERNAL_LIBS)
- unit-test: $(UNIT_TARGET)
- run-unit-test: $(UNIT_TARGET)
- 	@echo "Running unit tests"
--	LD_LIBRARY_PATH=$(top_builddir)/libdm $(UNIT_TARGET) run
-+	test -n "$$LVM_TEST_DIR" || LVM_TEST_DIR=$${TMPDIR:-/tmp} ;\
-+		TESTDIR=$$(mktemp -d -t -p "$$LVM_TEST_DIR" "LVMTEST.XXXXXXXXXX") ;\
-+		cd "$$TESTDIR" ;\
-+		LD_LIBRARY_PATH=$(abs_top_builddir)/libdm:$(abs_top_builddir)/daemons/dmeventd $(abs_top_builddir)/$(UNIT_TARGET) run ;\
-+		cd $$OLDPWD ;\
-+		$(RM) -r "$${TESTDIR:?}"
+diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
+index b3c8c6ece..f29e73c7c 100644
+--- a/lib/metadata/metadata.c
++++ b/lib/metadata/metadata.c
+@@ -5015,7 +5015,7 @@ struct volume_group *vg_read(struct cmd_context *cmd, const char *vg_name, const
+ 		unlock_vg(cmd, NULL, vg_name);
+ 		log_error("VG name not found for vgid %s", vgid);
+ 		failure |= FAILED_NOTFOUND;
+-		goto_bad;
++		goto bad;
+ 	}
  
- ifeq ("$(DEPENDS)","yes")
- -include $(UNIT_SOURCE:%.c=%.d)
+ 	/*
+@@ -5037,7 +5037,7 @@ struct volume_group *vg_read(struct cmd_context *cmd, const char *vg_name, const
+ 		if (!(vg_read_flags & READ_OK_NOTFOUND))
+ 			log_error("Volume group \"%s\" not found", vg_name);
+ 		failure |= FAILED_NOTFOUND;
+-		goto_bad;
++		goto bad;
+ 	}
+ 
+ 	/*
+@@ -5053,7 +5053,7 @@ struct volume_group *vg_read(struct cmd_context *cmd, const char *vg_name, const
+ 		if (!(vg_read_flags & READ_OK_NOTFOUND))
+ 			log_error("Volume group \"%s\" not found.", vg_name);
+ 		failure |= FAILED_NOTFOUND;
+-		goto_bad;
++		goto bad;
+ 	}
+ 
+ 	/*
+@@ -5264,7 +5264,7 @@ bad:
+ 
+ 		/* caller must unlock_vg and release_vg */
+ 		*error_vg = vg;
+-		return_NULL;
++		return NULL;
+ 	}
+ 
+ 	if (vg) {
 
 
