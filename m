@@ -1,349 +1,197 @@
 From: David Teigland <teigland@sourceware.org>
-Date: Thu,  7 Oct 2021 17:43:26 +0000 (GMT)
-Subject: main - logging: to the systemd journal
-Message-ID: <20211007174326.5451F385843E@sourceware.org>
+Date: Thu,  7 Oct 2021 17:43:23 +0000 (GMT)
+Subject: main - system_id: new appmachineid option
+Message-ID: <20211007174323.D6C953858004@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=bbf8e7db74d744c1462a63ae2bc64f4d46e8db9f
-Commit:        bbf8e7db74d744c1462a63ae2bc64f4d46e8db9f
-Parent:        0b6782fa0139e412f827cc9d1f0cd96ea38e27b0
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=3e1316bb09b087ec79c9661ead14d8556c36fa8d
+Commit:        3e1316bb09b087ec79c9661ead14d8556c36fa8d
+Parent:        6c22392a3f903d6c086f7cc94978bdf8b072da6e
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Wed Mar 24 14:19:54 2021 -0500
+AuthorDate:    Wed May 20 10:59:38 2020 -0500
 Committer:     David Teigland <teigland@redhat.com>
 CommitterDate: Thu Oct 7 12:06:49 2021 -0500
 
-logging: to the systemd journal
+system_id: new appmachineid option
 
-Configure via lvm.conf log/journal or command line --journal.
-
-Possible values:
-"command" records command information.
-"output" records default command output.
-"debug" records full command debugging.
-
-Multiple values can be set in lvm.conf as an array.
-One value can be set in --journal which is added to
-values set in lvm.conf
+The new system_id_source="appmachineid" will cause
+lvm to use an lvm-specific derivation of the machine-id,
+instead of the machine-id directly.  This is now
+recommended in place of using machineid.
 ---
- lib/commands/toolcontext.c   | 30 +++++++++++++++
- lib/commands/toolcontext.h   |  1 +
- lib/config/config_settings.h |  6 +++
- lib/log/log.c                | 91 ++++++++++++++++++++++++++++++++++++++++++++
- lib/log/log.h                |  4 ++
- lib/log/lvm-logging.h        |  6 +++
- tools/args.h                 |  8 ++++
- tools/command-lines.in       |  2 +-
- tools/lvmcmdline.c           | 12 ++++++
- 9 files changed, 159 insertions(+), 1 deletion(-)
+ configure.ac                 | 20 ++++++++++++++++++++
+ lib/commands/toolcontext.c   | 26 +++++++++++++++++++++++---
+ lib/config/config_settings.h |  8 +++++---
+ man/lvmsystemid.7_main       | 17 +++++++++++++++++
+ test/shell/system_id.sh      | 11 +++++++++++
+ 5 files changed, 76 insertions(+), 6 deletions(-)
 
+diff --git a/configure.ac b/configure.ac
+index 6b1ea9854..31196d96c 100644
+--- a/configure.ac
++++ b/configure.ac
+@@ -1105,6 +1105,26 @@ if test "$NOTIFYDBUS_SUPPORT" = yes; then
+ 	PKG_CHECK_MODULES(NOTIFY_DBUS, systemd >= 221, [HAVE_NOTIFY_DBUS=yes], $bailout)
+ fi
+ 
++################################################################################
++dnl -- Build appmachineid
++AC_MSG_CHECKING(whether to build appmachineid)
++AC_ARG_ENABLE(app-machineid,
++	      AC_HELP_STRING([--enable-app-machineid],
++			     [enable LVM system ID using app-specific machine-id]),
++	      APP_MACHINEID_SUPPORT=$enableval, APP_MACHINEID_SUPPORT=no)
++AC_MSG_RESULT($APP_MACHINEID_SUPPORT)
++
++if test "$APP_MACHINEID_SUPPORT" = yes; then
++	AC_DEFINE([APP_MACHINEID_SUPPORT], 1, [Define to 1 to include code that uses libsystemd machine-id apis.])
++	SYSTEMD_LIBS="-lsystemd"
++fi
++
++################################################################################
++dnl -- Look for libsystemd libraries
++if test "$APP_MACHINEID_SUPPORT" = yes; then
++	PKG_CHECK_MODULES(APP_MACHINEID, systemd >= 234, [HAVE_APP_MACHINEID=yes], $bailout)
++fi
++
+ ################################################################################
+ 
+ dnl -- Enable blkid wiping functionality
 diff --git a/lib/commands/toolcontext.c b/lib/commands/toolcontext.c
-index 8991aebcf..f939c3e76 100644
+index ecd50dbf7..8991aebcf 100644
 --- a/lib/commands/toolcontext.c
 +++ b/lib/commands/toolcontext.c
-@@ -340,6 +340,33 @@ static int _parse_debug_classes(struct cmd_context *cmd)
- 	return debug_classes;
+@@ -41,6 +41,10 @@
+ #include <syslog.h>
+ #include <time.h>
+ 
++#ifdef APP_MACHINEID_SUPPORT
++#include <systemd/sd-id128.h>
++#endif
++
+ #ifdef __linux__
+ #  include <malloc.h>
+ #endif
+@@ -129,9 +133,12 @@ static const char *_read_system_id_from_file(struct cmd_context *cmd, const char
+ 	return system_id;
  }
  
-+static uint32_t _parse_log_journal(struct cmd_context *cmd, int cfg, const char *cfgname)
-+{
-+	const struct dm_config_node *cn;
-+	const struct dm_config_value *cv;
-+	uint32_t fields = 0;
-+	uint32_t val;
++/* systemd-id128 new produced: f64406832c2140e8ac5422d1089aae03 */
++#define LVM_APPLICATION_ID SD_ID128_MAKE(f6,44,06,83,2c,21,40,e8,ac,54,22,d1,08,9a,ae,03)
 +
-+	if (!(cn = find_config_tree_array(cmd, cfg, NULL))) {
-+		log_debug("Unable to find configuration for log/%s.", cfgname);
-+		return 0;
-+	}
-+
-+	for (cv = cn->v; cv; cv = cv->next) {
-+		if (cv->type != DM_CFG_STRING) {
-+			log_verbose("log/%s contains a value which is not a string.  Ignoring.", cfgname);
-+			continue;
-+		}
-+
-+		if ((val = log_journal_str_to_val(cv->v.str)))
-+			fields |= val;
-+		else
-+			log_verbose("Unrecognised value for log/%s: %s", cfgname, cv->v.str);
-+	}
-+
-+	return fields;
-+}
-+
- static void _init_logging(struct cmd_context *cmd)
+ static const char *_system_id_from_source(struct cmd_context *cmd, const char *source)
  {
- 	int append = 1;
-@@ -408,6 +435,9 @@ static void _init_logging(struct cmd_context *cmd)
- 	init_debug_file_fields(_parse_debug_fields(cmd, log_debug_file_fields_CFG, "debug_file_fields"));
- 	init_debug_output_fields(_parse_debug_fields(cmd, log_debug_output_fields_CFG, "debug_output_fields"));
+-	char filebuf[PATH_MAX];
++	char buf[PATH_MAX];
+ 	const char *file;
+ 	const char *etc_str;
+ 	const char *str;
+@@ -150,10 +157,23 @@ static const char *_system_id_from_source(struct cmd_context *cmd, const char *s
+ 		goto out;
+ 	}
  
-+	cmd->default_settings.journal = _parse_log_journal(cmd, log_journal_CFG, "journal");
-+	init_log_journal(cmd->default_settings.journal);
++#ifdef APP_MACHINEID_SUPPORT
++	if (!strcasecmp(source, "appmachineid")) {
++		sd_id128_t id;
 +
- 	t = time(NULL);
- 	ctime_r(&t, &timebuf[0]);
- 	timebuf[24] = '\0';
-diff --git a/lib/commands/toolcontext.h b/lib/commands/toolcontext.h
-index 731cc7ee0..7ccee4571 100644
---- a/lib/commands/toolcontext.h
-+++ b/lib/commands/toolcontext.h
-@@ -42,6 +42,7 @@ struct config_info {
- 	int udev_sync;
- 	int udev_fallback;
- 	int issue_discards;
-+	uint32_t journal;
- 	const char *msg_prefix;
- 	const char *fmt_name;
- 	const char *dmeventd_executable;
++		sd_id128_get_machine_app_specific(LVM_APPLICATION_ID, &id);
++
++		if (dm_snprintf(buf, PATH_MAX, SD_ID128_FORMAT_STR, SD_ID128_FORMAT_VAL(id)) < 0)
++			stack;
++		system_id = system_id_from_string(cmd, buf);
++		goto out;
++	}
++#endif
++
+ 	if (!strcasecmp(source, "machineid") || !strcasecmp(source, "machine-id")) {
+ 		etc_str = find_config_tree_str(cmd, global_etc_CFG, NULL);
+-		if (dm_snprintf(filebuf, sizeof(filebuf), "%s/machine-id", etc_str) != -1)
+-			system_id = _read_system_id_from_file(cmd, filebuf);
++		if (dm_snprintf(buf, sizeof(buf), "%s/machine-id", etc_str) != -1)
++			system_id = _read_system_id_from_file(cmd, buf);
+ 		goto out;
+ 	}
+ 
 diff --git a/lib/config/config_settings.h b/lib/config/config_settings.h
-index aad0d5989..d280e7adb 100644
+index b2270bee9..aad0d5989 100644
 --- a/lib/config/config_settings.h
 +++ b/lib/config/config_settings.h
-@@ -873,6 +873,12 @@ cfg(log_syslog_CFG, "syslog", log_CFG_SECTION, CFG_DEFAULT_COMMENTED, CFG_TYPE_B
- cfg(log_file_CFG, "file", log_CFG_SECTION, CFG_DEFAULT_UNDEFINED, CFG_TYPE_STRING, NULL, vsn(1, 0, 0), NULL, 0, NULL,
- 	"Write error and debug log messages to a file specified here.\n")
- 
-+cfg_array(log_journal_CFG, "journal", log_CFG_SECTION, CFG_ALLOW_EMPTY | CFG_DEFAULT_COMMENTED, CFG_TYPE_STRING, NULL, vsn(2, 3, 12), NULL, 0, NULL,
-+	  "Record lvm information in the systemd journal.\n"
-+	  "command: record commands that are run.\n"
-+	  "output: record default output from commands.\n"
-+	  "debug: record debug messages from commands.\n")
-+
- cfg(log_overwrite_CFG, "overwrite", log_CFG_SECTION, CFG_DEFAULT_COMMENTED, CFG_TYPE_BOOL, DEFAULT_OVERWRITE, vsn(1, 0, 0), NULL, 0, NULL,
- 	"Overwrite the log file each time the program is run.\n")
- 
-diff --git a/lib/log/log.c b/lib/log/log.c
-index 53ff5b156..8ebbf947a 100644
---- a/lib/log/log.c
-+++ b/lib/log/log.c
-@@ -25,6 +25,7 @@
- #include <syslog.h>
- #include <ctype.h>
- #include <time.h>
-+#include <systemd/sd-journal.h>
- 
- static FILE *_log_file;
- static char _log_file_path[PATH_MAX];
-@@ -40,6 +41,7 @@ static char _msg_prefix[30] = "  ";
- static int _abort_on_internal_errors_config = 0;
- static uint32_t _debug_file_fields;
- static uint32_t _debug_output_fields;
-+static uint32_t _log_journal = 0;
- 
- static lvm2_log_fn_t _lvm2_log_fn = NULL;
- 
-@@ -455,6 +457,11 @@ void init_debug_output_fields(uint32_t debug_fields)
- 	_debug_output_fields = debug_fields;
+@@ -1275,10 +1275,12 @@ cfg(global_system_id_source_CFG, "system_id_source", global_CFG_SECTION, CFG_DEF
+ 	"  uname\n"
+ 	"    Set the system ID from the hostname (uname) of the system.\n"
+ 	"    System IDs beginning localhost are not permitted.\n"
++	"  appmachineid\n"
++	"    Use an LVM-specific derivation of the local machine-id as the\n"
++	"    system ID. See 'man machine-id'.\n"
+ 	"  machineid\n"
+-	"    Use the contents of the machine-id file to set the system ID.\n"
+-	"    Some systems create this file@installation time.\n"
+-	"    See 'man machine-id' and global/etc.\n"
++	"    Use the contents of the machine-id file to set the system ID\n"
++	"    (appmachineid is recommended.)\n"
+ 	"  file\n"
+ 	"    Use the contents of another file (system_id_file) to set the\n"
+ 	"    system ID.\n"
+diff --git a/man/lvmsystemid.7_main b/man/lvmsystemid.7_main
+index eac4f7bc1..06e7f3454 100644
+--- a/man/lvmsystemid.7_main
++++ b/man/lvmsystemid.7_main
+@@ -172,6 +172,22 @@ global {
  }
- 
-+void init_log_journal(uint32_t fields)
-+{
-+	_log_journal = fields;
+ .fi
+ .
++.TP
++.B appmachineid
++.br
++
++An LVM-specific derivation of /etc/machine-id is used as the system ID.
++See
++.BR machine-id (5)
++to check if machine-id is available on the host.
++
++.I lvm.conf
++.nf
++global {
++    system_id_source = "appmachineid"
 +}
++.fi
 +
- static void _set_time_prefix(char *prefix, int buflen)
- {
+ .TP
+ .B machineid
+ .br
+@@ -181,6 +197,7 @@ See
+ and
+ .BR systemd-machine-id-setup (1)
+ to check if machine-id is available on the host.
++(appmachineid is recommended in place of machineid.)
+ .sp
+ .I lvm.conf
+ .nf
+diff --git a/test/shell/system_id.sh b/test/shell/system_id.sh
+index ee51ca179..756c95add 100644
+--- a/test/shell/system_id.sh
++++ b/test/shell/system_id.sh
+@@ -64,6 +64,17 @@ check vg_field $vg1 systemid "$SID"
+ vgremove $vg1
+ fi
  
-@@ -609,6 +616,33 @@ static void _vprint_log(int level, const char *file, int line, int dm_errno_or_c
- 	}
++## appmachineid
++lvm version > lvmver
++if grep app-machineid lvmver; then
++aux lvmconf "global/system_id_source = appmachineid"
++lvm systemid | awk '{ print $3 }' > sid_lvm
++vgcreate $vg1 "$dev1"
++vgs -o systemid --noheadings $vg1 | awk '{print $1}' > sid_vg
++diff sid_lvm sid_vg
++vgremove $vg1
++fi
++
+ ## uname
  
-       log_it:
-+
-+	if (_log_journal) {
-+		int to_journal = 0;
-+
-+		/* By default the visible command output is _LOG_WARN or less. */
-+
-+		if (_log_journal & LOG_JOURNAL_DEBUG)
-+			to_journal = 1;
-+		if ((_log_journal & LOG_JOURNAL_OUTPUT) && (log_level(level) <= _LOG_WARN))
-+			to_journal = 1;
-+
-+		if (to_journal) {
-+			int prio;
-+			switch (log_level(level)) {
-+			case _LOG_ERR:    prio = LOG_ERR; break;
-+			case _LOG_WARN:   prio = LOG_WARNING; break;
-+			case _LOG_INFO:   prio = LOG_INFO; break;
-+			case _LOG_NOTICE: prio = LOG_NOTICE; break;
-+			case _LOG_DEBUG:  prio = LOG_DEBUG; break;
-+			default:          prio = LOG_INFO;
-+			}
-+			va_copy(ap, orig_ap);
-+			sd_journal_printv(prio, trformat, ap);
-+			va_end(ap);
-+		}
-+	}
-+
- 	if (!logged_via_report && ((verbose_level() >= level) && !_log_suppress)) {
- 		if (verbose_level() > _LOG_DEBUG) {
- 			memset(buf, 0, sizeof(buf));
-@@ -792,3 +826,60 @@ void log_set_report_object_name_and_id(const char *name, const char *id)
- 	_log_report.object_name = name;
- 	_log_report.object_id = id;
- }
-+
-+/*
-+ * TODO: log/journal=["daemon_command"]
-+ *       daemon_command: record commands that are run by an lvm daemon.
-+ *       (i.e. not commands run directly by a user.)
-+ *       For this we need to be able to clearly identify when a command is
-+ *       being run by dmeventd/lvmpolld/lvmdbusd.
-+ *
-+ * TODO: log/journal_commmand_names=["lvcreate","lvconvert"]
-+ * This would restrict log/journal=["command"] to the listed command names.
-+ * Also allow "!command" to exclude a command, e.g. ["!pvs"]
-+ *
-+ * TODO: log/journal_daemon_command_names=["lvcreate","lvconvert"]
-+ * This would restrict log/journal=["dameon_command"] to the listed command names.
-+ *
-+ * TODO: log/journal_daemon_names=["dmeventd"]
-+ * This would restrict log/journal=["daemon_command"] to commands run by
-+ * the named daemon.
-+ *
-+ * TODO: log/command_to_file=<path> would write this info to the file.
-+ *
-+ * TODO: log/debug_to_file=<path> would write full debugging to the file.
-+ *       (the same effect as log/file=<path> log/level=7)
-+ */
-+
-+void log_command(const char *cmd_line, const char *cmd_name, const char *cmd_id)
-+{
-+	if (_log_journal & LOG_JOURNAL_COMMAND) {
-+
-+		/*
-+		 * TODO: DAEMON=dmeventd|lvmpolld|lvmdbusd,
-+		 * Could we include caller info such as libblkid, udev rule, etc?
-+		 * Does systemd already record the caller for us?
-+		 */
-+
-+		/* The command line, pid, and other things are automatically included. */
-+
-+		sd_journal_send("MESSAGE=lvm command %s", cmd_name,
-+				"MESSAGE_ID=3ca432788c374e4ba684b834188eca36",
-+				"LVM_CMD_NAME=%s", cmd_name,
-+				"LVM_CMD_ID=%s", cmd_id,
-+				"PRIORITY=%i", LOG_INFO,
-+				NULL);
-+	}
-+}
-+
-+uint32_t log_journal_str_to_val(const char *str)
-+{
-+	if (!strcasecmp(str, "command"))
-+		return LOG_JOURNAL_COMMAND;
-+	if (!strcasecmp(str, "output"))
-+		return LOG_JOURNAL_OUTPUT;
-+	if (!strcasecmp(str, "debug"))
-+		return LOG_JOURNAL_DEBUG;
-+	return 0;
-+}
-+
-diff --git a/lib/log/log.h b/lib/log/log.h
-index d3848a4f0..b5f05f29b 100644
---- a/lib/log/log.h
-+++ b/lib/log/log.h
-@@ -63,6 +63,10 @@
- #define LOG_DEBUG_FIELD_FILELINE	0x0004
- #define LOG_DEBUG_FIELD_MESSAGE		0x0008
- 
-+#define LOG_JOURNAL_COMMAND             0x0001
-+#define LOG_JOURNAL_OUTPUT              0x0002
-+#define LOG_JOURNAL_DEBUG               0x0004
-+
- 
- /*
-  * Classes available for debug log messages.
-diff --git a/lib/log/lvm-logging.h b/lib/log/lvm-logging.h
-index 39108fc60..fb18a4159 100644
---- a/lib/log/lvm-logging.h
-+++ b/lib/log/lvm-logging.h
-@@ -62,6 +62,12 @@ void reset_log_duplicated(void);
- void init_syslog(int facility);
- void fin_syslog(void);
- 
-+void init_log_journal(uint32_t fields);
-+uint32_t log_journal_str_to_val(const char *str);
-+
-+void log_command(const char *cmd_line, const char *cmd_name, const char *cmd_id);
-+
-+
- int error_message_produced(void);
- void reset_lvm_errno(int store_errmsg);
- int stored_errno(void);
-diff --git a/tools/args.h b/tools/args.h
-index 8ce176739..774ce33f4 100644
---- a/tools/args.h
-+++ b/tools/args.h
-@@ -323,6 +323,14 @@ arg(ignoreunsupported_ARG, '\0', "ignoreunsupported", 0, 0, 0,
- arg(importdevices_ARG, '\0', "importdevices", 0, 0, 0,
-     "Add devices to the devices file.\n")
- 
-+arg(journal_ARG, '\0', "journal", string_VAL, 0, 0,
-+    "Record information in the systemd journal.\n"
-+    "This information is in addition to information\n"
-+    "enabled by the lvm.conf log/journal setting.\n"
-+    "command: record information about the command.\n"
-+    "output: record the default command output.\n"
-+    "debug: record full command debugging.\n")
-+
- arg(labelsector_ARG, '\0', "labelsector", number_VAL, 0, 0,
-     "By default the PV is labelled with an LVM2 identifier in its second\n"
-     "sector (sector 1). This lets you use a different sector near the\n"
-diff --git a/tools/command-lines.in b/tools/command-lines.in
-index 332ad8a3b..10b23e75d 100644
---- a/tools/command-lines.in
-+++ b/tools/command-lines.in
-@@ -204,7 +204,7 @@
- #
- OO_ALL: --commandprofile String, --config String, --debug,
- --driverloaded Bool, --help, --nolocking, --lockopt String, --longhelp, --profile String, --quiet,
----verbose, --version, --yes, --test, --devicesfile String, --devices PV, --nohints
-+--verbose, --version, --yes, --test, --devicesfile String, --devices PV, --nohints --journal String
- 
- #
- # options for pvs, lvs, vgs, fullreport
-diff --git a/tools/lvmcmdline.c b/tools/lvmcmdline.c
-index d82c374c6..1e12bedca 100644
---- a/tools/lvmcmdline.c
-+++ b/tools/lvmcmdline.c
-@@ -2017,6 +2017,8 @@ out:
- 	log_debug("Recognised command %s (id %d / enum %d).",
- 		  commands[best_i].command_id, best_i, commands[best_i].command_enum);
- 
-+	log_command(cmd->cmd_line, commands[best_i].name, commands[best_i].command_id);
-+
- 	return &commands[best_i];
- }
- 
-@@ -2405,6 +2407,15 @@ static void _get_current_output_settings_from_args(struct cmd_context *cmd)
- 		cmd->current_settings.verbose = 0;
- 		cmd->current_settings.silent = (arg_count(cmd, quiet_ARG) > 1) ? 1 : 0;
- 	}
-+
-+	/*
-+	 * default_settings.journal is already set from config and has already been
-+	 * applied using init_log_journal().
-+	 * current_settings have been set to default_settings.
-+	 * now --journal value adds to current_settings.
-+	 */
-+	if (arg_is_set(cmd, journal_ARG))
-+		cmd->current_settings.journal |= log_journal_str_to_val(arg_str_value(cmd, journal_ARG, ""));
- }
- 
- static void _apply_current_output_settings(struct cmd_context *cmd)
-@@ -2414,6 +2425,7 @@ static void _apply_current_output_settings(struct cmd_context *cmd)
- 	init_debug_classes_logged(cmd->default_settings.debug_classes);
- 	init_verbose(cmd->current_settings.verbose + VERBOSE_BASE_LEVEL);
- 	init_silent(cmd->current_settings.silent);
-+	init_log_journal(cmd->current_settings.journal);
- }
- 
- static int _read_devices_list(struct cmd_context *cmd)
+ SID1=$(uname -n)
 
 
