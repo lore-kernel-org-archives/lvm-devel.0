@@ -1,53 +1,61 @@
 From: David Teigland <teigland@sourceware.org>
-Date: Wed, 13 Oct 2021 18:43:49 +0000 (GMT)
-Subject: main - devices file: unmatching system id should just be warning
-Message-ID: <20211013184349.076003858015@sourceware.org>
+Date: Wed, 13 Oct 2021 22:30:40 +0000 (GMT)
+Subject: main - fix lvmcache_add log_debug pvid
+Message-ID: <20211013223040.2421D385840B@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=272d1ccac8654c0d74ecf255d13de0a6222ff96f
-Commit:        272d1ccac8654c0d74ecf255d13de0a6222ff96f
-Parent:        062ea3c4181ef158620556bbab2358bc76eeab90
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=e88163ceac0ca7d78ab728867a6e84d0e535ad1d
+Commit:        e88163ceac0ca7d78ab728867a6e84d0e535ad1d
+Parent:        6fb497ef42a5f8324a90cb93734cd8071ed0dc0b
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Wed Oct 13 13:34:46 2021 -0500
+AuthorDate:    Wed Oct 13 16:26:00 2021 -0500
 Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Wed Oct 13 13:42:04 2021 -0500
+CommitterDate: Wed Oct 13 17:30:21 2021 -0500
 
-devices file: unmatching system id should just be warning
+fix lvmcache_add log_debug pvid
 
-there are likely more cases than not where the systemid
-does not match and the command should still run.
+from previous cleanup
 ---
- lib/device/device_id.c | 6 +-----
- 1 file changed, 1 insertion(+), 5 deletions(-)
+ lib/cache/lvmcache.c | 10 ++++++----
+ 1 file changed, 6 insertions(+), 4 deletions(-)
 
-diff --git a/lib/device/device_id.c b/lib/device/device_id.c
-index ce43e61ca..e4208c56b 100644
---- a/lib/device/device_id.c
-+++ b/lib/device/device_id.c
-@@ -543,11 +543,8 @@ int device_ids_read(struct cmd_context *cmd)
- 			log_debug("read devices file systemid %s", _devices_file_systemid);
- 			if ((!cmd->system_id && _devices_file_systemid[0]) ||
- 			    (cmd->system_id && strcmp(cmd->system_id, _devices_file_systemid))) {
--				log_warn("WARNING: ignoring devices file with wrong system id %s vs local %s.",
-+				log_warn("WARNING: devices file has unmatching system id %s vs local %s.",
- 					  _devices_file_systemid[0] ? _devices_file_systemid : "none", cmd->system_id ?: "none");
--				free_dus(&cmd->use_devices);
--				ret = 0;
--				goto out;
- 			}
- 			continue;
- 		}
-@@ -613,7 +610,6 @@ int device_ids_read(struct cmd_context *cmd)
+diff --git a/lib/cache/lvmcache.c b/lib/cache/lvmcache.c
+index e04f00f2d..2c4254324 100644
+--- a/lib/cache/lvmcache.c
++++ b/lib/cache/lvmcache.c
+@@ -2168,15 +2168,17 @@ struct lvmcache_info *lvmcache_add(struct cmd_context *cmd, struct labeller *lab
+ {
+ 	const char *pvid = pvid_arg;
+ 	const char *vgid = vgid_arg;
+-	char pvid_dashed[64] __attribute__((aligned(8)));
+ 	struct lvmcache_vgsummary vgsummary = { 0 };
+ 	struct lvmcache_info *info;
+ 	struct lvmcache_info *info_lookup;
+ 	struct device_list *devl;
+ 	int created = 0;
  
- 		dm_list_add(&cmd->use_devices, &du->list);
- 	}
--out:
- 	if (fclose(fp))
- 		stack;
+-	if (!id_write_format((const struct id *)&pvid, pvid_dashed, sizeof(pvid_dashed)))
+-		stack;
++	/*
++	 * Note: ensure that callers of lvmcache_add() pass null terminated
++	 * pvid and vgid strings, and do not pass char* that is type cast
++	 * from struct id.
++	 */
  
+ 	log_debug_cache("Found PVID %s on %s", pvid, dev_name(dev));
+ 
+@@ -2206,7 +2208,7 @@ struct lvmcache_info *lvmcache_add(struct cmd_context *cmd, struct labeller *lab
+ 	if (!created) {
+ 		if (info->dev != dev) {
+ 			log_debug_cache("Saving initial duplicate device %s previously seen on %s with PVID %s.",
+-					dev_name(dev), dev_name(info->dev), pvid_dashed);
++					dev_name(dev), dev_name(info->dev), pvid);
+ 
+ 			memset(&dev->pvid, 0, sizeof(dev->pvid));
+ 			memcpy(dev->pvid, pvid, ID_LEN);
 
 
