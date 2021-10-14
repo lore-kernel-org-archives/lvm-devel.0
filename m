@@ -1,92 +1,66 @@
-From: David Teigland <teigland@sourceware.org>
-Date: Thu, 14 Oct 2021 19:04:19 +0000 (GMT)
-Subject: main - fix segfault handling duplicate PVs
-Message-ID: <20211014190419.9104B3858412@sourceware.org>
+From: Zdenek Kabelac <zkabelac@sourceware.org>
+Date: Thu, 14 Oct 2021 21:37:06 +0000 (GMT)
+Subject: main - archiving: update refactoring
+Message-ID: <20211014213706.4AC6E3858427@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=c38473548e546c8e94d41587714f350a11362c84
-Commit:        c38473548e546c8e94d41587714f350a11362c84
-Parent:        e88163ceac0ca7d78ab728867a6e84d0e535ad1d
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Thu Oct 14 14:02:59 2021 -0500
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Thu Oct 14 14:02:59 2021 -0500
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=7e346ee2a5cd520fc038dda7451360bbe67e629f
+Commit:        7e346ee2a5cd520fc038dda7451360bbe67e629f
+Parent:        c38473548e546c8e94d41587714f350a11362c84
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Thu Oct 14 23:31:21 2021 +0200
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Thu Oct 14 23:33:26 2021 +0200
 
-fix segfault handling duplicate PVs
+archiving: update refactoring
 
-cmd arg was missing when switching to use an alternative
-duplicate dev.
+Commit 5ea426e65628218569ede461312d80ba5d1c50fb handled case with
+file path without '/' incorrectly - there is valid use-case so
+switch 'log_error()' to valid code branch.
 ---
- lib/cache/lvmcache.c | 2 +-
- lib/label/label.c    | 4 ++--
- lib/label/label.h    | 2 +-
- tools/toollib.c      | 2 +-
- 4 files changed, 5 insertions(+), 5 deletions(-)
+ lib/format_text/archive.c | 22 +++++++++++-----------
+ 1 file changed, 11 insertions(+), 11 deletions(-)
 
-diff --git a/lib/cache/lvmcache.c b/lib/cache/lvmcache.c
-index 2c4254324..bee63ebb4 100644
---- a/lib/cache/lvmcache.c
-+++ b/lib/cache/lvmcache.c
-@@ -1349,7 +1349,7 @@ int lvmcache_label_scan(struct cmd_context *cmd)
+diff --git a/lib/format_text/archive.c b/lib/format_text/archive.c
+index 740129df0..c9c4f2265 100644
+--- a/lib/format_text/archive.c
++++ b/lib/format_text/archive.c
+@@ -373,21 +373,21 @@ int archive_list_file(struct cmd_context *cmd, const char *file)
+ 	}
  
- 		dm_list_iterate_items(devl, &add_cache_devs) {
- 			log_debug_cache("Adding chosen duplicate %s", dev_name(devl->dev));
--			label_scan_dev(devl->dev);
-+			label_scan_dev(cmd, devl->dev);
- 		}
+ 	if (!(af.name = strrchr(file, '/'))) {
+-		log_error("No '/' in file path %s found.", file);
+-		return 0;
+-	}
++		af.name = file;
++		path[0] = 0;
++	} else {
++		len = (size_t)(af.name - file);
  
- 		dm_list_splice(&_unused_duplicates, &del_cache_devs);
-diff --git a/lib/label/label.c b/lib/label/label.c
-index b8f0dc84d..3cd912270 100644
---- a/lib/label/label.c
-+++ b/lib/label/label.c
-@@ -1488,7 +1488,7 @@ void label_scan_destroy(struct cmd_context *cmd)
-  * device, this is not a commonly used function.
-  */
+-	len = (size_t)(af.name - file);
++		if (len >= sizeof(path)) {
++			log_error(INTERNAL_ERROR "Passed file path name %s is too long.", file);
++			return 0;
++		}
  
--int label_scan_dev(struct device *dev)
-+int label_scan_dev(struct cmd_context *cmd, struct device *dev)
- {
- 	struct dm_list one_dev;
- 	struct device_list *devl;
-@@ -1503,7 +1503,7 @@ int label_scan_dev(struct device *dev)
+-	if (len >= sizeof(path)) {
+-		log_error(INTERNAL_ERROR "Passed file path name %s is too long.", file);
+-		return 0;
++		memcpy(path, file, len);
++		path[len] = 0;
++		af.name++;  /* jump over '/' */
+ 	}
  
- 	label_scan_invalidate(dev);
+-	memcpy(path, file, len);
+-	path[len] = 0;
+-	af.name++;  /* jump over '/' */
+-
+ 	_display_archive(cmd, path, &af);
  
--	_scan_list(NULL, NULL, &one_dev, 0, &failed);
-+	_scan_list(cmd, NULL, &one_dev, 0, &failed);
- 
- 	free(devl);
- 
-diff --git a/lib/label/label.h b/lib/label/label.h
-index 32ceebc34..8b510eb79 100644
---- a/lib/label/label.h
-+++ b/lib/label/label.h
-@@ -107,7 +107,7 @@ int label_scan_devs(struct cmd_context *cmd, struct dev_filter *f, struct dm_lis
- int label_scan_devs_cached(struct cmd_context *cmd, struct dev_filter *f, struct dm_list *devs);
- int label_scan_devs_rw(struct cmd_context *cmd, struct dev_filter *f, struct dm_list *devs);
- int label_scan_devs_excl(struct cmd_context *cmd, struct dev_filter *f, struct dm_list *devs);
--int label_scan_dev(struct device *dev);
-+int label_scan_dev(struct cmd_context *cmd, struct device *dev);
- void label_scan_invalidate(struct device *dev);
- void label_scan_invalidate_lv(struct cmd_context *cmd, struct logical_volume *lv);
- void label_scan_drop(struct cmd_context *cmd);
-diff --git a/tools/toollib.c b/tools/toollib.c
-index c05a973d5..5b67669e1 100644
---- a/tools/toollib.c
-+++ b/tools/toollib.c
-@@ -1481,7 +1481,7 @@ int process_each_label(struct cmd_context *cmd, int argc, char **argv,
- 			/*
- 			 * add info to lvmcache from the duplicate dev.
- 			 */
--			label_scan_dev(devl->dev);
-+			label_scan_dev(cmd, devl->dev);
- 
- 			/*
- 			 * the info/label should now be found because
+ 	return 1;
 
 
