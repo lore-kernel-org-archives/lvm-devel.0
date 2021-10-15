@@ -1,46 +1,44 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Fri, 15 Oct 2021 21:42:26 +0000 (GMT)
-Subject: main - cov: ensure id is always initialize
-Message-ID: <20211015214226.3A00A3858401@sourceware.org>
+Date: Fri, 15 Oct 2021 21:42:27 +0000 (GMT)
+Subject: main - cov: check device_ids_write return code
+Message-ID: <20211015214227.5A4EF3858405@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=c2be6c38d5d878861b7d4ce601a64bcb88bbe38e
-Commit:        c2be6c38d5d878861b7d4ce601a64bcb88bbe38e
-Parent:        882141eb8c1a9718652cd903e411b6876aff54ef
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=bae1083472d9c589d59f93a4e0a137cb94ba5ed0
+Commit:        bae1083472d9c589d59f93a4e0a137cb94ba5ed0
+Parent:        c2be6c38d5d878861b7d4ce601a64bcb88bbe38e
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Oct 15 15:00:03 2021 +0200
+AuthorDate:    Fri Oct 15 15:04:43 2021 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Fri Oct 15 23:40:56 2021 +0200
 
-cov: ensure id is always initialize
+cov: check device_ids_write return code
 
-Always resed sd_id128_t id and report warning in case
-sd_id128_get_machine_app_specific() does not exit with 0.
+At least 'stack' failure code path as the
+function device_id_update_vg_uuid() is void.
 ---
- lib/commands/toolcontext.c | 6 ++++--
- 1 file changed, 4 insertions(+), 2 deletions(-)
+ lib/device/device_id.c | 5 +++--
+ 1 file changed, 3 insertions(+), 2 deletions(-)
 
-diff --git a/lib/commands/toolcontext.c b/lib/commands/toolcontext.c
-index ab574fb55..105aecd5d 100644
---- a/lib/commands/toolcontext.c
-+++ b/lib/commands/toolcontext.c
-@@ -159,9 +159,11 @@ static const char *_system_id_from_source(struct cmd_context *cmd, const char *s
+diff --git a/lib/device/device_id.c b/lib/device/device_id.c
+index e4208c56b..eb06109ff 100644
+--- a/lib/device/device_id.c
++++ b/lib/device/device_id.c
+@@ -1351,8 +1351,9 @@ void device_id_update_vg_uuid(struct cmd_context *cmd, struct volume_group *vg,
+ 		}
+ 	}
  
- #ifdef APP_MACHINEID_SUPPORT
- 	if (!strcasecmp(source, "appmachineid")) {
--		sd_id128_t id;
-+		sd_id128_t id = { 0 };
- 
--		sd_id128_get_machine_app_specific(LVM_APPLICATION_ID, &id);
-+		if (sd_id128_get_machine_app_specific(LVM_APPLICATION_ID, &id) != 0)
-+			log_warn("WARNING: sd_id128_get_machine_app_specific() failed %s (%d).",
-+				 strerror(errno), errno);
- 
- 		if (dm_snprintf(buf, PATH_MAX, SD_ID128_FORMAT_STR, SD_ID128_FORMAT_VAL(id)) < 0)
- 			stack;
+-	if (update)
+-		device_ids_write(cmd);
++	if (update &&
++	    !device_ids_write(cmd))
++		stack;
+  out:
+ 	unlock_devices_file(cmd);
+ }
 
 
