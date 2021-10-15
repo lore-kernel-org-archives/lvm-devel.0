@@ -1,47 +1,39 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Fri, 15 Oct 2021 21:42:21 +0000 (GMT)
-Subject: main - cov: validate subcommand existance
-Message-ID: <20211015214221.AEB9A3858401@sourceware.org>
+Date: Fri, 15 Oct 2021 21:42:22 +0000 (GMT)
+Subject: main - cov: ignore close result
+Message-ID: <20211015214222.CE0C53858416@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=6668d6409aa841839b8eefc2a49d004b0c29397a
-Commit:        6668d6409aa841839b8eefc2a49d004b0c29397a
-Parent:        2779830a060730801ae6b055c2332301bf913c0f
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=e7b5f490c53368b9591fe8c5561de4371207f882
+Commit:        e7b5f490c53368b9591fe8c5561de4371207f882
+Parent:        6668d6409aa841839b8eefc2a49d004b0c29397a
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Oct 15 14:42:20 2021 +0200
+AuthorDate:    Fri Oct 15 14:42:34 2021 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Fri Oct 15 23:39:25 2021 +0200
+CommitterDate: Fri Oct 15 23:40:29 2021 +0200
 
-cov: validate subcommand existance
+cov: ignore close result
 
-Before dereference of subcommand pointer, check it's not NULL
-as  coverity believes there exists theoretical path for this...
 ---
- libdm/dm-tools/dmsetup.c | 4 ++--
- 1 file changed, 2 insertions(+), 2 deletions(-)
+ test/unit/bcache_utils_t.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
 
-diff --git a/libdm/dm-tools/dmsetup.c b/libdm/dm-tools/dmsetup.c
-index 07b6cca8a..8502d9adc 100644
---- a/libdm/dm-tools/dmsetup.c
-+++ b/libdm/dm-tools/dmsetup.c
-@@ -5846,12 +5846,12 @@ static int _stats_report(CMD_ARGS)
- 	if (_switches[ALL_PROGRAMS_ARG])
- 		_program_id = "";
+diff --git a/test/unit/bcache_utils_t.c b/test/unit/bcache_utils_t.c
+index daed0ce39..f05292474 100644
+--- a/test/unit/bcache_utils_t.c
++++ b/test/unit/bcache_utils_t.c
+@@ -86,7 +86,7 @@ static void *_fix_init(struct io_engine *engine)
+ 	}
  
--	if (_switches[VERBOSE_ARG] && !strcmp(subcommand, "list"))
-+	if (_switches[VERBOSE_ARG] && subcommand && !strcmp(subcommand, "list"))
- 		_statstype |= (DM_STATS_WALK_ALL
- 			       | DM_STATS_WALK_SKIP_SINGLE_AREA);
- 
- 	/* suppress duplicates unless the user has requested all regions */
--	if (!strcmp(subcommand, "report") && !objtype_args)
-+	if (subcommand && !objtype_args && !strcmp(subcommand, "report"))
- 		/* suppress duplicate rows of output */
- 		_statstype |= (DM_STATS_WALK_ALL
- 			       | DM_STATS_WALK_SKIP_SINGLE_AREA);
+ 	if (!_runs_is_tmpfs) {
+-		close(f->fd);
++		(void) close(f->fd);
+ 		// reopen with O_DIRECT
+ 		f->fd = open(f->fname, O_RDWR | O_DIRECT);
+ 		T_ASSERT(f->fd >= 0);
 
 
