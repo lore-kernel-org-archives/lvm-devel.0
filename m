@@ -1,53 +1,39 @@
-From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Mon, 18 Oct 2021 19:03:45 +0200
-Subject: LVM2/libdm build system
-In-Reply-To: <16d0cea1-35bd-f6d8-b307-33aba881951d@yuka.dev>
-References: <16d0cea1-35bd-f6d8-b307-33aba881951d@yuka.dev>
-Message-ID: <4905e48a-0607-0305-31cb-a4762794290f@redhat.com>
+From: Zdenek Kabelac <zkabelac@sourceware.org>
+Date: Mon, 18 Oct 2021 17:19:29 +0000 (GMT)
+Subject: main - cleanup: use const char buffer
+Message-ID: <20211018171929.53E48385840D@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Dne 18. 10. 21 v 18:31 Yureka napsal(a):
-> Hey everyone,
->
->
-> I recently had to deal with the LVM2 build system a bit, and it was
-> horrible. For example, in an environment where only static libraries
-> (.a) are available, the build system would still try to build
-> libdevmapper.so and fail. Also it was not easily possible to build only
-> the libdm portions of the code base.
->
-> The question: Would it be thinkable to switch the build system to
-> something more modern like Meson or CMake? Are the maintainers
-> interested in contributions like this?
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=a172a02a9a980d084d5729cc8483bdddad0100f2
+Commit:        a172a02a9a980d084d5729cc8483bdddad0100f2
+Parent:        9cf4eac250ef7abd5e0961da2371294da07ab4de
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Sat Oct 16 10:09:02 2021 +0200
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Mon Oct 18 19:17:27 2021 +0200
 
+cleanup: use const char buffer
 
-Hi
+---
+ lib/locking/lvmlockd.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
 
-
-Do you have some example of your problem ?
-
-
-With 'static' linking - we are not able to support this since some libraries 
-are not provided in static form (i.e. udev), while they are 'core' libraries. 
-So ATM we may only support? those configuration where users do provide some 
-valid patches.
-
-
-There is currently no plan to switch to Meson or CMake as ATM we are quite 
-happy with provided autoconf.
-
-If you can see some problem (except? for 'static' build which is simply 
-officially unsupported) - please provide traces so we can fix your problem.
-
-Also - why would you actually need 'static' build - do you have some? 
-non-standard linux distro ?
-
-
-Regards
-
+diff --git a/lib/locking/lvmlockd.c b/lib/locking/lvmlockd.c
+index 4f9952d5b..b598df3d6 100644
+--- a/lib/locking/lvmlockd.c
++++ b/lib/locking/lvmlockd.c
+@@ -503,7 +503,7 @@ static int _create_sanlock_lv(struct cmd_context *cmd, struct volume_group *vg,
+ 		.read_ahead = DM_READ_AHEAD_NONE,
+ 		.stripes = 1,
+ 		.vg_name = vg->name,
+-		.lv_name = dm_pool_strdup(cmd->mem, lock_lv_name),
++		.lv_name = lock_lv_name,
+ 		.zero = 1,
+ 	};
+ 
 
 
