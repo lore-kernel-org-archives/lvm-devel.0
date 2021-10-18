@@ -1,119 +1,100 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Mon, 18 Oct 2021 17:19:30 +0000 (GMT)
-Subject: main - configure.ac: remove unused part
-Message-ID: <20211018171930.742803858404@sourceware.org>
+Date: Mon, 18 Oct 2021 19:18:40 +0000 (GMT)
+Subject: main - dev-cache: better detection of filesystem
+Message-ID: <20211018191840.B89363858C27@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=1b104ddb5539f998389afa3394cbc81d9410b390
-Commit:        1b104ddb5539f998389afa3394cbc81d9410b390
-Parent:        a172a02a9a980d084d5729cc8483bdddad0100f2
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=88e0d68909c007576272d65216b0e7a9011b9c9b
+Commit:        88e0d68909c007576272d65216b0e7a9011b9c9b
+Parent:        c60bac466175949b56b768b5e8d01ea5655a423e
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Sat Oct 16 22:08:50 2021 +0200
+AuthorDate:    Mon Oct 18 21:08:19 2021 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Mon Oct 18 19:17:27 2021 +0200
+CommitterDate: Mon Oct 18 21:16:53 2021 +0200
 
-configure.ac: remove unused part
+dev-cache: better detection of filesystem
 
-As we are not using 'enable-compat' for anything, remove this section.
-Also remove duplicated check for blkid.
-Move setting of some AC_ARG_ENABLE defaults into the macro so it's always
-defined.
+It appear on some systems the first found dev might not be actually for
+the filesytem - so use a better way through _cache.st_dev.
 ---
- configure.ac | 29 ++++++-----------------------
- 1 file changed, 6 insertions(+), 23 deletions(-)
+ lib/device/dev-cache.c | 22 +++++++++++++---------
+ 1 file changed, 13 insertions(+), 9 deletions(-)
 
-diff --git a/configure.ac b/configure.ac
-index 2f821edae..6cdf1a7e6 100644
---- a/configure.ac
-+++ b/configure.ac
-@@ -38,10 +38,6 @@ case "$host_os" in
- 		LIB_SUFFIX=so
- 		DEVMAPPER=yes
- 		BUILD_LVMPOLLD=no
--		LOCKDSANLOCK=no
--		LOCKDDLM=no
--		LOCKDDLM_CONTROL=no
--		LOCKDIDM=no
- 		ODIRECT=yes
- 		DM_IOCTLS=yes
- 		SELINUX=yes
-@@ -946,7 +942,7 @@ AC_MSG_CHECKING(whether to build lvmpolld)
- AC_ARG_ENABLE(lvmpolld,
- 	      AS_HELP_STRING([--enable-lvmpolld],
- 			     [enable the LVM Polling Daemon]),
--	      LVMPOLLD=$enableval)
-+	      LVMPOLLD=$enableval, LVMPOLLD=no)
- test -n "$LVMPOLLD" && BUILD_LVMPOLLD=$LVMPOLLD
- AC_MSG_RESULT($BUILD_LVMPOLLD)
+diff --git a/lib/device/dev-cache.c b/lib/device/dev-cache.c
+index 6d706eb1e..57fa916a9 100644
+--- a/lib/device/dev-cache.c
++++ b/lib/device/dev-cache.c
+@@ -53,6 +53,7 @@ static struct {
+ 	const char *dev_dir;
  
-@@ -958,7 +954,7 @@ AC_MSG_CHECKING(whether to build lvmlockdsanlock)
- AC_ARG_ENABLE(lvmlockd-sanlock,
- 	      AS_HELP_STRING([--enable-lvmlockd-sanlock],
- 			     [enable the LVM lock daemon using sanlock]),
--	      LOCKDSANLOCK=$enableval)
-+	      LOCKDSANLOCK=$enableval, LOCKDSANLOCK=no)
- AC_MSG_RESULT($LOCKDSANLOCK)
+ 	int has_scanned;
++	long st_dev;
+ 	struct dm_list dirs;
+ 	struct dm_list files;
  
- BUILD_LOCKDSANLOCK=$LOCKDSANLOCK
-@@ -976,7 +972,7 @@ AC_MSG_CHECKING(whether to build lvmlockddlm)
- AC_ARG_ENABLE(lvmlockd-dlm,
- 	      AS_HELP_STRING([--enable-lvmlockd-dlm],
- 			     [enable the LVM lock daemon using dlm]),
--	      LOCKDDLM=$enableval)
-+	      LOCKDDLM=$enableval, LOCKDDLM=no)
- AC_MSG_RESULT($LOCKDDLM)
+@@ -1064,11 +1065,18 @@ static void _insert_dirs(struct dm_list *dirs)
+ 	struct dir_list *dl;
+ 	struct udev *udev = NULL;
+ 	int with_udev;
++	struct stat tinfo;
  
- BUILD_LOCKDDLM=$LOCKDDLM
-@@ -994,7 +990,7 @@ AC_MSG_CHECKING(whether to build lvmlockddlmcontrol)
- AC_ARG_ENABLE(lvmlockd-dlmcontrol,
- 	      AS_HELP_STRING([--enable-lvmlockd-dlmcontrol],
- 			     [enable lvmlockd remote refresh using libdlmcontrol]),
--	      LOCKDDLM_CONTROL=$enableval)
-+	      LOCKDDLM_CONTROL=$enableval, LOCKDDLM_CONTROL=no)
- AC_MSG_RESULT($LOCKDDLM_CONTROL)
+ 	with_udev = obtain_device_list_from_udev() &&
+ 		    (udev = udev_get_library_context());
  
- BUILD_LOCKDDLM_CONTROL=$LOCKDDLM_CONTROL
-@@ -1012,7 +1008,7 @@ AC_MSG_CHECKING(whether to build lvmlockdidm)
- AC_ARG_ENABLE(lvmlockd-idm,
- 	      AS_HELP_STRING([--enable-lvmlockd-idm],
- 			     [enable the LVM lock daemon using idm]),
--	      LOCKDIDM=$enableval)
-+	      LOCKDIDM=$enableval, LOCKDIDM=no)
- AC_MSG_RESULT($LOCKDIDM)
+ 	dm_list_iterate_items(dl, &_cache.dirs) {
++		if (stat(dl->dir, &tinfo) < 0) {
++			log_warn("WARNING: Cannot use dir %s, %s.",
++				 dl->dir, strerror(errno));
++			continue;
++		}
++		_cache.st_dev = tinfo.st_dev;
+ 		if (with_udev) {
+ 			if (!_insert_udev_dir(udev, dl->dir))
+ 				log_debug_devs("%s: Failed to insert devices from "
+@@ -1101,7 +1109,6 @@ static void _insert_dirs(struct dm_list *dirs)
+ static int _insert(const char *path, const struct stat *info,
+ 		   int rec, int check_with_udev_db)
+ {
+-	static long _st_dev = -1;
+ 	struct stat tinfo;
  
- BUILD_LOCKDIDM=$LOCKDIDM
-@@ -1020,7 +1016,7 @@ BUILD_LOCKDIDM=$LOCKDIDM
- dnl -- Look for Seagate IDM libraries
- if test "$BUILD_LOCKDIDM" = yes; then
- 	PKG_CHECK_MODULES(LOCKD_IDM, libseagate_ilm >= 0.1.0, [HAVE_LOCKD_IDM=yes], $bailout)
--	PKG_CHECK_MODULES(BLKID, blkid >= 2.24, [HAVE_LOCKD_IDM=yes], $bailout)
-+	PKG_CHECK_EXISTS(blkid >= 2.24, [HAVE_LOCKD_IDM=yes], $bailout)
- 	AC_DEFINE([LOCKDIDM_SUPPORT], 1, [Define to 1 to include code that uses lvmlockd IDM option.])
- 	BUILD_LVMLOCKD=yes
- fi
-@@ -1251,19 +1247,6 @@ if test "$UDEV_RULE" != no ; then
- 	AC_MSG_RESULT($UDEV_HAS_BUILTIN_BLKID)
- fi
+ 	if (!info) {
+@@ -1112,20 +1119,12 @@ static int _insert(const char *path, const struct stat *info,
+ 		info = &tinfo;
+ 	}
  
--################################################################################
--dnl -- Compatibility mode
--AC_ARG_ENABLE(compat,
--	      AS_HELP_STRING([--enable-compat],
--			     [enable support for old device-mapper versions]),
--	      DM_COMPAT=$enableval, DM_COMPAT=no)
+-	if (_st_dev == -1)
+-		_st_dev = info->st_dev; /* first dir device */
 -
--AS_IF([test "$DM_COMPAT" = yes],
--      [AC_DEFINE([DM_COMPAT], 1, [Define to enable compat protocol])
--      AC_MSG_ERROR([--enable-compat is not currently supported.
--Since device-mapper version 1.02.66, only one version (4) of the device-mapper
--ioctl protocol is supported.])])
+ 	if (check_with_udev_db && !_device_in_udev_db(info->st_rdev)) {
+ 		log_very_verbose("%s: Not in udev db", path);
+ 		return 0;
+ 	}
+ 
+ 	if (S_ISDIR(info->st_mode)) {	/* add a directory */
+-		if (info->st_dev != _st_dev) {
+-			log_debug_devs("%s: Different filesystem in directory", path);
+-			return 1;
+-		}
 -
- ################################################################################
- dnl -- Compatible units suffix mode
- AC_ARG_ENABLE(units-compat,
+ 		/* check it's not a symbolic link */
+ 		if (lstat(path, &tinfo) < 0) {
+ 			log_sys_very_verbose("lstat", path);
+@@ -1137,6 +1136,11 @@ static int _insert(const char *path, const struct stat *info,
+ 			return 1;
+ 		}
+ 
++		if (info->st_dev != _cache.st_dev) {
++			log_debug_devs("%s: Different filesystem in directory", path);
++			return 1;
++		}
++
+ 		if (rec && !_insert_dir(path))
+ 			return 0;
+ 	} else {		/* add a device */
 
 
