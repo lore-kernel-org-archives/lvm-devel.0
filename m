@@ -1,64 +1,65 @@
-From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Wed,  6 Oct 2021 13:47:52 +0000 (GMT)
-Subject: main - cleanup: remove unused code
-Message-ID: <20211006134752.1C1953857C56@sourceware.org>
+From: Marian Csontos <mcsontos@sourceware.org>
+Date: Wed, 20 Oct 2021 10:10:25 +0000 (GMT)
+Subject: main - post-release
+Message-ID: <20211020101025.86AF53857C52@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=a841babaf7f0108797ef18af0777721742c8656c
-Commit:        a841babaf7f0108797ef18af0777721742c8656c
-Parent:        5ea426e65628218569ede461312d80ba5d1c50fb
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Oct 1 13:47:43 2021 +0200
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Wed Oct 6 15:43:31 2021 +0200
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=819a35cc9133889b5efc4833d8191e3e71396552
+Commit:        819a35cc9133889b5efc4833d8191e3e71396552
+Parent:        ef4521831d15a1785e034f6c6f536a03446f6e05
+Author:        Marian Csontos <mcsontos@redhat.com>
+AuthorDate:    Wed Oct 20 11:13:28 2021 +0200
+Committer:     Marian Csontos <mcsontos@redhat.com>
+CommitterDate: Wed Oct 20 11:13:28 2021 +0200
 
-cleanup: remove unused code
+post-release
 
 ---
- lib/metadata/metadata.c | 12 ------------
- lib/metadata/metadata.h |  3 ---
- 2 files changed, 15 deletions(-)
+ VERSION      | 2 +-
+ VERSION_DM   | 2 +-
+ WHATS_NEW    | 3 +++
+ WHATS_NEW_DM | 3 +++
+ 4 files changed, 8 insertions(+), 2 deletions(-)
 
-diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
-index 146ce476d..d5ef7f7cb 100644
---- a/lib/metadata/metadata.c
-+++ b/lib/metadata/metadata.c
-@@ -1648,18 +1648,6 @@ struct lv_list *find_lv_in_vg(const struct volume_group *vg,
- 	return NULL;
- }
- 
--struct lv_list *find_lv_in_lv_list(const struct dm_list *ll,
--				   const struct logical_volume *lv)
--{
--	struct lv_list *lvl;
--
--	dm_list_iterate_items(lvl, ll)
--		if (lvl->lv == lv)
--			return lvl;
--
--	return NULL;
--}
--
- struct logical_volume *find_lv_in_vg_by_lvid(const struct volume_group *vg,
- 					     const union lvid *lvid)
- {
-diff --git a/lib/metadata/metadata.h b/lib/metadata/metadata.h
-index 3b3145d2c..95ca320e6 100644
---- a/lib/metadata/metadata.h
-+++ b/lib/metadata/metadata.h
-@@ -395,9 +395,6 @@ int add_pv_to_vg(struct volume_group *vg, const char *pv_name,
- struct logical_volume *find_lv_in_vg_by_lvid(const struct volume_group *vg,
- 					     const union lvid *lvid);
- 
--struct lv_list *find_lv_in_lv_list(const struct dm_list *ll,
--				   const struct logical_volume *lv);
--
- /* FIXME Merge these functions with ones above */
- struct physical_volume *find_pv(struct volume_group *vg, struct device *dev);
- 
+diff --git a/VERSION b/VERSION
+index 0a3618042..dfbf5a300 100644
+--- a/VERSION
++++ b/VERSION
+@@ -1 +1 @@
+-2.03.14(2) (2021-10-20)
++2.03.15(2)-git (2021-10-20)
+diff --git a/VERSION_DM b/VERSION_DM
+index 52cb6225f..5e5c70a77 100644
+--- a/VERSION_DM
++++ b/VERSION_DM
+@@ -1 +1 @@
+-1.02.181 (2021-10-20)
++1.02.183-git (2021-10-20)
+diff --git a/WHATS_NEW b/WHATS_NEW
+index 240234e4d..b0720cd10 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,3 +1,6 @@
++Version 2.03.15 - 
++===================================
++
+ Version 2.03.14 - 20th October 2021
+ ===================================
+   Device scanning is skipping directories on different filesystems.
+diff --git a/WHATS_NEW_DM b/WHATS_NEW_DM
+index adfff2142..8e06ee9b9 100644
+--- a/WHATS_NEW_DM
++++ b/WHATS_NEW_DM
+@@ -1,3 +1,6 @@
++Version 1.02.183 - 
++====================================
++
+ Version 1.02.181 - 20th October 2021
+ ====================================
+   Add IMA support with 'dmsetup measure' command.
 
 
