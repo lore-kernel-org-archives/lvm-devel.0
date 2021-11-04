@@ -1,435 +1,311 @@
 From: David Teigland <teigland@sourceware.org>
-Date: Thu,  4 Nov 2021 16:37:13 +0000 (GMT)
-Subject: main - vgchange -aay: optimize device scan using pvs_online files
-Message-ID: <20211104163713.0634D385840F@sourceware.org>
+Date: Thu,  4 Nov 2021 16:37:10 +0000 (GMT)
+Subject: main - add hints interface to the pvs_online file information
+Message-ID: <20211104163710.B87EC385840F@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=d558b3ad7e6086480075b3bf750eba0ee66c78ec
-Commit:        d558b3ad7e6086480075b3bf750eba0ee66c78ec
-Parent:        594f6ca97024fa23dfa852b6cc9da272877e1ced
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=726dd25969e9e6a3de285a22cea45e9f5f53520f
+Commit:        726dd25969e9e6a3de285a22cea45e9f5f53520f
+Parent:        6ea8d975b23758e6e099bf51cf7334f27f9fd096
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Wed Nov 3 12:03:29 2021 -0500
+AuthorDate:    Thu Jul 15 16:33:50 2021 -0500
 Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Thu Nov 4 11:08:38 2021 -0500
+CommitterDate: Thu Nov 4 10:58:16 2021 -0500
 
-vgchange -aay: optimize device scan using pvs_online files
+add hints interface to the pvs_online file information
 
-Port the old pvscan -aay scanning optimization to vgchange -aay.
-The optimization uses pvs_online files created by pvscan --cache
-to derive a list of devices to use when activating a VG.  This
-allows autoactivation of a VG to avoid scanning all devices, and
-only scan the devices used by the VG itself.  The optimization is
-applied internally using the device hints interface.
+The information in /run/lvm/pvs_online/<pvid> files can
+be used to build a list of devices for a given VG.
 
-The new option "--autoactivation event" is given to pvscan and
-vgchange commands that are called by event activation.  This
-informs the command that it is being used for event activation,
-so that it can apply checks and optimizations that are specific
-to event activation.  Those include:
+The pvscan -aay command has long used this information to
+activate a VG while scanning only devices in that VG, which
+is an important optimization for autoactivation.
 
-- skipping the command if lvm.conf event_activation=0
-- checking that a VG is complete before activating it
-- using pvs_online files to limit device scanning
+This patch implements the same thing through the existing
+device hints interface, so that the optimization can be
+applied elsewhere.  A future patch will take advantage of
+this optimization in vgchange -aay, which is now used in
+place of pvscan -aay for event activation.
 ---
- test/shell/vgchange-pvs-online.sh | 98 +++++++++++++++++++++++++++++++++++++++
- tools/args.h                      |  6 +++
- tools/command-lines.in            |  8 ++--
- tools/pvscan.c                    | 34 +++++++++++++-
- tools/tools.h                     |  2 +-
- tools/vgchange.c                  | 56 +++++++++++++++++++++-
- udev/69-dm-lvm-metad.rules.in     |  2 +-
- udev/69-dm-lvm.rules.in           |  4 +-
- 8 files changed, 199 insertions(+), 11 deletions(-)
+ lib/commands/toolcontext.h |   1 +
+ lib/config/defaults.h      |   4 ++
+ lib/label/hints.c          | 121 ++++++++++++++++++++++++++++++++++++++++++++-
+ lib/label/label.c          |   3 ++
+ tools/lvmcmdline.c         |   2 +
+ tools/pvscan.c             |  12 +++--
+ 6 files changed, 137 insertions(+), 6 deletions(-)
 
-diff --git a/test/shell/vgchange-pvs-online.sh b/test/shell/vgchange-pvs-online.sh
-new file mode 100644
-index 000000000..bdc481ced
---- /dev/null
-+++ b/test/shell/vgchange-pvs-online.sh
-@@ -0,0 +1,98 @@
-+SKIP_WITH_LVMPOLLD=1
-+SKIP_WITH_LVMLOCKD=1
-+
-+RUNDIR="/run"
-+test -d "$RUNDIR" || RUNDIR="/var/run"
-+PVS_ONLINE_DIR="$RUNDIR/lvm/pvs_online"
-+VGS_ONLINE_DIR="$RUNDIR/lvm/vgs_online"
-+PVS_LOOKUP_DIR="$RUNDIR/lvm/pvs_lookup"
-+
-+_clear_online_files() {
-+        # wait till udev is finished
-+        aux udev_wait
-+        rm -f "$PVS_ONLINE_DIR"/*
-+        rm -f "$VGS_ONLINE_DIR"/*
-+        rm -f "$PVS_LOOKUP_DIR"/*
-+}
-+
-+. lib/inittest
-+
-+aux prepare_devs 4
-+
-+vgcreate $vg1 "$dev1" "$dev2"
-+vgcreate $vg2 "$dev3"
-+pvcreate "$dev4"
-+
-+lvcreate -l1 -n $lv1 -an $vg1
-+lvcreate -l1 -n $lv1 -an $vg2
-+
-+# With no pv online files, vgchange that uses online files
-+# will find no PVs to activate from.
-+
-+_clear_online_files
-+
-+not vgchange -aay --autoactivation event $vg1
-+not vgchange -aay --autoactivation event $vg2
-+vgchange -aay --autoactivation event
-+
-+check lv_field $vg1/$lv1 lv_active ""
-+check lv_field $vg2/$lv1 lv_active ""
-+
-+# incomplete vg will not be activated
-+
-+pvscan --cache "$dev1"
-+vgchange -aay --autoactivation event $vg1
-+# VG foo is incomplete
-+check lv_field $vg1/$lv1 lv_active ""
-+
-+# complete vg is activated
-+
-+pvscan --cache "$dev3"
-+vgchange -aay --autoactivation event $vg2
-+check lv_field $vg2/$lv1 lv_active "active"
-+
-+pvscan --cache "$dev2"
-+vgchange -aay --autoactivation event $vg1
-+check lv_field $vg1/$lv1 lv_active "active"
-+
-+vgchange -an $vg1
-+vgchange -an $vg2
-+
-+# the same tests but using command options matching udev rule
-+
-+_clear_online_files
-+
-+pvscan --cache --listvg --checkcomplete --vgonline --autoactivation event --udevoutput --journal=output "$dev1"
-+vgchange -aay --autoactivation event $vg1
-+# VG foo is incomplete
-+check lv_field $vg1/$lv1 lv_active ""
-+
-+pvscan --cache --listvg --checkcomplete --vgonline --autoactivation event --udevoutput --journal=output "$dev3"
-+vgchange -aay --autoactivation event $vg2
-+check lv_field $vg2/$lv1 lv_active "active"
-+
-+pvscan --cache --listvg --checkcomplete --vgonline --autoactivation event --udevoutput --journal=output "$dev2"
-+vgchange -aay --autoactivation event $vg1
-+check lv_field $vg1/$lv1 lv_active "active"
-+
-+vgchange -an $vg1
-+vgchange -an $vg2
-+
-+# with a full pvscan --cache
-+
-+_clear_online_files
-+
-+pvscan --cache
-+check lv_field $vg1/$lv1 lv_active ""
-+check lv_field $vg2/$lv1 lv_active ""
-+vgchange -aay --autoactivation event $vg1
-+vgchange -aay --autoactivation event $vg2
-+check lv_field $vg1/$lv1 lv_active "active"
-+check lv_field $vg2/$lv1 lv_active "active"
-+
-+vgchange -an $vg1
-+vgchange -an $vg2
-+
-+vgremove -f $vg1
-+vgremove -f $vg2
-+
-diff --git a/tools/args.h b/tools/args.h
-index 774ce33f4..2aed8afbb 100644
---- a/tools/args.h
-+++ b/tools/args.h
-@@ -87,6 +87,12 @@ arg(atversion_ARG, '\0', "atversion", string_VAL, 0, 0,
-     "which does not contain any newer settings for which LVM would\n"
-     "issue a warning message when checking the configuration.\n")
+diff --git a/lib/commands/toolcontext.h b/lib/commands/toolcontext.h
+index 356c79f8a..e864932f2 100644
+--- a/lib/commands/toolcontext.h
++++ b/lib/commands/toolcontext.h
+@@ -183,6 +183,7 @@ struct cmd_context {
+ 	unsigned enable_hints:1;		/* hints are enabled for cmds in general */
+ 	unsigned use_hints:1;			/* if hints are enabled this cmd can use them */
+ 	unsigned pvscan_recreate_hints:1;	/* enable special case hint handling for pvscan --cache */
++	unsigned hints_pvs_online:1;		/* hints="pvs_online" */
+ 	unsigned scan_lvs:1;
+ 	unsigned wipe_outdated_pvs:1;
+ 	unsigned enable_devices_list:1;		/* command is using --devices option */
+diff --git a/lib/config/defaults.h b/lib/config/defaults.h
+index 1b1568a7b..3308b1ea6 100644
+--- a/lib/config/defaults.h
++++ b/lib/config/defaults.h
+@@ -328,4 +328,8 @@
  
-+arg(autoactivation_ARG, '\0', "autoactivation", string_VAL, 0, 0,
-+    "Specify if autoactivation is being used from an event.\n"
-+    "This allows the command to apply settings that are specific\n"
-+    "to event activation, such as device scanning optimizations\n"
-+    "using pvs_online files created by event-based pvscans.\n")
+ #define DEFAULT_WWIDS_FILE "/etc/multipath/wwids"
+ 
++#define PVS_ONLINE_DIR DEFAULT_RUN_DIR "/pvs_online"
++#define VGS_ONLINE_DIR DEFAULT_RUN_DIR "/vgs_online"
++#define PVS_LOOKUP_DIR DEFAULT_RUN_DIR "/pvs_lookup"
 +
- arg(setautoactivation_ARG, '\0', "setautoactivation", bool_VAL, 0, 0,
-     "Set the autoactivation property on a VG or LV.\n"
-     "Display the property with vgs or lvs \"-o autoactivation\".\n"
-diff --git a/tools/command-lines.in b/tools/command-lines.in
-index 10b23e75d..d4691c686 100644
---- a/tools/command-lines.in
-+++ b/tools/command-lines.in
-@@ -1642,14 +1642,15 @@ DESC: Record that a PV is online or offline.
+ #endif				/* _LVM_DEFAULTS_H */
+diff --git a/lib/label/hints.c b/lib/label/hints.c
+index e444a0c82..c84bd1f1c 100644
+--- a/lib/label/hints.c
++++ b/lib/label/hints.c
+@@ -150,11 +150,14 @@
+ #include <sys/stat.h>
+ #include <fcntl.h>
+ #include <unistd.h>
++#include <dirent.h>
+ #include <time.h>
+ #include <sys/types.h>
+ #include <sys/file.h>
+ #include <sys/sysmacros.h>
  
- pvscan --cache_long --activate ay
- OO: --ignorelockingfailure, --reportformat ReportFmt,
----major Number, --minor Number, --noudevsync
-+--major Number, --minor Number, --noudevsync, --autoactivation String
- OP: PV|String ...
- IO: --background
- ID: pvscan_cache
- DESC: Record that a PV is online and autoactivate the VG if complete.
- 
- pvscan --cache_long --listvg PV
--OO: --ignorelockingfailure, --checkcomplete, --vgonline, --udevoutput
-+OO: --ignorelockingfailure, --checkcomplete, --vgonline, --udevoutput,
-+--autoactivation String
- ID: pvscan_cache
- DESC: Record that a PV is online and list the VG using the PV.
- 
-@@ -1747,7 +1748,8 @@ DESC: Start or stop processing LV conversions.
- 
- vgchange --activate Active
- OO: --activationmode ActivationMode, --ignoreactivationskip, --partial, --sysinit,
----readonly, --ignorelockingfailure, --monitor Bool, --poll Bool, OO_VGCHANGE
-+--readonly, --ignorelockingfailure, --monitor Bool, --poll Bool,
-+--autoactivation String, OO_VGCHANGE
- OP: VG|Tag|Select ...
- IO: --ignoreskippedcluster
- ID: vgchange_activate
-diff --git a/tools/pvscan.c b/tools/pvscan.c
-index 4f97e211c..d9607fdb6 100644
---- a/tools/pvscan.c
-+++ b/tools/pvscan.c
-@@ -750,7 +750,7 @@ static int _pvscan_aa_single(struct cmd_context *cmd, const char *vg_name,
- 
- 	log_debug("pvscan autoactivating VG %s.", vg_name);
- 
--	if (!vgchange_activate(cmd, vg, CHANGE_AAY)) {
-+	if (!vgchange_activate(cmd, vg, CHANGE_AAY, 1)) {
- 		log_error_pvscan(cmd, "%s: autoactivation failed.", vg->name);
- 		pp->activate_errors++;
- 	}
-@@ -1038,7 +1038,7 @@ static int _pvscan_aa_quick(struct cmd_context *cmd, struct pvscan_aa_params *pp
- 
- 	log_debug("pvscan autoactivating VG %s.", vgname);
- 
--	if (!vgchange_activate(cmd, vg, CHANGE_AAY)) {
-+	if (!vgchange_activate(cmd, vg, CHANGE_AAY, 1)) {
- 		log_error_pvscan(cmd, "%s: autoactivation failed.", vg->name);
- 		pp->activate_errors++;
- 	}
-@@ -1869,12 +1869,35 @@ static int _pvscan_cache_args(struct cmd_context *cmd, int argc, char **argv,
- 	return ret;
++int online_pvid_file_read(char *path, int *major, int *minor, char *vgname);
++
+ static const char *_hints_file = DEFAULT_RUN_DIR "/hints";
+ static const char *_nohints_file = DEFAULT_RUN_DIR "/nohints";
+ static const char *_newhints_file = DEFAULT_RUN_DIR "/newhints";
+@@ -1278,6 +1281,109 @@ check:
+ 	free(name);
  }
  
-+static int _get_autoactivation(struct cmd_context *cmd, int event_activation, int *skip_command)
++static int _get_hints_from_pvs_online(struct cmd_context *cmd, struct dm_list *hints_out,
++				      struct dm_list *devs_in, struct dm_list *devs_out)
 +{
-+	const char *aa_str;
++	char path[PATH_MAX];
++	char file_vgname[NAME_LEN];
++	struct dm_list hints_list;
++	struct hint file_hint;
++	struct hint *alloc_hint;
++	struct hint *hint, *hint2;
++	struct device_list *devl, *devl2;
++	int file_major, file_minor;
++	int found = 0;
++	DIR *dir;
++	struct dirent *de;
++	char *vgname = NULL;
++	char *pvid;
 +
-+	if (!(aa_str = arg_str_value(cmd, autoactivation_ARG, NULL)))
-+		return 1;
++	dm_list_init(&hints_list);
 +
-+	if (strcmp(aa_str, "event")) {
-+		log_print_pvscan(cmd, "Skip pvscan for unknown autoactivation value.");
-+		*skip_command = 1;
-+		return 1;
++	if (!(dir = opendir(PVS_ONLINE_DIR)))
++		return 0;
++
++	while ((de = readdir(dir))) {
++		if (de->d_name[0] == '.')
++			continue;
++
++		pvid = de->d_name;
++
++		if (strlen(pvid) != ID_LEN) /* 32 */
++			continue;
++
++		memset(path, 0, sizeof(path));
++		snprintf(path, sizeof(path), "%s/%s", PVS_ONLINE_DIR, pvid);
++
++		memset(&file_hint, 0, sizeof(file_hint));
++		memset(file_vgname, 0, sizeof(file_vgname));
++		file_major = 0;
++		file_minor = 0;
++
++		if (!online_pvid_file_read(path, &file_major, &file_minor, file_vgname))
++			continue;
++
++		if (!dm_strncpy(file_hint.pvid, pvid, sizeof(file_hint.pvid)))
++			continue;
++
++		file_hint.devt = makedev(file_major, file_minor);
++
++		if (file_vgname[0] && validate_name(file_vgname)) {
++			if (!dm_strncpy(file_hint.vgname, file_vgname, sizeof(file_hint.vgname)))
++				continue;
++		}
++
++		if (!(alloc_hint = malloc(sizeof(struct hint))))
++			continue;
++
++		memcpy(alloc_hint, &file_hint, sizeof(struct hint));
++
++		log_debug("add hint %s %d:%d %s from pvs_online", file_hint.pvid, file_major, file_minor, file_vgname);
++		dm_list_add(&hints_list, &alloc_hint->list);
++		found++;
 +	}
-+	
-+	if (!event_activation) {
-+		log_print_pvscan(cmd, "Skip pvscan for event with event_activation=0.");
-+		*skip_command = 1;
-+		return 1;
-+	}
 +
-+	return 1;
-+}
++	if (closedir(dir))
++		stack;
 +
- int pvscan_cache_cmd(struct cmd_context *cmd, int argc, char **argv)
- {
- 	struct pvscan_aa_params pp = { 0 };
- 	struct dm_list complete_vgnames;
- 	int do_activate = arg_is_set(cmd, activate_ARG);
- 	int event_activation;
-+	int skip_command = 0;
- 	int devno_args = 0;
- 	int do_all;
- 	int ret;
-@@ -1946,6 +1969,13 @@ int pvscan_cache_cmd(struct cmd_context *cmd, int argc, char **argv)
- 			log_verbose("Ignoring pvscan --cache because event_activation is disabled.");
- 			return ECMD_PROCESSED;
- 		}
++	log_debug("accept hints found %d from pvs_online", found);
 +
-+		if (!_get_autoactivation(cmd, event_activation, &skip_command))
-+			return_ECMD_FAILED;
++	_get_single_vgname_cmd_arg(cmd, &hints_list, &vgname);
 +
-+		if (skip_command)
-+			return ECMD_PROCESSED;
++	/*
++	 * apply_hints equivalent, move devs from devs_in to devs_out if
++	 * their devno matches the devno of a hint (and if the hint matches
++	 * the vgname when a vgname is present.)
++	 */
++	dm_list_iterate_items_safe(devl, devl2, devs_in) {
++		dm_list_iterate_items_safe(hint, hint2, &hints_list) {
++			if ((MAJOR(devl->dev->dev) == MAJOR(hint->devt)) &&
++			    (MINOR(devl->dev->dev) == MINOR(hint->devt))) {
 +
- 		if (!_pvscan_cache_args(cmd, argc, argv, &complete_vgnames))
- 			return ECMD_FAILED;
- 	}
-diff --git a/tools/tools.h b/tools/tools.h
-index bc98fcb09..182ff3af9 100644
---- a/tools/tools.h
-+++ b/tools/tools.h
-@@ -228,7 +228,7 @@ int mirror_remove_missing(struct cmd_context *cmd,
- 
- 
- int vgchange_activate(struct cmd_context *cmd, struct volume_group *vg,
--		       activation_change_t activate);
-+		       activation_change_t activate, int vg_complete_to_activate);
- 
- int vgchange_background_polling(struct cmd_context *cmd, struct volume_group *vg);
- 
-diff --git a/tools/vgchange.c b/tools/vgchange.c
-index e4b57dbd2..ee06c498c 100644
---- a/tools/vgchange.c
-+++ b/tools/vgchange.c
-@@ -19,6 +19,7 @@
- struct vgchange_params {
- 	int lock_start_count;
- 	unsigned int lock_start_sanlock : 1;
-+	unsigned int vg_complete_to_activate : 1;
- };
- 
- /*
-@@ -195,10 +196,11 @@ int vgchange_background_polling(struct cmd_context *cmd, struct volume_group *vg
- }
- 
- int vgchange_activate(struct cmd_context *cmd, struct volume_group *vg,
--		      activation_change_t activate)
-+		      activation_change_t activate, int vg_complete_to_activate)
- {
- 	int lv_open, active, monitored = 0, r = 1;
- 	const struct lv_list *lvl;
-+	struct pv_list *pvl;
- 	int do_activate = is_change_activating(activate);
- 
- 	/*
-@@ -219,6 +221,15 @@ int vgchange_activate(struct cmd_context *cmd, struct volume_group *vg,
- 		return 1;
- 	}
- 
-+	if (do_activate && vg_complete_to_activate) {
-+		dm_list_iterate_items(pvl, &vg->pvs) {
-+			if (!pvl->pv->dev) {
-+				log_print("VG %s is incomplete.", vg->name);
-+				return 1;
++				if (vgname && hint->vgname[0] && strcmp(vgname, hint->vgname))
++					goto next_dev;
++
++				snprintf(hint->name, sizeof(hint->name), "%s", dev_name(devl->dev));
++				hint->chosen = 1;
++
++				dm_list_del(&devl->list);
++				dm_list_add(devs_out, &devl->list);
 +			}
 +		}
++ next_dev:
++		;
 +	}
 +
- 	/*
- 	 * Safe, since we never write out new metadata here. Required for
- 	 * partial activation to work.
-@@ -647,6 +658,7 @@ static int _vgchange_single(struct cmd_context *cmd, const char *vg_name,
- 			    struct volume_group *vg,
- 			    struct processing_handle *handle)
- {
-+	struct vgchange_params *vp = (struct vgchange_params *)handle->custom_handle;
- 	int ret = ECMD_PROCESSED;
- 	unsigned i;
- 	activation_change_t activate;
-@@ -701,7 +713,7 @@ static int _vgchange_single(struct cmd_context *cmd, const char *vg_name,
- 
- 	if (arg_is_set(cmd, activate_ARG)) {
- 		activate = (activation_change_t) arg_uint_value(cmd, activate_ARG, 0);
--		if (!vgchange_activate(cmd, vg, activate))
-+		if (!vgchange_activate(cmd, vg, activate, vp->vg_complete_to_activate))
- 			return_ECMD_FAILED;
- 	} else if (arg_is_set(cmd, refresh_ARG)) {
- 		/* refreshes the visible LVs (which starts polling) */
-@@ -722,8 +734,38 @@ static int _vgchange_single(struct cmd_context *cmd, const char *vg_name,
- 	return ret;
- }
- 
-+static int _check_autoactivation(struct cmd_context *cmd, struct vgchange_params *vp, int *skip_command)
-+{
-+	const char *aa;
++	log_debug("applied hints using %d other %d vgname %s from pvs_online",
++		  dm_list_size(devs_out), dm_list_size(devs_in), vgname ?: "");
 +
-+	if (!(aa = arg_str_value(cmd, autoactivation_ARG, NULL)))
-+		return 1;
++	dm_list_splice(hints_out, &hints_list);
 +
-+	if (strcmp(aa, "event")) {
-+		log_print("Skip vgchange for unknown autoactivation value.");
-+		*skip_command = 1;
-+		return 1;
-+	}
-+
-+	if (!find_config_tree_bool(cmd, global_event_activation_CFG, NULL)) {
-+		log_print("Skip vgchange for event and event_activation=0.");
-+		*skip_command = 1;
-+		return 1;
-+	}
-+
-+	vp->vg_complete_to_activate = 1;
-+
-+	if (!arg_is_set(cmd, nohints_ARG))
-+		cmd->hints_pvs_online = 1;
-+	else
-+		cmd->use_hints = 0;
++	free(vgname);
 +
 +	return 1;
 +}
 +
- int vgchange(struct cmd_context *cmd, int argc, char **argv)
- {
-+	struct vgchange_params vp = { 0 };
- 	struct processing_handle *handle;
- 	uint32_t flags = 0;
- 	int ret;
-@@ -837,6 +879,14 @@ int vgchange(struct cmd_context *cmd, int argc, char **argv)
- 			cmd->lockd_vg_enforce_sh = 1;
- 	}
+ /*
+  * Returns 0: no hints are used.
+  *  . newhints is set if this command should create new hints after scan
+@@ -1299,7 +1405,7 @@ int get_hints(struct cmd_context *cmd, struct dm_list *hints_out, int *newhints,
+ 	*newhints = NEWHINTS_NONE;
  
-+	if (arg_is_set(cmd, autoactivation_ARG)) {
-+		int skip_command = 0;
-+		if (!_check_autoactivation(cmd, &vp, &skip_command))
-+			return ECMD_FAILED;
-+		if (skip_command)
-+			return ECMD_PROCESSED;
+ 	/* No commands are using hints. */
+-	if (!cmd->enable_hints)
++	if (!cmd->enable_hints && !cmd->hints_pvs_online)
+ 		return 0;
+ 
+ 	/*
+@@ -1319,6 +1425,19 @@ int get_hints(struct cmd_context *cmd, struct dm_list *hints_out, int *newhints,
+ 	if (!cmd->use_hints)
+ 		return 0;
+ 
++	/*
++	 * enable_hints is 0 for the special hints=pvs_online
++	 * and by lvm.conf hints="none" does not disable hints=pvs_online.
++	 * hints=pvs_online can be disabled with --nohints.
++	 */
++	if (cmd->hints_pvs_online) {
++		if (!_get_hints_from_pvs_online(cmd, &hints_list, devs_in, devs_out)) {
++			log_debug("get_hints: pvs_online failed");
++			return 0;
++		}
++		return 1;
 +	}
 +
- 	if (update)
- 		flags |= READ_FOR_UPDATE;
- 	else if (arg_is_set(cmd, activate_ARG))
-@@ -847,6 +897,8 @@ int vgchange(struct cmd_context *cmd, int argc, char **argv)
- 		return ECMD_FAILED;
+ 	/*
+ 	 * Check if another command created the nohints file to prevent us from
+ 	 * using hints.
+diff --git a/lib/label/label.c b/lib/label/label.c
+index 9fac3e464..f9ab9a1f1 100644
+--- a/lib/label/label.c
++++ b/lib/label/label.c
+@@ -1130,6 +1130,9 @@ int label_scan(struct cmd_context *cmd)
+ 			}
+ 		}
+ 	}
++
++	log_debug_devs("Filtering devices to scan done (nodata)");
++
+ 	cmd->filter_nodata_only = 0;
+ 
+ 	dm_list_iterate_items(devl, &all_devs)
+diff --git a/tools/lvmcmdline.c b/tools/lvmcmdline.c
+index 1e12bedca..9cbeab91d 100644
+--- a/tools/lvmcmdline.c
++++ b/tools/lvmcmdline.c
+@@ -2540,6 +2540,8 @@ static int _get_current_settings(struct cmd_context *cmd)
+ 		if (!strcmp(hint_mode, "none")) {
+ 			cmd->enable_hints = 0;
+ 			cmd->use_hints = 0;
++		} else if (!strcmp(hint_mode, "pvs_online")) {
++			cmd->hints_pvs_online = 1;
+ 		}
  	}
  
-+	handle->custom_handle = &vp;
+diff --git a/tools/pvscan.c b/tools/pvscan.c
+index 7d84e45d4..01f57af0c 100644
+--- a/tools/pvscan.c
++++ b/tools/pvscan.c
+@@ -21,6 +21,8 @@
+ 
+ #include <dirent.h>
+ 
++int online_pvid_file_read(char *path, int *major, int *minor, char *vgname);
 +
- 	ret = process_each_vg(cmd, argc, argv, NULL, NULL, flags, 0, handle, &_vgchange_single);
+ struct pvscan_params {
+ 	int new_pvs_found;
+ 	int pvs_found;
+@@ -225,7 +227,7 @@ static char *_vgname_in_pvid_file_buf(char *buf)
  
- 	destroy_processing_handle(cmd, handle);
-diff --git a/udev/69-dm-lvm-metad.rules.in b/udev/69-dm-lvm-metad.rules.in
-index 78f506520..a2384f2af 100644
---- a/udev/69-dm-lvm-metad.rules.in
-+++ b/udev/69-dm-lvm-metad.rules.in
-@@ -121,6 +121,6 @@ LABEL="direct_pvscan"
- #  MD    |          |      X      |       X*       |                   |
- #  loop  |          |      X      |       X*       |                   |
- #  other |    X     |             |       X        |                   |   X
--RUN+="(LVM_EXEC)/lvm pvscan --background --cache --activate ay --major $major --minor $minor", ENV{LVM_SCANNED}="1"
-+RUN+="(LVM_EXEC)/lvm pvscan --cache --aay --autoactivation event --major $major --minor $minor", ENV{LVM_SCANNED}="1"
+ #define MAX_PVID_FILE_SIZE 512
  
- LABEL="lvm_end"
-diff --git a/udev/69-dm-lvm.rules.in b/udev/69-dm-lvm.rules.in
-index d6bf1e0e9..4f34b2cc2 100644
---- a/udev/69-dm-lvm.rules.in
-+++ b/udev/69-dm-lvm.rules.in
-@@ -79,8 +79,8 @@ ENV{SYSTEMD_READY}="1"
- # TODO: adjust the output of vgchange -aay so that
- # it's better suited to appearing in the journal.
+-static int _online_pvid_file_read(char *path, int *major, int *minor, char *vgname)
++int online_pvid_file_read(char *path, int *major, int *minor, char *vgname)
+ {
+ 	char buf[MAX_PVID_FILE_SIZE] = { 0 };
+ 	char *name;
+@@ -328,7 +330,7 @@ static void _online_pvid_file_remove_devno(int major, int minor)
+ 		file_minor = 0;
+ 		memset(file_vgname, 0, sizeof(file_vgname));
  
--IMPORT{program}="(LVM_EXEC)/lvm pvscan --cache --listvg --checkcomplete --vgonline --udevoutput --journal=output $env{DEVNAME}"
--ENV{LVM_VG_NAME_COMPLETE}=="?*", RUN+="/usr/bin/systemd-run -r --no-block --property DefaultDependencies=no --unit lvm-activate-$env{LVM_VG_NAME_COMPLETE} (LVM_EXEC)/lvm vgchange -aay --nohints $env{LVM_VG_NAME_COMPLETE}"
-+IMPORT{program}="(LVM_EXEC)/lvm pvscan --cache --listvg --checkcomplete --vgonline --autoactivation event --udevoutput --journal=output $env{DEVNAME}"
-+ENV{LVM_VG_NAME_COMPLETE}=="?*", RUN+="/usr/bin/systemd-run -r --no-block --property DefaultDependencies=no --unit lvm-activate-$env{LVM_VG_NAME_COMPLETE} (LVM_EXEC)/lvm vgchange -aay --autoactivation event $env{LVM_VG_NAME_COMPLETE}"
- GOTO="lvm_end"
+-		_online_pvid_file_read(path, &file_major, &file_minor, file_vgname);
++		online_pvid_file_read(path, &file_major, &file_minor, file_vgname);
  
- LABEL="lvm_end"
+ 		if ((file_major == major) && (file_minor == minor)) {
+ 			log_debug("Unlink pv online %s", path);
+@@ -447,7 +449,7 @@ check_duplicate:
+ 
+ 	memset(file_vgname, 0, sizeof(file_vgname));
+ 
+-	_online_pvid_file_read(path, &file_major, &file_minor, file_vgname);
++	online_pvid_file_read(path, &file_major, &file_minor, file_vgname);
+ 
+ 	if ((file_major == major) && (file_minor == minor)) {
+ 		log_debug("Existing online file for %d:%d", major, minor);
+@@ -847,7 +849,7 @@ static int _get_devs_from_saved_vg(struct cmd_context *cmd, const char *vgname,
+ 		file_minor = 0;
+ 		memset(file_vgname, 0, sizeof(file_vgname));
+ 
+-		_online_pvid_file_read(path, &file_major, &file_minor, file_vgname);
++		online_pvid_file_read(path, &file_major, &file_minor, file_vgname);
+ 
+ 		if (file_vgname[0] && strcmp(vgname, file_vgname)) {
+ 			log_error_pvscan(cmd, "Wrong VG found for %d:%d PVID %s: %s vs %s",
+@@ -1254,7 +1256,7 @@ static void _set_pv_devices_online(struct cmd_context *cmd, struct volume_group
+ 		minor = 0;
+ 		file_vgname[0] = '\0';
+ 
+-		_online_pvid_file_read(path, &major, &minor, file_vgname);
++		online_pvid_file_read(path, &major, &minor, file_vgname);
+ 
+ 		if (file_vgname[0] && strcmp(vg->name, file_vgname)) {
+ 			log_warn("WARNING: VG %s PV %s wrong vgname in online file %s",
 
 
