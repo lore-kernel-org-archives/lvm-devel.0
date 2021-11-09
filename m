@@ -1,428 +1,531 @@
 From: David Teigland <teigland@sourceware.org>
-Date: Mon,  8 Nov 2021 21:32:56 +0000 (GMT)
-Subject: main - vgchange -aay: improve unexpected command variations
-Message-ID: <20211108213256.C00913858D3C@sourceware.org>
+Date: Tue,  9 Nov 2021 17:45:04 +0000 (GMT)
+Subject: main - pvs_online: include devname in pvid files
+Message-ID: <20211109174504.B12A93858020@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=024ce50f06feff2dae53dce83398911bef071a6e
-Commit:        024ce50f06feff2dae53dce83398911bef071a6e
-Parent:        14b68ea313865041433e18bac92a6dfcf6128b15
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=73b4602f219767850a2834c6b15bdb5e6d636870
+Commit:        73b4602f219767850a2834c6b15bdb5e6d636870
+Parent:        024ce50f06feff2dae53dce83398911bef071a6e
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Mon Nov 8 11:30:25 2021 -0600
+AuthorDate:    Mon Nov 8 16:02:48 2021 -0600
 Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Mon Nov 8 15:19:25 2021 -0600
+CommitterDate: Tue Nov 9 11:26:26 2021 -0600
 
-vgchange -aay: improve unexpected command variations
+pvs_online: include devname in pvid files
 
-For completeness and consistency, adjust the behavior
-for some variations of:
-
-  vgchange -aay --autoactivation event [vgname]
-
-The current standard use is with a VG name arg, and the
-command is only called when all pvs_online files exist.
-This is the optimal case, in which only pvs_online devs
-are read.  This remains the same.
-
-Clean up behaviors for some other unexpected uses of the
-command:
-
-. With no VG name arg, the command activates any VGs
-  that are complete according to pvs_online.  If no
-  pvs_online files exist, it does nothing.
-
-. If a VG name is used but no PVs online files exist for
-  the VG, or the PVs online files are incomplete, then
-  consider there could be a problem with the pvs_online
-  files, and fall back to a full label scan prior to
-  attempting the activation.
+Include the device name in the /run/lvm/pvs_online/pvid files.
+Commands using the pvid file can use the devname to more quickly
+find the correct device, vs finding the device using the
+major:minor number.  If the devname in the pvid file is missing
+or incorrect, fall back to using the devno.
 ---
- lib/device/dev-cache.c            |   2 +-
- lib/device/online.c               |   6 ++
- lib/label/label.c                 |  48 +++++++++++-----
- lib/label/label.h                 |   4 +-
- test/shell/vgchange-pvs-online.sh | 112 +++++++++++++++++++++++++++++++-------
- tools/vgchange.c                  |  47 ++++++++++++++--
- 6 files changed, 178 insertions(+), 41 deletions(-)
+ lib/device/dev-cache.c |  50 ++++++++++++++++++
+ lib/device/dev-cache.h |   1 +
+ lib/device/online.c    | 138 +++++++++++++++++++++++++++++++++++++------------
+ lib/device/online.h    |   3 +-
+ lib/label/label.c      |  18 ++-----
+ tools/pvscan.c         |  41 +++++++--------
+ 6 files changed, 182 insertions(+), 69 deletions(-)
 
 diff --git a/lib/device/dev-cache.c b/lib/device/dev-cache.c
-index e71cef38d..525dae31e 100644
+index 525dae31e..b5f355484 100644
 --- a/lib/device/dev-cache.c
 +++ b/lib/device/dev-cache.c
-@@ -2164,7 +2164,7 @@ static char *_get_devname_from_devno(struct cmd_context *cmd, dev_t devno)
- 		}
+@@ -2241,3 +2241,53 @@ int setup_devno_in_dev_cache(struct cmd_context *cmd, dev_t devno)
+ 	return setup_devname_in_dev_cache(cmd, devname);
+ }
  
- 		if (devname[0]) {
--			log_debug("Found %s for %d:%d from sys", devname, major, minor);
-+			log_debug("Found %s for %d:%d from sys dm", devname, major, minor);
- 			return _strdup(devname);
- 		}
- 		return NULL;
++struct device *setup_dev_in_dev_cache(struct cmd_context *cmd, dev_t devno, const char *devname)
++{
++	struct device *dev;
++	struct stat buf;
++	int major = (int)MAJOR(devno);
++	int minor = (int)MINOR(devno);
++
++	if (devname) {
++		if (stat(devname, &buf) < 0) {
++			log_error("Cannot access device %s for %d:%d.", devname, major, minor);
++			if (!(devname = _get_devname_from_devno(cmd, devno))) {
++				log_error("No device name found from %d:%d.", major, minor);
++				return_NULL;
++			}
++			if (stat(devname, &buf) < 0) {
++				log_error("Cannot access device %s from %d:%d.", devname, major, minor);
++				return_NULL;
++			}
++		}
++	} else {
++		if (!(devname = _get_devname_from_devno(cmd, devno))) {
++			log_error("No device name found from %d:%d.", major, minor);
++			return_NULL;
++		}
++		if (stat(devname, &buf) < 0) {
++			log_error("Cannot access device %s from %d:%d.", devname, major, minor);
++			return_NULL;
++		}
++	}
++
++	if (!S_ISBLK(buf.st_mode)) {
++		log_error("Invaild device type %s.", devname);
++		return_NULL;
++	}
++
++	if (devno && (buf.st_rdev != devno)) {
++		log_warn("Found %s devno %d:%d expected %d:%d.", devname,
++			  (int)MAJOR(buf.st_rdev), (int)MINOR(buf.st_rdev), major, minor);
++	}
++
++	if (!_insert_dev(devname, buf.st_rdev))
++		return_NULL;
++
++	if (!(dev = (struct device *) dm_hash_lookup(_cache.names, devname))) {
++		log_error("Device lookup failed for %d:%d %s", major, minor, devname);
++		return_NULL;
++	}
++
++	return dev;
++}
+diff --git a/lib/device/dev-cache.h b/lib/device/dev-cache.h
+index 175c0a3e3..449bfeb75 100644
+--- a/lib/device/dev-cache.h
++++ b/lib/device/dev-cache.h
+@@ -82,5 +82,6 @@ int setup_device(struct cmd_context *cmd, const char *devname);
+ int setup_devices_for_online_autoactivation(struct cmd_context *cmd);
+ int setup_devname_in_dev_cache(struct cmd_context *cmd, const char *devname);
+ int setup_devno_in_dev_cache(struct cmd_context *cmd, dev_t devno);
++struct device *setup_dev_in_dev_cache(struct cmd_context *cmd, dev_t devno, const char *devname);
+ 
+ #endif
 diff --git a/lib/device/online.c b/lib/device/online.c
-index cd89d72e3..58696871e 100644
+index 58696871e..c67f45001 100644
 --- a/lib/device/online.c
 +++ b/lib/device/online.c
-@@ -134,8 +134,12 @@ int get_pvs_online(struct dm_list *pvs_online, const char *vgname)
+@@ -21,35 +21,50 @@
  
- 		dm_list_add(pvs_online, &po->list);
+ #include <dirent.h>
+ 
+-static char *_vgname_in_pvid_file_buf(char *buf)
++/*
++ * file contains:
++ * <major>:<minor>\n
++ * vg:<vgname>\n
++ * dev:<devname>\n\0
++ *
++ * It's possible that vg and dev may not exist.
++ */
++
++static int _copy_pvid_file_field(const char *field, char *buf, int bufsize, char *out, int outsize)
+ {
+-	char *p, *n;
++	char *p;
++	int i = 0;
++	
++	if (!(p = strstr(buf, field)))
++		return 0;
+ 
+-	/*
+-	 * file contains:
+-	 * <major>:<minor>\n
+-	 * vg:<vgname>\n\0
+-	 */
++	p += strlen(field);
+ 
+-	if (!(p = strchr(buf, '\n')))
+-		return NULL;
++	while (1) {
++		if (*p == '\n')
++			break;
++		if (*p == '\0')
++			break;
+ 
+-	p++; /* skip \n */
++		if (p >= (buf + bufsize))
++			return 0;
++		if (i >= outsize-1)
++			return 0;
+ 
+-	if (*p && !strncmp(p, "vg:", 3)) {
+-		if ((n = strchr(p, '\n')))
+-			*n = '\0';
+-		return p + 3;
++		out[i] = *p;
++
++		i++;
++		p++;
  	}
+-	return NULL;
 +
- 	if (closedir(dir))
- 		log_sys_debug("closedir", PVS_ONLINE_DIR);
++	return i ? 1 : 0;
+ }
+ 
+ #define MAX_PVID_FILE_SIZE 512
+ 
+-int online_pvid_file_read(char *path, int *major, int *minor, char *vgname)
++int online_pvid_file_read(char *path, int *major, int *minor, char *vgname, char *devname)
+ {
+ 	char buf[MAX_PVID_FILE_SIZE] = { 0 };
+-	char *name;
+ 	int fd, rv;
+ 
+ 	fd = open(path, O_RDONLY);
+@@ -72,12 +87,47 @@ int online_pvid_file_read(char *path, int *major, int *minor, char *vgname)
+ 		return 0;
+ 	}
+ 
+-	/* vgname points to an offset in buf */
+-	if ((name = _vgname_in_pvid_file_buf(buf)))
+-		strncpy(vgname, name, NAME_LEN);
+-	else
+-		log_debug("No vgname in %s", path);
++	if (vgname) {
++		if (!strstr(buf, "vg:")) {
++			log_debug("No vgname in %s", path);
++			vgname[0] = '\0';
++			goto copy_dev;
++		}
 +
-+	log_debug("PVs online found %d for %s", dm_list_size(pvs_online), vgname ?: "all");
++		if (!_copy_pvid_file_field("vg:", buf, MAX_PVID_FILE_SIZE, vgname, NAME_LEN)) {
++			log_warn("Ignoring invalid vg field in %s", path);
++			vgname[0] = '\0';
++			goto copy_dev;
++		}
 +
++		if (!validate_name(vgname)) {
++			log_warn("Ignoring invalid vgname in %s (%s)", path, vgname);
++			vgname[0] = '\0';
++			goto copy_dev;
++		}
++	}
++
++ copy_dev:
++	if (devname) {
++		if (!strstr(buf, "dev:")) {
++			log_debug("No devname in %s", path);
++			devname[0] = '\0';
++			goto out;
++		}
++
++		if (!_copy_pvid_file_field("dev:", buf, MAX_PVID_FILE_SIZE, devname, NAME_LEN)) {
++			log_warn("Ignoring invalid devname field in %s", path);
++			devname[0] = '\0';
++			goto out;
++		}
+ 
++		if (strncmp(devname, "/dev/", 5)) {
++			log_warn("Ignoring invalid devname in %s (%s)", path, devname);
++			devname[0] = '\0';
++			goto out;
++		}
++	}
++ out:
  	return 1;
  }
  
-@@ -355,6 +359,8 @@ int get_pvs_lookup(struct dm_list *pvs_online, const char *vgname)
+@@ -95,6 +145,7 @@ int get_pvs_online(struct dm_list *pvs_online, const char *vgname)
+ {
+ 	char path[PATH_MAX];
+ 	char file_vgname[NAME_LEN];
++	char file_devname[NAME_LEN];
+ 	DIR *dir;
+ 	struct dirent *de;
+ 	struct pv_online *po;
+@@ -116,8 +167,9 @@ int get_pvs_online(struct dm_list *pvs_online, const char *vgname)
+ 		file_major = 0;
+ 		file_minor = 0;
+ 		memset(file_vgname, 0, sizeof(file_vgname));
++		memset(file_devname, 0, sizeof(file_devname));
+ 
+-		if (!online_pvid_file_read(path, &file_major, &file_minor, file_vgname))
++		if (!online_pvid_file_read(path, &file_major, &file_minor, file_vgname, file_devname))
+ 			continue;
+ 
+ 		if (vgname && strcmp(file_vgname, vgname))
+@@ -130,15 +182,18 @@ int get_pvs_online(struct dm_list *pvs_online, const char *vgname)
+ 		if (file_major || file_minor)
+ 			po->devno = MKDEV(file_major, file_minor);
+ 		if (file_vgname[0])
+-			strncpy(po->vgname, file_vgname, NAME_LEN-1);
++			strncpy(po->vgname, file_vgname, NAME_LEN);
++		if (file_devname[0])
++			strncpy(po->devname, file_devname, NAME_LEN);
+ 
++		log_debug("Found PV online %s for VG %s %s", path, vgname, file_devname);
  		dm_list_add(pvs_online, &po->list);
  	}
  
-+	log_debug("PVs online lookup found %d for %s", dm_list_size(pvs_online), vgname);
-+
- 	fclose(fp);
+ 	if (closedir(dir))
+ 		log_sys_debug("closedir", PVS_ONLINE_DIR);
+ 
+-	log_debug("PVs online found %d for %s", dm_list_size(pvs_online), vgname ?: "all");
++	log_debug("Found PVs online %d for %s", dm_list_size(pvs_online), vgname ?: "all");
+ 
  	return 1;
+ }
+@@ -195,6 +250,9 @@ int online_pvid_file_create(struct cmd_context *cmd, struct device *dev, const c
+ 	char path[PATH_MAX];
+ 	char buf[MAX_PVID_FILE_SIZE] = { 0 };
+ 	char file_vgname[NAME_LEN];
++	char file_devname[NAME_LEN];
++	char devname[NAME_LEN];
++	int devnamelen;
+ 	int file_major = 0, file_minor = 0;
+ 	int major, minor;
+ 	int fd;
+@@ -202,6 +260,7 @@ int online_pvid_file_create(struct cmd_context *cmd, struct device *dev, const c
+ 	int len;
+ 	int len1 = 0;
+ 	int len2 = 0;
++	int len3 = 0;
  
-diff --git a/lib/label/label.c b/lib/label/label.c
-index 2f9b5c371..9875b5f02 100644
---- a/lib/label/label.c
-+++ b/lib/label/label.c
-@@ -1023,13 +1023,13 @@ int label_scan_for_pvid(struct cmd_context *cmd, char *pvid, struct device **dev
+ 	major = (int)MAJOR(dev->dev);
+ 	minor = (int)MINOR(dev->dev);
+@@ -218,13 +277,22 @@ int online_pvid_file_create(struct cmd_context *cmd, struct device *dev, const c
  
- /*
-  * Use files under /run/lvm/, created by pvscan --cache autoactivation,
-- * to optimize device setup/scanning for a command that is run for a
-- * specific vg name.  autoactivation happens during system startup
-- * when the hints file is not useful, so this uses the online files as
-- * an alternative.
-- */ 
--
--int label_scan_vg_online(struct cmd_context *cmd, const char *vgname)
-+ * to optimize device setup/scanning.  autoactivation happens during
-+ * system startup when the hints file is not useful, but he pvs_online
-+ * files can provide a similar optimization to the hints file.
-+ */
-+ 
-+int label_scan_vg_online(struct cmd_context *cmd, const char *vgname,
-+			 int *found_none, int *found_all, int *found_incomplete)
- {
- 	struct dm_list pvs_online;
- 	struct dm_list devs;
-@@ -1042,6 +1042,8 @@ int label_scan_vg_online(struct cmd_context *cmd, const char *vgname)
- 	dm_list_init(&pvs_online);
- 	dm_list_init(&devs);
- 
-+	log_debug_devs("Finding online devices to scan");
-+
- 	/* reads devices file, does not populate dev-cache */
- 	if (!setup_devices_for_online_autoactivation(cmd))
- 		return 0;
-@@ -1055,11 +1057,21 @@ int label_scan_vg_online(struct cmd_context *cmd, const char *vgname)
- 	 * info from the online files tell us which devices those PVs are
- 	 * located on.
- 	 */
--	if (!get_pvs_lookup(&pvs_online, vgname)) {
--		if (!get_pvs_online(&pvs_online, vgname))
-+	if (vgname) {
-+		if (!get_pvs_lookup(&pvs_online, vgname)) {
-+			if (!get_pvs_online(&pvs_online, vgname))
-+				goto bad;
-+		}
-+	} else {
-+		if (!get_pvs_online(&pvs_online, NULL))
- 			goto bad;
- 	}
- 
-+	if (dm_list_empty(&pvs_online)) {
-+		*found_none = 1;
-+		return 1;
-+	}
-+
- 	/*
- 	 * For each po devno add a struct dev to dev-cache.  This is a faster
- 	 * alternative to the usual dev_cache_scan() which looks at all
-@@ -1201,8 +1213,10 @@ int label_scan_vg_online(struct cmd_context *cmd, const char *vgname)
- 
- 	free_po_list(&pvs_online);
- 
--	if (dm_list_empty(&devs))
-+	if (dm_list_empty(&devs)) {
-+		*found_none = 1;
- 		return 1;
-+	}
- 
- 	/*
- 	 * Scan devs to populate lvmcache info, which includes the mda info that's
-@@ -1220,13 +1234,17 @@ int label_scan_vg_online(struct cmd_context *cmd, const char *vgname)
- 	 * be able to fall back to a standard label scan if the online hints
- 	 * gave fewer PVs than listed in VG metadata.
- 	 */
--	metadata_pv_count = lvmcache_pvsummary_count(vgname);
--	if (metadata_pv_count != dm_list_size(&devs)) {
--		log_debug("Incorrect PV list from online files %d metadata %d.",
--			   dm_list_size(&devs), metadata_pv_count);
--		return 0;
-+	if (vgname) {
-+		metadata_pv_count = lvmcache_pvsummary_count(vgname);
-+		if (metadata_pv_count > dm_list_size(&devs)) {
-+			log_debug("Incomplete PV list from online files %d metadata %d.",
-+				  dm_list_size(&devs), metadata_pv_count);
-+			*found_incomplete = 1;
-+			return 1;
-+		}
- 	}
- 
-+	*found_all = 1;
- 	return 1;
- bad:
- 	free_po_list(&pvs_online);
-diff --git a/lib/label/label.h b/lib/label/label.h
-index 55ebfde45..3cda1818c 100644
---- a/lib/label/label.h
-+++ b/lib/label/label.h
-@@ -118,7 +118,9 @@ int label_scan_open_excl(struct device *dev);
- int label_scan_open_rw(struct device *dev);
- int label_scan_reopen_rw(struct device *dev);
- int label_read_pvid(struct device *dev, int *has_pvid);
--int label_scan_vg_online(struct cmd_context *cmd, const char *vgname);
-+int label_scan_vg_online(struct cmd_context *cmd, const char *vgname,
-+			 int *found_none, int *found_all, int *found_incomplete);
-+
- 
- int label_scan_for_pvid(struct cmd_context *cmd, char *pvid, struct device **dev_out);
- 
-diff --git a/test/shell/vgchange-pvs-online.sh b/test/shell/vgchange-pvs-online.sh
-index bdc481ced..c2ebe7327 100644
---- a/test/shell/vgchange-pvs-online.sh
-+++ b/test/shell/vgchange-pvs-online.sh
-@@ -19,61 +19,135 @@ _clear_online_files() {
- 
- aux prepare_devs 4
- 
-+# Because mapping devno to devname gets dm name from sysfs
-+aux lvmconf 'devices/scan = "/dev"'
-+base1=$(basename $dev1)
-+base2=$(basename $dev2)
-+base3=$(basename $dev3)
-+base4=$(basename $dev4)
-+aux extend_filter "a|/dev/mapper/$base1|"
-+aux extend_filter "a|/dev/mapper/$base2|"
-+aux extend_filter "a|/dev/mapper/$base3|"
-+aux extend_filter "a|/dev/mapper/$base4|"
-+
- vgcreate $vg1 "$dev1" "$dev2"
- vgcreate $vg2 "$dev3"
- pvcreate "$dev4"
- 
- lvcreate -l1 -n $lv1 -an $vg1
-+lvcreate -l1 -n $lv2 -an $vg1
- lvcreate -l1 -n $lv1 -an $vg2
- 
--# With no pv online files, vgchange that uses online files
--# will find no PVs to activate from.
-+# Expected use, with vg name and all online files exist for vgchange.
- 
- _clear_online_files
- 
--not vgchange -aay --autoactivation event $vg1
--not vgchange -aay --autoactivation event $vg2
--vgchange -aay --autoactivation event
-+pvscan --cache "$dev1"
-+pvscan --cache "$dev2"
-+vgchange -aay --autoactivation event $vg1
-+check lv_field $vg1/$lv1 lv_active "active"
-+check lv_field $vg1/$lv2 lv_active "active"
-+check lv_field $vg2/$lv1 lv_active ""
-+
-+pvscan --cache "$dev3"
-+vgchange -aay --autoactivation event $vg2
-+check lv_field $vg2/$lv1 lv_active "active"
-+
-+# Count io to check the pvs_online optimization 
-+# is working to limit scanning.
-+
-+vgchange -an
-+_clear_online_files
-+
-+pvscan --cache "$dev1"
-+pvscan --cache "$dev2"
-+strace -e io_submit vgchange -aay --autoactivation event $vg1 2>&1|tee trace.out
-+test "$(grep io_submit trace.out | wc -l)" -eq 4
-+rm trace.out
-+
-+strace -e io_submit pvscan --cache "$dev3" 2>&1|tee trace.out
-+test "$(grep io_submit trace.out | wc -l)" -eq 1
-+rm trace.out
-+
-+strace -e io_submit vgchange -aay --autoactivation event $vg2 2>&1|tee trace.out
-+test "$(grep io_submit trace.out | wc -l)" -eq 2
-+rm trace.out
- 
-+# non-standard usage: no VG name arg, vgchange will only used pvs_online files
-+
-+vgchange -an
-+_clear_online_files
-+
-+vgchange -aay --autoactivation event
- check lv_field $vg1/$lv1 lv_active ""
-+check lv_field $vg1/$lv2 lv_active ""
- check lv_field $vg2/$lv1 lv_active ""
- 
--# incomplete vg will not be activated
--
- pvscan --cache "$dev1"
--vgchange -aay --autoactivation event $vg1
--# VG foo is incomplete
-+vgchange -aay --autoactivation event
- check lv_field $vg1/$lv1 lv_active ""
-+check lv_field $vg1/$lv2 lv_active ""
-+check lv_field $vg2/$lv1 lv_active ""
- 
--# complete vg is activated
-+pvscan --cache "$dev2"
-+vgchange -aay --autoactivation event
-+check lv_field $vg1/$lv1 lv_active "active"
-+check lv_field $vg1/$lv2 lv_active "active"
-+check lv_field $vg2/$lv1 lv_active ""
- 
- pvscan --cache "$dev3"
--vgchange -aay --autoactivation event $vg2
-+vgchange -aay --autoactivation event
- check lv_field $vg2/$lv1 lv_active "active"
- 
--pvscan --cache "$dev2"
-+# non-standard usage: include VG name arg, but missing or incomplete pvs_online files
-+
-+vgchange -an
-+_clear_online_files
-+
-+# all missing pvs_online, vgchange falls back to full label scan
- vgchange -aay --autoactivation event $vg1
- check lv_field $vg1/$lv1 lv_active "active"
-+check lv_field $vg1/$lv2 lv_active "active"
- 
--vgchange -an $vg1
--vgchange -an $vg2
-+vgchange -an
-+_clear_online_files
- 
--# the same tests but using command options matching udev rule
-+# incomplete pvs_online, vgchange falls back to full label scan
-+pvscan --cache "$dev1"
-+vgchange -aay --autoactivation event $vg1
-+check lv_field $vg1/$lv1 lv_active "active"
-+check lv_field $vg1/$lv2 lv_active "active"
- 
-+vgchange -an
- _clear_online_files
- 
--pvscan --cache --listvg --checkcomplete --vgonline --autoactivation event --udevoutput --journal=output "$dev1"
-+# incomplete pvs_online, pvs_online from different vg,
-+# no pvs_online found for vg arg so vgchange falls back to full label scan
-+
-+pvscan --cache "$dev3"
- vgchange -aay --autoactivation event $vg1
--# VG foo is incomplete
--check lv_field $vg1/$lv1 lv_active ""
-+check lv_field $vg1/$lv1 lv_active "active"
-+check lv_field $vg1/$lv2 lv_active "active"
-+check lv_field $vg2/$lv1 lv_active ""
- 
--pvscan --cache --listvg --checkcomplete --vgonline --autoactivation event --udevoutput --journal=output "$dev3"
- vgchange -aay --autoactivation event $vg2
- check lv_field $vg2/$lv1 lv_active "active"
- 
-+vgchange -an
-+_clear_online_files
-+
-+# same tests but using command options matching udev rule
-+
-+pvscan --cache --listvg --checkcomplete --vgonline --autoactivation event --udevoutput --journal=output "$dev1"
- pvscan --cache --listvg --checkcomplete --vgonline --autoactivation event --udevoutput --journal=output "$dev2"
- vgchange -aay --autoactivation event $vg1
- check lv_field $vg1/$lv1 lv_active "active"
-+check lv_field $vg1/$lv2 lv_active "active"
-+check lv_field $vg2/$lv1 lv_active ""
-+
-+pvscan --cache --listvg --checkcomplete --vgonline --autoactivation event --udevoutput --journal=output "$dev3"
-+vgchange -aay --autoactivation event $vg2
-+check lv_field $vg2/$lv1 lv_active "active"
- 
- vgchange -an $vg1
- vgchange -an $vg2
-diff --git a/tools/vgchange.c b/tools/vgchange.c
-index e20026e4d..acdde97a8 100644
---- a/tools/vgchange.c
-+++ b/tools/vgchange.c
-@@ -879,7 +879,9 @@ int vgchange(struct cmd_context *cmd, int argc, char **argv)
- 	}
- 
- 	if (arg_is_set(cmd, autoactivation_ARG)) {
-+		int found_none = 0, found_all = 0, found_incomplete = 0;
- 		int skip_command = 0;
-+
- 		if (!_check_autoactivation(cmd, &vp, &skip_command))
- 			return ECMD_FAILED;
- 		if (skip_command)
-@@ -889,14 +891,49 @@ int vgchange(struct cmd_context *cmd, int argc, char **argv)
- 		 * Special label scan optimized for autoactivation
- 		 * that is based on info read from /run/lvm/ files
- 		 * created by pvscan --cache during autoactivation.
--		 * (Add an option to disable this optimization?)
-+		 * Add an option to disable this optimization?  e.g.
-+		 * "online_skip" in --autoactivation / auto_activation_settings
-+		 *
-+		 * In some cases it might be useful to strictly follow
-+		 * the online files, and not fall back to a standard
-+		 * label scan when no pvs or incomplete pvs are found
-+		 * from the online files.  Add option for that?  e.g.
-+		 * "online_only" in --autoactivation / auto_activation_settings
-+		 *
-+		 * Generally the way that vgchange -aay --autoactivation event
-+		 * is currently used, it will not be called until pvscan --cache
-+		 * has found the VG is complete, so it will not generally be
-+		 * following the paths that fall back to standard label_scan.
-+		 *
-+		 * TODO: Like pvscan_aa_quick, this could do lock_vol(vgname)
-+		 * before label_scan_vg_online, then set cmd->can_use_one_scan=1
-+		 * to avoid rescanning in _vg_read called by process_each_vg.
- 		 */
- 		get_single_vgname_cmd_arg(cmd, NULL, &vgname);
--		if (vgname) {
--			if (!label_scan_vg_online(cmd, vgname))
--				log_debug("Standard label_scan required in place of online scan.");
--			else
-+		if (!label_scan_vg_online(cmd, vgname, &found_none, &found_all, &found_incomplete)) {
-+			log_print("PVs online error%s%s, using all devices.", vgname ? " for VG " : "", vgname ?: "");
-+		} else {
-+			if (!vgname) {
-+				/* Not expected usage, activate any VGs that are complete based on pvs_online. */
-+				flags |= PROCESS_SKIP_SCAN;
-+			} else if (found_all) {
-+				/* The expected and optimal usage, only online PVs are read. */
- 				flags |= PROCESS_SKIP_SCAN;
-+			/*
-+			} else if (online_only) {
-+				log_print("PVs online %s.", found_none ? "not found" : "incomplete");
-+				return vgname ? ECMD_FAILED : ECMD_PROCESSED;
-+			*/
-+			} else if (found_none) {
-+				/* Not expected usage, use full label_scan in process_each */
-+				log_print("PVs online not found for VG %s, using all devices.", vgname);
-+			} else if (found_incomplete) {
-+				/* Not expected usage, use full label_scan in process_each */
-+				log_print("PVs online incomplete for VG %s, using all devicess.", vgname);
-+			} else {
-+				/* Shouldn't happen */
-+				log_print("PVs online unknown for VG %s, using all devices.", vgname);
-+			}
+ 	if (vgname) {
+ 		if ((len2 = dm_snprintf(buf + len1, sizeof(buf) - len1, "vg:%s\n", vgname)) < 0) {
+-			log_print_pvscan(cmd, "Incomplete online file for %s %d:%d vg %s.", dev_name(dev), major, minor, vgname);
++			log_print("Incomplete online file for %s %d:%d vg %s.", dev_name(dev), major, minor, vgname);
+ 			/* can still continue without vgname */
+ 			len2 = 0;
  		}
  	}
  
+-	len = len1 + len2;
++	devnamelen = dm_snprintf(devname, sizeof(devname), "%s", dev_name(dev));
++	if ((devnamelen > 5) && (devnamelen < NAME_LEN-1)) {
++		if ((len3 = dm_snprintf(buf + len1 + len2, sizeof(buf) - len1 - len2, "dev:%s\n", devname)) < 0) {
++			log_print("Incomplete devname in online file for %s.", dev_name(dev));
++			/* can continue without devname */
++			len3 = 0;
++		}
++	}
++
++	len = len1 + len2 + len3;
+ 
+ 	log_debug("Create pv online: %s %d:%d %s", path, major, minor, dev_name(dev));
+ 
+@@ -269,8 +337,9 @@ check_duplicate:
+ 	 */
+ 
+ 	memset(file_vgname, 0, sizeof(file_vgname));
++	memset(file_devname, 0, sizeof(file_devname));
+ 
+-	online_pvid_file_read(path, &file_major, &file_minor, file_vgname);
++	online_pvid_file_read(path, &file_major, &file_minor, file_vgname, file_devname);
+ 
+ 	if ((file_major == major) && (file_minor == minor)) {
+ 		log_debug("Existing online file for %d:%d", major, minor);
+@@ -280,8 +349,8 @@ check_duplicate:
+ 	/* Don't know how vgname might not match, but it's not good so fail. */
+ 
+ 	if ((file_major != major) || (file_minor != minor))
+-		log_error_pvscan(cmd, "PV %s is duplicate for PVID %s on %d:%d and %d:%d.",
+-			         dev_name(dev), dev->pvid, major, minor, file_major, file_minor);
++		log_error_pvscan(cmd, "PV %s %d:%d is duplicate for PVID %s on %d:%d %s.",
++			         dev_name(dev), major, minor, dev->pvid, file_major, file_minor, file_devname);
+ 
+ 	if (file_vgname[0] && vgname && strcmp(file_vgname, vgname))
+ 		log_error_pvscan(cmd, "PV %s has unexpected VG %s vs %s.",
+@@ -319,6 +388,7 @@ int get_pvs_lookup(struct dm_list *pvs_online, const char *vgname)
+ 	char line[64];
+ 	char pvid[ID_LEN + 1] __attribute__((aligned(8))) = { 0 };
+ 	char file_vgname[NAME_LEN];
++	char file_devname[NAME_LEN];
+ 	struct pv_online *po;
+ 	int file_major = 0, file_minor = 0;
+ 	FILE *fp;
+@@ -340,8 +410,9 @@ int get_pvs_lookup(struct dm_list *pvs_online, const char *vgname)
+ 		file_major = 0;
+ 		file_minor = 0;
+ 		memset(file_vgname, 0, sizeof(file_vgname));
++		memset(file_devname, 0, sizeof(file_devname));
+ 
+-		if (!online_pvid_file_read(path, &file_major, &file_minor, file_vgname))
++		if (!online_pvid_file_read(path, &file_major, &file_minor, file_vgname, file_devname))
+ 			goto_bad;
+ 
+ 		if (vgname && strcmp(file_vgname, vgname))
+@@ -355,11 +426,14 @@ int get_pvs_lookup(struct dm_list *pvs_online, const char *vgname)
+ 			po->devno = MKDEV(file_major, file_minor);
+ 		if (file_vgname[0])
+ 			strncpy(po->vgname, file_vgname, NAME_LEN-1);
++		if (file_devname[0])
++			strncpy(po->devname, file_devname, NAME_LEN-1);
+ 
++		log_debug("Found PV online lookup %s for VG %s on %s", path, vgname, file_devname);
+ 		dm_list_add(pvs_online, &po->list);
+ 	}
+ 
+-	log_debug("PVs online lookup found %d for %s", dm_list_size(pvs_online), vgname);
++	log_debug("Found PVs online lookup %d for %s", dm_list_size(pvs_online), vgname);
+ 
+ 	fclose(fp);
+ 	return 1;
+diff --git a/lib/device/online.h b/lib/device/online.h
+index 25a176854..850b03db8 100644
+--- a/lib/device/online.h
++++ b/lib/device/online.h
+@@ -21,6 +21,7 @@ struct pv_online {
+ 	dev_t devno;
+ 	char pvid[ID_LEN + 1];
+ 	char vgname[NAME_LEN];
++	char devname[NAME_LEN];
+ };
+ 
+ /*
+@@ -44,7 +45,7 @@ do \
+ 		log_error("pvscan[%d] " fmt, getpid(), ##args); \
+ while (0)
+ 
+-int online_pvid_file_read(char *path, int *major, int *minor, char *vgname);
++int online_pvid_file_read(char *path, int *major, int *minor, char *vgname, char *devname);
+ int online_vg_file_create(struct cmd_context *cmd, const char *vgname);
+ void online_vg_file_remove(const char *vgname);
+ int online_pvid_file_create(struct cmd_context *cmd, struct device *dev, const char *vgname);
+diff --git a/lib/label/label.c b/lib/label/label.c
+index 9875b5f02..324cfd034 100644
+--- a/lib/label/label.c
++++ b/lib/label/label.c
+@@ -1073,26 +1073,18 @@ int label_scan_vg_online(struct cmd_context *cmd, const char *vgname,
+ 	}
+ 
+ 	/*
+-	 * For each po devno add a struct dev to dev-cache.  This is a faster
++	 * For each po add a struct dev to dev-cache.  This is a faster
+ 	 * alternative to the usual dev_cache_scan() which looks at all
+ 	 * devices.  If this optimization fails, then fall back to the usual
+ 	 * dev_cache_scan().
+ 	 */
+ 	dm_list_iterate_items(po, &pvs_online) {
+-		if (!setup_devno_in_dev_cache(cmd, po->devno)) {
+-			log_debug("No device set up for quick mapping of %d:%d PVID %s",
+-				  (int)MAJOR(po->devno), (int)MINOR(po->devno), po->pvid);
++		if (!(po->dev = setup_dev_in_dev_cache(cmd, po->devno, po->devname[0] ? po->devname : NULL))) {
++			log_debug("No device found for quick mapping of online PV %d:%d %s PVID %s",
++				  (int)MAJOR(po->devno), (int)MINOR(po->devno), po->devname, po->pvid);
+ 			try_dev_scan = 1;
+-			break;
+-		}
+-
+-		if (!(po->dev = dev_cache_get_by_devt(cmd, po->devno, NULL, NULL))) {
+-			log_debug("No device found for quick mapping of %d:%d PVID %s",
+-				  (int)MAJOR(po->devno), (int)MINOR(po->devno), po->pvid);
+-			try_dev_scan = 1;
+-			break;
++			continue;
+ 		}
+-
+ 		if (!(devl = dm_pool_zalloc(cmd->mem, sizeof(*devl))))
+ 			goto_bad;
+ 
+diff --git a/tools/pvscan.c b/tools/pvscan.c
+index 6fd86e486..df1722c45 100644
+--- a/tools/pvscan.c
++++ b/tools/pvscan.c
+@@ -223,7 +223,7 @@ static void _online_pvid_file_remove_devno(int major, int minor)
+ 		file_minor = 0;
+ 		memset(file_vgname, 0, sizeof(file_vgname));
+ 
+-		online_pvid_file_read(path, &file_major, &file_minor, file_vgname);
++		online_pvid_file_read(path, &file_major, &file_minor, file_vgname, NULL);
+ 
+ 		if ((file_major == major) && (file_minor == minor)) {
+ 			log_debug("Unlink pv online %s", path);
+@@ -509,6 +509,7 @@ static int _get_devs_from_saved_vg(struct cmd_context *cmd, const char *vgname,
+ {
+ 	char path[PATH_MAX];
+ 	char file_vgname[NAME_LEN];
++	char file_devname[NAME_LEN];
+ 	char pvid[ID_LEN + 1] __attribute__((aligned(8))) = { 0 };
+ 	char uuidstr[64] __attribute__((aligned(8)));
+ 	struct pv_list *pvl;
+@@ -538,8 +539,9 @@ static int _get_devs_from_saved_vg(struct cmd_context *cmd, const char *vgname,
+ 		file_major = 0;
+ 		file_minor = 0;
+ 		memset(file_vgname, 0, sizeof(file_vgname));
++		memset(file_devname, 0, sizeof(file_devname));
+ 
+-		online_pvid_file_read(path, &file_major, &file_minor, file_vgname);
++		online_pvid_file_read(path, &file_major, &file_minor, file_vgname, file_devname);
+ 
+ 		if (file_vgname[0] && strcmp(vgname, file_vgname)) {
+ 			log_error_pvscan(cmd, "Wrong VG found for %d:%d PVID %s: %s vs %s",
+@@ -549,13 +551,8 @@ static int _get_devs_from_saved_vg(struct cmd_context *cmd, const char *vgname,
+ 
+ 		devno = MKDEV(file_major, file_minor);
+ 
+-		if (!setup_devno_in_dev_cache(cmd, devno)) {
+-			log_error_pvscan(cmd, "No device set up for %d:%d PVID %s", file_major, file_minor, pvid);
+-			goto bad;
+-		}
+-
+-		if (!(dev = dev_cache_get_by_devt(cmd, devno, NULL, NULL))) {
+-			log_error_pvscan(cmd, "No device found for %d:%d PVID %s", file_major, file_minor, pvid);
++		if (!(dev = setup_dev_in_dev_cache(cmd, devno, file_devname[0] ? file_devname : NULL))) {
++			log_error_pvscan(cmd, "No device set up for online PV %d:%d %s PVID %s", file_major, file_minor, file_devname, pvid);
+ 			goto bad;
+ 		}
+ 
+@@ -888,16 +885,12 @@ static int _get_args_devs(struct cmd_context *cmd, struct dm_list *pvscan_args,
+ 	/* in common usage, no dev will be found for a devno */
+ 
+ 	dm_list_iterate_items(arg, pvscan_args) {
+-		if (arg->devname) {
+-			if (!setup_devname_in_dev_cache(cmd, arg->devname))
+-				log_error_pvscan(cmd, "No device set up for name arg %s", arg->devname);
+-			arg->dev = dev_cache_get(cmd, arg->devname, NULL);
+-		} else if (arg->devno) {
+-			if (!setup_devno_in_dev_cache(cmd, arg->devno))
+-				log_error_pvscan(cmd, "No device set up for devno arg %d", (int)arg->devno);
+-			arg->dev = dev_cache_get_by_devt(cmd, arg->devno, NULL, NULL);
+-		} else
++		if (!arg->devname && !arg->devno)
+ 			return_0;
++		if (!(arg->dev = setup_dev_in_dev_cache(cmd, arg->devno, arg->devname))) {
++			log_error_pvscan(cmd, "No device set up for arg %s %d:%d",
++					 arg->devname ?: "", (int)MAJOR(arg->devno), (int)MINOR(arg->devno));
++		}
+ 	}
+ 
+ 	dm_list_iterate_items(arg, pvscan_args) {
+@@ -917,6 +910,7 @@ static void _set_pv_devices_online(struct cmd_context *cmd, struct volume_group
+ {
+ 	char path[PATH_MAX];
+ 	char file_vgname[NAME_LEN];
++	char file_devname[NAME_LEN];
+ 	char pvid[ID_LEN+1] = { 0 };
+ 	struct pv_list *pvl;
+ 	struct device *dev;
+@@ -944,9 +938,10 @@ static void _set_pv_devices_online(struct cmd_context *cmd, struct volume_group
+ 
+ 		major = 0;
+ 		minor = 0;
+-		file_vgname[0] = '\0';
++		memset(file_vgname, 0, sizeof(file_vgname));
++		memset(file_devname, 0, sizeof(file_devname));
+ 
+-		online_pvid_file_read(path, &major, &minor, file_vgname);
++		online_pvid_file_read(path, &major, &minor, file_vgname, file_devname);
+ 
+ 		if (file_vgname[0] && strcmp(vg->name, file_vgname)) {
+ 			log_warn("WARNING: VG %s PV %s wrong vgname in online file %s",
+@@ -957,9 +952,9 @@ static void _set_pv_devices_online(struct cmd_context *cmd, struct volume_group
+ 
+ 		devno = MKDEV(major, minor);
+ 
+-		if (!(dev = dev_cache_get_by_devt(cmd, devno, NULL, NULL))) {
+-			log_print_pvscan(cmd, "VG %s PV %s no device found for %d:%d",
+-					 vg->name, pvid, major, minor);
++		if (!(dev = setup_dev_in_dev_cache(cmd, devno, file_devname[0] ? file_devname : NULL))) {
++			log_print_pvscan(cmd, "VG %s PV %s no device found for online PV %d:%d %s",
++					 vg->name, pvid, major, minor, file_devname);
+ 			pvl->pv->status |= MISSING_PV;
+ 			continue;
+ 		}
 
 
