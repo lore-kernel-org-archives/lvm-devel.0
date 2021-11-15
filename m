@@ -1,145 +1,169 @@
-From: Lakshmi Narasimhan Sundararajan <lsundararajan@purestorage.com>
-Date: Fri, 12 Nov 2021 13:46:14 +0530
-Subject: Need clarification
-In-Reply-To: <YY1DNXFh+mmuHOCh@redhat.com>
-References: <CAFe+wq3SuywSq0OFKr+ND_OWP4cL2xFDGKipVOBvpJZ3SR3vFA@mail.gmail.com>
-	<70b1de35-76e2-391d-9d8c-3752fb948f41@redhat.com>
-	<YY1DNXFh+mmuHOCh@redhat.com>
-Message-ID: <CAFe+wq3wmyrSPgOPFor7X9O75r63HyqMWVLsmk-32ZjTAmzhvA@mail.gmail.com>
+From: David Teigland <teigland@sourceware.org>
+Date: Mon, 15 Nov 2021 20:57:12 +0000 (GMT)
+Subject: main - device_id: match different dm device names
+Message-ID: <20211115205712.752753858003@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-I am testing out recovery of the node when using dm devices as storage
-drives and a kernel crash for any reason.
-My expectation was the system would be able to sync and unmount
-filesystems during a kernel crash forced through (echo c >
-/proc/sysrq-trigger).
-But the system did not complete shutdown and got hung.
-It is generally true that if there is a kernel crash then the internal
-structures may become inconsistent, but with forced reboot through
-sysrq-trigger and option 'c', it is guaranteed none of the internal
-structures are inconsistent, so I was surprised that sync/unmount over
-dm devices
-could not complete.
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=c5f998aec4b5e42f7f1b6ddeec6c4544dceaa1b5
+Commit:        c5f998aec4b5e42f7f1b6ddeec6c4544dceaa1b5
+Parent:        4926061d32f855ffe7a38034b2fe2917e63409a0
+Author:        David Teigland <teigland@redhat.com>
+AuthorDate:    Fri Nov 12 16:42:51 2021 -0600
+Committer:     David Teigland <teigland@redhat.com>
+CommitterDate: Fri Nov 12 16:42:51 2021 -0600
 
-Based on your inputs, I was able to root cause the issue to incorrect
-kdump configuration on the kernel.
-It looks like my system has hit this bug
-https://bugzilla.redhat.com/show_bug.cgi?id=1510654
+device_id: match different dm device names
 
-Below are the background details.
-1/ linux kernel version
-[root at ip-10-13-11-45 ~]# cat /etc/os-release
-NAME="CentOS Linux"
-VERSION="7 (Core)"
-ID="centos"
-ID_LIKE="rhel fedora"
-VERSION_ID="7"
-PRETTY_NAME="CentOS Linux 7 (Core)"
-ANSI_COLOR="0;31"
-CPE_NAME="cpe:/o:centos:centos:7"
-HOME_URL="https://www.centos.org/"
-BUG_REPORT_URL="https://bugs.centos.org/"
+If a devices file entry for a dm device is using the devname
+for the device id, then recognize different dm names as matching.
+---
+ lib/device/device_id.c | 81 ++++++++++++++++++++++++++++++++++++++++++--------
+ 1 file changed, 69 insertions(+), 12 deletions(-)
 
-CENTOS_MANTISBT_PROJECT="CentOS-7"
-CENTOS_MANTISBT_PROJECT_VERSION="7"
-REDHAT_SUPPORT_PRODUCT="centos"
-REDHAT_SUPPORT_PRODUCT_VERSION="7"
-
-[root at ip-10-13-11-45 ~]# uname -r
-5.7.12-1.el7.elrepo.x86_64
-[root at ip-10-13-11-45 ~]#
-
-
-
-2/ kdump is configured with 'auto'
-Linux kernel configuration defined as below with crashkernel=auto option.
-menuentry 'CentOS Linux (5.7.12-1.el7.elrepo.x86_64) 7 (Core)' --class
-centos --class gnu-linux --class gnu --class os --unrestricted
-$menuentry_id_option
-'gnulinux-5.7.12-1.el7.elrepo.x86_64-advanced-adf91006-76ef-4113-850a-090c2be36f20'
-{
-        load_video
-        set gfxpayload=keep
-        insmod gzio
-        insmod part_msdos
-        insmod ext2
-        set root='hd0,msdos1'
-        if [ x$feature_platform_search_hint = xy ]; then
-          search --no-floppy --fs-uuid --set=root
---hint-bios=hd0,msdos1 --hint-efi=hd0,msdos1
---hint-baremetal=ahci0,msdos1 --hint='hd0,msdos1'
-691ac0a0-e4a2-40e3-b3ad-a720d630f49b
-        else
-          search --no-floppy --fs-uuid --set=root
-691ac0a0-e4a2-40e3-b3ad-a720d630f49b
-        fi
-        linux16 /vmlinuz-5.7.12-1.el7.elrepo.x86_64
-root=UUID=adf91006-76ef-4113-850a-090c2be36f20 ro crashkernel=auto
-rhgb quiet biosdevname=0 net.ifnames=0
-        initrd16 /initramfs-5.7.12-1.el7.elrepo.x86_64.img
-}
-
-Many thanks for your inputs.
-Regards
-
-On Thu, Nov 11, 2021 at 9:52 PM Bryn M. Reeves <breeves@redhat.com> wrote:
->
-> On Thu, Nov 11, 2021 at 01:23:03PM +0100, Zdenek Kabelac wrote:
-> > Dne 10. 11. 21 v 14:11 Lakshmi Narasimhan Sundararajan napsal(a):
-> > > Hi LVM Team!
-> > > A very good day to you.
-> > >
-> > > I have the following observation, and I need your inputs to understand behavior.
-> > >
-> > > 1/ create a volume group on a single block device.
-> > > 2/ create a logical volume on the volume group.
-> > > 3/ pump IO to the dm device
-> > > 4/ while IOs are active, force kernel crash through the sysrq interface.
-> > >
-> > > This results in a kernel hang. possibly because of IOs waiting to be
-> > > serviced still.
-> > > This behavior is seen over thin pool, thin device as well.
-> > >
-> > > 1/ Is this behavior known or understood well as to why the kernel does
-> > > not complete a shutdown?
-> > > 2/ Is there any configuration with the lvm/dm layer that can allow the
-> > > kernel to proceed to complete shutdown and reboot failing those
-> > > incomplete IOs?
-> > >
-> > > Please advise.
-> >
-> > I'm pretty sure     'echo b > /proc/sysrq-trigger'  will reboot your kernel.
->
-> It sounds like they are using the 'c' sysrq command; this invokes a
-> crash (used to be just dereferencing a NULL pointer) and is commonly
-> used to test configurations like kdump, or automatic reboot on panic.
->
-> From what the reporter is saying it sounds like that is not happening in
-> the described scenario although presumably it has been configured?
->
-> After the 'c' it's not possible to issue further sysrq commands via the
-> /proc interface, so the 'b' would have to be invoked via sysrq keyboard
-> commands.
->
-> > Other then that I'm not much sure I'm getting your point here.
-> >
-> > You crash your kernel and then you are wondering why it's hang ??
->
-> If you have kdump enabled, or /proc/sys/kernel/panic is set to a value
-> that is > 0 then this is definitely not expected behaviour.
->
-> In this case it's often useful to enable keyboard sysrq (since those can
-> be issued following the 'echo c > /proc/sysrq-trigger'), and to carry
-> out a thread dump (sysrq-t) to print all stacks to the console. To be
-> useful this generally needs a serial console or some other mechanism to
-> capture the large volume of messages for analysis.
->
-> Regards,
-> Bryn.
->
+diff --git a/lib/device/device_id.c b/lib/device/device_id.c
+index 18669630c..749acdf89 100644
+--- a/lib/device/device_id.c
++++ b/lib/device/device_id.c
+@@ -1359,6 +1359,10 @@ void device_id_update_vg_uuid(struct cmd_context *cmd, struct volume_group *vg,
+ 
+ static int _idtype_compatible_with_major_number(struct cmd_context *cmd, int idtype, int major)
+ {
++	/* devname can be used with any kind of device */
++	if (idtype == DEV_ID_TYPE_DEVNAME)
++		return 1;
++
+ 	if (idtype == DEV_ID_TYPE_MPATH_UUID ||
+ 	    idtype == DEV_ID_TYPE_CRYPT_UUID ||
+ 	    idtype == DEV_ID_TYPE_LVMLV_UUID)
+@@ -1387,6 +1391,43 @@ static int _idtype_compatible_with_major_number(struct cmd_context *cmd, int idt
+ 	return 1;
+ }
+ 
++static int _match_dm_devnames(struct cmd_context *cmd, struct device *dev,
++			      struct dev_id *id, struct dev_use *du)
++{
++	struct stat buf;
++
++	if (MAJOR(dev->dev) != cmd->dev_types->device_mapper_major)
++		return 0;
++
++	if (id->idname && du->idname && !strcmp(id->idname, du->idname))
++		return 1;
++
++	if (du->idname && !strcmp(du->idname, dev_name(dev))) {
++		log_debug("Match device_id %s %s to %s: ignoring idname %s",
++			  idtype_to_str(du->idtype), du->idname, dev_name(dev), id->idname ?: ".");
++		return 1;
++	}
++
++	if (!du->idname)
++		return 0;
++
++	/* detect that a du entry is for a dm device */
++
++	if (!strncmp(du->idname, "/dev/dm-", 8) || !strncmp(du->idname, "/dev/mapper/", 12)) {
++		if (stat(du->idname, &buf))
++			return 0;
++
++		if ((MAJOR(buf.st_rdev) == cmd->dev_types->device_mapper_major) &&
++		    (MINOR(buf.st_rdev) == MINOR(dev->dev))) {
++			log_debug("Match device_id %s %s to %s: using other dm name, ignoring %s",
++				  idtype_to_str(du->idtype), du->idname, dev_name(dev), id->idname ?: ".");
++			return 1;
++		}
++	}
++
++	return 0;
++}
++
+ /*
+  * check for dev->ids entry with du->idtype, if found compare it,
+  * if not, system_read of this type and add entry to dev->ids, compare it.
+@@ -1407,35 +1448,52 @@ static int _match_du_to_dev(struct cmd_context *cmd, struct dev_use *du, struct
+ 	 * so we can skip trying to match certain du entries based simply on
+ 	 * the major number of dev.
+ 	 */
+-	if (!_idtype_compatible_with_major_number(cmd, du->idtype, (int)MAJOR(dev->dev)))
++	if (!_idtype_compatible_with_major_number(cmd, du->idtype, (int)MAJOR(dev->dev))) {
++		/*
++		log_debug("Mismatch device_id %s %s to %s: wrong major",
++			  idtype_to_str(du->idtype), du->idname ?: ".", dev_name(dev));
++		*/
+ 		return 0;
++	}
+ 
+ 	if (!dev_get_partition_number(dev, &part)) {
+-		log_debug("compare %s failed to get dev partition", dev_name(dev));
++		/*
++		log_debug("Mismatch device_id %s %s to %s: no partition",
++			  idtype_to_str(du->idtype), du->idname ?: ".", dev_name(dev));
++		*/
+ 		return 0;
+ 	}
+ 	if (part != du->part) {
+ 		/*
+-		log_debug("compare mis %s %s part %d to %s part %d",
+-			  idtype_to_str(du->idtype), du->idname ?: ".", du->part, dev_name(dev), part);
++		log_debug("Mismatch device_id %s %s to %s: wrong partition %d vs %d",
++			  idtype_to_str(du->idtype), du->idname ?: ".", dev_name(dev), du->part, part);
+ 		*/
+ 		return 0;
+ 	}
+ 
+ 	dm_list_iterate_items(id, &dev->ids) {
+ 		if (id->idtype == du->idtype) {
+-			if (id->idname && !strcmp(id->idname, du->idname)) {
++			if ((id->idtype == DEV_ID_TYPE_DEVNAME) && _match_dm_devnames(cmd, dev, id, du)) {
++				/* dm devs can have differing names that we know still match */
++				du->dev = dev;
++				dev->id = id;
++				dev->flags |= DEV_MATCHED_USE_ID;
++				log_debug("Match device_id %s %s to %s: dm names",
++					  idtype_to_str(du->idtype), du->idname, dev_name(dev));
++				return 1;
++
++			} else if (id->idname && !strcmp(id->idname, du->idname)) {
+ 				du->dev = dev;
+ 				dev->id = id;
+ 				dev->flags |= DEV_MATCHED_USE_ID;
+ 				log_debug("Match device_id %s %s to %s",
+ 					  idtype_to_str(du->idtype), du->idname, dev_name(dev));
+ 				return 1;
++
+ 			} else {
+ 				/*
+-				log_debug("compare mis %s %s to %s %s",
+-			  		  idtype_to_str(du->idtype), du->idname ?: ".", dev_name(dev),
+-					  ((id->idtype != DEV_ID_TYPE_DEVNAME) && id->idname) ? id->idname : "");
++				log_debug("Mismatch device_id %s %s to %s: idname %s",
++			  		  idtype_to_str(du->idtype), du->idname ?: ".", dev_name(dev), id->idname ?: ":");
+ 				*/
+ 				return 0;
+ 			}
+@@ -1455,7 +1513,7 @@ static int _match_du_to_dev(struct cmd_context *cmd, struct dev_use *du, struct
+ 		id->dev = dev;
+ 		dm_list_add(&dev->ids, &id->list);
+ 		/*
+-		log_debug("compare mis %s %s to %s no idtype",
++		log_debug("Mismatch device_id %s %s to %s: no idtype",
+ 			  idtype_to_str(du->idtype), du->idname ?: ".", dev_name(dev));
+ 		*/
+ 		return 0;
+@@ -1480,9 +1538,8 @@ static int _match_du_to_dev(struct cmd_context *cmd, struct dev_use *du, struct
+ 	}
+ 
+ 	/*
+-	log_debug("compare mis %s %s to %s %s",
+-		  idtype_to_str(du->idtype), du->idname ?: ".", dev_name(dev),
+-		  ((id->idtype != DEV_ID_TYPE_DEVNAME) && id->idname) ? id->idname : "");
++	log_debug("Mismatch device_id %s %s to %s: idname %s",
++		  idtype_to_str(du->idtype), du->idname ?: ".", dev_name(dev), idname);
+ 	*/
+ 	return 0;
+ }
 
 
