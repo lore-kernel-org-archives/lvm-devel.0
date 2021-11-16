@@ -1,218 +1,116 @@
 From: David Teigland <teigland@sourceware.org>
-Date: Tue, 16 Nov 2021 20:34:24 +0000 (GMT)
-Subject: main - Revert "tests devicesfile-devname: remove searched_devnames"
-Message-ID: <20211116203424.C3080385781A@sourceware.org>
+Date: Tue, 16 Nov 2021 20:34:22 +0000 (GMT)
+Subject: main - device_id: searched_devnames improvements
+Message-ID: <20211116203422.8297A385781A@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=e4b8726b6d4ba9fc4b1f6e79339b1fecb2d890b0
-Commit:        e4b8726b6d4ba9fc4b1f6e79339b1fecb2d890b0
-Parent:        5c71aa751048f99f4b599a01e7376d8ba951f793
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=5c4ce4669eb8d8cacc095bd70871c13a4042e5af
+Commit:        5c4ce4669eb8d8cacc095bd70871c13a4042e5af
+Parent:        fee39370020424234bee1295cac480afeef72fd6
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Tue Nov 16 14:30:09 2021 -0600
+AuthorDate:    Tue Nov 16 11:26:41 2021 -0600
 Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Tue Nov 16 14:30:09 2021 -0600
+CommitterDate: Tue Nov 16 14:29:17 2021 -0600
 
-Revert "tests devicesfile-devname: remove searched_devnames"
+device_id: searched_devnames improvements
 
-This reverts commit 8e61c0ad6ecad5e0bcee09e44029e39396c1b59a.
-
-The changes from "device_id: searched_devnames improvements"
-allow this to work without the external removal.
+Remove the searched_devnames file in a couple more places:
+. When hints need refreshing it's possible that a missing
+  devices file entry could be found by searching devices
+  again.
+. When a devices file entry devname is first found to be
+  incorrect, a new search for missing entries may be
+  useful.
 ---
- test/shell/devicesfile-devname.sh | 23 -----------------------
- 1 file changed, 23 deletions(-)
+ lib/device/device_id.c | 28 ++++++++++++++++++++++++++--
+ lib/label/hints.c      | 10 ++++++++++
+ 2 files changed, 36 insertions(+), 2 deletions(-)
 
-diff --git a/test/shell/devicesfile-devname.sh b/test/shell/devicesfile-devname.sh
-index 1b881c1cb..a99fe3e9a 100644
---- a/test/shell/devicesfile-devname.sh
-+++ b/test/shell/devicesfile-devname.sh
-@@ -100,7 +100,6 @@ lvcreate -l4 -an -i2 -n $lv1 $vg1
+diff --git a/lib/device/device_id.c b/lib/device/device_id.c
+index 7bcaf3df4..b6e31d0e7 100644
+--- a/lib/device/device_id.c
++++ b/lib/device/device_id.c
+@@ -74,6 +74,8 @@ void unlink_searched_devnames(struct cmd_context *cmd)
  
- sed -e "s|IDNAME=$dev1|IDNAME=$dev3|" "$ORIG" > "$DF"
- cat "$DF"
--rm /run/lvm/searched_devnames || true
- # pvs reports correct info 
- pvs -o+uuid | tee pvs.out
- grep $vg1 pvs.out > out
-@@ -117,7 +116,6 @@ cat "$DF"
+ 	if (unlink(_searched_file))
+ 		log_debug("unlink %s errno %d", _searched_file, errno);
++	else
++		log_debug("unlink %s", _searched_file);
+ }
  
- sed -e "s|IDNAME=$dev1|IDNAME=$dev3|" "$ORIG" > "$DF"
- cat "$DF"
--rm /run/lvm/searched_devnames || true
- # lvcreate uses correct dev
- lvcreate -l1 -n $lv2 -an $vg1 "$dev1"
- # lvcreate fixed the DF
-@@ -137,7 +135,6 @@ cat "$DF"
+ static int _searched_devnames_exists(struct cmd_context *cmd)
+@@ -779,7 +781,7 @@ static void _device_ids_update_try(struct cmd_context *cmd)
+ 	int held = 0;
  
- sed -e "s|IDNAME=$dev1|IDNAME=$dev3|" "$ORIG" > "$DF"
- cat "$DF"
--rm /run/lvm/searched_devnames || true
- # lvmdevices fixes the DF
- lvmdevices --update
- not grep "$PVID3" "$DF"
-@@ -150,7 +147,6 @@ cat "$DF"
+ 	if (cmd->expect_missing_vg_device) {
+-		log_print("skip updating devices file.");
++		log_print("Devices file update skipped."); 
+ 		return;
+ 	}
  
- sed -e "s|IDNAME=$dev1|IDNAME=$dev2|" "$ORIG" > "$DF"
- cat "$DF"
--rm /run/lvm/searched_devnames || true
- # pvs reports correct info
- pvs -o+uuid | tee pvs.out
- grep $vg1 pvs.out > out
-@@ -167,7 +163,6 @@ cat "$DF"
+@@ -1440,8 +1442,22 @@ static int _match_du_to_dev(struct cmd_context *cmd, struct dev_use *du, struct
+ 	const char *idname;
+ 	int part;
  
- sed -e "s|IDNAME=$dev1|IDNAME=$dev2|" "$ORIG" > "$DF"
- cat "$DF"
--rm /run/lvm/searched_devnames || true
- # lvcreate uses correct dev
- lvcreate -l1 -n $lv2 -an $vg1 "$dev1"
- # lvcreate fixed the DF
-@@ -187,7 +182,6 @@ cat "$DF"
+-	if (!du->idname || !du->idtype)
++	/*
++	 * The idname will be removed from an entry with devname type when the
++	 * devname is read and found to hold a different PVID than the PVID in
++	 * the entry.  At that point we only have the PVID and no known
++	 * location for it.
++	 */
++	if (!du->idname || !du->idtype) {
++		/*
++		log_debug("Mismatch device_id %s %s %s to %s",
++			  du->idtype ? idtype_to_str(du->idtype) : "idtype_missing",
++			  du->idname ? du->idname : "idname_missing",
++			  du->devname ? du->devname : "devname_missing",
++			  dev_name(dev));
++		*/
+ 		return 0;
++	}
  
- sed -e "s|IDNAME=$dev1|IDNAME=$dev2|" "$ORIG" > "$DF"
- cat "$DF"
--rm /run/lvm/searched_devnames || true
- # lvmdevices fixes the DF
- lvmdevices --update
- grep "$PVID1" "$DF" |tee out
-@@ -202,7 +196,6 @@ sed -e "s|IDNAME=$dev1|IDNAME=tmpname|" "$ORIG" > tmp1.devices
- sed -e "s|IDNAME=$dev2|IDNAME=$dev1|" tmp1.devices > tmp2.devices
- sed -e "s|IDNAME=tmpname|IDNAME=$dev2|" tmp2.devices > "$DF"
- cat "$DF"
--rm /run/lvm/searched_devnames || true
- # pvs reports correct info
- pvs -o+uuid | tee pvs.out
- grep $vg1 pvs.out > out
-@@ -221,7 +214,6 @@ sed -e "s|IDNAME=$dev1|IDNAME=tmpname|" "$ORIG" > tmp1.devices
- sed -e "s|IDNAME=$dev2|IDNAME=$dev1|" tmp1.devices > tmp2.devices
- sed -e "s|IDNAME=tmpname|IDNAME=$dev2|" tmp2.devices > "$DF"
- cat "$DF"
--rm /run/lvm/searched_devnames || true
- # lvcreate uses correct dev
- lvcreate -l1 -n $lv2 -an $vg1 "$dev1"
- # lvcreate fixed the DF
-@@ -243,7 +235,6 @@ sed -e "s|IDNAME=$dev1|IDNAME=tmpname|" "$ORIG" > tmp1.devices
- sed -e "s|IDNAME=$dev2|IDNAME=$dev1|" tmp1.devices > tmp2.devices
- sed -e "s|IDNAME=tmpname|IDNAME=$dev2|" tmp2.devices > "$DF"
- cat "$DF"
--rm /run/lvm/searched_devnames || true
- # lvmdevices fixes the DF
- lvmdevices --update
- grep "$PVID1" "$DF" |tee out
-@@ -264,7 +255,6 @@ cat "$DF"
+ 	/*
+ 	 * Some idtypes can only match devices with a specific major number,
+@@ -1963,6 +1979,14 @@ void device_ids_validate(struct cmd_context *cmd, struct dm_list *scanned_devs,
+ 			*device_ids_invalid = 1;
+ 	}
  
- sed -e "s|DEVNAME=$dev1|DEVNAME=$dev3|" "$ORIG" > "$DF"
- cat "$DF"
--rm /run/lvm/searched_devnames || true
- # pvs reports correct info
- pvs -o+uuid | tee pvs.out
- grep $vg1 pvs.out > out
-@@ -281,7 +271,6 @@ cat "$DF"
++	/*
++	 * When a new devname/pvid mismatch is discovered, a new search for the
++	 * pvid should be permitted (searched_devnames may exist to suppress
++	 * searching for other pvids.)
++	 */
++	if (update_file)
++		unlink_searched_devnames(cmd);
++
+ 	/* FIXME: for wrong devname cases, wait to write new until device_ids_find_renamed_devs? */
  
- sed -e "s|DEVNAME=$dev1|DEVNAME=$dev3|" "$ORIG" > "$DF"
- cat "$DF"
--rm /run/lvm/searched_devnames || true
- # lvmdevices fixes the DF
- lvmdevices --update
- not grep "$PVID3" "$DF"
-@@ -294,7 +283,6 @@ cat "$DF"
+ 	/*
+diff --git a/lib/label/hints.c b/lib/label/hints.c
+index 9a7c280eb..93dfdd5c1 100644
+--- a/lib/label/hints.c
++++ b/lib/label/hints.c
+@@ -1397,6 +1397,16 @@ int get_hints(struct cmd_context *cmd, struct dm_list *hints_out, int *newhints,
+ 		log_debug("get_hints: needs refresh");
+ 		free_hints(&hints_list);
  
- sed -e "s|DEVNAME=$dev1|DEVNAME=$dev2|" "$ORIG" > "$DF"
- cat "$DF"
--rm /run/lvm/searched_devnames || true
- # pvs reports correct info
- pvs -o+uuid | tee pvs.out
- grep $vg1 pvs.out > out
-@@ -311,7 +299,6 @@ cat "$DF"
++		/*
++		 * This is not related to hints, and is probably unnecessary,
++		 * but it could possibly help.  When hints become invalid it's
++		 * usually becaues devs on the system have changed, and that
++		 * also means that a missing devices file entry might be found
++		 * by searching devices again.  (the searched_devnames
++		 * mechanism should eventually be replaced)
++		 */
++		unlink_searched_devnames(cmd);
++
+ 		if (!_lock_hints(cmd, LOCK_EX, NONBLOCK))
+ 			return 0;
  
- sed -e "s|DEVNAME=$dev1|DEVNAME=$dev2|" "$ORIG" > "$DF"
- cat "$DF"
--rm /run/lvm/searched_devnames || true
- # lvmdevices fixes the DF
- lvmdevices --update
- grep "$PVID1" "$DF" |tee out
-@@ -326,7 +313,6 @@ sed -e "s|DEVNAME=$dev1|DEVNAME=tmpname|" "$ORIG" > tmp1.devices
- sed -e "s|DEVNAME=$dev2|DEVNAME=$dev1|" tmp1.devices > tmp2.devices
- sed -e "s|DEVNAME=tmpname|DEVNAME=$dev2|" tmp2.devices > "$DF"
- cat "$DF"
--rm /run/lvm/searched_devnames || true
- # pvs reports correct info
- pvs -o+uuid | tee pvs.out
- grep $vg1 pvs.out > out
-@@ -345,7 +331,6 @@ sed -e "s|DEVNAME=$dev1|DEVNAME=tmpname|" "$ORIG" > tmp1.devices
- sed -e "s|DEVNAME=$dev2|DEVNAME=$dev1|" tmp1.devices > tmp2.devices
- sed -e "s|DEVNAME=tmpname|DEVNAME=$dev2|" tmp2.devices > "$DF"
- cat "$DF"
--rm /run/lvm/searched_devnames || true
- # lvmdevices fixes the DF
- lvmdevices --update
- grep "$PVID1" "$DF" |tee out
-@@ -367,7 +352,6 @@ cat "$DF"
- sed -e "s|DEVNAME=$dev1|DEVNAME=$dev3|" "$ORIG" > tmp1.devices
- sed -e "s|IDNAME=$dev1|IDNAME=$dev3|" tmp1.devices > "$DF"
- cat "$DF"
--rm /run/lvm/searched_devnames || true
- # pvs reports correct info
- pvs -o+uuid | tee pvs.out
- grep $vg1 pvs.out > out
-@@ -386,7 +370,6 @@ cat "$DF"
- sed -e "s|DEVNAME=$dev1|DEVNAME=$dev3|" "$ORIG" > tmp1.devices
- sed -e "s|IDNAME=$dev1|IDNAME=$dev3|" tmp1.devices > "$DF"
- cat "$DF"
--rm /run/lvm/searched_devnames || true
- # lvmdevices fixes the DF
- lvmdevices --update
- not grep "$PVID3" "$DF"
-@@ -401,7 +384,6 @@ cat "$DF"
- sed -e "s|DEVNAME=$dev1|DEVNAME=$dev2|" tmp1.devices > "$DF"
- sed -e "s|IDNAME=$dev1|IDNAME=$dev2|" tmp1.devices > "$DF"
- cat "$DF"
--rm /run/lvm/searched_devnames || true
- # pvs reports correct info
- pvs -o+uuid | tee pvs.out
- grep $vg1 pvs.out > out
-@@ -421,7 +403,6 @@ cat "$DF"
- sed -e "s|DEVNAME=$dev1|DEVNAME=$dev2|" tmp1.devices > "$DF"
- sed -e "s|IDNAME=$dev1|IDNAME=$dev2|" tmp1.devices > "$DF"
- cat "$DF"
--rm /run/lvm/searched_devnames || true
- # lvmdevices fixes the DF
- lvmdevices --update
- grep "$PVID1" "$DF" |tee out
-@@ -441,7 +422,6 @@ sed -e "s|IDNAME=$dev1|IDNAME=tmpname|" tmp3.devices > tmp4.devices
- sed -e "s|IDNAME=$dev2|IDNAME=$dev1|" tmp4.devices > tmp5.devices
- sed -e "s|IDNAME=tmpname|IDNAME=$dev2|" tmp5.devices > "$DF"
- cat "$DF"
--rm /run/lvm/searched_devnames || true
- # pvs reports correct info
- pvs -o+uuid | tee pvs.out
- grep $vg1 pvs.out > out
-@@ -465,7 +445,6 @@ sed -e "s|IDNAME=$dev1|IDNAME=tmpname|" tmp3.devices > tmp4.devices
- sed -e "s|IDNAME=$dev2|IDNAME=$dev1|" tmp4.devices > tmp5.devices
- sed -e "s|IDNAME=tmpname|IDNAME=$dev2|" tmp5.devices > "$DF"
- cat "$DF"
--rm /run/lvm/searched_devnames || true
- # lvmdevices fixes the DF
- lvmdevices --update
- grep "$PVID1" "$DF" |tee out
-@@ -489,7 +468,6 @@ cat "$DF"
- sed -e "s|DEVNAME=$dev1|DEVNAME=$dev3|" "$ORIG" > tmp1.devices
- sed -e "s|IDNAME=$dev1|IDNAME=$dev3|" tmp1.devices > "$DF"
- cat "$DF"
--rm /run/lvm/searched_devnames || true
- _clear_online_files
- pvscan --cache -aay "$dev1"
- pvscan --cache -aay "$dev2"
-@@ -530,7 +508,6 @@ sed -e "s|IDNAME=tmpname|IDNAME=$dev2|" tmp5.devices > "$DF"
- cat "$DF"
- 
- _clear_online_files
--rm /run/lvm/searched_devnames || true
- 
- # pvscan creates the correct online files and activates correct vg
- pvscan --cache -aay "$dev1"
 
 
