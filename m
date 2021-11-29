@@ -1,47 +1,429 @@
-From: David Teigland <teigland@redhat.com>
-Date: Wed, 24 Nov 2021 08:55:59 -0600
-Subject: atime/mtime for VG/PV
-In-Reply-To: <CAJNi=XryUgjw3BuiMZV4CX6GSUD7sfLyaa2a-_gpj9f_iH+Yug@mail.gmail.com>
-References: <CAJNi=XryUgjw3BuiMZV4CX6GSUD7sfLyaa2a-_gpj9f_iH+Yug@mail.gmail.com>
-Message-ID: <20211124145559.GA13560@redhat.com>
+From: David Teigland <teigland@sourceware.org>
+Date: Mon, 29 Nov 2021 17:10:55 +0000 (GMT)
+Subject: main - man: lvmautoactivation
+Message-ID: <20211129171055.A69B3385840B@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On Tue, Nov 23, 2021 at 04:58:20PM +0100, Marian Csontos wrote:
-> Hi folks, as various issues with duplicates are being solved, I wondered if
-> it would be beneficial to include things like atime/mtime in metadata.
-> 
-> Actually mtime is already there in the VG metadata: seqno + timestamp.
-> 
-> So what would atime be?
-> Store a timestamp on activation of an LV in the VG? Write on any lvm
-> operation? Or write timestamp more frequently when there are active devices?
-> 
-> atime should be stored in PV metadata, even if there is no VG MDA - these
-> would benefit the most as there is no VG MDA and thus no "mtime".
-> 
-> When there are duplicates higher atime would be almost certainly the
-> correct device, unless user intends to use a LUN's snapshot, but that would
-> require an input from user anyway.
-> 
-> User MUST be able to turn it of ("noatime") in case of being slow for
-> hundreds/thousands of PVs.
-> 
-> Perhaps this would not have to be fsynced all the time, but then there may
-> be a chance for mismatch and for snapshot having higher timestamp than
-> original PV.
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=009007484b88fb16e2177deaf4774d0e50576a06
+Commit:        009007484b88fb16e2177deaf4774d0e50576a06
+Parent:        01bf8e174774359a5c65e7e712d208ff7194310b
+Author:        David Teigland <teigland@redhat.com>
+AuthorDate:    Wed Nov 24 16:03:39 2021 -0600
+Committer:     David Teigland <teigland@redhat.com>
+CommitterDate: Mon Nov 29 11:10:02 2021 -0600
 
-It's interesting, it would be nice to think of some other problem(s) we
-could address with it or something like it.  A local file might work in
-place of metadata, depending on what it's used for.
+man: lvmautoactivation
 
-The issue of duplicate PVs should soon go away with the devices file in
-use.  When the devices file is used, a new cloned/copied PV will often not
-be included in the devices file, so lvm won't see it.  But if it is, we
-also store the WWID of each PV in the VG metadata, so if there are
-duplicates we use the one with the correct WWID.
+new topical man page describing autoactivation
+---
+ man/Makefile.in              |   2 +-
+ man/lvm.8_main               |   1 +
+ man/lvmautoactivation.7_main | 280 +++++++++++++++++++++++++++++++++++++++++++
+ man/pvscan.8_des             |  63 +++++-----
+ 4 files changed, 309 insertions(+), 37 deletions(-)
+
+diff --git a/man/Makefile.in b/man/Makefile.in
+index 40248d640..ba6f2046f 100644
+--- a/man/Makefile.in
++++ b/man/Makefile.in
+@@ -33,7 +33,7 @@ CMIRRORDMAN = cmirrord.8
+ LVMDBUSDMAN = lvmdbusd.8
+ 
+ MAN5=lvm.conf.5
+-MAN7=lvmsystemid.7 lvmreport.7 lvmraid.7
++MAN7=lvmsystemid.7 lvmreport.7 lvmraid.7 lvmautoactivation.7
+ 
+ MAN8=lvm.8 lvmdump.8 lvm-fullreport.8 lvm-lvpoll.8 \
+      lvcreate.8 lvchange.8 lvmconfig.8 lvconvert.8 lvdisplay.8 \
+diff --git a/man/lvm.8_main b/man/lvm.8_main
+index 6f86d0353..a008a3bc0 100644
+--- a/man/lvm.8_main
++++ b/man/lvm.8_main
+@@ -579,6 +579,7 @@ Prepends source file name and code line number with libdm debugging.
+ .BR lvmraid (7),
+ .BR lvmthin (7),
+ .BR lvmcache (7),
++.BR lvmautoactivation (7),
+ .P
+ .BR dmsetup (8),
+ .BR dmstats (8),
+diff --git a/man/lvmautoactivation.7_main b/man/lvmautoactivation.7_main
+new file mode 100644
+index 000000000..87c15a3d1
+--- /dev/null
++++ b/man/lvmautoactivation.7_main
+@@ -0,0 +1,280 @@
++.TH "LVMAUTOACTIVATION" "7" "LVM TOOLS #VERSION#" "Red Hat, Inc" "\""
++.
++.SH NAME
++.
++lvmautoactivation \(em LVM autoactivation
++.
++.SH DESCRIPTION
++.
++Autoactivation is the activation of LVs performed automatically by the
++system in response to LVM devices being attached to the machine.  When all
++PVs in a VG have been attached, the VG is complete, and LVs in the VG are
++activated.
++.P
++Autoactivation of VGs, or specific LVs, can be prevented using vgchange or
++lvchange --setautoactivation n.  The lvm.conf auto_activation_volume_list
++is another way to limit autoactivation.
++.P
++The most common form of autoactivation is "event based", in which complete
++VGs are activated in response to uevents which occur during system startup
++or at any time after the system has started.  Another form of
++autoactivation is "service based" in which complete VGs are activated at a
++fixed point during system startup by a systemd service, and are not
++activated in response to uevents.  This can be controlled with the
++lvm.conf setting event_activation.
++.P
++Event based autoactivation is driven by udev, udev rules, and systemd.
++When a device is attached to a machine, a uevent is generated by the
++kernel to notify userspace of the new device.  systemd-udev runs udev
++rules to process the new device.  Udev rules use blkid to identify the
++device as an LVM PV and then execute the lvm-specific udev rule for the
++device, which triggers autoactivation.
++.P
++There are two variations of event based autoactivation that may be used a
++system, depending on the LVM udev rule that is installed (found in
++/lib/udev/rules.d/.)  The following summarizes the steps in each rule
++which lead to autoactivation:
++.P
++.B 69-dm-lvm-metad.rules
++.
++.IP \[bu] 2
++device /dev/name with major:minor X:Y is attached to the machine
++.
++.IP \[bu] 2
++systemd/udev runs blkid to identify /dev/name as an LVM PV
++.
++.IP \[bu] 2
++udev rule 69-dm-lvm-metad.rules is run for /dev/name
++.
++.IP \[bu] 2
++the lvm udev rule runs the systemd service lvm2-pvscan at X:Yservice
++.
++.IP \[bu] 2
++the lvm2-pvscan service runs:
++.br
++pvscan --cache -aay --major X --minor Y
++.
++.IP \[bu] 2
++pvscan reads the device, records that the PV is online
++(see pvs_online), and checks if the VG is complete.
++.
++.IP \[bu] 2
++if the VG is complete, pvscan creates the vgs_online temp file,
++and activates the VG.
++.
++.IP \[bu] 2
++the activation command output can be seen from
++systemctl status lvm2-pvscan*
++.P
++.B 69-dm-lvm.rules
++.
++.IP \[bu] 2
++device /dev/name with major:minor X:Y is attached to the machine
++.
++.IP \[bu] 2
++systemd/udev runs blkid to identify /dev/name as an LVM PV
++.
++.IP \[bu] 2
++udev rule 69-dm-lvm.rules is run for /dev/name
++.
++.IP \[bu] 2
++the lvm udev rule runs:
++.br
++pvscan --cache --listvg --checkcomplete --vgonline
++.br
++--autoactivation event --udevoutput --journal=output /dev/name
++.
++.IP \[bu] 2
++pvscan reads the device, records that the PV is online
++(see pvs_online), and checks if the VG is complete.
++.
++.IP \[bu] 2
++if the VG is complete, pvscan creates the vgs_online temp file,
++and prints the name of the VG for the udev rule to import:
++LVM_VG_NAME_COMPLETE='vgname'
++.
++.IP \[bu] 2
++if the lvm udev rule sees LVM_VG_NAME_COMPLETE from pvscan,
++it activates the VG using a transient systemd service named
++lvm-activate-<vgname>.
++.
++.IP \[bu] 2
++the lvm-activate-<vgname> service runs
++.br
++vgchange -aay --autoactivation event <vgname>
++.
++.IP \[bu] 2
++the activation command output can be seen from
++systemctl status lvm-activate-<vgname>
++.P
++.
++.SS pvscan options
++.P
++.B --cache
++.br
++Read the <device> arg (and only that device), and record that
++the PV is online by creating the /run/lvm/pvs_online/<pvid>
++file containing the name of the VG and the device for the PV.
++.P
++.B -aay
++.br
++Activate the VG from the pvscan command
++(includes implicit --checkcomplete and --vgonline.)
++.P
++.B --checkcomplete
++.br
++Check if the VG is complete, i.e. all PVs are present on
++the system, by checking /run/lvm/pvs_online/<pvid> files.
++.P
++.B --vgonline
++.br
++Create /run/lvm/vgs_online/<vgname> if the VG is complete
++(used to ensure only one command performs activation.)
++.P
++.B --autoactivation event
++.br
++Inform the command it is used for event based autoactivation.
++.P
++.B --listvg
++.br
++Print the name of the VG using the device.
++.P
++.B --udevoutput
++.br
++Only print output that can be imported to the udev rule,
++using the udev environment key format, i.e. NAME='value'.
++.P
++.B --journal=output
++.br
++Send standard command output to the journal (when stdout
++is reserved for udev output.)
++.P
++.SS Temp files
++.P
++Autoactivation commands use a number of temp files in /run/lvm (with the
++expectation that /run is cleared between boots.)
++.P
++.B pvs_online
++.br
++pvscan --cache creates a file here for each PV that is attached.  The file
++is named with the PVID and contains the VG name and device information.
++The existence of the file is used to determine when all PVs for a given VG
++are present.  The device information in these files is also used to
++optimize locating devices for a VG when the VG is activated.
++.P
++.B pvs_lookup
++.br
++pvscan --cache creates a file here named for a VG (if one doesn't already
++exist.)  The file contains a list of PVIDs in the VG.  This is needed when
++a PV is processed which has no VG metadata, in which case the list of
++PVIDs from the lookup file is used to check if the VG is complete.
++.P
++.B vgs_online
++.br
++The first activation command (pvscan or vgchange) to create a file here,
++named for the VG, will activate the VG.  This resolves a race when
++concurrent commands attempt to activate a VG at once.
++.
++.SH EXAMPLES
++.P
++VG "vg" contains two PVs:
++.nf
++$ pvs -o name,vgname,uuid /dev/sdb /dev/sdc
++  PV         VG PV UUID                               
++  /dev/sdb   vg 1uKpaT-lFOZ-NLHX-j4jI-OBi1-QpdE-HZ5hZY
++  /dev/sdc   vg 5J3tM8-aIPe-2vbd-DBe7-bvRq-TGj0-DaKV2G
++.fi
++.P
++use of --cache:
++.nf
++$ pvscan --cache /dev/sdb
++  pvscan[12922] PV /dev/sdb online.
++$ pvscan --cache /dev/sdc
++  pvscan[12923] PV /dev/sdc online.
++
++$ cat /run/lvm/pvs_online/1uKpaTlFOZNLHXj4jIOBi1QpdEHZ5hZY 
++8:16
++vg:vg
++dev:/dev/sdb
++$ cat /run/lvm/pvs_online/5J3tM8aIPe2vbdDBe7bvRqTGj0DaKV2G 
++8:32
++vg:vg
++dev:/dev/sdc
++.fi
++.P
++use of -aay:
++.nf
++$ pvscan --cache -aay /dev/sdb
++  pvscan[12935] PV /dev/sdb online, VG vg incomplete (need 1).
++$ pvscan --cache -aay /dev/sdc
++  pvscan[12936] PV /dev/sdc online, VG vg is complete.
++  pvscan[12936] VG vg run autoactivation.
++  1 logical volume(s) in volume group "vg" now active
++
++$ cat /run/lvm/pvs_online/1uKpaTlFOZNLHXj4jIOBi1QpdEHZ5hZY 
++8:16
++vg:vg
++dev:/dev/sdb
++$ cat /run/lvm/pvs_online/5J3tM8aIPe2vbdDBe7bvRqTGj0DaKV2G 
++8:32
++vg:vg
++dev:/dev/sdc
++$ ls /run/lvm/vgs_online/vg 
++/run/lvm/vgs_online/vg
++.fi
++.P
++use of --listvg:
++.nf
++$ pvscan --cache --listvg /dev/sdb
++  VG vg
++$ pvscan --cache --listvg /dev/sdc
++  VG vg
++
++$ cat /run/lvm/pvs_online/1uKpaTlFOZNLHXj4jIOBi1QpdEHZ5hZY 
++8:16
++vg:vg
++dev:/dev/sdb
++$ cat /run/lvm/pvs_online/5J3tM8aIPe2vbdDBe7bvRqTGj0DaKV2G 
++8:32
++vg:vg
++dev:/dev/sdc
++.fi
++.P
++use of --checkcomplete:
++.nf
++$ pvscan --cache --listvg --checkcomplete --vgonline /dev/sdb
++  pvscan[12996] PV /dev/sdb online, VG vg incomplete (need 1).
++  VG vg incomplete
++$ pvscan --cache --listvg --checkcomplete --vgonline /dev/sdc
++  pvscan[12997] PV /dev/sdc online, VG vg is complete.
++  VG vg complete
++.fi
++.P
++use of --udevoutput:
++.nf
++$ pvscan --cache --listvg --checkcomplete --vgonline --udevoutput /dev/sdb
++LVM_VG_NAME_INCOMPLETE='vg'
++$ pvscan --cache --listvg --checkcomplete --vgonline --udevoutput /dev/sdc
++LVM_VG_NAME_COMPLETE='vg'
++.fi
++.P
++use of --listlvs:
++.nf
++$ lvs -o name,devices vg
++  LV    Devices                
++  lvol0 /dev/sdb(0)            
++  lvol1 /dev/sdc(0)            
++  lvol2 /dev/sdb(1),/dev/sdc(1)
++
++$ pvscan --cache --listlvs --checkcomplete /dev/sdb
++  pvscan[13288] PV /dev/sdb online, VG vg incomplete (need 1).
++  VG vg incomplete
++  LV vg/lvol0 complete
++  LV vg/lvol2 incomplete
++$ pvscan --cache --listlvs --checkcomplete /dev/sdc
++  pvscan[13289] PV /dev/sdc online, VG vg is complete.
++  VG vg complete
++  LV vg/lvol1 complete
++  LV vg/lvol2 complete
++.fi
++
+diff --git a/man/pvscan.8_des b/man/pvscan.8_des
+index b20b987da..4c5929955 100644
+--- a/man/pvscan.8_des
++++ b/man/pvscan.8_des
+@@ -4,56 +4,47 @@ like
+ or
+ .BR pvdisplay (8).
+ .P
+-When the --cache and -aay options are used, pvscan records which PVs are
+-available on the system, and activates LVs in completed VGs.  A VG is
+-complete when pvscan sees that the final PV in the VG has appeared.  This
+-is used by event-based system startup (systemd, udev) to activate LVs.
+-.P
+-The four main variations of this are:
++When --cache is used, pvscan updates runtime lvm state on the system, or
++with -aay performs autoactivation.
+ .P
+ .B pvscan --cache
+ .I device
+ .P
+-If device is present, lvm adds a record that the PV on device is online.
++If device is present, lvm records that the PV on device is online.
+ If device is not present, lvm removes the online record for the PV.
+-In most cases, the pvscan will only read the named devices.
++pvscan only reads the named device.
+ .P
+-.B pvscan --cache -aay
+-.IR device ...
++.B pvscan --cache
+ .P
+-This begins by performing the same steps as above.  Afterward, if the VG
+-for the specified PV is complete, then pvscan will activate LVs in the VG
+-(the same as vgchange -aay vgname would do.)
++Updates the runtime state for all lvm devices.
+ .P
+-.B pvscan --cache
++.B pvscan --cache -aay
++.I device
+ .P
+-This first clears all existing PV online records, then scans all devices
+-on the system, adding PV online records for any PVs that are found.
++Performs the --cache steps for the device, then checks if the VG using the
++device is complete.  If so, LVs in the VG are autoactivated, the same as
++vgchange -aay vgname would do.  (A device name may be replaced with major
++and minor numbers.)
+ .P
+ .B pvscan --cache -aay
+ .P
+-This begins by performing the same steps as pvscan --cache.  Afterward, it
+-activates LVs in any complete VGs.
++Performs the --cache steps for all devices, then autoactivates any complete VGs.
+ .P
+-To prevent devices from being scanned by pvscan --cache, add them
+-to
+-.BR lvm.conf (5)
+-.B devices/global_filter.
+-For more information, see:
+-.br
+-.B lvmconfig --withcomments devices/global_filter
++.B pvscan --cache --listvg|--listlvs
++.I device
++.P
++Performs the --cache steps for the device, then prints the name of the VG
++using the device, or the names of LVs using the device.  --checkcomplete
++is usually included to check if all PVs for the VG or LVs are online.
++When this command is called by a udev rule, the output must conform to
++udev rule specifications (see --udevoutput.)  The udev rule will use the
++results to perform autoactivation.
+ .P
+-Auto-activation of VGs or LVs can be enabled/disabled using:
+-.br
++Autoactivation of VGs or LVs can be enabled/disabled using vgchange or
++lvchange with --setautoactivation y|n, or by adding names to
+ .BR lvm.conf (5)
+ .B activation/auto_activation_volume_list
+ .P
+-For more information, see:
+-.br
+-.B lvmconfig --withcomments activation/auto_activation_volume_list
+-.P
+-To disable auto-activation, explicitly set this list to an empty list,
+-i.e. auto_activation_volume_list = [ ].
+-.P
+-When this setting is undefined (e.g. commented), then all LVs are
+-auto-activated.
++See
++.BR lvmautoactivation (7)
++for more information about how pvscan is used for autoactivation.
 
 
