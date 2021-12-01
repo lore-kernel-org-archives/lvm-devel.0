@@ -1,71 +1,60 @@
 From: David Teigland <teigland@sourceware.org>
-Date: Wed,  1 Dec 2021 19:42:48 +0000 (GMT)
-Subject: main - pvscan: fix filter symlink checks
-Message-ID: <20211201194248.012C7385840C@sourceware.org>
+Date: Wed,  1 Dec 2021 20:39:45 +0000 (GMT)
+Subject: main - pvscan: fix error message for invalid devname
+Message-ID: <20211201203945.3D975385840C@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=05d9a013516f23e27b04b6933705c6ae45f9f5b2
-Commit:        05d9a013516f23e27b04b6933705c6ae45f9f5b2
-Parent:        d5402e55f6b9d3a5f407502ce5c7a8a5bfd12243
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=c42a05c3ec8608e438fca435e3cbe6d306af80c6
+Commit:        c42a05c3ec8608e438fca435e3cbe6d306af80c6
+Parent:        05d9a013516f23e27b04b6933705c6ae45f9f5b2
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Wed Dec 1 13:40:09 2021 -0600
+AuthorDate:    Wed Dec 1 14:36:40 2021 -0600
 Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Wed Dec 1 13:42:32 2021 -0600
+CommitterDate: Wed Dec 1 14:38:17 2021 -0600
 
-pvscan: fix filter symlink checks
+pvscan: fix error message for invalid devname
 
-Fixes commit "pvscan: match device arg to filter symlink"
-which failed to account for the fact that filter entries
-are not just path names but include "a" or "r", etc.
+uninitialized name buffer used in message.
+fixes "pvs_online: include devname in pvid files"
 ---
- tools/pvscan.c | 18 +++++++++++-------
- 1 file changed, 11 insertions(+), 7 deletions(-)
+ lib/device/dev-cache.c | 7 ++++++-
+ 1 file changed, 6 insertions(+), 1 deletion(-)
 
-diff --git a/tools/pvscan.c b/tools/pvscan.c
-index 429b5e676..dcf183a46 100644
---- a/tools/pvscan.c
-+++ b/tools/pvscan.c
-@@ -828,6 +828,7 @@ static int _filter_uses_symlinks(struct cmd_context *cmd, int filter_cfg)
+diff --git a/lib/device/dev-cache.c b/lib/device/dev-cache.c
+index b5f355484..825e348b4 100644
+--- a/lib/device/dev-cache.c
++++ b/lib/device/dev-cache.c
+@@ -2102,7 +2102,7 @@ int setup_devices_for_online_autoactivation(struct cmd_context *cmd)
+ static char *_get_devname_from_devno(struct cmd_context *cmd, dev_t devno)
  {
- 	const struct dm_config_node *cn;
- 	const struct dm_config_value *cv;
-+	const char *fname;
+ 	char path[PATH_MAX];
+-	char devname[PATH_MAX];
++	char devname[PATH_MAX] = { 0 };
+ 	char namebuf[NAME_LEN];
+ 	char line[1024];
+ 	int major = MAJOR(devno);
+@@ -2114,6 +2114,9 @@ static char *_get_devname_from_devno(struct cmd_context *cmd, dev_t devno)
+ 	struct dirent *dirent;
+ 	FILE *fp;
  
- 	if ((cn = find_config_tree_array(cmd, filter_cfg, NULL))) {
-         	for (cv = cn->v; cv; cv = cv->next) {
-@@ -836,19 +837,22 @@ static int _filter_uses_symlinks(struct cmd_context *cmd, int filter_cfg)
- 			if (!cv->v.str)
- 				continue;
- 
--			if (!strncmp(cv->v.str, "/dev/disk/", 10))
-+			fname = cv->v.str;
++	if (!devno)
++		return NULL;
 +
-+			if (fname[0] != 'a')
-+				continue;
-+
-+			if (strstr(fname, "/dev/disk/"))
- 				return 1;
--			if (!strncmp(cv->v.str, "/dev/mapper/", 12))
-+			if (strstr(fname, "/dev/mapper/"))
- 				return 1;
--			if (cv->v.str[0] == '/')
--				continue;
- 
- 			/* In case /dev/disk/by was omitted */
--			if (strstr(cv->v.str, "lvm-pv-uuid"))
-+			if (strstr(fname, "lvm-pv-uuid"))
- 				return 1;
--			if (strstr(cv->v.str, "dm-uuid"))
-+			if (strstr(fname, "dm-uuid"))
- 				return 1;
--			if (strstr(cv->v.str, "wwn-"))
-+			if (strstr(fname, "wwn-"))
- 				return 1;
- 		}
- 	}
+ 	/*
+ 	 * $ ls /sys/dev/block/8:0/device/block/
+ 	 * sda
+@@ -2251,6 +2254,8 @@ struct device *setup_dev_in_dev_cache(struct cmd_context *cmd, dev_t devno, cons
+ 	if (devname) {
+ 		if (stat(devname, &buf) < 0) {
+ 			log_error("Cannot access device %s for %d:%d.", devname, major, minor);
++			if (!devno)
++				return_NULL;
+ 			if (!(devname = _get_devname_from_devno(cmd, devno))) {
+ 				log_error("No device name found from %d:%d.", major, minor);
+ 				return_NULL;
 
 
