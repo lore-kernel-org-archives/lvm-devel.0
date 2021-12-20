@@ -1,77 +1,81 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Mon, 20 Dec 2021 15:14:09 +0000 (GMT)
-Subject: main - libdm: correct version check
-Message-ID: <20211220151409.77F5A3858005@sourceware.org>
+Date: Mon, 20 Dec 2021 15:14:06 +0000 (GMT)
+Subject: main - hash: raise hash table size
+Message-ID: <20211220151406.16C1A3858411@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=39a121ddbcf83314c5a75e23671acbc6600292ce
-Commit:        39a121ddbcf83314c5a75e23671acbc6600292ce
-Parent:        47ac2659d5f8544dcd53aeef13a42b3256f2fd6f
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=09a4b56895b959f46a9b7e7af11732d8e1bbf945
+Commit:        09a4b56895b959f46a9b7e7af11732d8e1bbf945
+Parent:        ed1651d11f42ea7157b7b0aebf498b97e56b98aa
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed Dec 8 10:56:21 2021 +0100
+AuthorDate:    Fri Dec 17 16:36:36 2021 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Mon Dec 20 16:13:28 2021 +0100
 
-libdm: correct version check
+hash: raise hash table size
 
-If there ever would be API version 5,
-these check would give incorrect results.
+With slightly bigger hash tables, there is considerable
+less hash collisions.
 ---
- device_mapper/ioctl/libdm-iface.c | 6 ++----
- libdm/ioctl/libdm-iface.c         | 6 ++----
- 2 files changed, 4 insertions(+), 8 deletions(-)
+ WHATS_NEW                       | 1 +
+ lib/config/config.c             | 2 +-
+ lib/device/dev-cache.c          | 2 +-
+ lib/filters/filter-persistent.c | 2 +-
+ 4 files changed, 4 insertions(+), 3 deletions(-)
 
-diff --git a/device_mapper/ioctl/libdm-iface.c b/device_mapper/ioctl/libdm-iface.c
-index 533bb9eea..925f18c6b 100644
---- a/device_mapper/ioctl/libdm-iface.c
-+++ b/device_mapper/ioctl/libdm-iface.c
-@@ -616,8 +616,7 @@ int dm_check_version(void)
- int dm_cookie_supported(void)
- {
- 	return (dm_check_version() &&
--		_dm_version >= 4 &&
--		_dm_version_minor >= 15);
-+		((_dm_version == 4) ? _dm_version_minor >= 15 : _dm_version > 4));
- }
+diff --git a/WHATS_NEW b/WHATS_NEW
+index b0720cd10..fc327dffd 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.03.15 - 
+ ===================================
++  Increase some hash table size to better support large device sets.
  
- static int _dm_inactive_supported(void)
-@@ -1441,8 +1440,7 @@ static int _udev_complete(struct dm_task *dmt)
- static int _check_uevent_generated(struct dm_ioctl *dmi)
- {
- 	if (!dm_check_version() ||
--	    _dm_version < 4 ||
--	    _dm_version_minor < 17)
-+	    ((_dm_version == 4) ? _dm_version_minor < 17 : _dm_version < 4))
- 		/* can't check, assume uevent is generated */
- 		return 1;
+ Version 2.03.14 - 20th October 2021
+ ===================================
+diff --git a/lib/config/config.c b/lib/config/config.c
+index 0cb0da121..c8dab5683 100644
+--- a/lib/config/config.c
++++ b/lib/config/config.c
+@@ -1167,7 +1167,7 @@ int config_def_check(struct cft_check_handle *handle)
+ 	*vp = 0;
+ 	*rp = 0;
+ 	if (!handle->cmd->cft_def_hash) {
+-		if (!(handle->cmd->cft_def_hash = dm_hash_create(60))) {
++		if (!(handle->cmd->cft_def_hash = dm_hash_create(500))) {
+ 			log_error("Failed to create configuration definition hash.");
+ 			r = 0; goto out;
+ 		}
+diff --git a/lib/device/dev-cache.c b/lib/device/dev-cache.c
+index 825e348b4..d3fae4948 100644
+--- a/lib/device/dev-cache.c
++++ b/lib/device/dev-cache.c
+@@ -1246,7 +1246,7 @@ int dev_cache_init(struct cmd_context *cmd)
+ 	if (!(_cache.mem = dm_pool_create("dev_cache", 10 * 1024)))
+ 		return_0;
  
-diff --git a/libdm/ioctl/libdm-iface.c b/libdm/ioctl/libdm-iface.c
-index 28589a15c..a3a1bdc66 100644
---- a/libdm/ioctl/libdm-iface.c
-+++ b/libdm/ioctl/libdm-iface.c
-@@ -609,8 +609,7 @@ int dm_check_version(void)
- int dm_cookie_supported(void)
- {
- 	return (dm_check_version() &&
--		_dm_version >= 4 &&
--		_dm_version_minor >= 15);
-+		((_dm_version == 4) ? _dm_version_minor >= 15 : _dm_version > 4));
- }
+-	if (!(_cache.names = dm_hash_create(120)) ||
++	if (!(_cache.names = dm_hash_create(1020)) ||
+ 	    !(_cache.vgid_index = dm_hash_create(30)) ||
+ 	    !(_cache.lvid_index = dm_hash_create(29))) {
+ 		dm_pool_destroy(_cache.mem);
+diff --git a/lib/filters/filter-persistent.c b/lib/filters/filter-persistent.c
+index 494a38ece..c164c4a99 100644
+--- a/lib/filters/filter-persistent.c
++++ b/lib/filters/filter-persistent.c
+@@ -58,7 +58,7 @@ static int _init_hash(struct pfilter *pf)
+ 	if (pf->devices)
+ 		dm_hash_destroy(pf->devices);
  
- static int _dm_inactive_supported(void)
-@@ -1436,8 +1435,7 @@ static int _udev_complete(struct dm_task *dmt)
- static int _check_uevent_generated(struct dm_ioctl *dmi)
- {
- 	if (!dm_check_version() ||
--	    _dm_version < 4 ||
--	    _dm_version_minor < 17)
-+	    ((_dm_version == 4) ? _dm_version_minor < 17 : _dm_version < 4))
- 		/* can't check, assume uevent is generated */
- 		return 1;
+-	if (!(pf->devices = dm_hash_create(111)))
++	if (!(pf->devices = dm_hash_create(511)))
+ 		return_0;
  
+ 	return 1;
 
 
