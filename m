@@ -1,198 +1,235 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Mon, 20 Dec 2021 15:14:12 +0000 (GMT)
-Subject: main - libdm: unmangling UUID for DM_DEVICE_LIST
-Message-ID: <20211220151412.D8D6D3858025@sourceware.org>
+Date: Mon, 20 Dec 2021 15:14:11 +0000 (GMT)
+Subject: main - activate: device_is_usable
+Message-ID: <20211220151411.B6E6F3858016@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=90da953fd22437a8abfff02eb590a621efcc007c
-Commit:        90da953fd22437a8abfff02eb590a621efcc007c
-Parent:        65236ee7226930bcbabac0d2dc1979a90bcf2d19
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=65236ee7226930bcbabac0d2dc1979a90bcf2d19
+Commit:        65236ee7226930bcbabac0d2dc1979a90bcf2d19
+Parent:        5a78979b68c4ae822c3f9bcc7ba662c7aa727b40
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed Dec 8 10:45:13 2021 +0100
+AuthorDate:    Wed Dec 15 11:26:21 2021 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Mon Dec 20 16:13:28 2021 +0100
 
-libdm: unmangling UUID for DM_DEVICE_LIST
+activate: device_is_usable
 
-Properly unmangle UUID if they are provided as result
-of DM_DEVICE_LIST ioctl on newer linux kernels.
+Move checking of usable uuid into separate function
+and pass in also cmd context.
 ---
- WHATS_NEW_DM                      |  1 +
- device_mapper/ioctl/libdm-iface.c | 52 +++++++++++++++++++++++++++++++++------
- libdm/ioctl/libdm-iface.c         | 51 ++++++++++++++++++++++++++++++++------
- 3 files changed, 88 insertions(+), 16 deletions(-)
+ lib/activate/activate.c     |   2 +-
+ lib/activate/activate.h     |   2 +-
+ lib/activate/dev_manager.c  | 113 ++++++++++++++++++++++++--------------------
+ lib/filters/filter-usable.c |   2 +-
+ 4 files changed, 66 insertions(+), 53 deletions(-)
 
-diff --git a/WHATS_NEW_DM b/WHATS_NEW_DM
-index 8e06ee9b9..dfb075dcc 100644
---- a/WHATS_NEW_DM
-+++ b/WHATS_NEW_DM
-@@ -1,5 +1,6 @@
- Version 1.02.183 - 
- ====================================
-+  Unmangle UUIDs for DM_DEVICE_LIST ioctl.
+diff --git a/lib/activate/activate.c b/lib/activate/activate.c
+index 52ec02e2c..9d1fe8ebe 100644
+--- a/lib/activate/activate.c
++++ b/lib/activate/activate.c
+@@ -413,7 +413,7 @@ int add_areas_line(struct dev_manager *dm, struct lv_segment *seg,
+ {
+         return 0;
+ }
+-int device_is_usable(struct device *dev, struct dev_usable_check_params check, int *is_lv)
++int device_is_usable(struct cmd_context *cmd, struct device *dev, struct dev_usable_check_params check, int *is_lv)
+ {
+         return 0;
+ }
+diff --git a/lib/activate/activate.h b/lib/activate/activate.h
+index edd385aef..6133e6d97 100644
+--- a/lib/activate/activate.h
++++ b/lib/activate/activate.h
+@@ -254,7 +254,7 @@ struct dev_usable_check_params {
+  * Returns 1 if mapped device is not suspended, blocked or
+  * is using a reserved name.
+  */
+-int device_is_usable(struct device *dev, struct dev_usable_check_params check, int *is_lv);
++int device_is_usable(struct cmd_context *cmd, struct device *dev, struct dev_usable_check_params check, int *is_lv);
  
- Version 1.02.181 - 20th October 2021
- ====================================
-diff --git a/device_mapper/ioctl/libdm-iface.c b/device_mapper/ioctl/libdm-iface.c
-index 925f18c6b..acc0f557c 100644
---- a/device_mapper/ioctl/libdm-iface.c
-+++ b/device_mapper/ioctl/libdm-iface.c
-@@ -754,6 +754,31 @@ struct dm_deps *dm_task_get_deps(struct dm_task *dmt)
- 				   dmt->dmi.v4->data_start);
+ /*
+  * Declaration moved here from fs.h to keep header fs.h hidden
+diff --git a/lib/activate/dev_manager.c b/lib/activate/dev_manager.c
+index a73a556b2..56575fa85 100644
+--- a/lib/activate/dev_manager.c
++++ b/lib/activate/dev_manager.c
+@@ -359,7 +359,8 @@ static int _info_run(const char *dlid, struct dm_info *dminfo,
+  *
+  * Returns: 1 if mirror should be ignored, 0 if safe to use
+  */
+-static int _ignore_blocked_mirror_devices(struct device *dev,
++static int _ignore_blocked_mirror_devices(struct cmd_context *cmd,
++					  struct device *dev,
+ 					  uint64_t start, uint64_t length,
+ 					  char *mirror_status_str)
+ {
+@@ -402,7 +403,7 @@ static int _ignore_blocked_mirror_devices(struct device *dev,
+ 				goto_out;
+ 
+ 			tmp_dev->dev = MKDEV(sm->logs[0].major, sm->logs[0].minor);
+-			if (device_is_usable(tmp_dev, (struct dev_usable_check_params)
++			if (device_is_usable(cmd, tmp_dev, (struct dev_usable_check_params)
+ 					     { .check_empty = 1,
+ 					       .check_blocked = 1,
+ 					       .check_suspended = ignore_suspended_devices(),
+@@ -606,6 +607,60 @@ static int _ignore_frozen_raid(struct device *dev, const char *params)
+ 	return r;
  }
  
-+
-+/*
-+ * Round up the ptr to an 8-byte boundary.
-+ * Follow kernel pattern.
-+ */
-+#define ALIGN_MASK 7
-+static size_t _align_val(size_t val)
++static int _is_usable_uuid(const struct device *dev, const char *name, const char *uuid, int check_reserved, int check_lv, int *is_lv)
 +{
-+	return (val + ALIGN_MASK) & ~ALIGN_MASK;
-+}
-+static void *_align_ptr(void *ptr)
-+{
-+	return (void *)_align_val((size_t)ptr);
-+}
++	char *vgname, *lvname, *layer;
++	char vg_name[NAME_LEN];
 +
-+static int _check_has_event_nr(void) {
-+	static int _has_event_nr = -1;
++	if (!check_reserved && !check_lv)
++		return 1;
 +
-+	if (_has_event_nr < 0)
-+		_has_event_nr = dm_check_version() &&
-+			((_dm_version == 4) ?  _dm_version_minor >= 38 : _dm_version > 4);
-+
-+	return _has_event_nr;
-+}
-+
- struct dm_names *dm_task_get_names(struct dm_task *dmt)
- {
- 	return (struct dm_names *) (((char *) dmt->dmi.v4) +
-@@ -1806,23 +1831,34 @@ static int _do_dm_ioctl_unmangle_string(char *str, const char *str_name,
- static int _dm_ioctl_unmangle_names(int type, struct dm_ioctl *dmi)
- {
- 	char buf[DM_NAME_LEN];
--	struct dm_names *names;
-+	char buf_uuid[DM_UUID_LEN];
-+	struct dm_name_list *names;
- 	unsigned next = 0;
- 	char *name;
- 	int r = 1;
-+	uint32_t *event_nr;
-+	char *uuid_ptr;
-+	dm_string_mangling_t mangling_mode = dm_get_name_mangling_mode();
- 
- 	if ((name = dmi->name))
--		r = _do_dm_ioctl_unmangle_string(name, "name", buf, sizeof(buf),
--						 dm_get_name_mangling_mode());
-+		r &= _do_dm_ioctl_unmangle_string(name, "name", buf, sizeof(buf),
-+						  mangling_mode);
- 
- 	if (type == DM_DEVICE_LIST &&
--	    ((names = ((struct dm_names *) ((char *)dmi + dmi->data_start)))) &&
-+	    ((names = ((struct dm_name_list *) ((char *)dmi + dmi->data_start)))) &&
- 	    names->dev) {
- 		do {
--			names = (struct dm_names *)((char *) names + next);
--			r = _do_dm_ioctl_unmangle_string(names->name, "name",
--							 buf, sizeof(buf),
--							 dm_get_name_mangling_mode());
-+			names = (struct dm_name_list *)((char *) names + next);
-+			event_nr = _align_ptr(names->name + strlen(names->name) + 1);
-+			r &= _do_dm_ioctl_unmangle_string(names->name, "name",
-+							  buf, sizeof(buf), mangling_mode);
-+			/* Unmangle also UUID within same loop */
-+			if (_check_has_event_nr() &&
-+			    (event_nr[1] & DM_NAME_LIST_FLAG_HAS_UUID)) {
-+				uuid_ptr = _align_ptr(event_nr + 2);
-+				r &= _do_dm_ioctl_unmangle_string(uuid_ptr, "UUID", buf_uuid,
-+								  sizeof(buf_uuid), mangling_mode);
++	if (!strncmp(uuid, UUID_PREFIX, sizeof(UUID_PREFIX) - 1)) { /* with LVM- prefix */
++		if (check_reserved) {
++			/* Check internal lvm devices */
++			if (strlen(uuid) > (sizeof(UUID_PREFIX) + 2 * ID_LEN)) { /* 68 with suffix */
++				log_debug_activation("%s: Reserved uuid %s on internal LV device %s not usable.",
++						     dev_name(dev), uuid, name);
++				return 0;
 +			}
- 			next = names->next;
- 		} while (next);
- 	}
-diff --git a/libdm/ioctl/libdm-iface.c b/libdm/ioctl/libdm-iface.c
-index a3a1bdc66..0fba79ce4 100644
---- a/libdm/ioctl/libdm-iface.c
-+++ b/libdm/ioctl/libdm-iface.c
-@@ -762,6 +762,30 @@ struct dm_deps *dm_task_get_deps(struct dm_task *dmt)
- 				   dmt->dmi.v4->data_start);
- }
- 
-+/*
-+ * Round up the ptr to an 8-byte boundary.
-+ * Follow kernel pattern.
-+ */
-+#define ALIGN_MASK 7
-+static size_t _align_val(size_t val)
-+{
-+	return (val + ALIGN_MASK) & ~ALIGN_MASK;
-+}
-+static void *_align_ptr(void *ptr)
-+{
-+	return (void *)_align_val((size_t)ptr);
-+}
 +
-+static int _check_has_event_nr(void) {
-+	static int _has_event_nr = -1;
++			/* Recognize some older reserved LVs just from the LV name (snapshot, pvmove...) */
++			vgname = vg_name;
++			if (!dm_strncpy(vg_name, name, sizeof(vg_name)) ||
++			    !dm_split_lvm_name(NULL, NULL, &vgname, &lvname, &layer))
++				return_0;
 +
-+	if (_has_event_nr < 0)
-+		_has_event_nr = dm_check_version() &&
-+			((_dm_version == 4) ?  _dm_version_minor >= 38 : _dm_version > 4);
-+
-+	return _has_event_nr;
-+}
-+
- struct dm_names *dm_task_get_names(struct dm_task *dmt)
- {
- 	return (struct dm_names *) (((char *) dmt->dmi.v4) +
-@@ -1782,23 +1806,34 @@ static int _do_dm_ioctl_unmangle_string(char *str, const char *str_name,
- static int _dm_ioctl_unmangle_names(int type, struct dm_ioctl *dmi)
- {
- 	char buf[DM_NAME_LEN];
--	struct dm_names *names;
-+	char buf_uuid[DM_UUID_LEN];
-+	struct dm_name_list *names;
- 	unsigned next = 0;
- 	char *name;
- 	int r = 1;
-+	uint32_t *event_nr;
-+	char *uuid_ptr;
-+	dm_string_mangling_t mangling_mode = dm_get_name_mangling_mode();
- 
- 	if ((name = dmi->name))
--		r = _do_dm_ioctl_unmangle_string(name, "name", buf, sizeof(buf),
--						 dm_get_name_mangling_mode());
-+		r &= _do_dm_ioctl_unmangle_string(name, "name", buf, sizeof(buf),
-+						  mangling_mode);
- 
- 	if (type == DM_DEVICE_LIST &&
--	    ((names = ((struct dm_names *) ((char *)dmi + dmi->data_start)))) &&
-+	    ((names = ((struct dm_name_list *) ((char *)dmi + dmi->data_start)))) &&
- 	    names->dev) {
- 		do {
--			names = (struct dm_names *)((char *) names + next);
--			r = _do_dm_ioctl_unmangle_string(names->name, "name",
--							 buf, sizeof(buf),
--							 dm_get_name_mangling_mode());
-+			names = (struct dm_name_list *)((char *) names + next);
-+			event_nr = _align_ptr(names->name + strlen(names->name) + 1);
-+			r &= _do_dm_ioctl_unmangle_string(names->name, "name",
-+							  buf, sizeof(buf), mangling_mode);
-+			/* Unmangle also UUID within same loop */
-+			if (_check_has_event_nr() &&
-+			    (event_nr[1] & DM_NAME_LIST_FLAG_HAS_UUID)) {
-+				uuid_ptr = _align_ptr(event_nr + 2);
-+				r &= _do_dm_ioctl_unmangle_string(uuid_ptr, "UUID", buf_uuid,
-+								  sizeof(buf_uuid), mangling_mode);
++			/* FIXME: fails to handle dev aliases i.e. /dev/dm-5, replace with UUID suffix */
++			if (lvname && (is_reserved_lvname(lvname) || *layer)) {
++				log_debug_activation("%s: Reserved internal LV device %s/%s%s%s not usable.",
++						     dev_name(dev), vgname, lvname, *layer ? "-" : "", layer);
++				return 0;
 +			}
- 			next = names->next;
- 		} while (next);
++		}
++
++		if (check_lv) {
++			/* Skip LVs */
++			if (is_lv)
++				*is_lv = 1;
++			return 0;
++		}
++	}
++
++	if (check_reserved &&
++	    (!strncmp(uuid, CRYPT_TEMP, sizeof(CRYPT_TEMP) - 1) ||
++	     !strncmp(uuid, CRYPT_SUBDEV, sizeof(CRYPT_SUBDEV) - 1) ||
++	     !strncmp(uuid, STRATIS, sizeof(STRATIS) - 1))) {
++		/* Skip private crypto devices */
++		log_debug_activation("%s: Reserved uuid %s on %s device %s not usable.",
++				     dev_name(dev), uuid,
++				     uuid[0] == 'C' ? "crypto" : "stratis",
++				     name);
++		return 0;
++	}
++
++        return 1;
++}
++
+ /*
+  * device_is_usable
+  * @dev
+@@ -622,15 +677,14 @@ static int _ignore_frozen_raid(struct device *dev, const char *params)
+  *
+  * Returns: 1 if usable, 0 otherwise
+  */
+-int device_is_usable(struct device *dev, struct dev_usable_check_params check, int *is_lv)
++int device_is_usable(struct cmd_context *cmd, struct device *dev, struct dev_usable_check_params check, int *is_lv)
+ {
+ 	struct dm_task *dmt;
+ 	struct dm_info info;
+ 	const char *name, *uuid;
+ 	uint64_t start, length;
+ 	char *target_type = NULL;
+-	char *params, *vgname, *lvname, *layer;
+-	char vg_name[NAME_LEN];
++	char *params;
+ 	void *next = NULL;
+ 	int only_error_or_zero_target = 1;
+ 	int r = 0;
+@@ -655,50 +709,9 @@ int device_is_usable(struct device *dev, struct dev_usable_check_params check, i
+ 		goto out;
  	}
+ 
+-	if (uuid && (check.check_reserved || check.check_lv)) {
+-		if (!strncmp(uuid, UUID_PREFIX, sizeof(UUID_PREFIX) - 1)) { /* with LVM- prefix */
+-			if (check.check_reserved) {
+-				/* Check internal lvm devices */
+-				if (strlen(uuid) > (sizeof(UUID_PREFIX) + 2 * ID_LEN)) { /* 68 with suffix */
+-					log_debug_activation("%s: Reserved uuid %s on internal LV device %s not usable.",
+-							     dev_name(dev), uuid, name);
+-					goto out;
+-				}
+-
+-				/* Recognize some older reserved LVs just from the LV name (snapshot, pvmove...) */
+-				vgname = vg_name;
+-				if (!dm_strncpy(vg_name, name, sizeof(vg_name)) ||
+-				    !dm_split_lvm_name(NULL, NULL, &vgname, &lvname, &layer))
+-					goto_out;
+-
+-				/* FIXME: fails to handle dev aliases i.e. /dev/dm-5, replace with UUID suffix */
+-				if (lvname && (is_reserved_lvname(lvname) || *layer)) {
+-					log_debug_activation("%s: Reserved internal LV device %s/%s%s%s not usable.",
+-							     dev_name(dev), vgname, lvname, *layer ? "-" : "", layer);
+-					goto out;
+-				}
+-			}
+-
+-			if (check.check_lv) {
+-				/* Skip LVs */
+-				if (is_lv)
+-					*is_lv = 1;
+-				goto out;
+-			}
+-		}
+-
+-		if (check.check_reserved &&
+-		    (!strncmp(uuid, CRYPT_TEMP, sizeof(CRYPT_TEMP) - 1) ||
+-		     !strncmp(uuid, CRYPT_SUBDEV, sizeof(CRYPT_SUBDEV) - 1) ||
+-		     !strncmp(uuid, STRATIS, sizeof(STRATIS) - 1))) {
+-			/* Skip private crypto devices */
+-			log_debug_activation("%s: Reserved uuid %s on %s device %s not usable.",
+-					     dev_name(dev), uuid,
+-					     uuid[0] == 'C' ? "crypto" : "stratis",
+-					     name);
+-			goto out;
+-		}
+-	}
++	if (uuid &&
++	    !_is_usable_uuid(dev, name, uuid, check.check_reserved, check.check_lv, is_lv))
++		goto out;
+ 
+ 	/* FIXME Also check for mpath no paths */
+ 	do {
+@@ -713,7 +726,7 @@ int device_is_usable(struct device *dev, struct dev_usable_check_params check, i
+ 				log_debug_activation("%s: Scanning mirror devices is disabled.", dev_name(dev));
+ 				goto out;
+ 			}
+-			if (!_ignore_blocked_mirror_devices(dev, start,
++			if (!_ignore_blocked_mirror_devices(cmd, dev, start,
+ 							    length, params)) {
+ 				log_debug_activation("%s: Mirror device %s not usable.",
+ 						     dev_name(dev), name);
+diff --git a/lib/filters/filter-usable.c b/lib/filters/filter-usable.c
+index 062fb6c74..d7bdf115e 100644
+--- a/lib/filters/filter-usable.c
++++ b/lib/filters/filter-usable.c
+@@ -87,7 +87,7 @@ static int _passes_usable_filter(struct cmd_context *cmd, struct dev_filter *f,
+ 			break;
+ 		}
+ 
+-		if (!(r = device_is_usable(dev, ucp, &is_lv))) {
++		if (!(r = device_is_usable(cmd, dev, ucp, &is_lv))) {
+ 			if (is_lv)
+ 				dev->filtered_flags |= DEV_FILTERED_IS_LV;
+ 			else
 
 
