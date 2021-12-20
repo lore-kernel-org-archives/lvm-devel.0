@@ -1,81 +1,47 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Mon, 20 Dec 2021 15:14:06 +0000 (GMT)
-Subject: main - hash: raise hash table size
-Message-ID: <20211220151406.16C1A3858411@sourceware.org>
+Date: Mon, 20 Dec 2021 15:14:03 +0000 (GMT)
+Subject: main - vdo: ensure VDO config is removed
+Message-ID: <20211220151403.C9AA03858408@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=09a4b56895b959f46a9b7e7af11732d8e1bbf945
-Commit:        09a4b56895b959f46a9b7e7af11732d8e1bbf945
-Parent:        ed1651d11f42ea7157b7b0aebf498b97e56b98aa
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Dec 17 16:36:36 2021 +0100
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=522561e64b5fe73cb9d01c2ee2d4b7624b0ddff4
+Commit:        522561e64b5fe73cb9d01c2ee2d4b7624b0ddff4
+Parent:        0f71183f9434d513733d38fb7f9619421d8afaf5
+Author:        Andrew Walsh <awalsh@redhat.com>
+AuthorDate:    Mon Nov 15 10:49:06 2021 -0500
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Mon Dec 20 16:13:28 2021 +0100
 
-hash: raise hash table size
+vdo: ensure VDO config is removed
 
-With slightly bigger hash tables, there is considerable
-less hash collisions.
+Make sure to remove the VDO config after conversion
+of LVM-backed VDO.
+
+Addresses point 3 in rhbz#1987024#c5
 ---
- WHATS_NEW                       | 1 +
- lib/config/config.c             | 2 +-
- lib/device/dev-cache.c          | 2 +-
- lib/filters/filter-persistent.c | 2 +-
- 4 files changed, 4 insertions(+), 3 deletions(-)
+ scripts/lvm_import_vdo.sh | 6 ++++++
+ 1 file changed, 6 insertions(+)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index b0720cd10..fc327dffd 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.03.15 - 
- ===================================
-+  Increase some hash table size to better support large device sets.
+diff --git a/scripts/lvm_import_vdo.sh b/scripts/lvm_import_vdo.sh
+index 61a82e41e..d01766743 100755
+--- a/scripts/lvm_import_vdo.sh
++++ b/scripts/lvm_import_vdo.sh
+@@ -414,6 +414,12 @@ EOF
+ 	verbose "Converting to VDO pool."
+ 	dry "$LVM" lvconvert $YES $VERB $FORCE --config "$PARAMS" -Zn -V "${vdo_logicalSize}k" -n "$LVNAME" --type vdo-pool "$VGNAME/${LVNAME}_vpool"
  
- Version 2.03.14 - 20th October 2021
- ===================================
-diff --git a/lib/config/config.c b/lib/config/config.c
-index 0cb0da121..c8dab5683 100644
---- a/lib/config/config.c
-+++ b/lib/config/config.c
-@@ -1167,7 +1167,7 @@ int config_def_check(struct cft_check_handle *handle)
- 	*vp = 0;
- 	*rp = 0;
- 	if (!handle->cmd->cft_def_hash) {
--		if (!(handle->cmd->cft_def_hash = dm_hash_create(60))) {
-+		if (!(handle->cmd->cft_def_hash = dm_hash_create(500))) {
- 			log_error("Failed to create configuration definition hash.");
- 			r = 0; goto out;
- 		}
-diff --git a/lib/device/dev-cache.c b/lib/device/dev-cache.c
-index 825e348b4..d3fae4948 100644
---- a/lib/device/dev-cache.c
-+++ b/lib/device/dev-cache.c
-@@ -1246,7 +1246,7 @@ int dev_cache_init(struct cmd_context *cmd)
- 	if (!(_cache.mem = dm_pool_create("dev_cache", 10 * 1024)))
- 		return_0;
++	# Note: that this is spelled OPPOSITE the other $IS_LV checks.
++	if [ "$IS_LV" = "1" ]; then
++		verbose "Removing now-unused VDO entry from VDO config."
++		dry "$VDO" remove $VDOCONF --force --verbose --name "$VDONAME"
++	fi
++
+ 	rm -fr "$TEMPDIR"
+ }
  
--	if (!(_cache.names = dm_hash_create(120)) ||
-+	if (!(_cache.names = dm_hash_create(1020)) ||
- 	    !(_cache.vgid_index = dm_hash_create(30)) ||
- 	    !(_cache.lvid_index = dm_hash_create(29))) {
- 		dm_pool_destroy(_cache.mem);
-diff --git a/lib/filters/filter-persistent.c b/lib/filters/filter-persistent.c
-index 494a38ece..c164c4a99 100644
---- a/lib/filters/filter-persistent.c
-+++ b/lib/filters/filter-persistent.c
-@@ -58,7 +58,7 @@ static int _init_hash(struct pfilter *pf)
- 	if (pf->devices)
- 		dm_hash_destroy(pf->devices);
- 
--	if (!(pf->devices = dm_hash_create(111)))
-+	if (!(pf->devices = dm_hash_create(511)))
- 		return_0;
- 
- 	return 1;
 
 
