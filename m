@@ -1,66 +1,52 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Mon, 20 Dec 2021 15:14:04 +0000 (GMT)
-Subject: main - toollib: avoid repeated remove of online vg
-Message-ID: <20211220151404.EA9B33858409@sourceware.org>
+Date: Mon, 20 Dec 2021 15:14:08 +0000 (GMT)
+Subject: main - activate: cache driver_version result
+Message-ID: <20211220151408.56F903858438@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=ed1651d11f42ea7157b7b0aebf498b97e56b98aa
-Commit:        ed1651d11f42ea7157b7b0aebf498b97e56b98aa
-Parent:        522561e64b5fe73cb9d01c2ee2d4b7624b0ddff4
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=47ac2659d5f8544dcd53aeef13a42b3256f2fd6f
+Commit:        47ac2659d5f8544dcd53aeef13a42b3256f2fd6f
+Parent:        26e6580dfb00912823282f7028ab542501c449ef
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Dec 17 13:18:56 2021 +0100
+AuthorDate:    Wed Dec 8 10:25:02 2021 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Mon Dec 20 16:13:28 2021 +0100
 
-toollib: avoid repeated remove of online vg
+activate: cache driver_version result
 
-Call just once unlink after every deactivation of LV from VG.
 ---
- lib/commands/toolcontext.h | 1 +
- tools/toollib.c            | 7 ++++++-
- 2 files changed, 7 insertions(+), 1 deletion(-)
+ lib/activate/activate.c | 10 +++++++++-
+ 1 file changed, 9 insertions(+), 1 deletion(-)
 
-diff --git a/lib/commands/toolcontext.h b/lib/commands/toolcontext.h
-index fb7182db6..4d7d4630d 100644
---- a/lib/commands/toolcontext.h
-+++ b/lib/commands/toolcontext.h
-@@ -202,6 +202,7 @@ struct cmd_context {
- 	unsigned backup_disabled:1;		/* skip repeated debug message */
- 	unsigned event_activation:1;		/* whether event_activation is set */
- 	unsigned udevoutput:1;
-+	unsigned online_vg_file_removed:1;
+diff --git a/lib/activate/activate.c b/lib/activate/activate.c
+index 727bd2386..52ec02e2c 100644
+--- a/lib/activate/activate.c
++++ b/lib/activate/activate.c
+@@ -486,12 +486,20 @@ int library_version(char *version, size_t size)
  
- 	/*
- 	 * Devices and filtering.
-diff --git a/tools/toollib.c b/tools/toollib.c
-index 33b704134..3b3a20689 100644
---- a/tools/toollib.c
-+++ b/tools/toollib.c
-@@ -829,8 +829,11 @@ int lv_change_activate(struct cmd_context *cmd, struct logical_volume *lv,
- 	 * user may want to take charge of activation changes to the VG
- 	 * and not have the system autoactivation interfere.
- 	 */
--	if (!is_change_activating(activate) && cmd->event_activation)
-+	if (!is_change_activating(activate) && cmd->event_activation &&
-+	    !cmd->online_vg_file_removed) {
-+		cmd->online_vg_file_removed = 1;
- 		online_vg_file_remove(lv->vg->name);
-+	}
- 
- 	set_lv_notify(lv->vg->cmd);
- 
-@@ -2983,6 +2986,8 @@ int process_each_lv_in_vg(struct cmd_context *cmd, struct volume_group *vg,
- 	struct glv_list *glvl, *tglvl;
- 	int do_report_ret_code = 1;
- 
-+	cmd->online_vg_file_removed = 0;
+ int driver_version(char *version, size_t size)
+ {
++	static char _vsn[80] = { 0 };
 +
- 	log_set_report_object_type(LOG_REPORT_OBJECT_TYPE_LV);
+ 	if (!activation())
+ 		return 0;
  
- 	vg_uuid[0] = '\0';
+ 	log_very_verbose("Getting driver version");
+ 
+-	return dm_driver_version(version, size);
++	if (!_vsn[0] &&
++	    !dm_driver_version(_vsn, sizeof(_vsn)))
++		return_0;
++
++	(void) dm_strncpy(version, _vsn, size);
++
++	return 1;
+ }
+ 
+ int target_version(const char *target_name, uint32_t *maj,
 
 
