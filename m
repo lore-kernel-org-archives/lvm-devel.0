@@ -1,54 +1,128 @@
-From: David Teigland <teigland@redhat.com>
-Date: Fri, 29 Sep 2023 16:01:40 -0500
-Subject: dmeventd is not respecting /etc/lvm/devices/system.devices
-In-Reply-To: <fd47987d-5137-ee79-3e81-2c3228f2c9b3@ewheeler.net>
-References: <fd47987d-5137-ee79-3e81-2c3228f2c9b3@ewheeler.net>
-Message-ID: <20230929210140.GA28125@redhat.com>
+From: David Teigland <teigland@sourceware.org>
+Date: Tue, 11 Jan 2022 22:06:36 +0000 (GMT)
+Subject: main - Revert "handle duplicate vgids"
+Message-ID: <20220111220636.3B7143858029@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On Fri, Sep 29, 2023 at 12:18:07PM -0700, Eric Wheeler wrote:
-> Hello all,
-> 
-> I am not sure how to resolve the dmeventd warning below, maybe you can 
-> help. It appears that dmeventd is finding PVs attached to VMs, but those 
-> volumes are not listed in /etc/lvm/devices/system.devices so, presumably, 
-> they should be ignored by dmeventd.
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=7502f78678db7c7701e543a0a7267e050850ba53
+Commit:        7502f78678db7c7701e543a0a7267e050850ba53
+Parent:        bd2baeaaa67da3885df9f06700565dc201c82861
+Author:        David Teigland <teigland@redhat.com>
+AuthorDate:    Tue Jan 11 16:03:07 2022 -0600
+Committer:     David Teigland <teigland@redhat.com>
+CommitterDate: Tue Jan 11 16:04:51 2022 -0600
 
-Thanks for bringing his up, it's a neglected and hidden corner of the
-devices file feature that's not well developed.
+Revert "handle duplicate vgids"
 
-The existing solution to this problem isn't great, but should work: create
-/etc/lvm/devices/dmeventd.devices, where dmeventd.devices contains devs
-for any VG where dmeventd is needed.  That might be the same as
-system.devices (you could just copy system.devices to dmeventd.devices.)
-If you don't actually need dmeventd, then dmeventd.devices could be empty,
-or better just disable that service.
+This reverts commit bd2baeaaa67da3885df9f06700565dc201c82861.
 
-Without a dmeventd.devices file, dmeventd does not use any devices file
-and looks at all PVs on the system, as you've seen.  This was a quick way
-get around the fact that multiple devices files can be used, but dmeventd
-needs to service all of them.  It turns out multiple devices files aren't
-really used by anyone, as far as I can tell (at least not yet.)  The
-default should be for dmeventd to use system.devices, I expect we can make
-that change for the next release.
+This commit broke vgrename because vgrename relies on old bugs
+in lvmcache_update_vg_from_write and lvmcache_update_vgname
+which need to be fixed first.
+---
+ lib/cache/lvmcache.c         | 20 ++++-------------
+ test/shell/duplicate-vgid.sh | 52 --------------------------------------------
+ 2 files changed, 4 insertions(+), 68 deletions(-)
 
-> We used to use `global_filter` and that worked fine, but that seems to be 
-> deprecated starting in el9 in favor of system.devices. If we try to enable 
-> the filters in lvm.conf, then pvs/lvs/vgs commands complain about the 
-> filter options being used together with `use_devicesfile=1`. Note that we 
-> have PVs on LVs for ssd allocation to different VGs, so `scan_lvs=1` is 
-> enabled.  (Maybe turning off scan_lvs would "fix" dmeventd, but I can't 
-> test that because we need PVs on LVs for this deployment.)
+diff --git a/lib/cache/lvmcache.c b/lib/cache/lvmcache.c
+index 9c1619b7e..c5359f3c5 100644
+--- a/lib/cache/lvmcache.c
++++ b/lib/cache/lvmcache.c
+@@ -354,11 +354,9 @@ static struct lvmcache_vginfo *_vginfo_lookup(const char *vgname, const char *vg
+ 	if (vgid_arg) {
+ 		if ((vginfo = dm_hash_lookup(_vgid_hash, vgid))) {
+ 			if (vgname && strcmp(vginfo->vgname, vgname)) {
+-				log_warn("WARNING: lookup found duplicate VGID %s for VGs %s and %s.", vgid, vginfo->vgname, vgname);
+-				if ((vginfo = dm_hash_lookup(_vgname_hash, vgname))) {
+-					if (!memcmp(vginfo->vgid, vgid, ID_LEN))
+-						return vginfo;
+-				}
++				/* should never happen */
++				log_error(INTERNAL_ERROR "vginfo_lookup vgid %s has two names %s %s",
++					  vgid, vginfo->vgname, vgname);
+ 				return NULL;
+ 			}
+ 			return vginfo;
+@@ -1886,17 +1884,7 @@ static int _lvmcache_update_vgname(struct cmd_context *cmd,
+ 
+ 	_drop_vginfo(info, info->vginfo);
+ 
+-	vginfo = lvmcache_vginfo_from_vgid(vgid);
+-	if (vginfo && strcmp(vginfo->vgname, vgname)) {
+-		log_warn("WARNING: fix duplicate VGID %s for VGs %s and %s (see vgchange -u).", vgid_dashed, vgname, vginfo->vgname);
+-		vginfo = lvmcache_vginfo_from_vgname(vgname, NULL);
+-		if (vginfo && memcmp(vginfo->vgid, vgid, ID_LEN)) {
+-			log_error("Ignoring %s with conflicting VG info %s %s.", dev_name(info->dev), vgid_dashed, vgname);
+-			return_0;
+-		}
+-	}
+-
+-	if (!vginfo) {
++	if (!(vginfo = lvmcache_vginfo_from_vgid(vgid))) {
+ 		/*
+ 	 	 * Create a vginfo struct for this VG and put the vginfo
+ 	 	 * into the hash table.
+diff --git a/test/shell/duplicate-vgid.sh b/test/shell/duplicate-vgid.sh
+deleted file mode 100644
+index 12163c2f0..000000000
+--- a/test/shell/duplicate-vgid.sh
++++ /dev/null
+@@ -1,52 +0,0 @@
+-#!/usr/bin/env bash
+-
+-# Copyright (C) 2008-2013 Red Hat, Inc. All rights reserved.
+-#
+-# This copyrighted material is made available to anyone wishing to use,
+-# modify, copy, or redistribute it subject to the terms and conditions
+-# of the GNU General Public License v.2.
+-
+-SKIP_WITH_LVMLOCKD=1
+-SKIP_WITH_LVMPOLLD=1
+-
+-. lib/inittest
+-
+-aux prepare_devs 2
+-
+-vgcreate $vg1 "$dev1"
+-vgchange --setautoactivation n $vg1
+-UUID1=$(vgs --noheading -o vg_uuid $vg1 | xargs)
+-lvcreate -l1 -an -n $lv1 $vg1
+-dd if="$dev1" of="$dev2" bs=1M count=1
+-aux disable_dev "$dev1"
+-vgrename $vg1 $vg2
+-pvchange -u "$dev2"
+-aux enable_dev "$dev1"
+-
+-vgs -o+uuid |tee out
+-grep $vg1 out | tee out1
+-grep $UUID1 out1
+-grep $vg2 out | tee out2
+-grep $UUID1 out2
+-
+-vgs $vg1
+-vgs $vg2
+-lvs $vg1/$lv1
+-lvs $vg2/$lv1
+-
+-lvremove $vg1/$lv1
+-lvremove $vg2/$lv1
+-
+-lvcreate -l1 -an -n $lv2 $vg1
+-lvcreate -l1 -an -n $lv3 $vg2
+-
+-vgchange -u $vg2
+-
+-vgs -o uuid $vg1 |tee out
+-grep $UUID1 out
+-
+-vgs -o uuid $vg2 |tee out
+-not grep $UUID1 out
+-
+-vgremove -ff $vg1
+-vgremove -ff $vg2
 
-I don't think scan_lvs will have any impact on this.
 
-> Aug 28 15:25:29 hv1.ewheeler.net dmeventd[886522]: WARNING: VG name data is used by VGs pcqIki-TjE0-iFMN-D8MH-19Er-ypSm-djfl5D and 9UEiuo-DYzj-UTLi-XYCi-KiBO-wQi2-w5QUtX.
-
-It's always been difficult to know what dmeventd is doing, and I wonder
-what it's running so frequently.
-
-Dave
