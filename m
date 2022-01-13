@@ -1,135 +1,52 @@
 From: David Teigland <teigland@sourceware.org>
-Date: Thu, 13 Jan 2022 16:01:50 +0000 (GMT)
-Subject: main - handle duplicate vgids
-Message-ID: <20220113160150.102E93951C8E@sourceware.org>
+Date: Thu, 13 Jan 2022 17:42:19 +0000 (GMT)
+Subject: main - remove unused variable
+Message-ID: <20220113174219.A268A385840D@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=18f451e09e943eb3d51f8394f6fe8967e1e9f565
-Commit:        18f451e09e943eb3d51f8394f6fe8967e1e9f565
-Parent:        cb798ee1c102aadde93965a894c5aa59d4e76e4a
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=0c80ea88477b3511562036748d3bf837bf7b3e8b
+Commit:        0c80ea88477b3511562036748d3bf837bf7b3e8b
+Parent:        18f451e09e943eb3d51f8394f6fe8967e1e9f565
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Thu Jan 6 10:15:16 2022 -0600
+AuthorDate:    Thu Jan 13 11:41:09 2022 -0600
 Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Thu Jan 13 10:01:24 2022 -0600
+CommitterDate: Thu Jan 13 11:41:39 2022 -0600
 
-handle duplicate vgids
+remove unused variable
 
-The approach to duplicate VGIDs has been that it is not possible
-or not allowed, so the behavior has been undefined.  The actual
-result was unpredictable and/or broken, and generally unhelpful.
-
-Improve this by recognizing the problem, displaying the VGs,
-and printing a warning to fix the problem.  Beyond this,
-using VGs with duplicate VGIDs remains undefined, but should
-work well enough to correct the problem with vgchange -u.
-
-It's possible to create this condition without too much difficulty
-by cloning PVs, followed by an incomplete attempt at making the two
-VGs unique (vgrename and pvchange -u, but missing vgchange -u.)
+resulting from commit cb798ee1c102aadde93965a894c5aa59d4e76e4a
+  "lvmcache: remove lvmcache_update_vg_from_write"
 ---
- lib/cache/lvmcache.c         | 20 +++++++++++++----
- test/shell/duplicate-vgid.sh | 52 ++++++++++++++++++++++++++++++++++++++++++++
- 2 files changed, 68 insertions(+), 4 deletions(-)
+ lib/metadata/metadata.c | 3 ---
+ 1 file changed, 3 deletions(-)
 
-diff --git a/lib/cache/lvmcache.c b/lib/cache/lvmcache.c
-index 6569f983d..22edcfd84 100644
---- a/lib/cache/lvmcache.c
-+++ b/lib/cache/lvmcache.c
-@@ -354,9 +354,11 @@ static struct lvmcache_vginfo *_vginfo_lookup(const char *vgname, const char *vg
- 	if (vgid_arg) {
- 		if ((vginfo = dm_hash_lookup(_vgid_hash, vgid))) {
- 			if (vgname && strcmp(vginfo->vgname, vgname)) {
--				/* should never happen */
--				log_error(INTERNAL_ERROR "vginfo_lookup vgid %s has two names %s %s",
--					  vgid, vginfo->vgname, vgname);
-+				log_warn("WARNING: lookup found duplicate VGID %s for VGs %s and %s.", vgid, vginfo->vgname, vgname);
-+				if ((vginfo = dm_hash_lookup(_vgname_hash, vgname))) {
-+					if (!memcmp(vginfo->vgid, vgid, ID_LEN))
-+						return vginfo;
-+				}
- 				return NULL;
- 			}
- 			return vginfo;
-@@ -1884,7 +1886,17 @@ static int _lvmcache_update_vgname(struct cmd_context *cmd,
+diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
+index 7e5605820..db0e511ec 100644
+--- a/lib/metadata/metadata.c
++++ b/lib/metadata/metadata.c
+@@ -3100,7 +3100,6 @@ static int _vg_commit_mdas(struct volume_group *vg)
+ {
+ 	struct metadata_area *mda, *tmda;
+ 	DM_LIST_INIT(ignored);
+-	int failed = 0;
+ 	int good = 0;
  
- 	_drop_vginfo(info, info->vginfo);
- 
--	if (!(vginfo = lvmcache_vginfo_from_vgid(vgid))) {
-+	vginfo = lvmcache_vginfo_from_vgid(vgid);
-+	if (vginfo && strcmp(vginfo->vgname, vgname)) {
-+		log_warn("WARNING: fix duplicate VGID %s for VGs %s and %s (see vgchange -u).", vgid_dashed, vgname, vginfo->vgname);
-+		vginfo = lvmcache_vginfo_from_vgname(vgname, NULL);
-+		if (vginfo && memcmp(vginfo->vgid, vgid, ID_LEN)) {
-+			log_error("Ignoring %s with conflicting VG info %s %s.", dev_name(info->dev), vgid_dashed, vgname);
-+			return_0;
-+		}
-+	}
-+
-+	if (!vginfo) {
- 		/*
- 	 	 * Create a vginfo struct for this VG and put the vginfo
- 	 	 * into the hash table.
-diff --git a/test/shell/duplicate-vgid.sh b/test/shell/duplicate-vgid.sh
-new file mode 100644
-index 000000000..12163c2f0
---- /dev/null
-+++ b/test/shell/duplicate-vgid.sh
-@@ -0,0 +1,52 @@
-+#!/usr/bin/env bash
-+
-+# Copyright (C) 2008-2013 Red Hat, Inc. All rights reserved.
-+#
-+# This copyrighted material is made available to anyone wishing to use,
-+# modify, copy, or redistribute it subject to the terms and conditions
-+# of the GNU General Public License v.2.
-+
-+SKIP_WITH_LVMLOCKD=1
-+SKIP_WITH_LVMPOLLD=1
-+
-+. lib/inittest
-+
-+aux prepare_devs 2
-+
-+vgcreate $vg1 "$dev1"
-+vgchange --setautoactivation n $vg1
-+UUID1=$(vgs --noheading -o vg_uuid $vg1 | xargs)
-+lvcreate -l1 -an -n $lv1 $vg1
-+dd if="$dev1" of="$dev2" bs=1M count=1
-+aux disable_dev "$dev1"
-+vgrename $vg1 $vg2
-+pvchange -u "$dev2"
-+aux enable_dev "$dev1"
-+
-+vgs -o+uuid |tee out
-+grep $vg1 out | tee out1
-+grep $UUID1 out1
-+grep $vg2 out | tee out2
-+grep $UUID1 out2
-+
-+vgs $vg1
-+vgs $vg2
-+lvs $vg1/$lv1
-+lvs $vg2/$lv1
-+
-+lvremove $vg1/$lv1
-+lvremove $vg2/$lv1
-+
-+lvcreate -l1 -an -n $lv2 $vg1
-+lvcreate -l1 -an -n $lv3 $vg2
-+
-+vgchange -u $vg2
-+
-+vgs -o uuid $vg1 |tee out
-+grep $UUID1 out
-+
-+vgs -o uuid $vg2 |tee out
-+not grep $UUID1 out
-+
-+vgremove -ff $vg1
-+vgremove -ff $vg2
+ 	/* Rearrange the metadata_areas_in_use so ignored mdas come first. */
+@@ -3115,11 +3114,9 @@ static int _vg_commit_mdas(struct volume_group *vg)
+ 	dm_list_iterate_items(mda, &vg->fid->metadata_areas_in_use) {
+ 		if (mda->status & MDA_FAILED)
+ 			continue;
+-		failed = 0;
+ 		if (mda->ops->vg_commit &&
+ 		    !mda->ops->vg_commit(vg->fid, vg, mda)) {
+ 			stack;
+-			failed = 1;
+ 		} else
+ 			good++;
+ 	}
 
 
