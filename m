@@ -1,38 +1,65 @@
-From: David Teigland <teigland@redhat.com>
-Date: Thu, 13 Jan 2022 08:52:26 -0600
-Subject: Reg a deadlock specific to our environment
-In-Reply-To: <CAFe+wq18h3W3DwmR-n6v=0cPm4XgiwRsjkq4260uRYyNhAx9Aw@mail.gmail.com>
-References: <CAFe+wq18h3W3DwmR-n6v=0cPm4XgiwRsjkq4260uRYyNhAx9Aw@mail.gmail.com>
-Message-ID: <20220113145226.GA436@redhat.com>
+From: David Teigland <teigland@sourceware.org>
+Date: Thu, 13 Jan 2022 16:01:47 +0000 (GMT)
+Subject: main - vgsplit: don't reread vg_to
+Message-ID: <20220113160147.872013951C05@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On Wed, Jan 12, 2022 at 05:10:40PM +0530, Lakshmi Narasimhan Sundararajan wrote:
-> In such a scenario, when our user space storage application gets restarted,
-> there are calls to sanitize the storage backend. This involves reading the
-> thin pool information. This internally, does a vg open call, which ends up
-> READing to all dm devices, resulting in a deadlock during startup.
-> To overcome this situation, I extended a filter to ignore all devices that
-> have pxd naming part of it. This solves the problem for us.
-> 
-> Is there a better way to handle our deadlock situation?
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=5e428d22d9647a294eba65852078947df5ade48f
+Commit:        5e428d22d9647a294eba65852078947df5ade48f
+Parent:        7502f78678db7c7701e543a0a7267e050850ba53
+Author:        David Teigland <teigland@redhat.com>
+AuthorDate:    Wed Jan 12 16:42:01 2022 -0600
+Committer:     David Teigland <teigland@redhat.com>
+CommitterDate: Wed Jan 12 16:42:01 2022 -0600
 
-Hi,
+vgsplit: don't reread vg_to
 
-We need more details to understand this.  Which command is run that gets
-stuck (any?), and can you send the output of that command with -vvvv?
-By deadlock do you mean the lvm command blocks reading it?  What are the
-details of this device?  Is it a dm device, and if so can you show how we
-could create one here using dmsetup, or is it using a custom dm target?
-Do you know why the command blocks, e.g. is the device suspended?
+The destination vg is first written with the EXPORTED flag,
+then the source vg is written, then the destination vg is
+written again without the EXPORTED flag.  Remove an unnecessary
+vg_read of the destination vg just before the second write.
+---
+ tools/vgsplit.c | 24 ------------------------
+ 1 file changed, 24 deletions(-)
 
-> Is the below posted solution good to be merged back into master?
-
-I don't think that looks like the right solution.
-
-Dave
+diff --git a/tools/vgsplit.c b/tools/vgsplit.c
+index a085ac2ba..5f113b363 100644
+--- a/tools/vgsplit.c
++++ b/tools/vgsplit.c
+@@ -727,30 +727,6 @@ int vgsplit(struct cmd_context *cmd, int argc, char **argv)
+ 		backup(vg_from);
+ 	}
+ 
+-	/*
+-	 * Finally, remove the EXPORTED flag from the new VG and write it out.
+-	 * We need to unlock vg_to because vg_read_for_update wants to lock it.
+-	 */
+-	if (!test_mode()) {
+-		unlock_vg(cmd, NULL, vg_name_to);
+-		release_vg(vg_to);
+-
+-		/*
+-		 * This command uses the exported vg flag internally, but
+-		 * exported VGs are not allowed to be split from the command
+-		 * level, so ALLOW_EXPORTED is not set in commands.h.
+-		 */
+-		cmd->include_exported_vgs = 1;
+-
+-		vg_to = vg_read_for_update(cmd, vg_name_to, NULL, 0, 0);
+-
+-		if (!vg_to) {
+-			log_error("Volume group \"%s\" became inconsistent: "
+-				  "please fix manually", vg_name_to);
+-			goto bad;
+-		}
+-	}
+-
+ 	vg_to->status &= ~EXPORTED_VG;
+ 
+ 	if (!vg_write(vg_to) || !vg_commit(vg_to))
 
 
