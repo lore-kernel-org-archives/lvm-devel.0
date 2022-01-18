@@ -1,24 +1,24 @@
 From: David Teigland <teigland@sourceware.org>
-Date: Tue, 18 Jan 2022 18:16:34 +0000 (GMT)
-Subject: main - Revert "pvcreate: overwrite partition header with -f"
-Message-ID: <20220118181634.3FB793858D28@sourceware.org>
+Date: Tue, 18 Jan 2022 18:17:29 +0000 (GMT)
+Subject: stable-2.03.14 - Revert "pvcreate: overwrite partition header with -f"
+Message-ID: <20220118181729.1495D3858D28@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=de7892f0af275615d2db0c7e6a4bbc56cd4962e8
-Commit:        de7892f0af275615d2db0c7e6a4bbc56cd4962e8
-Parent:        a972d63c547dc9699c0b3664175eb96b5d89ff8f
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=9375aebad1db72267dd67e3ed768aa3b0e698d52
+Commit:        9375aebad1db72267dd67e3ed768aa3b0e698d52
+Parent:        bb477d63e336a10e5959962a9f26a028ea9e55eb
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Tue Jan 18 12:15:03 2022 -0600
+AuthorDate:    Tue Jan 18 12:16:52 2022 -0600
 Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Tue Jan 18 12:15:03 2022 -0600
+CommitterDate: Tue Jan 18 12:16:52 2022 -0600
 
 Revert "pvcreate: overwrite partition header with -f"
 
-This reverts commit d5a950ca67c106403054ecb847e226e8b5a7c30e.
+This reverts commit a5c37afdca97d6565ea02bc4bc7d52f360823cd3.
 
 This commit did not properly recognize GPT cases.
 ---
@@ -30,13 +30,13 @@ This commit did not properly recognize GPT cases.
  5 files changed, 5 insertions(+), 28 deletions(-)
 
 diff --git a/lib/commands/toolcontext.h b/lib/commands/toolcontext.h
-index 9c24559a6..f16322d4e 100644
+index b83883fb8..356c79f8a 100644
 --- a/lib/commands/toolcontext.h
 +++ b/lib/commands/toolcontext.h
-@@ -204,7 +204,6 @@ struct cmd_context {
- 	unsigned udevoutput:1;
- 	unsigned online_vg_file_removed:1;
- 	unsigned disable_dm_devs:1;		/* temporarily disable use of dm devs cache */
+@@ -201,7 +201,6 @@ struct cmd_context {
+ 	unsigned ignore_device_name_mismatch:1; /* skip updating devices file names */
+ 	unsigned backup_disabled:1;		/* skip repeated debug message */
+ 	unsigned event_activation:1;		/* whether event_activation is set */
 -	unsigned filter_partitioned_skip:1;	/* don't use filter-partitioned */
  
  	/*
@@ -108,10 +108,10 @@ index 3a45f9089..0e92f00db 100644
 -pvremove "$dev2"
 -
 diff --git a/tools/toollib.c b/tools/toollib.c
-index 9b193bd2d..f95c98f51 100644
+index 80d3de57c..d6f48aad2 100644
 --- a/tools/toollib.c
 +++ b/tools/toollib.c
-@@ -5248,10 +5248,6 @@ int pvcreate_each_device(struct cmd_context *cmd,
+@@ -5243,10 +5243,6 @@ int pvcreate_each_device(struct cmd_context *cmd,
  	if (cmd->enable_devices_file && !pp->is_remove)
  		cmd->filter_deviceid_skip = 1;
  
@@ -122,7 +122,7 @@ index 9b193bd2d..f95c98f51 100644
  	log_debug("Scanning and filtering device args (%u).", dm_list_size(&scan_devs));
  	label_scan_devs(cmd, cmd->filter, &scan_devs);
  
-@@ -5266,7 +5262,6 @@ int pvcreate_each_device(struct cmd_context *cmd,
+@@ -5261,7 +5257,6 @@ int pvcreate_each_device(struct cmd_context *cmd,
  		}
  	}
  	cmd->filter_deviceid_skip = 0;
@@ -130,7 +130,7 @@ index 9b193bd2d..f95c98f51 100644
  
  	/*
  	 * Can the command continue if some specified devices were not found?
-@@ -5479,9 +5474,6 @@ do_command:
+@@ -5474,9 +5469,6 @@ do_command:
  	if (cmd->enable_devices_file && !pp->is_remove)
  		cmd->filter_deviceid_skip = 1;
  
@@ -140,7 +140,7 @@ index 9b193bd2d..f95c98f51 100644
  	log_debug("Rescanning and filtering device args with exclusive open");
  	if (!label_scan_devs_excl(cmd, cmd->filter, &rescan_devs)) {
  		log_debug("Failed to rescan devs excl");
-@@ -5495,9 +5487,7 @@ do_command:
+@@ -5490,9 +5482,7 @@ do_command:
  			dm_list_add(&pp->arg_fail, &pd->list);
  		}
  	}
