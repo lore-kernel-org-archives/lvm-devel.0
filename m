@@ -1,40 +1,55 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Wed, 26 Jan 2022 14:10:35 +0000 (GMT)
-Subject: main - gcc: snprintf may need here upto 18 bytes
-Message-ID: <20220126141035.D9A54385042E@sourceware.org>
+Date: Wed, 26 Jan 2022 14:10:37 +0000 (GMT)
+Subject: main - gcc: increate buffer sizes
+Message-ID: <20220126141037.056423850431@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=cf68bf7b6c5668dcaf16310e84636a79164bd8ee
-Commit:        cf68bf7b6c5668dcaf16310e84636a79164bd8ee
-Parent:        7f1f7ad694201533c04ddfbe9ba047f832b38750
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=62f11b0b0b0e4e6aebec5857406b2d4b22406378
+Commit:        62f11b0b0b0e4e6aebec5857406b2d4b22406378
+Parent:        cf68bf7b6c5668dcaf16310e84636a79164bd8ee
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu Jan 20 15:24:09 2022 +0100
+AuthorDate:    Thu Jan 20 15:27:29 2022 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Wed Jan 26 15:09:58 2022 +0100
 
-gcc: snprintf may need here upto 18 bytes
+gcc: increate buffer sizes
 
-Although hypothetical case....
+Make all possible string buffers to fit so they are not shortened in the
+middle.
 ---
- daemons/lvmlockd/lvmlockd-core.c | 2 +-
- 1 file changed, 1 insertion(+), 1 deletion(-)
+ daemons/cmirrord/cluster.c   | 2 +-
+ daemons/cmirrord/functions.c | 2 +-
+ 2 files changed, 2 insertions(+), 2 deletions(-)
 
-diff --git a/daemons/lvmlockd/lvmlockd-core.c b/daemons/lvmlockd/lvmlockd-core.c
-index 175f59331..6d0d4d98c 100644
---- a/daemons/lvmlockd/lvmlockd-core.c
-+++ b/daemons/lvmlockd/lvmlockd-core.c
-@@ -4777,7 +4777,7 @@ static void client_recv_action(struct client *cl)
- 	const char *path;
- 	const char *str;
- 	struct pvs pvs;
--	char buf[17];	/* "path[%d]\0", %d outputs signed integer so max to 10 bytes */
-+	char buf[18];	/* "path[%d]\0", %d outputs signed integer so max to 10 bytes */
- 	int64_t val;
- 	uint32_t opts = 0;
- 	int result = 0;
+diff --git a/daemons/cmirrord/cluster.c b/daemons/cmirrord/cluster.c
+index 5de43c534..ef997baf4 100644
+--- a/daemons/cmirrord/cluster.c
++++ b/daemons/cmirrord/cluster.c
+@@ -108,7 +108,7 @@ static SaVersionT version = { 'B', 1, 1 };
+ #endif
+ 
+ #define DEBUGGING_HISTORY 100
+-#define DEBUGGING_BUFLEN 128
++#define DEBUGGING_BUFLEN 270
+ #define LOG_SPRINT(cc, f, arg...) do {				\
+ 		cc->idx++;					\
+ 		cc->idx = cc->idx % DEBUGGING_HISTORY;		\
+diff --git a/daemons/cmirrord/functions.c b/daemons/cmirrord/functions.c
+index 6c8c386a7..18251ec4d 100644
+--- a/daemons/cmirrord/functions.c
++++ b/daemons/cmirrord/functions.c
+@@ -34,7 +34,7 @@
+ #define LOG_OFFSET 2
+ 
+ #define RESYNC_HISTORY 50
+-#define RESYNC_BUFLEN 128
++#define RESYNC_BUFLEN 270
+ //static char resync_history[RESYNC_HISTORY][128];
+ //static int idx = 0;
+ #define LOG_SPRINT(_lc, f, arg...) do {					\
 
 
