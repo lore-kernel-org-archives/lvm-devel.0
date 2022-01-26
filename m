@@ -1,73 +1,119 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Wed, 26 Jan 2022 14:10:33 +0000 (GMT)
-Subject: main - test: check writecache profile support
-Message-ID: <20220126141033.9A3EC385041C@sourceware.org>
+Date: Wed, 26 Jan 2022 14:10:34 +0000 (GMT)
+Subject: main - lvcreate: code move
+Message-ID: <20220126141034.B9B613850423@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=89cec5b65af5533bcde358d8d4f7d1d5701a341b
-Commit:        89cec5b65af5533bcde358d8d4f7d1d5701a341b
-Parent:        b95506815fa149cf135687cbe047b7bdfcd6e00f
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=7f1f7ad694201533c04ddfbe9ba047f832b38750
+Commit:        7f1f7ad694201533c04ddfbe9ba047f832b38750
+Parent:        89cec5b65af5533bcde358d8d4f7d1d5701a341b
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Mon Jan 24 14:49:53 2022 +0100
+AuthorDate:    Tue Jan 18 17:33:53 2022 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Wed Jan 26 15:09:58 2022 +0100
 
-test: check writecache profile support
+lvcreate: code move
 
-FIXME
 ---
- test/shell/profiles-cache.sh  | 10 ++++++++++
- test/shell/writecache-misc.sh |  6 ++++++
- 2 files changed, 16 insertions(+)
+ tools/lvcreate.c | 48 ++++++++++++++++++++++--------------------------
+ 1 file changed, 22 insertions(+), 26 deletions(-)
 
-diff --git a/test/shell/profiles-cache.sh b/test/shell/profiles-cache.sh
-index 9e17ebf60..47a5cdf2f 100644
---- a/test/shell/profiles-cache.sh
-+++ b/test/shell/profiles-cache.sh
-@@ -43,6 +43,9 @@ allocation {
- 			sequential_threshold = 100
- 			random_threshold = 200
- 		}
-+		writecache {
-+			high_watermark = 60
-+		}
+diff --git a/tools/lvcreate.c b/tools/lvcreate.c
+index 2c519d555..b58fd62bb 100644
+--- a/tools/lvcreate.c
++++ b/tools/lvcreate.c
+@@ -1851,30 +1851,28 @@ static int _lvcreate_and_attach_writecache_single(struct cmd_context *cmd,
+ int lvcreate_and_attach_writecache_cmd(struct cmd_context *cmd, int argc, char **argv)
+ {
+ 	struct processing_handle *handle = NULL;
+-	struct processing_params pp;
+ 	struct lvcreate_params lp = {
+ 		.major = -1,
+ 		.minor = -1,
++		/*
++		 * Tell lvcreate to ignore --type since we are using lvcreate
++		 * to create a linear LV and using lvconvert to add cache.
++		 * (Would be better if lvcreate code was split up so we could
++		 * call a specific function that just created a linear/striped LV.)
++		 */
++		.ignore_type = 1,
+ 	};
+ 	struct lvcreate_cmdline_params lcp = { 0 };
++	struct processing_params pp = {
++	    .lp = &lp,
++	    .lcp = &lcp,
++	};
+ 	int ret;
+-
+-	/*
+-	 * Tell lvcreate to ignore --type since we are using lvcreate
+-	 * to create a linear LV and using lvconvert to add cache.
+-	 * (Would be better if lvcreate code was split up so we could
+-	 * call a specific function that just created a linear/striped LV.)
+-	 */
+-	lp.ignore_type = 1;
+-
+ 	if (!_lvcreate_params(cmd, argc, argv, &lp, &lcp)) {
+ 		stack;
+ 		return EINVALID_CMD_LINE;
  	}
+ 
+-	pp.lp = &lp;
+-	pp.lcp = &lcp;
+-
+         if (!(handle = init_processing_handle(cmd, NULL))) {
+ 		log_error("Failed to initialize processing handle.");
+ 		return ECMD_FAILED;
+@@ -1925,30 +1923,29 @@ static int _lvcreate_and_attach_cache_single(struct cmd_context *cmd,
+ int lvcreate_and_attach_cache_cmd(struct cmd_context *cmd, int argc, char **argv)
+ {
+ 	struct processing_handle *handle = NULL;
+-	struct processing_params pp;
+ 	struct lvcreate_params lp = {
+ 		.major = -1,
+ 		.minor = -1,
++		/*
++		 * Tell lvcreate to ignore --type since we are using lvcreate
++		 * to create a linear LV and using lvconvert to add cache.
++		 * (Would be better if lvcreate code was split up so we could
++		 * call a specific function that just created a linear/striped LV.)
++		 */
++		.ignore_type = 1,
+ 	};
+ 	struct lvcreate_cmdline_params lcp = { 0 };
++	struct processing_params pp = {
++	    .lp = &lp,
++	    .lcp = &lcp,
++	};
+ 	int ret;
+ 
+-	/*
+-	 * Tell lvcreate to ignore --type since we are using lvcreate
+-	 * to create a linear LV and using lvconvert to add cache.
+-	 * (Would be better if lvcreate code was split up so we could
+-	 * call a specific function that just created a linear/striped LV.)
+-	 */
+-	lp.ignore_type = 1;
+-
+ 	if (!_lvcreate_params(cmd, argc, argv, &lp, &lcp)) {
+ 		stack;
+ 		return EINVALID_CMD_LINE;
+ 	}
+ 
+-	pp.lp = &lp;
+-	pp.lcp = &lcp;
+-
+ 	if (!(handle = init_processing_handle(cmd, NULL))) {
+ 		log_error("Failed to initialize processing handle.");
+ 		return ECMD_FAILED;
+@@ -1963,4 +1960,3 @@ int lvcreate_and_attach_cache_cmd(struct cmd_context *cmd, int argc, char **argv
+ 	destroy_processing_handle(cmd, handle);
+ 	return ret;
  }
- EOF
-@@ -58,6 +61,13 @@ EOF
- 
- aux prepare_vg 2 1000000
- 
-+# Check writecache read data from profile
-+lvcreate -n $lv1 -l 4 -an $vg "$dev1"
-+lvcreate -y --type writecache -l 4 --cachevol $lv1 -n $lv2 --metadataprofile $PFILE $vg "$dev2"
-+check lv_field $vg/$lv2 cachesettings "high_watermark=60"
-+lvremove -y $vg
-+exit
-+
- # Check chunk_size is grabbed from configuration
- lvcreate -L1G --config 'allocation/cache_pool_chunk_size=512' --type cache-pool $vg/cpool
- check lv_field $vg/cpool chunksize "512.00k"
-diff --git a/test/shell/writecache-misc.sh b/test/shell/writecache-misc.sh
-index 80b793256..f62974c54 100644
---- a/test/shell/writecache-misc.sh
-+++ b/test/shell/writecache-misc.sh
-@@ -52,6 +52,12 @@ aux prepare_devs 4
- vgcreate $vg "$dev1" "$dev2" "$dev3" "$dev4"
- 
- 
-+# Create writecache without a specified name so it gets automatic name
-+lvcreate -n $lv1 -l 4 -an $vg "$dev1"
-+lvcreate -y --type writecache -l 4 --cachevol $lv1 $vg "$dev2"
-+check lv_exists $vg lvol0
-+lvremove -y $vg
-+
- #
- # Test pvmove with writecache
- #
+-
 
 
