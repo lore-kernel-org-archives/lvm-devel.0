@@ -1,55 +1,73 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Wed, 26 Jan 2022 14:10:37 +0000 (GMT)
-Subject: main - gcc: increate buffer sizes
-Message-ID: <20220126141037.056423850431@sourceware.org>
+Date: Wed, 26 Jan 2022 14:10:33 +0000 (GMT)
+Subject: main - test: check writecache profile support
+Message-ID: <20220126141033.9A3EC385041C@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=62f11b0b0b0e4e6aebec5857406b2d4b22406378
-Commit:        62f11b0b0b0e4e6aebec5857406b2d4b22406378
-Parent:        cf68bf7b6c5668dcaf16310e84636a79164bd8ee
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=89cec5b65af5533bcde358d8d4f7d1d5701a341b
+Commit:        89cec5b65af5533bcde358d8d4f7d1d5701a341b
+Parent:        b95506815fa149cf135687cbe047b7bdfcd6e00f
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu Jan 20 15:27:29 2022 +0100
+AuthorDate:    Mon Jan 24 14:49:53 2022 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Wed Jan 26 15:09:58 2022 +0100
 
-gcc: increate buffer sizes
+test: check writecache profile support
 
-Make all possible string buffers to fit so they are not shortened in the
-middle.
+FIXME
 ---
- daemons/cmirrord/cluster.c   | 2 +-
- daemons/cmirrord/functions.c | 2 +-
- 2 files changed, 2 insertions(+), 2 deletions(-)
+ test/shell/profiles-cache.sh  | 10 ++++++++++
+ test/shell/writecache-misc.sh |  6 ++++++
+ 2 files changed, 16 insertions(+)
 
-diff --git a/daemons/cmirrord/cluster.c b/daemons/cmirrord/cluster.c
-index 5de43c534..ef997baf4 100644
---- a/daemons/cmirrord/cluster.c
-+++ b/daemons/cmirrord/cluster.c
-@@ -108,7 +108,7 @@ static SaVersionT version = { 'B', 1, 1 };
- #endif
+diff --git a/test/shell/profiles-cache.sh b/test/shell/profiles-cache.sh
+index 9e17ebf60..47a5cdf2f 100644
+--- a/test/shell/profiles-cache.sh
++++ b/test/shell/profiles-cache.sh
+@@ -43,6 +43,9 @@ allocation {
+ 			sequential_threshold = 100
+ 			random_threshold = 200
+ 		}
++		writecache {
++			high_watermark = 60
++		}
+ 	}
+ }
+ EOF
+@@ -58,6 +61,13 @@ EOF
  
- #define DEBUGGING_HISTORY 100
--#define DEBUGGING_BUFLEN 128
-+#define DEBUGGING_BUFLEN 270
- #define LOG_SPRINT(cc, f, arg...) do {				\
- 		cc->idx++;					\
- 		cc->idx = cc->idx % DEBUGGING_HISTORY;		\
-diff --git a/daemons/cmirrord/functions.c b/daemons/cmirrord/functions.c
-index 6c8c386a7..18251ec4d 100644
---- a/daemons/cmirrord/functions.c
-+++ b/daemons/cmirrord/functions.c
-@@ -34,7 +34,7 @@
- #define LOG_OFFSET 2
+ aux prepare_vg 2 1000000
  
- #define RESYNC_HISTORY 50
--#define RESYNC_BUFLEN 128
-+#define RESYNC_BUFLEN 270
- //static char resync_history[RESYNC_HISTORY][128];
- //static int idx = 0;
- #define LOG_SPRINT(_lc, f, arg...) do {					\
++# Check writecache read data from profile
++lvcreate -n $lv1 -l 4 -an $vg "$dev1"
++lvcreate -y --type writecache -l 4 --cachevol $lv1 -n $lv2 --metadataprofile $PFILE $vg "$dev2"
++check lv_field $vg/$lv2 cachesettings "high_watermark=60"
++lvremove -y $vg
++exit
++
+ # Check chunk_size is grabbed from configuration
+ lvcreate -L1G --config 'allocation/cache_pool_chunk_size=512' --type cache-pool $vg/cpool
+ check lv_field $vg/cpool chunksize "512.00k"
+diff --git a/test/shell/writecache-misc.sh b/test/shell/writecache-misc.sh
+index 80b793256..f62974c54 100644
+--- a/test/shell/writecache-misc.sh
++++ b/test/shell/writecache-misc.sh
+@@ -52,6 +52,12 @@ aux prepare_devs 4
+ vgcreate $vg "$dev1" "$dev2" "$dev3" "$dev4"
+ 
+ 
++# Create writecache without a specified name so it gets automatic name
++lvcreate -n $lv1 -l 4 -an $vg "$dev1"
++lvcreate -y --type writecache -l 4 --cachevol $lv1 $vg "$dev2"
++check lv_exists $vg lvol0
++lvremove -y $vg
++
+ #
+ # Test pvmove with writecache
+ #
 
 
