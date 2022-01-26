@@ -1,38 +1,26 @@
-From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Wed, 26 Jan 2022 14:33:05 +0000 (GMT)
-Subject: main - test: remove leaked exit
-Message-ID: <20220126143305.4C64F3864835@sourceware.org>
+From: David Teigland <teigland@redhat.com>
+Date: Wed, 26 Jan 2022 10:40:23 -0600
+Subject: Reg a deadlock specific to our environment
+In-Reply-To: <CAFe+wq1yJG-QymJg_uT6+yEU3f0Ua5MEXaKpSEZRmDcPTMXt5w@mail.gmail.com>
+References: <CAFe+wq18h3W3DwmR-n6v=0cPm4XgiwRsjkq4260uRYyNhAx9Aw@mail.gmail.com>
+	<20220113145226.GA436@redhat.com>
+	<CAFe+wq1yJG-QymJg_uT6+yEU3f0Ua5MEXaKpSEZRmDcPTMXt5w@mail.gmail.com>
+Message-ID: <20220126164023.GA29106@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=a425729da9e756a91a5729addb26029216bfd476
-Commit:        a425729da9e756a91a5729addb26029216bfd476
-Parent:        62f11b0b0b0e4e6aebec5857406b2d4b22406378
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed Jan 26 15:32:30 2022 +0100
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Wed Jan 26 15:32:30 2022 +0100
+On Wed, Jan 26, 2022 at 06:41:07PM +0530, Lakshmi Narasimhan Sundararajan wrote:
+> From the code, all commands that internally does vg_open() gets stuck.
 
-test: remove leaked exit
+vg_open() sounds like the old liblvm2app, is there a program you've
+written using that library?  That lib was seriously flawed, so you're
+unlikely to get it to work well.  It was dropped some years ago now.
+We can take a brief look at the debug output to see if there's any
+obvious workaround for whatever is blocking it.
 
----
- test/shell/profiles-cache.sh | 1 -
- 1 file changed, 1 deletion(-)
-
-diff --git a/test/shell/profiles-cache.sh b/test/shell/profiles-cache.sh
-index 47a5cdf2f..60345fd61 100644
---- a/test/shell/profiles-cache.sh
-+++ b/test/shell/profiles-cache.sh
-@@ -66,7 +66,6 @@ lvcreate -n $lv1 -l 4 -an $vg "$dev1"
- lvcreate -y --type writecache -l 4 --cachevol $lv1 -n $lv2 --metadataprofile $PFILE $vg "$dev2"
- check lv_field $vg/$lv2 cachesettings "high_watermark=60"
- lvremove -y $vg
--exit
- 
- # Check chunk_size is grabbed from configuration
- lvcreate -L1G --config 'allocation/cache_pool_chunk_size=512' --type cache-pool $vg/cpool
+Dave
 
 
