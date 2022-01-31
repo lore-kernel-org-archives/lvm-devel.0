@@ -1,57 +1,57 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Mon, 31 Jan 2022 13:57:28 +0000 (GMT)
-Subject: main - udev: create symlinks and watch even in suspended state
-Message-ID: <20220131135728.0366C3858C20@sourceware.org>
+Date: Mon, 31 Jan 2022 13:57:29 +0000 (GMT)
+Subject: main - tools: missing sync after deactivation
+Message-ID: <20220131135729.23FB0385840B@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=e10f67e91728f1e576803df884049ecbd92874d0
-Commit:        e10f67e91728f1e576803df884049ecbd92874d0
-Parent:        ee8fb0310c53ed003a43b324c99cdfd891dd1a7c
-Author:        Martin Wilck <mwilck@suse.com>
-AuthorDate:    Fri Jan 28 14:42:29 2022 +0100
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=f8d12913e78e25120ca41d8d6938ec3a423274f5
+Commit:        f8d12913e78e25120ca41d8d6938ec3a423274f5
+Parent:        e10f67e91728f1e576803df884049ecbd92874d0
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Fri Jan 28 17:42:04 2022 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Mon Jan 31 14:55:20 2022 +0100
+CommitterDate: Mon Jan 31 14:55:42 2022 +0100
 
-udev: create symlinks and watch even in suspended state
+tools: missing sync after deactivation
 
-If a dm device is suspended, we can't run blkid on it. But earlier
-rules (e.g. 11-dm-parts.rules) might have imported previously scanned
-properties from the udev db, in particular if the device had been correctly
-set up beforehand (DM_UDEV_PRIMARY_SOURCE_FLAG==1). Symlinks for existing
-ID_FS_xyz properties must be preserved in this case. Otherwise lower-priority
-devices (such as multipath components) might take over the symlink
-temporarily.
-
-Likewise, we should't stop watching a temporarily suspended, but previously
-correctly configured dm device.
-
-Signed-off-by: Martin Wilck <mwilck@suse.com>
+Caching of DM states optimisation revealed some missing
+synchronisation points.
 ---
- udev/13-dm-disk.rules.in | 4 ++++
- 1 file changed, 4 insertions(+)
+ tools/lvchange.c | 2 ++
+ tools/toollib.c  | 4 ++++
+ 2 files changed, 6 insertions(+)
 
-diff --git a/udev/13-dm-disk.rules.in b/udev/13-dm-disk.rules.in
-index 535581070..5cc08121e 100644
---- a/udev/13-dm-disk.rules.in
-+++ b/udev/13-dm-disk.rules.in
-@@ -17,10 +17,14 @@ ENV{DM_UDEV_DISABLE_DISK_RULES_FLAG}=="1", GOTO="dm_end"
- SYMLINK+="disk/by-id/dm-name-$env{DM_NAME}"
- ENV{DM_UUID}=="?*", SYMLINK+="disk/by-id/dm-uuid-$env{DM_UUID}"
+diff --git a/tools/lvchange.c b/tools/lvchange.c
+index 0525bc53c..879999766 100644
+--- a/tools/lvchange.c
++++ b/tools/lvchange.c
+@@ -358,6 +358,8 @@ static int _lvchange_resync(struct cmd_context *cmd, struct logical_volume *lv)
+ 	if (monitored != DMEVENTD_MONITOR_IGNORE)
+ 		init_dmeventd_monitor(monitored);
+ 	init_mirror_in_sync(0);
++	if (!sync_local_dev_names(cmd))
++		log_warn("Failed to sync local dev names.");
  
-+ENV{DM_SUSPENDED}=="1", ENV{DM_UDEV_PRIMARY_SOURCE_FLAG}=="1", GOTO="dm_link"
-+ENV{DM_NOSCAN}=="1", ENV{DM_UDEV_PRIMARY_SOURCE_FLAG}=="1", GOTO="dm_link"
- ENV{DM_SUSPENDED}=="1", GOTO="dm_end"
- ENV{DM_NOSCAN}=="1", GOTO="dm_watch"
+ 	log_very_verbose("Starting resync of %s%s%s%s %s.",
+ 			 (active) ? "active " : "",
+diff --git a/tools/toollib.c b/tools/toollib.c
+index e8873adee..4a131aea8 100644
+--- a/tools/toollib.c
++++ b/tools/toollib.c
+@@ -900,6 +900,10 @@ void lv_spawn_background_polling(struct cmd_context *cmd,
+ 	const char *pvname;
+ 	const struct logical_volume *lv_mirr = NULL;
  
- (BLKID_RULE)
++	/* Ensure there is nothing waiting on cookie */
++	if (!sync_local_dev_names(cmd))
++		log_warn("Failed to sync local dev names.");
 +
-+LABEL="dm_link"
- ENV{DM_UDEV_LOW_PRIORITY_FLAG}=="1", OPTIONS="link_priority=-100"
- ENV{ID_FS_USAGE}=="filesystem|other|crypto", ENV{ID_FS_UUID_ENC}=="?*", SYMLINK+="disk/by-uuid/$env{ID_FS_UUID_ENC}"
- ENV{ID_FS_USAGE}=="filesystem|other", ENV{ID_FS_LABEL_ENC}=="?*", SYMLINK+="disk/by-label/$env{ID_FS_LABEL_ENC}"
+ 	if (lv_is_pvmove(lv))
+ 		lv_mirr = lv;
+ 	else if (lv_is_locked(lv))
 
 
