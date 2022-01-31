@@ -1,114 +1,44 @@
-From: David Teigland <teigland@sourceware.org>
-Date: Mon, 31 Jan 2022 23:02:54 +0000 (GMT)
-Subject: main - writecache: look for settings in lvm.conf
-Message-ID: <20220131230254.B7A583858D35@sourceware.org>
+From: Kai Lüke <kai@kinvolk.io>
+Date: Mon, 31 Jan 2022 17:22:31 +0100
+Subject: [PATCH] systemd: Set RemainAfterExit=yes for oneshot service
+Message-ID: <CAL6HQvHE08_Su1KhVy_MKzRrHNcjDpnqp94YMvZx6n2i2ofjdg@mail.gmail.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=f0cd54a873880286e0932c5cb38a9572677bee25
-Commit:        f0cd54a873880286e0932c5cb38a9572677bee25
-Parent:        ffa07c8e398232150794767e05b95893c7b737b6
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Mon Jan 31 16:12:24 2022 -0600
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Mon Jan 31 16:59:37 2022 -0600
+From: Kai L?ke <kai@kinvolk.io>
 
-writecache: look for settings in lvm.conf
-
-Restore the lvm.conf cache_settings for writecache
-added by c6639056e0bb2fc5f072b2c0d6bb629ad17eee6e.
-Shorter method reduces and isolates the complexity
-of config trees.
+The lvm2-activation(-early).service was triggered multiple times which
+if done too quickly leads to a failure like this:
+  systemd[1]: Finished Activation of LVM2 logical volumes.
+  systemd[1]: lvm2-activation-early.service: Start request repeated too quickly.
+  systemd[1]: lvm2-activation-early.service: Failed with result
+'start-limit-hit'.
+Set RemainAfterExit=yes as done for the other oneshot services to
+prevent the unit from running multiple times in a row and hitting the
+restart limit.
 ---
- WHATS_NEW       |  1 +
- tools/toollib.c | 46 ++++++++++++++++++++++++++++++++++++++++++++++
- 2 files changed, 47 insertions(+)
+ scripts/lvm2_activation_generator_systemd_red_hat.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index e2f6e166b..16235514e 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.03.15 - 
- ===================================
-+  Improve support for metadata profiles for --type writecache.
-   Use cache or active DM device when available with new kernels.
-   Introduce function to utilize UUIDs from DM_DEVICE_LIST.
-   Increase some hash table size to better support large device sets.
-diff --git a/tools/toollib.c b/tools/toollib.c
-index c23f55c07..b08c044fa 100644
---- a/tools/toollib.c
-+++ b/tools/toollib.c
-@@ -1317,12 +1317,15 @@ static int _get_one_writecache_setting(struct cmd_context *cmd, struct writecach
- int get_writecache_settings(struct cmd_context *cmd, struct writecache_settings *settings,
- 			    uint32_t *block_size_sectors)
- {
-+	const struct dm_config_node *cns, *cn1, *cn2;
- 	struct arg_value_group_list *group;
- 	const char *str;
- 	char key[64];
- 	char val[64];
- 	int num;
- 	int pos;
-+	int rn;
-+	int found = 0;
- 
- 	/*
- 	 * "grouped" means that multiple --cachesettings options can be used.
-@@ -1354,8 +1357,51 @@ int get_writecache_settings(struct cmd_context *cmd, struct writecache_settings
- 			if (!_get_one_writecache_setting(cmd, settings, key, val, block_size_sectors))
- 				return_0;
- 		}
-+		found = 1;
- 	}
- 
-+	if (found)
-+		goto out;
-+
-+	/*
-+	 * If there were no settings on the command line, look for settings in
-+	 * lvm.conf
-+	 *
-+	 * TODO: support profiles
-+	 */
-+
-+	if (!(cns = find_config_tree_node(cmd, allocation_cache_settings_CFG_SECTION, NULL)))
-+		goto out;
-+
-+	for (cn1 = cns->child; cn1; cn1 = cn1->sib) {
-+		if (!cn1->child)
-+			continue; /* Ignore section without settings */
-+
-+		if (cn1->v || strcmp(cn1->key, "writecache") != 0)
-+			continue; /* Ignore non-matching settings */
-+
-+		cn2 = cn1->child;
-+
-+		for (; cn2; cn2 = cn2->sib) {
-+			memset(val, 0, sizeof(val));
-+
-+			if (cn2->v->type == DM_CFG_INT)
-+				rn = dm_snprintf(val, sizeof(val), FMTd64, cn2->v->v.i);
-+			else if (cn2->v->type == DM_CFG_STRING)
-+				rn = dm_snprintf(val, sizeof(val), "%s", cn2->v->v.str);
-+			else
-+				rn = -1;
-+			if (rn < 0) {
-+				log_error("Invalid lvm.conf writecache setting value for %s.", cn2->key);
-+				return 0;
-+			}
-+
-+			if (!_get_one_writecache_setting(cmd, settings, (char *)cn2->key, val, block_size_sectors))
-+				return_0;
-+		}
-+	}
-+
-+ out:
- 	if (settings->high_watermark_set && settings->low_watermark_set &&
- 	    (settings->high_watermark <= settings->low_watermark)) {
- 		log_error("High watermark must be greater than low watermark.");
+diff --git a/scripts/lvm2_activation_generator_systemd_red_hat.c
+b/scripts/lvm2_activation_generator_systemd_red_hat.c
+index 0f4ac8da2..1884b45ad 100644
+--- a/scripts/lvm2_activation_generator_systemd_red_hat.c
++++ b/scripts/lvm2_activation_generator_systemd_red_hat.c
+@@ -160,7 +160,7 @@ static int generate_unit(struct generator *gen, int unit)
+     fputs("ExecStart=" LVM_PATH " vgchange -aay", f);
+     if (gen->cfg.sysinit_needed)
+         fputs(" --sysinit", f);
+-    fputs("\nType=oneshot\n", f);
++    fputs("\nType=oneshot\nRemainAfterExit=yes\n", f);
+
+     if (fclose(f) < 0) {
+         _error("Failed to write unit file %s: %m.\n", unit_name);
+-- 
+2.26.2
+
 
 
