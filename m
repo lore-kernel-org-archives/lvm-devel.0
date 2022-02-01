@@ -1,92 +1,77 @@
-From: Zdenek Kabelac <zkabelac@fedoraproject.org>
-Date: Fri, 24 Oct 2014 14:40:34 +0000 (UTC)
-Subject: master - cleanup: move code
-Message-ID: <20141024144034.ACD1A60CE2@fedorahosted.org>
+From: Zdenek Kabelac <zdenek.kabelac@gmail.com>
+Date: Tue, 1 Feb 2022 11:11:44 +0100
+Subject: [PATCH] udev: create symlinks and watch even in suspended state
+In-Reply-To: <3f7f5039c4529912970f21fe699ad204dfbe5be3.camel@suse.com>
+References: <20220128134229.1783-1-mwilck@suse.com>
+	<10ad6fc0-6c24-c98b-4a02-2140883af72d@gmail.com>
+	<a1f472a89e9825f90a4104bea535086f0cde6b93.camel@suse.com>
+	<d0d0d8f39257bcddf480524f01faae1f15ac2c42.camel@suse.com>
+	<e85bd660-0c50-df5d-35de-2fd5b16cc47f@gmail.com>
+	<0a55dd1393df2c125f8cb443daaeb7d1b7162bcc.camel@suse.com>
+	<aba2f6dd-f4cf-6af4-e2b6-965f5de06cd8@redhat.com>
+	<92de9eff521e2702e364f7aa3cce6927d9d9c03c.camel@suse.com>
+	<1b20e88f-2714-3c61-73a6-2f34f6a34edc@gmail.com>
+	<712b54a06fa1b13f9ac92a00d7b121979c43d31c.camel@suse.com>
+	<20220131133354.vfomn5gdlgrhue4g@alatyr-rpi.brq.redhat.com>
+	<3f7f5039c4529912970f21fe699ad204dfbe5be3.camel@suse.com>
+Message-ID: <cc5c503a-c94f-d32f-9f91-e388f36c647c@gmail.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        http://git.fedorahosted.org/git/?p=lvm2.git;a=commitdiff;h=cf674142a2c1504d5652a5dd5479041272fd34ec
-Commit:        cf674142a2c1504d5652a5dd5479041272fd34ec
-Parent:        4f8ed25a999821cd37cc1e2c0051e60e8a63e371
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Sat Oct 18 11:01:34 2014 +0200
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Fri Oct 24 16:39:31 2014 +0200
+Dne 01. 02. 22 v 9:40 Martin Wilck napsal(a):
+> On Mon, 2022-01-31 at 14:33 +0100, Peter Rajnoha wrote:
+>> (just discussed this with Zdenek too)
+>>
+>> The patch makes sense to me!
+>>
+>> We added all the DM_UDEV_PRIMARY_SOURCE_FLAG and related for exactly
+>> such cases where we need to take the existing values already scanned
+>> in previous event, main use-case being the trigger at boot. We just
+>> didn't cover the 13-dm-disk.rules with the same logic regarding the
+>> suspended state to keep the symlinks - I didn't think it would cause
+>> issues (because, usually, after suspend, we anticipate incoming
+>> resume where the device is scanned again).
+>>
+>> But yes, if temporarily losing the symlink causes issues, your patch
+>> solves that (Zdenek will push that upstream).
+> 
+> Thank you very much! It occured to me that if we want to solve my use
+> case with minimal risk, we could make the the case in which the
+> symlinks are preserved conditional on ACTION=="add" (i.e. true coldplug
+> events). Tell me if you'd prefer that, I can re-submit.
 
-cleanup: move code
+The problem is handling of 'suspended' state in udev rules - as I've mentioned 
+original no userland tool should mostly care about this.
 
----
- lib/metadata/lv_manip.c |   10 ++++------
- tools/lvcreate.c        |    5 ++---
- 2 files changed, 6 insertions(+), 9 deletions(-)
+However since there are those things like udev 'trigger' and it would be kind 
+of ugly if the 'left-over' suspended device would stop whole system operation
+it's most likely better ATM to have some kind of support for this.
 
-diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
-index ec09b41..244db1b 100644
---- a/lib/metadata/lv_manip.c
-+++ b/lib/metadata/lv_manip.c
-@@ -6573,7 +6573,7 @@ static struct logical_volume *_lv_create_an_lv(struct volume_group *vg,
- {
- 	struct cmd_context *cmd = vg->cmd;
- 	uint32_t size_rest;
--	uint64_t status = UINT64_C(0);
-+	uint64_t status = lp->permission | VISIBLE_LV;
- 	struct logical_volume *lv, *origin_lv = NULL;
- 	struct logical_volume *pool_lv;
- 	struct logical_volume *tmp_lv;
-@@ -6672,8 +6672,6 @@ static struct logical_volume *_lv_create_an_lv(struct volume_group *vg,
- 		lp->extents = lp->extents - size_rest + lp->stripes;
- 	}
- 
--	status |= lp->permission | VISIBLE_LV;
--
- 	if (seg_is_cache(lp)) {
- 		if (!lp->pool_name) {
- 			log_error(INTERNAL_ERROR "Cannot create thin volume without thin pool.");
-@@ -6900,6 +6898,9 @@ static struct logical_volume *_lv_create_an_lv(struct volume_group *vg,
- 		if (!recalculate_pool_chunk_size_with_dev_hints(lv, lp->passed_args,
- 								THIN_CHUNK_SIZE_CALC_METHOD_GENERIC))
- 			return_NULL;
-+	} else if (seg_is_raid(lp)) {
-+		first_seg(lv)->min_recovery_rate = lp->min_recovery_rate;
-+		first_seg(lv)->max_recovery_rate = lp->max_recovery_rate;
- 	} else if (seg_is_thin_pool(lp)) {
- 		first_seg(lv)->chunk_size = lp->chunk_size;
- 		first_seg(lv)->zero_new_blocks = lp->zero ? 1 : 0;
-@@ -6936,9 +6937,6 @@ static struct logical_volume *_lv_create_an_lv(struct volume_group *vg,
- 		if (!attach_pool_message(first_seg(pool_lv),
- 					 DM_THIN_MESSAGE_CREATE_THIN, lv, 0, 0))
- 			return_NULL;
--	} else if (seg_is_raid(lp)) {
--		first_seg(lv)->min_recovery_rate = lp->min_recovery_rate;
--		first_seg(lv)->max_recovery_rate = lp->max_recovery_rate;
- 	}
- 
- 	/* FIXME Log allocation and attachment should have happened inside lv_extend. */
-diff --git a/tools/lvcreate.c b/tools/lvcreate.c
-index 7573a2e..8b3255c 100644
---- a/tools/lvcreate.c
-+++ b/tools/lvcreate.c
-@@ -806,9 +806,6 @@ static int _read_activation_params(struct lvcreate_params *lp,
- 		return 0;
- 	}
- 
--	lp->yes = arg_count(cmd, yes_ARG);
--	lp->force = (force_t) arg_count(cmd, force_ARG);
--
- 	return 1;
- }
- 
-@@ -825,6 +822,8 @@ static int _lvcreate_params(struct lvcreate_params *lp,
- 	memset(lcp, 0, sizeof(*lcp));
- 	dm_list_init(&lp->tags);
- 	lp->target_attr = ~0;
-+	lp->yes = arg_count(cmd, yes_ARG);
-+	lp->force = (force_t) arg_count(cmd, force_ARG);
- 
- 	/* Set default segtype - remember, '-m 0' implies stripe. */
- 	if (arg_count(cmd, mirrors_ARG) &&
+It's should be noted there is still 'race' risk of system freezing in the case 
+the suspend happens just after sysfs test and before actual i.e. 'blkid' use.
+But let's assume the chance of having this to happen is pretty minimal, and 
+usually tools doing suspend & resume will work correctly and the 'crash' will 
+not likely happen in this particular moment - and suspended device just 
+hanging there already for longer time.
+
+The missed issue to be solve is - that ALL rules have to rely on a single 
+suspend check - otherwise we risk 'partial' processing  which is the last 
+thing we want to see (aka all or nothing).
+
+Your real problem was not the suspend on its own - which still may happen 
+anytime (so i.e. just after the test whether device is suspended),
+but the bug was related to bad exit path cleaning udev db content in this case 
+- which is clear bug.  Next bug is that other rules have to be consistent and 
+properly skip its processing if the 1st. rules decides its meant to be skipped.
+
+ATM your patch is already upstream and great thanks for pointing this out.
+
+Regards
+
+Zdenek
+
 
 
