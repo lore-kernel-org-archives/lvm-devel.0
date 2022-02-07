@@ -1,65 +1,158 @@
-From: Marian Csontos <mcsontos@sourceware.org>
-Date: Mon,  7 Feb 2022 17:08:26 +0000 (GMT)
-Subject: main - post-release
-Message-ID: <20220207170826.139963858423@sourceware.org>
+From: Zdenek Kabelac <zkabelac@sourceware.org>
+Date: Mon,  7 Feb 2022 19:03:52 +0000 (GMT)
+Subject: main - asan: fix some reports from libasan
+Message-ID: <20220207190352.9C1D93858C83@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=8dccc2314e2482370bc6e5cf007eb210994abdef
-Commit:        8dccc2314e2482370bc6e5cf007eb210994abdef
-Parent:        6987f318ec135ffd54a05872a8aa621726fe7acb
-Author:        Marian Csontos <mcsontos@redhat.com>
-AuthorDate:    Mon Feb 7 18:02:07 2022 +0100
-Committer:     Marian Csontos <mcsontos@redhat.com>
-CommitterDate: Mon Feb 7 18:02:07 2022 +0100
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=f83b3962c10bf4e196fec0e3e735820ba908661f
+Commit:        f83b3962c10bf4e196fec0e3e735820ba908661f
+Parent:        8dccc2314e2482370bc6e5cf007eb210994abdef
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Mon Feb 7 19:58:04 2022 +0100
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Mon Feb 7 20:02:11 2022 +0100
 
-post-release
+asan: fix some reports from libasan
 
+When compiled and used with:
+
+CFLAGS="-fsanitize=address -g -O0"
+ASAN_OPTIONS=strict_string_checks=1:detect_stack_use_after_return=1:check_initialization_order=1:strict_init_order=1
+
+we have few reported issue - they where not normally spotted, since
+we were still accessing our own memory - but ouf of buffer-range.
+
+TODO: there is still something to enhance with handling of #orphan vgids
 ---
- VERSION      | 2 +-
- VERSION_DM   | 2 +-
- WHATS_NEW    | 3 +++
- WHATS_NEW_DM | 3 +++
- 4 files changed, 8 insertions(+), 2 deletions(-)
+ lib/config/config.c              | 4 +++-
+ lib/format_text/format-text.c    | 2 +-
+ lib/format_text/text_label.c     | 6 ++++--
+ lib/metadata/metadata-exported.h | 2 +-
+ lib/uuid/uuid.c                  | 5 +++++
+ tools/Makefile.in                | 4 ++--
+ tools/command.c                  | 2 +-
+ 7 files changed, 17 insertions(+), 8 deletions(-)
 
-diff --git a/VERSION b/VERSION
-index 0e6ab70a9..fba090956 100644
---- a/VERSION
-+++ b/VERSION
-@@ -1 +1 @@
--2.03.15(2) (2022-02-07)
-+2.03.16(2)-git (2022-02-07)
-diff --git a/VERSION_DM b/VERSION_DM
-index d6704212f..d122183b2 100644
---- a/VERSION_DM
-+++ b/VERSION_DM
-@@ -1 +1 @@
--1.02.183 (2022-02-07)
-+1.02.185-git (2022-02-07)
-diff --git a/WHATS_NEW b/WHATS_NEW
-index dda9954fe..006d0acb1 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,3 +1,6 @@
-+Version 2.03.16 - 
-+====================================
+diff --git a/lib/config/config.c b/lib/config/config.c
+index c8dab5683..f9614779a 100644
+--- a/lib/config/config.c
++++ b/lib/config/config.c
+@@ -522,7 +522,9 @@ int config_file_read_fd(struct dm_config_tree *cft, struct device *dev, dev_io_r
+ 	if (!(dev->flags & DEV_REGULAR) || size2)
+ 		use_plain_read = 0;
+ 
+-	if (!(buf = zalloc(size + size2))) {
++	/* Ensure there is extra '\0' after end of buffer since we pass
++	 * buffer to funtions like strtoll() */
++	if (!(buf = zalloc(size + size2 + 1))) {
+ 		log_error("Failed to allocate circular buffer.");
+ 		return 0;
+ 	}
+diff --git a/lib/format_text/format-text.c b/lib/format_text/format-text.c
+index 00443faa1..07aaa0b28 100644
+--- a/lib/format_text/format-text.c
++++ b/lib/format_text/format-text.c
+@@ -2601,7 +2601,7 @@ struct format_type *create_text_format(struct cmd_context *cmd)
+ 	fmt->ops = &_text_handler;
+ 	fmt->name = FMT_TEXT_NAME;
+ 	fmt->alias = FMT_TEXT_ALIAS;
+-	fmt->orphan_vg_name = ORPHAN_VG_NAME(FMT_TEXT_NAME);
++	strncpy(fmt->orphan_vg_name, ORPHAN_VG_NAME(FMT_TEXT_NAME), sizeof(fmt->orphan_vg_name));
+ 	fmt->features = FMT_SEGMENTS | FMT_TAGS | FMT_PRECOMMIT |
+ 			FMT_UNLIMITED_VOLS | FMT_RESIZE_PV |
+ 			FMT_UNLIMITED_STRIPESIZE | FMT_CONFIG_PROFILE |
+diff --git a/lib/format_text/text_label.c b/lib/format_text/text_label.c
+index 29b470271..324c86e44 100644
+--- a/lib/format_text/text_label.c
++++ b/lib/format_text/text_label.c
+@@ -410,6 +410,7 @@ static int _text_read(struct cmd_context *cmd, struct labeller *labeller, struct
+ {
+ 	struct lvmcache_vgsummary vgsummary;
+ 	char pvid[ID_LEN + 1] __attribute__((aligned(8))) = { 0 };
++	char vgid[ID_LEN + 1] __attribute__((aligned(8))) = { 0 };
+ 	struct lvmcache_info *info;
+ 	const struct format_type *fmt = labeller->fmt;
+ 	struct label_header *lh = (struct label_header *) label_buf;
+@@ -433,6 +434,7 @@ static int _text_read(struct cmd_context *cmd, struct labeller *labeller, struct
+ 	pvhdr = (struct pv_header *) ((char *) label_buf + xlate32(lh->offset_xl));
+ 
+ 	memcpy(pvid, &pvhdr->pv_uuid, ID_LEN);
++	strncpy(vgid, FMT_TEXT_ORPHAN_VG_NAME, ID_LEN);
+ 
+ 	/*
+ 	 * FIXME: stop adding the device to lvmcache initially as an orphan
+@@ -449,8 +451,8 @@ static int _text_read(struct cmd_context *cmd, struct labeller *labeller, struct
+ 	 * Other reasons for lvmcache_add to return NULL are internal errors.
+ 	 */
+ 	if (!(info = lvmcache_add(cmd, labeller, pvid, dev, label_sector,
+-				  FMT_TEXT_ORPHAN_VG_NAME,
+-				  FMT_TEXT_ORPHAN_VG_NAME, 0, is_duplicate)))
++				  vgid,
++				  vgid, 0, is_duplicate)))
+ 		return_0;
+ 
+ 	lvmcache_set_device_size(info, xlate64(pvhdr->device_size_xl));
+diff --git a/lib/metadata/metadata-exported.h b/lib/metadata/metadata-exported.h
+index 7bac5b900..fd370d4b2 100644
+--- a/lib/metadata/metadata-exported.h
++++ b/lib/metadata/metadata-exported.h
+@@ -371,7 +371,7 @@ struct format_type {
+ 	struct labeller *labeller;
+ 	const char *name;
+ 	const char *alias;
+-	const char *orphan_vg_name;
++	char orphan_vg_name[ID_LEN];
+ 	struct volume_group *orphan_vg; /* Only one ever exists. */
+ 	uint32_t features;
+ 	void *library;
+diff --git a/lib/uuid/uuid.c b/lib/uuid/uuid.c
+index be4cbc3ec..d8b72422b 100644
+--- a/lib/uuid/uuid.c
++++ b/lib/uuid/uuid.c
+@@ -168,6 +168,11 @@ int id_write_format(const struct id *id, char *buffer, size_t size)
+ 
+ 	assert(ID_LEN == 32);
+ 
++	if (id->uuid[0] == '#') {
++		(void) dm_strncpy(buffer, (char*)id->uuid, size);
++		return 1;
++	}
 +
- Version 2.03.15 - 07th February 2022
- ====================================
-   Remove service based autoactivation. global/event_activation = 0 is NOOP.
-diff --git a/WHATS_NEW_DM b/WHATS_NEW_DM
-index 778437262..c63436221 100644
---- a/WHATS_NEW_DM
-+++ b/WHATS_NEW_DM
-@@ -1,3 +1,6 @@
-+Version 1.02.185 - 
-+=====================================
-+
- Version 1.02.183 - 07th February 2022
- =====================================
-   Unmangle UUIDs for DM_DEVICE_LIST ioctl.
+ 	/* split into groups separated by dashes */
+ 	if (size < (32 + 6 + 1)) {
+ 		if (size > 0)
+diff --git a/tools/Makefile.in b/tools/Makefile.in
+index e0e180474..25fe3b6b3 100644
+--- a/tools/Makefile.in
++++ b/tools/Makefile.in
+@@ -190,9 +190,9 @@ command-lines-input.h: $(srcdir)/command-lines.in Makefile
+ 	$(Q) set -o pipefail && \
+ 	( cat $(srcdir)/license.inc && \
+ 	  echo "/* Do not edit. This file is generated by the Makefile. */" && \
+-	  echo -en "const char _command_input[] =\n\n\"" && \
++	  echo -en "static const char _command_input[] =\n\n\"" && \
+ 	  $(EGREP) -v '^#|\-\-\-|^$$' $(srcdir)/command-lines.in | $(AWK) 'BEGIN {ORS = "\\n\"\n\""} //' && \
+-	  echo "\\n\";" \
++	  echo "\\n\\n\";" \
+ 	) > $@
+ 
+ $(SOURCES:%.c=%.d) $(SOURCES2:%.c=%.d): command-lines-input.h command-count.h cmds.h
+diff --git a/tools/command.c b/tools/command.c
+index 18ffd64ed..8de8825e4 100644
+--- a/tools/command.c
++++ b/tools/command.c
+@@ -2549,7 +2549,7 @@ static const char *_man_long_opt_name(const char *cmdname, int opt_enum)
+ 	}
+ 
+ 	if (strchr(long_opt, '[')) {
+-		for (i = 0; i < sizeof(long_opt_name) - 1; ++long_opt, ++i) {
++		for (i = 0; *long_opt && i < sizeof(long_opt_name) - 1; ++long_opt, ++i) {
+ 			if (i < (sizeof(long_opt_name) - 8))
+ 				switch(*long_opt) {
+ 				case '[':
 
 
