@@ -1,158 +1,332 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Mon,  7 Feb 2022 19:03:52 +0000 (GMT)
-Subject: main - asan: fix some reports from libasan
-Message-ID: <20220207190352.9C1D93858C83@sourceware.org>
+Date: Mon,  7 Feb 2022 19:03:53 +0000 (GMT)
+Subject: main - make: generate
+Message-ID: <20220207190353.BCD0D3858414@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=f83b3962c10bf4e196fec0e3e735820ba908661f
-Commit:        f83b3962c10bf4e196fec0e3e735820ba908661f
-Parent:        8dccc2314e2482370bc6e5cf007eb210994abdef
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=13122bcc3329f3c1aee0a1cc478eda8906cd96df
+Commit:        13122bcc3329f3c1aee0a1cc478eda8906cd96df
+Parent:        f83b3962c10bf4e196fec0e3e735820ba908661f
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Mon Feb 7 19:58:04 2022 +0100
+AuthorDate:    Sun Feb 6 20:05:54 2022 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Mon Feb 7 20:02:11 2022 +0100
 
-asan: fix some reports from libasan
+make: generate
 
-When compiled and used with:
-
-CFLAGS="-fsanitize=address -g -O0"
-ASAN_OPTIONS=strict_string_checks=1:detect_stack_use_after_return=1:check_initialization_order=1:strict_init_order=1
-
-we have few reported issue - they where not normally spotted, since
-we were still accessing our own memory - but ouf of buffer-range.
-
-TODO: there is still something to enhance with handling of #orphan vgids
 ---
- lib/config/config.c              | 4 +++-
- lib/format_text/format-text.c    | 2 +-
- lib/format_text/text_label.c     | 6 ++++--
- lib/metadata/metadata-exported.h | 2 +-
- lib/uuid/uuid.c                  | 5 +++++
- tools/Makefile.in                | 4 ++--
- tools/command.c                  | 2 +-
- 7 files changed, 17 insertions(+), 8 deletions(-)
+ conf/example.conf.in    | 15 ++++------
+ man/lvdisplay.8_pregen  | 12 --------
+ man/lvmdevices.8_pregen |  3 +-
+ man/pvdisplay.8_pregen  | 12 --------
+ man/pvscan.8_pregen     | 77 ++++++++++++++++++++++++++-----------------------
+ man/vgchange.8_pregen   | 12 ++++++++
+ man/vgdisplay.8_pregen  | 12 --------
+ 7 files changed, 60 insertions(+), 83 deletions(-)
 
-diff --git a/lib/config/config.c b/lib/config/config.c
-index c8dab5683..f9614779a 100644
---- a/lib/config/config.c
-+++ b/lib/config/config.c
-@@ -522,7 +522,9 @@ int config_file_read_fd(struct dm_config_tree *cft, struct device *dev, dev_io_r
- 	if (!(dev->flags & DEV_REGULAR) || size2)
- 		use_plain_read = 0;
+diff --git a/conf/example.conf.in b/conf/example.conf.in
+index a78ed7333..94f7a23fd 100644
+--- a/conf/example.conf.in
++++ b/conf/example.conf.in
+@@ -1151,16 +1151,11 @@ global {
+ 	# lvdisplay_shows_full_device_path = 0
  
--	if (!(buf = zalloc(size + size2))) {
-+	/* Ensure there is extra '\0' after end of buffer since we pass
-+	 * buffer to funtions like strtoll() */
-+	if (!(buf = zalloc(size + size2 + 1))) {
- 		log_error("Failed to allocate circular buffer.");
- 		return 0;
- 	}
-diff --git a/lib/format_text/format-text.c b/lib/format_text/format-text.c
-index 00443faa1..07aaa0b28 100644
---- a/lib/format_text/format-text.c
-+++ b/lib/format_text/format-text.c
-@@ -2601,7 +2601,7 @@ struct format_type *create_text_format(struct cmd_context *cmd)
- 	fmt->ops = &_text_handler;
- 	fmt->name = FMT_TEXT_NAME;
- 	fmt->alias = FMT_TEXT_ALIAS;
--	fmt->orphan_vg_name = ORPHAN_VG_NAME(FMT_TEXT_NAME);
-+	strncpy(fmt->orphan_vg_name, ORPHAN_VG_NAME(FMT_TEXT_NAME), sizeof(fmt->orphan_vg_name));
- 	fmt->features = FMT_SEGMENTS | FMT_TAGS | FMT_PRECOMMIT |
- 			FMT_UNLIMITED_VOLS | FMT_RESIZE_PV |
- 			FMT_UNLIMITED_STRIPESIZE | FMT_CONFIG_PROFILE |
-diff --git a/lib/format_text/text_label.c b/lib/format_text/text_label.c
-index 29b470271..324c86e44 100644
---- a/lib/format_text/text_label.c
-+++ b/lib/format_text/text_label.c
-@@ -410,6 +410,7 @@ static int _text_read(struct cmd_context *cmd, struct labeller *labeller, struct
- {
- 	struct lvmcache_vgsummary vgsummary;
- 	char pvid[ID_LEN + 1] __attribute__((aligned(8))) = { 0 };
-+	char vgid[ID_LEN + 1] __attribute__((aligned(8))) = { 0 };
- 	struct lvmcache_info *info;
- 	const struct format_type *fmt = labeller->fmt;
- 	struct label_header *lh = (struct label_header *) label_buf;
-@@ -433,6 +434,7 @@ static int _text_read(struct cmd_context *cmd, struct labeller *labeller, struct
- 	pvhdr = (struct pv_header *) ((char *) label_buf + xlate32(lh->offset_xl));
+ 	# Configuration option global/event_activation.
+-	# Activate LVs based on system-generated device events.
+-	# When a PV appears on the system, a system-generated uevent triggers
+-	# the lvm2-pvscan service which runs the pvscan --cache -aay command.
+-	# If the new PV completes a VG, pvscan autoactivates LVs in the VG.
+-	# When event_activation is disabled, the lvm2-activation services are
+-	# generated and run at fixed points during system startup.  These
+-	# services run vgchange -aay to autoactivate LVs in VGs that happen
+-	# to be present at that point in time.
+-	# See the --setautoactivation option or the auto_activation_volume_list
+-	# setting to configure autoactivation for specific VGs or LVs.
++	# Disable event based autoactivation commands.
++	# WARNING: setting this to zero may cause machine startup to fail.
++	# Previously, setting this to zero would enable static autoactivation
++	# services (via the lvm2-activation-generator), but the autoactivation
++	# services and generator have been removed.
+ 	# This configuration option has an automatic default value.
+ 	# event_activation = 1
  
- 	memcpy(pvid, &pvhdr->pv_uuid, ID_LEN);
-+	strncpy(vgid, FMT_TEXT_ORPHAN_VG_NAME, ID_LEN);
- 
- 	/*
- 	 * FIXME: stop adding the device to lvmcache initially as an orphan
-@@ -449,8 +451,8 @@ static int _text_read(struct cmd_context *cmd, struct labeller *labeller, struct
- 	 * Other reasons for lvmcache_add to return NULL are internal errors.
- 	 */
- 	if (!(info = lvmcache_add(cmd, labeller, pvid, dev, label_sector,
--				  FMT_TEXT_ORPHAN_VG_NAME,
--				  FMT_TEXT_ORPHAN_VG_NAME, 0, is_duplicate)))
-+				  vgid,
-+				  vgid, 0, is_duplicate)))
- 		return_0;
- 
- 	lvmcache_set_device_size(info, xlate64(pvhdr->device_size_xl));
-diff --git a/lib/metadata/metadata-exported.h b/lib/metadata/metadata-exported.h
-index 7bac5b900..fd370d4b2 100644
---- a/lib/metadata/metadata-exported.h
-+++ b/lib/metadata/metadata-exported.h
-@@ -371,7 +371,7 @@ struct format_type {
- 	struct labeller *labeller;
- 	const char *name;
- 	const char *alias;
--	const char *orphan_vg_name;
-+	char orphan_vg_name[ID_LEN];
- 	struct volume_group *orphan_vg; /* Only one ever exists. */
- 	uint32_t features;
- 	void *library;
-diff --git a/lib/uuid/uuid.c b/lib/uuid/uuid.c
-index be4cbc3ec..d8b72422b 100644
---- a/lib/uuid/uuid.c
-+++ b/lib/uuid/uuid.c
-@@ -168,6 +168,11 @@ int id_write_format(const struct id *id, char *buffer, size_t size)
- 
- 	assert(ID_LEN == 32);
- 
-+	if (id->uuid[0] == '#') {
-+		(void) dm_strncpy(buffer, (char*)id->uuid, size);
-+		return 1;
-+	}
-+
- 	/* split into groups separated by dashes */
- 	if (size < (32 + 6 + 1)) {
- 		if (size > 0)
-diff --git a/tools/Makefile.in b/tools/Makefile.in
-index e0e180474..25fe3b6b3 100644
---- a/tools/Makefile.in
-+++ b/tools/Makefile.in
-@@ -190,9 +190,9 @@ command-lines-input.h: $(srcdir)/command-lines.in Makefile
- 	$(Q) set -o pipefail && \
- 	( cat $(srcdir)/license.inc && \
- 	  echo "/* Do not edit. This file is generated by the Makefile. */" && \
--	  echo -en "const char _command_input[] =\n\n\"" && \
-+	  echo -en "static const char _command_input[] =\n\n\"" && \
- 	  $(EGREP) -v '^#|\-\-\-|^$$' $(srcdir)/command-lines.in | $(AWK) 'BEGIN {ORS = "\\n\"\n\""} //' && \
--	  echo "\\n\";" \
-+	  echo "\\n\\n\";" \
- 	) > $@
- 
- $(SOURCES:%.c=%.d) $(SOURCES2:%.c=%.d): command-lines-input.h command-count.h cmds.h
-diff --git a/tools/command.c b/tools/command.c
-index 18ffd64ed..8de8825e4 100644
---- a/tools/command.c
-+++ b/tools/command.c
-@@ -2549,7 +2549,7 @@ static const char *_man_long_opt_name(const char *cmdname, int opt_enum)
- 	}
- 
- 	if (strchr(long_opt, '[')) {
--		for (i = 0; i < sizeof(long_opt_name) - 1; ++long_opt, ++i) {
-+		for (i = 0; *long_opt && i < sizeof(long_opt_name) - 1; ++long_opt, ++i) {
- 			if (i < (sizeof(long_opt_name) - 8))
- 				switch(*long_opt) {
- 				case '[':
+diff --git a/man/lvdisplay.8_pregen b/man/lvdisplay.8_pregen
+index a1740ebed..04aab4c09 100644
+--- a/man/lvdisplay.8_pregen
++++ b/man/lvdisplay.8_pregen
+@@ -61,8 +61,6 @@ and more, using a more compact and configurable output format.
+ .br
+ [    \fB--readonly\fP ]
+ .br
+-[    \fB--reportformat\fP \fBbasic\fP|\fBjson\fP ]
+-.br
+ [    \fB--segments\fP ]
+ .br
+ [    \fB--separator\fP \fIString\fP ]
+@@ -332,16 +330,6 @@ device-mapper kernel driver, so this option is unable to report whether
+ or not LVs are actually in use.
+ .
+ .HP
+-\fB--reportformat\fP \fBbasic\fP|\fBjson\fP
+-.br
+-Overrides current output format for reports which is defined globally by
+-the report/output_format setting in \fBlvm.conf\fP(5).
+-\fBbasic\fP is the original format with columns and rows.
+-If there is more than one report per command, each report is prefixed
+-with the report name for identification. \fBjson\fP produces report
+-output in JSON format. See \fBlvmreport\fP(7) for more information.
+-.
+-.HP
+ \fB--segments\fP
+ .br
+ .
+diff --git a/man/lvmdevices.8_pregen b/man/lvmdevices.8_pregen
+index d64c3a31a..a2391a62b 100644
+--- a/man/lvmdevices.8_pregen
++++ b/man/lvmdevices.8_pregen
+@@ -322,7 +322,8 @@ Find a device with the PVID and add the device to the devices file.
+ .HP
+ \fB--check\fP
+ .br
+-Check the content of the devices file.
++Checks the content of the devices file.
++Reports incorrect device names or PVIDs for entries.
+ .
+ .HP
+ \fB--commandprofile\fP \fIString\fP
+diff --git a/man/pvdisplay.8_pregen b/man/pvdisplay.8_pregen
+index 22a0992b5..2f26a8727 100644
+--- a/man/pvdisplay.8_pregen
++++ b/man/pvdisplay.8_pregen
+@@ -61,8 +61,6 @@ and more, using a more compact and configurable output format.
+ .br
+ [    \fB--readonly\fP ]
+ .br
+-[    \fB--reportformat\fP \fBbasic\fP|\fBjson\fP ]
+-.br
+ [    \fB--separator\fP \fIString\fP ]
+ .br
+ [    \fB--shared\fP ]
+@@ -320,16 +318,6 @@ device-mapper kernel driver, so this option is unable to report whether
+ or not LVs are actually in use.
+ .
+ .HP
+-\fB--reportformat\fP \fBbasic\fP|\fBjson\fP
+-.br
+-Overrides current output format for reports which is defined globally by
+-the report/output_format setting in \fBlvm.conf\fP(5).
+-\fBbasic\fP is the original format with columns and rows.
+-If there is more than one report per command, each report is prefixed
+-with the report name for identification. \fBjson\fP produces report
+-output in JSON format. See \fBlvmreport\fP(7) for more information.
+-.
+-.HP
+ \fB-S\fP|\fB--select\fP \fIString\fP
+ .br
+ Select objects for processing and reporting based on specified criteria.
+diff --git a/man/pvscan.8_pregen b/man/pvscan.8_pregen
+index 9eb6b5bf9..4622e145e 100644
+--- a/man/pvscan.8_pregen
++++ b/man/pvscan.8_pregen
+@@ -15,6 +15,8 @@ pvscan \(em List all physical volumes
+ .P
+ .ad l
+  \fB-a\fP|\fB--activate\fP \fBy\fP|\fBn\fP|\fBay\fP
++.br
++    \fB--autoactivation\fP \fIString\fP
+ .br
+     \fB--cache\fP
+ .br
+@@ -91,59 +93,50 @@ like
+ or
+ .BR pvdisplay (8).
+ .P
+-When the --cache and -aay options are used, pvscan records which PVs are
+-available on the system, and activates LVs in completed VGs.  A VG is
+-complete when pvscan sees that the final PV in the VG has appeared.  This
+-is used by event-based system startup (systemd, udev) to activate LVs.
+-.P
+-The four main variations of this are:
++When --cache is used, pvscan updates runtime lvm state on the system, or
++with -aay performs autoactivation.
+ .P
+ .B pvscan --cache
+ .I device
+ .P
+-If device is present, lvm adds a record that the PV on device is online.
++If device is present, lvm records that the PV on device is online.
+ If device is not present, lvm removes the online record for the PV.
+-In most cases, the pvscan will only read the named devices.
++pvscan only reads the named device.
+ .P
+-.B pvscan --cache -aay
+-.IR device ...
++.B pvscan --cache
+ .P
+-This begins by performing the same steps as above.  Afterward, if the VG
+-for the specified PV is complete, then pvscan will activate LVs in the VG
+-(the same as vgchange -aay vgname would do.)
++Updates the runtime state for all lvm devices.
+ .P
+-.B pvscan --cache
++.B pvscan --cache -aay
++.I device
+ .P
+-This first clears all existing PV online records, then scans all devices
+-on the system, adding PV online records for any PVs that are found.
++Performs the --cache steps for the device, then checks if the VG using the
++device is complete.  If so, LVs in the VG are autoactivated, the same as
++vgchange -aay vgname would do.  (A device name may be replaced with major
++and minor numbers.)
+ .P
+ .B pvscan --cache -aay
+ .P
+-This begins by performing the same steps as pvscan --cache.  Afterward, it
+-activates LVs in any complete VGs.
++Performs the --cache steps for all devices, then autoactivates any complete VGs.
+ .P
+-To prevent devices from being scanned by pvscan --cache, add them
+-to
+-.BR lvm.conf (5)
+-.B devices/global_filter.
+-For more information, see:
+-.br
+-.B lvmconfig --withcomments devices/global_filter
++.B pvscan --cache --listvg|--listlvs
++.I device
+ .P
+-Auto-activation of VGs or LVs can be enabled/disabled using:
+-.br
++Performs the --cache steps for the device, then prints the name of the VG
++using the device, or the names of LVs using the device.  --checkcomplete
++is usually included to check if all PVs for the VG or LVs are online.
++When this command is called by a udev rule, the output must conform to
++udev rule specifications (see --udevoutput.)  The udev rule will use the
++results to perform autoactivation.
++.P
++Autoactivation of VGs or LVs can be enabled/disabled using vgchange or
++lvchange with --setautoactivation y|n, or by adding names to
+ .BR lvm.conf (5)
+ .B activation/auto_activation_volume_list
+ .P
+-For more information, see:
+-.br
+-.B lvmconfig --withcomments activation/auto_activation_volume_list
+-.P
+-To disable auto-activation, explicitly set this list to an empty list,
+-i.e. auto_activation_volume_list = [ ].
+-.P
+-When this setting is undefined (e.g. commented), then all LVs are
+-auto-activated.
++See
++.BR lvmautoactivation (7)
++for more information about how pvscan is used for autoactivation.
+ .
+ .SH USAGE
+ .
+@@ -215,6 +208,8 @@ Record that a PV is online and autoactivate the VG if complete.
+ .br
+ [    \fB--noudevsync\fP ]
+ .br
++[    \fB--autoactivation\fP \fIString\fP ]
++.br
+ [ COMMON_OPTIONS ]
+ .ad b
+ .RE
+@@ -239,6 +234,8 @@ Record that a PV is online and list the VG using the PV.
+ .br
+ [    \fB--udevoutput\fP ]
+ .br
++[    \fB--autoactivation\fP \fIString\fP ]
++.br
+ [ COMMON_OPTIONS ]
+ .ad b
+ .RE
+@@ -342,6 +339,14 @@ Auto-activate LVs in a VG when the PVs scanned have completed the VG.
+ (Only \fBay\fP is applicable.)
+ .
+ .HP
++\fB--autoactivation\fP \fIString\fP
++.br
++Specify if autoactivation is being used from an event.
++This allows the command to apply settings that are specific
++to event activation, such as device scanning optimizations
++using pvs_online files created by event-based pvscans.
++.
++.HP
+ \fB--cache\fP
+ .br
+ Scan one or more devices and record that they are online.
+diff --git a/man/vgchange.8_pregen b/man/vgchange.8_pregen
+index 05c67aead..9dbad3faa 100644
+--- a/man/vgchange.8_pregen
++++ b/man/vgchange.8_pregen
+@@ -24,6 +24,8 @@ vgchange \(em Change volume group attributes
+ .nh
+ \%\fBcontiguous\fP|\:\fBcling\fP|\:\fBcling_by_tags\fP|\:\fBnormal\fP|\:\fBanywhere\fP|\:\fBinherit\fP
+ .hy
++.br
++    \fB--autoactivation\fP \fIString\fP
+ .br
+  \fB-A\fP|\fB--autobackup\fP \fBy\fP|\fBn\fP
+ .br
+@@ -286,6 +288,8 @@ Activate or deactivate LVs.
+ .br
+ [    \fB--poll\fP \fBy\fP|\fBn\fP ]
+ .br
++[    \fB--autoactivation\fP \fIString\fP ]
++.br
+ [    \fB--ignoremonitoring\fP ]
+ .br
+ [    \fB--noudevsync\fP ]
+@@ -516,6 +520,14 @@ which PVs the command will use for allocation.
+ See \fBlvm\fP(8) for more information about allocation.
+ .
+ .HP
++\fB--autoactivation\fP \fIString\fP
++.br
++Specify if autoactivation is being used from an event.
++This allows the command to apply settings that are specific
++to event activation, such as device scanning optimizations
++using pvs_online files created by event-based pvscans.
++.
++.HP
+ \fB-A\fP|\fB--autobackup\fP \fBy\fP|\fBn\fP
+ .br
+ Specifies if metadata should be backed up automatically after a change.
+diff --git a/man/vgdisplay.8_pregen b/man/vgdisplay.8_pregen
+index 9c694921d..0a12b3c39 100644
+--- a/man/vgdisplay.8_pregen
++++ b/man/vgdisplay.8_pregen
+@@ -58,8 +58,6 @@ and more, using a more compact and configurable output format.
+ .br
+ [    \fB--readonly\fP ]
+ .br
+-[    \fB--reportformat\fP \fBbasic\fP|\fBjson\fP ]
+-.br
+ [    \fB--shared\fP ]
+ .br
+ [    \fB--separator\fP \fIString\fP ]
+@@ -312,16 +310,6 @@ device-mapper kernel driver, so this option is unable to report whether
+ or not LVs are actually in use.
+ .
+ .HP
+-\fB--reportformat\fP \fBbasic\fP|\fBjson\fP
+-.br
+-Overrides current output format for reports which is defined globally by
+-the report/output_format setting in \fBlvm.conf\fP(5).
+-\fBbasic\fP is the original format with columns and rows.
+-If there is more than one report per command, each report is prefixed
+-with the report name for identification. \fBjson\fP produces report
+-output in JSON format. See \fBlvmreport\fP(7) for more information.
+-.
+-.HP
+ \fB-S\fP|\fB--select\fP \fIString\fP
+ .br
+ Select objects for processing and reporting based on specified criteria.
 
 
