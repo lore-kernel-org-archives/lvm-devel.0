@@ -1,77 +1,332 @@
-From: David Teigland <teigland@sourceware.org>
-Date: Mon,  7 Feb 2022 22:47:34 +0000 (GMT)
-Subject: main - tests: udev-pvscan-vgchange fix service wait
-Message-ID: <20220207224734.9C11B3858C83@sourceware.org>
+From: Marian Csontos <mcsontos@sourceware.org>
+Date: Tue,  8 Feb 2022 14:30:02 +0000 (GMT)
+Subject: dev-rhel90-4 - make: generate
+Message-ID: <20220208143002.37FC93858D1E@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=61f23fe15e0c6e5b7882263e0d527f363535da4d
-Commit:        61f23fe15e0c6e5b7882263e0d527f363535da4d
-Parent:        13122bcc3329f3c1aee0a1cc478eda8906cd96df
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Mon Feb 7 16:44:57 2022 -0600
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Mon Feb 7 16:44:57 2022 -0600
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=4a1f6173d29a7d7ecab14a9313000aa5f81170d0
+Commit:        4a1f6173d29a7d7ecab14a9313000aa5f81170d0
+Parent:        61706793deed8954e42f178162d22416f61537b2
+Author:        Marian Csontos <mcsontos@redhat.com>
+AuthorDate:    Tue Feb 8 15:29:23 2022 +0100
+Committer:     Marian Csontos <mcsontos@redhat.com>
+CommitterDate: Tue Feb 8 15:29:23 2022 +0100
 
-tests: udev-pvscan-vgchange fix service wait
+make: generate
 
-As a result of removing -r from systemd-run in
-commit fbd8b0cf43dc67f51f86f060dce748f446985855
-this test needs to change how it handles the
-transient services.
 ---
- test/shell/udev-pvscan-vgchange.sh | 15 +--------------
- 1 file changed, 1 insertion(+), 14 deletions(-)
+ conf/example.conf.in    | 15 ++++------
+ man/lvdisplay.8_pregen  | 12 --------
+ man/lvmdevices.8_pregen |  3 +-
+ man/pvdisplay.8_pregen  | 12 --------
+ man/pvscan.8_pregen     | 77 ++++++++++++++++++++++++++-----------------------
+ man/vgchange.8_pregen   | 12 ++++++++
+ man/vgdisplay.8_pregen  | 12 --------
+ 7 files changed, 60 insertions(+), 83 deletions(-)
 
-diff --git a/test/shell/udev-pvscan-vgchange.sh b/test/shell/udev-pvscan-vgchange.sh
-index a209dc048..eb6984078 100644
---- a/test/shell/udev-pvscan-vgchange.sh
-+++ b/test/shell/udev-pvscan-vgchange.sh
-@@ -75,7 +75,7 @@ wait_lvm_activate() {
- 	local vgw=$1
- 	local wait=0
+diff --git a/conf/example.conf.in b/conf/example.conf.in
+index a78ed7333..94f7a23fd 100644
+--- a/conf/example.conf.in
++++ b/conf/example.conf.in
+@@ -1151,16 +1151,11 @@ global {
+ 	# lvdisplay_shows_full_device_path = 0
  
--	while systemctl status lvm-activate-$vgw | grep "active (running)" && test "$wait" -le 30; do
-+	while systemctl status lvm-activate-$vgw > /dev/null && test "$wait" -le 30; do
- 		sleep .2
- 		wait=$(( wait + 1 ))
- 	done
-@@ -382,7 +382,6 @@ lvcreate -l1 -an -n $lv1 $vg9
- lvcreate -l1 -an -n $lv2 $vg9
+ 	# Configuration option global/event_activation.
+-	# Activate LVs based on system-generated device events.
+-	# When a PV appears on the system, a system-generated uevent triggers
+-	# the lvm2-pvscan service which runs the pvscan --cache -aay command.
+-	# If the new PV completes a VG, pvscan autoactivates LVs in the VG.
+-	# When event_activation is disabled, the lvm2-activation services are
+-	# generated and run at fixed points during system startup.  These
+-	# services run vgchange -aay to autoactivate LVs in VGs that happen
+-	# to be present at that point in time.
+-	# See the --setautoactivation option or the auto_activation_volume_list
+-	# setting to configure autoactivation for specific VGs or LVs.
++	# Disable event based autoactivation commands.
++	# WARNING: setting this to zero may cause machine startup to fail.
++	# Previously, setting this to zero would enable static autoactivation
++	# services (via the lvm2-activation-generator), but the autoactivation
++	# services and generator have been removed.
+ 	# This configuration option has an automatic default value.
+ 	# event_activation = 1
  
- mdadm --stop "$mddev"
--systemctl stop lvm-activate-$vg9 || true
- _clear_online_files
- mdadm --assemble "$mddev" "$dev1" "$dev2"
- 
-@@ -405,17 +404,6 @@ mdadm --stop "$mddev"
- aux udev_wait
- wipe_all
- 
--systemctl stop lvm-activate-$vg1
--systemctl stop lvm-activate-$vg2
--systemctl stop lvm-activate-$vg3
--systemctl stop lvm-activate-$vg4
--systemctl stop lvm-activate-$vg5
--systemctl stop lvm-activate-$vg6
--systemctl stop lvm-activate-$vg7
--systemctl stop lvm-activate-$vg8
--systemctl stop lvm-activate-$vg9
--
--
- # no devices file, filter with symlink of PV
- # the pvscan needs to look at all dev names to
- # match the symlink in the filter with the
-@@ -439,7 +427,6 @@ udevadm trigger --settle -c add /sys/block/$BDEV1
- ls /dev/disk/by-id/lvm-pv-uuid-$OPVID1
- 
- vgchange -an $vg10
--systemctl stop lvm-activate-$vg10
- _clear_online_files
- 
- aux lvmconf "devices/filter = [ \"a|/dev/disk/by-id/lvm-pv-uuid-$OPVID1|\", \"r|.*|\" ]"
+diff --git a/man/lvdisplay.8_pregen b/man/lvdisplay.8_pregen
+index a1740ebed..04aab4c09 100644
+--- a/man/lvdisplay.8_pregen
++++ b/man/lvdisplay.8_pregen
+@@ -61,8 +61,6 @@ and more, using a more compact and configurable output format.
+ .br
+ [    \fB--readonly\fP ]
+ .br
+-[    \fB--reportformat\fP \fBbasic\fP|\fBjson\fP ]
+-.br
+ [    \fB--segments\fP ]
+ .br
+ [    \fB--separator\fP \fIString\fP ]
+@@ -332,16 +330,6 @@ device-mapper kernel driver, so this option is unable to report whether
+ or not LVs are actually in use.
+ .
+ .HP
+-\fB--reportformat\fP \fBbasic\fP|\fBjson\fP
+-.br
+-Overrides current output format for reports which is defined globally by
+-the report/output_format setting in \fBlvm.conf\fP(5).
+-\fBbasic\fP is the original format with columns and rows.
+-If there is more than one report per command, each report is prefixed
+-with the report name for identification. \fBjson\fP produces report
+-output in JSON format. See \fBlvmreport\fP(7) for more information.
+-.
+-.HP
+ \fB--segments\fP
+ .br
+ .
+diff --git a/man/lvmdevices.8_pregen b/man/lvmdevices.8_pregen
+index d64c3a31a..a2391a62b 100644
+--- a/man/lvmdevices.8_pregen
++++ b/man/lvmdevices.8_pregen
+@@ -322,7 +322,8 @@ Find a device with the PVID and add the device to the devices file.
+ .HP
+ \fB--check\fP
+ .br
+-Check the content of the devices file.
++Checks the content of the devices file.
++Reports incorrect device names or PVIDs for entries.
+ .
+ .HP
+ \fB--commandprofile\fP \fIString\fP
+diff --git a/man/pvdisplay.8_pregen b/man/pvdisplay.8_pregen
+index 22a0992b5..2f26a8727 100644
+--- a/man/pvdisplay.8_pregen
++++ b/man/pvdisplay.8_pregen
+@@ -61,8 +61,6 @@ and more, using a more compact and configurable output format.
+ .br
+ [    \fB--readonly\fP ]
+ .br
+-[    \fB--reportformat\fP \fBbasic\fP|\fBjson\fP ]
+-.br
+ [    \fB--separator\fP \fIString\fP ]
+ .br
+ [    \fB--shared\fP ]
+@@ -320,16 +318,6 @@ device-mapper kernel driver, so this option is unable to report whether
+ or not LVs are actually in use.
+ .
+ .HP
+-\fB--reportformat\fP \fBbasic\fP|\fBjson\fP
+-.br
+-Overrides current output format for reports which is defined globally by
+-the report/output_format setting in \fBlvm.conf\fP(5).
+-\fBbasic\fP is the original format with columns and rows.
+-If there is more than one report per command, each report is prefixed
+-with the report name for identification. \fBjson\fP produces report
+-output in JSON format. See \fBlvmreport\fP(7) for more information.
+-.
+-.HP
+ \fB-S\fP|\fB--select\fP \fIString\fP
+ .br
+ Select objects for processing and reporting based on specified criteria.
+diff --git a/man/pvscan.8_pregen b/man/pvscan.8_pregen
+index 9eb6b5bf9..4622e145e 100644
+--- a/man/pvscan.8_pregen
++++ b/man/pvscan.8_pregen
+@@ -15,6 +15,8 @@ pvscan \(em List all physical volumes
+ .P
+ .ad l
+  \fB-a\fP|\fB--activate\fP \fBy\fP|\fBn\fP|\fBay\fP
++.br
++    \fB--autoactivation\fP \fIString\fP
+ .br
+     \fB--cache\fP
+ .br
+@@ -91,59 +93,50 @@ like
+ or
+ .BR pvdisplay (8).
+ .P
+-When the --cache and -aay options are used, pvscan records which PVs are
+-available on the system, and activates LVs in completed VGs.  A VG is
+-complete when pvscan sees that the final PV in the VG has appeared.  This
+-is used by event-based system startup (systemd, udev) to activate LVs.
+-.P
+-The four main variations of this are:
++When --cache is used, pvscan updates runtime lvm state on the system, or
++with -aay performs autoactivation.
+ .P
+ .B pvscan --cache
+ .I device
+ .P
+-If device is present, lvm adds a record that the PV on device is online.
++If device is present, lvm records that the PV on device is online.
+ If device is not present, lvm removes the online record for the PV.
+-In most cases, the pvscan will only read the named devices.
++pvscan only reads the named device.
+ .P
+-.B pvscan --cache -aay
+-.IR device ...
++.B pvscan --cache
+ .P
+-This begins by performing the same steps as above.  Afterward, if the VG
+-for the specified PV is complete, then pvscan will activate LVs in the VG
+-(the same as vgchange -aay vgname would do.)
++Updates the runtime state for all lvm devices.
+ .P
+-.B pvscan --cache
++.B pvscan --cache -aay
++.I device
+ .P
+-This first clears all existing PV online records, then scans all devices
+-on the system, adding PV online records for any PVs that are found.
++Performs the --cache steps for the device, then checks if the VG using the
++device is complete.  If so, LVs in the VG are autoactivated, the same as
++vgchange -aay vgname would do.  (A device name may be replaced with major
++and minor numbers.)
+ .P
+ .B pvscan --cache -aay
+ .P
+-This begins by performing the same steps as pvscan --cache.  Afterward, it
+-activates LVs in any complete VGs.
++Performs the --cache steps for all devices, then autoactivates any complete VGs.
+ .P
+-To prevent devices from being scanned by pvscan --cache, add them
+-to
+-.BR lvm.conf (5)
+-.B devices/global_filter.
+-For more information, see:
+-.br
+-.B lvmconfig --withcomments devices/global_filter
++.B pvscan --cache --listvg|--listlvs
++.I device
+ .P
+-Auto-activation of VGs or LVs can be enabled/disabled using:
+-.br
++Performs the --cache steps for the device, then prints the name of the VG
++using the device, or the names of LVs using the device.  --checkcomplete
++is usually included to check if all PVs for the VG or LVs are online.
++When this command is called by a udev rule, the output must conform to
++udev rule specifications (see --udevoutput.)  The udev rule will use the
++results to perform autoactivation.
++.P
++Autoactivation of VGs or LVs can be enabled/disabled using vgchange or
++lvchange with --setautoactivation y|n, or by adding names to
+ .BR lvm.conf (5)
+ .B activation/auto_activation_volume_list
+ .P
+-For more information, see:
+-.br
+-.B lvmconfig --withcomments activation/auto_activation_volume_list
+-.P
+-To disable auto-activation, explicitly set this list to an empty list,
+-i.e. auto_activation_volume_list = [ ].
+-.P
+-When this setting is undefined (e.g. commented), then all LVs are
+-auto-activated.
++See
++.BR lvmautoactivation (7)
++for more information about how pvscan is used for autoactivation.
+ .
+ .SH USAGE
+ .
+@@ -215,6 +208,8 @@ Record that a PV is online and autoactivate the VG if complete.
+ .br
+ [    \fB--noudevsync\fP ]
+ .br
++[    \fB--autoactivation\fP \fIString\fP ]
++.br
+ [ COMMON_OPTIONS ]
+ .ad b
+ .RE
+@@ -239,6 +234,8 @@ Record that a PV is online and list the VG using the PV.
+ .br
+ [    \fB--udevoutput\fP ]
+ .br
++[    \fB--autoactivation\fP \fIString\fP ]
++.br
+ [ COMMON_OPTIONS ]
+ .ad b
+ .RE
+@@ -342,6 +339,14 @@ Auto-activate LVs in a VG when the PVs scanned have completed the VG.
+ (Only \fBay\fP is applicable.)
+ .
+ .HP
++\fB--autoactivation\fP \fIString\fP
++.br
++Specify if autoactivation is being used from an event.
++This allows the command to apply settings that are specific
++to event activation, such as device scanning optimizations
++using pvs_online files created by event-based pvscans.
++.
++.HP
+ \fB--cache\fP
+ .br
+ Scan one or more devices and record that they are online.
+diff --git a/man/vgchange.8_pregen b/man/vgchange.8_pregen
+index 05c67aead..9dbad3faa 100644
+--- a/man/vgchange.8_pregen
++++ b/man/vgchange.8_pregen
+@@ -24,6 +24,8 @@ vgchange \(em Change volume group attributes
+ .nh
+ \%\fBcontiguous\fP|\:\fBcling\fP|\:\fBcling_by_tags\fP|\:\fBnormal\fP|\:\fBanywhere\fP|\:\fBinherit\fP
+ .hy
++.br
++    \fB--autoactivation\fP \fIString\fP
+ .br
+  \fB-A\fP|\fB--autobackup\fP \fBy\fP|\fBn\fP
+ .br
+@@ -286,6 +288,8 @@ Activate or deactivate LVs.
+ .br
+ [    \fB--poll\fP \fBy\fP|\fBn\fP ]
+ .br
++[    \fB--autoactivation\fP \fIString\fP ]
++.br
+ [    \fB--ignoremonitoring\fP ]
+ .br
+ [    \fB--noudevsync\fP ]
+@@ -516,6 +520,14 @@ which PVs the command will use for allocation.
+ See \fBlvm\fP(8) for more information about allocation.
+ .
+ .HP
++\fB--autoactivation\fP \fIString\fP
++.br
++Specify if autoactivation is being used from an event.
++This allows the command to apply settings that are specific
++to event activation, such as device scanning optimizations
++using pvs_online files created by event-based pvscans.
++.
++.HP
+ \fB-A\fP|\fB--autobackup\fP \fBy\fP|\fBn\fP
+ .br
+ Specifies if metadata should be backed up automatically after a change.
+diff --git a/man/vgdisplay.8_pregen b/man/vgdisplay.8_pregen
+index 9c694921d..0a12b3c39 100644
+--- a/man/vgdisplay.8_pregen
++++ b/man/vgdisplay.8_pregen
+@@ -58,8 +58,6 @@ and more, using a more compact and configurable output format.
+ .br
+ [    \fB--readonly\fP ]
+ .br
+-[    \fB--reportformat\fP \fBbasic\fP|\fBjson\fP ]
+-.br
+ [    \fB--shared\fP ]
+ .br
+ [    \fB--separator\fP \fIString\fP ]
+@@ -312,16 +310,6 @@ device-mapper kernel driver, so this option is unable to report whether
+ or not LVs are actually in use.
+ .
+ .HP
+-\fB--reportformat\fP \fBbasic\fP|\fBjson\fP
+-.br
+-Overrides current output format for reports which is defined globally by
+-the report/output_format setting in \fBlvm.conf\fP(5).
+-\fBbasic\fP is the original format with columns and rows.
+-If there is more than one report per command, each report is prefixed
+-with the report name for identification. \fBjson\fP produces report
+-output in JSON format. See \fBlvmreport\fP(7) for more information.
+-.
+-.HP
+ \fB-S\fP|\fB--select\fP \fIString\fP
+ .br
+ Select objects for processing and reporting based on specified criteria.
 
 
