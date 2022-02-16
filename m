@@ -1,84 +1,51 @@
 From: David Teigland <teigland@sourceware.org>
-Date: Thu, 24 Feb 2022 23:22:55 +0000 (GMT)
-Subject: main - devices: initial use of existing option
-Message-ID: <20220224232255.8754B3858D1E@sourceware.org>
+Date: Wed, 16 Feb 2022 21:40:07 +0000 (GMT)
+Subject: main - man: update cachesettings option description
+Message-ID: <20220216214007.21B253858431@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=00c3069872ab488f66f14c8c2727bd080affc05e
-Commit:        00c3069872ab488f66f14c8c2727bd080affc05e
-Parent:        7e70041e324e1a4d49134a93323072e1b6ec661f
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=96c99d647ef783abcd26a1f3f63f12e033195633
+Commit:        96c99d647ef783abcd26a1f3f63f12e033195633
+Parent:        ec2119beddde9e38681cb096b93048ee25034c1e
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Thu Feb 24 16:10:37 2022 -0600
+AuthorDate:    Wed Feb 16 15:36:44 2022 -0600
 Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Thu Feb 24 17:22:03 2022 -0600
+CommitterDate: Wed Feb 16 15:37:54 2022 -0600
 
-devices: initial use of existing option
+man: update cachesettings option description
 
-Use dev_cache_get_existing() in a few common, high level
-locations where it's obvious that only existing dev-cache
-entries are wanted.  This can be expanded and used in more
-locations (or dev_cache_get can stop creating new entries.)
+to be more consistent with man page description
 ---
- lib/device/device_id.c | 4 ++--
- tools/toollib.c        | 6 +++---
- 2 files changed, 5 insertions(+), 5 deletions(-)
+ tools/args.h | 13 +++++++------
+ 1 file changed, 7 insertions(+), 6 deletions(-)
 
-diff --git a/lib/device/device_id.c b/lib/device/device_id.c
-index 003f10a96..c8df47345 100644
---- a/lib/device/device_id.c
-+++ b/lib/device/device_id.c
-@@ -1577,7 +1577,7 @@ void device_ids_match_device_list(struct cmd_context *cmd)
- 	dm_list_iterate_items(du, &cmd->use_devices) {
- 		if (du->dev)
- 			continue;
--		if (!(du->dev = dev_cache_get(cmd, du->devname, NULL))) {
-+		if (!(du->dev = dev_cache_get_existing(cmd, du->devname, NULL))) {
- 			log_warn("Device not found for %s.", du->devname);
- 		} else {
- 			/* Should we set dev->id?  Which idtype?  Use --deviceidtype? */
-@@ -1625,7 +1625,7 @@ void device_ids_match(struct cmd_context *cmd)
- 		 * the du/dev pairs in preparation for using the filters.
- 		 */
- 		if (du->devname &&
--		    (dev = dev_cache_get(cmd, du->devname, NULL))) {
-+		    (dev = dev_cache_get_existing(cmd, du->devname, NULL))) {
- 			/* On successful match, du, dev, and id are linked. */
- 			if (_match_du_to_dev(cmd, du, dev))
- 				continue;
-diff --git a/tools/toollib.c b/tools/toollib.c
-index b08c044fa..897adec34 100644
---- a/tools/toollib.c
-+++ b/tools/toollib.c
-@@ -1488,7 +1488,7 @@ int process_each_label(struct cmd_context *cmd, int argc, char **argv,
- 				goto out;
- 			}
+diff --git a/tools/args.h b/tools/args.h
+index 3f4580b8d..56669645d 100644
+--- a/tools/args.h
++++ b/tools/args.h
+@@ -862,12 +862,13 @@ arg(cachepolicy_ARG, '\0', "cachepolicy", string_VAL, 0, 0,
+     "See \\fBlvmcache\\fP(7) for more information.\n")
  
--			if (!(dev = dev_cache_get(cmd, argv[opt], cmd->filter))) {
-+			if (!(dev = dev_cache_get_existing(cmd, argv[opt], cmd->filter))) {
- 				log_error("Failed to find device "
- 					  "\"%s\".", argv[opt]);
- 				ret_max = ECMD_FAILED;
-@@ -3925,7 +3925,7 @@ static int _get_arg_devices(struct cmd_context *cmd,
- 			return ECMD_FAILED;
- 		}
+ arg(cachesettings_ARG, '\0', "cachesettings", string_VAL, ARG_GROUPABLE, 0,
+-    "Specifies tunable values for a cache LV in \"Key = Value\" form.\n"
+-    "Repeat this option to specify multiple values.\n"
+-    "(The default values should usually be adequate.)\n"
+-    "The special string value \\fBdefault\\fP switches\n"
+-    "settings back to their default kernel values and removes\n"
+-    "them from the list of settings stored in LVM metadata.\n"
++    "Specifies tunable kernel options for dm-cache or dm-writecache LVs.\n"
++    "Use the form 'option=value' or 'option1=value option2=value', or\n"
++    "repeat --cachesettings for each option being set.\n"
++    "These settings override the default kernel behaviors which are\n"
++    "usually adequate. To remove cachesettings and revert to the default\n"
++    "kernel behaviors, use --cachesettings 'default' for dm-cache or\n"
++    "an empty string --cachesettings '' for dm-writecache.\n"
+     "See \\fBlvmcache\\fP(7) for more information.\n")
  
--		if (!(dil->dev = dev_cache_get(cmd, sl->str, cmd->filter))) {
-+		if (!(dil->dev = dev_cache_get_existing(cmd, sl->str, cmd->filter))) {
- 			log_error("Cannot use %s: %s", sl->str, devname_error_reason(sl->str));
- 			ret_max = EINIT_FAILED;
- 		} else {
-@@ -5261,7 +5261,7 @@ int pvcreate_each_device(struct cmd_context *cmd,
- 		struct device *dev;
- 
- 		/* No filter used here */
--		if (!(dev = dev_cache_get(cmd, pd->name, NULL))) {
-+		if (!(dev = dev_cache_get_existing(cmd, pd->name, NULL))) {
- 			log_error("No device found for %s.", pd->name);
- 			dm_list_del(&pd->list);
- 			dm_list_add(&pp->arg_fail, &pd->list);
+ arg(unconfigured_ARG, '\0', "unconfigured", 0, 0, 0,
 
 
