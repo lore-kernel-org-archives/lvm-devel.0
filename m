@@ -1,40 +1,69 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Wed, 16 Feb 2022 00:03:13 +0000 (GMT)
-Subject: main - dev_manager: do not query for open_count
-Message-ID: <20220216000313.7098E3858C2D@sourceware.org>
+Date: Wed, 16 Feb 2022 00:03:14 +0000 (GMT)
+Subject: main - dev_manager: use list info for preset devs
+Message-ID: <20220216000314.90E623858C1F@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=fa7b67eeebfc28bce355991eebe1b5f21f075e9a
-Commit:        fa7b67eeebfc28bce355991eebe1b5f21f075e9a
-Parent:        4fd76de4b69f8e5e6d5afa03d54cb4b8986c4bcc
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=d4a0816a5824dc375d662e76823ee8ed77bb9983
+Commit:        d4a0816a5824dc375d662e76823ee8ed77bb9983
+Parent:        fa7b67eeebfc28bce355991eebe1b5f21f075e9a
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Feb 11 23:55:08 2022 +0100
+AuthorDate:    Wed Feb 16 00:33:32 2022 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Wed Feb 16 01:00:36 2022 +0100
 
-dev_manager: do not query for open_count
+dev_manager: use list info for preset devs
 
-Oepn count is not used along this code path.
+In some cases we can also use cached info obtained from DM_DEVICE_LIST
+also to avoid extra ioctl check for present devices.
 ---
- lib/activate/dev_manager.c | 2 +-
- 1 file changed, 1 insertion(+), 1 deletion(-)
+ lib/activate/dev_manager.c | 22 ++++++++++++++--------
+ 1 file changed, 14 insertions(+), 8 deletions(-)
 
 diff --git a/lib/activate/dev_manager.c b/lib/activate/dev_manager.c
-index 4d18d9838..feea06a47 100644
+index feea06a47..63bfd9b74 100644
 --- a/lib/activate/dev_manager.c
 +++ b/lib/activate/dev_manager.c
-@@ -2268,7 +2268,7 @@ static int _add_dev_to_dtree(struct dev_manager *dm, struct dm_tree *dtree,
- 		return 1;
- 	}
+@@ -2254,6 +2254,7 @@ static int _add_dev_to_dtree(struct dev_manager *dm, struct dm_tree *dtree,
+ {
+ 	char *dlid, *name;
+ 	struct dm_info info, info2;
++	const struct dm_active_device *dev;
  
--	if (!_info(dm->cmd, name, dlid, 1, 0, 0, &info, NULL, NULL))
-+	if (!_info(dm->cmd, name, dlid, 0, 0, 0, &info, NULL, NULL))
+ 	if (!(name = dm_build_dm_name(dm->mem, lv->vg->name, lv->name, layer)))
+ 		return_0;
+@@ -2262,15 +2263,20 @@ static int _add_dev_to_dtree(struct dev_manager *dm, struct dm_tree *dtree,
  		return_0;
  
+ 	if (!dm->cmd->disable_dm_devs &&
+-	    dm->cmd->cache_dm_devs &&
+-	    !dm_device_list_find_by_uuid(dm->cmd->cache_dm_devs, dlid, NULL)) {
+-		log_debug("Cached as not present %s.", name);
+-		return 1;
+-	}
+-
+-	if (!_info(dm->cmd, name, dlid, 0, 0, 0, &info, NULL, NULL))
++	    dm->cmd->cache_dm_devs) {
++		if (!dm_device_list_find_by_uuid(dm->cmd->cache_dm_devs, dlid, &dev)) {
++			log_debug("Cached as not present %s.", name);
++			return 1;
++		}
++		info = (struct dm_info) {
++			.exists = 1,
++			.major = dev->major,
++			.minor = dev->minor,
++		};
++		log_debug("Cached as present %s %s (%d:%d).",
++			  name, dlid, info.major, info.minor);
++	} else if (!_info(dm->cmd, name, dlid, 0, 0, 0, &info, NULL, NULL))
+ 		return_0;
+-
  	/*
+ 	 * For top level volumes verify that existing device match
+ 	 * requested major/minor and that major/minor pair is available for use
 
 
