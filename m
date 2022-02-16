@@ -1,37 +1,59 @@
-From: Martin Wilck <mwilck@suse.com>
-Date: Mon, 28 Feb 2022 09:48:28 +0100
+From: NeilBrown <neilb@suse.de>
+Date: Thu, 17 Feb 2022 09:09:28 +1100
 Subject: [PATCH] udev-md-raid-assembly.rules: skip if DM_UDEV_DISABLE_OTHER_RULES_FLAG
-In-Reply-To: <164557016782.28944.17731814770525408828@noble.neil.brown.name>
+In-Reply-To: <20220216205914.7575-1-mwilck@suse.com>
 References: <20220216205914.7575-1-mwilck@suse.com>
-	, <164504936873.10228.7361167610237544463@noble.neil.brown.name>
-	, <e8720e3f8734cbad1af34d5e54afc47ba3ef1b8f.camel@suse.com>
-	, <20220217130934.lh2b33255kyx2pax@alatyr-rpi.brq.redhat.com>
-	, <164548656531.8827.3365536065813085321@noble.neil.brown.name>
-	, <4b61ca1eafb35e3fdfbc9bb260dc89d56d181499.camel@suse.com>
-	<164557016782.28944.17731814770525408828@noble.neil.brown.name>
-Message-ID: <ff8030340e30963a1772f43e8bdfb6b610219887.camel@suse.com>
+Message-ID: <164504936873.10228.7361167610237544463@noble.neil.brown.name>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On Wed, 2022-02-23 at 09:49 +1100, NeilBrown wrote:
+On Thu, 17 Feb 2022, mwilck at suse.com wrote:
+> From: Martin Wilck <mwilck@suse.com>
 > 
-> But if libdevmapper.h is the best you have, then maybe it'll have to
-> do.
-> It is up to Jes what he accepts of course.
+> device-mapper sets the flag DM_UDEV_DISABLE_OTHER_RULES_FLAG to 1 for
+> devices which are unusable. They may be no set up yet, suspended, or
+> otherwise unusable (e.g. multipath maps without usable path). This
+> flag does not necessarily imply SYSTEMD_READY=0 and must therefore
+> be tested separately.
 
-Jes, have you made up your mind on this patch yet?
-Please contact me if you have remarks or questions.
+I really don't like this - looks like a hack.  A Kludge.
 
-Note that the patch that started this thread is broken; the v2 is
-correct. With the v2, I was able to reach 1000 consecutive reboots on
-a system with MD on top of multipath that would otherwise hang during
-boot about once every 50-100 reboots.
+Can you provide a reference to a detailed discussion that explains why
+SYSTEMD_READY=0 cannot be used?
 
-Regards
-Martin
+Thanks,
+NeilBrown
+
+
+> 
+> Signed-off-by: Martin Wilck <mwilck@suse.com>
+> ---
+>  udev-md-raid-assembly.rules | 5 +++++
+>  1 file changed, 5 insertions(+)
+> 
+> diff --git a/udev-md-raid-assembly.rules b/udev-md-raid-assembly.rules
+> index d668cdd..4568b01 100644
+> --- a/udev-md-raid-assembly.rules
+> +++ b/udev-md-raid-assembly.rules
+> @@ -21,6 +21,11 @@ IMPORT{cmdline}="noiswmd"
+>  IMPORT{cmdline}="nodmraid"
+>  
+>  ENV{nodmraid}=="?*", GOTO="md_inc_end"
+> +
+> +# device mapper sets DM_UDEV_DISABLE_OTHER_RULES_FLAG for devices which
+> +# aren't ready to use
+> +KERNEL=="dm-*", ENV{DM_UDEV_DISABLE_OTHER_RULES_FLAG}=="1", GOTO="md_inc_end"
+> +
+>  ENV{ID_FS_TYPE}=="ddf_raid_member", GOTO="md_inc"
+>  ENV{noiswmd}=="?*", GOTO="md_inc_end"
+>  ENV{ID_FS_TYPE}=="isw_raid_member", ACTION!="change", GOTO="md_inc"
+> -- 
+> 2.35.1
+> 
+> 
 
 
 
