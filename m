@@ -1,52 +1,38 @@
-From: Malahal Naineni <malahal@us.ibm.com>
-Date: Wed, 5 May 2010 07:35:58 -0700
-Subject: [BUG-REPORT] mirror legs in the same PV with --alloc anywhere
-In-Reply-To: <87fx26zba5.fsf@twilight.int.mornfall.net.>
-References: <20100415220308.GO13021@agk-dp.fab.redhat.com>
-	<4BC88002.10803@redhat.com> <1271495752.5449.53.camel@localhost>
-	<4BCF1761.7080805@redhat.com>
-	<s2q29ae894c1004211036i8113a0e4q16670c46f5700bf1@mail.gmail.com>
-	<t2i29ae894c1004230901qe3e4fa75of26e8d39e0d8c7cd@mail.gmail.com>
-	<4BD1ECEB.9010504@redhat.com> <1272056987.2983.2.camel@localhost>
-	<4BD1F9C0.8090108@redhat.com>
-	<87fx26zba5.fsf@twilight.int.mornfall.net.>
-Message-ID: <20100505143558.GA7122@us.ibm.com>
+From: Peter Rajnoha <prajnoha@redhat.com>
+Date: Thu, 17 Feb 2022 14:20:42 +0100
+Subject: [PATCH] udev-md-raid-assembly.rules: skip if DM_UDEV_DISABLE_OTHER_RULES_FLAG
+In-Reply-To: <e8720e3f8734cbad1af34d5e54afc47ba3ef1b8f.camel@suse.com>
+References: <20220216205914.7575-1-mwilck@suse.com>
+	<164504936873.10228.7361167610237544463@noble.neil.brown.name>
+	<e8720e3f8734cbad1af34d5e54afc47ba3ef1b8f.camel@suse.com>
+Message-ID: <20220217132042.dmmkhecvvylnyc3b@alatyr-rpi.brq.redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Petr Rockai [prockai at redhat.com] wrote:
-> Takahiro Yasui <tyasui@redhat.com> writes:
-> > On 04/23/10 17:09, brem belguebli wrote:
-> >> On Fri, 2010-04-23 at 14:54 -0400, Takahiro Yasui wrote:
-> >>> On 04/23/10 12:01, brem belguebli wrote:
-> >>>> I've read in the RHEL 5.5 technical datasheet that the shipped LVM
-> >>>> version 2.02.56 was alraedy capable of mirrored log.
-> >>>
-> >>> As far as I see lvm2 code, I don't think lvm2 in RHEL5.5 has
-> >>> mirrored log feature. I'm not sure which document you referred to.
-> >>> Could you tell me the exact name of "RHEL 5.5 technical datasheet"?
-> >> 
-> >> http://www.redhat.com/f/pdf/rhel/RHEL_5_5_TechOverview_wp_web.pdf
-> >> page 4, LVM
-> >> 
-> >> " LVM ??? the Logical Volume Management storage suite has been augmented
-> >> to provide hot sparing
-> >>  for mirror journals, enabling automatic replacement or removal of
-> >> failed logging devices.
-> >> "
-> >
-> > Thanks for the information, but I am not sure if this sentence is
-> > telling 'mirrored log.' What I can say is the lvm2-2.02.56-8 doesn't
-> > have 'mirrored log' feature. I hope someone may give you a explanation...
-> For all I can tell, this means that if the log fails, it is
-> automatically replaced when there's a hotspare. Which is true, but it
-> does not imply mirroring.
+On Thu 17 Feb 2022 11:58, Martin Wilck wrote:
+> The main reason is that SYSTEMD_READY=0 is set too late, in 99-systemd-
+> rules, and only on "add" events:
+> https://github.com/systemd/systemd/blob/bfae960e53f6986f1c4d234ea82681d0acad57df/rules.d/99-systemd.rules.in#L18
+> 
+> I guess the device-mapper rules themselves could be setting
+> SYSTEMD_READY="0". @Peter Rajnoha, do you want to comment on that? My
+> concern wrt such a change would be possible side effects. Setting
+> SYSTEMD_READY=0 on "change" events could actually be wrong, see below.
 
-But is that new in 5.5? I thought that feature is available in 5.4 too.
+We need to be very careful with SYSTEMD_READY as switching that from 1
+to 0 would cause the systemd device unit to stop. And services can be
+bound to device existence (that is, systemd device unit). If we just
+temporarily suspend a DM device and not completely removing it, then
+we might get out-of-sync easily when it comes to notion of device
+presence in various parts of the system.
 
-Thanks, Malahal.
+One thing is device presence, the other are various sub-states that
+a single SYSTEMD_READY is not covering, like the suspended state...
+
+-- 
+Peter
 
 
