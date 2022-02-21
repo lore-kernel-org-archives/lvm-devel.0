@@ -1,50 +1,116 @@
-From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 11 May 2010 08:47:05 -0000
-Subject: LVM2 ./WHATS_NEW daemons/dmeventd/libdevmapper ...
-Message-ID: <20100511084705.7923.qmail@sourceware.org>
+From: David Teigland <teigland@sourceware.org>
+Date: Mon, 21 Feb 2022 22:12:11 +0000 (GMT)
+Subject: main - writecache: display block size from lvs
+Message-ID: <20220221221211.CE92D3851C2A@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2010-05-11 08:47:03
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=ac1f4bbbfd4c5f1387c3e0607f7d556409e7a4b4
+Commit:        ac1f4bbbfd4c5f1387c3e0607f7d556409e7a4b4
+Parent:        6144dac897728a4857294d70645df8ed7a5ff11f
+Author:        David Teigland <teigland@redhat.com>
+AuthorDate:    Mon Feb 21 16:09:57 2022 -0600
+Committer:     David Teigland <teigland@redhat.com>
+CommitterDate: Mon Feb 21 16:11:13 2022 -0600
 
-Modified files:
-	.              : WHATS_NEW 
-	daemons/dmeventd: libdevmapper-event.pc.in 
+writecache: display block size from lvs
 
-Log message:
-	Use Require.private: field for devmapper-event.pc
-	
-	Move devmapper to Require.private: field and remove unneeded libs
-	from Libs.private: as they are dependencies of devmapper library.
+lvs was missing the ability to display writecache block size.
+now possible with lvs -o writecache_block_size
+---
+ lib/report/columns.h                     |  1 +
+ lib/report/properties.c                  |  2 ++
+ lib/report/report.c                      | 20 ++++++++++++++++++++
+ man/lvmcache.7_main                      |  4 ++++
+ test/shell/writecache-cache-blocksize.sh |  2 ++
+ 5 files changed, 29 insertions(+)
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.1552&r2=1.1553
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/dmeventd/libdevmapper-event.pc.in.diff?cvsroot=lvm2&r1=1.2&r2=1.3
-
---- LVM2/WHATS_NEW	2010/05/11 08:38:10	1.1552
-+++ LVM2/WHATS_NEW	2010/05/11 08:47:02	1.1553
-@@ -1,5 +1,6 @@
- Version 2.02.65 - 
- =================================
-+  Use field Requires.private: for devmapper-event.pc.
-   Add devmapper library to linked libdevmapper-event.so.
-   Link liblvm2cmd.so with devmapper-event and devmapper libs.
-   Fix truncated total size displayed by pvscan.
---- LVM2/daemons/dmeventd/libdevmapper-event.pc.in	2010/03/19 18:33:55	1.2
-+++ LVM2/daemons/dmeventd/libdevmapper-event.pc.in	2010/05/11 08:47:03	1.3
-@@ -6,7 +6,6 @@
- Name: devmapper-event
- Description: device-mapper event library
- Version: @DM_LIB_PATCHLEVEL@
--Requires: devmapper
- Cflags: -I${includedir}
- Libs: -L${libdir} -ldevmapper-event
--Libs.private: -lpthread -ldl
-+Requires.private: devmapper
+diff --git a/lib/report/columns.h b/lib/report/columns.h
+index 12b78b766..7e450dace 100644
+--- a/lib/report/columns.h
++++ b/lib/report/columns.h
+@@ -108,6 +108,7 @@ FIELD(LVS, lv, TIM, "RTime", lvid, 26, lvtimeremoved, lv_time_removed, "Removal
+ FIELD(LVS, lv, STR, "Host", lvid, 10, lvhost, lv_host, "Creation host of the LV, if known.", 0)
+ FIELD(LVS, lv, STR_LIST, "Modules", lvid, 0, modules, lv_modules, "Kernel device-mapper modules required for this LV.", 0)
+ FIELD(LVS, lv, BIN, "Historical", lvid, 0, lvhistorical, lv_historical, "Set if the LV is historical.", 0)
++FIELD(LVS, lv, NUM, "WCacheBlkSize", lvid, 0, writecache_block_size, writecache_block_size, "The writecache block size", 0)
+ /*
+  * End of LVS type fields
+  */
+diff --git a/lib/report/properties.c b/lib/report/properties.c
+index 12ea890f4..6f302360f 100644
+--- a/lib/report/properties.c
++++ b/lib/report/properties.c
+@@ -353,6 +353,8 @@ GET_PV_STR_PROPERTY_FN(pv_device_id_type, pv->device_id_type)
+ #define _writecache_writeback_blocks_get prop_not_implemented_get
+ #define _writecache_error_set prop_not_implemented_set
+ #define _writecache_error_get prop_not_implemented_get
++#define _writecache_block_size_set prop_not_implemented_set
++#define _writecache_block_size_get prop_not_implemented_get
+ 
+ #define _vdo_operating_mode_set prop_not_implemented_set
+ #define _vdo_operating_mode_get prop_not_implemented_get
+diff --git a/lib/report/report.c b/lib/report/report.c
+index 60df417a4..c06b22674 100644
+--- a/lib/report/report.c
++++ b/lib/report/report.c
+@@ -3346,6 +3346,26 @@ static int _integritymismatches_disp(struct dm_report *rh __attribute__((unused)
+ 	return _field_set_value(field, "", &GET_TYPE_RESERVED_VALUE(num_undef_64));
+ }
+ 
++static int _writecache_block_size_disp(struct dm_report *rh __attribute__((unused)),
++				   struct dm_pool *mem,
++				   struct dm_report_field *field,
++				   const void *data,
++				   void *private __attribute__((unused)))
++{
++	struct logical_volume *lv = (struct logical_volume *) data;
++	uint32_t bs = 0;
++
++	if (lv_is_writecache(lv)) {
++		struct lv_segment *seg = first_seg(lv);
++		bs = seg->writecache_block_size;
++	}
++
++	if (!bs)
++		return dm_report_field_int32(rh, field, &GET_TYPE_RESERVED_VALUE(num_undef_32));
++
++	return dm_report_field_uint32(rh, field, &bs);
++}
++
+ static int _datapercent_disp(struct dm_report *rh, struct dm_pool *mem,
+ 			     struct dm_report_field *field,
+ 			     const void *data, void *private)
+diff --git a/man/lvmcache.7_main b/man/lvmcache.7_main
+index ce440bf49..8b8289c74 100644
+--- a/man/lvmcache.7_main
++++ b/man/lvmcache.7_main
+@@ -241,6 +241,10 @@ It is also possible to specify a sector size of 4096 to mkfs.xfs when
+ creating the file system.  In this case the writecache block size of 4096
+ can be used.
+ .P
++The writecache block size is displayed by the command:
++.br
++lvs -o writecacheblocksize VG/LV
++.P
+ .SS dm-writecache memory usage
+ .P
+ The amount of main system memory used by dm-writecache can be a factor
+diff --git a/test/shell/writecache-cache-blocksize.sh b/test/shell/writecache-cache-blocksize.sh
+index 2579ef7b7..4e17effe5 100644
+--- a/test/shell/writecache-cache-blocksize.sh
++++ b/test/shell/writecache-cache-blocksize.sh
+@@ -222,6 +222,8 @@ vgextend $vg "$dev2"
+ lvcreate -n $lv1 -l 8 -an $vg "$dev1"
+ lvcreate -n $lv2 -l 4 -an $vg "$dev2"
+ lvconvert --yes --type writecache --cachevol $lv2 --cachesettings "block_size=4096" $vg/$lv1
++lvs -o writecacheblocksize $vg/$lv1 |tee out
++grep 4096 out
+ lvchange -ay $vg/$lv1
+ mkfs.xfs -f "$DM_DEV_DIR/$vg/$lv1" |tee out
+ grep "sectsz=4096" out
 
 
