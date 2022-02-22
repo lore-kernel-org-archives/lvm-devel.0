@@ -1,85 +1,44 @@
-From: mornfall@sourceware.org <mornfall@sourceware.org>
-Date: 12 May 2010 13:15:39 -0000
-Subject: LVM2/test t-lvconvert-mirror-basic.sh t-lvconv ...
-Message-ID: <20100512131539.28715.qmail@sourceware.org>
+From: Martin Wilck <mwilck@suse.com>
+Date: Tue, 22 Feb 2022 14:54:33 +0100
+Subject: [PATCH] udev-md-raid-assembly.rules: skip if DM_UDEV_DISABLE_OTHER_RULES_FLAG
+In-Reply-To: <164548656531.8827.3365536065813085321@noble.neil.brown.name>
+References: <20220216205914.7575-1-mwilck@suse.com>
+	, <164504936873.10228.7361167610237544463@noble.neil.brown.name>
+	, <e8720e3f8734cbad1af34d5e54afc47ba3ef1b8f.camel@suse.com>
+	, <20220217130934.lh2b33255kyx2pax@alatyr-rpi.brq.redhat.com>
+	<164548656531.8827.3365536065813085321@noble.neil.brown.name>
+Message-ID: <4b61ca1eafb35e3fdfbc9bb260dc89d56d181499.camel@suse.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	mornfall at sourceware.org	2010-05-12 13:15:38
+Neil,
 
-Modified files:
-	test           : t-lvconvert-mirror-basic.sh 
-Added files:
-	test           : t-lvconvert-mirror-basic-0.sh 
-	                 t-lvconvert-mirror-basic-1.sh 
-	                 t-lvconvert-mirror-basic-2.sh 
-	                 t-lvconvert-mirror-basic-3.sh 
+On Tue, 2022-02-22 at 10:36 +1100, NeilBrown wrote:
+> 
+> > The flags that DM use for udev were introduced before systemd
+> > project
+> > even existed. We needed to introduce the
+> > DM_UDEV_DISABLE_OTHER_RULES_FLAG
+> > to have a possibility for all the "other" (non-dm) udev rules to
+> > check
+> > for if there's another subsystem stacking its own devices on top of
+> > DM
+> > ones.
+> 
+> If this is an established API that DM uses, then presumably it is
+> documented somewhere.? If a link to that documentation were provided,
+> it
+> would look a a whole lot less like a hack.
 
-Log message:
-	Chop up the big t-lvconvert-mirror-basic loop across 4 separate test scripts
-	(and use sourcing to avoid code duplication).
+Peter has provided a link to libdevmapper.h in his previous post in
+this thread. Is this a request for me to include that link in the patch
+description?
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/t-lvconvert-mirror-basic-0.sh.diff?cvsroot=lvm2&r1=NONE&r2=1.1
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/t-lvconvert-mirror-basic-1.sh.diff?cvsroot=lvm2&r1=NONE&r2=1.1
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/t-lvconvert-mirror-basic-2.sh.diff?cvsroot=lvm2&r1=NONE&r2=1.1
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/t-lvconvert-mirror-basic-3.sh.diff?cvsroot=lvm2&r1=NONE&r2=1.1
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/t-lvconvert-mirror-basic.sh.diff?cvsroot=lvm2&r1=1.1&r2=1.2
+Regards,
+Martin
 
-/cvs/lvm2/LVM2/test/t-lvconvert-mirror-basic-0.sh,v  -->  standard output
-revision 1.1
---- LVM2/test/t-lvconvert-mirror-basic-0.sh
-+++ -	2010-05-12 13:15:39.141989000 +0000
-@@ -0,0 +1,2 @@
-+. ./t-lvconvert-mirror-basic.sh
-+test_many 0
-/cvs/lvm2/LVM2/test/t-lvconvert-mirror-basic-1.sh,v  -->  standard output
-revision 1.1
---- LVM2/test/t-lvconvert-mirror-basic-1.sh
-+++ -	2010-05-12 13:15:39.225899000 +0000
-@@ -0,0 +1,2 @@
-+. ./t-lvconvert-mirror-basic.sh
-+test_many 1
-/cvs/lvm2/LVM2/test/t-lvconvert-mirror-basic-2.sh,v  -->  standard output
-revision 1.1
---- LVM2/test/t-lvconvert-mirror-basic-2.sh
-+++ -	2010-05-12 13:15:39.310482000 +0000
-@@ -0,0 +1,2 @@
-+. ./t-lvconvert-mirror-basic.sh
-+test_many 2
-/cvs/lvm2/LVM2/test/t-lvconvert-mirror-basic-3.sh,v  -->  standard output
-revision 1.1
---- LVM2/test/t-lvconvert-mirror-basic-3.sh
-+++ -	2010-05-12 13:15:39.395233000 +0000
-@@ -0,0 +1,2 @@
-+. ./t-lvconvert-mirror-basic.sh
-+test_many 3
---- LVM2/test/t-lvconvert-mirror-basic.sh	2010/05/12 10:08:35	1.1
-+++ LVM2/test/t-lvconvert-mirror-basic.sh	2010/05/12 13:15:38	1.2
-@@ -121,9 +121,9 @@
- 
- aux prepare_vg 5
- 
--# Test conversion combinations from linear <-> 4-way mirrors
--for i in $(seq 0 4); do
--	for j in $(seq 0 4); do
-+test_many() {
-+	i=$1
-+	for j in $(seq 0 3); do
- 		for k in core disk mirrored; do
- 			for l in core disk mirrored; do
- 				if test "$i" -eq "$j" && test "$k" = "$l"; then continue; fi
-@@ -135,5 +135,4 @@
- 			done
- 		done
- 	done
--done
--
-+}
 
 
