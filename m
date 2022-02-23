@@ -1,148 +1,71 @@
-From: David Teigland <teigland@sourceware.org>
-Date: Thu, 24 Feb 2022 23:22:53 +0000 (GMT)
-Subject: main - devices: simplify dev_cache_get_by_devt
-Message-ID: <20220224232253.4632E3858D1E@sourceware.org>
+From: Martin Wilck <mwilck@suse.com>
+Date: Wed, 23 Feb 2022 10:47:38 +0100
+Subject: [PATCH] udev-md-raid-assembly.rules: skip if DM_UDEV_DISABLE_OTHER_RULES_FLAG
+In-Reply-To: <164557016782.28944.17731814770525408828@noble.neil.brown.name>
+References: <20220216205914.7575-1-mwilck@suse.com>
+	, <164504936873.10228.7361167610237544463@noble.neil.brown.name>
+	, <e8720e3f8734cbad1af34d5e54afc47ba3ef1b8f.camel@suse.com>
+	, <20220217130934.lh2b33255kyx2pax@alatyr-rpi.brq.redhat.com>
+	, <164548656531.8827.3365536065813085321@noble.neil.brown.name>
+	, <4b61ca1eafb35e3fdfbc9bb260dc89d56d181499.camel@suse.com>
+	<164557016782.28944.17731814770525408828@noble.neil.brown.name>
+Message-ID: <d3aab8f2318f1438a1f0085eddf9713217d52391.camel@suse.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=1126be8f8dbce482e82d8f98a7e7f4b7cd2cac34
-Commit:        1126be8f8dbce482e82d8f98a7e7f4b7cd2cac34
-Parent:        ac1f4bbbfd4c5f1387c3e0607f7d556409e7a4b4
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Thu Feb 24 15:57:29 2022 -0600
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Thu Feb 24 17:21:58 2022 -0600
+Hello Neil,
 
-devices: simplify dev_cache_get_by_devt
+On Wed, 2022-02-23 at 09:49 +1100, NeilBrown wrote:
+> > 
+> > Peter has provided a link to libdevmapper.h in his previous post in
+> > this thread. Is this a request for me to include that link in the
+> > patch
+> > description?
+> 
+> If libdevmapper.h is the best documentation there is for this
+> variable,
+> then hopefully you can see why it feels to an outsider like a hack.
+> 
 
-remove unused args, and no callers need or want a
-repeated dev_cache_scan if there is no dev from the
-lookup.
----
- lib/device/dev-cache.c | 60 +++++---------------------------------------------
- lib/device/dev-cache.h |  2 +-
- lib/label/label.c      |  6 ++---
- 3 files changed, 9 insertions(+), 59 deletions(-)
+There's also some documentation in the form of comments in the device-
+mapper rules files themselves:
 
-diff --git a/lib/device/dev-cache.c b/lib/device/dev-cache.c
-index d3fae4948..1777628a8 100644
---- a/lib/device/dev-cache.c
-+++ b/lib/device/dev-cache.c
-@@ -1577,63 +1577,13 @@ struct device *dev_cache_get(struct cmd_context *cmd, const char *name, struct d
- 	return dev;
- }
- 
--struct device *dev_cache_get_by_devt(struct cmd_context *cmd, dev_t dev, struct dev_filter *f, int *filtered)
-+struct device *dev_cache_get_by_devt(struct cmd_context *cmd, dev_t devt)
- {
--	char path[PATH_MAX];
--	const char *sysfs_dir;
--	struct stat info;
--	struct device *d = (struct device *) btree_lookup(_cache.devices, (uint32_t) dev);
--	int ret;
--
--	if (filtered)
--		*filtered = 0;
--
--	if (!d) {
--		sysfs_dir = dm_sysfs_dir();
--		if (sysfs_dir && *sysfs_dir) {
--			/* First check if dev is sysfs to avoid useless scan */
--			if (dm_snprintf(path, sizeof(path), "%sdev/block/%d:%d",
--					sysfs_dir, (int)MAJOR(dev), (int)MINOR(dev)) < 0) {
--				log_error("dm_snprintf partition failed.");
--				return NULL;
--			}
--
--			if (lstat(path, &info)) {
--				log_debug("No sysfs entry for %d:%d errno %d@%s.",
--					  (int)MAJOR(dev), (int)MINOR(dev), errno, path);
--				return NULL;
--			}
--		}
--
--		log_debug_devs("Device num not found in dev_cache repeat dev_cache_scan for %d:%d",
--				(int)MAJOR(dev), (int)MINOR(dev));
--		dev_cache_scan(cmd);
--		d = (struct device *) btree_lookup(_cache.devices, (uint32_t) dev);
--
--		if (!d)
--			return NULL;
--	}
--
--	if (d->flags & DEV_REGULAR)
--		return d;
--
--	if (!f)
--		return d;
--
--	ret = f->passes_filter(cmd, f, d, NULL);
--
--	if (ret == -EAGAIN) {
--		log_debug_devs("get device by number defer filter %s", dev_name(d));
--		d->flags |= DEV_FILTER_AFTER_SCAN;
--		ret = 1;
--	}
--
--	if (ret)
--		return d;
--
--	if (filtered)
--		*filtered = 1;
-+	struct device *dev = (struct device *) btree_lookup(_cache.devices, (uint32_t) devt);
- 
-+	if (dev)
-+		return dev;
-+	log_debug_devs("No devno %d:%d in dev cache.", (int)MAJOR(devt), (int)MINOR(devt));
- 	return NULL;
- }
- 
-diff --git a/lib/device/dev-cache.h b/lib/device/dev-cache.h
-index 449bfeb75..a88e3c282 100644
---- a/lib/device/dev-cache.h
-+++ b/lib/device/dev-cache.h
-@@ -54,7 +54,7 @@ int dev_cache_has_scanned(void);
- int dev_cache_add_dir(const char *path);
- struct device *dev_cache_get(struct cmd_context *cmd, const char *name, struct dev_filter *f);
- 
--struct device *dev_cache_get_by_devt(struct cmd_context *cmd, dev_t device, struct dev_filter *f, int *filtered);
-+struct device *dev_cache_get_by_devt(struct cmd_context *cmd, dev_t devt);
- 
- struct device *dev_hash_get(const char *name);
- 
-diff --git a/lib/label/label.c b/lib/label/label.c
-index fe2bc8fec..66d6e7db7 100644
---- a/lib/label/label.c
-+++ b/lib/label/label.c
-@@ -1134,7 +1134,7 @@ int label_scan_vg_online(struct cmd_context *cmd, const char *vgname,
- 		dm_list_iterate_items(po, &pvs_online) {
- 			if (po->dev)
- 				continue;
--			if (!(po->dev = dev_cache_get_by_devt(cmd, po->devno, NULL, NULL))) {
-+			if (!(po->dev = dev_cache_get_by_devt(cmd, po->devno))) {
- 				log_error("No device found for %d:%d PVID %s",
- 					  (int)MAJOR(po->devno), (int)MINOR(po->devno), po->pvid);
- 				goto bad;
-@@ -1722,7 +1722,7 @@ void label_scan_invalidate_lv(struct cmd_context *cmd, struct logical_volume *lv
- 	if (lv_info(cmd, lv, 0, &lvinfo, 0, 0) && lvinfo.exists) {
- 		/* FIXME: Still unclear what is it supposed to find */
- 		devt = MKDEV(lvinfo.major, lvinfo.minor);
--		if ((dev = dev_cache_get_by_devt(cmd, devt, NULL, NULL)))
-+		if ((dev = dev_cache_get_by_devt(cmd, devt)))
- 			label_scan_invalidate(dev);
- 	}
- }
-@@ -1742,7 +1742,7 @@ void label_scan_invalidate_lvs(struct cmd_context *cmd, struct dm_list *lvs)
- 				if (dm_dev->uuid &&
- 				    strncmp(dm_dev->uuid, UUID_PREFIX, sizeof(UUID_PREFIX) - 1) == 0) {
- 					devt = MKDEV(dm_dev->major, dm_dev->minor);
--					if ((dev = dev_cache_get_by_devt(cmd, devt, NULL, NULL)))
-+					if ((dev = dev_cache_get_by_devt(cmd, devt)))
- 						label_scan_invalidate(dev);
- 				}
- 			/* ATM no further caching for any lvconvert command
+https://github.com/lvmteam/lvm2/blob/8dccc2314e2482370bc6e5cf007eb210994abdef/udev/10-dm.rules.in#L137
+
+In general, 10-dm.rules is one of the most extensively commented rule
+files. I've always found these comments quite helpful.
+
+> It isn't even immediately clear that the text there is talking about
+> environment variables visible in udev.
+> If there is an expectation that tools outside of lvm2 will use these,
+> then they really should be documented properly.? SYSTEMD_READY is
+> documented in "man systemd.device".? How hard would it be to write a
+> "dm-udev" man page which explains all this.
+
+I agree that the documentation could be improved. OTOH, the text in
+systemd.device(5) only explains how systemd itself interprets
+SYSTEMD_READY. It doesn't say a word about how other udev rules are
+supposed to deal with the device. IOW, SYSTEMD_READY is part of an API
+between udev rules and systemd, and not between different udev rule
+sets.
+
+In particular the "don't probe this iff SYSTEMD_READY==0" semantics
+that are frequently used in rules files can't be inferred from this
+documentation. It makes sense most of the time, but there are some
+cases where it doesn't. Here, we have a case where probing should be
+skipped, even though SYSTEMD_READY is not 0.
+
+Regards,
+Martin
+
+PS: The big issue remains that there is no "official" API in which udev
+rule sets can transport information between each other. I guess the
+original idea was that every rule set would be self-contained, which
+isn't the case any more. If anyone makes an effort redesign udev, they
+should consider creating such an API somehow.
+
 
 
