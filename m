@@ -1,58 +1,84 @@
-From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Wed, 16 Feb 2022 00:03:08 +0000 (GMT)
-Subject: main - dev_manager: fix dm_task_get_device_list
-Message-ID: <20220216000308.DD73D3858C1F@sourceware.org>
+From: David Teigland <teigland@sourceware.org>
+Date: Thu, 24 Feb 2022 23:22:55 +0000 (GMT)
+Subject: main - devices: initial use of existing option
+Message-ID: <20220224232255.8754B3858D1E@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=6ffb150f3075da69597e6f3e84d7533f2d8a36fa
-Commit:        6ffb150f3075da69597e6f3e84d7533f2d8a36fa
-Parent:        6626adb46789e329a53242822dc6e9d233320adb
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed Feb 16 00:33:25 2022 +0100
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Wed Feb 16 01:00:36 2022 +0100
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=00c3069872ab488f66f14c8c2727bd080affc05e
+Commit:        00c3069872ab488f66f14c8c2727bd080affc05e
+Parent:        7e70041e324e1a4d49134a93323072e1b6ec661f
+Author:        David Teigland <teigland@redhat.com>
+AuthorDate:    Thu Feb 24 16:10:37 2022 -0600
+Committer:     David Teigland <teigland@redhat.com>
+CommitterDate: Thu Feb 24 17:22:03 2022 -0600
 
-dev_manager: fix dm_task_get_device_list
+devices: initial use of existing option
 
-With very old version of DM target driver we have to avoid
-trying to use newuuid setting - otherwise we get error
-during ioctl preparation phase.
-
-Patch is fixing regression from commit:
-988ea0e94c79a496f2619eab878fd9db6168711d
+Use dev_cache_get_existing() in a few common, high level
+locations where it's obvious that only existing dev-cache
+entries are wanted.  This can be expanded and used in more
+locations (or dev_cache_get can stop creating new entries.)
 ---
- lib/activate/dev_manager.c | 8 +++++++-
- 1 file changed, 7 insertions(+), 1 deletion(-)
+ lib/device/device_id.c | 4 ++--
+ tools/toollib.c        | 6 +++---
+ 2 files changed, 5 insertions(+), 5 deletions(-)
 
-diff --git a/lib/activate/dev_manager.c b/lib/activate/dev_manager.c
-index 6cf4c718c..3fd6aaff7 100644
---- a/lib/activate/dev_manager.c
-+++ b/lib/activate/dev_manager.c
-@@ -107,6 +107,8 @@ static struct dm_task *_setup_task_run(int task, struct dm_info *info,
- 				       int with_flush,
- 				       int query_inactive)
- {
-+	char vsn[80];
-+	unsigned maj, min;
- 	struct dm_task *dmt;
+diff --git a/lib/device/device_id.c b/lib/device/device_id.c
+index 003f10a96..c8df47345 100644
+--- a/lib/device/device_id.c
++++ b/lib/device/device_id.c
+@@ -1577,7 +1577,7 @@ void device_ids_match_device_list(struct cmd_context *cmd)
+ 	dm_list_iterate_items(du, &cmd->use_devices) {
+ 		if (du->dev)
+ 			continue;
+-		if (!(du->dev = dev_cache_get(cmd, du->devname, NULL))) {
++		if (!(du->dev = dev_cache_get_existing(cmd, du->devname, NULL))) {
+ 			log_warn("Device not found for %s.", du->devname);
+ 		} else {
+ 			/* Should we set dev->id?  Which idtype?  Use --deviceidtype? */
+@@ -1625,7 +1625,7 @@ void device_ids_match(struct cmd_context *cmd)
+ 		 * the du/dev pairs in preparation for using the filters.
+ 		 */
+ 		if (du->devname &&
+-		    (dev = dev_cache_get(cmd, du->devname, NULL))) {
++		    (dev = dev_cache_get_existing(cmd, du->devname, NULL))) {
+ 			/* On successful match, du, dev, and id are linked. */
+ 			if (_match_du_to_dev(cmd, du, dev))
+ 				continue;
+diff --git a/tools/toollib.c b/tools/toollib.c
+index b08c044fa..897adec34 100644
+--- a/tools/toollib.c
++++ b/tools/toollib.c
+@@ -1488,7 +1488,7 @@ int process_each_label(struct cmd_context *cmd, int argc, char **argv,
+ 				goto out;
+ 			}
  
- 	if (!(dmt = dm_task_create(task)))
-@@ -142,7 +144,11 @@ static struct dm_task *_setup_task_run(int task, struct dm_info *info,
- 	case DM_DEVICE_TARGET_MSG:
- 		return dmt; /* TARGET_MSG needs more local tweaking before task_run() */
- 	case DM_DEVICE_LIST:
--		if (!dm_task_set_newuuid(dmt, " ")) // new uuid has no meaning here
-+		/* Use 'newuuid' only with DM version that supports it */
-+		if (driver_version(vsn, sizeof(vsn)) &&
-+		    (sscanf(vsn, "%u.%u", &maj, &min) == 2) &&
-+		    (maj == 4 ? min >= 19 : maj > 4) &&
-+		    !dm_task_set_newuuid(dmt, " ")) // new uuid has no meaning here
- 			log_warn("WARNING: Failed to query uuid with LIST.");
- 		break;
- 	default:
+-			if (!(dev = dev_cache_get(cmd, argv[opt], cmd->filter))) {
++			if (!(dev = dev_cache_get_existing(cmd, argv[opt], cmd->filter))) {
+ 				log_error("Failed to find device "
+ 					  "\"%s\".", argv[opt]);
+ 				ret_max = ECMD_FAILED;
+@@ -3925,7 +3925,7 @@ static int _get_arg_devices(struct cmd_context *cmd,
+ 			return ECMD_FAILED;
+ 		}
+ 
+-		if (!(dil->dev = dev_cache_get(cmd, sl->str, cmd->filter))) {
++		if (!(dil->dev = dev_cache_get_existing(cmd, sl->str, cmd->filter))) {
+ 			log_error("Cannot use %s: %s", sl->str, devname_error_reason(sl->str));
+ 			ret_max = EINIT_FAILED;
+ 		} else {
+@@ -5261,7 +5261,7 @@ int pvcreate_each_device(struct cmd_context *cmd,
+ 		struct device *dev;
+ 
+ 		/* No filter used here */
+-		if (!(dev = dev_cache_get(cmd, pd->name, NULL))) {
++		if (!(dev = dev_cache_get_existing(cmd, pd->name, NULL))) {
+ 			log_error("No device found for %s.", pd->name);
+ 			dm_list_del(&pd->list);
+ 			dm_list_add(&pp->arg_fail, &pd->list);
 
 
