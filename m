@@ -1,51 +1,305 @@
 From: David Teigland <teigland@sourceware.org>
-Date: Wed, 16 Feb 2022 21:40:07 +0000 (GMT)
-Subject: main - man: update cachesettings option description
-Message-ID: <20220216214007.21B253858431@sourceware.org>
+Date: Thu, 24 Feb 2022 23:22:56 +0000 (GMT)
+Subject: main - devices: fix dev_name assumptions
+Message-ID: <20220224232256.A8C1E3858414@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=96c99d647ef783abcd26a1f3f63f12e033195633
-Commit:        96c99d647ef783abcd26a1f3f63f12e033195633
-Parent:        ec2119beddde9e38681cb096b93048ee25034c1e
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=4eb04c8c05e52776891f62863375ceacf866de77
+Commit:        4eb04c8c05e52776891f62863375ceacf866de77
+Parent:        00c3069872ab488f66f14c8c2727bd080affc05e
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Wed Feb 16 15:36:44 2022 -0600
+AuthorDate:    Tue Feb 22 15:03:11 2022 -0600
 Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Wed Feb 16 15:37:54 2022 -0600
+CommitterDate: Thu Feb 24 17:22:04 2022 -0600
 
-man: update cachesettings option description
+devices: fix dev_name assumptions
 
-to be more consistent with man page description
+dev_name(dev) returns "[unknown]" if there are no names
+on dev->aliases.  It's meant mainly for log messages.
+
+Many places assume a valid path name is returned, and
+use it directly.  A caller that wants to use the path
+from dev_name() must first check if the dev has any
+paths with dm_list_empty(&dev->aliases).
 ---
- tools/args.h | 13 +++++++------
- 1 file changed, 7 insertions(+), 6 deletions(-)
+ lib/activate/dev_manager.c     |  9 ++++++++-
+ lib/device/dev-type.c          |  3 +++
+ lib/device/device_id.c         | 13 +++++++++++--
+ lib/label/hints.c              |  2 ++
+ lib/label/label.c              | 23 ++++++++++++++++++++++-
+ lib/locking/lvmlockd.c         |  4 ++++
+ lib/metadata/mirror.c          | 17 +++++++++++++----
+ lib/metadata/pv_list.c         |  5 +++++
+ lib/metadata/vg.c              |  5 +++++
+ test/shell/losetup-partscan.sh |  2 ++
+ 10 files changed, 75 insertions(+), 8 deletions(-)
 
-diff --git a/tools/args.h b/tools/args.h
-index 3f4580b8d..56669645d 100644
---- a/tools/args.h
-+++ b/tools/args.h
-@@ -862,12 +862,13 @@ arg(cachepolicy_ARG, '\0', "cachepolicy", string_VAL, 0, 0,
-     "See \\fBlvmcache\\fP(7) for more information.\n")
+diff --git a/lib/activate/dev_manager.c b/lib/activate/dev_manager.c
+index 63bfd9b74..2cae3bed1 100644
+--- a/lib/activate/dev_manager.c
++++ b/lib/activate/dev_manager.c
+@@ -2947,6 +2947,10 @@ int add_areas_line(struct dev_manager *dm, struct lv_segment *seg,
  
- arg(cachesettings_ARG, '\0', "cachesettings", string_VAL, ARG_GROUPABLE, 0,
--    "Specifies tunable values for a cache LV in \"Key = Value\" form.\n"
--    "Repeat this option to specify multiple values.\n"
--    "(The default values should usually be adequate.)\n"
--    "The special string value \\fBdefault\\fP switches\n"
--    "settings back to their default kernel values and removes\n"
--    "them from the list of settings stored in LVM metadata.\n"
-+    "Specifies tunable kernel options for dm-cache or dm-writecache LVs.\n"
-+    "Use the form 'option=value' or 'option1=value option2=value', or\n"
-+    "repeat --cachesettings for each option being set.\n"
-+    "These settings override the default kernel behaviors which are\n"
-+    "usually adequate. To remove cachesettings and revert to the default\n"
-+    "kernel behaviors, use --cachesettings 'default' for dm-cache or\n"
-+    "an empty string --cachesettings '' for dm-writecache.\n"
-     "See \\fBlvmcache\\fP(7) for more information.\n")
+ 	/* FIXME Avoid repeating identical stat in dm_tree_node_add_target_area */
+ 	for (s = start_area; s < areas; s++) {
++
++		/* FIXME: dev_name() does not return NULL!  It needs to check if dm_list_empty(&dev->aliases)
++		   but this knot of logic is too complex to pull apart without careful deconstruction. */
++
+ 		if ((seg_type(seg, s) == AREA_PV &&
+ 		     (!seg_pvseg(seg, s) || !seg_pv(seg, s) || !seg_dev(seg, s) ||
+ 		       !(name = dev_name(seg_dev(seg, s))) || !*name ||
+@@ -2965,7 +2969,10 @@ int add_areas_line(struct dev_manager *dm, struct lv_segment *seg,
+ 				return_0;
+ 			num_error_areas++;
+ 		} else if (seg_type(seg, s) == AREA_PV) {
+-			if (!dm_tree_node_add_target_area(node, dev_name(seg_dev(seg, s)), NULL,
++			struct device *dev = seg_dev(seg, s);
++			name = dm_list_empty(&dev->aliases) ? NULL : dev_name(dev);
++
++			if (!dm_tree_node_add_target_area(node, name, NULL,
+ 				    (seg_pv(seg, s)->pe_start + (extent_size * seg_pe(seg, s)))))
+ 				return_0;
+ 			num_existing_areas++;
+diff --git a/lib/device/dev-type.c b/lib/device/dev-type.c
+index 0e77a009d..c67a86fa3 100644
+--- a/lib/device/dev-type.c
++++ b/lib/device/dev-type.c
+@@ -966,6 +966,9 @@ static int _wipe_known_signatures_with_blkid(struct device *dev, const char *nam
  
- arg(unconfigured_ARG, '\0', "unconfigured", 0, 0, 0,
+ 	/* TODO: Should we check for valid dev - _dev_is_valid(dev)? */
+ 
++	if (dm_list_empty(&dev->aliases))
++		goto_out;
++
+ 	if (!(probe = blkid_new_probe_from_filename(dev_name(dev)))) {
+ 		log_error("Failed to create a new blkid probe for device %s.", dev_name(dev));
+ 		goto out;
+diff --git a/lib/device/device_id.c b/lib/device/device_id.c
+index c8df47345..7ce955b11 100644
+--- a/lib/device/device_id.c
++++ b/lib/device/device_id.c
+@@ -347,6 +347,8 @@ const char *device_id_system_read(struct cmd_context *cmd, struct device *dev, u
+ 	}
+ 
+ 	else if (idtype == DEV_ID_TYPE_DEVNAME) {
++		if (dm_list_empty(&dev->aliases))
++			goto_bad;
+ 		if (!(idname = strdup(dev_name(dev))))
+ 			goto_bad;
+ 		return idname;
+@@ -955,6 +957,10 @@ int device_id_add(struct cmd_context *cmd, struct device *dev, const char *pvid_
+ 	if (!dev_get_partition_number(dev, &part))
+ 		return_0;
+ 
++	/* Ensure valid dev_name(dev) below. */
++	if (dm_list_empty(&dev->aliases))
++		return_0;
++
+ 	/*
+ 	 * When enable_devices_file=0 and pending_devices_file=1 we let
+ 	 * pvcreate/vgcreate add new du's to cmd->use_devices.  These du's may
+@@ -1842,6 +1848,9 @@ void device_ids_validate(struct cmd_context *cmd, struct dm_list *scanned_devs,
+ 		if (dev->flags & DEV_SCAN_NOT_READ)
+ 			continue;
+ 
++		if (dm_list_empty(&dev->aliases))
++			continue;
++
+ 		if (!cmd->filter->passes_filter(cmd, cmd->filter, dev, "persistent")) {
+ 			log_warn("Devices file %s is excluded by filter: %s.",
+ 				 dev_name(dev), dev_filtered_reason(dev));
+@@ -2225,14 +2234,14 @@ void device_ids_find_renamed_devs(struct cmd_context *cmd, struct dm_list *dev_l
+ 	dm_list_iterate_items(dil, &search_pvids) {
+ 		char *dup_devname1, *dup_devname2, *dup_devname3;
+ 
+-		if (!dil->dev) {
++		if (!dil->dev || dm_list_empty(&dil->dev->aliases)) {
+ 			not_found++;
+ 			continue;
+ 		}
+-		found++;
+ 
+ 		dev = dil->dev;
+ 		devname = dev_name(dev);
++		found++;
+ 
+ 		if (!(du = get_du_for_pvid(cmd, dil->pvid))) {
+ 			/* shouldn't happen */
+diff --git a/lib/label/hints.c b/lib/label/hints.c
+index 35ae7f5cc..edce6f517 100644
+--- a/lib/label/hints.c
++++ b/lib/label/hints.c
+@@ -500,6 +500,8 @@ int validate_hints(struct cmd_context *cmd, struct dm_list *hints)
+ 	if (!(iter = dev_iter_create(NULL, 0)))
+ 		return 0;
+ 	while ((dev = dev_iter_get(cmd, iter))) {
++		if (dm_list_empty(&dev->aliases))
++			continue;
+ 		if (!(hint = _find_hint_name(hints, dev_name(dev))))
+ 			continue;
+ 
+diff --git a/lib/label/label.c b/lib/label/label.c
+index 66d6e7db7..ffb393891 100644
+--- a/lib/label/label.c
++++ b/lib/label/label.c
+@@ -1130,6 +1130,7 @@ int label_scan_vg_online(struct cmd_context *cmd, const char *vgname,
+ 	 * sure to find the device.
+ 	 */
+ 	if (try_dev_scan) {
++		log_debug("Repeat dev cache scan to translate devnos.");
+ 		dev_cache_scan(cmd);
+ 		dm_list_iterate_items(po, &pvs_online) {
+ 			if (po->dev)
+@@ -1736,6 +1737,12 @@ void label_scan_invalidate_lvs(struct cmd_context *cmd, struct dm_list *lvs)
+ 	struct lv_list *lvl;
+ 	dev_t devt;
+ 
++	/*
++	 * FIXME: this is all unnecessary unless there are PVs stacked on LVs,
++	 * so we can skip all of this if scan_lvs=0.
++	 */
++	log_debug("invalidating devs for any pvs on lvs");
++
+ 	if (get_device_list(NULL, &devs, &devs_features)) {
+ 		if (devs_features & DM_DEVICE_LIST_HAS_UUID) {
+ 			dm_list_iterate_items(dm_dev, devs)
+@@ -1879,10 +1886,24 @@ int label_scan_open_rw(struct device *dev)
+ 
+ int label_scan_reopen_rw(struct device *dev)
+ {
++	const char *name;
+ 	int flags = 0;
+ 	int prev_fd = dev->bcache_fd;
+ 	int fd;
+ 
++	if (dm_list_empty(&dev->aliases)) {
++		log_error("Cannot reopen rw device %d:%d with no valid paths di %d fd %d.",
++			  (int)MAJOR(dev->dev), (int)MINOR(dev->dev), dev->bcache_di, dev->bcache_fd);
++		return 0;
++	}
++
++	name = dev_name(dev);
++	if (!name || name[0] != '/') {
++		log_error("Cannot reopen rw device %d:%d with no valid name di %d fd %d.",
++			  (int)MAJOR(dev->dev), (int)MINOR(dev->dev), dev->bcache_di, dev->bcache_fd);
++		return 0;
++	}
++
+ 	if (!(dev->flags & DEV_IN_BCACHE)) {
+ 		if ((dev->bcache_fd != -1) || (dev->bcache_di != -1)) {
+ 			/* shouldn't happen */
+@@ -1912,7 +1933,7 @@ int label_scan_reopen_rw(struct device *dev)
+ 	flags |= O_NOATIME;
+ 	flags |= O_RDWR;
+ 
+-	fd = open(dev_name(dev), flags, 0777);
++	fd = open(name, flags, 0777);
+ 	if (fd < 0) {
+ 		log_error("Failed to open rw %s errno %d di %d fd %d.",
+ 			  dev_name(dev), errno, dev->bcache_di, dev->bcache_fd);
+diff --git a/lib/locking/lvmlockd.c b/lib/locking/lvmlockd.c
+index b598df3d6..60c80f1b1 100644
+--- a/lib/locking/lvmlockd.c
++++ b/lib/locking/lvmlockd.c
+@@ -272,6 +272,8 @@ static void _lockd_retrive_vg_pv_list(struct volume_group *vg,
+ 
+ 	i = 0;
+ 	dm_list_iterate_items(pvl, &vg->pvs) {
++		if (!pvl->pv->dev || dm_list_empty(&pvl->pv->dev->aliases))
++			continue;
+ 		lock_pvs->path[i] = strdup(pv_dev_name(pvl->pv));
+ 		if (!lock_pvs->path[i]) {
+ 			log_error("Fail to allocate PV path for VG %s", vg->name);
+@@ -341,6 +343,8 @@ static void _lockd_retrive_lv_pv_list(struct volume_group *vg,
+ 
+ 	dm_list_iterate_items(pvl, &vg->pvs) {
+ 		if (lv_is_on_pv(lv, pvl->pv)) {
++			if (!pvl->pv->dev || dm_list_empty(&pvl->pv->dev->aliases))
++				continue;
+ 			lock_pvs->path[i] = strdup(pv_dev_name(pvl->pv));
+ 			if (!lock_pvs->path[i]) {
+ 				log_error("Fail to allocate PV path for LV %s/%s",
+diff --git a/lib/metadata/mirror.c b/lib/metadata/mirror.c
+index e2bf191a1..46da57948 100644
+--- a/lib/metadata/mirror.c
++++ b/lib/metadata/mirror.c
+@@ -1231,14 +1231,23 @@ int remove_mirrors_from_segments(struct logical_volume *lv,
+ const char *get_pvmove_pvname_from_lv_mirr(const struct logical_volume *lv_mirr)
+ {
+ 	struct lv_segment *seg;
++	struct device *dev;
+ 
+ 	dm_list_iterate_items(seg, &lv_mirr->segments) {
+ 		if (!seg_is_mirrored(seg))
+ 			continue;
+-		if (seg_type(seg, 0) == AREA_PV)
+-			return dev_name(seg_dev(seg, 0));
+-		if (seg_type(seg, 0) == AREA_LV)
+-			return dev_name(seg_dev(first_seg(seg_lv(seg, 0)), 0));
++		if (seg_type(seg, 0) == AREA_PV) {
++			dev = seg_dev(seg, 0);
++			if (!dev || dm_list_empty(&dev->aliases))
++				return NULL;
++			return dev_name(dev);
++		}
++		if (seg_type(seg, 0) == AREA_LV) {
++			dev = seg_dev(first_seg(seg_lv(seg, 0)), 0);
++			if (!dev || dm_list_empty(&dev->aliases))
++				return NULL;
++			return dev_name(dev);
++		}
+ 	}
+ 
+ 	return NULL;
+diff --git a/lib/metadata/pv_list.c b/lib/metadata/pv_list.c
+index 813e8e525..fc3667db0 100644
+--- a/lib/metadata/pv_list.c
++++ b/lib/metadata/pv_list.c
+@@ -152,6 +152,11 @@ static int _create_pv_entry(struct dm_pool *mem, struct pv_list *pvl,
+ 	struct pv_list *new_pvl = NULL, *pvl2;
+ 	struct dm_list *pe_ranges;
+ 
++	if (!pvl->pv->dev || dm_list_empty(&pvl->pv->dev->aliases)) {
++		log_error("Failed to create PV entry for missing device.");
++		return 0;
++	}
++
+ 	pvname = pv_dev_name(pvl->pv);
+ 	if (allocatable_only && !(pvl->pv->status & ALLOCATABLE_PV)) {
+ 		log_warn("WARNING: Physical volume %s not allocatable.", pvname);
+diff --git a/lib/metadata/vg.c b/lib/metadata/vg.c
+index 85482552a..adc954bab 100644
+--- a/lib/metadata/vg.c
++++ b/lib/metadata/vg.c
+@@ -679,6 +679,11 @@ int vgreduce_single(struct cmd_context *cmd, struct volume_group *vg,
+ 		return r;
+ 	}
+ 
++	if (!pv->dev || dm_list_empty(&pv->dev->aliases)) {
++		log_error("No device found for PV.");
++		return r;
++	}
++
+ 	log_debug("vgreduce_single VG %s PV %s", vg->name, pv_dev_name(pv));
+ 
+ 	if (pv_pe_alloc_count(pv)) {
+diff --git a/test/shell/losetup-partscan.sh b/test/shell/losetup-partscan.sh
+index 99f552ad1..670568945 100644
+--- a/test/shell/losetup-partscan.sh
++++ b/test/shell/losetup-partscan.sh
+@@ -33,6 +33,8 @@ aux udev_wait
+ ls -la "${LOOP}"*
+ test -e "${LOOP}p1"
+ 
++aux lvmconf 'devices/scan = "/dev"'
++
+ aux extend_filter "a|$LOOP|"
+ aux extend_devices "$LOOP"
+ 
 
 
