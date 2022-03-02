@@ -1,176 +1,115 @@
-From: agk@sourceware.org <agk@sourceware.org>
-Date: 21 Jan 2012 05:31:55 -0000
-Subject: LVM2/daemons/clvmd clvm.h clvmd.c refresh_clvmd.c
-Message-ID: <20120121053155.29182.qmail@sourceware.org>
+From: David Teigland <teigland@sourceware.org>
+Date: Wed,  2 Mar 2022 17:51:46 +0000 (GMT)
+Subject: main - writecache: check memory usage
+Message-ID: <20220302175146.2302A3858D39@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	agk at sourceware.org	2012-01-21 05:31:54
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=bef1363c0064f42e8063571143a428ad163d1bd9
+Commit:        bef1363c0064f42e8063571143a428ad163d1bd9
+Parent:        cc73d99886dfd6e0da3c6ca685669f77fac3c1cd
+Author:        David Teigland <teigland@redhat.com>
+AuthorDate:    Tue Mar 1 14:31:39 2022 -0600
+Committer:     David Teigland <teigland@redhat.com>
+CommitterDate: Tue Mar 1 16:29:53 2022 -0600
 
-Modified files:
-	daemons/clvmd  : clvm.h clvmd.c refresh_clvmd.c 
+writecache: check memory usage
 
-Log message:
-	Add CLVMD_FLAG_REMOTE to skip processing on local node.
+warn if writecache neds > 50% of system memory, and
+confirm if writecache needs > 90% of system memory.
+---
+ tools/lvconvert.c | 69 +++++++++++++++++++++++++++++++++++++++++++++++++++++++
+ 1 file changed, 69 insertions(+)
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/clvmd/clvm.h.diff?cvsroot=lvm2&r1=1.10&r2=1.11
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/clvmd/clvmd.c.diff?cvsroot=lvm2&r1=1.116&r2=1.117
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/clvmd/refresh_clvmd.c.diff?cvsroot=lvm2&r1=1.16&r2=1.17
-
---- LVM2/daemons/clvmd/clvm.h	2011/01/12 20:42:50	1.10
-+++ LVM2/daemons/clvmd/clvm.h	2012/01/21 05:31:54	1.11
-@@ -36,16 +36,17 @@
- 	char node[1];		/* Actually a NUL-terminated string, node name.
- 				   If this is empty then the command is 
- 				   forwarded to all cluster nodes unless 
--				   FLAG_LOCAL is also set. */
-+				   FLAG_LOCAL or FLAG_REMOTE is also set. */
- 	char args[1];		/* Arguments for the command follow the 
- 				   node name, This member is only
- 				   valid if the node name is empty */
- } __attribute__ ((packed));
- 
- /* Flags */
--#define CLVMD_FLAG_LOCAL        1	/* Only do this on the local node */
--#define CLVMD_FLAG_SYSTEMLV     2	/* Data in system LV under my node name */
--#define CLVMD_FLAG_NODEERRS     4       /* Reply has errors in node-specific portion */
-+#define CLVMD_FLAG_LOCAL	1	/* Only do this on the local node */
-+#define CLVMD_FLAG_SYSTEMLV	2	/* Data in system LV under my node name */
-+#define CLVMD_FLAG_NODEERRS	4	/* Reply has errors in node-specific portion */
-+#define CLVMD_FLAG_REMOTE	8	/* Do this on all nodes except for the local node */
- 
- /* Name of the local socket to communicate between lvm and clvmd */
- static const char CLVMD_SOCKNAME[]= DEFAULT_RUN_DIR "/clvmd.sock";
-@@ -72,4 +73,10 @@
- #define CLVMD_CMD_VG_BACKUP	    43
- #define CLVMD_CMD_RESTART	    44
- #define CLVMD_CMD_SYNC_NAMES	    45
-+
-+/* Used internally by some callers, but not part of the protocol.*/
-+#define NODE_ALL	"*"
-+#define NODE_LOCAL	"."
-+#define NODE_REMOTE	"^"
-+
- #endif
---- LVM2/daemons/clvmd/clvmd.c	2011/10/11 10:06:57	1.116
-+++ LVM2/daemons/clvmd/clvmd.c	2012/01/21 05:31:54	1.117
-@@ -1396,7 +1396,10 @@
- 	int len = thisfd->bits.localsock.cmd_len;
- 
- 	thisfd->xid = global_xid++;
--	DEBUGLOG("distribute command: XID = %d\n", thisfd->xid);
-+	DEBUGLOG("distribute command: XID = %d, flags=0x%x (%s%s)\n",
-+		 thisfd->xid, inheader->flags,
-+		(inheader->flags & CLVMD_FLAG_LOCAL) ? "LOCAL" : "",
-+		(inheader->flags & CLVMD_FLAG_REMOTE) ? "REMOTE" : "");
- 
- 	/* Forward it to other nodes in the cluster if needed */
- 	if (!(inheader->flags & CLVMD_FLAG_LOCAL)) {
-@@ -1409,7 +1412,11 @@
- 			thisfd->bits.localsock.in_progress = TRUE;
- 			thisfd->bits.localsock.sent_out = TRUE;
- 
--			/* Do it here first */
-+			/*
-+			 * Send to local node first, even if CLVMD_FLAG_REMOTE
-+			 * is set so we still get a reply if this is the
-+			 * only node.
-+			 */
- 			add_to_lvmqueue(thisfd, inheader, len, NULL);
- 
- 			DEBUGLOG("Sending message to all cluster nodes\n");
-@@ -1735,8 +1742,12 @@
- 	if (replybuf == NULL)
- 		return -1;
- 
--	/* FIXME: usage of init_test() is unprotected */
--	status = do_command(client, msg, msglen, &replybuf, buflen, &replylen);
-+	/* If remote flag is set, just set a successful status code. */
-+	if (msg->flags & CLVMD_FLAG_REMOTE)
-+		status = 0;
-+	else
-+		/* FIXME: usage of init_test() is unprotected */
-+		status = do_command(client, msg, msglen, &replybuf, buflen, &replylen);
- 
- 	if (status)
- 		client->bits.localsock.all_success = 0;
---- LVM2/daemons/clvmd/refresh_clvmd.c	2011/09/21 13:40:46	1.16
-+++ LVM2/daemons/clvmd/refresh_clvmd.c	2012/01/21 05:31:54	1.17
-@@ -13,6 +13,8 @@
-  * Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
-  */
- 
-+/* FIXME Remove duplicated functions from this file. */
-+
- /*
-  * Send a command to a running clvmd from the command-line
-  */
-@@ -164,21 +166,16 @@
- 		*head->args = '\0';
- 	}
- 
--	if (node) {
--		/*
--		 * Allow a couple of special node names:
--		 * "*" for all nodes,
--		 * "." for the local node only
--		 */
--		if (strcmp(node, "*") == 0) {
--			head->node[0] = '\0';
--		} else if (strcmp(node, ".") == 0) {
--			head->node[0] = '\0';
--			head->flags = CLVMD_FLAG_LOCAL;
--		} else
--			strcpy(head->node, node);
--	} else
-+	/*
-+	 * Translate special node names.
-+	 */
-+	if (!node || !strcmp(node, NODE_ALL))
-+		head->node[0] = '\0';
-+	else if (!strcmp(node, NODE_LOCAL)) {
- 		head->node[0] = '\0';
-+		head->flags = CLVMD_FLAG_LOCAL;
-+	} else
-+		strcpy(head->node, node);
+diff --git a/tools/lvconvert.c b/tools/lvconvert.c
+index a3eb60b20..1c4351e9d 100644
+--- a/tools/lvconvert.c
++++ b/tools/lvconvert.c
+@@ -6070,6 +6070,69 @@ bad:
+ 	return 0;
  }
  
- /*
-@@ -298,7 +295,7 @@
- 	int status;
- 	int i;
++static int _check_writecache_memory(struct cmd_context *cmd, struct logical_volume *lv_fast,
++				     uint32_t block_size_sectors)
++{
++	char line[128];
++	FILE *fp;
++	uint64_t cachevol_size_bytes = lv_fast->size * SECTOR_SIZE;
++	uint64_t need_mem_bytes = 0;
++	uint64_t proc_mem_bytes = 0;
++	uint64_t need_mem_gb;
++	uint64_t proc_mem_gb;
++	unsigned long long proc_mem_kb = 0;
++
++	if (!(fp = fopen("/proc/meminfo", "r")))
++		goto skip_proc;
++
++	while (fgets(line, sizeof(line), fp)) {
++		if (strncmp(line, "MemTotal:", 9))
++			continue;
++		if (sscanf(line, "%*s%llu%*s", &proc_mem_kb) != 1)
++			break;
++		break;
++	}
++	(void)fclose(fp);
++
++	proc_mem_bytes = proc_mem_kb * 1024;
++
++ skip_proc:
++	/* dm-writecache memory consumption per block is 88 bytes */
++	if (block_size_sectors == 8) {
++		need_mem_bytes = cachevol_size_bytes * 88 / 4096;
++	} else if (block_size_sectors == 1) {
++		need_mem_bytes = cachevol_size_bytes * 88 / 512;
++	} else {
++		/* shouldn't happen */
++		log_warn("Unknown memory usage for unknown writecache block_size_sectors %u", block_size_sectors);
++		return 1;
++	}
++
++	need_mem_gb = need_mem_bytes / 1073741824;
++	proc_mem_gb = proc_mem_bytes / 1073741824;
++
++	/*
++	 * warn if writecache needs > 50% of main memory, and
++	 * confirm if writecache needs > 90% of main memory.
++	 */
++	if (need_mem_bytes >= (proc_mem_bytes / 2)) {
++		log_warn("WARNING: writecache size %s will use %llu GiB of system memory (%llu GiB).",
++			  display_size(cmd, lv_fast->size),
++			  (unsigned long long)need_mem_gb,
++			  (unsigned long long)proc_mem_gb);
++
++		if (need_mem_gb >= (proc_mem_gb * 9 / 10)) {
++			if (!arg_is_set(cmd, yes_ARG) &&
++			    yes_no_prompt("Continue adding writecache? [y/n]: ") == 'n') {
++				log_error("Conversion aborted.");
++				return 0;
++			}
++		}
++	}
++
++	return 1;
++}
++
+ int lvconvert_writecache_attach_single(struct cmd_context *cmd,
+ 					struct logical_volume *lv,
+ 					struct processing_handle *handle)
+@@ -6158,6 +6221,12 @@ int lvconvert_writecache_attach_single(struct cmd_context *cmd,
+ 		goto_bad;
+ 	}
  
--	status = _cluster_request(CLVMD_CMD_REFRESH, all_nodes?"*":".", args, 0, &response, &num_responses, 0);
-+	status = _cluster_request(CLVMD_CMD_REFRESH, all_nodes ? NODE_ALL : NODE_LOCAL, args, 0, &response, &num_responses, 0);
- 
- 	/* If any nodes were down then display them and return an error */
- 	for (i = 0; i < num_responses; i++) {
-@@ -329,7 +326,7 @@
- {
- 	int dummy, status;
- 
--	status = _cluster_request(CLVMD_CMD_RESTART, all_nodes?"*":".", NULL, 0, NULL, &dummy, 1);
-+	status = _cluster_request(CLVMD_CMD_RESTART, all_nodes ? NODE_ALL : NODE_LOCAL, NULL, 0, NULL, &dummy, 1);
- 
- 	/*
- 	 * FIXME: we cannot receive response, clvmd re-exec before it.
-@@ -356,9 +353,9 @@
- 
- 	args[0] = level;
- 	if (clusterwide)
--		nodes = "*";
-+		nodes = NODE_ALL;
- 	else
--		nodes = ".";
-+		nodes = NODE_LOCAL;
- 
- 	status = _cluster_request(CLVMD_CMD_SET_DEBUG, nodes, args, 1, &response, &num_responses, 0);
- 
++	if (!_check_writecache_memory(cmd, lv_fast, block_size_sectors)) {
++		if (!is_active && !deactivate_lv(cmd, lv))
++			stack;
++		goto_bad;
++	}
++
+ 	if (!is_active) {
+ 		if (!deactivate_lv(cmd, lv)) {
+ 			log_error("Failed to deactivate LV after checking block size %s", display_lvname(lv));
 
 
