@@ -1,85 +1,120 @@
 From: David Teigland <teigland@sourceware.org>
-Date: Fri,  1 Apr 2022 18:38:40 +0000 (GMT)
-Subject: main - pvscan: warn about /dev/sda excluded by devices file
-Message-ID: <20220401183840.8A2273858C83@sourceware.org>
+Date: Fri,  1 Apr 2022 18:38:38 +0000 (GMT)
+Subject: main - lvmdevices update: correct multipath entries
+Message-ID: <20220401183838.49A3E3858C83@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=f840dbb3205754db1a339aba8e0f68fa40138ba1
-Commit:        f840dbb3205754db1a339aba8e0f68fa40138ba1
-Parent:        8db3b11e4ed94974bc25c26e2f1271c34f6ccf15
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=23a9bd549a27cba63c525e7b3042a67e428c798f
+Commit:        23a9bd549a27cba63c525e7b3042a67e428c798f
+Parent:        6e22be20c66b85ee161d170571c65b0f383010e4
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Thu Mar 31 14:47:42 2022 -0500
+AuthorDate:    Wed Mar 30 16:28:35 2022 -0500
 Committer:     David Teigland <teigland@redhat.com>
 CommitterDate: Fri Apr 1 13:38:21 2022 -0500
 
-pvscan: warn about /dev/sda excluded by devices file
+lvmdevices update: correct multipath entries
 
-In most installations, /dev/sda* or /dev/vda* should be included
-in system.devices because the root, home, etc LVs are usually on
-sda or vda.
-
-Add a special case warning when a pvscan autoactivation command
-sees that /dev/sda* or /dev/vda* are excluded by system.devices,
-either not listed or having a different device id.
+Remove multipath components.
+Add multipath devs that have multipath components listed.
 ---
- tools/pvscan.c | 28 ++++++++++++++++++++++++++++
- 1 file changed, 28 insertions(+)
+ lib/filters/filter-mpath.c |  6 ++++++
+ tools/lvmdevices.c         | 43 +++++++++++++++++++++++++++++++++++++++++++
+ 2 files changed, 49 insertions(+)
 
-diff --git a/tools/pvscan.c b/tools/pvscan.c
-index cf1772165..1e47d754a 100644
---- a/tools/pvscan.c
-+++ b/tools/pvscan.c
-@@ -19,6 +19,7 @@
- #include "lib/metadata/metadata.h"
- #include "lib/label/hints.h"
- #include "lib/device/online.h"
-+#include "lib/filters/filter.h"
+diff --git a/lib/filters/filter-mpath.c b/lib/filters/filter-mpath.c
+index fc7cc51fa..854c26a7c 100644
+--- a/lib/filters/filter-mpath.c
++++ b/lib/filters/filter-mpath.c
+@@ -21,6 +21,8 @@
  
  #include <dirent.h>
  
-@@ -1435,6 +1436,27 @@ static int _pvscan_cache_all(struct cmd_context *cmd, int argc, char **argv,
- 	return 1;
- }
- 
-+/*
-+ * If /dev/sda* of /dev/vda* is excluded by the devices file
-+ * it's usually a misconfiguration that prevents proper booting,
-+ * so make it a special case to give extra info to help debugging.
-+ */
-+static void _warn_excluded_root(struct cmd_context *cmd, struct device *dev)
-+{
-+	struct dev_use *du;
-+	const char *cur_idname;
++static int _lvmdevices_update_msg;
 +
-+	if (!(du = get_du_for_devname(cmd, dev_name(dev)))) {
-+		log_warn("WARNING: no autoactivation for %s: not found in system.devices.", dev_name(dev));
-+		return;
-+	}
-+
-+	cur_idname = device_id_system_read(cmd, dev, du->idtype);
-+
-+	log_warn("WARNING: no autoactivation for %s: system.devices %s current %s.",
-+		 dev_name(dev), du->idname, cur_idname ?: "missing device id");
-+}
-+
- static int _pvscan_cache_args(struct cmd_context *cmd, int argc, char **argv,
- 			      struct dm_list *complete_vgnames)
+ static int _ignore_mpath_component(struct cmd_context *cmd, struct dev_filter *f, struct device *dev, const char *use_filter_name)
  {
-@@ -1545,6 +1567,12 @@ static int _pvscan_cache_args(struct cmd_context *cmd, int argc, char **argv,
- 			log_print_pvscan(cmd, "%s excluded: %s.",
- 					 dev_name(devl->dev), dev_filtered_reason(devl->dev));
- 			dm_list_del(&devl->list);
-+
-+			/* Special case warning when probable root dev is missing from system.devices */
-+			if ((devl->dev->filtered_flags & DEV_FILTERED_DEVICES_FILE) &&
-+			    (!strncmp(dev_name(devl->dev), "/dev/sda", 8) ||
-+			     !strncmp(dev_name(devl->dev), "/dev/vda", 8)))
-+				_warn_excluded_root(cmd, devl->dev);
+ 	dev_t mpath_devno = 0;
+@@ -41,6 +43,10 @@ static int _ignore_mpath_component(struct cmd_context *cmd, struct dev_filter *f
+ 				log_warn("WARNING: devices file is missing %s (%d:%d) using multipath component %s.",
+ 					 mpath_dev ? dev_name(mpath_dev) : "unknown",
+ 					 (int)MAJOR(mpath_devno), (int)MINOR(mpath_devno), dev_name(dev));
++				if (!_lvmdevices_update_msg && strcmp(get_cmd_name(), "lvmdevices")) {
++					log_warn("See lvmdevices --update for devices file update.");
++					_lvmdevices_update_msg = 1;
++				}
+ 			}
  		}
- 	}
  
+diff --git a/tools/lvmdevices.c b/tools/lvmdevices.c
+index 662b35f9a..d30f86b75 100644
+--- a/tools/lvmdevices.c
++++ b/tools/lvmdevices.c
+@@ -16,6 +16,7 @@
+ #include "lib/cache/lvmcache.h"
+ #include "lib/device/device_id.h"
+ #include "lib/device/dev-type.h"
++#include "lib/filters/filter.h"
+ 
+ /* coverity[unnecessary_header] needed for MuslC */
+ #include <sys/file.h>
+@@ -182,6 +183,7 @@ int lvmdevices(struct cmd_context *cmd, int argc, char **argv)
+ 	device_ids_match(cmd);
+ 
+ 	if (arg_is_set(cmd, check_ARG) || arg_is_set(cmd, update_ARG)) {
++		int update_set = arg_is_set(cmd, update_ARG);
+ 		int search_count = 0;
+ 		int update_needed = 0;
+ 		int invalid = 0;
+@@ -230,6 +232,47 @@ int lvmdevices(struct cmd_context *cmd, int argc, char **argv)
+ 		if (invalid)
+ 			update_needed = 1;
+ 
++		/*
++		 * Remove multipath components.
++		 * Add multipath devs that had components listed.
++		 */
++		dm_list_iterate_items_safe(du, du2, &cmd->use_devices) {
++			dev_t mpath_devno;
++			struct device *mpath_dev;
++
++			if (!du->dev)
++				continue;
++			dev = du->dev;
++
++			if (!(dev->filtered_flags & DEV_FILTERED_MPATH_COMPONENT))
++				continue;
++
++			/* redundant given the flag check, but used to get devno */
++			if (!dev_is_mpath_component(cmd, dev, &mpath_devno))
++				continue;
++
++			update_needed = 1;
++			if (update_set) {
++				log_print("Removing multipath component %s.", dev_name(du->dev));
++				dm_list_del(&du->list);
++			}
++
++			if (!(mpath_dev = dev_cache_get_by_devt(cmd, mpath_devno)))
++				continue;
++
++			if (!get_du_for_dev(cmd, mpath_dev)) {
++				if (update_set) {
++					log_print("Adding multipath device %s for multipath component %s.",
++						  dev_name(mpath_dev), dev_name(du->dev));
++					if (!device_id_add(cmd, mpath_dev, dev->pvid, NULL, NULL))
++						stack;
++				} else {
++					log_print("Missing multipath device %s for multipath component %s.",
++						  dev_name(mpath_dev), dev_name(du->dev));
++				}
++			}
++		}
++
+ 		/*
+ 		 * Find and fix any devname entries that have moved to a
+ 		 * renamed device.
 
