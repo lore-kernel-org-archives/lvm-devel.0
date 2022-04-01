@@ -1,115 +1,144 @@
 From: David Teigland <teigland@sourceware.org>
-Date: Mon, 23 Apr 2018 09:53:39 -0400
-Subject: master - pvremove: device check doesn't require label_read
-Message-ID: <201804231353.w3NDrdYX001231@lists01.pubmisc.prod.ext.phx2.redhat.com>
+Date: Fri,  1 Apr 2022 18:38:39 +0000 (GMT)
+Subject: main - change messages about filtered devices
+Message-ID: <20220401183839.69E4E3858C83@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=f17c2cf7c614e8f6e4ffe9b7415d628ecab61d47
-Commit:        f17c2cf7c614e8f6e4ffe9b7415d628ecab61d47
-Parent:        29c6c171217753daf5603432bcaeaed2e8dc8418
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=8db3b11e4ed94974bc25c26e2f1271c34f6ccf15
+Commit:        8db3b11e4ed94974bc25c26e2f1271c34f6ccf15
+Parent:        23a9bd549a27cba63c525e7b3042a67e428c798f
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Fri Feb 9 12:43:12 2018 -0600
+AuthorDate:    Thu Mar 31 11:38:08 2022 -0500
 Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Fri Apr 20 11:22:45 2018 -0500
+CommitterDate: Fri Apr 1 13:38:21 2022 -0500
 
-pvremove: device check doesn't require label_read
+change messages about filtered devices
 
-It just needs to check if the device was found during
-the scan, which means checking if it exists in lvmcache.
+Change messages that refer to devices being "excluded by filters"
+to say just "excluded".  This will avoid mistaking the word
+"filters" with the lvm.conf filter setting.
 ---
- lib/cache/lvmcache.c |   19 +++++++++++++++++++
- lib/cache/lvmcache.h |    2 ++
- tools/toollib.c      |   13 ++++++++-----
- 3 files changed, 29 insertions(+), 5 deletions(-)
+ lib/device/device_id.c | 6 +++---
+ lib/label/label.c      | 4 ++--
+ tools/lvmdevices.c     | 4 ++--
+ tools/pvscan.c         | 4 ++--
+ tools/vgimportclone.c  | 4 ++--
+ 5 files changed, 11 insertions(+), 11 deletions(-)
 
-diff --git a/lib/cache/lvmcache.c b/lib/cache/lvmcache.c
-index 28e46bb..87bcc37 100644
---- a/lib/cache/lvmcache.c
-+++ b/lib/cache/lvmcache.c
-@@ -2562,6 +2562,25 @@ int lvmcache_foreach_ba(struct lvmcache_info *info,
- 	return 1;
- }
+diff --git a/lib/device/device_id.c b/lib/device/device_id.c
+index fa71874d0..0f7c42f79 100644
+--- a/lib/device/device_id.c
++++ b/lib/device/device_id.c
+@@ -1777,7 +1777,7 @@ void device_ids_validate(struct cmd_context *cmd, struct dm_list *scanned_devs,
+ 		 * probably wants to do something about it.
+ 		 */
+ 		if (!cmd->filter->passes_filter(cmd, cmd->filter, dev, "persistent")) {
+-			log_warn("Devices file %s is excluded by filter: %s.",
++			log_warn("Devices file %s is excluded: %s.",
+ 				 dev_name(dev), dev_filtered_reason(dev));
+ 			continue;
+ 		}
+@@ -1863,7 +1863,7 @@ void device_ids_validate(struct cmd_context *cmd, struct dm_list *scanned_devs,
+ 			continue;
  
-+struct label *lvmcache_get_dev_label(struct device *dev)
-+{
-+	struct lvmcache_info *info;
-+
-+	if ((info = lvmcache_info_from_pvid(dev->pvid, NULL, 0))) {
-+		/* dev would be different for a duplicate */
-+		if (info->dev == dev)
-+			return info->label;
-+	}
-+	return NULL;
-+}
-+
-+int lvmcache_has_dev_info(struct device *dev)
-+{
-+	if (lvmcache_info_from_pvid(dev->pvid, NULL, 0))
-+		return 1;
-+	return 0;
-+}
-+
- /*
-  * The lifetime of the label returned is tied to the lifetime of the
-  * lvmcache_info which is the same as lvmcache itself.
-diff --git a/lib/cache/lvmcache.h b/lib/cache/lvmcache.h
-index 1856344..3967b29 100644
---- a/lib/cache/lvmcache.h
-+++ b/lib/cache/lvmcache.h
-@@ -160,6 +160,8 @@ uint32_t lvmcache_ext_flags(struct lvmcache_info *info);
+ 		if (!cmd->filter->passes_filter(cmd, cmd->filter, dev, "persistent")) {
+-			log_warn("Devices file %s is excluded by filter: %s.",
++			log_warn("Devices file %s is excluded: %s.",
+ 				 dev_name(dev), dev_filtered_reason(dev));
+ 			/* FIXME: what if this dev is wrongly matched and should be checked below? */
+ 			continue;
+@@ -2305,7 +2305,7 @@ void device_ids_find_renamed_devs(struct cmd_context *cmd, struct dm_list *dev_l
  
- const struct format_type *lvmcache_fmt(struct lvmcache_info *info);
- struct label *lvmcache_get_label(struct lvmcache_info *info);
-+struct label *lvmcache_get_dev_label(struct device *dev);
-+int lvmcache_has_dev_info(struct device *dev);
+ 		if (!cmd->filter->passes_filter(cmd, cmd->filter, dev, NULL)) {
+ 			/* I don't think this would happen */
+-			log_warn("WARNING: new device %s for PVID %s does not pass filter %s.",
++			log_warn("WARNING: new device %s for PVID %s is excluded: %s.",
+ 				 dev_name(dev), dil->pvid, dev_filtered_reason(dev));
+ 			if (du) /* Should not happen 'du' is NULL */
+ 				du->dev = NULL;
+diff --git a/lib/label/label.c b/lib/label/label.c
+index e6bc791a7..711edb6f4 100644
+--- a/lib/label/label.c
++++ b/lib/label/label.c
+@@ -1103,7 +1103,7 @@ int label_scan_vg_online(struct cmd_context *cmd, const char *vgname,
  
- void lvmcache_update_pv(struct lvmcache_info *info, struct physical_volume *pv,
- 			const struct format_type *fmt);
-diff --git a/tools/toollib.c b/tools/toollib.c
-index 1c216d8..6593195 100644
---- a/tools/toollib.c
-+++ b/tools/toollib.c
-@@ -5292,14 +5292,12 @@ static int _pvremove_check_single(struct cmd_context *cmd,
- 	 * Is there a pv here already?
- 	 * If not, this is an error unless you used -f.
+ 	dm_list_iterate_items_safe(devl, devl2, &devs) {
+ 		if (!cmd->filter->passes_filter(cmd, cmd->filter, devl->dev, NULL)) {
+-			log_print("%s excluded by filters: %s.",
++			log_print("%s excluded: %s.",
+ 				  dev_name(devl->dev), dev_filtered_reason(devl->dev));
+ 			dm_list_del(&devl->list);
+ 			dm_list_add(&devs_drop, &devl->list);
+@@ -1169,7 +1169,7 @@ int label_scan_vg_online(struct cmd_context *cmd, const char *vgname,
+ 
+ 		/* Applies all filters, including those that need data from dev. */
+ 		if (!cmd->filter->passes_filter(cmd, cmd->filter, devl->dev, NULL)) {
+-			log_print("%s excluded by filters: %s.",
++			log_print("%s excluded: %s.",
+ 				  dev_name(devl->dev), dev_filtered_reason(devl->dev));
+ 			dm_list_del(&devl->list);
+ 			dm_list_add(&devs_drop, &devl->list);
+diff --git a/tools/lvmdevices.c b/tools/lvmdevices.c
+index d30f86b75..b03411b8b 100644
+--- a/tools/lvmdevices.c
++++ b/tools/lvmdevices.c
+@@ -113,7 +113,7 @@ static void _search_devs_for_pvids(struct cmd_context *cmd, struct dm_list *sear
+ 		dev = devl->dev;
+ 		cmd->filter->wipe(cmd, cmd->filter, dev, NULL);
+ 		if (!cmd->filter->passes_filter(cmd, cmd->filter, dev, NULL)) {
+-			log_warn("WARNING: PVID %s found on %s which is excluded by filter: %s",
++			log_warn("WARNING: PVID %s found on %s which is excluded: %s",
+ 			 	  dev->pvid, dev_name(dev), dev_filtered_reason(dev));
+ 			dm_list_del(&devl->list);
+ 		}
+@@ -353,7 +353,7 @@ int lvmdevices(struct cmd_context *cmd, int argc, char **argv)
+ 		cmd->filter_deviceid_skip = 1;
+ 
+ 		if (!cmd->filter->passes_filter(cmd, cmd->filter, dev, NULL)) {
+-			log_warn("WARNING: adding device %s that is excluded by filter: %s.",
++			log_warn("WARNING: adding device %s that is excluded: %s.",
+ 				 dev_name(dev), dev_filtered_reason(dev));
+ 		}
+ 
+diff --git a/tools/pvscan.c b/tools/pvscan.c
+index db6709a5a..cf1772165 100644
+--- a/tools/pvscan.c
++++ b/tools/pvscan.c
+@@ -1542,7 +1542,7 @@ static int _pvscan_cache_args(struct cmd_context *cmd, int argc, char **argv,
+ 
+ 	dm_list_iterate_items_safe(devl, devl2, &pvscan_devs) {
+ 		if (!cmd->filter->passes_filter(cmd, cmd->filter, devl->dev, NULL)) {
+-			log_print_pvscan(cmd, "%s excluded by filters: %s.",
++			log_print_pvscan(cmd, "%s excluded: %s.",
+ 					 dev_name(devl->dev), dev_filtered_reason(devl->dev));
+ 			dm_list_del(&devl->list);
+ 		}
+@@ -1599,7 +1599,7 @@ static int _pvscan_cache_args(struct cmd_context *cmd, int argc, char **argv,
+ 
+ 		/* Applies all filters, including those that need data from dev. */
+ 		if (!cmd->filter->passes_filter(cmd, cmd->filter, devl->dev, NULL)) {
+-			log_print_pvscan(cmd, "%s excluded by filters: %s.",
++			log_print_pvscan(cmd, "%s excluded: %s.",
+ 					 dev_name(devl->dev), dev_filtered_reason(devl->dev));
+ 			dm_list_del(&devl->list);
+ 		}
+diff --git a/tools/vgimportclone.c b/tools/vgimportclone.c
+index 23bb6271f..cab501619 100644
+--- a/tools/vgimportclone.c
++++ b/tools/vgimportclone.c
+@@ -311,8 +311,8 @@ int vgimportclone(struct cmd_context *cmd, int argc, char **argv)
  	 */
--	if (!label_read(pd->dev, &label, 0)) {
-+	if (!lvmcache_has_dev_info(pv->dev)) {
- 		if (pp->force) {
- 			dm_list_move(&pp->arg_process, &pd->list);
- 			return 1;
- 		} else {
--			log_error("No PV label found on %s.", pd->name);
--			dm_list_move(&pp->arg_fail, &pd->list);
--			return 1;
-+			pd->is_not_pv = 1;
+ 	dm_list_iterate_items(devl, &vp.new_devs) {
+ 		if (!cmd->filter->passes_filter(cmd, cmd->filter, devl->dev, "persistent")) {
+-			/* FIXME: print which filter */
+-			log_error("Device %s was excluded by filters.", dev_name(devl->dev));
++			log_error("Device %s is excluded: %s.",
++				  dev_name(devl->dev), dev_filtered_reason(devl->dev));
+ 			goto out;
  		}
  	}
- 
-@@ -5308,7 +5306,11 @@ static int _pvremove_check_single(struct cmd_context *cmd,
- 	 * device, a PV used in a VG.
- 	 */
- 
--	if (vg && !is_orphan_vg(vg->name)) {
-+	if (pd->is_not_pv) {
-+		/* Device is not a PV. */
-+		log_debug("Found pvremove arg %s: device is not a PV.", pd->name);
-+
-+	} else if (vg && !is_orphan_vg(vg->name)) {
- 		/* Device is a PV used in a VG. */
- 		log_debug("Found pvremove arg %s: pv is used in %s.", pd->name, vg->name);
- 		pd->is_vg_pv = 1;
-@@ -5330,6 +5332,7 @@ static int _pvremove_check_single(struct cmd_context *cmd,
- 		else
- 			pp->orphan_vg_name = FMT_TEXT_ORPHAN_VG_NAME;
- 	} else {
-+		/* FIXME: is it possible to reach here? */
- 		log_debug("Found pvremove arg %s: device is not a PV.", pd->name);
- 		/* Device is not a PV. */
- 		pd->is_not_pv = 1;
-
 
