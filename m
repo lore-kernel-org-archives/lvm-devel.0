@@ -1,73 +1,98 @@
-From: Tony Asleson <tasleson@sourceware.org>
-Date: Wed, 30 Oct 2019 11:45:49 -0400
-Subject: master - lvmdbusd: Debug msg. improvements.
-Message-ID: <201910301545.x9UFjnT1017006@lists01.pubmisc.prod.ext.phx2.redhat.com>
+From: Marian Csontos <mcsontos@sourceware.org>
+Date: Wed, 18 May 2022 16:26:17 +0000 (GMT)
+Subject: v2_03_16 annotated tag has been created
+Message-ID: <20220518162617.3F8653858016@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=1bbf97757736b49065bd6944d36e7a6db6f3aa7e
-Commit:        1bbf97757736b49065bd6944d36e7a6db6f3aa7e
-Parent:        4dcb36aba4160ffe9ae90c93642e717e813e4779
-Author:        Tony Asleson <tasleson@redhat.com>
-AuthorDate:    Fri Oct 11 10:46:22 2019 -0500
-Committer:     Tony Asleson <tasleson@redhat.com>
-CommitterDate: Wed Oct 30 10:38:40 2019 -0500
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=82b36d78165764dda7d44d104737a95054348a02
+Commit:        82b36d78165764dda7d44d104737a95054348a02
+Parent:        0000000000000000000000000000000000000000
+Author:        Marian Csontos <mcsontos@redhat.com>
+AuthorDate:    2022-05-18 16:21 +0000
+Committer:     Marian Csontos <mcsontos@redhat.com>
+CommitterDate: 2022-05-18 16:21 +0000
 
-lvmdbusd: Debug msg. improvements.
+annotated tag: v2_03_16 has been created
+	    at 82b36d78165764dda7d44d104737a95054348a02 (tag)
+       tagging 6d1e894a867681af7a811ed63bc435f3aa55fec8 (commit)
+      replaces v2_03_15
 
----
- daemons/lvmdbusd/main.py    |   10 +++++-----
- daemons/lvmdbusd/manager.py |    4 ++--
- 2 files changed, 7 insertions(+), 7 deletions(-)
+Release 2.03.16
 
-diff --git a/daemons/lvmdbusd/main.py b/daemons/lvmdbusd/main.py
-index 9988143..b0a82d4 100644
---- a/daemons/lvmdbusd/main.py
-+++ b/daemons/lvmdbusd/main.py
-@@ -44,10 +44,10 @@ def process_request():
- 		try:
- 			req = cfg.worker_q.get(True, 5)
- 			log_debug(
--				"Running method: %s with args %s" %
--				(str(req.method), str(req.arguments)))
-+				"Method start: %s with args %s (callback = %s)" %
-+				(str(req.method), str(req.arguments), str(req.cb)))
- 			req.run_cmd()
--			log_debug("Method complete ")
-+			log_debug("Method complete: %s" % str(req.method))
- 		except queue.Empty:
- 			pass
- 		except Exception:
-@@ -159,8 +159,8 @@ def main():
- 
- 	# Using a thread to process requests, we cannot hang the dbus library
- 	# thread that is handling the dbus interface
--	thread_list.append(threading.Thread(target=process_request,
--										name='process_request'))
-+	thread_list.append(
-+		threading.Thread(target=process_request, name='process_request'))
- 
- 	# Have a single thread handling updating lvm and the dbus model so we
- 	# don't have multiple threads doing this as the same time
-diff --git a/daemons/lvmdbusd/manager.py b/daemons/lvmdbusd/manager.py
-index 8de05db..2857e9a 100644
---- a/daemons/lvmdbusd/manager.py
-+++ b/daemons/lvmdbusd/manager.py
-@@ -107,10 +107,10 @@ class Manager(AutomatedProperties):
- 		rc = cfg.load(log=False)
- 
- 		if rc != 0:
--			utils.log_debug('Manager.Refresh - exit %d' % (rc),
-+			utils.log_debug('Manager.Refresh - exit %d %d' % (rc, lc),
- 							'bg_black', 'fg_light_red')
- 		else:
--			utils.log_debug('Manager.Refresh - exit %d' % (rc))
-+			utils.log_debug('Manager.Refresh - exit %d %d' % (rc, lc))
- 		return rc + lc
- 
- 	@dbus.service.method(
+Mostly bug fixes and minor improvements.
+-----BEGIN PGP SIGNATURE-----
 
+iQJIBAABCAAyFiEE1QGkeEQK4v0TChvouREkMeUJA58FAmKFHY4UHG1jc29udG9z
+QHJlZGhhdC5jb20ACgkQuREkMeUJA5+hpA//cpgNtNuGOD1cqIS9i6JkPNwJy4TI
+HbCMqJDQqQjeOGIj/8GTnMYwvbSAgZrRL+fITvrVu24EBj7yzRvFhn0+zr6WlTAF
+5MHMiRkWPzf/dZjhSMNV5XGlC1anuUBqIkRmtO5BGowPnm5ve/OH5dhGiOPdzI9m
+riIWX9ZnXhjKwkXA+ovpczYbkABoahL4Of2WxReiPEAWnXBzCO2X7TQWrvZxbEzk
+4s5aewphB14oEY8xnJAbt9M+te+gWk+IKmN8dCWURcPSj5zMkjW/iuDMKJee7e9o
+rsYGeZJrXQCz20HfjGdtnKJMEYbEslKYOiayGBQeKLf+AIwuSOxG1zv7mSuE9MtA
+HnMDwRik9S2YkpmntdTRKzjJTC2QzbAdgZ+ywdL7Xq/qTPc4rrOYfTVMSbylo28j
+LZRb4hOcIeqCRv0j4Y4sazyDw1GfGcW5TrDQ/4ddWDyU+FNjCoC4BQbHdr9dxYiO
+9SnAgMtbOJ25A9MnjRiq0+8+YJ4rIKo+Kp72a+v3SZI5Q+S17PiWIKtKMfWMkylb
+pRaAOGLo717uqEk8pMFCgCiGhuclXZUwFWNzWbJ7c1EE6xGMZP5DJjsWxPAiPhWu
+t6b1R6XrfcxwXHEbzWPjKGCpHTjgKJNaxN8HrZtvqpBQhdJ0vq/w7q/Abl3Dj5cH
+jwQ85DHUtcVrfno=
+=GbW6
+-----END PGP SIGNATURE-----
+
+David Teigland (31):
+      tests: udev-pvscan-vgchange fix service wait
+      devices file: do not clear PVID of unread devices
+      tests: skip vgchange-pvs-online.sh on rhel5
+      man lvmcache: add more writecache cachesettings info
+      man: update cachesettings option description
+      man lvmcache: mention writecache memory usage
+      writecache: display block size from lvs
+      devices: simplify dev_cache_get_by_devt
+      devices: drop incorrect paths from aliases list
+      devices: initial use of existing option
+      devices: fix dev_name assumptions
+      devices: use dev-cache aliases handling from label scan functions
+      devices: only close PVs on LVs when scan_lvs is enabled
+      writecache: check memory usage
+      pvscan: don't use udev for external device info
+      vgchange monitor: don't use udev info
+      Move nolocking warning to man page
+      fix args entry for nolocking
+      devices file: warn about missing multipath entry
+      lvmdevices update: correct multipath entries
+      change messages about filtered devices
+      pvscan: warn about /dev/sda excluded by devices file
+      vgimportdevices: fix incorrect deviceidtype usage
+      lvmdevices: --deldev using device id
+      filter: remove unused EAGAIN case and flag
+      filters: remove unused internal filter
+      lvmlockd: return error from vgcreate init_vg_sanlock
+      devices file: remove extraneous unlock in vgchange -u
+      tests: devicesfile-edit.sh fix loop file name
+      filter-mpath: use multipath blacklist
+      improve description of devices option
+
+Marian Csontos (3):
+      post-release
+      make: generate
+      pre-release
+
+Peter Rajnoha (1):
+      toollib: fix segfault when handling selection with historical LVs
+
+Zdenek Kabelac (11):
+      asan: fix some reports from libasan
+      make: generate
+      dev_manager: fix dm_task_get_device_list
+      dev_manager: failing status is not internal error
+      clang: add extra check
+      clang: possible better compilation with musl c
+      dev_manager: do not query for open_count
+      dev_manager: use list info for preset devs
+      thin: fix message processing on thin-pool extension
+      vdo: support --vdosettings
+      make: generate
 
