@@ -1,60 +1,65 @@
 From: David Teigland <teigland@sourceware.org>
-Date: Fri, 27 May 2022 17:40:29 +0000 (GMT)
-Subject: main - devices file: move clean up after command is run
-Message-ID: <20220527174029.E9AF038418A8@sourceware.org>
+Date: Fri, 27 May 2022 19:30:24 +0000 (GMT)
+Subject: main - devices file: fail if --devicesfile filename doesn't exist
+Message-ID: <20220527193024.785933827990@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=9dfa6f38793f6b5f7de2a4148ab2f7790e3c39da
-Commit:        9dfa6f38793f6b5f7de2a4148ab2f7790e3c39da
-Parent:        a30013ff4f5981afd7778597172e0e834ca99cd4
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=bfe072e4388b530cbf5369be8a8f1305220198bf
+Commit:        bfe072e4388b530cbf5369be8a8f1305220198bf
+Parent:        9dfa6f38793f6b5f7de2a4148ab2f7790e3c39da
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Fri May 27 12:38:43 2022 -0500
+AuthorDate:    Fri May 27 14:27:03 2022 -0500
 Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Fri May 27 12:38:43 2022 -0500
+CommitterDate: Fri May 27 14:27:03 2022 -0500
 
-devices file: move clean up after command is run
+devices file: fail if --devicesfile filename doesn't exist
 
-devices_file_exit wasn't being called between lvm_shell
-commands, so the file lock wouldn't be released.
+A typo of the filename after --devicesfile should result in a
+command error rather than the command falling back to using no
+devices file at all.  Exception is vgcreate|pvcreate which
+create a new devices file if the file name doesn't exist.
 ---
- lib/commands/toolcontext.c | 2 --
- tools/lvmcmdline.c         | 1 +
- 2 files changed, 1 insertion(+), 2 deletions(-)
+ lib/device/dev-cache.c          | 9 +++++++++
+ test/shell/devicesfile-basic.sh | 4 ++++
+ 2 files changed, 13 insertions(+)
 
-diff --git a/lib/commands/toolcontext.c b/lib/commands/toolcontext.c
-index 4cb81bf94..2666d7b42 100644
---- a/lib/commands/toolcontext.c
-+++ b/lib/commands/toolcontext.c
-@@ -1905,7 +1905,6 @@ int refresh_toolcontext(struct cmd_context *cmd)
- 	_destroy_segtypes(&cmd->segtypes);
- 	_destroy_formats(cmd, &cmd->formats);
+diff --git a/lib/device/dev-cache.c b/lib/device/dev-cache.c
+index 3aaf6a2e5..ed9c726c9 100644
+--- a/lib/device/dev-cache.c
++++ b/lib/device/dev-cache.c
+@@ -1863,6 +1863,15 @@ int setup_devices(struct cmd_context *cmd)
  
--	devices_file_exit(cmd);
- 	if (!dev_cache_exit())
- 		stack;
- 	_destroy_dev_types(cmd);
-@@ -2034,7 +2033,6 @@ void destroy_toolcontext(struct cmd_context *cmd)
- 	_destroy_segtypes(&cmd->segtypes);
- 	_destroy_formats(cmd, &cmd->formats);
- 	_destroy_filters(cmd);
--	devices_file_exit(cmd);
- 	dev_cache_exit();
- 	_destroy_dev_types(cmd);
- 	_destroy_tags(cmd);
-diff --git a/tools/lvmcmdline.c b/tools/lvmcmdline.c
-index 1e3547ed7..b052d698f 100644
---- a/tools/lvmcmdline.c
-+++ b/tools/lvmcmdline.c
-@@ -3305,6 +3305,7 @@ int lvm_run_command(struct cmd_context *cmd, int argc, char **argv)
- 	hints_exit(cmd);
- 	lvmcache_destroy(cmd, 1, 1);
- 	label_scan_destroy(cmd);
-+	devices_file_exit(cmd);
+ 	file_exists = devices_file_exists(cmd);
  
- 	if ((config_string_cft = remove_config_tree_by_source(cmd, CONFIG_STRING)))
- 		dm_config_destroy(config_string_cft);
++	/*
++	 * Fail if user specifies a file name that doesn't exist and
++	 * the command is not creating a new devices file.
++	 */
++	if (!file_exists && !cmd->create_edit_devices_file && cmd->devicesfile && strlen(cmd->devicesfile)) {
++		log_error("Devices file not found: %s", cmd->devices_file_path);
++		return 0;
++	}
++
+ 	/*
+ 	 * Removing the devices file is another way of disabling the use of
+ 	 * a devices file, unless the command creates the devices file.
+diff --git a/test/shell/devicesfile-basic.sh b/test/shell/devicesfile-basic.sh
+index 9c3455c76..77fe265a0 100644
+--- a/test/shell/devicesfile-basic.sh
++++ b/test/shell/devicesfile-basic.sh
+@@ -104,6 +104,10 @@ not ls "$DFDIR/system.devices"
+ vgs --devicesfile test.devices $vg1
+ not vgs --devicesfile test.devices $vg2
+ 
++# misspelled override name fails
++not vgs --devicesfile doesnotexist $vg1
++not vgs --devicesfile doesnotexist $vg2
++
+ # devicesfile and devices cannot be used together
+ not vgs --devicesfile test.devices --devices "$dev1","$dev1" $vg1
+ 
 
