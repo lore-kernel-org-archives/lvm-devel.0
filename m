@@ -1,82 +1,60 @@
-From: Lakshmi Narasimhan Sundararajan <lsundararajan@purestorage.com>
-Date: Fri, 20 May 2022 22:02:56 +0530
-Subject: Reg cache target
-In-Reply-To: <CAFe+wq1P-z94VTvfNnvCmC9f1KY4MEvkp5wO6MMVb-_1C86Grg@mail.gmail.com>
-References: <CAFe+wq1P-z94VTvfNnvCmC9f1KY4MEvkp5wO6MMVb-_1C86Grg@mail.gmail.com>
-Message-ID: <CAFe+wq3PSgfqfsR7Y5f7sntg-SAGf6cy622TtQvRAk3A2uG2KQ@mail.gmail.com>
+From: David Teigland <teigland@sourceware.org>
+Date: Fri, 27 May 2022 17:40:29 +0000 (GMT)
+Subject: main - devices file: move clean up after command is run
+Message-ID: <20220527174029.E9AF038418A8@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On Fri, May 20, 2022 at 9:45 AM Lakshmi Narasimhan Sundararajan <
-lsundararajan@purestorage.com> wrote:
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=9dfa6f38793f6b5f7de2a4148ab2f7790e3c39da
+Commit:        9dfa6f38793f6b5f7de2a4148ab2f7790e3c39da
+Parent:        a30013ff4f5981afd7778597172e0e834ca99cd4
+Author:        David Teigland <teigland@redhat.com>
+AuthorDate:    Fri May 27 12:38:43 2022 -0500
+Committer:     David Teigland <teigland@redhat.com>
+CommitterDate: Fri May 27 12:38:43 2022 -0500
 
-> Hi Team!
-> A very good day to you.
->
-> I have a lvm cache setup with 14TB cache on a origin device that is 110TB.
-> The cache was configured with 1MB cache blocks, and 100MB migration
-> bandwidth/smq policy/writeback. This setup has a large memory and high cpu
-> count, so we relaxed the allocation/cache_pool_max_chunks to
-> accommodate this. The setup was stable until the cache got full of dirty
-> blocks.
-> Under some cases, cache target seems to block submitted IO and only do
-> migration and all IO that's incoming seems to be very slow.
-> Does the cache target have a scenario where this may happen when the cache
-> is full of dirty blocks?
->
-> It looks like the migration bandwidth was underprovisioned as the cache
-> got full of dirty blocks. Now I am trying to flush the cache and bring down
-> the dirty block count on a live setup. Below are some options I tried and
-> would like feedback to know what's the best way to bring down the dirty
-> blocks without taking down the node.
->
->
-> 1/ increase migration threshold to a larger value 1600 MB.
-> 2/ change cache policy to cleaner
->
-> Do these change take effect on the fly?
-> I do not seem to see the dirty block count drop significantly.
->
-> Can you please point me how to bring down the dirty block count
-> immediately on a live setup?
->
+devices file: move clean up after command is run
 
-More findings from the scenario.
-Cache is currently configured at cleaner policy, 1600MBps migration
-bandwidth, writeback mode.
+devices_file_exit wasn't being called between lvm_shell
+commands, so the file lock wouldn't be released.
+---
+ lib/commands/toolcontext.c | 2 --
+ tools/lvmcmdline.c         | 1 +
+ 2 files changed, 1 insertion(+), 2 deletions(-)
 
-Now in this state, it looks like the cache is still accumulating newer
-writes within. Can this be confirmed?
-Q: Does writeback cache still accumulate newer writes while in cleaner
-policy? Does it only accumulate write overwrites for existing block in
-cache?
-Or does it only accumulate write overwrites on dirty block only in cache?
+diff --git a/lib/commands/toolcontext.c b/lib/commands/toolcontext.c
+index 4cb81bf94..2666d7b42 100644
+--- a/lib/commands/toolcontext.c
++++ b/lib/commands/toolcontext.c
+@@ -1905,7 +1905,6 @@ int refresh_toolcontext(struct cmd_context *cmd)
+ 	_destroy_segtypes(&cmd->segtypes);
+ 	_destroy_formats(cmd, &cmd->formats);
+ 
+-	devices_file_exit(cmd);
+ 	if (!dev_cache_exit())
+ 		stack;
+ 	_destroy_dev_types(cmd);
+@@ -2034,7 +2033,6 @@ void destroy_toolcontext(struct cmd_context *cmd)
+ 	_destroy_segtypes(&cmd->segtypes);
+ 	_destroy_formats(cmd, &cmd->formats);
+ 	_destroy_filters(cmd);
+-	devices_file_exit(cmd);
+ 	dev_cache_exit();
+ 	_destroy_dev_types(cmd);
+ 	_destroy_tags(cmd);
+diff --git a/tools/lvmcmdline.c b/tools/lvmcmdline.c
+index 1e3547ed7..b052d698f 100644
+--- a/tools/lvmcmdline.c
++++ b/tools/lvmcmdline.c
+@@ -3305,6 +3305,7 @@ int lvm_run_command(struct cmd_context *cmd, int argc, char **argv)
+ 	hints_exit(cmd);
+ 	lvmcache_destroy(cmd, 1, 1);
+ 	label_scan_destroy(cmd);
++	devices_file_exit(cmd);
+ 
+ 	if ((config_string_cft = remove_config_tree_by_source(cmd, CONFIG_STRING)))
+ 		dm_config_destroy(config_string_cft);
 
-And if yes, does reconfiguring cache to writethrough mode make sense with
-cleaner policy, to allow continual IO flush and maintaining data
-consistency for those in-flight dirty blocks?
-
-Q: It looks like when writethrough gets configured with dirty blocks, the
-cli waits until flush gets complete before applying writethrough.
-In my situation, this may take a very long time to drain. How can I ensure
-cache does not accumulate any newer writes but only drain all dirty data.
-
-Please help me understand behavior in the above situation.
-
-Regards
-LN
-
-
-
->
-> Thanks for your help.
-> Regards
-> LN
->
->
--------------- next part --------------
-An HTML attachment was scrubbed...
-URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20220520/91192f03/attachment.htm>
