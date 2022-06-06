@@ -1,65 +1,90 @@
-From: David Teigland <teigland@sourceware.org>
-Date: Mon,  6 Jun 2022 16:43:07 +0000 (GMT)
-Subject: main - filter-mpath: handle other wwid types in blacklist
-Message-ID: <20220606164307.D4E3D3857B9A@sourceware.org>
+From: Lakshmi Narasimhan Sundararajan <lsundararajan@purestorage.com>
+Date: Mon, 6 Jun 2022 18:31:53 +0530
+Subject: lvmthin with dedicated lvols for data/md
+In-Reply-To: <b269f0e9-f2a1-f89d-62ee-766d99dee45b@redhat.com>
+References: <CAFe+wq0kVFovJP7YdkJ3yY0oqdSAHM-St_LbbUFN2dNx6V6gAA@mail.gmail.com>
+ <CAFe+wq1xiT7TQyy9CPmgtseZ_0+umaNLEXkJC9vXW9xCZDY5pA@mail.gmail.com>
+ <b269f0e9-f2a1-f89d-62ee-766d99dee45b@redhat.com>
+Message-ID: <CAFe+wq2C4CcGVbK=4Z34Lr7EEXg6Dnbbgk9vDoW3Z4y4t4hovQ@mail.gmail.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=c302903dbab1d5fd05b344c654bed83c9ecb69f8
-Commit:        c302903dbab1d5fd05b344c654bed83c9ecb69f8
-Parent:        bfe072e4388b530cbf5369be8a8f1305220198bf
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Mon Jun 6 11:39:02 2022 -0500
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Mon Jun 6 11:39:02 2022 -0500
+On Mon, Jun 6, 2022 at 2:30 PM Zdenek Kabelac <zkabelac@redhat.com> wrote:
 
-filter-mpath: handle other wwid types in blacklist
+> Dne 06. 06. 22 v 6:18 Lakshmi Narasimhan Sundararajan napsal(a):
+> > I found the reason for the above behavior.
+> > For the benefit of anyone looking into this, there is an internal spare
+> > volume for metadata that gets created.
+> > So using 50%PVS for the metadata volume will create a spare of equal
+> size.
+>
+>
+> Correct -  _pmspare volume is created together with the first pool in VG
+> and
+> should have be always the max size of any metadata volume in this VG. But
+> you
+> could use '---poolmetadataspare n' if you want to handle recovery yourself
+> (and you could also 'lvremove' such _pmspare LV at any time.
+>
+> It's worth to note max size of metadata LV is ~16GiB.
+>
+> >
+> > My one follow up question to experts here would be, what happens when in
+> > future metadata volume gets full.
+> > Should both the spare and metadata volume be extended equally?
+>
+>
+> Yes - lvm2 tries to extend '_pmspare' if it's possible to match biggest
+> metadata LV in VG.
+>
+>
 
-Fixes commit 494372b4eed0c8f6040e3357939eb7511ac25745
-  "filter-mpath: use multipath blacklist"
-to handle wwids with initial type digits 1 and 2 used
-for t10 and eui ids.  Originally recognized type 3 naa.
----
- lib/device/dev-mpath.c | 11 ++++++-----
- 1 file changed, 6 insertions(+), 5 deletions(-)
+Is there loss in functionality if the pmspare lvol is smaller than meta
+volume?
+Like in the usecase I mentioned above, where there was space to extend
+metadata volume, but none for the pmspare lvol.
 
-diff --git a/lib/device/dev-mpath.c b/lib/device/dev-mpath.c
-index 270366ad7..846f6c8ba 100644
---- a/lib/device/dev-mpath.c
-+++ b/lib/device/dev-mpath.c
-@@ -54,7 +54,7 @@ static void _read_blacklist_file(const char *path)
- 	int section_black = 0;
- 	int section_exceptions = 0;
- 	int found_quote;
--	int found_three;
-+	int found_type;
- 	int i, j;
- 
- 	if (!(fp = fopen(path, "r")))
-@@ -114,7 +114,7 @@ static void _read_blacklist_file(const char *path)
- 
- 		memset(wwid, 0, sizeof(wwid));
- 		found_quote = 0;
--		found_three = 0;
-+		found_type = 0;
- 		j = 0;
- 
- 		for (; i < MAX_WWID_LINE; i++) {
-@@ -132,9 +132,10 @@ static void _read_blacklist_file(const char *path)
- 			/* second quote is end of wwid */
- 			if ((line[i] == '"') && found_quote)
- 				break;
--			/* ignore first "3" in wwid */
--			if ((line[i] == '3') && !found_three) {
--				found_three = 1;
-+			/* exclude initial 3/2/1 for naa/eui/t10 */
-+			if (!j && !found_type &&
-+			    ((line[i] == '3') || (line[i] == '2') || (line[i] == '1'))) {
-+				found_type = 1;
- 				continue;
- 			}
- 
+Please clarify.
 
+LN
+
+
+
+
+
+>
+> > Currently I see that one can extend the metadata volume independently,
+> this
+> > leaves the spare volume with the original capacity.
+> > Will such differing sized volume for metadata and spare leave recovery
+> useless?
+> > Please suggest the correct approach to resizing metadata volumes.
+>
+>
+> pmspare is useful for 'recovery' cases - i.e. you need a new LV to repair
+> metadata (as there is no 'in-place' recovery) .
+>
+>
+> >   [pxpool_tdata]  test Twi-ao---- <9.99g
+> >   [pxpool_tmeta]  test ewi-ao---- <4.66g
+>
+>
+> Your 'meta' size is certainly too big for your 'data' size - the main idea
+> is
+> that metadata LV is a small fraction of data size, but once you get
+> familiar
+> with thinpool - you will most likely figure this out.
+>
+> Regards
+>
+>
+> Zdenek
+>
+>
+>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20220606/6533ee5b/attachment.htm>
