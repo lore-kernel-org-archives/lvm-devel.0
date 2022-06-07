@@ -1,90 +1,90 @@
-From: Lakshmi Narasimhan Sundararajan <lsundararajan@purestorage.com>
-Date: Mon, 6 Jun 2022 18:31:53 +0530
-Subject: lvmthin with dedicated lvols for data/md
-In-Reply-To: <b269f0e9-f2a1-f89d-62ee-766d99dee45b@redhat.com>
-References: <CAFe+wq0kVFovJP7YdkJ3yY0oqdSAHM-St_LbbUFN2dNx6V6gAA@mail.gmail.com>
- <CAFe+wq1xiT7TQyy9CPmgtseZ_0+umaNLEXkJC9vXW9xCZDY5pA@mail.gmail.com>
- <b269f0e9-f2a1-f89d-62ee-766d99dee45b@redhat.com>
-Message-ID: <CAFe+wq2C4CcGVbK=4Z34Lr7EEXg6Dnbbgk9vDoW3Z4y4t4hovQ@mail.gmail.com>
+From: Zdenek Kabelac <zkabelac@sourceware.org>
+Date: Tue,  7 Jun 2022 15:15:54 +0000 (GMT)
+Subject: main - vdo: fix conversion of vdo_slab_size_mb
+Message-ID: <20220607151554.2156538133EC@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On Mon, Jun 6, 2022 at 2:30 PM Zdenek Kabelac <zkabelac@redhat.com> wrote:
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=1b070f366ba57a6eb24df03241284732db5047e9
+Commit:        1b070f366ba57a6eb24df03241284732db5047e9
+Parent:        c302903dbab1d5fd05b344c654bed83c9ecb69f8
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Tue May 31 22:48:38 2022 +0200
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Tue Jun 7 17:14:08 2022 +0200
 
-> Dne 06. 06. 22 v 6:18 Lakshmi Narasimhan Sundararajan napsal(a):
-> > I found the reason for the above behavior.
-> > For the benefit of anyone looking into this, there is an internal spare
-> > volume for metadata that gets created.
-> > So using 50%PVS for the metadata volume will create a spare of equal
-> size.
->
->
-> Correct -  _pmspare volume is created together with the first pool in VG
-> and
-> should have be always the max size of any metadata volume in this VG. But
-> you
-> could use '---poolmetadataspare n' if you want to handle recovery yourself
-> (and you could also 'lvremove' such _pmspare LV at any time.
->
-> It's worth to note max size of metadata LV is ~16GiB.
->
-> >
-> > My one follow up question to experts here would be, what happens when in
-> > future metadata volume gets full.
-> > Should both the spare and metadata volume be extended equally?
->
->
-> Yes - lvm2 tries to extend '_pmspare' if it's possible to match biggest
-> metadata LV in VG.
->
->
+vdo: fix conversion of vdo_slab_size_mb
 
-Is there loss in functionality if the pmspare lvol is smaller than meta
-volume?
-Like in the usecase I mentioned above, where there was space to extend
-metadata volume, but none for the pmspare lvol.
+When converting VDO volume, the parameter vdo_slabSize was
+incorrectly copied as vdo_blockMapCacheSize, however this parameter
+is then no longer used for any table line creation so the wrong
+value was only stored in metadata.
 
-Please clarify.
+Also use just single get_kb_size_with_unit_ and remove it's duplicate
+functionality with get_mb_size_with_unit_.
 
-LN
+Use $VERB for vdo remove call.
+---
+ WHATS_NEW                 |  1 +
+ scripts/lvm_import_vdo.sh | 15 +++------------
+ 2 files changed, 4 insertions(+), 12 deletions(-)
 
+diff --git a/WHATS_NEW b/WHATS_NEW
+index 844f69084..fed5faedc 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.03.17 - 
+ ===============================
++ Fix vdo_slab_size_mb value for converted VDO volume.
+ 
+ Version 2.03.16 - 18th May 2022
+ ===============================
+diff --git a/scripts/lvm_import_vdo.sh b/scripts/lvm_import_vdo.sh
+index d01766743..c10b3b050 100755
+--- a/scripts/lvm_import_vdo.sh
++++ b/scripts/lvm_import_vdo.sh
+@@ -125,15 +125,6 @@ get_kb_size_with_unit_() {
+ 	esac
+ }
+ 
+-get_mb_size_with_unit_() {
+-	case "$1" in
+-	*[mM]) echo $(( ${1%[mM]} )) ;;
+-	*[gG]) echo $(( ${1%[gG]} * 1024 )) ;;
+-	*[tT]) echo $(( ${1%[tT]} * 1024 * 1024 )) ;;
+-	*[pP]) echo $(( ${1%[pP]} * 1024 * 1024 * 1024 )) ;;
+-	esac
+-}
+-
+ # Figure out largest possible extent size usable for VG
+ # $1   physical size
+ # $2   logical size
+@@ -328,12 +319,12 @@ allocation {
+ 	vdo_use_deduplication = $(get_enabled_value_ "$vdo_deduplication")
+ 	vdo_use_metadata_hints=1
+ 	vdo_minimum_io_size = $vdo_logicalBlockSize
+-	vdo_block_map_cache_size_mb = $(get_mb_size_with_unit_ "$vdo_blockMapCacheSize")
++	vdo_block_map_cache_size_mb = $(( $(get_kb_size_with_unit_ "$vdo_blockMapCacheSize") / 1024 ))
+ 	vdo_block_map_period = $vdo_blockMapPeriod
+ 	vdo_check_point_frequency = $vdo_indexCfreq
+ 	vdo_use_sparse_index = $(get_enabled_value_ "$vdo_indexSparse")
+ 	vdo_index_memory_size_mb = $(awk "BEGIN {print $vdo_indexMemory * 1024}")
+-	vdo_slab_size_mb = $(get_mb_size_with_unit_ "$vdo_blockMapCacheSize")
++	vdo_slab_size_mb = $(( $(get_kb_size_with_unit_ "$vdo_blockMapCacheSize") / 1024 ))
+ 	vdo_ack_threads = $vdo_ackThreads
+ 	vdo_bio_threads = $vdo_bioThreads
+ 	vdo_bio_rotation = $vdo_bioRotationInterval
+@@ -417,7 +408,7 @@ EOF
+ 	# Note: that this is spelled OPPOSITE the other $IS_LV checks.
+ 	if [ "$IS_LV" = "1" ]; then
+ 		verbose "Removing now-unused VDO entry from VDO config."
+-		dry "$VDO" remove $VDOCONF --force --verbose --name "$VDONAME"
++		dry "$VDO" remove $VDOCONF $VERB --force --name "$VDONAME"
+ 	fi
+ 
+ 	rm -fr "$TEMPDIR"
 
-
-
-
->
-> > Currently I see that one can extend the metadata volume independently,
-> this
-> > leaves the spare volume with the original capacity.
-> > Will such differing sized volume for metadata and spare leave recovery
-> useless?
-> > Please suggest the correct approach to resizing metadata volumes.
->
->
-> pmspare is useful for 'recovery' cases - i.e. you need a new LV to repair
-> metadata (as there is no 'in-place' recovery) .
->
->
-> >   [pxpool_tdata]  test Twi-ao---- <9.99g
-> >   [pxpool_tmeta]  test ewi-ao---- <4.66g
->
->
-> Your 'meta' size is certainly too big for your 'data' size - the main idea
-> is
-> that metadata LV is a small fraction of data size, but once you get
-> familiar
-> with thinpool - you will most likely figure this out.
->
-> Regards
->
->
-> Zdenek
->
->
->
--------------- next part --------------
-An HTML attachment was scrubbed...
-URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20220606/6533ee5b/attachment.htm>
