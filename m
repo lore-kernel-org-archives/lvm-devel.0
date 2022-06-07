@@ -1,90 +1,406 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Tue,  7 Jun 2022 15:15:54 +0000 (GMT)
-Subject: main - vdo: fix conversion of vdo_slab_size_mb
-Message-ID: <20220607151554.2156538133EC@sourceware.org>
+Date: Tue,  7 Jun 2022 15:15:55 +0000 (GMT)
+Subject: main - tests: add lvm_vdo_wrapper
+Message-ID: <20220607151555.40FE438133EC@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=1b070f366ba57a6eb24df03241284732db5047e9
-Commit:        1b070f366ba57a6eb24df03241284732db5047e9
-Parent:        c302903dbab1d5fd05b344c654bed83c9ecb69f8
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=2ecfd503edadaf5d46115826c629754bf9fd573f
+Commit:        2ecfd503edadaf5d46115826c629754bf9fd573f
+Parent:        1b070f366ba57a6eb24df03241284732db5047e9
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue May 31 22:48:38 2022 +0200
+AuthorDate:    Tue May 31 22:45:29 2022 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Tue Jun 7 17:14:08 2022 +0200
 
-vdo: fix conversion of vdo_slab_size_mb
+tests: add lvm_vdo_wrapper
 
-When converting VDO volume, the parameter vdo_slabSize was
-incorrectly copied as vdo_blockMapCacheSize, however this parameter
-is then no longer used for any table line creation so the wrong
-value was only stored in metadata.
+Introduce a replacement vdo manager wrapper for testing.
+When using test suite on a system without vdo manager (which has got
+deprecated) - we still need its functionality to prepare 'vdo volume'
+for testing lvm_import_vdo.
 
-Also use just single get_kb_size_with_unit_ and remove it's duplicate
-functionality with get_mb_size_with_unit_.
-
-Use $VERB for vdo remove call.
+Wrapper currently need 2 binaries from older 'vdo 6.2' package -
+to be named:
+oldvdoformat - format VDO metadata with older format
+oldvdoprepareforlvm - shift vdo metadata by 1MiB
 ---
- WHATS_NEW                 |  1 +
- scripts/lvm_import_vdo.sh | 15 +++------------
- 2 files changed, 4 insertions(+), 12 deletions(-)
+ test/Makefile.in            |   1 +
+ test/lib/lvm_vdo_wrapper.sh | 353 ++++++++++++++++++++++++++++++++++++++++++++
+ 2 files changed, 354 insertions(+)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index 844f69084..fed5faedc 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.03.17 - 
- ===============================
-+ Fix vdo_slab_size_mb value for converted VDO volume.
- 
- Version 2.03.16 - 18th May 2022
- ===============================
-diff --git a/scripts/lvm_import_vdo.sh b/scripts/lvm_import_vdo.sh
-index d01766743..c10b3b050 100755
---- a/scripts/lvm_import_vdo.sh
-+++ b/scripts/lvm_import_vdo.sh
-@@ -125,15 +125,6 @@ get_kb_size_with_unit_() {
- 	esac
- }
- 
--get_mb_size_with_unit_() {
--	case "$1" in
--	*[mM]) echo $(( ${1%[mM]} )) ;;
--	*[gG]) echo $(( ${1%[gG]} * 1024 )) ;;
--	*[tT]) echo $(( ${1%[tT]} * 1024 * 1024 )) ;;
--	*[pP]) echo $(( ${1%[pP]} * 1024 * 1024 * 1024 )) ;;
--	esac
--}
--
- # Figure out largest possible extent size usable for VG
- # $1   physical size
- # $2   logical size
-@@ -328,12 +319,12 @@ allocation {
- 	vdo_use_deduplication = $(get_enabled_value_ "$vdo_deduplication")
- 	vdo_use_metadata_hints=1
- 	vdo_minimum_io_size = $vdo_logicalBlockSize
--	vdo_block_map_cache_size_mb = $(get_mb_size_with_unit_ "$vdo_blockMapCacheSize")
-+	vdo_block_map_cache_size_mb = $(( $(get_kb_size_with_unit_ "$vdo_blockMapCacheSize") / 1024 ))
- 	vdo_block_map_period = $vdo_blockMapPeriod
- 	vdo_check_point_frequency = $vdo_indexCfreq
- 	vdo_use_sparse_index = $(get_enabled_value_ "$vdo_indexSparse")
- 	vdo_index_memory_size_mb = $(awk "BEGIN {print $vdo_indexMemory * 1024}")
--	vdo_slab_size_mb = $(get_mb_size_with_unit_ "$vdo_blockMapCacheSize")
-+	vdo_slab_size_mb = $(( $(get_kb_size_with_unit_ "$vdo_blockMapCacheSize") / 1024 ))
- 	vdo_ack_threads = $vdo_ackThreads
- 	vdo_bio_threads = $vdo_bioThreads
- 	vdo_bio_rotation = $vdo_bioRotationInterval
-@@ -417,7 +408,7 @@ EOF
- 	# Note: that this is spelled OPPOSITE the other $IS_LV checks.
- 	if [ "$IS_LV" = "1" ]; then
- 		verbose "Removing now-unused VDO entry from VDO config."
--		dry "$VDO" remove $VDOCONF --force --verbose --name "$VDONAME"
-+		dry "$VDO" remove $VDOCONF $VERB --force --name "$VDONAME"
- 	fi
- 
- 	rm -fr "$TEMPDIR"
+diff --git a/test/Makefile.in b/test/Makefile.in
+index ecb9e4264..f69dc97b6 100644
+--- a/test/Makefile.in
++++ b/test/Makefile.in
+@@ -369,6 +369,7 @@ LIB = $(addprefix lib/, $(LIB_SECURETEST) $(LIB_DMSECURETEST) $(LIB_SHARED) $(LI
+ 	$(Q) $(LN_S) -f $(abs_top_srcdir)/conf/thin-performance.profile lib/
+ 	$(Q) $(LN_S) -f $(abs_top_srcdir)/scripts/fsadm.sh lib/fsadm
+ 	$(Q) $(LN_S) -f $(abs_top_srcdir)/scripts/lvm_import_vdo.sh lib/lvm_import_vdo
++	$(Q) which vdo || $(LN_S) -f $(abs_top_srcdir)/test/lib/lvm_vdo_wrapper.sh lib/vdo
+ 	@test "$(srcdir)" = . || \
+ 		for i in $(LIB_LVMLOCKD_CONF) $(LIB_MKE2FS_CONF); do \
+ 			test -n "$(Q)" || echo "$(LN_S) -f $(abs_top_srcdir)/test/lib/$$i lib/"; \
+diff --git a/test/lib/lvm_vdo_wrapper.sh b/test/lib/lvm_vdo_wrapper.sh
+new file mode 100755
+index 000000000..d622d6456
+--- /dev/null
++++ b/test/lib/lvm_vdo_wrapper.sh
+@@ -0,0 +1,353 @@
++#!/bin/bash
++#
++# Wrapper script for 'naive' emulation of vdo manager tool for systems
++# that no longer have this tool present
++#
++
++set -euE -o pipefail
++
++# tool for formating 'old' VDO metadata format
++LVM_VDO_FORMAT=${LVM_VDO_FORMAT-"oldvdoformat"}
++# tool for shifting VDO metadata header by 2MiB
++LVM_VDO_PREPARE=${LVM_VDO_PREPARE-"oldvdoprepareforlvm"}
++# default vdo conf file
++LVM_VDO_DEFAULT_CONF=${LVM_VDO_DEFAULT_CONF-"/tmp/vdoconf.yml"}
++
++vdo_die_() {
++	echo -e "$@" >&2
++	return 1
++}
++
++vdo_verbose_() {
++	test -z "$vdo_verbose" || echo "$0:" "$@"
++}
++
++vdo_dry_() {
++	if test -n "$vdo_dry"; then
++		vdo_verbose_ "Dry execution" "$@"
++		return 0
++	fi
++	vdo_verbose_ "Executing" "$@"
++	"$@"
++}
++
++vdo_get_kb_size_with_unit_() {
++	local sz=${2-1}  # 2nd. arg as unit - default 'k'
++
++	case "$sz" in
++	  [mM]) sz=1024 ;;
++	esac
++
++	case "$1" in
++	  *[mM]) sz=1024 ;;
++	  *[gG]) sz=$(( 1024 * 1024 )) ;;
++	  *[tT]) sz=$(( 1024 * 1024 * 1024 )) ;;
++	  *[pP]) sz=$(( 1024 * 1024 * 1024 * 1024 )) ;;
++	esac
++
++	echo $(( sz * ${1%[kKmMgGtTpP]} ))
++}
++
++#
++# Emulate functionality of deprecated 'vdo create'
++#
++vdo_create_() {
++local cachesize=
++local devsize=
++local emulate512=disabled
++local logicalsize=
++local maxdiscardsize=
++local slabbits=0  # 4k
++local slabsize=
++local sparse=
++local table=
++local vdo_compression_msg=
++local vdo_dry=
++local vdo_index_msg=
++local vdo_logicalBlockSize=
++local vdo_verbose=
++
++local vdo_ackThreads=${vdo_ackThreads-1}
++local vdo_bioRotationInterval=${vdo_bioRotationInterval-64}
++local vdo_bioThreads=${vdo_bioThreads-4}
++local vdo_blockMapCacheSize=${vdo_blockMapCacheSize-128M}
++local vdo_blockMapPeriod=${vdo_blockMapPeriod-16380}
++local vdo_compression=${vdo_compression-enabled}
++local vdo_confFile=$LVM_VDO_DEFAULT_CONF  # place some file in /tmp
++local vdo_cpuThreads=${vdo_cpuThreads-2}
++local vdo_deduplication=${vdo_deduplication-enabled}
++local vdo_hashZoneThreads=${vdo_hashZoneThreads-1}
++local vdo_indexCfreq=${vdo_indexCfreq-0}
++local vdo_indexMemory=${vdo_indexMemory-0.25}
++local vdo_indexSparse=${vdo_indexSparse-disabled}
++local vdo_indexThreads=${vdo_indexThreads-0}
++local vdo_logicalSize=${vdo_logicalSize-0}
++local vdo_logicalThreads=${vdo_logicalThreads-1}
++local vdo_maxDiscardSize=${vdo_maxDiscardSize-4K}
++local vdo_name=${vdo_name-VDONAME}
++local vdo_physicalThreads=${vdo_physicalThreads-1}
++local vdo_slabSize=${vdo_slabSize-2G}
++local vdo_uuid="VDO-$(uuidgen || echo \"f7a3ecdc-40a0-4e43-814c-4a7039a75de4\")"
++local vdo_writePolicy=${vdo_writePolicy-auto}
++
++while [ "$#" -ne 0 ]
++do
++	case "$1" in
++	  "--blockMapCacheSize") shift; vdo_blockMapCacheSize=$1 ;;
++	  "--blockMapPeriod") shift; vdo_blockMapPeriod=$1 ;;
++	  "--compression") shift; vdo_compression=$1 ;;
++	  "--confFile"|"-f") shift; vdo_confFile=$1 ;;
++	  "--deduplication") shift; vdo_deduplication=$1 ;;
++	  "--device") shift; vdo_device=$1 ;;
++	  "--emulate512") shift; emulate512=$1 ;;
++	  "--indexMem") shift; vdo_indexMemory=$1 ;;
++	  "--maxDiscardSize") shift; vdo_maxDiscardSize=$1 ;;
++	  "--name"|"-n") shift; vdo_name=$1 ;;
++	  "--sparseIndex") shift; vdo_indexSparse=$1 ;;
++	  "--uuid") shift ;;		# ignored
++	  "--vdoAckThreads") shift; vdo_ackThreads=$1 ;;
++	  "--vdoBioRotationInterval") shift; vdo_bioRotationInterval=$1 ;;
++	  "--vdoBioThreads") shift; vdo_bioThreads=$1 ;;
++	  "--vdoCpuThreads") shift; vdo_cpuThreads=$1 ;;
++	  "--vdoHashZoneThreads") shift; vdo_hashZoneThreads=$1 ;;
++	  "--vdoLogicalSize") shift; vdo_logicalSize=$1 ;;
++	  "--vdoLogicalThreads") shift; vdo_logicalThreads=$1 ;;
++	  "--vdoLogLevel") shift ;;	# ignored
++	  "--vdoPhysicalThreads") shift; vdo_physicalSize=$1 ;;
++	  "--vdoSlabSize") shift; vdo_slabSize=$1 ;;
++	  "--verbose"|"-d"|"--debug") vdo_verbose="-v" ;;
++	  "--writePolicy") shift; vdo_writePolicy=$1 ;;
++	esac
++	shift
++done
++
++# Convert when set
++case "$emulate512" in
++  "enabled") vdo_logicalBlockSize=512 ;;
++  "disabled") vdo_logicalBlockSize=4096 ;;
++  *) vdo_die_ "Invalid emulate512 setting."
++esac
++
++case "$vdo_deduplication" in
++  "enabled")  vdo_index_msg="index-enable" ;;
++  "disabled") vdo_index_msg="index-disable";;
++  *) vdo_die_ "Invalid deduplication setting."
++esac
++
++case "$vdo_compression" in
++  "enabled")  vdo_compression_msg="compression on" ;;
++  "disabled") vdo_compression_msg="compression off";;
++  *) vdo_die_ "Invalid compression setting."
++esac
++
++test -n "${vdo_device-}" || vdo_die_ "VDO device is missing"
++
++blkid -s UUID -o value "${vdo_device}" || true
++
++devsize=$(blockdev --getsize64 "$vdo_device")
++devsize=$(( devsize / 4096 )) # convert to 4KiB units
++
++logicalsize=$(vdo_get_kb_size_with_unit_ "$vdo_logicalSize" M)
++logicalsize=$(( logicalsize * 2 ))	# 512B  units
++
++cachesize=$(vdo_get_kb_size_with_unit_ "$vdo_blockMapCacheSize" M)
++cachesize=$(( cachesize / 4 ))		# 4KiB units
++
++maxdiscardsize=$(vdo_get_kb_size_with_unit_ "$vdo_maxDiscardSize" M)
++maxdiscardsize=$(( maxdiscardsize / 4 )) # 4KiB units
++
++test -e "$vdo_confFile" || {
++	cat > "$vdo_confFile" <<EOF
++####################################################################
++# THIS FILE IS MACHINE GENERATED. DO NOT EDIT THIS FILE BY HAND.
++####################################################################
++config: !Configuration
++  vdos:
++EOF
++}
++
++cat >> "$vdo_confFile" <<EOF
++    $vdo_name: !VDOService
++      _operationState: finished
++      ackThreads: $vdo_ackThreads
++      activated: enabled
++      bioRotationInterval: $vdo_bioRotationInterval
++      bioThreads: $vdo_bioThreads
++      blockMapCacheSize: $(( cachesize * 4 ))K
++      blockMapPeriod: $vdo_blockMapPeriod
++      compression: $vdo_compression
++      cpuThreads: $vdo_cpuThreads
++      deduplication: $vdo_deduplication
++      device: $vdo_device
++      hashZoneThreads: $vdo_hashZoneThreads
++      indexCfreq: $vdo_indexCfreq
++      indexMemory: $vdo_indexMemory
++      indexSparse: $vdo_indexSparse
++      indexThreads: $vdo_indexThreads
++      logicalBlockSize: $vdo_logicalBlockSize
++      logicalSize: $(( logicalsize / 2 ))K
++      logicalThreads: $vdo_logicalThreads
++      maxDiscardSize: $(( maxdiscardsize * 4 ))K
++      name: $vdo_name
++      physicalSize: $(( devsize * 4 ))K
++      physicalThreads: $vdo_physicalThreads
++      slabSize: $vdo_slabSize
++      uuid: $vdo_uuid
++      writePolicy: $vdo_writePolicy
++  version: 538380551
++EOF
++
++slabsize=$(vdo_get_kb_size_with_unit_ "$vdo_slabSize")
++while test "$slabsize" -gt 4 ; do
++	slabbits=$(( slabbits + 1 ))
++	slabsize=$(( slabsize / 2 ))
++done
++
++case "$vdo_indexSparse" in
++  "enabled") sparse="--uds-sparse" ;;
++esac
++
++vdo_dry_ "$LVM_VDO_FORMAT" $vdo_verbose $sparse\
++ --logical-size "$vdo_logicalSize" --slab-bits "$slabbits"\
++ --uds-checkpoint-frequency "$vdo_indexCfreq"\
++ --uds-memory-size "$vdo_indexMemory" "$vdo_device"
++
++# V2 format
++table="0 $logicalsize vdo V2 $vdo_device\
++ $devsize\
++ $vdo_logicalBlockSize\
++ $cachesize\
++ $vdo_blockMapPeriod\
++ on\
++ $vdo_writePolicy\
++ $vdo_name\
++ maxDiscard $maxdiscardsize\
++ ack $vdo_ackThreads\
++ bio $vdo_bioThreads\
++ bioRotationInterval $vdo_bioRotationInterval\
++ cpu $vdo_cpuThreads\
++ hash $vdo_hashZoneThreads\
++ logical $vdo_logicalThreads\
++ physical $vdo_physicalThreads"
++
++vdo_dry_ dmsetup create "$vdo_name" --uuid "$vdo_uuid" --table "$table"
++vdo_dry_ dmsetup message "$vdo_name" 0 "$vdo_index_msg"
++vdo_dry_ dmsetup message "$vdo_name" 0 "$vdo_compression_msg"
++}
++
++#
++# vdo stop
++#
++vdo_stop_() {
++local vdo_confFile=$LVM_VDO_DEFAULT_CONF
++local vdo_dry=
++local vdo_force=
++local vdo_name=
++local vdo_verbose=
++
++while [ "$#" -ne 0 ]
++do
++	case "$1" in
++	  "--confFile"|"-f") shift; vdo_confFile=$1 ;;
++	  "--name"|"-n") shift; vdo_name=$1 ;;
++	  "--verbose"|"-d"|"--debug") vdo_verbose="-v" ;;
++	  "--force") vdo_force="--force" ;;
++	esac
++	shift
++done
++
++vdo_dry_ dmsetup status --target vdo "$vdo_name" 2>/dev/null || return 0
++vdo_dry_ dmsetup remove $vdo_force "$vdo_name" || true
++}
++
++#
++# vdo remove
++#
++vdo_remove_() {
++local vdo_confFile=$LVM_VDO_DEFAULT_CONF
++local vdo_name=
++
++vdo_stop_ "$@"
++while [ "$#" -ne 0 ]
++do
++	case "$1" in
++	  "--confFile"|"-f") shift; vdo_confFile=$1 ;;
++	  "--name"|"-n") shift; vdo_name=$1 ;;
++	esac
++	shift
++done
++
++# remove entry from conf file
++awk -v vdovolname="$vdo_name" 'BEGIN { have=0 }
++	$0 ~ "!VDOService" { have=0 }
++	$0 ~ vdovolname":" { have=1 }
++	{ if (have==0) { print } ;}
++	' "$vdo_confFile" >"${vdo_confFile}.new"
++
++mv "${vdo_confFile}.new" "$vdo_confFile"
++grep "!VDOService" "$vdo_confFile" || rm -f "$vdo_confFile"
++}
++
++
++#
++# print_config_file
++#
++vdo_print_config_file_() {
++local vdo_confFile=$LVM_VDO_DEFAULT_CONF
++
++while [ "$#" -ne 0 ]
++do
++	case "$1" in
++	  "--confFile"|"-f") shift; vdo_confFile=$1 ;;
++	  "--verbose"|"-d"|"--debug") ;;
++	  "--logfile") shift ;;  # ignore
++	esac
++	shift
++done
++
++cat "$vdo_confFile"
++}
++
++#
++# vdo convert
++#
++vdo_convert_() {
++local vdo_confFile=$LVM_VDO_DEFAULT_CONF
++local vdo_dry=
++local vdo_force=
++local vdo_name=
++local vdo_verbose=
++local vdo_device=
++
++while [ "$#" -ne 0 ]
++do
++	case "$1" in
++	  "--confFile"|"-f") shift; vdo_confFile=$1 ;;
++	  "--name"|"-n") shift; vdo_name=$1 ;;
++	  "--verbose"|"-d"|"--debug") vdo_verbose="-v" ;;
++	  "--force") vdo_force="--force" ;;
++	esac
++	shift
++done
++
++vdo_device=$(awk -v vdovolname="$vdo_name" 'BEGIN { have=0 }
++     $0 ~ "!VDOService" { have=0 }
++     $0 ~ vdovolname":" { have=1 }
++     { if (have==1 && $0 ~ "device:" ) {  print $2 } ;}'\
++     "$vdo_confFile")
++
++#dmsetup status --target vdo "$vdo_name" || true
++vdo_dry_ "$LVM_VDO_PREPARE" "$vdo_device"
++vdo_dry_ vdo_remove_ -f "$vdo_confFile" -n "$vdo_name" || true
++}
++
++#
++# MAIN
++#
++case "$1" in
++  "create") shift; vdo_create_ "$@" ;;
++  "remove") shift; vdo_remove_ "$@" ;;
++  "stop") shift; vdo_stop_ "$@" ;;
++  "convert") shift; vdo_convert_ "$@" ;;
++  "printConfigFile") shift; vdo_print_config_file_ "$@" ;;
++esac
 
