@@ -1,126 +1,114 @@
-From: David Teigland (@teigland) <gitlab@mg.gitlab.com>
-Date: Wed, 09 Aug 2023 15:30:27 +0000
-Subject: [Git][lvmteam/lvm2][main] lvconvert swapmetadata: fix lvmlockd locking
-Message-ID: <64d3b113ce0ea_28a6d74299d3@gitlab-sidekiq-low-urgency-cpu-bound-v2-79db7d77db-vkj5f.mail>
+From: Tony Asleson <tasleson@sourceware.org>
+Date: Thu, 30 Jun 2022 16:00:49 +0000 (GMT)
+Subject: main - lvmdbustest: Correct comment spelling/grammar
+Message-ID: <20220630160049.68E03386F0D6@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=8fa8dfdb8c3b5310a5b43c99fd088f4f076b5903
+Commit:        8fa8dfdb8c3b5310a5b43c99fd088f4f076b5903
+Parent:        55059e002abb3d858e4c53ac0da078ca853ff1f4
+Author:        Tony Asleson <tasleson@redhat.com>
+AuthorDate:    Mon Jun 6 09:59:59 2022 -0500
+Committer:     Tony Asleson <tasleson@redhat.com>
+CommitterDate: Thu Jun 30 10:55:16 2022 -0500
 
+lvmdbustest: Correct comment spelling/grammar
 
-David Teigland pushed to branch main at LVM team / lvm2
+---
+ test/dbus/lvmdbustest.py | 22 +++++++++++-----------
+ 1 file changed, 11 insertions(+), 11 deletions(-)
 
-
-Commits:
-2928891b by David Teigland at 2023-08-08T16:57:22-05:00
-lvconvert swapmetadata: fix lvmlockd locking
-
-The lockd lock needs to be freed for the LV that is becoming
-the new metadata LV, and a new lockd lock needs to be created
-for the old metadata LV that is becoming an independent LV.
-Fixes b3e45219c2f4
-
-- - - - -
-
-
-1 changed file:
-
-- tools/lvconvert.c
-
-
-Changes:
-
-=====================================
-tools/lvconvert.c
-=====================================
-@@ -2818,6 +2818,9 @@ static int _lvconvert_swap_pool_metadata(struct cmd_context *cmd,
- 	struct lv_type *lvtype;
- 	char meta_name[NAME_LEN];
- 	const char *swap_name;
-+	char *lockd_meta_args = NULL;
-+	char *lockd_meta_name = NULL;
-+	struct id lockd_meta_id;
- 	uint32_t chunk_size;
- 	int is_thinpool;
- 	int is_cachepool;
-@@ -2872,6 +2875,12 @@ static int _lvconvert_swap_pool_metadata(struct cmd_context *cmd,
- 	if (!lockd_lv(cmd, lv, "ex", 0))
- 		return 0;
+diff --git a/test/dbus/lvmdbustest.py b/test/dbus/lvmdbustest.py
+index e16a484b7..ae02c5fef 100755
+--- a/test/dbus/lvmdbustest.py
++++ b/test/dbus/lvmdbustest.py
+@@ -153,7 +153,7 @@ def get_objects():
+ 			rc[interface].append(proxy)
  
-+	/* If new metadata LV is inactive here, ensure it's not active elsewhere */
-+	if (!lockd_lv(cmd, metadata_lv, "ex", 0)) {
-+		log_error("New pool metadata LV %s cannot be locked.", display_lvname(metadata_lv));
-+		return 0;
-+	}
-+
- 	if (!deactivate_lv(cmd, metadata_lv)) {
- 		log_error("Aborting. Failed to deactivate %s.",
- 			  display_lvname(metadata_lv));
-@@ -2883,8 +2892,22 @@ static int _lvconvert_swap_pool_metadata(struct cmd_context *cmd,
- 		return 0;
- 	}
+ 	# At this point we have a full population of everything, we now need to
+-	# prune the the objects if we are filtering PVs with a sub selection.
++	# prune the objects if we are filtering PVs with a sub selection.
+ 	return _prune(rc, pv_device_list), bus
  
--        metadata_lv->lock_args = NULL;
--
-+	/*
-+	 * metadata_lv is currently an independent LV with its own lockd lock allocated.
-+	 * A pool metadata LV does not have its own lockd lock (only the pool LV does.)
-+	 * So, when metadata_lv is added to the thin pool, it's lock needs to be freed.
-+	 * Save info about the metadata_lv here that will be used to free the lock.
-+	 * The current pool metadata LV does not currently have its own lockd lock
-+	 * allocated, and once it becomes an independent LV it will need its own lock.
-+	 * (see setting prev_metadata_lv->lock_args below.)
-+	 */
-+	if (vg_is_shared(vg) && metadata_lv->lock_args) {
-+		lockd_meta_args = dm_pool_strdup(cmd->mem, metadata_lv->lock_args);
-+		lockd_meta_name = dm_pool_strdup(cmd->mem, metadata_lv->name);
-+		memcpy(&lockd_meta_id, &metadata_lv->lvid.id[1], sizeof(struct id));
-+		/* Without lock_args, a lock will no longer be acquired for this LV. */
-+		metadata_lv->lock_args = NULL;
-+	}
  
- 	seg = first_seg(lv);
+@@ -1111,7 +1111,7 @@ class TestDbusService(unittest.TestCase):
+ 	def _test_expired_timer(self, num_lvs):
+ 		rc = False
  
-@@ -2950,9 +2973,27 @@ static int _lvconvert_swap_pool_metadata(struct cmd_context *cmd,
- 	if (!attach_pool_metadata_lv(seg, metadata_lv))
- 		return_0;
+-		# In small configurations lvm is pretty snappy, so lets create a VG
++		# In small configurations lvm is pretty snappy, so let's create a VG
+ 		# add a number of LVs and then remove the VG and all the contained
+ 		# LVs which appears to consistently run a little slow.
  
-+	/*
-+	 * The previous metadata LV will now be an independent LV so it now
-+	 * requires a lockd lock.  We could call lockd_init_lv_args() directly
-+	 * here, but reuse the existing code in vg_write() to be consistent
-+	 * with the way lvcreate allocates locks.
-+	 */
-+	if (is_lockd_type(vg->lock_type)) {
-+		if (!strcmp(vg->lock_type, "sanlock"))
-+			prev_metadata_lv->lock_args = "pending";
-+		else if (!strcmp(vg->lock_type, "dlm"))
-+			prev_metadata_lv->lock_args = "dlm";
-+		else if (!strcmp(vg->lock_type, "idm"))
-+			prev_metadata_lv->lock_args = "idm";
-+	}
-+
- 	if (!vg_write(vg) || !vg_commit(vg))
- 		return_0;
+@@ -1781,7 +1781,7 @@ class TestDbusService(unittest.TestCase):
+ 			self.assertTrue(ec == 0, "%s exit code = %d" % (operation, ec))
  
-+	if (lockd_meta_name)
-+		lockd_free_lv(cmd, vg, lockd_meta_name, &lockd_meta_id, lockd_meta_args);
-+
- 	return 1;
- }
+ 	def test_external_vg_create(self):
+-		# We need to ensure that if a user creates something outside of lvm
++		# We need to ensure that if a user creates something outside lvm
+ 		# dbus service that things are sequenced correctly so that if a dbus
+ 		# user calls into the service they will find the same information.
+ 		vg_name = vg_n()
+@@ -1794,8 +1794,8 @@ class TestDbusService(unittest.TestCase):
+ 		self._verify_existence(cmd, cmd[0], vg_name)
  
+ 	def test_external_lv_create(self):
+-		# Lets create a LV outside of service and see if we correctly handle
+-		# it's inclusion
++		# Let's create a LV outside of service and see if we correctly handle
++		# its inclusion
+ 		vg = self._vg_create().Vg
+ 		lv_name = lv_n()
+ 		full_name = "%s/%s" % (vg.Name, lv_name)
+@@ -1804,8 +1804,8 @@ class TestDbusService(unittest.TestCase):
+ 		self._verify_existence(cmd, cmd[0], full_name)
+ 
+ 	def test_external_pv_create(self):
+-		# Lets create a PV outside of service and see if we correctly handle
+-		# it's inclusion
++		# Let's create a PV outside of service and see if we correctly handle
++		# its inclusion
+ 		target = self.objs[PV_INT][0]
+ 
+ 		# Remove the PV
+@@ -1851,7 +1851,7 @@ class TestDbusService(unittest.TestCase):
+ 		#
+ 		# NOTE: This needs an equivalent of aux extend_filter_LVMTEST
+ 		# when run from lvm2 testsuite. See dbustest.sh.
+-		# Also if developing locally with actual devices one can achieve this
++		# Also, if developing locally with actual devices one can achieve this
+ 		# by editing lvm.conf with "devices/scan_lvs = 1"  As testing
+ 		# typically utilizes loopback, this test is skipped in
+ 		# those environments.
+@@ -1866,7 +1866,7 @@ class TestDbusService(unittest.TestCase):
+ 			pv_object_path = self._create_nested(pv_object_path)
+ 
+ 	def test_pv_symlinks(self):
+-		# Lets take one of our test PVs, pvremove it, find a symlink to it
++		# Let's take one of our test PVs, pvremove it, find a symlink to it
+ 		# and re-create using the symlink to ensure we return an object
+ 		# path to it.  Additionally, we will take the symlink and do a lookup
+ 		# (Manager.LookUpByLvmId) using it and the original device path to
+@@ -1888,7 +1888,7 @@ class TestDbusService(unittest.TestCase):
+ 		rc = self._lookup(pv_device_path)
+ 		self.assertEqual(rc, '/')
+ 
+-		# Lets locate a symlink for it
++		# Let's locate a symlink for it
+ 		devices = glob('/dev/disk/*/*')
+ 		rp_pv_device_path = os.path.realpath(pv_device_path)
+ 		for d in devices:
+@@ -1953,7 +1953,7 @@ class TestDbusService(unittest.TestCase):
+ 			raise unittest.SkipTest('vdo not supported')
+ 
+ 		# Do this twice to ensure we are providing the correct flags to force
+-		# the operation when if finds an existing vdo signature, which likely
++		# the operation when it finds an existing vdo signature, which likely
+ 		# shouldn't exist.
+ 		for _ in range(0, 2):
+ 			vg, _, _ = self._create_vdo_pool_and_lv()
 
-
-
-View it on GitLab: https://gitlab.com/lvmteam/lvm2/-/commit/2928891bd00bce8d880f8c3a6aec430a57c49377
-
--- 
-View it on GitLab: https://gitlab.com/lvmteam/lvm2/-/commit/2928891bd00bce8d880f8c3a6aec430a57c49377
-You're receiving this email because of your account on gitlab.com.
-
-
--------------- next part --------------
-An HTML attachment was scrubbed...
-URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20230809/e84854ea/attachment-0001.htm>
