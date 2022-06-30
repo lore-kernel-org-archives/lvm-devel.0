@@ -1,186 +1,96 @@
 From: Tony Asleson <tasleson@sourceware.org>
-Date: Thu, 30 Jun 2022 16:00:46 +0000 (GMT)
-Subject: main - lvmdbusd: Don't require "lvm> " prompt for shell
-Message-ID: <20220630160046.08A2D386F0D2@sourceware.org>
+Date: Thu, 30 Jun 2022 16:00:53 +0000 (GMT)
+Subject: main - lvmdbustest: Add test for property "Get"
+Message-ID: <20220630160053.E866C386F0E1@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=691494268502ddb20da2a14568984c0fa4f29f50
-Commit:        691494268502ddb20da2a14568984c0fa4f29f50
-Parent:        eee89a941eb4e63865356cfe9e513c24cfa8e0f9
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=d0f94e763d6e6bca491c74cea93ec3062f32757e
+Commit:        d0f94e763d6e6bca491c74cea93ec3062f32757e
+Parent:        01ef2f2525e8733f01443987b2c6f99882e04f3d
 Author:        Tony Asleson <tasleson@redhat.com>
-AuthorDate:    Mon Jun 6 09:56:32 2022 -0500
+AuthorDate:    Tue Jun 7 11:47:27 2022 -0500
 Committer:     Tony Asleson <tasleson@redhat.com>
 CommitterDate: Thu Jun 30 10:55:16 2022 -0500
 
-lvmdbusd: Don't require "lvm> " prompt for shell
+lvmdbustest: Add test for property "Get"
 
-Depending on how lvm is compiled, it may not present the "lvm> " prompt
-when using the lvm shell.  Don't require it to be present.
-
-Addresses: https://bugzilla.redhat.com/show_bug.cgi?id=2090391
+We typically use "GetAll", so add test for "Get" and check values.
 ---
- daemons/lvmdbusd/lvm_shell_proxy.py.in | 83 ++++++++++++++++++----------------
- 1 file changed, 43 insertions(+), 40 deletions(-)
+ test/dbus/lvmdbustest.py | 14 ++++++++++++++
+ test/dbus/testlib.py     | 12 +++++++++++-
+ 2 files changed, 25 insertions(+), 1 deletion(-)
 
-diff --git a/daemons/lvmdbusd/lvm_shell_proxy.py.in b/daemons/lvmdbusd/lvm_shell_proxy.py.in
-index 1a5051a92..e106ca36f 100644
---- a/daemons/lvmdbusd/lvm_shell_proxy.py.in
-+++ b/daemons/lvmdbusd/lvm_shell_proxy.py.in
-@@ -19,7 +19,6 @@ import sys
- import tempfile
- import time
- import select
--import copy
+diff --git a/test/dbus/lvmdbustest.py b/test/dbus/lvmdbustest.py
+index 12f1741b1..e6f6d4891 100755
+--- a/test/dbus/lvmdbustest.py
++++ b/test/dbus/lvmdbustest.py
+@@ -677,6 +677,20 @@ class TestDbusService(unittest.TestCase):
+ 				EOD), vg, LV_BASE_INT)
+ 		self._validate_lookup("%s/%s" % (vg.Name, lv_name), lv.object_path)
  
- try:
- 	import simplejson as json
-@@ -31,8 +30,6 @@ from lvmdbusd.cfg import LVM_CMD
- from lvmdbusd.utils import log_debug, log_error, add_no_notify, make_non_block,\
- 							read_decoded
- 
--SHELL_PROMPT = "lvm> "
--
- 
- def _quote_arg(arg):
- 	if len(shlex.split(arg)) > 1:
-@@ -43,10 +40,11 @@ def _quote_arg(arg):
- 
- class LVMShellProxy(object):
- 
--	# Read until we get prompt back and a result
--	# @param: no_output	Caller expects no output to report FD
--	# Returns stdout, report, stderr (report is JSON!)
--	def _read_until_prompt(self, no_output=False):
-+	# Read REPORT FD until we have a complete and valid JSON record or give
-+	# up trying to get one.
-+	#
-+	# Returns stdout, report (JSON), stderr
-+	def _read_response(self):
- 		stdout = ""
- 		report = ""
- 		stderr = ""
-@@ -58,6 +56,7 @@ class LVMShellProxy(object):
- 		# Try reading from all FDs to prevent one from filling up and causing
- 		# a hang.  Keep reading until we get the prompt back and the report
- 		# FD does not contain valid JSON
++	def test_prop_get(self):
++		lv_name = lv_n()
++		vg = self._vg_create().Vg
++		lv = self._test_lv_create(
++			vg.LvCreate,
++				(dbus.String(lv_name), dbus.UInt64(mib(4)),
++				dbus.Array([], signature='(ott)'), dbus.Int32(g_tmo),
++				EOD), vg, LV_BASE_INT)
++		ri = RemoteInterface(lv.dbus_object, interface=LV_COMMON_INT, introspect=False)
 +
- 		while keep_reading:
- 			try:
- 				rd_fd = [
-@@ -78,32 +77,33 @@ class LVMShellProxy(object):
- 				if self.lvm_shell.poll() is not None:
- 					raise Exception(self.lvm_shell.returncode, "%s" % stderr)
- 
--				if stdout.endswith(SHELL_PROMPT):
--					if no_output:
--						keep_reading = False
--					else:
--						cur_report_len = len(report)
--						if cur_report_len != 0:
--							# Only bother to parse if we have more data
--							if prev_report_len != cur_report_len:
--								prev_report_len = cur_report_len
--								# Parse the JSON if it's good we are done,
--								# if not we will try to read some more.
--								try:
--									report_json = json.loads(report)
--									keep_reading = False
--								except ValueError:
--									pass
--
--						if keep_reading:
--							extra_passes -= 1
--							if extra_passes <= 0:
--								if len(report):
--									raise ValueError("Invalid json: %s" %
--														report)
--								else:
--									raise ValueError(
--										"lvm returned no JSON output!")
-+				cur_report_len = len(report)
-+				if cur_report_len != 0:
-+					# Only bother to parse if we have more data and the last 2 characters match expected
-+					# complete JSON, prevents excessive JSON parsing attempts
-+					if prev_report_len != cur_report_len and report[-2:] == "}\n":
-+						prev_report_len = cur_report_len
++		ri.update()
++		for prop_name in ri.get_property_names():
++			self.assertEqual(ri.get_property_value(prop_name), getattr(ri, prop_name))
 +
-+						# Parse the JSON if it's good we are done,
-+						# if not we will try to read some more.
-+						try:
-+							report_json = json.loads(report)
-+							keep_reading = False
-+						except ValueError:
-+							pass
+ 	def test_lv_create_job(self):
+ 		lv_name = lv_n()
+ 		vg = self._vg_create().Vg
+diff --git a/test/dbus/testlib.py b/test/dbus/testlib.py
+index 75a367d40..b793b67a8 100644
+--- a/test/dbus/testlib.py
++++ b/test/dbus/testlib.py
+@@ -183,6 +183,7 @@ class RemoteInterface(object):
+ 					verify_type(
+ 						vl, self.introspect[self.interface]
+ 						['properties'][kl]['p_type'])
++				self.p_name[kl] = True
+ 				setattr(self, kl, vl)
+ 
+ 	@property
+@@ -196,6 +197,7 @@ class RemoteInterface(object):
+ 		self.interface = interface
+ 		self.introspect = introspect
+ 		self.tmo = 0
++		self.p_name = {}
+ 
+ 		if timelimit >= 0:
+ 			self.tmo = float(timelimit)
+@@ -213,7 +215,7 @@ class RemoteInterface(object):
+ 
+ 	def _wrapper(self, _method_name, *args, **kwargs):
+ 
+-		# Lets see how long a method takes to execute, in call cases we should
++		# Let's see how long a method takes to execute, in call cases we should
+ 		# return something when the time limit has been reached.
+ 		start = time.time()
+ 		result = getattr(self.dbus_interface, _method_name)(*args, **kwargs)
+@@ -241,6 +243,14 @@ class RemoteInterface(object):
+ 	def update(self):
+ 		self._set_props()
+ 
++	def get_property_names(self):
++		return self.p_name.keys()
 +
-+				# As long as lvm is spewing something on one of the FDs we will
-+				# keep trying.  If we get a few timeouts with no activity, and
-+				# we don't have valid JSON, we will raise an error.
-+				if len(ready) == 0 and keep_reading:
-+					extra_passes -= 1
-+					if extra_passes <= 0:
-+						if len(report):
-+							raise ValueError("Invalid json: %s" %
-+												report)
-+						else:
-+							raise ValueError(
-+								"lvm returned no JSON output!")
- 
- 			except IOError as ioe:
- 				log_debug(str(ioe))
-@@ -118,7 +118,6 @@ class LVMShellProxy(object):
- 		self.lvm_shell.stdin.flush()
- 
- 	def __init__(self):
--
- 		# Create a temp directory
- 		tmp_dir = tempfile.mkdtemp(prefix="lvmdbus_")
- 		tmp_file = "%s/lvmdbus_report" % (tmp_dir)
-@@ -139,6 +138,11 @@ class LVMShellProxy(object):
- 		local_env = {"LC_ALL": "C", "LVM_REPORT_FD": "%s" % lvm_fd, "LVM_COMMAND_PROFILE": "lvmdbusd",
- 					 "LVM_LOG_FILE_MAX_LINES": "0"}
- 
-+		# If any env variables contain LVM we will propagate them too
-+		for k, v in os.environ.items():
-+			if "LVM" in k:
-+				local_env[k] = v
++	def get_property_value(self, name):
++		prop_interface = dbus.Interface(
++			self.dbus_object, 'org.freedesktop.DBus.Properties')
++		return prop_interface.Get(self.interface, name)
 +
- 		# run the lvm shell
- 		self.lvm_shell = subprocess.Popen(
- 			[LVM_CMD],
-@@ -152,10 +156,9 @@ class LVMShellProxy(object):
- 			# Close our copy of the lvm_fd, child process is open in its process space
- 			os.close(lvm_fd)
  
--			# wait for the first prompt
--			errors = self._read_until_prompt(no_output=True)[2]
--			if errors and len(errors):
--				raise RuntimeError(errors)
-+			# Assume we are ready as we may not get the lvm prompt message depending on
-+			# if we are using readline or editline.
-+
- 		except:
- 			raise
- 		finally:
-@@ -169,7 +172,7 @@ class LVMShellProxy(object):
- 		self._write_cmd('lastlog\n')
+ class ClientProxy(object):
  
- 		# read everything from the STDOUT to the next prompt
--		stdout, report_json, stderr = self._read_until_prompt()
-+		stdout, report_json, stderr = self._read_response()
- 		if 'log' in report_json:
- 			error_msg = ""
- 			# Walk the entire log array and build an error string
-@@ -203,7 +206,7 @@ class LVMShellProxy(object):
- 		self._write_cmd(cmd)
- 
- 		# read everything from the STDOUT to the next prompt
--		stdout, report_json, stderr = self._read_until_prompt()
-+		stdout, report_json, stderr = self._read_response()
- 
- 		# Parse the report to see what happened
- 		if 'log' in report_json:
 
