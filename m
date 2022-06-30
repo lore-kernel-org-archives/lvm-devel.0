@@ -1,96 +1,40 @@
 From: Tony Asleson <tasleson@sourceware.org>
-Date: Thu, 30 Jun 2022 16:00:53 +0000 (GMT)
-Subject: main - lvmdbustest: Add test for property "Get"
-Message-ID: <20220630160053.E866C386F0E1@sourceware.org>
+Date: Thu, 30 Jun 2022 16:00:36 +0000 (GMT)
+Subject: main - lvmdbusd: Correct conditional for lvm child process running
+Message-ID: <20220630160036.E9CDA38460AE@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=d0f94e763d6e6bca491c74cea93ec3062f32757e
-Commit:        d0f94e763d6e6bca491c74cea93ec3062f32757e
-Parent:        01ef2f2525e8733f01443987b2c6f99882e04f3d
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=37733cd4eb5116db371ac1ae6e971e3c336c3ddb
+Commit:        37733cd4eb5116db371ac1ae6e971e3c336c3ddb
+Parent:        db5277c97155632ce83e1125e348eda97c871968
 Author:        Tony Asleson <tasleson@redhat.com>
-AuthorDate:    Tue Jun 7 11:47:27 2022 -0500
+AuthorDate:    Wed May 25 15:51:14 2022 -0500
 Committer:     Tony Asleson <tasleson@redhat.com>
 CommitterDate: Thu Jun 30 10:55:16 2022 -0500
 
-lvmdbustest: Add test for property "Get"
+lvmdbusd: Correct conditional for lvm child process running
 
-We typically use "GetAll", so add test for "Get" and check values.
+Poll returns None when process is running, else exit value.  If poll returns
+0 we will fail to exit the select loop.
 ---
- test/dbus/lvmdbustest.py | 14 ++++++++++++++
- test/dbus/testlib.py     | 12 +++++++++++-
- 2 files changed, 25 insertions(+), 1 deletion(-)
+ daemons/lvmdbusd/lvm_shell_proxy.py.in | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
 
-diff --git a/test/dbus/lvmdbustest.py b/test/dbus/lvmdbustest.py
-index 12f1741b1..e6f6d4891 100755
---- a/test/dbus/lvmdbustest.py
-+++ b/test/dbus/lvmdbustest.py
-@@ -677,6 +677,20 @@ class TestDbusService(unittest.TestCase):
- 				EOD), vg, LV_BASE_INT)
- 		self._validate_lookup("%s/%s" % (vg.Name, lv_name), lv.object_path)
+diff --git a/daemons/lvmdbusd/lvm_shell_proxy.py.in b/daemons/lvmdbusd/lvm_shell_proxy.py.in
+index 7816daa8b..78fe1e422 100644
+--- a/daemons/lvmdbusd/lvm_shell_proxy.py.in
++++ b/daemons/lvmdbusd/lvm_shell_proxy.py.in
+@@ -75,7 +75,7 @@ class LVMShellProxy(object):
+ 						stderr += read_decoded(self.lvm_shell.stderr)
  
-+	def test_prop_get(self):
-+		lv_name = lv_n()
-+		vg = self._vg_create().Vg
-+		lv = self._test_lv_create(
-+			vg.LvCreate,
-+				(dbus.String(lv_name), dbus.UInt64(mib(4)),
-+				dbus.Array([], signature='(ott)'), dbus.Int32(g_tmo),
-+				EOD), vg, LV_BASE_INT)
-+		ri = RemoteInterface(lv.dbus_object, interface=LV_COMMON_INT, introspect=False)
-+
-+		ri.update()
-+		for prop_name in ri.get_property_names():
-+			self.assertEqual(ri.get_property_value(prop_name), getattr(ri, prop_name))
-+
- 	def test_lv_create_job(self):
- 		lv_name = lv_n()
- 		vg = self._vg_create().Vg
-diff --git a/test/dbus/testlib.py b/test/dbus/testlib.py
-index 75a367d40..b793b67a8 100644
---- a/test/dbus/testlib.py
-+++ b/test/dbus/testlib.py
-@@ -183,6 +183,7 @@ class RemoteInterface(object):
- 					verify_type(
- 						vl, self.introspect[self.interface]
- 						['properties'][kl]['p_type'])
-+				self.p_name[kl] = True
- 				setattr(self, kl, vl)
+ 				# Check to see if the lvm process died on us
+-				if self.lvm_shell.poll():
++				if self.lvm_shell.poll() is not None:
+ 					raise Exception(self.lvm_shell.returncode, "%s" % stderr)
  
- 	@property
-@@ -196,6 +197,7 @@ class RemoteInterface(object):
- 		self.interface = interface
- 		self.introspect = introspect
- 		self.tmo = 0
-+		self.p_name = {}
- 
- 		if timelimit >= 0:
- 			self.tmo = float(timelimit)
-@@ -213,7 +215,7 @@ class RemoteInterface(object):
- 
- 	def _wrapper(self, _method_name, *args, **kwargs):
- 
--		# Lets see how long a method takes to execute, in call cases we should
-+		# Let's see how long a method takes to execute, in call cases we should
- 		# return something when the time limit has been reached.
- 		start = time.time()
- 		result = getattr(self.dbus_interface, _method_name)(*args, **kwargs)
-@@ -241,6 +243,14 @@ class RemoteInterface(object):
- 	def update(self):
- 		self._set_props()
- 
-+	def get_property_names(self):
-+		return self.p_name.keys()
-+
-+	def get_property_value(self, name):
-+		prop_interface = dbus.Interface(
-+			self.dbus_object, 'org.freedesktop.DBus.Properties')
-+		return prop_interface.Get(self.interface, name)
-+
- 
- class ClientProxy(object):
- 
+ 				if stdout.endswith(SHELL_PROMPT):
 
