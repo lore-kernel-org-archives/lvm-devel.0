@@ -1,41 +1,38 @@
 From: Tony Asleson <tasleson@sourceware.org>
-Date: Thu, 30 Jun 2022 16:00:38 +0000 (GMT)
-Subject: main - lvmdbusd: Simplify child process env
-Message-ID: <20220630160038.170F53842AF1@sourceware.org>
+Date: Thu, 30 Jun 2022 16:00:40 +0000 (GMT)
+Subject: main - lvmdbusd: Add debug output for which lvm binary is used
+Message-ID: <20220630160040.590C73842AFC@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=58c6c9e9aa8d6aa6d3be14a04ec0f4257b61495e
-Commit:        58c6c9e9aa8d6aa6d3be14a04ec0f4257b61495e
-Parent:        37733cd4eb5116db371ac1ae6e971e3c336c3ddb
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=51d9b686c08d963c61898d407d15abf39f129d72
+Commit:        51d9b686c08d963c61898d407d15abf39f129d72
+Parent:        b3407b16c1c7b5bff01e3bde4e0f62a2608682f8
 Author:        Tony Asleson <tasleson@redhat.com>
-AuthorDate:    Wed May 25 15:52:20 2022 -0500
+AuthorDate:    Wed May 25 15:59:11 2022 -0500
 Committer:     Tony Asleson <tasleson@redhat.com>
 CommitterDate: Thu Jun 30 10:55:16 2022 -0500
 
-lvmdbusd: Simplify child process env
+lvmdbusd: Add debug output for which lvm binary is used
 
-We don't need to duplicate the entire env from the parent, supply only what
-is needed.
 ---
- daemons/lvmdbusd/lvm_shell_proxy.py.in | 3 ++-
- 1 file changed, 2 insertions(+), 1 deletion(-)
+ daemons/lvmdbusd/main.py | 2 ++
+ 1 file changed, 2 insertions(+)
 
-diff --git a/daemons/lvmdbusd/lvm_shell_proxy.py.in b/daemons/lvmdbusd/lvm_shell_proxy.py.in
-index 78fe1e422..10719c67e 100644
---- a/daemons/lvmdbusd/lvm_shell_proxy.py.in
-+++ b/daemons/lvmdbusd/lvm_shell_proxy.py.in
-@@ -135,7 +135,8 @@ class LVMShellProxy(object):
- 		self.report_stream = os.fdopen(self.report_fd, 'rb', 0)
+diff --git a/daemons/lvmdbusd/main.py b/daemons/lvmdbusd/main.py
+index b0a82d492..1e717ef69 100644
+--- a/daemons/lvmdbusd/main.py
++++ b/daemons/lvmdbusd/main.py
+@@ -127,6 +127,8 @@ def main():
+ 		log_error("You cannot specify --lvmshell and --nojson")
+ 		sys.exit(1)
  
- 		# Setup the environment for using our own socket for reporting
--		local_env = copy.deepcopy(os.environ)
-+		local_env = {}
-+		local_env["LC_ALL"] = "C"
- 		local_env["LVM_REPORT_FD"] = "32"
- 		local_env["LVM_COMMAND_PROFILE"] = "lvmdbusd"
- 
++	log_debug("Using lvm binary: %s" % cfg.LVM_CMD)
++
+ 	# We will dynamically add interfaces which support vdo if it
+ 	# exists.
+ 	cfg.vdo_support = supports_vdo()
 
