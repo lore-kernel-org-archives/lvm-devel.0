@@ -1,65 +1,47 @@
 From: Tony Asleson <tasleson@sourceware.org>
-Date: Thu, 30 Jun 2022 16:00:42 +0000 (GMT)
-Subject: main - lvmdbusd: Fix env variable LVM_DBUSD_TEST_MODE
-Message-ID: <20220630160042.9ADB6386F0CE@sourceware.org>
+Date: Thu, 30 Jun 2022 16:00:47 +0000 (GMT)
+Subject: main - lvmdbusd: Correct grammar in lvm shell proxy comments
+Message-ID: <20220630160047.2947F386F0D3@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=b3d7aff6a3a8fd55790f61b9b0b33d599841030b
-Commit:        b3d7aff6a3a8fd55790f61b9b0b33d599841030b
-Parent:        47c61907b4adbdead50f5bb5ac95c0f5d0fe263e
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=d393436727014b9eddf71009065f65a59ff3837c
+Commit:        d393436727014b9eddf71009065f65a59ff3837c
+Parent:        691494268502ddb20da2a14568984c0fa4f29f50
 Author:        Tony Asleson <tasleson@redhat.com>
-AuthorDate:    Wed May 25 16:21:14 2022 -0500
+AuthorDate:    Mon Jun 6 09:57:20 2022 -0500
 Committer:     Tony Asleson <tasleson@redhat.com>
 CommitterDate: Thu Jun 30 10:55:16 2022 -0500
 
-lvmdbusd: Fix env variable LVM_DBUSD_TEST_MODE
+lvmdbusd: Correct grammar in lvm shell proxy comments
 
-Make it more logical.
 ---
- test/dbus/lvmdbustest.py | 12 ++++++++----
- 1 file changed, 8 insertions(+), 4 deletions(-)
+ daemons/lvmdbusd/lvm_shell_proxy.py.in | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
 
-diff --git a/test/dbus/lvmdbustest.py b/test/dbus/lvmdbustest.py
-index 3eef77fd7..d876a1748 100755
---- a/test/dbus/lvmdbustest.py
-+++ b/test/dbus/lvmdbustest.py
-@@ -40,9 +40,10 @@ pv_device_list = os.getenv('LVM_DBUSD_PV_DEVICE_LIST', None)
+diff --git a/daemons/lvmdbusd/lvm_shell_proxy.py.in b/daemons/lvmdbusd/lvm_shell_proxy.py.in
+index e106ca36f..fa2415fcf 100644
+--- a/daemons/lvmdbusd/lvm_shell_proxy.py.in
++++ b/daemons/lvmdbusd/lvm_shell_proxy.py.in
+@@ -123,7 +123,7 @@ class LVMShellProxy(object):
+ 		tmp_file = "%s/lvmdbus_report" % (tmp_dir)
  
- # Default is to test all modes
- # 0 == Only test fork & exec mode
--# 1 == Test both fork & exec & lvm shell mode (default)
-+# 1 == Only test lvm shell mode
-+# 2 == Test both fork & exec & lvm shell mode (default)
- # Other == Test just lvm shell mode
--test_shell = os.getenv('LVM_DBUSD_TEST_MODE', 1)
-+test_shell = os.getenv('LVM_DBUSD_TEST_MODE', 2)
- 
- # LVM binary to use
- LVM_EXECUTABLE = os.getenv('LVM_BINARY', '/usr/sbin/lvm')
-@@ -2081,16 +2082,19 @@ if __name__ == '__main__':
- 	if mode == 0:
- 		std_err_print('\n*** Testing only lvm fork & exec test mode ***\n')
- 	elif mode == 1:
-+		std_err_print('\n*** Testing only lvm shell mode ***\n')
-+	elif mode == 2:
- 		std_err_print('\n*** Testing fork & exec & lvm shell mode ***\n')
- 	else:
--		std_err_print('\n*** Testing only lvm shell mode ***\n')
-+		std_err_print("Unsupported \"LVM_DBUSD_TEST_MODE\"=%d, [0-2] valid" % mode)
-+		sys.exit(1)
- 
- 	for g_tmo in [0, 15]:
- 		std_err_print('Testing TMO=%d\n' % g_tmo)
- 		if mode == 0:
- 			if set_execution(False, r):
- 				r.register_result(unittest.main(exit=False))
--		elif mode == 2:
-+		elif mode == 1:
- 			if set_execution(True, r):
- 				r.register_result(unittest.main(exit=False))
- 		else:
+ 		try:
+-			# Lets create fifo for the report output
++			# Let's create a fifo for the report output
+ 			os.mkfifo(tmp_file, 0o600)
+ 		except FileExistsError:
+ 			pass
+@@ -162,7 +162,7 @@ class LVMShellProxy(object):
+ 		except:
+ 			raise
+ 		finally:
+-			# These will get deleted when the FD count goes to zero so we
++			# These will get deleted when the FD count goes to zero, so we
+ 			# can be sure to clean up correctly no matter how we finish
+ 			os.unlink(tmp_file)
+ 			os.rmdir(tmp_dir)
 
