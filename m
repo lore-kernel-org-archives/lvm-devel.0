@@ -1,39 +1,259 @@
-From: ben <benscott@nwlink.com>
-Date: Mon, 22 Nov 2010 15:03:25 -0800
-Subject: wishlist: Two lvm2app pv and lv properties still needed
-In-Reply-To: <20101122213948.11757.qmail@sourceware.org>
-References: <20101122213948.11757.qmail@sourceware.org>
-Message-ID: <201011221503.26030.benscott@nwlink.com>
+From: David Teigland <teigland@sourceware.org>
+Date: Wed,  6 Jul 2022 15:14:38 +0000 (GMT)
+Subject: main - exit with error when --devicesfile name doesn't exist
+Message-ID: <20220706151438.0070838582A9@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-When using lvm2app function calls to retrieve physical volume segment 
-properties there seems to be no way the get the "lv_name" to tie each segment 
-of the pv to an lv. For instance like this:
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=92b4fcf57f3c6d212d06b72b097e1a06e6efb84b
+Commit:        92b4fcf57f3c6d212d06b72b097e1a06e6efb84b
+Parent:        d0f94e763d6e6bca491c74cea93ec3062f32757e
+Author:        David Teigland <teigland@redhat.com>
+AuthorDate:    Tue Jul 5 17:08:00 2022 -0500
+Committer:     David Teigland <teigland@redhat.com>
+CommitterDate: Wed Jul 6 10:10:58 2022 -0500
 
-pvs --segments -o+lv_name
-  PV         VG    Fmt  Attr PSize   PFree   Start SSize LV   
-  /dev/sdh1  local lvm2 a-   768.00m 512.00m     0     1      
-  /dev/sdh1  local lvm2 a-   768.00m 512.00m     1     1 lvol1
-  /dev/sdh1  local lvm2 a-   768.00m 512.00m     2     1      
-  /dev/sdi1  local lvm2 a-   768.00m      0      0     3 lvol2
+exit with error when --devicesfile name doesn't exist
 
-The same seems to apply to getting lv segments properties and their 
-asscociated devices.   Like this:
+---
+ lib/cache/lvmcache.c            |  3 ++-
+ lib/label/label.c               |  4 ++--
+ test/shell/devicesfile-basic.sh |  1 +
+ tools/pvcreate.c                |  3 ++-
+ tools/pvremove.c                |  3 ++-
+ tools/pvscan.c                  |  3 ++-
+ tools/toollib.c                 | 27 +++++++++++++++++++++------
+ tools/vgcfgrestore.c            |  5 ++++-
+ tools/vgcreate.c                |  5 ++++-
+ tools/vgextend.c                |  3 ++-
+ tools/vgmerge.c                 |  3 ++-
+ tools/vgsplit.c                 |  3 ++-
+ 12 files changed, 46 insertions(+), 17 deletions(-)
 
- lvs -o+devices
-  LV    VG    Attr   LSize    Devices
-  lvol1 local -wi-a- 256.00m  /dev/sdh1(1)
-  lvol2 local -wi-a- 768.00m  /dev/sdi1(0)
-
-It would be great if those two things, esp. the second one could be 
-implemented. 
-
-Thank you
-
-ben <benscott@nwlink.com>
-
+diff --git a/lib/cache/lvmcache.c b/lib/cache/lvmcache.c
+index 22edcfd84..a1c4a61c8 100644
+--- a/lib/cache/lvmcache.c
++++ b/lib/cache/lvmcache.c
+@@ -1612,7 +1612,8 @@ int lvmcache_label_scan(struct cmd_context *cmd)
+ 	 * with infos/vginfos based on reading headers from
+ 	 * each device, and a vg summary from each mda.
+ 	 */
+-	label_scan(cmd);
++	if (!label_scan(cmd))
++		return_0;
+ 
+ 	/*
+ 	 * When devnames are used as device ids (which is dispreferred),
+diff --git a/lib/label/label.c b/lib/label/label.c
+index 711edb6f4..f845abb96 100644
+--- a/lib/label/label.c
++++ b/lib/label/label.c
+@@ -801,7 +801,7 @@ static int _setup_bcache(void)
+ 	}
+ 
+ 	if (!(scan_bcache = bcache_create(BCACHE_BLOCK_SIZE_IN_SECTORS, cache_blocks, ioe))) {
+-		log_error("Failed to create bcache with %d cache blocks.", cache_blocks);
++		log_error("Failed to set up io layer with %d blocks.", cache_blocks);
+ 		return 0;
+ 	}
+ 
+@@ -1292,7 +1292,7 @@ int label_scan(struct cmd_context *cmd)
+ 	 * data to invalidate.)
+ 	 */
+ 	if (!(iter = dev_iter_create(NULL, 0))) {
+-		log_error("Scanning failed to get devices.");
++		log_error("Failed to get device list.");
+ 		return 0;
+ 	}
+ 	while ((dev = dev_iter_get(cmd, iter))) {
+diff --git a/test/shell/devicesfile-basic.sh b/test/shell/devicesfile-basic.sh
+index 77fe265a0..715c579b3 100644
+--- a/test/shell/devicesfile-basic.sh
++++ b/test/shell/devicesfile-basic.sh
+@@ -107,6 +107,7 @@ not vgs --devicesfile test.devices $vg2
+ # misspelled override name fails
+ not vgs --devicesfile doesnotexist $vg1
+ not vgs --devicesfile doesnotexist $vg2
++not vgs --devicesfile doesnotexist
+ 
+ # devicesfile and devices cannot be used together
+ not vgs --devicesfile test.devices --devices "$dev1","$dev1" $vg1
+diff --git a/tools/pvcreate.c b/tools/pvcreate.c
+index 71eb060a3..a1ef0e9e1 100644
+--- a/tools/pvcreate.c
++++ b/tools/pvcreate.c
+@@ -144,7 +144,8 @@ int pvcreate(struct cmd_context *cmd, int argc, char **argv)
+ 
+ 	cmd->create_edit_devices_file = 1;
+ 
+-	lvmcache_label_scan(cmd);
++	if (!lvmcache_label_scan(cmd))
++		return_ECMD_FAILED;
+ 
+ 	if (!(handle = init_processing_handle(cmd, NULL))) {
+ 		log_error("Failed to initialize processing handle.");
+diff --git a/tools/pvremove.c b/tools/pvremove.c
+index 2dfdbd016..5c39ee0c7 100644
+--- a/tools/pvremove.c
++++ b/tools/pvremove.c
+@@ -45,7 +45,8 @@ int pvremove(struct cmd_context *cmd, int argc, char **argv)
+ 
+ 	clear_hint_file(cmd);
+ 
+-	lvmcache_label_scan(cmd);
++	if (!lvmcache_label_scan(cmd))
++		return_ECMD_FAILED;
+ 
+ 	/* When forcibly clearing a PV we don't care about a VG lock. */
+ 	if (pp.force == DONT_PROMPT_OVERRIDE)
+diff --git a/tools/pvscan.c b/tools/pvscan.c
+index 1e47d754a..72c3279c3 100644
+--- a/tools/pvscan.c
++++ b/tools/pvscan.c
+@@ -1407,7 +1407,8 @@ static int _pvscan_cache_all(struct cmd_context *cmd, int argc, char **argv,
+ 	 * which we want 'pvscan --cache' to do, and that uses
+ 	 * info from lvmcache, e.g. duplicate pv info.
+ 	 */
+-	lvmcache_label_scan(cmd);
++	if (!lvmcache_label_scan(cmd))
++		return_0;
+ 
+ 	cmd->pvscan_recreate_hints = 0;
+ 	cmd->use_hints = 0;
+diff --git a/tools/toollib.c b/tools/toollib.c
+index d77092d89..544791808 100644
+--- a/tools/toollib.c
++++ b/tools/toollib.c
+@@ -1655,7 +1655,10 @@ int process_each_label(struct cmd_context *cmd, int argc, char **argv,
+ 
+ 	log_set_report_object_type(LOG_REPORT_OBJECT_TYPE_LABEL);
+ 
+-	lvmcache_label_scan(cmd);
++	if (!lvmcache_label_scan(cmd)) {
++		ret_max = ECMD_FAILED;
++		goto_out;
++	}
+ 
+ 	if (argc) {
+ 		for (; opt < argc; opt++) {
+@@ -2435,8 +2438,13 @@ int process_each_vg(struct cmd_context *cmd,
+ 	 * Scan all devices to populate lvmcache with initial
+ 	 * list of PVs and VGs.
+ 	 */
+-	if (!(read_flags & PROCESS_SKIP_SCAN))
+-		lvmcache_label_scan(cmd);
++	if (!(read_flags & PROCESS_SKIP_SCAN)) {
++		if (!lvmcache_label_scan(cmd)) {
++			ret_max = ECMD_FAILED;
++			goto_out;
++		}
++	}
++
+ 
+ 	/*
+ 	 * A list of all VGs on the system is needed when:
+@@ -3987,7 +3995,10 @@ int process_each_lv(struct cmd_context *cmd,
+ 	 * Scan all devices to populate lvmcache with initial
+ 	 * list of PVs and VGs.
+ 	 */
+-	lvmcache_label_scan(cmd);
++	if (!lvmcache_label_scan(cmd)) {
++		ret_max = ECMD_FAILED;
++		goto_out;
++	}
+ 
+ 	/*
+ 	 * A list of all VGs on the system is needed when:
+@@ -4623,8 +4634,12 @@ int process_each_pv(struct cmd_context *cmd,
+ 		goto_out;
+ 	}
+ 
+-	if (!(read_flags & PROCESS_SKIP_SCAN))
+-		lvmcache_label_scan(cmd);
++	if (!(read_flags & PROCESS_SKIP_SCAN)) {
++		if (!lvmcache_label_scan(cmd)) {
++			ret_max = ECMD_FAILED;
++			goto_out;
++		}
++	}
+ 
+ 	if (!lvmcache_get_vgnameids(cmd, &all_vgnameids, only_this_vgname, 1)) {
+ 		ret_max = ret;
+diff --git a/tools/vgcfgrestore.c b/tools/vgcfgrestore.c
+index e49313d14..9fcba89d4 100644
+--- a/tools/vgcfgrestore.c
++++ b/tools/vgcfgrestore.c
+@@ -132,7 +132,10 @@ int vgcfgrestore(struct cmd_context *cmd, int argc, char **argv)
+ 
+ 	clear_hint_file(cmd);
+ 
+-	lvmcache_label_scan(cmd);
++	if (!lvmcache_label_scan(cmd)) {
++		unlock_vg(cmd, NULL, vg_name);
++		return_ECMD_FAILED;
++	}
+ 
+ 	cmd->handles_unknown_segments = 1;
+ 
+diff --git a/tools/vgcreate.c b/tools/vgcreate.c
+index dde3f1eac..14608777f 100644
+--- a/tools/vgcreate.c
++++ b/tools/vgcreate.c
+@@ -84,7 +84,10 @@ int vgcreate(struct cmd_context *cmd, int argc, char **argv)
+ 
+ 	cmd->create_edit_devices_file = 1;
+ 
+-	lvmcache_label_scan(cmd);
++	if (!lvmcache_label_scan(cmd)) {
++		unlock_vg(cmd, NULL, vp_new.vg_name);
++		return_ECMD_FAILED;
++	}
+ 
+ 	if (lvmcache_vginfo_from_vgname(vp_new.vg_name, NULL)) {
+ 		unlock_vg(cmd, NULL, vp_new.vg_name);
+diff --git a/tools/vgextend.c b/tools/vgextend.c
+index 0856b4c78..fecd6bdd5 100644
+--- a/tools/vgextend.c
++++ b/tools/vgextend.c
+@@ -160,7 +160,8 @@ int vgextend(struct cmd_context *cmd, int argc, char **argv)
+ 
+ 	cmd->edit_devices_file = 1;
+ 
+-	lvmcache_label_scan(cmd);
++	if (!lvmcache_label_scan(cmd))
++		return_ECMD_FAILED;
+ 
+ 	if (!(handle = init_processing_handle(cmd, NULL))) {
+ 		log_error("Failed to initialize processing handle.");
+diff --git a/tools/vgmerge.c b/tools/vgmerge.c
+index 08615cd62..4ed4a8f0b 100644
+--- a/tools/vgmerge.c
++++ b/tools/vgmerge.c
+@@ -72,7 +72,8 @@ static int _vgmerge_single(struct cmd_context *cmd, const char *vg_name_to,
+ 		return ECMD_FAILED;
+ 	}
+ 
+-	lvmcache_label_scan(cmd);
++	if (!lvmcache_label_scan(cmd))
++		return_ECMD_FAILED;
+ 
+ 	if (strcmp(vg_name_to, vg_name_from) > 0)
+ 		lock_vg_from_first = 1;
+diff --git a/tools/vgsplit.c b/tools/vgsplit.c
+index 5f113b363..c7f4b8af4 100644
+--- a/tools/vgsplit.c
++++ b/tools/vgsplit.c
+@@ -559,7 +559,8 @@ int vgsplit(struct cmd_context *cmd, int argc, char **argv)
+ 		return ECMD_FAILED;
+ 	}
+ 
+-	lvmcache_label_scan(cmd);
++	if (!lvmcache_label_scan(cmd))
++		return_ECMD_FAILED;
+ 
+ 	if (!(vginfo_to = lvmcache_vginfo_from_vgname(vg_name_to, NULL))) {
+ 		if (!validate_name(vg_name_to)) {
 
