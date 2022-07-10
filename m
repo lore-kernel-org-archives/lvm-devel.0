@@ -1,101 +1,60 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Sun, 10 Jul 2022 23:22:15 +0000 (GMT)
-Subject: main - vdo: use single validator
-Message-ID: <20220710232215.04474385734A@sourceware.org>
+Date: Sun, 10 Jul 2022 23:22:16 +0000 (GMT)
+Subject: main - vdo: update info about memory
+Message-ID: <20220710232216.2444F385737B@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=8ca2b1bc213188037ecedfbf76de53de871c7f5b
-Commit:        8ca2b1bc213188037ecedfbf76de53de871c7f5b
-Parent:        fe6fb1ec521407ec586ebda66d67345e33cfc39e
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=f445624c339a5c1436a47d2b51046869f183eb03
+Commit:        f445624c339a5c1436a47d2b51046869f183eb03
+Parent:        8ca2b1bc213188037ecedfbf76de53de871c7f5b
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Mon Jul 4 16:08:30 2022 +0200
+AuthorDate:    Mon Jul 4 15:00:26 2022 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Mon Jul 11 01:18:24 2022 +0200
 
-vdo: use single validator
+vdo: update info about memory
 
-Add era lenght validation into dm_vdo_validate_target_params()
-and reuse this validator also for _check_lv_segment().
+Add more info about kernel target memory allocation associated with
+VDO pool usage.
 ---
- device_mapper/vdo/vdo_target.c |  9 ++++++++-
- lib/metadata/merge.c           | 37 ++-----------------------------------
- 2 files changed, 10 insertions(+), 36 deletions(-)
+ man/lvmvdo.7_main | 15 ++++++++++++---
+ 1 file changed, 12 insertions(+), 3 deletions(-)
 
-diff --git a/device_mapper/vdo/vdo_target.c b/device_mapper/vdo/vdo_target.c
-index 2ffd29145..0e5abd162 100644
---- a/device_mapper/vdo/vdo_target.c
-+++ b/device_mapper/vdo/vdo_target.c
-@@ -1,5 +1,5 @@
- /*
-- * Copyright (C) 2018 Red Hat, Inc. All rights reserved.
-+ * Copyright (C) 2018-2022 Red Hat, Inc. All rights reserved.
-  *
-  * This file is part of LVM2.
-  *
-@@ -38,6 +38,13 @@ bool dm_vdo_validate_target_params(const struct dm_vdo_target_params *vtp,
- 		valid = false;
- 	}
- 
-+	if ((vtp->block_map_era_length < DM_VDO_BLOCK_MAP_ERA_LENGTH_MINIMUM) ||
-+	    (vtp->block_map_era_length > DM_VDO_BLOCK_MAP_ERA_LENGTH_MAXIMUM)) {
-+		log_error("VDO block map era length %u out of range.",
-+			  vtp->block_map_era_length);
-+		valid = false;
-+	}
-+
- 	if ((vtp->index_memory_size_mb < DM_VDO_INDEX_MEMORY_SIZE_MINIMUM_MB) ||
- 	    (vtp->index_memory_size_mb > DM_VDO_INDEX_MEMORY_SIZE_MAXIMUM_MB)) {
- 		log_error("VDO index memory size %u out of range.",
-diff --git a/lib/metadata/merge.c b/lib/metadata/merge.c
-index 8eff74297..5209f51b5 100644
---- a/lib/metadata/merge.c
-+++ b/lib/metadata/merge.c
-@@ -545,41 +545,8 @@ static void _check_lv_segment(struct logical_volume *lv, struct lv_segment *seg,
- 			seg_error("is missing a VDO pool data LV");
- 		} else if (!lv_is_vdo_pool_data(seg_lv(seg, 0)))
- 			seg_error("is not VDO pool data LV");
--		if ((seg->vdo_params.minimum_io_size != (512 >> SECTOR_SHIFT)) &&
--		    (seg->vdo_params.minimum_io_size != (4096 >> SECTOR_SHIFT)))
--			seg_error("sets unsupported VDO minimum io size");
--		if ((seg->vdo_params.block_map_cache_size_mb < DM_VDO_BLOCK_MAP_CACHE_SIZE_MINIMUM_MB) ||
--		    (seg->vdo_params.block_map_cache_size_mb > DM_VDO_BLOCK_MAP_CACHE_SIZE_MAXIMUM_MB))
--			seg_error("sets unsupported VDO block map cache size");
--		if ((seg->vdo_params.block_map_era_length < DM_VDO_BLOCK_MAP_ERA_LENGTH_MINIMUM) ||
--		    (seg->vdo_params.block_map_era_length > DM_VDO_BLOCK_MAP_ERA_LENGTH_MAXIMUM))
--			seg_error("sets unsupported VDO block map era length");
--		if ((seg->vdo_params.index_memory_size_mb < DM_VDO_INDEX_MEMORY_SIZE_MINIMUM_MB) ||
--		    (seg->vdo_params.index_memory_size_mb > DM_VDO_INDEX_MEMORY_SIZE_MAXIMUM_MB))
--			seg_error("sets unsupported VDO index memory size");
--		if ((seg->vdo_params.slab_size_mb < DM_VDO_SLAB_SIZE_MINIMUM_MB) ||
--		    (seg->vdo_params.slab_size_mb > DM_VDO_SLAB_SIZE_MAXIMUM_MB))
--			seg_error("sets unsupported VDO slab size");
--		if ((seg->vdo_params.max_discard < DM_VDO_MAX_DISCARD_MINIMUM) ||
--		    (seg->vdo_params.max_discard > DM_VDO_MAX_DISCARD_MAXIMUM))
--			seg_error("sets unsupported VDO max discard");
--		if (seg->vdo_params.ack_threads > DM_VDO_ACK_THREADS_MAXIMUM)
--			seg_error("sets unsupported VDO ack threads");
--		if ((seg->vdo_params.bio_threads < DM_VDO_BIO_THREADS_MINIMUM) ||
--		    (seg->vdo_params.bio_threads > DM_VDO_BIO_THREADS_MAXIMUM))
--			seg_error("sets unsupported VDO bio threads");
--		if ((seg->vdo_params.bio_rotation < DM_VDO_BIO_ROTATION_MINIMUM) ||
--		    (seg->vdo_params.bio_rotation > DM_VDO_BIO_ROTATION_MAXIMUM))
--			seg_error("sets unsupported VDO bio rotation");
--		if ((seg->vdo_params.cpu_threads < DM_VDO_CPU_THREADS_MINIMUM) ||
--		    (seg->vdo_params.cpu_threads > DM_VDO_CPU_THREADS_MAXIMUM))
--			seg_error("sets unsupported VDO cpu threads");
--		if (seg->vdo_params.hash_zone_threads > DM_VDO_HASH_ZONE_THREADS_MAXIMUM)
--			seg_error("sets unsupported VDO hash zone threads");
--		if (seg->vdo_params.logical_threads > DM_VDO_LOGICAL_THREADS_MAXIMUM)
--			seg_error("sets unsupported VDO logical threads");
--		if (seg->vdo_params.physical_threads > DM_VDO_PHYSICAL_THREADS_MAXIMUM)
--			seg_error("sets unsupported VDO physical threads");
-+		if (!dm_vdo_validate_target_params(&seg->vdo_params, 0))
-+			seg_error("sets invalid VDO parameter(s)");
- 	} else { /* !VDO pool */
- 		if (seg->vdo_pool_header_size)
- 			seg_error("sets vdo_pool_header_size");
+diff --git a/man/lvmvdo.7_main b/man/lvmvdo.7_main
+index 14bd640b5..8c3e3eeaa 100644
+--- a/man/lvmvdo.7_main
++++ b/man/lvmvdo.7_main
+@@ -12,7 +12,7 @@ for primary storage.
+ .P
+ Deduplication is a technique for reducing the consumption of storage
+ resources by eliminating multiple copies of duplicate blocks. Compression
+-takes the individual unique blocks and shrinks them. 
++takes the individual unique blocks and shrinks them.
+ These reduced blocks are then efficiently packed together into
+ physical blocks. Thin provisioning manages the mapping from logical blocks
+ presented by VDO to where the data has actually been physically stored,
+@@ -358,8 +358,17 @@ take otherwise as device is already expected to be empty.
+ .
+ .SS \n+[step]. Memory usage
+ .
+-The VDO target requires 370 MiB of RAM plus an additional 268 MiB
+-per each 1 TiB of physical storage managed by the volume.
++The VDO target requires 38 MiB of RAM and several variable amounts:
++.IP \(bu 2
++1.15 MiB of RAM for each 1 MiB of configured block map cache size.
++The block map cache requires a minimum of 150 MiB RAM.
++.br
++.IP \(bu
++1.6 MiB of RAM for each 1 TiB of logical space.
++.br
++.IP \(bu
++268 MiB of RAM for each 1 TiB of physical storage managed by the volume.
++.br
+ .P
+ UDS requires a minimum of 250 MiB of RAM,
+ which is also the default amount that deduplication uses.
 
