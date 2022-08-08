@@ -1,82 +1,91 @@
-From: Milan Broz <mbroz@redhat.com>
-Date: Fri, 18 Mar 2011 12:32:17 +0100
-Subject: [PATCH] Mitigate some warnings if running as non-root user.
-Message-ID: <1300447937-8114-1-git-send-email-mbroz@redhat.com>
+From: Peter Rajnoha <prajnoha@sourceware.org>
+Date: Mon,  8 Aug 2022 13:47:54 +0000 (GMT)
+Subject: master - shell: also output error message about max number of args hit with JSON format
+Message-ID: <20220808134754.03EEE3858400@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-LVM doesn't behave correctly if running as non-root user,
-there is warning when it detects it.
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=2fa99164938d11221fe6afc30af4f016bbc02450
+Commit:        2fa99164938d11221fe6afc30af4f016bbc02450
+Parent:        99ce09ae778c2cc4aa2611e425bba5287b8b9513
+Author:        Peter Rajnoha <prajnoha@redhat.com>
+AuthorDate:    Mon Aug 8 15:15:32 2022 +0200
+Committer:     Peter Rajnoha <prajnoha@redhat.com>
+CommitterDate: Mon Aug 8 15:46:52 2022 +0200
 
-Despite this, it produces many error messages, saying nothing.
-See https://bugzilla.redhat.com/show_bug.cgi?id=620571
+shell: also output error message about max number of args hit with JSON format
 
-This patch fixes two things:
-1) Removes eror message from device_is_usable() which has no
-information value anyway (real warning is printed inside it).
+If using JSON format for lvm shell's output, the error message about
+exceeding the maximum number of arguments was not reported on output if
+this condition was ever hit.
 
-2) it fixes device-mapper initialization, if we support
-core dm module autoload and device node is present, it should
-fail early and not try recreate existing and correct node.
-(non-root == permission denied here)
+This is because the JSON format (as well as any other future format)
+requires extra formatting compared to "basic" format and so it also
+requires extra calls when it comes to reporting. The report needs to
+be added to a report group and then popped and put on output with
+specialized "dm_report_group_output_and_pop_all".
 
-N.B. In future code should support user roles, some more
-drastic checks in code are probably contraproductive now.
+This "output and pop" is normally executed after we execute the command
+in the lvm shell. When we didn't get to the command exection at all because
+some precondition was not met (like hitting the limit for the number of
+arguments for the command here), we skipped this important call and
+so there was no log report output.
 
-Signed-off-by: Milan Broz <mbroz@redhat.com>
+Right now, it's only this exact error message for which we need to call
+"output and pop" directly, all the other error messages are about
+initializing and setting the log report itself which we can't report
+obviously.
+
+Before this patch:
+
+  lvm> pvs 01 02 03 04 05 06 07 08 09 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 32 33 34 35 36 37 38 39 40 41 42 43 44 45 46 47 48 49 50 51 52 53 54 55 56 57 58 59 60 61 62 63 64 65
+  lvm>
+
+With this patch applied:
+
+  lvm> pvs 01 02 03 04 05 06 07 08 09 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 32 33 34 35 36 37 38 39 40 41 42 43 44 45 46 47 48 49 50 51 52 53 54 55 56 57 58 59 60 61 62 63 64 65
+  {
+      "log": [
+          {"log_seq_num":"1", "log_type":"error", "log_context":"shell", "log_object_type":"cmd", "log_object_name":"", "log_object_id":"", "log_object_group":"", "log_object_group_id":"", "log_message":"Too many arguments, sorry.", "log_errno":"-1", "log_ret_code":"0"}
+      ]
+  }
+
+If there's any other error message in the future before we execute the
+command itself, we also need to call the "output and pop" directly.
 ---
- lib/activate/dev_manager.c |    6 ++----
- libdm/ioctl/libdm-iface.c  |    9 ++++++---
- 2 files changed, 8 insertions(+), 7 deletions(-)
+ tools/lvm.c | 11 +++++++++++
+ 1 file changed, 11 insertions(+)
 
-diff --git a/lib/activate/dev_manager.c b/lib/activate/dev_manager.c
-index 865bb35..cb041c6 100644
---- a/lib/activate/dev_manager.c
-+++ b/lib/activate/dev_manager.c
-@@ -141,10 +141,8 @@ int device_is_usable(struct device *dev)
- 	int only_error_target = 1;
- 	int r = 0;
+diff --git a/tools/lvm.c b/tools/lvm.c
+index e80113e0d..756328f3f 100644
+--- a/tools/lvm.c
++++ b/tools/lvm.c
+@@ -234,6 +234,16 @@ int lvm_shell(struct cmd_context *cmd, struct cmdline_context *cmdline)
+ 	log_set_report_object_type(LOG_REPORT_OBJECT_TYPE_CMD);
  
--	if (!(dmt = dm_task_create(DM_DEVICE_STATUS))) {
--		log_error("Failed to create dm_task struct to check dev status");
--		return 0;
--	}
-+	if (!(dmt = dm_task_create(DM_DEVICE_STATUS)))
-+		return_0;
+ 	while (1) {
++		/*
++		 * Note: If we need to output the log report before we get to the dm_report_group_output_and_pop_all
++		 * at the end of this loop, like hitting a failure situation before we execute the command itself,
++		 * don't forget to directly call dm_report_group_output_and_pop_all, otherwise no log meesage will
++		 * appear on output (for output formats other than 'basic').
++		 *
++		 * Obviously, you can't output the 'log report' if the error is in initializing or setting
++		 * the report itself. In this case, we can only return an error code, but no message.
++		 */
++
+ 		report_reset_cmdlog_seqnum();
+ 		if (cmd->cmd_report.log_rh) {
+ 			/*
+@@ -275,6 +285,7 @@ int lvm_shell(struct cmd_context *cmd, struct cmdline_context *cmdline)
+ 		if (lvm_split(input, &argc, argv, MAX_ARGS) == MAX_ARGS) {
+ 			_discard_log_report_content(cmd);
+ 			log_error("Too many arguments, sorry.");
++			dm_report_group_output_and_pop_all(cmd->cmd_report.report_group);
+ 			continue;
+ 		}
  
- 	if (!dm_task_set_major_minor(dmt, MAJOR(dev->dev), MINOR(dev->dev), 1))
- 		goto_out;
-diff --git a/libdm/ioctl/libdm-iface.c b/libdm/ioctl/libdm-iface.c
-index 241e792..b52c925 100644
---- a/libdm/ioctl/libdm-iface.c
-+++ b/libdm/ioctl/libdm-iface.c
-@@ -365,8 +365,9 @@ static int _open_and_assign_control_fd(const char *control,
- 	_close_control_fd();
- 
- 	if ((_control_fd = open(control, O_RDWR)) < 0) {
--		if (!(ignore_nodev && errno == ENODEV))
--			log_sys_error("open", control);
-+		if (ignore_nodev && errno == ENODEV)
-+			return 1;
-+		log_sys_error("open", control);
- 		return 0;
- 	}
- 
-@@ -412,7 +413,9 @@ static int _open_control(void)
- 		    !_create_control(control, major, MAPPER_CTRL_MINOR))
- 			goto error;
- 
--		_open_and_assign_control_fd(control, 1);
-+		/* Fallback to old code only if control node doesn't exist */
-+		if (!_open_and_assign_control_fd(control, 1))
-+			goto error;
- 	}
- 
- 	/*
--- 
-1.7.4.1
-
 
