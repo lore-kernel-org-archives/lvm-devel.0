@@ -1,71 +1,52 @@
 From: Marian Csontos <mcsontos@sourceware.org>
-Date: Tue,  9 Aug 2022 14:18:02 +0000 (GMT)
-Subject: main - spec: Use libedit for newer distributions
-Message-ID: <20220809141802.22DD3385AC23@sourceware.org>
+Date: Tue,  9 Aug 2022 14:18:05 +0000 (GMT)
+Subject: main - config: add correct unconfigured value for use_devicesfile
+Message-ID: <20220809141805.95276385AC2F@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=9cdd258646d5d9da534568a61133e76f3d5548d7
-Commit:        9cdd258646d5d9da534568a61133e76f3d5548d7
-Parent:        2fa99164938d11221fe6afc30af4f016bbc02450
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=2fc52b6c41172fc4ae15e736fae095aa681ff03a
+Commit:        2fc52b6c41172fc4ae15e736fae095aa681ff03a
+Parent:        4e6ed2c458a47b2ea4b43c4e0b00ec070040a592
 Author:        Marian Csontos <mcsontos@redhat.com>
-AuthorDate:    Wed Jul 27 18:02:01 2022 +0200
+AuthorDate:    Tue Aug 9 16:04:09 2022 +0200
 Committer:     Marian Csontos <mcsontos@redhat.com>
-CommitterDate: Tue Aug 9 16:17:36 2022 +0200
+CommitterDate: Tue Aug 9 16:17:45 2022 +0200
 
-spec: Use libedit for newer distributions
+config: add correct unconfigured value for use_devicesfile
 
 ---
- spec/build.inc  |  2 ++
- spec/source.inc | 13 +++++++++++++
- 2 files changed, 15 insertions(+)
+ conf/example.conf.in         | 2 +-
+ lib/config/config_settings.h | 2 +-
+ 2 files changed, 2 insertions(+), 2 deletions(-)
 
-diff --git a/spec/build.inc b/spec/build.inc
-index 8067e58d0..e57ecf958 100644
---- a/spec/build.inc
-+++ b/spec/build.inc
-@@ -28,6 +28,8 @@
- %enableif %{enable_dbusd} dbus-service
- %enableif %{enable_dbusd} notify-dbus
- %enableif %{enable_dmfilemapd} dmfilemapd
-+%enableif %{enable_readline} readline
-+%enableif %{enable_editline} editline
+diff --git a/conf/example.conf.in b/conf/example.conf.in
+index 4e5482fee..5fadeac12 100644
+--- a/conf/example.conf.in
++++ b/conf/example.conf.in
+@@ -126,7 +126,7 @@ devices {
+ 	# be used, regardless of this setting, when the --devicesfile
+ 	# option is set to a specific file name.
+ 	# This configuration option has an automatic default value.
+-	# use_devicesfile = 0
++	# use_devicesfile = @DEFAULT_USE_DEVICES_FILE@
  
- %build
+ 	# Configuration option devices/devicesfile.
+ 	# The name of the system devices file, listing devices that LVM should use.
+diff --git a/lib/config/config_settings.h b/lib/config/config_settings.h
+index e97e12152..d2811df2b 100644
+--- a/lib/config/config_settings.h
++++ b/lib/config/config_settings.h
+@@ -277,7 +277,7 @@ cfg_array(devices_preferred_names_CFG, "preferred_names", devices_CFG_SECTION, C
+ 	"preferred_names = [ \"^/dev/mpath/\", \"^/dev/mapper/mpath\", \"^/dev/[hs]d\" ]\n"
+ 	"#\n")
  
-diff --git a/spec/source.inc b/spec/source.inc
-index d608debab..3e7573025 100644
---- a/spec/source.inc
-+++ b/spec/source.inc
-@@ -47,6 +47,14 @@
- %global req_udev udev >= 181-1
- 
- 
-+%if %{fedora} >= 35 || %{rhel} >= 9
-+  %global enable_readline 0
-+  %global enable_editline 1
-+%else
-+  %global enable_readline 1
-+  %global enable_editline 0
-+%endif
-+
- %if %{fedora} >= 24 || %{rhel} >= 7
-  %service lvmlockd 1
-  %global sanlock_version 3.3.0-1
-@@ -154,7 +162,12 @@ Source94: macros.inc
- 
- BuildRequires: libselinux-devel >= 1.30.19-4, libsepol-devel
- BuildRequires: ncurses-devel
-+%if %{enable_readline}
- BuildRequires: readline-devel
-+%endif
-+%if %{enable_editline}
-+BuildRequires: libedit-devel
-+%endif
- BuildRequires: module-init-tools
- BuildRequires: pkgconfig
- 
+-cfg(devices_use_devicesfile_CFG, "use_devicesfile", devices_CFG_SECTION, CFG_DEFAULT_COMMENTED, CFG_TYPE_BOOL, DEFAULT_USE_DEVICES_FILE, vsn(2, 3, 12), NULL, 0, NULL,
++cfg(devices_use_devicesfile_CFG, "use_devicesfile", devices_CFG_SECTION, CFG_DEFAULT_COMMENTED, CFG_TYPE_BOOL, DEFAULT_USE_DEVICES_FILE, vsn(2, 3, 12), "@DEFAULT_USE_DEVICES_FILE@", 0, NULL,
+ 	"Enable or disable the use of a devices file.\n"
+ 	"When enabled, lvm will only use devices that\n"
+ 	"are lised in the devices file. A devices file will\n"
 
