@@ -1,29 +1,38 @@
-From: Peter Rajnoha <prajnoha@redhat.com>
-Date: Fri, 18 Mar 2011 13:10:45 +0100
-Subject: [PATCH] Mitigate some warnings if running as non-root user.
-In-Reply-To: <1300447937-8114-1-git-send-email-mbroz@redhat.com>
-References: <1300447937-8114-1-git-send-email-mbroz@redhat.com>
-Message-ID: <4D834BC5.4030803@redhat.com>
+From: Lakshmi Narasimhan Sundararajan <lsundararajan@purestorage.com>
+Date: Wed, 10 Aug 2022 22:55:38 +0530
+Subject: thin pool zeroing/dump query
+Message-ID: <CAFe+wq062=a8iFbqD=MjK20UTrvEcoKscWZn1V1nMfxYM3068A@mail.gmail.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On 03/18/2011 12:32 PM +0100, Milan Broz wrote:
-> See https://bugzilla.redhat.com/show_bug.cgi?id=620571
-> 
-> This patch fixes two things:
-> 1) Removes eror message from device_is_usable() which has no
-> information value anyway (real warning is printed inside it).
-> 
-> 2) it fixes device-mapper initialization, if we support
-> core dm module autoload and device node is present, it should
-> fail early and not try recreate existing and correct node.
-> (non-root == permission denied here)
+Hi Team!
+Good day everyone!
 
-Yes, we need to fix this! The patch is clear, runs fine. Ack.
+I wanted to check with you on the 2 items below.
 
-Peter
+1/ Is it safe to run with thin pool chunks not zeroed? What's the
+recommendation?
+not zeroing chunks from within thin pools, allows for some perf benefits,
+but we see xfs complaining about unclean metadata sometimes.
 
+Our reasoning is as below. A discard happened to a range that unmapped the
+chunk, and then fs wrote only a portion, which now has junk data in
+unwritten but discard region from fs point of view.
 
+2/ Is it possible for thin_dump to return len that are smaller than the
+whole chunk?
+say for ex. chunk mapped at off 'x' with user data only upto 'u' but the
+thin chunk size is (c) which is greater than user data (u). In which case,
+is it possible for thin_dump to report an off 'x' with len 'u'? Or can we
+always expect thin_dump to report lengths that are a multiple of chunk size?
+
+As always, thank you for your inputs and clarifications.
+
+Best regards
+LN
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20220810/43d06847/attachment.htm>
