@@ -1,51 +1,105 @@
 From: Peter Rajnoha <prajnoha@sourceware.org>
-Date: Thu, 11 Aug 2022 11:06:14 +0000 (GMT)
-Subject: main - report: fix pe_start column type from NUM to SIZ
-Message-ID: <20220811110614.59E4B3858C74@sourceware.org>
+Date: Thu, 11 Aug 2022 11:06:15 +0000 (GMT)
+Subject: main - test: add report-format test
+Message-ID: <20220811110615.7A1A33858C74@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=fc8fda641781d0978ff22ad0a59d5a19b5e450e1
-Commit:        fc8fda641781d0978ff22ad0a59d5a19b5e450e1
-Parent:        b318c9c20f40be1583e7d0751a733f77be173012
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=af2b51d25fb76451d19cb27d22ea0c72f386e33e
+Commit:        af2b51d25fb76451d19cb27d22ea0c72f386e33e
+Parent:        fc8fda641781d0978ff22ad0a59d5a19b5e450e1
 Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Fri Aug 5 11:02:25 2022 +0200
+AuthorDate:    Thu Aug 11 10:57:06 2022 +0200
 Committer:     Peter Rajnoha <prajnoha@redhat.com>
 CommitterDate: Thu Aug 11 11:10:11 2022 +0200
 
-report: fix pe_start column type from NUM to SIZ
+test: add report-format test
 
-The 'pe_start' column was incorrectly marked as being of type NUM.
-This was not correct as pe_start is actually of type SIZ, which means
-it can have a size suffix and hence it's not a pure numeric value.
-
-Proper column type is important for selection to work correctly, so we
-can also do comparisons while using suffixes.
-
-This is also important for new "json_std" output format which does not
-put double quotes around pure numeric values. With pe_start incorrectly
-marked as NUM instead of SIZ, this produced invalid JSON output
-like '"pe_start" = 1.00m' because it contained the 'm' (or other)
-size suffix. If properly marked as SIZ, this is then put in double
-quotes like '"pe_start" = "1.00m"'.
 ---
- lib/report/columns.h | 2 +-
- 1 file changed, 1 insertion(+), 1 deletion(-)
+ test/shell/report-format.sh | 74 +++++++++++++++++++++++++++++++++++++++++++++
+ 1 file changed, 74 insertions(+)
 
-diff --git a/lib/report/columns.h b/lib/report/columns.h
-index 7e450dace..d702635d2 100644
---- a/lib/report/columns.h
-+++ b/lib/report/columns.h
-@@ -191,7 +191,7 @@ FIELD(LABEL, label, NUM, "PExtVsn", type, 0, pvextvsn, pv_ext_vsn, "PV header ex
- /*
-  * PVS type fields
-  */
--FIELD(PVS, pv, NUM, "1st PE", pe_start, 7, size64, pe_start, "Offset to the start of data on the underlying device.", 0)
-+FIELD(PVS, pv, SIZ, "1st PE", pe_start, 7, size64, pe_start, "Offset to the start of data on the underlying device.", 0)
- FIELD(PVS, pv, SIZ, "PSize", id, 0, pvsize, pv_size, "Size of PV in current units.", 0)
- FIELD(PVS, pv, SIZ, "PFree", id, 0, pvfree, pv_free, "Total amount of unallocated space in current units.", 0)
- FIELD(PVS, pv, SIZ, "Used", id, 0, pvused, pv_used, "Total amount of allocated space in current units.", 0)
+diff --git a/test/shell/report-format.sh b/test/shell/report-format.sh
+new file mode 100644
+index 000000000..07fa02778
+--- /dev/null
++++ b/test/shell/report-format.sh
+@@ -0,0 +1,74 @@
++#!/usr/bin/env bash
++
++# Copyright (C) 2022 Red Hat, Inc. All rights reserved.
++#
++# This copyrighted material is made available to anyone wishing to use,
++# modify, copy, or redistribute it subject to the terms and conditions
++# of the GNU General Public License v.2.
++#
++# You should have received a copy of the GNU General Public License
++# along with this program; if not, write to the Free Software Foundation,
++# Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
++
++
++SKIP_WITH_LVMPOLLD=1
++
++. lib/inittest
++
++aux prepare_vg 1
++
++OUT_LOG_FILE="out"
++
++lvcreate -l1 -T $vg/$lv1
++lvcreate -l1 -n $lv2 --addtag lv_tag1 -an $vg
++lvcreate -l1 -n $lv3 --addtag lv_tag3 --addtag lv_tag1 --addtag lv_tag2 $vg
++
++aux lvmconf "report/output_format = basic"
++lvs -o name,kernel_major,data_percent,tags | tee "$OUT_LOG_FILE"
++
++#
++#  LV    KMaj Data%  LV Tags
++#  lvol1  253 0.00
++#  lvol2   -1        lv_tag1
++#  lvol3  253        lv_tag1,lv_tag2,lv_tag3
++#
++grep -E "^[[:space:]]*$lv1[[:space:]]*[[:digit:]]+[[:space:]]*[[:digit:]]+.[[:digit:]]+[[:space:]]*\$" out
++grep -E "^[[:space:]]*$lv2[[:space:]]*-1[[:space:]]*lv_tag1[[:space:]]*\$" out
++grep -E "^[[:space:]]*$lv3[[:space:]]*[[:digit:]]+[[:space:]]*lv_tag1,lv_tag2,lv_tag3\$" out
++
++
++aux lvmconf "report/output_format = json"
++lvs -o name,kernel_major,data_percent,tags | tee "$OUT_LOG_FILE"
++#  {
++#      "report": [
++#          {
++#              "lv": [
++#                  {"lv_name":"lvol1", "lv_kernel_major":"253", "data_percent":"0.00", "lv_tags":""},
++#                  {"lv_name":"lvol2", "lv_kernel_major":"-1", "data_percent":"", "lv_tags":"lv_tag1"},
++#                  {"lv_name":"lvol3", "lv_kernel_major":"253", "data_percent":"", "lv_tags":"lv_tag1,lv_tag2,lv_tag3"}
++#              ]
++#          }
++#      ]
++#  }
++grep -E "^[[:space:]]*{\"lv_name\":\"$lv1\", \"lv_kernel_major\":\"[[:digit:]]+\", \"data_percent\":\"[[:digit:]]+.[[:digit:]]+\", \"lv_tags\":\"\"},\$" out
++grep -E "^[[:space:]]*{\"lv_name\":\"$lv2\", \"lv_kernel_major\":\"-1\", \"data_percent\":\"\", \"lv_tags\":\"lv_tag1\"},\$" out
++grep -E "^[[:space:]]*{\"lv_name\":\"$lv3\", \"lv_kernel_major\":\"[[:digit:]]+\", \"data_percent\":\"\", \"lv_tags\":\"lv_tag1,lv_tag2,lv_tag3\"}\$" out
++
++aux lvmconf "report/output_format = json_std"
++lvs -o name,kernel_major,data_percent,tags | tee "$OUT_LOG_FILE"
++#  {
++#      "report": [
++#          {
++#              "lv": [
++#                  {"lv_name":"lvol1", "lv_kernel_major":253, "data_percent":0.00, "lv_tags":[]},
++#                  {"lv_name":"lvol2", "lv_kernel_major":-1, "data_percent":null, "lv_tags":["lv_tag1"]},
++#                  {"lv_name":"lvol3", "lv_kernel_major":253, "data_percent":null, "lv_tags":["lv_tag1","lv_tag2","lv_tag3"]}
++#              ]
++#          }
++#      ]
++#  }
++grep -E "^[[:space:]]*{\"lv_name\":\"$lv1\", \"lv_kernel_major\":[[:digit:]]+, \"data_percent\":[[:digit:]]+.[[:digit:]]+, \"lv_tags\":\[\]},\$" out
++grep -E "^[[:space:]]*{\"lv_name\":\"$lv2\", \"lv_kernel_major\":-1, \"data_percent\":null, \"lv_tags\":\[\"lv_tag1\"\]},\$" out
++grep -E "^[[:space:]]*{\"lv_name\":\"$lv3\", \"lv_kernel_major\":[[:digit:]]+, \"data_percent\":null, \"lv_tags\":\[\"lv_tag1\",\"lv_tag2\",\"lv_tag3\"\]}\$" out
++
++vgremove -ff $vg
 
