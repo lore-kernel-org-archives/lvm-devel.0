@@ -1,20 +1,20 @@
 From: Peter Rajnoha <prajnoha@sourceware.org>
-Date: Tue, 16 Aug 2022 11:36:38 +0000 (GMT)
+Date: Tue, 16 Aug 2022 11:43:16 +0000 (GMT)
 Subject: main - report: report numeric values (not string synonyms) for NUM and BIN fields with json_std format
-Message-ID: <20220816113638.89A4F3858C2F@sourceware.org>
+Message-ID: <20220816114316.5BFE9385843E@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=1ab6d0d8d8d043a99cb44531de563c7aeb1f0f75
-Commit:        1ab6d0d8d8d043a99cb44531de563c7aeb1f0f75
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=81839cc4ebf566ea9f3e6d819c7338b98cdec374
+Commit:        81839cc4ebf566ea9f3e6d819c7338b98cdec374
 Parent:        ce58e9d5b37c3e408f2b41c8095980490a87f2a4
 Author:        Peter Rajnoha <prajnoha@redhat.com>
 AuthorDate:    Mon Aug 15 11:40:52 2022 +0200
 Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Tue Aug 16 13:35:30 2022 +0200
+CommitterDate: Tue Aug 16 13:42:50 2022 +0200
 
 report: report numeric values (not string synonyms) for NUM and BIN fields with json_std format
 
@@ -32,9 +32,9 @@ in quotes, including numeric ones.
 ---
  lib/commands/toolcontext.h |  1 +
  lib/report/report.c        |  7 ++++---
- man/lvmreport.7_main       |  6 +++++-
+ man/lvmreport.7_main       |  4 ++++
  tools/reporter.c           | 10 ++++++++++
- 4 files changed, 20 insertions(+), 4 deletions(-)
+ 4 files changed, 19 insertions(+), 3 deletions(-)
 
 diff --git a/lib/commands/toolcontext.h b/lib/commands/toolcontext.h
 index f16322d4e..7a4979b33 100644
@@ -84,10 +84,10 @@ index c06b22674..8a5122ff9 100644
  					GET_FIELD_RESERVED_VALUE(vg_mda_copies_unmanaged));
  
 diff --git a/man/lvmreport.7_main b/man/lvmreport.7_main
-index 1ef5d25db..78c43664c 100644
+index 1ef5d25db..0015cdce7 100644
 --- a/man/lvmreport.7_main
 +++ b/man/lvmreport.7_main
-@@ -1335,9 +1335,13 @@ compared to the original \fBjson\fP format:
+@@ -1335,6 +1335,10 @@ compared to the original \fBjson\fP format:
  .RS
  - it does not use double quotes around numeric values,
  .br
@@ -97,11 +97,7 @@ index 1ef5d25db..78c43664c 100644
 +.br
  - it uses 'null' for undefined numeric values,
  .br
--- it prints string list as proper JSON array of strings instead of a single string.
-+- it prints string list as proper JSON array of strings instead of a single   string.
- .RE
- .P
- Note that some configuration settings and command line options have no
+ - it prints string list as proper JSON array of strings instead of a single string.
 diff --git a/tools/reporter.c b/tools/reporter.c
 index b31f1891e..e62858f42 100644
 --- a/tools/reporter.c
