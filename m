@@ -1,122 +1,203 @@
 From: Peter Rajnoha <prajnoha@sourceware.org>
-Date: Tue, 16 Aug 2022 11:43:16 +0000 (GMT)
-Subject: main - report: report numeric values (not string synonyms) for NUM and BIN fields with json_std format
-Message-ID: <20220816114316.5BFE9385843E@sourceware.org>
+Date: Wed, 17 Aug 2022 08:48:14 +0000 (GMT)
+Subject: main - lvmconfig: add --valuesonly option
+Message-ID: <20220817084814.490763858D1E@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=81839cc4ebf566ea9f3e6d819c7338b98cdec374
-Commit:        81839cc4ebf566ea9f3e6d819c7338b98cdec374
-Parent:        ce58e9d5b37c3e408f2b41c8095980490a87f2a4
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=b4cc28c2ef72ee022c1a03819927e31775c18676
+Commit:        b4cc28c2ef72ee022c1a03819927e31775c18676
+Parent:        81839cc4ebf566ea9f3e6d819c7338b98cdec374
 Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Mon Aug 15 11:40:52 2022 +0200
+AuthorDate:    Tue Aug 16 16:56:06 2022 +0200
 Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Tue Aug 16 13:42:50 2022 +0200
+CommitterDate: Wed Aug 17 10:47:24 2022 +0200
 
-report: report numeric values (not string synonyms) for NUM and BIN fields with json_std format
+lvmconfig: add --valuesonly option
 
-Internally, NUM and BIN fields are marked as DM_REPORT_FIELD_TYPE_NUM_NUMBER
-through libdevmapper API. The new 'json_std' format mandates that the report
-string representing such a value must be a number, not an arbitrary string.
-This is because numeric values in 'json_std' format do not have double quotes
-around them. This practically means, we can't use string synonyms
-("named reserved values") for such values and the report string must always
-represent a proper number.
+The new --valuesonly option causes the lvmconfig output to contain only
+values without keys for each config node. This is practical mainly in
+case where we use lvmconfig in scripts and we want to assign the value
+to a different custom key or simply output the value itself without the
+key.
 
-With 'json' and 'basic' formats, this is not an issue because 'basic' format
-doesn't have any structure or typing at all and 'json' format puts all values
-in quotes, including numeric ones.
+For example:
+
+  # lvmconfig --type full activation/raid_fault_policy
+  raid_fault_policy="warn"
+
+  # lvmconfig --type full activation/raid_fault_policy --valuesonly
+  "warn"
+
+  # my_var=$(lvmconfig --type full activation/raid_fault_policy --valuesonly)
+
+  # echo $my_var
+  "warn"
 ---
- lib/commands/toolcontext.h |  1 +
- lib/report/report.c        |  7 ++++---
- man/lvmreport.7_main       |  4 ++++
- tools/reporter.c           | 10 ++++++++++
- 4 files changed, 19 insertions(+), 3 deletions(-)
+ WHATS_NEW              |  1 +
+ lib/config/config.c    | 22 +++++++++++++++++++++-
+ lib/config/config.h    |  1 +
+ man/lvmconfig.8_pregen |  7 +++++++
+ tools/args.h           |  3 +++
+ tools/command-lines.in |  5 +++--
+ tools/dumpconfig.c     |  7 +++++++
+ 7 files changed, 43 insertions(+), 3 deletions(-)
 
-diff --git a/lib/commands/toolcontext.h b/lib/commands/toolcontext.h
-index f16322d4e..7a4979b33 100644
---- a/lib/commands/toolcontext.h
-+++ b/lib/commands/toolcontext.h
-@@ -144,6 +144,7 @@ struct cmd_context {
- 	unsigned degraded_activation:1;
- 	unsigned auto_set_activation_skip:1;
- 	unsigned si_unit_consistency:1;
-+	unsigned report_strict_type_mode:1;
- 	unsigned report_binary_values_as_numeric:1;
- 	unsigned report_mark_hidden_devices:1;
- 	unsigned metadata_read_only:1;
-diff --git a/lib/report/report.c b/lib/report/report.c
-index c06b22674..8a5122ff9 100644
---- a/lib/report/report.c
-+++ b/lib/report/report.c
-@@ -1256,7 +1256,7 @@ static int _binary_disp(struct dm_report *rh, struct dm_pool *mem __attribute__(
- {
- 	const struct cmd_context *cmd = (const struct cmd_context *) private;
+diff --git a/WHATS_NEW b/WHATS_NEW
+index 6cd53553b..6e9a3fa1d 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.03.17 - 
+ ===============================
++  Add --valuesonly option to lvmconfig to print only values without keys.
+   Updates configure with recent autoconf tooling.
+   Fix lvconvert --test --type vdo-pool execution.
+   Add json_std output format for more JSON standard compliant version of output.
+diff --git a/lib/config/config.c b/lib/config/config.c
+index f9614779a..1142ed345 100644
+--- a/lib/config/config.c
++++ b/lib/config/config.c
+@@ -1830,8 +1830,10 @@ static int _out_line_fn(const struct dm_config_node *cn, const char *line, void
+ 	char summary[MAX_COMMENT_LINE+1];
+ 	char version[9];
+ 	int pos = 0;
+-	size_t len;
++	int space_prefix_len;
+ 	char *space_prefix;
++	const char *p;
++	size_t len;
  
--	if (cmd->report_binary_values_as_numeric)
-+	if (cmd->report_strict_type_mode || cmd->report_binary_values_as_numeric)
- 		/* "0"/"1" */
- 		return _field_set_value(field, bin_value ? _str_one : _str_zero, bin_value ? &_one64 : &_zero64);
+ 	if ((out->tree_spec->type == CFG_DEF_TREE_DIFF) &&
+ 	    (!(out->tree_spec->check_status[cn->id] & CFG_DIFF)))
+@@ -1865,9 +1867,24 @@ static int _out_line_fn(const struct dm_config_node *cn, const char *line, void
  
-@@ -1269,7 +1269,7 @@ static int _binary_undef_disp(struct dm_report *rh, struct dm_pool *mem __attrib
- {
- 	const struct cmd_context *cmd = (const struct cmd_context *) private;
+ 	/* Usual tree view with nodes and their values. */
  
--	if (cmd->report_binary_values_as_numeric)
-+	if (cmd->report_strict_type_mode || cmd->report_binary_values_as_numeric)
- 		return _field_set_value(field, GET_FIRST_RESERVED_NAME(num_undef_64), &GET_TYPE_RESERVED_VALUE(num_undef_64));
- 
- 	return _field_set_value(field, _str_unknown, &GET_TYPE_RESERVED_VALUE(num_undef_64));
-@@ -3041,10 +3041,11 @@ static int _vgmdacopies_disp(struct dm_report *rh, struct dm_pool *mem,
- 				   struct dm_report_field *field,
- 				   const void *data, void *private)
- {
-+	struct cmd_context *cmd = (struct cmd_context *) private;
- 	const struct volume_group *vg = (const struct volume_group *) data;
- 	uint32_t count = vg_mda_copies(vg);
- 
--	if (count == VGMETADATACOPIES_UNMANAGED)
-+	if (count == VGMETADATACOPIES_UNMANAGED && !cmd->report_strict_type_mode)
- 		return _field_set_value(field, GET_FIRST_RESERVED_NAME(vg_mda_copies_unmanaged),
- 					GET_FIELD_RESERVED_VALUE(vg_mda_copies_unmanaged));
- 
-diff --git a/man/lvmreport.7_main b/man/lvmreport.7_main
-index 1ef5d25db..0015cdce7 100644
---- a/man/lvmreport.7_main
-+++ b/man/lvmreport.7_main
-@@ -1335,6 +1335,10 @@ compared to the original \fBjson\fP format:
- .RS
- - it does not use double quotes around numeric values,
- .br
-+- numeric values are always expressed as numbers, not reserved strings
-+  representing them (this also means that report/binary_values_as_numeric=1
-+  setting is forced)
-+.br
- - it uses 'null' for undefined numeric values,
- .br
- - it prints string list as proper JSON array of strings instead of a single string.
-diff --git a/tools/reporter.c b/tools/reporter.c
-index b31f1891e..e62858f42 100644
---- a/tools/reporter.c
-+++ b/tools/reporter.c
-@@ -1495,6 +1495,16 @@ int report_format_init(struct cmd_context *cmd)
- 		return 0;
- 	}
- 
-+	/*
-+	 * JSON_STD requires strict type mode. That means all NUM and BIN
-+	 * fields are always reported as numeric values and not strings which
-+	 * are synonyms to these numeric values.
-+	 */
-+	if (args.report_group_type == DM_REPORT_GROUP_JSON_STD)
-+		cmd->report_strict_type_mode = 1;
-+	else
-+		cmd->report_strict_type_mode = 0;
++	if (out->tree_spec->valuesonly && !(cfg_def->type & CFG_TYPE_SECTION)) {
++		if ((space_prefix_len = strspn(line, "\t "))) {
++			len = strlen(line);
++			p = line + space_prefix_len;
 +
- 	if (report_command_log) {
- 		single_args = &args.single_args[REPORT_IDX_LOG];
- 		single_args->report_type = CMDLOG;
++			/* copy space_prefix, skip key and '=', copy value */
++			dm_pool_begin_object(out->mem, len);
++			dm_pool_grow_object(out->mem, line, space_prefix_len);
++			dm_pool_grow_object(out->mem, p + strcspn(p, "=") + 1, len + 1);
++			line = dm_pool_end_object(out->mem);
++		} else
++			line = strchr(line, '=') + 1;
++	}
++
+ 	if ((out->tree_spec->type != CFG_DEF_TREE_CURRENT) &&
+ 	    (out->tree_spec->type != CFG_DEF_TREE_DIFF) &&
+ 	    (out->tree_spec->type != CFG_DEF_TREE_FULL) &&
++	    !out->tree_spec->valuesonly &&
+ 	    (cfg_def->flags & (CFG_DEFAULT_UNDEFINED | CFG_DEFAULT_COMMENTED))) {
+ 		/* print with # at the front to comment out the line */
+ 		if (_should_print_cfg_with_undef_def_val(out, cfg_def, cn)) {
+@@ -1883,6 +1900,9 @@ static int _out_line_fn(const struct dm_config_node *cn, const char *line, void
+ 	if (_should_print_cfg_with_undef_def_val(out, cfg_def, cn))
+ 		fprintf(out->fp, "%s\n", line);
+ 
++	if (out->tree_spec->valuesonly && !(cfg_def->type & CFG_TYPE_SECTION) && space_prefix_len)
++		dm_pool_free(out->mem, (char *) line);
++
+ 	return 1;
+ }
+ 
+diff --git a/lib/config/config.h b/lib/config/config.h
+index c62ea20a5..3926b12f5 100644
+--- a/lib/config/config.h
++++ b/lib/config/config.h
+@@ -176,6 +176,7 @@ struct config_def_tree_spec {
+ 	unsigned unconfigured:1;		/* use unconfigured path strings */
+ 	unsigned withgeneralpreamble:1;		/* include preamble for a general config file */
+ 	unsigned withlocalpreamble:1;		/* include preamble for a local config file */
++	unsigned valuesonly:1;                  /* print only values without keys */
+ 	uint8_t *check_status;			/* status of last tree check (currently needed for CFG_DEF_TREE_MISSING only) */
+ };
+ 
+diff --git a/man/lvmconfig.8_pregen b/man/lvmconfig.8_pregen
+index a29255cf4..5279fa4dc 100644
+--- a/man/lvmconfig.8_pregen
++++ b/man/lvmconfig.8_pregen
+@@ -56,6 +56,8 @@ line settings from --config.
+ .br
+ [    \fB--validate\fP ]
+ .br
++[    \fB--valuesonly\fP ]
++.br
+ [    \fB--withsummary\fP ]
+ .br
+ [    \fB--withcomments\fP ]
+@@ -369,6 +371,11 @@ merged configuration tree, also use --mergedconfig.
+ The validation is done even if \fBlvm.conf\fP(5) \fBconfig/checks\fP is disabled.
+ .
+ .HP
++\fB--valuesonly\fP
++.br
++When printing config settings, print only values without keys.
++.
++.HP
+ \fB-v\fP|\fB--verbose\fP ...
+ .br
+ Set verbose level. Repeat from 1 to 4 times to increase the detail
+diff --git a/tools/args.h b/tools/args.h
+index 9229b8764..bdeefca7d 100644
+--- a/tools/args.h
++++ b/tools/args.h
+@@ -905,6 +905,9 @@ arg(validate_ARG, '\0', "validate", 0, 0, 0,
+     "merged configuration tree, also use --mergedconfig.\n"
+     "The validation is done even if \\fBlvm.conf\\fP(5) \\fBconfig/checks\\fP is disabled.\n")
+ 
++arg(valuesonly_ARG, '\0', "valuesonly", 0, 0, 0,
++    "When printing config settings, print only values without keys.\n")
++
+ arg(vdo_ARG, '\0', "vdo", 0, 0, 0,
+     "Specifies the command is handling VDO LV.\n"
+     "See --type vdo.\n"
+diff --git a/tools/command-lines.in b/tools/command-lines.in
+index b6a03d158..6e9e7bdea 100644
+--- a/tools/command-lines.in
++++ b/tools/command-lines.in
+@@ -221,8 +221,9 @@ OO_REPORT: --aligned, --all, --binary, --configreport ConfigReport, --foreign,
+ #
+ OO_CONFIG: --atversion String, --typeconfig ConfigType, --file String, --ignoreadvanced,
+ --ignoreunsupported, --ignorelocal, --list, --mergedconfig, --metadataprofile String,
+---sinceversion String, --showdeprecated, --showunsupported, --validate, --withsummary,
+---withcomments, --withgeneralpreamble, --withlocalpreamble, --withspaces, --unconfigured, --withversions
++--sinceversion String, --showdeprecated, --showunsupported, --validate, --valuesonly,
++--withsummary, --withcomments, --withgeneralpreamble, --withlocalpreamble, --withspaces,
++--unconfigured, --withversions
+ 
+ ---
+ 
+diff --git a/tools/dumpconfig.c b/tools/dumpconfig.c
+index 9e4408e16..4a0f193c4 100644
+--- a/tools/dumpconfig.c
++++ b/tools/dumpconfig.c
+@@ -242,6 +242,10 @@ int dumpconfig(struct cmd_context *cmd, int argc, char **argv)
+ 			log_error("--withgeneralpreamble has no effect with --type list");
+ 			return EINVALID_CMD_LINE;
+ 		}
++		if (arg_is_set(cmd, valuesonly_ARG)) {
++			log_err("--valuesonly has no effect with --type list");
++			return EINVALID_CMD_LINE;
++		}
+ 		/* list type does not require status check */
+ 	} else if (!strcmp(type, "full")) {
+ 		tree_spec.type = CFG_DEF_TREE_FULL;
+@@ -320,6 +324,9 @@ int dumpconfig(struct cmd_context *cmd, int argc, char **argv)
+ 	if (arg_is_set(cmd, withspaces_ARG))
+ 		tree_spec.withspaces = 1;
+ 
++	if (arg_is_set(cmd, valuesonly_ARG))
++		tree_spec.valuesonly = 1;
++
+ 	if (cft_check_handle)
+ 		tree_spec.check_status = cft_check_handle->status;
+ 
 
