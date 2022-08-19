@@ -1,48 +1,38 @@
-From: Peter Rajnoha <prajnoha@sourceware.org>
-Date: Wed, 17 Aug 2022 10:52:27 +0000 (GMT)
-Subject: main - config: check for possible mempool errors in _out_line_fn
-Message-ID: <20220817105227.6B6B83858D1E@sourceware.org>
+From: Zdenek Kabelac <zkabelac@sourceware.org>
+Date: Fri, 19 Aug 2022 12:58:47 +0000 (GMT)
+Subject: main - vdo: reset errno before strtoull
+Message-ID: <20220819125847.550513858CDA@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=ac2c78544fa60490f9506f4ea0cd7d74d2395b28
-Commit:        ac2c78544fa60490f9506f4ea0cd7d74d2395b28
-Parent:        8a23683a59835d967eff193bf1f82cc4ee5a6fdf
-Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Wed Aug 17 12:51:42 2022 +0200
-Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Wed Aug 17 12:52:02 2022 +0200
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=309df239e3ee474f3a5337f8fa3c0a1f7b0a89e5
+Commit:        309df239e3ee474f3a5337f8fa3c0a1f7b0a89e5
+Parent:        ac2c78544fa60490f9506f4ea0cd7d74d2395b28
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Thu Aug 18 13:55:29 2022 +0200
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Fri Aug 19 14:55:47 2022 +0200
 
-config: check for possible mempool errors in _out_line_fn
+vdo: reset errno before strtoull
 
+Missed errno reset in commit ebad057579aeff0980a1b8af7eaacd56e62ed0c9.
 ---
- lib/config/config.c | 12 +++++++++---
- 1 file changed, 9 insertions(+), 3 deletions(-)
+ lib/metadata/vdo_manip.c | 1 +
+ 1 file changed, 1 insertion(+)
 
-diff --git a/lib/config/config.c b/lib/config/config.c
-index db8f3c2c1..230ec3225 100644
---- a/lib/config/config.c
-+++ b/lib/config/config.c
-@@ -1872,9 +1872,15 @@ static int _out_line_fn(const struct dm_config_node *cn, const char *line, void
- 			p = line + space_prefix_len;
+diff --git a/lib/metadata/vdo_manip.c b/lib/metadata/vdo_manip.c
+index 637fd1e5d..0db401537 100644
+--- a/lib/metadata/vdo_manip.c
++++ b/lib/metadata/vdo_manip.c
+@@ -618,6 +618,7 @@ static int _get_memory_info(uint64_t *total_mb, uint64_t *available_mb)
+ 		if (!found)
+ 			continue; // not interesting
  
- 			/* copy space_prefix, skip key and '=', copy value */
--			dm_pool_begin_object(out->mem, len);
--			dm_pool_grow_object(out->mem, line, space_prefix_len);
--			dm_pool_grow_object(out->mem, p + strcspn(p, "=") + 1, len + 1);
-+			if (!dm_pool_begin_object(out->mem, len))
-+				return_0;
-+
-+			if (!dm_pool_grow_object(out->mem, line, space_prefix_len) ||
-+			    !dm_pool_grow_object(out->mem, p + strcspn(p, "=") + 1, len + 1)) {
-+				dm_pool_abandon_object(out->mem);
-+				return_0;
-+			}
-+
- 			line = dm_pool_end_object(out->mem);
- 		} else
- 			line = strchr(line, '=') + 1;
++		errno = 0;
+ 		*(found->value) = (uint64_t) strtoull(e, &tail, 10);
+ 
+ 		if ((e == tail) || errno)
 
