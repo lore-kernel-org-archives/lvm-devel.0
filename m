@@ -1,103 +1,41 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Fri, 19 Aug 2022 12:58:51 +0000 (GMT)
-Subject: main - devices: drop double // from sysfs path
-Message-ID: <20220819125851.D988A3858CDA@sourceware.org>
+Date: Fri, 19 Aug 2022 12:58:50 +0000 (GMT)
+Subject: main - dmsetup: check also for ouf of range value
+Message-ID: <20220819125850.B80273858C83@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=1a981e9b6efb0bbc0881f5ed1f17900e9c669f48
-Commit:        1a981e9b6efb0bbc0881f5ed1f17900e9c669f48
-Parent:        718e38d5faf3a3ca23690d2f4203df1df65eba77
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=718e38d5faf3a3ca23690d2f4203df1df65eba77
+Commit:        718e38d5faf3a3ca23690d2f4203df1df65eba77
+Parent:        a3eb6ba425773224076c41aabc3c490a6a016ee6
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed Aug 10 15:09:34 2022 +0200
+AuthorDate:    Thu Aug 18 13:56:03 2022 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Fri Aug 19 14:56:57 2022 +0200
 
-devices: drop double // from sysfs path
+dmsetup: check also for ouf of range value
 
-dm_sysfs_dir() comes internally as  /sys/.
+Check errno result from strtoull().
 ---
- lib/device/dev-mpath.c   | 4 ++--
- lib/device/dev-type.c    | 8 ++++----
- lib/metadata/vdo_manip.c | 2 +-
- 3 files changed, 7 insertions(+), 7 deletions(-)
+ libdm/dm-tools/dmsetup.c | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
 
-diff --git a/lib/device/dev-mpath.c b/lib/device/dev-mpath.c
-index 27b0f41a6..2040edac3 100644
---- a/lib/device/dev-mpath.c
-+++ b/lib/device/dev-mpath.c
-@@ -815,7 +815,7 @@ const char *dev_mpath_component_wwid(struct cmd_context *cmd, struct device *dev
+diff --git a/libdm/dm-tools/dmsetup.c b/libdm/dm-tools/dmsetup.c
+index 8502d9adc..42eeead68 100644
+--- a/libdm/dm-tools/dmsetup.c
++++ b/libdm/dm-tools/dmsetup.c
+@@ -5106,8 +5106,9 @@ static int _size_from_string(char *argptr, uint64_t *size, const char *name)
+ 	if (!argptr)
+ 		return_0;
  
- 	/* /sys/dev/block/253:7/slaves/sda/device/wwid */
- 
--	if (dm_snprintf(slaves_path, sizeof(slaves_path), "%s/dev/block/%d:%d/slaves",
-+	if (dm_snprintf(slaves_path, sizeof(slaves_path), "%sdev/block/%d:%d/slaves",
- 			dm_sysfs_dir(), (int)MAJOR(dev->dev), (int)MINOR(dev->dev)) < 0) {
- 		log_warn("Sysfs path to check mpath components is too long.");
- 		return NULL;
-@@ -845,7 +845,7 @@ const char *dev_mpath_component_wwid(struct cmd_context *cmd, struct device *dev
- 
- 		/* read /sys/block/sda/device/wwid */
- 
--		if (dm_snprintf(wwid_path, sizeof(wwid_path), "%s/block/%s/device/wwid",
-+		if (dm_snprintf(wwid_path, sizeof(wwid_path), "%sblock/%s/device/wwid",
-        				dm_sysfs_dir(), slave_name) < 0) {
- 			log_warn("Failed to create sysfs wwid path for %s", slave_name);
- 			continue;
-diff --git a/lib/device/dev-type.c b/lib/device/dev-type.c
-index 939eb4aeb..1dc895b54 100644
---- a/lib/device/dev-type.c
-+++ b/lib/device/dev-type.c
-@@ -548,7 +548,7 @@ static int _has_sys_partition(struct device *dev)
- 	int minor = (int) MINOR(dev->dev);
- 
- 	/* check if dev is a partition */
--	if (dm_snprintf(path, sizeof(path), "%s/dev/block/%d:%d/partition",
-+	if (dm_snprintf(path, sizeof(path), "%sdev/block/%d:%d/partition",
- 			dm_sysfs_dir(), major, minor) < 0) {
- 		log_warn("WARNING: %s: partition path is too long.", dev_name(dev));
- 		return 0;
-@@ -775,7 +775,7 @@ int dev_get_primary_dev(struct dev_types *dt, struct device *dev, dev_t *result)
- 	 * - basename ../../block/md0/md0  = md0
- 	 * Parent's 'dev' sysfs attribute  = /sys/block/md0/dev
- 	 */
--	if (dm_snprintf(path, sizeof(path), "%s/dev/block/%d:%d",
-+	if (dm_snprintf(path, sizeof(path), "%sdev/block/%d:%d",
- 			dm_sysfs_dir(), major, minor) < 0) {
- 		log_warn("WARNING: %s: major:minor sysfs path is too long.", dev_name(dev));
- 		return 0;
-@@ -787,7 +787,7 @@ int dev_get_primary_dev(struct dev_types *dt, struct device *dev, dev_t *result)
- 
- 	temp_path[size] = '\0';
- 
--	if (dm_snprintf(path, sizeof(path), "%s/block/%s/dev",
-+	if (dm_snprintf(path, sizeof(path), "%sblock/%s/dev",
- 			dm_sysfs_dir(), basename(dirname(temp_path))) < 0) {
- 		log_warn("WARNING: sysfs path for %s is too long.",
- 			 basename(dirname(temp_path)));
-@@ -1095,7 +1095,7 @@ int wipe_known_signatures(struct cmd_context *cmd, struct device *dev,
- static int _snprintf_attr(char *buf, size_t buf_size, const char *sysfs_dir,
- 			 const char *attribute, dev_t dev)
- {
--	if (dm_snprintf(buf, buf_size, "%s/dev/block/%d:%d/%s", sysfs_dir,
-+	if (dm_snprintf(buf, buf_size, "%sdev/block/%d:%d/%s", sysfs_dir,
- 			(int)MAJOR(dev), (int)MINOR(dev),
- 			attribute) < 0) {
- 		log_warn("WARNING: sysfs path for %s attribute is too long.", attribute);
-diff --git a/lib/metadata/vdo_manip.c b/lib/metadata/vdo_manip.c
-index 0db401537..779883d03 100644
---- a/lib/metadata/vdo_manip.c
-+++ b/lib/metadata/vdo_manip.c
-@@ -148,7 +148,7 @@ static int _sysfs_get_kvdo_value(const char *dm_name, const struct dm_info *dmin
- 	char temp[64];
- 	int fd, size, r = 0;
- 
--	if (dm_snprintf(path, sizeof(path), "%s/block/dm-%d/vdo/%s",
-+	if (dm_snprintf(path, sizeof(path), "%sblock/dm-%d/vdo/%s",
- 			dm_sysfs_dir(), dminfo->minor, vdo_param) < 0) {
- 		log_debug("Failed to build kvdo path.");
- 		return 0;
++	errno = 0;
+ 	*size = strtoull(argptr, &endptr, 10);
+-	if (endptr == argptr) {
++	if (errno || endptr == argptr) {
+ 		*size = 0;
+ 		log_error("Invalid %s argument: \"%s\"",
+ 			  name, (*argptr) ? argptr : "");
 
