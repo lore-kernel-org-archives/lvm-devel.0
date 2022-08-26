@@ -1,105 +1,102 @@
 From: Peter Rajnoha <prajnoha@sourceware.org>
-Date: Fri, 26 Aug 2022 10:36:31 +0000 (GMT)
-Subject: main - args: add ARG_NONINTERACTIVE for cmds not supported in lvm shell
-Message-ID: <20220826103631.E166A38CB7D8@sourceware.org>
+Date: Fri, 26 Aug 2022 13:08:50 +0000 (GMT)
+Subject: main - report: values: add note about self-decriptive values to report
+Message-ID: <20220826130850.CF4C63858C74@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=e6b6a09f90f53a5cea3a712b2b84af57f4514a02
-Commit:        e6b6a09f90f53a5cea3a712b2b84af57f4514a02
-Parent:        800436d2affd4142b9d4b405112c4c30f1d31b5b
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=8d70cfe6005165e173643954e6cd9eff745e4aa4
+Commit:        8d70cfe6005165e173643954e6cd9eff745e4aa4
+Parent:        e6b6a09f90f53a5cea3a712b2b84af57f4514a02
 Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Fri Aug 26 12:17:45 2022 +0200
+AuthorDate:    Fri Aug 26 14:51:31 2022 +0200
 Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Fri Aug 26 12:17:50 2022 +0200
+CommitterDate: Fri Aug 26 15:08:33 2022 +0200
 
-args: add ARG_NONINTERACTIVE for cmds not supported in lvm shell
+report: values: add note about self-decriptive values to report
 
-Certain args can't be used in lvm shell ("interactive mode") because
-they are not supported there. Add ARG_NONINTERACTIVE flag to mark
-such args and error out if we're in interactive mode and at the same
-time we detect use of such argument.
-
-Currently, this is the case for --reportformat arg - we don't support
-changing the format per command in lvm shell. The whole shell is running
-under a reportformat chosen at shell's start.
 ---
- WHATS_NEW          | 1 +
- tools/args.h       | 2 +-
- tools/command.c    | 1 +
- tools/lvmcmdline.c | 9 +++++++++
- tools/tools.h      | 1 +
- 5 files changed, 13 insertions(+), 1 deletion(-)
+ lib/report/report.c | 27 +++++++++++++++++++++++++++
+ lib/report/values.h | 27 +++++++++++++++++++++++++++
+ 2 files changed, 54 insertions(+)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index 90dd417b1..9e7cd1f0c 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.03.17 - 
- ===============================
-+  Error out in lvm shell if using a cmd argument not supported in the shell.
-   Fix lvm shell's lastlog command to report previous pre-command failures.
-   Extend VDO and VDOPOOL without flushing and locking fs.
-   Add --valuesonly option to lvmconfig to print only values without keys.
-diff --git a/tools/args.h b/tools/args.h
-index bdeefca7d..85dd11aeb 100644
---- a/tools/args.h
-+++ b/tools/args.h
-@@ -671,7 +671,7 @@ arg(replace_ARG, '\0', "replace", pv_VAL, ARG_GROUPABLE, 0,
-     "Multiple PVs can be replaced by repeating this option.\n"
-     "See \\fBlvmraid\\fP(7) for more information.\n")
+diff --git a/lib/report/report.c b/lib/report/report.c
+index 8a5122ff9..f666ca842 100644
+--- a/lib/report/report.c
++++ b/lib/report/report.c
+@@ -29,6 +29,33 @@
+ #include <float.h> /* DBL_MAX */
+ #include <time.h>
  
--arg(reportformat_ARG, '\0', "reportformat", reportformat_VAL, 0, 0,
-+arg(reportformat_ARG, '\0', "reportformat", reportformat_VAL, ARG_NONINTERACTIVE, 0,
-     "Overrides current output format for reports which is defined globally by\n"
-     "the report/output_format setting in \\fBlvm.conf\\fP(5).\n"
-     "\\fBbasic\\fP is the original format with columns and rows.\n"
-diff --git a/tools/command.c b/tools/command.c
-index 8de8825e4..5da511530 100644
---- a/tools/command.c
-+++ b/tools/command.c
-@@ -78,6 +78,7 @@ static void *dm_pool_alloc(void *p, size_t size)
- /* needed to include args.h */
- #define ARG_COUNTABLE 0x00000001
- #define ARG_GROUPABLE 0x00000002
-+#define ARG_NONINTERACTIVE 0x00000004
- struct cmd_context;
- struct arg_values;
- 
-diff --git a/tools/lvmcmdline.c b/tools/lvmcmdline.c
-index 4fb21074f..ba3ca220b 100644
---- a/tools/lvmcmdline.c
-+++ b/tools/lvmcmdline.c
-@@ -2261,6 +2261,15 @@ static int _process_command_line(struct cmd_context *cmd, int *argc, char ***arg
- 
- 		av = &cmd->opt_arg_values[arg_enum];
- 
-+		if (a->flags & ARG_NONINTERACTIVE && cmd->is_interactive) {
-+			log_error("Argument%s%c%s%s cannot be used in interactive mode.",
-+				  a->short_opt ? " -" : "",
-+				  a->short_opt ? : ' ',
-+				  (a->short_opt && a->long_opt) ?
-+				  "/" : "", a->long_opt ? : "");
-+			return 0;
-+		}
++/*
++ * !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
++ * IMPORTANT NOTE ABOUT ADDING A NEW VALUE FOR REPORTING
++ * !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
++ *
++ * When adding a new string value to report, try to keep it
++ * self-descriptive so when it's printed even without the header,
++ * we can still deduce what it is actually reporting.
++ *
++ * If you need more than one descriptive string to mean the same value,
++ * please define them as reserved values in values.h.
++ *
++ * The first reserved value is the one that is printed in reports (unless
++ * it's a binary value and we have report/binary_values_as_numeric=1 config
++ * option used OR --binary command line option is used OR we're using an
++ * output format which must always print binary values in numeric way,
++ * like json_std output format.
++ *
++ * All the other (2nd and further) listed reserved names are synonyms which
++ * may be also used in selection (-S|--select).
++ *
++ * Also, always use proper *_disp functions to display each type of value
++ * properly. For example, in case of binary values, you should use
++ * _binary_disp so that we can always switch between numerical (0/1/-1) and
++ * string representation while reporting the value.
++ */
 +
- 		if (a->flags & ARG_GROUPABLE) {
- 			/*
- 			 * Start a new group of arguments:
-diff --git a/tools/tools.h b/tools/tools.h
-index cd89e1692..2636c22da 100644
---- a/tools/tools.h
-+++ b/tools/tools.h
-@@ -96,6 +96,7 @@ enum {
+ struct lvm_report_object {
+ 	struct volume_group *vg;
+ 	struct lv_with_info_and_seg_status *lvdm;
+diff --git a/lib/report/values.h b/lib/report/values.h
+index 9b98c229e..71175fa6e 100644
+--- a/lib/report/values.h
++++ b/lib/report/values.h
+@@ -45,6 +45,33 @@
  
- #define ARG_COUNTABLE 0x00000001	/* E.g. -vvvv */
- #define ARG_GROUPABLE 0x00000002	/* E.g. --addtag */
-+#define ARG_NONINTERACTIVE 0x00000004	/* only for use in noninteractive mode  */
+ /* *INDENT-OFF* */
  
- struct arg_values {
- 	unsigned count;
++/*
++ * !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
++ * IMPORTANT NOTE ABOUT ADDING A NEW VALUE FOR REPORTING
++ * !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
++ *
++ * When adding a new string value to report, try to keep it
++ * self-descriptive so when it's printed even without the header,
++ * we can still deduce what it is actually reporting.
++ *
++ * If you need more than one descriptive string to mean the same value,
++ * please define them as reserved values in values.h.
++ *
++ * The first reserved value is the one that is printed in reports (unless
++ * it's a binary value and we have report/binary_values_as_numeric=1 config
++ * option used OR --binary command line option is used OR we're using an
++ * output format which must always print binary values in numeric way,
++ * like json_std output format.
++ *
++ * All the other (2nd and further) listed reserved names are synonyms which
++ * may be also used in selection (-S|--select).
++ *
++ * Also, always use proper *_disp functions to display each type of value
++ * properly. For example, in case of binary values, you should use
++ * _binary_disp so that we can always switch between numerical (0/1/-1) and
++ * string representation while reporting the value.
++ */
++
+ /* Per-type reserved values usable for all fields of certain type. */
+ TYPE_RESERVED_VALUE(NUM, NOFLAG, num_undef_64, "Reserved value for undefined numeric value.", UINT64_C(-1), "-1", "unknown", "undefined", "undef")
+ 
 
