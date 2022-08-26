@@ -1,91 +1,105 @@
 From: Peter Rajnoha <prajnoha@sourceware.org>
-Date: Wed, 24 Aug 2022 10:26:12 +0000 (GMT)
-Subject: main - libdm: report: fix escaping of JSON quote char in reported fields
-Message-ID: <20220824102612.3AB20385354C@sourceware.org>
+Date: Fri, 26 Aug 2022 10:36:31 +0000 (GMT)
+Subject: main - args: add ARG_NONINTERACTIVE for cmds not supported in lvm shell
+Message-ID: <20220826103631.E166A38CB7D8@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=800436d2affd4142b9d4b405112c4c30f1d31b5b
-Commit:        800436d2affd4142b9d4b405112c4c30f1d31b5b
-Parent:        508782a9135acf13b39b47605e675a5678495c58
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=e6b6a09f90f53a5cea3a712b2b84af57f4514a02
+Commit:        e6b6a09f90f53a5cea3a712b2b84af57f4514a02
+Parent:        800436d2affd4142b9d4b405112c4c30f1d31b5b
 Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Wed Aug 24 12:08:51 2022 +0200
+AuthorDate:    Fri Aug 26 12:17:45 2022 +0200
 Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Wed Aug 24 12:10:10 2022 +0200
+CommitterDate: Fri Aug 26 12:17:50 2022 +0200
 
-libdm: report: fix escaping of JSON quote char in reported fields
+args: add ARG_NONINTERACTIVE for cmds not supported in lvm shell
 
-Commit 73ec3c954b21522352b6f5cce9a700d6bf30ccf4 added a way to print
-only a part of the report string (repstr) to support decoding individual
-string list items out of repstr.
+Certain args can't be used in lvm shell ("interactive mode") because
+they are not supported there. Add ARG_NONINTERACTIVE flag to mark
+such args and error out if we're in interactive mode and at the same
+time we detect use of such argument.
 
-The repstr is normally printed through _safe_repstr_output so that any
-JSON_QUOTE character ('"') found within the repstr is escaped to not
-interfere with value quoting in JSON format.
-
-However, the commit 73ec3c954b21522352b6f5cce9a700d6bf30ccf4 missed
-checking the 'len' argument passed to _safe_repstr_output function when
-adding the rest of the repstr after all previous JSON_QUOTE characters
-were escaped (when calling the last dm_pool_grow_object). When 'len'
-is 0, we need to calculate the 'len' ourselves in the function by
-simply calling strlen. This is because 'len' is passed to the function
-only if we're taking a part of repstr, not as a whole.
+Currently, this is the case for --reportformat arg - we don't support
+changing the format per command in lvm shell. The whole shell is running
+under a reportformat chosen at shell's start.
 ---
- device_mapper/libdm-report.c | 11 +++--------
- libdm/libdm-report.c         | 11 +++--------
- 2 files changed, 6 insertions(+), 16 deletions(-)
+ WHATS_NEW          | 1 +
+ tools/args.h       | 2 +-
+ tools/command.c    | 1 +
+ tools/lvmcmdline.c | 9 +++++++++
+ tools/tools.h      | 1 +
+ 5 files changed, 13 insertions(+), 1 deletion(-)
 
-diff --git a/device_mapper/libdm-report.c b/device_mapper/libdm-report.c
-index d4cd06002..2d4c8883b 100644
---- a/device_mapper/libdm-report.c
-+++ b/device_mapper/libdm-report.c
-@@ -4572,17 +4572,12 @@ bad:
- static int _safe_repstr_output(struct dm_report *rh, const char *repstr, size_t len)
- {
- 	const char *p_repstr;
--	const char *repstr_end = repstr + len;
-+	const char *repstr_end = len ? repstr + len : repstr + strlen(repstr);
+diff --git a/WHATS_NEW b/WHATS_NEW
+index 90dd417b1..9e7cd1f0c 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.03.17 - 
+ ===============================
++  Error out in lvm shell if using a cmd argument not supported in the shell.
+   Fix lvm shell's lastlog command to report previous pre-command failures.
+   Extend VDO and VDOPOOL without flushing and locking fs.
+   Add --valuesonly option to lvmconfig to print only values without keys.
+diff --git a/tools/args.h b/tools/args.h
+index bdeefca7d..85dd11aeb 100644
+--- a/tools/args.h
++++ b/tools/args.h
+@@ -671,7 +671,7 @@ arg(replace_ARG, '\0', "replace", pv_VAL, ARG_GROUPABLE, 0,
+     "Multiple PVs can be replaced by repeating this option.\n"
+     "See \\fBlvmraid\\fP(7) for more information.\n")
  
- 	/* Escape any JSON_QUOTE that may appear in reported string. */
- 	while (1) {
--		if (len) {
--			if (!(p_repstr = memchr(repstr, JSON_QUOTE[0], repstr_end - repstr)))
--				break;
--		} else {
--			if (!(p_repstr = strstr(repstr, JSON_QUOTE)))
--				break;
--		}
-+		if (!(p_repstr = memchr(repstr, JSON_QUOTE[0], repstr_end - repstr)))
-+			break;
+-arg(reportformat_ARG, '\0', "reportformat", reportformat_VAL, 0, 0,
++arg(reportformat_ARG, '\0', "reportformat", reportformat_VAL, ARG_NONINTERACTIVE, 0,
+     "Overrides current output format for reports which is defined globally by\n"
+     "the report/output_format setting in \\fBlvm.conf\\fP(5).\n"
+     "\\fBbasic\\fP is the original format with columns and rows.\n"
+diff --git a/tools/command.c b/tools/command.c
+index 8de8825e4..5da511530 100644
+--- a/tools/command.c
++++ b/tools/command.c
+@@ -78,6 +78,7 @@ static void *dm_pool_alloc(void *p, size_t size)
+ /* needed to include args.h */
+ #define ARG_COUNTABLE 0x00000001
+ #define ARG_GROUPABLE 0x00000002
++#define ARG_NONINTERACTIVE 0x00000004
+ struct cmd_context;
+ struct arg_values;
  
- 		if (p_repstr > repstr) {
- 			if (!dm_pool_grow_object(rh->mem, repstr, p_repstr - repstr)) {
-diff --git a/libdm/libdm-report.c b/libdm/libdm-report.c
-index fc71ca5df..8eaf5896e 100644
---- a/libdm/libdm-report.c
-+++ b/libdm/libdm-report.c
-@@ -4571,17 +4571,12 @@ bad:
- static int _safe_repstr_output(struct dm_report *rh, const char *repstr, size_t len)
- {
- 	const char *p_repstr;
--	const char *repstr_end = repstr + len;
-+	const char *repstr_end = len ? repstr + len : repstr + strlen(repstr);
+diff --git a/tools/lvmcmdline.c b/tools/lvmcmdline.c
+index 4fb21074f..ba3ca220b 100644
+--- a/tools/lvmcmdline.c
++++ b/tools/lvmcmdline.c
+@@ -2261,6 +2261,15 @@ static int _process_command_line(struct cmd_context *cmd, int *argc, char ***arg
  
- 	/* Escape any JSON_QUOTE that may appear in reported string. */
- 	while (1) {
--		if (len) {
--			if (!(p_repstr = memchr(repstr, JSON_QUOTE[0], repstr_end - repstr)))
--				break;
--		} else {
--			if (!(p_repstr = strstr(repstr, JSON_QUOTE)))
--				break;
--		}
-+		if (!(p_repstr = memchr(repstr, JSON_QUOTE[0], repstr_end - repstr)))
-+			break;
+ 		av = &cmd->opt_arg_values[arg_enum];
  
- 		if (p_repstr > repstr) {
- 			if (!dm_pool_grow_object(rh->mem, repstr, p_repstr - repstr)) {
++		if (a->flags & ARG_NONINTERACTIVE && cmd->is_interactive) {
++			log_error("Argument%s%c%s%s cannot be used in interactive mode.",
++				  a->short_opt ? " -" : "",
++				  a->short_opt ? : ' ',
++				  (a->short_opt && a->long_opt) ?
++				  "/" : "", a->long_opt ? : "");
++			return 0;
++		}
++
+ 		if (a->flags & ARG_GROUPABLE) {
+ 			/*
+ 			 * Start a new group of arguments:
+diff --git a/tools/tools.h b/tools/tools.h
+index cd89e1692..2636c22da 100644
+--- a/tools/tools.h
++++ b/tools/tools.h
+@@ -96,6 +96,7 @@ enum {
+ 
+ #define ARG_COUNTABLE 0x00000001	/* E.g. -vvvv */
+ #define ARG_GROUPABLE 0x00000002	/* E.g. --addtag */
++#define ARG_NONINTERACTIVE 0x00000004	/* only for use in noninteractive mode  */
+ 
+ struct arg_values {
+ 	unsigned count;
 
