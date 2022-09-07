@@ -1,44 +1,39 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Wed,  7 Sep 2022 13:04:57 +0000 (GMT)
-Subject: main - tests: make damage optional
-Message-ID: <20220907130457.610133858005@sourceware.org>
+Date: Wed,  7 Sep 2022 13:04:56 +0000 (GMT)
+Subject: main - tests: check for at least 1G of RAM
+Message-ID: <20220907130456.3EB3F385841A@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=80b782f86ffea19a9881b026df3dc133eebffbe5
-Commit:        80b782f86ffea19a9881b026df3dc133eebffbe5
-Parent:        e1e05cf2b526fbd8689dca8b0b232f0b1ce8ed7c
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=e1e05cf2b526fbd8689dca8b0b232f0b1ce8ed7c
+Commit:        e1e05cf2b526fbd8689dca8b0b232f0b1ce8ed7c
+Parent:        a6e47a161240e977bac5522d85e92fff3c1c9026
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed Aug 31 14:07:46 2022 +0200
+AuthorDate:    Wed Aug 31 13:57:41 2022 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Wed Sep 7 15:00:15 2022 +0200
 
-tests: make damage optional
+tests: check for at least 1G of RAM
 
-Investigate how to damage thin-pool across different versions/platforms.
-Until them - use  'should' for test result.
+This test requires quite some RAM to be there.
 ---
- test/shell/lvconvert-repair-thin.sh | 5 +++--
- 1 file changed, 3 insertions(+), 2 deletions(-)
+ test/shell/lvconvert-raid-reshape.sh | 2 ++
+ 1 file changed, 2 insertions(+)
 
-diff --git a/test/shell/lvconvert-repair-thin.sh b/test/shell/lvconvert-repair-thin.sh
-index 9b94cbfd2..0fb0d76ff 100644
---- a/test/shell/lvconvert-repair-thin.sh
-+++ b/test/shell/lvconvert-repair-thin.sh
-@@ -61,9 +61,10 @@ aux have_tool_at_least "$LVM_TEST_THIN_REPAIR_CMD" 0 3 1 || skip
- # Make some 'repairable' damage??
- dd if=/dev/zero of="$DM_DEV_DIR/$vg/repair" bs=1 seek=40960 count=1
+diff --git a/test/shell/lvconvert-raid-reshape.sh b/test/shell/lvconvert-raid-reshape.sh
+index bc6eaa733..e55ab7ab9 100644
+--- a/test/shell/lvconvert-raid-reshape.sh
++++ b/test/shell/lvconvert-raid-reshape.sh
+@@ -20,6 +20,8 @@ LVM_SKIP_LARGE_TESTS=0
+ which mkfs.ext4 || skip
+ aux have_raid 1 14 0 || skip
  
--not "$LVM_TEST_THIN_CHECK_CMD" "$DM_DEV_DIR/$vg/repair"
-+# Investige how to make such damage across different versions of thin-pool target.
-+should not "$LVM_TEST_THIN_CHECK_CMD" "$DM_DEV_DIR/$vg/repair"
- 
--not "$LVM_TEST_THIN_DUMP_CMD" "$DM_DEV_DIR/$vg/repair" | tee dump
-+should not "$LVM_TEST_THIN_DUMP_CMD" "$DM_DEV_DIR/$vg/repair" | tee dump
- 
- "$LVM_TEST_THIN_REPAIR_CMD" -i "$DM_DEV_DIR/$vg/repair" -o "$DM_DEV_DIR/$vg/fixed"
- 
++test "$(aux total_mem)" -gt 1048576 || skip "Not enough RAM for this test"
++
+ if [ $LVM_SKIP_LARGE_TESTS -eq 0 ]
+ then
+ 	aux prepare_pvs 65 9
 
