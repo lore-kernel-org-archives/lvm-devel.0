@@ -1,165 +1,127 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Wed,  7 Sep 2022 13:05:06 +0000 (GMT)
-Subject: main - tests: cache use 300M XFS
-Message-ID: <20220907130506.B0572385841A@sourceware.org>
+Date: Wed,  7 Sep 2022 13:04:59 +0000 (GMT)
+Subject: main - tests: lvextend update for 300M XFS
+Message-ID: <20220907130459.A6188385841A@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=19db3b3e456010fe8e2e3815bf12deba690c7303
-Commit:        19db3b3e456010fe8e2e3815bf12deba690c7303
-Parent:        e295610d42904e41f295e58b02e0c0577c26c702
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=1a3e773f37483b30f1bd1c1406ffc2f0b1e00631
+Commit:        1a3e773f37483b30f1bd1c1406ffc2f0b1e00631
+Parent:        afcf954491416dab5845d25dc45c53c3e8000773
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed Sep 7 01:02:29 2022 +0200
+AuthorDate:    Wed Aug 31 14:30:01 2022 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Wed Sep 7 15:00:15 2022 +0200
 
-tests: cache use 300M XFS
+tests: lvextend update for 300M XFS
 
 ---
- test/shell/cache-single-options.sh |  4 ++--
- test/shell/cache-single-split.sh   | 16 ++++++++--------
- test/shell/cache-single-types.sh   |  6 +++---
- test/shell/cache-single-usage.sh   |  4 ++--
- 4 files changed, 15 insertions(+), 15 deletions(-)
+ test/shell/lvextend-caches-on-thindata.sh | 12 ++++++------
+ test/shell/lvextend-caches.sh             | 12 ++++++------
+ 2 files changed, 12 insertions(+), 12 deletions(-)
 
-diff --git a/test/shell/cache-single-options.sh b/test/shell/cache-single-options.sh
-index 3be88d222..c736e5220 100644
---- a/test/shell/cache-single-options.sh
-+++ b/test/shell/cache-single-options.sh
-@@ -25,11 +25,11 @@ mkdir -p "$mount_dir"
- # generate random data
- dd if=/dev/urandom of=pattern1 bs=512K count=1
+diff --git a/test/shell/lvextend-caches-on-thindata.sh b/test/shell/lvextend-caches-on-thindata.sh
+index ef47d76d0..35b70546f 100644
+--- a/test/shell/lvextend-caches-on-thindata.sh
++++ b/test/shell/lvextend-caches-on-thindata.sh
+@@ -116,11 +116,11 @@ which mkfs.xfs || skip
+ mount_dir="mnt"
+ mkdir -p "$mount_dir"
  
--aux prepare_devs 5 64
-+aux prepare_devs 5 310
+-aux prepare_devs 6 70 # want 64M of usable space from each dev
++aux prepare_devs 6 400 # want 400M of usable space from each dev
  
- vgcreate $SHARED $vg "$dev1" "$dev2" "$dev3" "$dev4" "$dev5"
+ # Tests with fs block sizes require a libblkid version that shows BLOCK_SIZE
+ vgcreate $vg "$dev1"
+-lvcreate -n $lv1 -L50 $vg
++lvcreate -n $lv1 -L300 $vg
+ mkfs.xfs -f "$DM_DEV_DIR/$vg/$lv1"
+ blkid -c /dev/null "$DM_DEV_DIR/$vg/$lv1" | grep BLOCK_SIZE || skip
+ lvchange -an $vg
+@@ -141,7 +141,7 @@ vgcreate $SHARED $vg "$dev1" "$dev2" "$dev3" "$dev4" "$dev5" "$dev6"
+ # lv3 is thin LV:       1G
  
--lvcreate -n $lv1 -l 8 -an $vg "$dev1"
-+lvcreate -n $lv1 -L 300 -an $vg "$dev1"
- lvcreate -n $lv2 -l 4 -an $vg "$dev2"
- lvcreate -n $lv3 -l 4 -an $vg "$dev3"
- lvcreate -n $lv4 -l 4 -an $vg "$dev4"
-diff --git a/test/shell/cache-single-split.sh b/test/shell/cache-single-split.sh
-index ffe4292de..fa4c3fd9d 100644
---- a/test/shell/cache-single-split.sh
-+++ b/test/shell/cache-single-split.sh
-@@ -59,11 +59,11 @@ mkdir -p "$mount_dir"
- # generate random data
- dd if=/dev/urandom of=pattern1 bs=512K count=1
+ # attach writecache to thinpool data
+-lvcreate --type thin-pool -n $lv1 -L128M --poolmetadataspare n $vg "$dev1" "$dev2"
++lvcreate --type thin-pool -n $lv1 -L228M --poolmetadataspare n $vg "$dev1" "$dev2"
+ lvcreate --type thin -n $lv3 -V1G --thinpool $lv1 $vg
+ lvcreate -n $lv2 -L64M -an $vg "$dev3"
+ lvconvert -y --type writecache --cachevol $lv2 $vg/$lv1
+@@ -149,7 +149,7 @@ lvs -a $vg -o+devices
+ do_test $lv1 $lv3
  
--aux prepare_devs 4
-+aux prepare_devs 4 310
- 
- vgcreate $SHARED $vg "$dev1" "$dev2" "$dev3" "$dev4"
- 
--lvcreate -n $lv1 -l 16 -an $vg "$dev1" "$dev4"
-+lvcreate -n $lv1 -L 300 -an $vg "$dev1" "$dev4"
- lvcreate -n $lv2 -l 4 -an $vg "$dev2"
- 
- #
-@@ -227,7 +227,7 @@ vgextend --restoremissing $vg "$dev2"
- #
- 
- lvremove $vg/$lv2
--lvcreate -n $lv2 -l 14 -an $vg "$dev2" "$dev3"
-+lvcreate -n $lv2 -l 14 -an $vg "$dev2:0-10" "$dev3"
- 
- lvconvert -y --type cache --cachevol $lv2 --cachemode writethrough $vg/$lv1
- 
-@@ -263,7 +263,7 @@ mount_umount $lv1
- #
- 
- lvremove $vg/$lv2
--lvcreate -n $lv2 -l 14 -an $vg "$dev2" "$dev3"
-+lvcreate -n $lv2 -l 14 -an $vg "$dev2:0-10" "$dev3"
- 
+ # attach cache/writeback (cachevol) to thinpool data
+-lvcreate --type thin-pool -n $lv1 -L128M --poolmetadataspare n $vg "$dev1" "$dev2"
++lvcreate --type thin-pool -n $lv1 -L228M --poolmetadataspare n $vg "$dev1" "$dev2"
+ lvcreate --type thin -n $lv3 -V1G --thinpool $lv1 $vg
+ lvcreate -n $lv2 -L64M -an $vg "$dev3"
  lvconvert -y --type cache --cachevol $lv2 --cachemode writeback $vg/$lv1
+@@ -157,7 +157,7 @@ lvs -a $vg -o+devices
+ do_test $lv1 $lv3
  
-@@ -301,7 +301,7 @@ vgextend --restoremissing $vg "$dev3"
- lvremove $vg/$lv1
- lvremove $vg/$lv2
- 
--lvcreate -n $lv1 -l 16 -an $vg "$dev1" "$dev4"
-+lvcreate -n $lv1 -L 300 -an $vg "$dev1:0-10" "$dev4"
- lvcreate -n $lv2 -l 4 -an $vg "$dev2"
- 
+ # attach cache/writethrough (cachevol) to thinpool data
+-lvcreate --type thin-pool -n $lv1 -L128M --poolmetadataspare n $vg "$dev1" "$dev2"
++lvcreate --type thin-pool -n $lv1 -L228M --poolmetadataspare n $vg "$dev1" "$dev2"
+ lvcreate --type thin -n $lv3 -V1G --thinpool $lv1 $vg
+ lvcreate -n $lv2 -L64M -an $vg "$dev3"
  lvconvert -y --type cache --cachevol $lv2 --cachemode writethrough $vg/$lv1
-@@ -330,7 +330,7 @@ mount_umount $lv1
+@@ -165,7 +165,7 @@ lvs -a $vg -o+devices
+ do_test $lv1 $lv3
  
- lvremove $vg/$lv1
+ # attach cache (cachepool) to thinpool data
+-lvcreate --type thin-pool -n $lv1 -L128M --poolmetadataspare n $vg "$dev1" "$dev2"
++lvcreate --type thin-pool -n $lv1 -L228M --poolmetadataspare n $vg "$dev1" "$dev2"
+ lvcreate --type thin -n $lv3 -V1G --thinpool $lv1 $vg
+ lvcreate -y --type cache-pool -n $lv2 -L64M --poolmetadataspare n $vg "$dev3" "$dev6"
+ lvconvert -y --type cache --cachepool $lv2 --poolmetadataspare n $vg/$lv1
+diff --git a/test/shell/lvextend-caches.sh b/test/shell/lvextend-caches.sh
+index de9af6d2c..f2768903f 100644
+--- a/test/shell/lvextend-caches.sh
++++ b/test/shell/lvextend-caches.sh
+@@ -108,7 +108,7 @@ which mkfs.xfs || skip
+ mount_dir="mnt"
+ mkdir -p "$mount_dir"
  
--lvcreate -n $lv1 -l 16 -an $vg "$dev1" "$dev4"
-+lvcreate -n $lv1 -L 300 -an $vg "$dev1:0-10" "$dev4"
- lvcreate -n $lv2 -l 4 -an $vg "$dev2"
+-aux prepare_devs 6 66 # want 64M of usable space from each dev
++aux prepare_devs 6 200 # want 200M of usable space from each dev
  
- lvconvert -y --type cache --cachevol $lv2 --cachemode writethrough $vg/$lv1
-@@ -364,7 +364,7 @@ mount_umount $lv1
+ # generate random data
+ dd if=/dev/urandom of=pattern bs=512K count=1
+@@ -119,28 +119,28 @@ vgcreate $SHARED $vg "$dev1" "$dev2" "$dev3" "$dev4" "$dev5" "$dev6"
+ # cache with cachepool|cachevol
+ # cache with writeback|writethrough
  
- lvremove $vg/$lv1
+-# lv1 is main LV: 128M
++# lv1 is main LV: 300M
+ # lv2 is fast LV:  64M
  
--lvcreate -n $lv1 -l 16 -an $vg "$dev1" "$dev4"
-+lvcreate -n $lv1 -L 300 -an $vg "$dev1:0-10" "$dev4"
- lvcreate -n $lv2 -l 4 -an $vg "$dev2"
+-lvcreate -n $lv1 -L128M -an $vg "$dev1" "$dev2"
++lvcreate -n $lv1 -L300M -an $vg "$dev1" "$dev2"
+ lvcreate -n $lv2 -L64M -an $vg "$dev3"
+ lvconvert -y --type writecache --cachevol $lv2 $vg/$lv1
+ lvs -a $vg -o+devices
+ do_test
  
- lvconvert -y --type cache --cachevol $lv2 --cachemode writethrough $vg/$lv1
-@@ -395,7 +395,7 @@ mount_umount $lv1
- 
- lvremove $vg/$lv1
- 
--lvcreate -n $lv1 -l 16 -an $vg "$dev1" "$dev4"
-+lvcreate -n $lv1 -L 300 -an $vg "$dev1:0-10" "$dev4"
- lvcreate -n $lv2 -l 4 -an $vg "$dev2"
- 
+-lvcreate -n $lv1 -L128M -an $vg "$dev1" "$dev2"
++lvcreate -n $lv1 -L300M -an $vg "$dev1" "$dev2"
+ lvcreate -n $lv2 -L64M -an $vg "$dev3"
  lvconvert -y --type cache --cachevol $lv2 --cachemode writeback $vg/$lv1
-diff --git a/test/shell/cache-single-types.sh b/test/shell/cache-single-types.sh
-index 85582420d..1e67e7eda 100644
---- a/test/shell/cache-single-types.sh
-+++ b/test/shell/cache-single-types.sh
-@@ -26,11 +26,11 @@ mkdir -p "$mount_dir"
- # generate random data
- dd if=/dev/urandom of=pattern1 bs=512K count=1
+ lvs -a $vg -o+devices
+ do_test
  
--aux prepare_devs 4 64
-+aux prepare_devs 4 310
+-lvcreate -n $lv1 -L128M -an $vg "$dev1" "$dev2"
++lvcreate -n $lv1 -L300M -an $vg "$dev1" "$dev2"
+ lvcreate -n $lv2 -L64M -an $vg "$dev3"
+ lvconvert -y --type cache --cachevol $lv2 --cachemode writethrough $vg/$lv1
+ lvs -a $vg -o+devices
+ do_test
  
- vgcreate $SHARED $vg "$dev1" "$dev2" "$dev3" "$dev4"
- 
--lvcreate --type raid1 -m 1 -n $lv1 -l 8 $vg "$dev1" "$dev2"
-+lvcreate --type raid1 -m 1 -n $lv1 -L 300 --nosync $vg "$dev1" "$dev2"
- 
- lvcreate --type raid1 -m 1 -n $lv2 -l 4 $vg "$dev3" "$dev4"
- 
-@@ -69,7 +69,7 @@ lvchange -an $vg/$lv1
- lvconvert --splitcache $vg/$lv1
- 
- check lv_field $vg/$lv1 segtype raid1
--check lv_field $vg/$lv2 segtype raid1 
-+check lv_field $vg/$lv2 segtype raid1
- 
- lvchange -ay $vg/$lv1
- lvchange -ay $vg/$lv2
-diff --git a/test/shell/cache-single-usage.sh b/test/shell/cache-single-usage.sh
-index 9bc9b67c5..2c47d05e0 100644
---- a/test/shell/cache-single-usage.sh
-+++ b/test/shell/cache-single-usage.sh
-@@ -28,13 +28,13 @@ mkdir -p "$mount_dir"
- # generate random data
- dd if=/dev/urandom of=pattern1 bs=512K count=1
- 
--aux prepare_devs 2 64
-+aux prepare_devs 2 310
- 
- vgcreate $SHARED $vg "$dev1"
- 
- vgextend $vg "$dev2"
- 
--lvcreate -n $lv1 -l 8 -an $vg "$dev1"
-+lvcreate -n $lv1 -L 300 -an $vg "$dev1"
- 
- lvcreate -n $lv2 -l 4 -an $vg "$dev2"
- 
+-lvcreate -n $lv1 -L128M -an $vg "$dev1" "$dev2"
++lvcreate -n $lv1 -L300M -an $vg "$dev1" "$dev2"
+ lvcreate -y --type cache-pool -n $lv2 -L64M --poolmetadataspare n $vg "$dev3" "$dev6"
+ lvconvert -y --type cache --cachepool $lv2 --poolmetadataspare n $vg/$lv1
+ lvs -a $vg -o+devices
 
