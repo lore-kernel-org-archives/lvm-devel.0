@@ -1,43 +1,38 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Wed,  7 Sep 2022 13:04:53 +0000 (GMT)
-Subject: main - tests: skip this test for 5.19
-Message-ID: <20220907130453.F277D385841A@sourceware.org>
+Date: Wed,  7 Sep 2022 13:04:58 +0000 (GMT)
+Subject: main - tests: no caching for blkid in testing
+Message-ID: <20220907130458.85B9D3858428@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=8a92a526a0bd4f5c9f89a535ee8904143441f38e
-Commit:        8a92a526a0bd4f5c9f89a535ee8904143441f38e
-Parent:        15ad2b8e5585b89bc3f09a53567f17eb70f45714
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=afcf954491416dab5845d25dc45c53c3e8000773
+Commit:        afcf954491416dab5845d25dc45c53c3e8000773
+Parent:        80b782f86ffea19a9881b026df3dc133eebffbe5
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed Sep 7 14:54:39 2022 +0200
+AuthorDate:    Wed Aug 31 14:14:59 2022 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Wed Sep 7 15:00:15 2022 +0200
 
-tests: skip this test for 5.19
+tests: no caching for blkid in testing
 
-mdraid has some breakage - so 5.19 is crashing
-(possibly even some more older version - that can be added as well)
-Test seems to pass with 6.0-rc kernel.
 ---
- test/shell/lvconvert-raid-reshape-load.sh | 4 ++++
- 1 file changed, 4 insertions(+)
+ test/lib/lvm_vdo_wrapper.sh | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
 
-diff --git a/test/shell/lvconvert-raid-reshape-load.sh b/test/shell/lvconvert-raid-reshape-load.sh
-index 14b5dfdde..29b8e4ca4 100644
---- a/test/shell/lvconvert-raid-reshape-load.sh
-+++ b/test/shell/lvconvert-raid-reshape-load.sh
-@@ -15,6 +15,10 @@ SKIP_WITH_LVMPOLLD=1
+diff --git a/test/lib/lvm_vdo_wrapper.sh b/test/lib/lvm_vdo_wrapper.sh
+index 90d0b2ce8..b1da2e35b 100755
+--- a/test/lib/lvm_vdo_wrapper.sh
++++ b/test/lib/lvm_vdo_wrapper.sh
+@@ -142,7 +142,7 @@ esac
  
- . lib/inittest
+ test -n "${vdo_device-}" || vdo_die_ "VDO device is missing"
  
-+case "$(uname -r)" in
-+5.19*) skip "Skippen test that kills this kernel" ;;
-+esac
-+
- # Test reshaping under io load
+-blkid -s UUID -o value "${vdo_device}" || true
++blkid -c /dev/null -s UUID -o value "${vdo_device}" || true
  
- which mkfs.ext4 || skip
+ devsize=$(blockdev --getsize64 "$vdo_device")
+ devsize=$(( devsize / 4096 )) # convert to 4KiB units
 
