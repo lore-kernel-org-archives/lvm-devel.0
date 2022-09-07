@@ -1,66 +1,164 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Wed,  7 Sep 2022 13:05:01 +0000 (GMT)
-Subject: main - tests: add /dev requirement
-Message-ID: <20220907130501.E7569385841A@sourceware.org>
+Date: Wed,  7 Sep 2022 13:04:50 +0000 (GMT)
+Subject: main - make: update make.tmpl
+Message-ID: <20220907130450.8F6303858428@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=9f3997734480deaae8cb195c4c30bff1e2cfc463
-Commit:        9f3997734480deaae8cb195c4c30bff1e2cfc463
-Parent:        0ed3f7a1bf7d9a7a144526048e44dd19c29fcfed
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=2c7b9130499d17a657684fb3c762d608b50d139e
+Commit:        2c7b9130499d17a657684fb3c762d608b50d139e
+Parent:        85b436642baa4b957f70cf7e94355ee328fc8c02
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Sep 6 18:00:28 2022 +0200
+AuthorDate:    Mon Sep 5 15:56:58 2022 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Wed Sep 7 15:00:15 2022 +0200
+CommitterDate: Wed Sep 7 14:58:01 2022 +0200
 
-tests: add /dev requirement
+make: update make.tmpl
 
-This test could only be run when user passes  LVM_TEST_DEVDIR=/dev
-as it requires and expects actions to be going in this dir, skip
-otherwise.
-
-Also 'extend_filter' manages multiple args in on lvm.conf update.
+Add new define 'newline' for use in 'foreach()'
+Add new $(SHOW) for makefile printing output
+Add 'make print-VAR' for easier debugging of Makefiles' variables.
 ---
- test/shell/vgchange-pvs-online.sh | 19 +++++++------------
- 1 file changed, 7 insertions(+), 12 deletions(-)
+ libdm/make.tmpl.in | 24 +++++++++++++++++++-----
+ make.tmpl.in       | 39 +++++++++++++++++++++++++++++++--------
+ 2 files changed, 50 insertions(+), 13 deletions(-)
 
-diff --git a/test/shell/vgchange-pvs-online.sh b/test/shell/vgchange-pvs-online.sh
-index 9bcf70e4b..8812de1a3 100644
---- a/test/shell/vgchange-pvs-online.sh
-+++ b/test/shell/vgchange-pvs-online.sh
-@@ -22,24 +22,19 @@ aux prepare_devs 4
- # skip rhel5 which doesn't seem to have /dev/mapper/LVMTESTpv1
- aux driver_at_least 4 15 || skip
+diff --git a/libdm/make.tmpl.in b/libdm/make.tmpl.in
+index a306101d5..f1c88fac0 100644
+--- a/libdm/make.tmpl.in
++++ b/libdm/make.tmpl.in
+@@ -13,11 +13,9 @@
+ # along with this program; if not, write to the Free Software Foundation,
+ # Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  
-+test "$DM_DEV_DIR" = "/dev" || skip "Only works with /dev access -> make check LVM_TEST_DEVDIR=/dev"
+-ifeq ($(V),1)
+-	Q=
+-else
+-	Q=@
+-endif
++V ?= $(if ("@SILENT_RULES@","yes"),,1)
++Q := $(if $(V),,@)
++SHOW := $(if $(V), at true, at echo)
+ 
+ SHELL = @SHELL@
+ 
+@@ -129,6 +127,17 @@ DEFAULT_RUN_DIR = @DEFAULT_RUN_DIR@
+ DEFAULT_PID_DIR = @DEFAULT_PID_DIR@
+ DEFAULT_MANGLING = @MANGLING@
+ 
++#----------------------------------------------------------------------
++# From http://blog.melski.net/tag/debugging-makefiles/
++#
++# Usage: make print-CC print-CXX print-LD
++#----------------------------------------------------------------------
++print-%:
++	@echo '$*=$($*)'
++	@echo '  origin = $(origin $*)'
++	@echo '  flavor = $(flavor $*)'
++	@echo '   value = $(value  $*)'
 +
- DFDIR="$LVM_SYSTEM_DIR/devices"
- mkdir -p "$DFDIR" || true
- DF="$DFDIR/system.devices"
+ # Setup vpath search paths for some suffixes
+ vpath %.c $(srcdir)
+ vpath %.cpp $(srcdir)
+@@ -145,6 +154,10 @@ ifndef MAKEFLAGS
+ MAKEFLAGS = @JOBS@
+ endif
  
- # Because mapping devno to devname gets dm name from sysfs
- aux lvmconf 'devices/scan = "/dev"'
--base1=$(basename $dev1)
--base2=$(basename $dev2)
--base3=$(basename $dev3)
--base4=$(basename $dev4)
--bd1=/dev/mapper/$base1
--bd2=/dev/mapper/$base2
--bd3=/dev/mapper/$base3
--bd4=/dev/mapper/$base4
--aux extend_filter "a|/dev/mapper/$base1|"
--aux extend_filter "a|/dev/mapper/$base2|"
--aux extend_filter "a|/dev/mapper/$base3|"
--aux extend_filter "a|/dev/mapper/$base4|"
-+bd1="/dev/mapper/$(basename $dev1)"
-+bd2="/dev/mapper/$(basename $dev2)"
-+bd3="/dev/mapper/$(basename $dev3)"
-+bd4="/dev/mapper/$(basename $dev4)"
-+aux extend_filter "a|$bd1|" "a|$bd2|" "a|$bd3|" "a|$bd4|"
++ifneq (1, $(firstword $(V)))
++MAKEFLAGS += --no-print-directory
++endif
++
+ # Handle installation of files
+ ifeq ("@WRITE_INSTALL@", "yes")
+ # leaving defaults
+@@ -524,6 +537,7 @@ endif
+ ifeq ("@USE_TRACKING@","yes")
+ ifeq (,$(findstring $(MAKECMDGOALS),cscope.out cflow clean distclean lcov \
+  help check check_local check_cluster check_lvmpolld))
++.SECONDARY:
+ # Note: no tabs before -include
+     -include $(SOURCES:.c=.d) $(SOURCES2:.c=.d) $(CXXSOURCES:.cpp=.d)
+ endif
+diff --git a/make.tmpl.in b/make.tmpl.in
+index 427fee596..a390553a4 100644
+--- a/make.tmpl.in
++++ b/make.tmpl.in
+@@ -13,15 +13,10 @@
+ # along with this program; if not, write to the Free Software Foundation,
+ # Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  
- # Changing names will confuse df based on devname
- if lvmdevices; then
+-ifneq ("@SILENT_RULES@","yes")
+-	V ?= 1
+-endif
+ 
+-ifeq ($(V),1)
+-	Q=
+-else
+-	Q=@
+-endif
++V ?= $(if ("@SILENT_RULES@","yes"),,1)
++Q := $(if $(V),,@)
++SHOW := $(if $(V), at true, at echo)
+ 
+ SHELL = @SHELL@
+ 
+@@ -134,6 +129,18 @@ PYTHON_PREFIX = $(prefix)
+ python2dir = @PYTHON2DIR@
+ python3dir = @PYTHON3DIR@
+ 
++# Define macro NewLine for use in $(foreach) with 2 blank lines
++ifeq (1, $(firstword $(V)))
++define newline
++
++
++endef
++else
++define newline
++;
++endef
++endif
++
+ USRLIB_RELPATH = $(shell echo $(abspath $(usrlibdir) $(libdir)) | \
+   $(AWK) -f $(top_srcdir)/scripts/relpath.awk)
+ 
+@@ -148,6 +155,17 @@ DEFAULT_RUN_DIR = @DEFAULT_RUN_DIR@
+ DEFAULT_PID_DIR = @DEFAULT_PID_DIR@
+ DEFAULT_MANGLING = @MANGLING@
+ 
++#----------------------------------------------------------------------
++# From http://blog.melski.net/tag/debugging-makefiles/
++#
++# Usage: make print-CC print-CXX print-LD
++#----------------------------------------------------------------------
++print-%:
++	@echo '$*=$($*)'
++	@echo '  origin = $(origin $*)'
++	@echo '  flavor = $(flavor $*)'
++	@echo '   value = $(value  $*)'
++
+ # Setup vpath search paths for some suffixes
+ vpath %.c $(srcdir)
+ vpath %.cpp $(srcdir)
+@@ -164,6 +182,10 @@ ifndef MAKEFLAGS
+ MAKEFLAGS = @JOBS@
+ endif
+ 
++ifneq (1, $(firstword $(V)))
++MAKEFLAGS += --no-print-directory
++endif
++
+ # Handle installation of files
+ ifeq ("@WRITE_INSTALL@", "yes")
+ # leaving defaults
+@@ -582,6 +604,7 @@ endif
+ ifeq ("$(USE_TRACKING)","yes")
+ ifeq (,$(findstring $(MAKECMDGOALS),cscope.out cflow clean distclean lcov lcov-reset \
+  help check check_local check_cluster check_lvmpolld run-unit-test tags))
++.SECONDARY:
+ # Note: no tabs before -include
+     -include $(SOURCES:.c=.d) $(SOURCES2:.c=.d) $(CXXSOURCES:.cpp=.d)
+ endif
 
