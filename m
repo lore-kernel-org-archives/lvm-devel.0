@@ -1,38 +1,112 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Wed,  7 Sep 2022 13:04:58 +0000 (GMT)
-Subject: main - tests: no caching for blkid in testing
-Message-ID: <20220907130458.85B9D3858428@sourceware.org>
+Date: Wed,  7 Sep 2022 13:05:07 +0000 (GMT)
+Subject: main - gitignore: update
+Message-ID: <20220907130507.D1D0B3858428@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=afcf954491416dab5845d25dc45c53c3e8000773
-Commit:        afcf954491416dab5845d25dc45c53c3e8000773
-Parent:        80b782f86ffea19a9881b026df3dc133eebffbe5
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=6b05d6bd833c463b9a2074b2aa2bdaa531e7ab01
+Commit:        6b05d6bd833c463b9a2074b2aa2bdaa531e7ab01
+Parent:        19db3b3e456010fe8e2e3815bf12deba690c7303
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed Aug 31 14:14:59 2022 +0200
+AuthorDate:    Mon Sep 5 12:08:50 2022 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Wed Sep 7 15:00:15 2022 +0200
 
-tests: no caching for blkid in testing
+gitignore: update
 
 ---
- test/lib/lvm_vdo_wrapper.sh | 2 +-
- 1 file changed, 1 insertion(+), 1 deletion(-)
+ .gitignore      | 21 ++++++++++++++++++---
+ udev/.gitignore |  1 +
+ 2 files changed, 19 insertions(+), 3 deletions(-)
 
-diff --git a/test/lib/lvm_vdo_wrapper.sh b/test/lib/lvm_vdo_wrapper.sh
-index 90d0b2ce8..b1da2e35b 100755
---- a/test/lib/lvm_vdo_wrapper.sh
-+++ b/test/lib/lvm_vdo_wrapper.sh
-@@ -142,7 +142,7 @@ esac
+diff --git a/.gitignore b/.gitignore
+index 8c1672bd2..224d43cd6 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -16,6 +16,10 @@
+ *.sw*
+ *~
  
- test -n "${vdo_device-}" || vdo_die_ "VDO device is missing"
++# gcov files:
++*.gcda
++*.gcno
++
+ .export.sym
+ .exported_symbols_generated
+ .gdb_history
+@@ -39,9 +43,11 @@ make.tmpl
  
--blkid -s UUID -o value "${vdo_device}" || true
-+blkid -c /dev/null -s UUID -o value "${vdo_device}" || true
+ coverity/coverity_model.xml
  
- devsize=$(blockdev --getsize64 "$vdo_device")
- devsize=$(( devsize / 4096 )) # convert to 4KiB units
+-# gcov files:
+-*.gcda
+-*.gcno
++/libdm/.symver_check
++
++daemons/clvmd
++daemons/dmfilemapd
++daemons/lvmetad/
+ 
+ tools/man-generator
+ tools/man-generator.c
+@@ -102,6 +108,8 @@ test/api/thin_percent.t
+ test/api/vglist.t
+ test/api/vgtest.t
+ test/lib/aux
++test/lib/cache-mq.profile
++test/lib/cache-smq.profile
+ test/lib/check
+ test/lib/clvmd
+ test/lib/dm-version-expected
+@@ -111,6 +119,7 @@ test/lib/dmstats
+ test/lib/fail
+ test/lib/flavour-ndev-cluster
+ test/lib/flavour-ndev-cluster-lvmpolld
++test/lib/flavour-ndev-devicesfile
+ test/lib/flavour-ndev-lvmetad
+ test/lib/flavour-ndev-lvmetad-lvmpolld
+ test/lib/flavour-ndev-lvmpolld
+@@ -120,6 +129,7 @@ test/lib/flavour-udev-cluster-lvmpolld
+ test/lib/flavour-udev-lvmetad
+ test/lib/flavour-udev-lvmetad-lvmpolld
+ test/lib/flavour-udev-lvmlockd-dlm
++test/lib/flavour-udev-lvmlockd-idm
+ test/lib/flavour-udev-lvmlockd-sanlock
+ test/lib/flavour-udev-lvmlockd-test
+ test/lib/flavour-udev-lvmpolld
+@@ -132,8 +142,11 @@ test/lib/lvm
+ test/lib/lvm-wrapper
+ test/lib/lvmchange
+ test/lib/lvmdbusd.profile
++test/lib/lvmdevices
+ test/lib/lvmetad
+ test/lib/lvmpolld
++test/lib/lvm_import_vdo
++test/lib/lvm_vdo_wrapper
+ test/lib/not
+ test/lib/paths
+ test/lib/paths-common
+@@ -143,5 +156,7 @@ test/lib/test
+ test/lib/thin-performance.profile
+ test/lib/utils
+ test/lib/version-expected
++test/lib/vgimportdevices
++
+ test/unit/dmraid_t.c
+ test/unit/unit-test
+diff --git a/udev/.gitignore b/udev/.gitignore
+index 303d78761..24884bd4e 100644
+--- a/udev/.gitignore
++++ b/udev/.gitignore
+@@ -1,5 +1,6 @@
+ 10-dm.rules
+ 11-dm-lvm.rules
+ 13-dm-disk.rules
++69-dm-lvm.rules
+ 69-dm-lvm-metad.rules
+ 95-dm-notify.rules
 
