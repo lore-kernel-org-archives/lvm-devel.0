@@ -1,27 +1,38 @@
-From: Peter Rajnoha <prajnoha@redhat.com>
-Date: Tue, 29 May 2012 10:11:53 +0200
-Subject: LVM2 ./WHATS_NEW_DM lib/commands/toolcontext.c ...
-In-Reply-To: <20120529080919.4906.qmail@sourceware.org>
-References: <20120529080919.4906.qmail@sourceware.org>
-Message-ID: <4FC484C9.2030708@redhat.com>
+From: Zdenek Kabelac <zkabelac@sourceware.org>
+Date: Wed,  7 Sep 2022 13:04:55 +0000 (GMT)
+Subject: main - tests: remove slash
+Message-ID: <20220907130455.1E3C83858428@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On 05/29/2012 10:09 AM, prajnoha at sourceware.org wrote:
-> Log message:
-> 	Remove unsupported udev_get_dev_path libudev call used for checking udev dir.
-> 	
-> 	With latest changes in the udev, some deprecated functions were removed
-> 	from libudev amongst which there was the "udev_get_dev_path" function
-> 	we used to compare a device directory used in udev and directore set in
-> 	libdevmapper. The "/dev" is hardcoded in udev now (udev version >= 183).
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=a6e47a161240e977bac5522d85e92fff3c1c9026
+Commit:        a6e47a161240e977bac5522d85e92fff3c1c9026
+Parent:        8a92a526a0bd4f5c9f89a535ee8904143441f38e
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Wed Aug 31 13:26:30 2022 +0200
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Wed Sep 7 15:00:15 2022 +0200
 
-Just for a reference:
-  http://cgit.freedesktop.org/systemd/systemd/commit/src/libudev/libudev.h?id=20bbd54f603994a3cc211d2795de16550882ed8d
+tests: remove slash
 
-Peter
+---
+ test/shell/lvchange-thin.sh | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
 
+diff --git a/test/shell/lvchange-thin.sh b/test/shell/lvchange-thin.sh
+index 992ed7145..d9d261e4b 100644
+--- a/test/shell/lvchange-thin.sh
++++ b/test/shell/lvchange-thin.sh
+@@ -30,7 +30,7 @@ lvcreate -L10M -T $vg/pool
+ # tests for checking thin-pool discard passdown are skipped
+ pvmajor=$(get pv_field "$dev1" major)
+ pvminor=$(get pv_field "$dev1" minor)
+-test "$(< "/sys/dev/block/$pvmajor\:$pvminor/queue/discard_granularity")" -ne 0 || \
++test "$(< "/sys/dev/block/$pvmajor:$pvminor/queue/discard_granularity")" -ne 0 || \
+         no_discard=1
+ 
+ #
 
