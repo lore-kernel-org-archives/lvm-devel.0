@@ -1,40 +1,51 @@
-From: David Teigland <teigland@sourceware.org>
-Date: Fri,  9 Sep 2022 21:18:11 +0000 (GMT)
-Subject: main - remove libblkid flag BLKID_SUBLKS_FSINFO
-Message-ID: <20220909211811.B3CD33858429@sourceware.org>
+From: liuzhiqiang (I) <liuzhiqiang26@huawei.com>
+Date: Sat, 10 Sep 2022 01:56:59 +0000
+Subject: [PATCH] vgremove: PVID file leakage in /run/lvm/pvs_online
+In-Reply-To: <20220909142734.GA23063@redhat.com>
+References: <2cbbffed-1d4c-b351-d9e3-8218d8964a7b@huawei.com>,
+ <20220909142734.GA23063@redhat.com>
+Message-ID: <49411.122090922135500503@us-mta-519.us.mimecast.lan>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=55e9494e5fe3e3d2790fca6330b848a577e0b1c0
-Commit:        55e9494e5fe3e3d2790fca6330b848a577e0b1c0
-Parent:        b869a6ff7a3d254a56ad78444e7d7f8af93d6844
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Fri Sep 9 16:14:27 2022 -0500
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Fri Sep 9 16:14:27 2022 -0500
+Thanks for your reply.
+/run dir is mounted as tmpfs type, which has a setting inode number by systemd service. If the number of leakage pvid files increases with time, it may cause Deny of Service for other apps because cannot create files in /run.
 
-remove libblkid flag BLKID_SUBLKS_FSINFO
 
-This flag is not needed in fs_block_size_and_type()
-added in the previous commit.
----
- lib/device/dev-type.c | 2 +-
- 1 file changed, 1 insertion(+), 1 deletion(-)
 
-diff --git a/lib/device/dev-type.c b/lib/device/dev-type.c
-index 1e97f6c85..b1cf5b431 100644
---- a/lib/device/dev-type.c
-+++ b/lib/device/dev-type.c
-@@ -842,7 +842,7 @@ int fs_block_size_and_type(const char *pathname, uint32_t *fs_block_size_bytes,
- 			BLKID_SUBLKS_UUID | BLKID_SUBLKS_UUIDRAW |
- 			BLKID_SUBLKS_TYPE | BLKID_SUBLKS_SECTYPE |
- 			BLKID_SUBLKS_USAGE | BLKID_SUBLKS_VERSION |
--			BLKID_SUBLKS_MAGIC | BLKID_SUBLKS_FSINFO);
-+			BLKID_SUBLKS_MAGIC);
- 	rc = blkid_do_safeprobe(probe);
- 	if (rc < 0) {
- 		log_debug("Failed libblkid probe for %s", pathname);
 
+????David Teigland <teigland@redhat.com>
+????LVM2 development <lvm-devel@redhat.com>
+????zkabelac <zkabelac@redhat.com>;linfeilong <linfeilong@huawei.com>;wuguanghao <wuguanghao3@huawei.com>;liuzhiqiang (I) <liuzhiqiang26@huawei.com>
+????2022-09-09 22:27:45
+????Re: [lvm-devel] [PATCH] vgremove: PVID file leakage in /run/lvm/pvs_online
+
+On Thu, Sep 08, 2022 at 10:03:40PM +0800, miaoguanqin wrote:
+> We found PVID file leakage problem when exec the following test;
+> pvcreate /dev/sdb
+> vgcreate -s 1M docker /dev/sdb
+> lvcreate -L 10M docker
+> pvscan --cache --listvg --checkcomplete --vgonline --udevoutput
+> --journal=output /dev/sdb
+> vgremove -ff docker
+>
+> pvcreate operation generates a new PVID, which is used to create PVID pvid
+> file
+> when exec pvcan. However vgremove does not delete the old PVID file.
+>
+> Here, we will delete all PVID files of each pv in current vg, when exec
+> vgremove.
+
+Hi, these files are located in tmpfs, so they will disappear automatically
+when the system reboots. Is there a reason that you want remove them in
+vgremove instead of waiting for reboot to remove them?
+
+Dave
+
+
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20220910/67b53b3a/attachment.htm>
