@@ -1,118 +1,52 @@
 From: Tony Asleson <tasleson@sourceware.org>
-Date: Mon, 19 Sep 2022 15:57:48 +0000 (GMT)
-Subject: main - lvmdbusd: Move arg. setup/checking to function
-Message-ID: <20220919155748.C90233858C50@sourceware.org>
+Date: Mon, 19 Sep 2022 15:58:06 +0000 (GMT)
+Subject: main - lvmdbusd: Correct typos
+Message-ID: <20220919155806.EB6AA385841A@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=1a4384979cdf889bd63a932d83933079c53490ae
-Commit:        1a4384979cdf889bd63a932d83933079c53490ae
-Parent:        3eb19c4b7ae0b0b862a9cf92760922e4a524600a
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=ec50979b031e85ab155126aae51ab15b255f4be9
+Commit:        ec50979b031e85ab155126aae51ab15b255f4be9
+Parent:        3d8882db833909bede4b8cbcc81c1c3b9d9b3515
 Author:        Tony Asleson <tasleson@redhat.com>
-AuthorDate:    Mon Aug 8 20:44:32 2022 -0500
+AuthorDate:    Tue Aug 23 10:24:37 2022 -0500
 Committer:     Tony Asleson <tasleson@redhat.com>
-CommitterDate: Fri Sep 16 10:49:36 2022 -0500
+CommitterDate: Fri Sep 16 10:49:37 2022 -0500
 
-lvmdbusd: Move arg. setup/checking to function
+lvmdbusd: Correct typos
 
 ---
- daemons/lvmdbusd/main.py  | 37 ++++++++++++++++++++++---------------
- daemons/lvmdbusd/utils.py |  4 ++++
- 2 files changed, 26 insertions(+), 15 deletions(-)
+ daemons/lvmdbusd/lvmdb.py.in | 2 +-
+ test/dbus/lvmdbustest.py     | 2 +-
+ 2 files changed, 2 insertions(+), 2 deletions(-)
 
-diff --git a/daemons/lvmdbusd/main.py b/daemons/lvmdbusd/main.py
-index 50b8e568f..1e883c901 100644
---- a/daemons/lvmdbusd/main.py
-+++ b/daemons/lvmdbusd/main.py
-@@ -25,7 +25,7 @@ from .manager import Manager
- import traceback
- import queue
- from . import udevwatch
--from .utils import log_debug, log_error
-+from .utils import log_debug, log_error, log_msg
- import argparse
- import os
- import sys
-@@ -81,9 +81,7 @@ def install_signal_handlers():
- 		log_error("GLib.unix_signal_[add|add_full] are NOT available!")
+diff --git a/daemons/lvmdbusd/lvmdb.py.in b/daemons/lvmdbusd/lvmdb.py.in
+index 87474d0f3..d462e0cf8 100644
+--- a/daemons/lvmdbusd/lvmdb.py.in
++++ b/daemons/lvmdbusd/lvmdb.py.in
+@@ -161,7 +161,7 @@ class DataStore(object):
+ 		c_lvs = OrderedDict()
+ 		c_lv_full_lookup = {}
  
- 
--def main():
--	start = time.time()
--	# Add simple command line handling
-+def process_args():
- 	parser = argparse.ArgumentParser()
- 	parser.add_argument(
- 		"--udev", action='store_true',
-@@ -110,14 +108,9 @@ def main():
- 		type=check_bb_size,
- 		dest='bb_size')
- 
--	use_session = os.getenv('LVMDBUSD_USE_SESSION', False)
--
--	# Ensure that we get consistent output for parsing stdout/stderr
--	os.environ["LC_ALL"] = "C"
--
--	cfg.args = parser.parse_args()
-+	args = parser.parse_args()
- 
--	if not cfg.args.use_json:
-+	if not args.use_json:
- 		log_error("Daemon no longer supports lvm without JSON support, exiting!")
- 		sys.exit(1)
- 	else:
-@@ -125,6 +118,24 @@ def main():
- 			log_error("Un-supported version of LVM, daemon requires JSON output, exiting!")
- 			sys.exit(1)
- 
-+	# Add udev watching
-+	if args.use_udev:
-+		# Make sure this msg ends up in the journal, so we know
-+		log_msg('Utilizing udev to trigger updates')
-+
-+	return args
-+
-+
-+def main():
-+	start = time.time()
-+	use_session = os.getenv('LVMDBUSD_USE_SESSION', False)
-+
-+	# Ensure that we get consistent output for parsing stdout/stderr
-+	os.environ["LC_ALL"] = "C"
-+
-+	# Add simple command line handling
-+	cfg.args = process_args()
-+
- 	cfg.create_request_entry = RequestEntry
- 
- 	# We create a flight recorder in cmdhandler too, but we replace it here
-@@ -178,10 +189,6 @@ def main():
- 		thread.damon = True
- 		thread.start()
- 
--	# Add udev watching
--	if cfg.args.use_udev:
--		log_debug('Utilizing udev to trigger updates')
--
- 	# In all cases we are going to monitor for udev until we get an
- 	# ExternalEvent.  In the case where we get an external event and the user
- 	# didn't specify --udev we will stop monitoring udev
-diff --git a/daemons/lvmdbusd/utils.py b/daemons/lvmdbusd/utils.py
-index cc221fc2d..f5bca1b46 100644
---- a/daemons/lvmdbusd/utils.py
-+++ b/daemons/lvmdbusd/utils.py
-@@ -313,6 +313,10 @@ def log_error(msg, *attributes):
- 	_common_log(msg, *attributes)
- 
- 
-+def log_msg(msg, *attributes):
-+	_common_log(msg, *attributes)
-+
-+
- def dump_threads_stackframe():
- 	ident_to_name = {}
- 
+-		# Each item item in the report is a collection of information pertaining
++		# Each item in the report is a collection of information pertaining
+ 		# to the vg
+ 		for r in _all['report']:
+ 			# Get the lv data for this VG.
+diff --git a/test/dbus/lvmdbustest.py b/test/dbus/lvmdbustest.py
+index 878300a97..c4e95b7cc 100755
+--- a/test/dbus/lvmdbustest.py
++++ b/test/dbus/lvmdbustest.py
+@@ -215,7 +215,7 @@ class TestDbusService(unittest.TestCase):
+ 	def setUp(self):
+ 		# Because of the sensitive nature of running LVM tests we will only
+ 		# run if we have PVs and nothing else, so that we can be confident that
+-		# we are not mucking with someones data on their system
++		# we are not mucking with someone's data on their system
+ 		self.objs, self.bus = get_objects()
+ 		if len(self.objs[PV_INT]) == 0:
+ 			std_err_print('No PVs present exiting!')
 
