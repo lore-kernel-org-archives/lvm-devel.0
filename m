@@ -1,55 +1,39 @@
 From: Tony Asleson <tasleson@sourceware.org>
-Date: Mon, 19 Sep 2022 15:57:53 +0000 (GMT)
-Subject: main - lvmdbusd: Add SIGUSR2 to dump flight recorder
-Message-ID: <20220919155753.566063858C56@sourceware.org>
+Date: Mon, 19 Sep 2022 15:57:54 +0000 (GMT)
+Subject: main - lvmdbusd: Remove unneeded command line args
+Message-ID: <20220919155754.778263858C00@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=b3d8366ff21ee69380ab5fbca48204212a64a0cd
-Commit:        b3d8366ff21ee69380ab5fbca48204212a64a0cd
-Parent:        05f7fa5a8536d37b6a711ac0baab5bfd105bb0cc
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=c13efb2ffc90853884e77f0d2b28e8d1936c74d0
+Commit:        c13efb2ffc90853884e77f0d2b28e8d1936c74d0
+Parent:        b3d8366ff21ee69380ab5fbca48204212a64a0cd
 Author:        Tony Asleson <tasleson@redhat.com>
-AuthorDate:    Tue Aug 9 17:44:10 2022 -0500
+AuthorDate:    Tue Aug 9 17:45:04 2022 -0500
 Committer:     Tony Asleson <tasleson@redhat.com>
 CommitterDate: Fri Sep 16 10:49:36 2022 -0500
 
-lvmdbusd: Add SIGUSR2 to dump flight recorder
+lvmdbusd: Remove unneeded command line args
 
 ---
- daemons/lvmdbusd/main.py  | 1 +
- daemons/lvmdbusd/utils.py | 4 ++++
- 2 files changed, 5 insertions(+)
+ daemons/lvmdbusd/cmdhandler.py | 3 +--
+ 1 file changed, 1 insertion(+), 2 deletions(-)
 
-diff --git a/daemons/lvmdbusd/main.py b/daemons/lvmdbusd/main.py
-index 7b455052e..5e6f72cdc 100644
---- a/daemons/lvmdbusd/main.py
-+++ b/daemons/lvmdbusd/main.py
-@@ -77,6 +77,7 @@ def install_signal_handlers():
- 		signal_add(GLib.PRIORITY_HIGH, signal.SIGHUP, utils.handler, signal.SIGHUP)
- 		signal_add(GLib.PRIORITY_HIGH, signal.SIGINT, utils.handler, signal.SIGINT)
- 		signal_add(GLib.PRIORITY_HIGH, signal.SIGUSR1, utils.handler, signal.SIGUSR1)
-+		signal_add(GLib.PRIORITY_HIGH, signal.SIGUSR2, utils.handler, signal.SIGUSR2)
- 	else:
- 		log_error("GLib.unix_signal_[add|add_full] are NOT available!")
+diff --git a/daemons/lvmdbusd/cmdhandler.py b/daemons/lvmdbusd/cmdhandler.py
+index 0c4d5cb61..7b3ad528b 100644
+--- a/daemons/lvmdbusd/cmdhandler.py
++++ b/daemons/lvmdbusd/cmdhandler.py
+@@ -234,8 +234,7 @@ call = time_wrapper
+ # Default cmd
+ # Place default arguments for every command here.
+ def _dc(cmd, args):
+-	c = [cmd, '--noheading', '--separator', '%s' % SEP, '--nosuffix',
+-		'--unbuffered', '--units', 'b']
++	c = [cmd, '--nosuffix', '--unbuffered', '--units', 'b']
+ 	c.extend(args)
+ 	return c
  
-diff --git a/daemons/lvmdbusd/utils.py b/daemons/lvmdbusd/utils.py
-index d24a34935..a10fa7864 100644
---- a/daemons/lvmdbusd/utils.py
-+++ b/daemons/lvmdbusd/utils.py
-@@ -346,8 +346,12 @@ def dump_threads_stackframe():
- # noinspection PyUnusedLocal
- def handler(signum):
- 	try:
-+		# signal 10
- 		if signum == signal.SIGUSR1:
- 			dump_threads_stackframe()
-+		# signal 12
-+		elif signum == signal.SIGUSR2:
-+			cfg.blackbox.dump()
- 		else:
- 			cfg.run.value = 0
- 			log_debug('Exiting daemon with signal %d' % signum)
 
