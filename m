@@ -1,44 +1,47 @@
 From: Tony Asleson <tasleson@sourceware.org>
-Date: Mon, 19 Sep 2022 15:58:47 +0000 (GMT)
-Subject: main - lvmdbusd: Remove --reportformat
-Message-ID: <20220919155847.DF98E385829F@sourceware.org>
+Date: Mon, 19 Sep 2022 15:58:44 +0000 (GMT)
+Subject: main - lvmdbusd: Call readlines instead of readline
+Message-ID: <20220919155844.7ADD0385829E@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=868665766491d9d42b8acedaf07cafc7118d165c
-Commit:        868665766491d9d42b8acedaf07cafc7118d165c
-Parent:        3d3c517b0b4206adec9673b52ad931a64805af13
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=a4b7f988d88afa81fd8f1934482444f97a08d9dd
+Commit:        a4b7f988d88afa81fd8f1934482444f97a08d9dd
+Parent:        8e1e40c499a0e46a0a15b9a6b470adb8fbbbbf4f
 Author:        Tony Asleson <tasleson@redhat.com>
-AuthorDate:    Wed Sep 14 13:11:47 2022 -0500
+AuthorDate:    Thu Sep 8 15:42:26 2022 -0500
 Committer:     Tony Asleson <tasleson@redhat.com>
 CommitterDate: Fri Sep 16 10:49:37 2022 -0500
 
-lvmdbusd: Remove --reportformat
+lvmdbusd: Call readlines instead of readline
 
-Latest upstream build of lvm results in the following error when
-trying to use lvmshell.
-
-"Argument --reportformat cannot be used in interactive mode.,
-Error during parsing of command line."
+Better to drain everything we have now that our IO is line orientated
+when using a ptty.
 ---
- daemons/lvmdbusd/cmdhandler.py | 3 +--
- 1 file changed, 1 insertion(+), 2 deletions(-)
+ daemons/lvmdbusd/lvm_shell_proxy.py.in | 6 ++++--
+ 1 file changed, 4 insertions(+), 2 deletions(-)
 
-diff --git a/daemons/lvmdbusd/cmdhandler.py b/daemons/lvmdbusd/cmdhandler.py
-index 0e344d3ca..0c7bd8528 100644
---- a/daemons/lvmdbusd/cmdhandler.py
-+++ b/daemons/lvmdbusd/cmdhandler.py
-@@ -608,8 +608,7 @@ def lvm_full_report_json():
- 		'--configreport', 'vg', '-o', ','.join(vg_columns),
- 		'--configreport', 'lv', '-o', ','.join(lv_columns),
- 		'--configreport', 'seg', '-o', ','.join(lv_seg_columns),
--		'--configreport', 'pvseg', '-o', ','.join(pv_seg_columns),
--		'--reportformat', 'json'
-+		'--configreport', 'pvseg', '-o', ','.join(pv_seg_columns)
- 	])
+diff --git a/daemons/lvmdbusd/lvm_shell_proxy.py.in b/daemons/lvmdbusd/lvm_shell_proxy.py.in
+index ed2c7bc9e..0ba0ffe5c 100755
+--- a/daemons/lvmdbusd/lvm_shell_proxy.py.in
++++ b/daemons/lvmdbusd/lvm_shell_proxy.py.in
+@@ -69,11 +69,13 @@ class LVMShellProxy(object):
  
- 	# We are running the fullreport command, we will ask lvm to output the debug
+ 				for r in ready[0]:
+ 					if r == self.parent_stdout_fd:
+-						stdout += self.parent_stdout.readline()
++						for line in self.parent_stdout.readlines():
++							stdout += line
+ 					elif r == self.report_stream.fileno():
+ 						report += read_decoded(self.report_stream)
+ 					elif r == self.parent_stderr_fd:
+-						stderr += self.parent_stderr.readline()
++						for line in self.parent_stderr.readlines():
++							stderr += line
+ 
+ 				# Check to see if the lvm process died on us
+ 				if self.lvm_shell.poll() is not None:
 
