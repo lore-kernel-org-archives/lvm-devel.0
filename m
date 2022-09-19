@@ -1,246 +1,241 @@
-From: Milan Broz <gmazyland@gmail.com>
-Date: Tue,  6 Sep 2022 15:27:11 +0200
-Subject: [PATCH] Support new DM_RETURN_ERROR_FLAG in libdevmapper.
-Message-ID: <20220906132711.74114-1-gmazyland@gmail.com>
+From: Tony Asleson <tasleson@sourceware.org>
+Date: Mon, 19 Sep 2022 15:58:26 +0000 (GMT)
+Subject: main - lvmdbusd: Use common function for traceback
+Message-ID: <20220919155826.4840E3858285@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-This patch adds support for new flag defined here:
-https://git.kernel.org/pub/scm/linux/kernel/git/device-mapper/linux-dm.git/commit/?h=dm-6.1&id=0abd2cd1e80ec866107fb496c139034dbb2a60a4
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=cb32b0a87f9c2c5b9d79f02e59e3925d8350c70b
+Commit:        cb32b0a87f9c2c5b9d79f02e59e3925d8350c70b
+Parent:        22942f49162bca9e99172d64dfd03e7a881ce5b2
+Author:        Tony Asleson <tasleson@redhat.com>
+AuthorDate:    Wed Aug 31 11:18:55 2022 -0500
+Committer:     Tony Asleson <tasleson@redhat.com>
+CommitterDate: Fri Sep 16 10:49:37 2022 -0500
 
-As the patch overloads the name field in ioctl structure,
-all parsing must bu skipped.
+lvmdbusd: Use common function for traceback
 
-Also libdevmapps generates more ioctl on error path, so
-error string must be preserved from the actuall failing call.
-
-I am not sure that I understand all the magic here, but
-at least basic testing works and I get error string.
-
-Signed-off-by: Milan Broz <gmazyland@gmail.com>
+We were using a number of different ways to achieve the same result.  Use
+a common function to make this consistent.
 ---
- libdm/.exported_symbols.DM_1_02_187 |  2 ++
- libdm/ioctl/libdm-iface.c           | 33 +++++++++++++++++++++++++----
- libdm/ioctl/libdm-targets.h         |  2 ++
- libdm/libdevmapper.h                |  3 +++
- libdm/libdm-common.c                |  9 ++++++++
- libdm/misc/dm-ioctl.h               | 15 ++++++++++---
- 6 files changed, 57 insertions(+), 7 deletions(-)
- create mode 100644 libdm/.exported_symbols.DM_1_02_187
+ daemons/lvmdbusd/cmdhandler.py         | 13 ++++++-------
+ daemons/lvmdbusd/lv.py                 |  6 ++----
+ daemons/lvmdbusd/lvm_shell_proxy.py.in |  6 +++---
+ daemons/lvmdbusd/main.py               |  5 ++---
+ daemons/lvmdbusd/objectmanager.py      |  7 +++----
+ daemons/lvmdbusd/request.py            |  5 ++---
+ daemons/lvmdbusd/utils.py              | 15 ++++++++++-----
+ 7 files changed, 28 insertions(+), 29 deletions(-)
 
-diff --git a/libdm/.exported_symbols.DM_1_02_187 b/libdm/.exported_symbols.DM_1_02_187
-new file mode 100644
-index 000000000..5fb30ae6e
---- /dev/null
-+++ b/libdm/.exported_symbols.DM_1_02_187
-@@ -0,0 +1,2 @@
-+dm_task_return_error
-+dm_task_get_error
-diff --git a/libdm/ioctl/libdm-iface.c b/libdm/ioctl/libdm-iface.c
-index 0fba79ce4..06d01cebf 100644
---- a/libdm/ioctl/libdm-iface.c
-+++ b/libdm/ioctl/libdm-iface.c
-@@ -959,6 +959,13 @@ int dm_task_ima_measurement(struct dm_task *dmt)
- 	return 1;
- }
+diff --git a/daemons/lvmdbusd/cmdhandler.py b/daemons/lvmdbusd/cmdhandler.py
+index d5dceb64e..fd6ecf326 100644
+--- a/daemons/lvmdbusd/cmdhandler.py
++++ b/daemons/lvmdbusd/cmdhandler.py
+@@ -13,12 +13,11 @@ import time
+ import threading
+ from itertools import chain
+ import collections
+-import traceback
+ import os
  
-+int dm_task_return_error(struct dm_task *dmt)
-+{
-+	dmt->return_error = 1;
+ from lvmdbusd import cfg
+ from lvmdbusd.utils import pv_dest_ranges, log_debug, log_error, add_no_notify,\
+-							make_non_block, read_decoded
++			make_non_block, read_decoded, extract_stack_trace
+ from lvmdbusd.lvm_shell_proxy import LVMShellProxy
+ 
+ try:
+@@ -149,8 +148,8 @@ def call_lvm(command, debug=False, line_cb=None,
+ 					if i != -1:
+ 						try:
+ 							line_cb(cb_data, stdout_text[stdout_index:i])
+-						except:
+-							st = traceback.format_exc()
++						except BaseException as be:
++							st = extract_stack_trace(be)
+ 							log_error("call_lvm: line_cb exception: \n %s" % st)
+ 						stdout_index = i + 1
+ 					else:
+@@ -189,11 +188,11 @@ def _shell_cfg():
+ 		_t_call = lvm_shell.call_lvm
+ 		cfg.SHELL_IN_USE = lvm_shell
+ 		return True
+-	except Exception:
++	except Exception as e:
+ 		_t_call = call_lvm
+ 		cfg.SHELL_IN_USE = None
+-		log_error(traceback.format_exc())
+-		log_error("Unable to utilize lvm shell, dropping back to fork & exec")
++		log_error("Unable to utilize lvm shell, dropping "
++				  "back to fork & exec\n%s" % extract_stack_trace(e))
+ 		return False
+ 
+ 
+diff --git a/daemons/lvmdbusd/lv.py b/daemons/lvmdbusd/lv.py
+index 349ada006..8c55f5ffd 100644
+--- a/daemons/lvmdbusd/lv.py
++++ b/daemons/lvmdbusd/lv.py
+@@ -24,8 +24,6 @@ from . import background
+ from .utils import round_size, mt_remove_dbus_objects
+ from .job import JobState
+ 
+-import traceback
+-
+ 
+ # Try and build a key for a LV, so that we sort the LVs with least dependencies
+ # first.  This may be error prone because of the flexibility LVM
+@@ -371,8 +369,8 @@ class LvCommon(AutomatedProperties):
+ 			return dbus.Struct((self.state.Attr[index],
+ 				type_map.get(self.state.Attr[index], default)),
+ 								signature="(ss)")
+-		except BaseException:
+-			st = traceback.format_exc()
++		except BaseException as b:
++			st = utils.extract_stack_trace(b)
+ 			log_error("attr_struct: \n%s" % st)
+ 			return dbus.Struct(('?', 'Unavailable'), signature="(ss)")
+ 
+diff --git a/daemons/lvmdbusd/lvm_shell_proxy.py.in b/daemons/lvmdbusd/lvm_shell_proxy.py.in
+index feb93fbfa..77c0078ee 100644
+--- a/daemons/lvmdbusd/lvm_shell_proxy.py.in
++++ b/daemons/lvmdbusd/lvm_shell_proxy.py.in
+@@ -14,11 +14,11 @@
+ import subprocess
+ import shlex
+ import os
+-import traceback
+ import sys
+ import tempfile
+ import time
+ import select
++from .utils import extract_stack_trace
+ 
+ try:
+ 	import simplejson as json
+@@ -279,8 +279,8 @@ if __name__ == "__main__":
+ 				pass
+ 			except EOFError:
+ 				pass
+-	except Exception:
+-		traceback.print_exc(file=sys.stdout)
++	except Exception as e:
++		log_error("main process exiting on exception!\n%s", extract_stack_trace(e))
+ 		sys.exit(1)
+ 
+ 	sys.exit(0)
+diff --git a/daemons/lvmdbusd/main.py b/daemons/lvmdbusd/main.py
+index b485e0245..a426a535d 100644
+--- a/daemons/lvmdbusd/main.py
++++ b/daemons/lvmdbusd/main.py
+@@ -22,7 +22,6 @@ from . import lvmdb
+ from gi.repository import GLib
+ from .fetch import StateUpdate
+ from .manager import Manager
+-import traceback
+ import queue
+ from . import udevwatch
+ from .utils import log_debug, log_error, log_msg, DebugMessages
+@@ -52,8 +51,8 @@ def process_request():
+ 			pass
+ 		except SystemExit:
+ 			break
+-		except Exception:
+-			st = traceback.format_exc()
++		except Exception as e:
++			st = utils.extract_stack_trace(e)
+ 			utils.log_error("process_request exception: \n%s" % st)
+ 	log_debug("process_request thread exiting!")
+ 
+diff --git a/daemons/lvmdbusd/objectmanager.py b/daemons/lvmdbusd/objectmanager.py
+index a0c4a50ef..b84e16904 100644
+--- a/daemons/lvmdbusd/objectmanager.py
++++ b/daemons/lvmdbusd/objectmanager.py
+@@ -9,12 +9,11 @@
+ 
+ import sys
+ import threading
+-import traceback
+ import dbus
+ import os
+ import copy
+ from . import cfg
+-from .utils import log_debug, pv_obj_path_generate, log_error
++from .utils import log_debug, pv_obj_path_generate, log_error, extract_stack_trace
+ from .automatedproperties import AutomatedProperties
+ 
+ 
+@@ -40,8 +39,8 @@ class ObjectManager(AutomatedProperties):
+ 				for k, v in list(obj._objects.items()):
+ 					path, props = v[0].emit_data()
+ 					rc[path] = props
+-			except Exception:
+-				traceback.print_exc(file=sys.stdout)
++			except Exception as e:
++				log_error("_get_managed_objects exception, bailing: \n%s" % extract_stack_trace(e))
+ 				sys.exit(1)
+ 			return rc
+ 
+diff --git a/daemons/lvmdbusd/request.py b/daemons/lvmdbusd/request.py
+index 57d72d8af..5d4d7e30a 100644
+--- a/daemons/lvmdbusd/request.py
++++ b/daemons/lvmdbusd/request.py
+@@ -13,8 +13,7 @@ import threading
+ from gi.repository import GLib
+ from .job import Job
+ from . import cfg
+-import traceback
+-from .utils import log_error, mt_async_call
++from .utils import log_error, mt_async_call, extract_stack_trace
+ 
+ 
+ class RequestEntry(object):
+@@ -86,7 +85,7 @@ class RequestEntry(object):
+ 			# exception in the journal for figuring out what went wrong.
+ 			cfg.debug.dump()
+ 			cfg.flightrecorder.dump()
+-			tb = ''.join(traceback.format_tb(e.__traceback__))
++			tb = extract_stack_trace(e)
+ 			log_error("While processing %s: we encountered\n%s" % (str(self.method), tb))
+ 			log_error("Error returned to client: %s" % str(e))
+ 			self.register_error(-1, str(e), e)
+diff --git a/daemons/lvmdbusd/utils.py b/daemons/lvmdbusd/utils.py
+index ae925aa5f..d5c37de46 100644
+--- a/daemons/lvmdbusd/utils.py
++++ b/daemons/lvmdbusd/utils.py
+@@ -389,8 +389,8 @@ def handler(signum):
+ 			log_error('Exiting daemon with signal %d' % signum)
+ 			if cfg.loop is not None:
+ 				cfg.loop.quit()
+-	except:
+-		st = traceback.format_exc()
++	except BaseException as be:
++		st = extract_stack_trace(be)
+ 		log_error("signal handler: exception (logged, not reported!) \n %s" % st)
+ 
+ 	# It's important we report that we handled the exception for the exception
+@@ -659,9 +659,8 @@ def _async_handler(call_back, parameters):
+ 			call_back(*parameters)
+ 		else:
+ 			call_back()
+-	except:
+-		st = traceback.format_exc()
+-		log_error("mt_async_call: exception (logged, not reported!) \n %s" % st)
++	except BaseException as be:
++		log_error("mt_async_call: exception (logged, not reported!) \n %s" % extract_stack_trace(be))
+ 
+ 
+ # Execute the function on the main thread with the provided parameters, do
+@@ -763,3 +762,9 @@ class LockFile(object):
+ 
+ 	def __exit__(self, _type, _value, _traceback):
+ 		os.close(self.fd)
 +
-+	return 1;
-+}
 +
- int dm_task_retry_remove(struct dm_task *dmt)
- {
- 	dmt->retry_remove = 1;
-@@ -1326,6 +1333,14 @@ static struct dm_ioctl *_flatten(struct dm_task *dmt, unsigned repeat_count)
- 		}
- 		dmi->flags |= DM_IMA_MEASUREMENT_FLAG;
- 	}
-+	if (dmt->return_error) {
-+		if (_dm_version_minor < 48) {
-+			log_error("WARNING: Return error flag unsupported by "
-+				  "kernel.  Aborting operation.");
-+			goto bad;
-+		}
-+		dmi->flags |= DM_RETURN_ERROR_FLAG;
-+	}
- 
- 	dmi->target_count = count;
- 	dmi->event_nr = dmt->event_nr;
-@@ -1527,8 +1542,11 @@ static int _create_and_load_v4(struct dm_task *dmt)
- 	task->tail = dmt->tail;
- 	task->secure_data = dmt->secure_data;
- 	task->ima_measurement = dmt->ima_measurement;
-+	task->return_error = dmt->return_error;
- 
- 	r = dm_task_run(task);
-+	if (!r && task->return_error)
-+		strncpy(dmt->dm_error, task->dm_error, sizeof(dmt->dm_error));
- 
- 	task->head = NULL;
- 	task->tail = NULL;
-@@ -1815,7 +1833,7 @@ static int _dm_ioctl_unmangle_names(int type, struct dm_ioctl *dmi)
- 	char *uuid_ptr;
- 	dm_string_mangling_t mangling_mode = dm_get_name_mangling_mode();
- 
--	if ((name = dmi->name))
-+	if ((name = dmi->name) && !dmi->error)
- 		r &= _do_dm_ioctl_unmangle_string(name, "name", buf, sizeof(buf),
- 						  mangling_mode);
- 
-@@ -1926,7 +1944,7 @@ static struct dm_ioctl *_do_dm_ioctl(struct dm_task *dmt, unsigned command,
- 	}
- 
- 	log_debug_activation("dm %s %s%s %s%s%s %s%.0d%s%.0d%s"
--			     "%s[ %s%s%s%s%s%s%s%s%s%s] %.0" PRIu64 " %s [%u] (*%u)",
-+			     "%s[ %s%s%s%s%s%s%s%s%s%s%s] %.0" PRIu64 " %s [%u] (*%u)",
- 			     _cmd_data_v4[dmt->type].name,
- 			     dmt->new_uuid ? "UUID " : "",
- 			     dmi->name, dmi->uuid, dmt->newname ? " " : "",
-@@ -1945,6 +1963,7 @@ static struct dm_ioctl *_do_dm_ioctl(struct dm_task *dmt, unsigned command,
- 			     dmt->deferred_remove ? "deferredremove " : "",
- 			     dmt->secure_data ? "securedata " : "",
- 			     dmt->ima_measurement ? "ima_measurement " : "",
-+			     dmt->return_error ? "return_error " : "",
- 			     dmt->query_inactive_table ? "inactive " : "",
- 			     dmt->enable_checks ? "enablechecks " : "",
- 			     dmt->sector, _sanitise_message(dmt->message),
-@@ -1952,6 +1971,12 @@ static struct dm_ioctl *_do_dm_ioctl(struct dm_task *dmt, unsigned command,
- #ifdef DM_IOCTLS
- 	r = ioctl(_control_fd, command, dmi);
- 
-+	if (!r && dmt->return_error && dmi->error) {
-+		if (!*dmt->dm_error)
-+			strncpy(dmt->dm_error, dmi->name, sizeof(dmt->dm_error));
-+		r = dmi->error;
-+	}
++def extract_stack_trace(exception):
++	return ''.join(traceback.format_exception(None, exception, exception.__traceback__))
 +
- 	if (dmt->record_timestamp)
- 		if (!dm_timestamp_get(_dm_ioctl_timestamp))
- 			stack;
-@@ -1967,7 +1992,7 @@ static struct dm_ioctl *_do_dm_ioctl(struct dm_task *dmt, unsigned command,
- 				log_verbose("device-mapper: %s ioctl on %s %s%s%.0d%s%.0d%s%s "
- 					    "failed: %s",
- 					    _cmd_data_v4[dmt->type].name,
--					    dmi->name[0] ? dmi->name : DEV_NAME(dmt) ? : "",
-+					    !dmt->return_error && dmi->name[0] ? dmi->name : DEV_NAME(dmt) ? : "",
- 					    dmi->uuid[0] ? dmi->uuid : DEV_UUID(dmt) ? : "",
- 					    dmt->major > 0 ? "(" : "",
- 					    dmt->major > 0 ? dmt->major : 0,
-@@ -1980,7 +2005,7 @@ static struct dm_ioctl *_do_dm_ioctl(struct dm_task *dmt, unsigned command,
- 				log_error("device-mapper: %s ioctl on %s %s%s%.0d%s%.0d%s%s "
- 					  "failed: %s",
- 					  _cmd_data_v4[dmt->type].name,
--					  dmi->name[0] ? dmi->name : DEV_NAME(dmt) ? : "",
-+					  !dmt->return_error && dmi->name[0] ? dmi->name : DEV_NAME(dmt) ? : "",
- 					  dmi->uuid[0] ? dmi->uuid : DEV_UUID(dmt) ? : "",
- 					  dmt->major > 0 ? "(" : "",
- 					  dmt->major > 0 ? dmt->major : 0,
-diff --git a/libdm/ioctl/libdm-targets.h b/libdm/ioctl/libdm-targets.h
-index 022b02c72..914a1bab3 100644
---- a/libdm/ioctl/libdm-targets.h
-+++ b/libdm/ioctl/libdm-targets.h
-@@ -70,6 +70,8 @@ struct dm_task {
- 	int expected_errno;
- 	int ioctl_errno;
- 	int ima_measurement;
-+	int return_error;
-+	char dm_error[130]; /* At least DM_NAME_LEN */
- 
- 	int record_timestamp;
- 
-diff --git a/libdm/libdevmapper.h b/libdm/libdevmapper.h
-index c1c6cb40e..d69567d36 100644
---- a/libdm/libdevmapper.h
-+++ b/libdm/libdevmapper.h
-@@ -199,6 +199,8 @@ const char *dm_task_get_uuid(const struct dm_task *dmt);
- struct dm_deps *dm_task_get_deps(struct dm_task *dmt);
- struct dm_versions *dm_task_get_versions(struct dm_task *dmt);
- const char *dm_task_get_message_response(struct dm_task *dmt);
-+const char *dm_task_get_error(const struct dm_task *dmt);
 +
- 
- /*
-  * These functions return device-mapper names based on the value
-@@ -236,6 +238,7 @@ int dm_task_secure_data(struct dm_task *dmt);
- int dm_task_retry_remove(struct dm_task *dmt);
- int dm_task_deferred_remove(struct dm_task *dmt);
- int dm_task_ima_measurement(struct dm_task *dmt);
-+int dm_task_return_error(struct dm_task *dmt);
- 
- /*
-  * Record timestamp immediately after the ioctl returns.
-diff --git a/libdm/libdm-common.c b/libdm/libdm-common.c
-index 734a0127e..308d7599d 100644
---- a/libdm/libdm-common.c
-+++ b/libdm/libdm-common.c
-@@ -337,6 +337,7 @@ struct dm_task *dm_task_create(int type)
- 	dmt->secure_data = 0;
- 	dmt->record_timestamp = 0;
- 	dmt->ima_measurement = 0;
-+	dmt->return_error = 0;
- 
- 	return dmt;
- }
-@@ -745,6 +746,14 @@ const char *dm_task_get_uuid(const struct dm_task *dmt)
- 	return (dmt->dmi.v4->uuid);
- }
- 
-+const char *dm_task_get_error(const struct dm_task *dmt)
-+{
-+	if (dmt->return_error)
-+		return dmt->dm_error;
-+
-+	return NULL;
-+}
-+
- char *dm_task_get_uuid_mangled(const struct dm_task *dmt)
- {
- 	const char *s = dm_task_get_uuid(dmt);
-diff --git a/libdm/misc/dm-ioctl.h b/libdm/misc/dm-ioctl.h
-index cdb38f639..c8ceb0c0e 100644
---- a/libdm/misc/dm-ioctl.h
-+++ b/libdm/misc/dm-ioctl.h
-@@ -137,7 +137,8 @@ struct dm_ioctl {
- 	 * For output, the ioctls return the event number, not the cookie.
- 	 */
- 	uint32_t event_nr;      	/* in/out */
--	uint32_t padding;
-+
-+	uint32_t error;		/* out */
- 
- 	uint64_t dev;		/* in/out */
- 
-@@ -287,9 +288,9 @@ enum {
- #define DM_GET_TARGET_VERSION	_IOWR(DM_IOCTL, DM_GET_TARGET_VERSION_CMD, struct dm_ioctl)
- 
- #define DM_VERSION_MAJOR	4
--#define DM_VERSION_MINOR	45
-+#define DM_VERSION_MINOR	48
- #define DM_VERSION_PATCHLEVEL	0
--#define DM_VERSION_EXTRA	"-ioctl (2021-03-22)"
-+#define DM_VERSION_EXTRA	"-ioctl (2022-08-24)"
- 
- /* Status bits */
- #define DM_READONLY_FLAG	(1 << 0) /* In/Out */
-@@ -383,4 +384,12 @@ enum {
-  */
- #define DM_IMA_MEASUREMENT_FLAG	(1 << 19) /* In */
- 
-+/*
-+ * If this flag is set, the caller wants to receive the error string.
-+ * The error string is returned in the "name" field of the ioctl and
-+ * the error number is returned in the "error" field. The ioctl returns
-+ * zero.
-+ */
-+#define DM_RETURN_ERROR_FLAG	(1 << 20) /* In */
-+
- #endif				/* _LINUX_DM_IOCTL_H */
--- 
-2.37.2
 
