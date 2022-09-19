@@ -1,48 +1,61 @@
 From: Tony Asleson <tasleson@sourceware.org>
-Date: Mon, 19 Sep 2022 15:58:03 +0000 (GMT)
-Subject: main - lvmdbustest: Add test for external event
-Message-ID: <20220919155803.88326385840F@sourceware.org>
+Date: Mon, 19 Sep 2022 15:58:09 +0000 (GMT)
+Subject: main - lvmdbustest: Factor out tearDown implementation for re-use
+Message-ID: <20220919155809.3A14B3858421@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=2ca4a2dbf3d35528f8173916aed77fd277f23f18
-Commit:        2ca4a2dbf3d35528f8173916aed77fd277f23f18
-Parent:        4a202c11fffb30ae786e69cebe11186dd4166c88
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=d05d2328e0868c60ba95d3bd87b654146c078316
+Commit:        d05d2328e0868c60ba95d3bd87b654146c078316
+Parent:        de0258a60054166fd3a2b1732d74e7bae85e92f5
 Author:        Tony Asleson <tasleson@redhat.com>
-AuthorDate:    Wed Aug 17 12:12:17 2022 -0500
+AuthorDate:    Tue Aug 23 10:28:27 2022 -0500
 Committer:     Tony Asleson <tasleson@redhat.com>
 CommitterDate: Fri Sep 16 10:49:37 2022 -0500
 
-lvmdbustest: Add test for external event
+lvmdbustest: Factor out tearDown implementation for re-use
 
-Ensure that when we trigger an external event that we don't incorrectly
-handle multiple --config options.
 ---
- test/dbus/lvmdbustest.py | 10 ++++++++++
- 1 file changed, 10 insertions(+)
+ test/dbus/lvmdbustest.py | 11 +++++++----
+ 1 file changed, 7 insertions(+), 4 deletions(-)
 
 diff --git a/test/dbus/lvmdbustest.py b/test/dbus/lvmdbustest.py
-index c03e96c08..d67298fe9 100755
+index 5c352313d..bee6eb085 100755
 --- a/test/dbus/lvmdbustest.py
 +++ b/test/dbus/lvmdbustest.py
-@@ -2095,6 +2095,16 @@ class TestDbusService(unittest.TestCase):
- 	def test_log_file_option(self):
- 		self._log_file_option()
+@@ -419,9 +419,7 @@ class TestDbusService(unittest.TestCase):
+ 			rc = self._pv_remove(pv_proxy)
+ 			self.assertTrue(rc == '/')
  
-+	def test_external_event(self):
-+		# Call into the service to register an external event, so that we can test sending the path
-+		# where we don't send notifications on the command line in addition to the logging
-+		lvm_manager = dbus.Interface(bus.get_object(
-+			BUS_NAME, "/com/redhat/lvmdbus1/Manager", introspect=False),
-+			"com.redhat.lvmdbus1.Manager")
-+		rc = lvm_manager.ExternalEvent("unit_test")
-+		self.assertTrue(rc == 0)
-+		self._log_file_option()
+-	def tearDown(self):
+-		# If we get here it means we passed setUp, so lets remove anything
+-		# and everything that remains, besides the PVs themselves
++	def clean_up(self):
+ 		self.objs, self.bus = get_objects()
+ 
+ 		# The self.objs[PV_INT] list only contains those which we should be
+@@ -447,7 +445,7 @@ class TestDbusService(unittest.TestCase):
+ 			# the properties are current and correct.
+ 			p.update()
+ 			if p.Pv.Vg != '/':
+-				v = ClientProxy(self.bus, p.Pv.Vg, interfaces=(VG_INT, ))
++				v = ClientProxy(self.bus, p.Pv.Vg, interfaces=(VG_INT,))
+ 				self._recurse_vg_delete(v, p, nested_pvs)
+ 
+ 		# Check to make sure the PVs we had to start exist, else re-create
+@@ -465,6 +463,11 @@ class TestDbusService(unittest.TestCase):
+ 					# print('Re-creating PV=', p)
+ 					self._pv_create(p)
+ 
++	def tearDown(self):
++		# If we get here it means we passed setUp, so lets remove anything
++		# and everything that remains, besides the PVs themselves
++		self.clean_up()
 +
- class AggregateResults(object):
- 
- 	def __init__(self):
+ 	def _check_consistency(self):
+ 		# Only do consistency checks if we aren't running the unit tests
+ 		# concurrently
 
