@@ -1,101 +1,91 @@
 From: Tony Asleson <tasleson@sourceware.org>
-Date: Mon, 19 Sep 2022 15:58:30 +0000 (GMT)
-Subject: main - lvmdbusd: Remove duplicate code
-Message-ID: <20220919155830.CCFB6385828C@sourceware.org>
+Date: Mon, 19 Sep 2022 15:58:19 +0000 (GMT)
+Subject: main - lvmdbusd: Don't report recoverable error
+Message-ID: <20220919155819.723BE385842E@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=e977b70bfb0a26a8dd5cd06d581cb810e2a6f10b
-Commit:        e977b70bfb0a26a8dd5cd06d581cb810e2a6f10b
-Parent:        f4c03faa6556489444cf9402b2a35c46e7282ed3
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=0296e56073667216e6b1d7397880b02df8df54c8
+Commit:        0296e56073667216e6b1d7397880b02df8df54c8
+Parent:        29189948732b4385fa053c94ac2dc31e3cfc3dfa
 Author:        Tony Asleson <tasleson@redhat.com>
-AuthorDate:    Wed Aug 31 15:42:48 2022 -0500
+AuthorDate:    Thu Aug 25 09:33:50 2022 -0500
 Committer:     Tony Asleson <tasleson@redhat.com>
 CommitterDate: Fri Sep 16 10:49:37 2022 -0500
 
-lvmdbusd: Remove duplicate code
+lvmdbusd: Don't report recoverable error
 
-The logic for _cache_lv and _writecache_lv was identical except for which
-underlying lvm command to run.  Factor out common.
+Lvm occasionally fails to return all the request JSON keys in the output of
+"fullreport".  This happens very rarely.  When it does the daemon was reporting
+the resulting informational exception:
+
+MThreadRunner: exception
+Traceback (most recent call last):
+  File "/usr/lib/python3.9/site-packages/lvmdbusd/utils.py", line 667, in _run
+    self.rc = self.f(*self.args)
+  File "/usr/lib/python3.9/site-packages/lvmdbusd/fetch.py", line 40, in _main_thread_load
+    (lv_changes, remove) = load_lvs(
+  File "/usr/lib/python3.9/site-packages/lvmdbusd/lv.py", line 143, in load_lvs
+    return common(
+  File "/usr/lib/python3.9/site-packages/lvmdbusd/loader.py", line 37, in common
+    objects = retrieve(search_keys, cache_refresh=False)
+  File "/usr/lib/python3.9/site-packages/lvmdbusd/lv.py", line 95, in lvs_state_retrieve
+    l['vdo_operating_mode'],
+KeyError: 'vdo_operating_mode'
+
+The daemon retries the operation, which usually works and the daemon continues.
+However, simply reporting this informational stack trace is causing CI and other
+automated tests to fail as they expect no tracebacks in the log output.
+
+Remove the reporting of this code path unless it persists and causes the daemon
+to give up and exit.
+
+Ref: https://bugzilla.redhat.com/show_bug.cgi?id=2120267
 ---
- daemons/lvmdbusd/lv.py | 40 ++++++++++------------------------------
- 1 file changed, 10 insertions(+), 30 deletions(-)
+ daemons/lvmdbusd/fetch.py | 10 ++++------
+ daemons/lvmdbusd/utils.py |  3 ---
+ 2 files changed, 4 insertions(+), 9 deletions(-)
 
-diff --git a/daemons/lvmdbusd/lv.py b/daemons/lvmdbusd/lv.py
-index 134843346..5dd698e29 100644
---- a/daemons/lvmdbusd/lv.py
-+++ b/daemons/lvmdbusd/lv.py
-@@ -751,7 +751,7 @@ class Lv(LvCommon):
- 		cfg.worker_q.put(r)
- 
- 	@staticmethod
--	def _writecache_lv(lv_uuid, lv_name, lv_object_path, cache_options):
-+	def _caching_common(method, lv_uuid, lv_name, lv_object_path, cache_options):
- 		# Make sure we have a dbus object representing it
- 		dbo = LvCommon.validate_dbus_object(lv_uuid, lv_name)
- 
-@@ -760,7 +760,7 @@ class Lv(LvCommon):
- 
- 		if lv_to_cache:
- 			fcn = lv_to_cache.lv_full_name()
--			rc, out, err = cmdhandler.lv_writecache_lv(
-+			rc, out, err = method(
- 				dbo.lv_full_name(), fcn, cache_options)
- 			if rc == 0:
- 				# When we cache an LV, the cache pool and the lv that is getting
-@@ -777,9 +777,14 @@ class Lv(LvCommon):
- 		else:
- 			raise dbus.exceptions.DBusException(
- 				LV_INTERFACE, 'LV to cache with object path %s not present!' %
--				lv_object_path)
-+							  lv_object_path)
- 		return lv_converted
- 
-+	@staticmethod
-+	def _writecache_lv(lv_uuid, lv_name, lv_object_path, cache_options):
-+		return Lv._caching_common(cmdhandler.lv_writecache_lv, lv_uuid,
-+									lv_name, lv_object_path, cache_options)
-+
- 	@dbus.service.method(
- 		dbus_interface=LV_INTERFACE,
- 		in_signature='oia{sv}',
-@@ -959,33 +964,8 @@ class LvCachePool(Lv):
- 
- 	@staticmethod
- 	def _cache_lv(lv_uuid, lv_name, lv_object_path, cache_options):
--		# Make sure we have a dbus object representing cache pool
--		dbo = LvCommon.validate_dbus_object(lv_uuid, lv_name)
+diff --git a/daemons/lvmdbusd/fetch.py b/daemons/lvmdbusd/fetch.py
+index ed519b660..5cb98853a 100644
+--- a/daemons/lvmdbusd/fetch.py
++++ b/daemons/lvmdbusd/fetch.py
+@@ -193,16 +193,14 @@ class StateUpdate(object):
+ 			except queue.Empty:
+ 				pass
+ 			except Exception as e:
+-				st = traceback.format_exc()
+-				log_error("update_thread exception: \n%s" % st)
+-				cfg.debug.dump()
+-				cfg.flightrecorder.dump()
+ 				exception_count += 1
+ 				if exception_count >= 5:
++					st = traceback.format_exc()
++					log_error("Too many errors in update_thread, exiting daemon (last exception reported): \n %s" % st)
++					cfg.debug.dump()
++					cfg.flightrecorder.dump()
+ 					bailing(e)
+-					log_error("Too many errors in update_thread, exiting daemon")
+ 					cfg.exit_daemon()
 -
--		# Make sure we have dbus object representing lv to cache
--		lv_to_cache = cfg.om.get_object_by_path(lv_object_path)
--
--		if lv_to_cache:
--			fcn = lv_to_cache.lv_full_name()
--			rc, out, err = cmdhandler.lv_cache_lv(
--				dbo.lv_full_name(), fcn, cache_options)
--			if rc == 0:
--				# When we cache an LV, the cache pool and the lv that is getting
--				# cached need to be removed from the object manager and
--				# re-created as their interfaces have changed!
--				mt_remove_dbus_objects((dbo, lv_to_cache))
--				cfg.load()
--
--				lv_converted = cfg.om.get_object_path_by_lvm_id(fcn)
--			else:
--				raise dbus.exceptions.DBusException(
--					LV_INTERFACE,
--					'Exit code %s, stderr = %s' % (str(rc), err))
--		else:
--			raise dbus.exceptions.DBusException(
--				LV_INTERFACE, 'LV to cache with object path %s not present!' %
--				lv_object_path)
--		return lv_converted
-+		return Lv._caching_common(cmdhandler.lv_cache_lv, lv_uuid, lv_name,
-+									lv_object_path, cache_options)
+ 				else:
+ 					# Slow things down when encountering errors
+ 					time.sleep(1)
+diff --git a/daemons/lvmdbusd/utils.py b/daemons/lvmdbusd/utils.py
+index 802f71173..ae925aa5f 100644
+--- a/daemons/lvmdbusd/utils.py
++++ b/daemons/lvmdbusd/utils.py
+@@ -711,9 +711,6 @@ class MThreadRunner(object):
+ 				self.rc = self.f()
+ 		except BaseException as be:
+ 			self.exception = be
+-			st = traceback.format_exc()
+-			log_error("MThreadRunner: exception \n %s" % st)
+-			log_error("Exception will be raised in calling thread!")
  
- 	@dbus.service.method(
- 		dbus_interface=CACHE_POOL_INTERFACE,
+ 
+ def _remove_objects(dbus_objects_rm):
 
