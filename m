@@ -1,52 +1,60 @@
 From: Tony Asleson <tasleson@sourceware.org>
-Date: Mon, 19 Sep 2022 15:58:06 +0000 (GMT)
-Subject: main - lvmdbusd: Correct typos
-Message-ID: <20220919155806.EB6AA385841A@sourceware.org>
+Date: Mon, 19 Sep 2022 15:57:51 +0000 (GMT)
+Subject: main - lvmdbustest: Remove force exception in _wait_for_job
+Message-ID: <20220919155751.156DE3858C54@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=ec50979b031e85ab155126aae51ab15b255f4be9
-Commit:        ec50979b031e85ab155126aae51ab15b255f4be9
-Parent:        3d8882db833909bede4b8cbcc81c1c3b9d9b3515
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=ea45ba753eaa168429b9747500e6f31f2856890f
+Commit:        ea45ba753eaa168429b9747500e6f31f2856890f
+Parent:        3fdf4493481ff8baae2ac5416dce6d05b69e6b28
 Author:        Tony Asleson <tasleson@redhat.com>
-AuthorDate:    Tue Aug 23 10:24:37 2022 -0500
+AuthorDate:    Tue Aug 9 17:36:54 2022 -0500
 Committer:     Tony Asleson <tasleson@redhat.com>
-CommitterDate: Fri Sep 16 10:49:37 2022 -0500
+CommitterDate: Fri Sep 16 10:49:36 2022 -0500
 
-lvmdbusd: Correct typos
+lvmdbustest: Remove force exception in _wait_for_job
 
+We put this in to test one of the paths in the damon, but unfortunately
+if we hit the race condition where the job actually is done we will try
+to call j.Wait(1) after the remove.  This fails with:
+
+dbus.exceptions.DBusException: org.freedesktop.DBus.Error.UnknownMethod:
+Method "Wait" with signature "i" on interface "com.redhat.lvmdbus1.Job"
+doesn't exist
+
+Which is caused by the dbus object no longer existing.  We could handle
+this, but the issue is we no longer have the ability to get the result to
+return, they have been lost.
+
+A better solution would be to write a specific unit test to force this code
+path and handle all the possible outcomes.
 ---
- daemons/lvmdbusd/lvmdb.py.in | 2 +-
- test/dbus/lvmdbustest.py     | 2 +-
- 2 files changed, 2 insertions(+), 2 deletions(-)
+ test/dbus/lvmdbustest.py | 10 ----------
+ 1 file changed, 10 deletions(-)
 
-diff --git a/daemons/lvmdbusd/lvmdb.py.in b/daemons/lvmdbusd/lvmdb.py.in
-index 87474d0f3..d462e0cf8 100644
---- a/daemons/lvmdbusd/lvmdb.py.in
-+++ b/daemons/lvmdbusd/lvmdb.py.in
-@@ -161,7 +161,7 @@ class DataStore(object):
- 		c_lvs = OrderedDict()
- 		c_lv_full_lookup = {}
- 
--		# Each item item in the report is a collection of information pertaining
-+		# Each item in the report is a collection of information pertaining
- 		# to the vg
- 		for r in _all['report']:
- 			# Get the lv data for this VG.
 diff --git a/test/dbus/lvmdbustest.py b/test/dbus/lvmdbustest.py
-index 878300a97..c4e95b7cc 100755
+index 02d4d35d7..e7df238ce 100755
 --- a/test/dbus/lvmdbustest.py
 +++ b/test/dbus/lvmdbustest.py
-@@ -215,7 +215,7 @@ class TestDbusService(unittest.TestCase):
- 	def setUp(self):
- 		# Because of the sensitive nature of running LVM tests we will only
- 		# run if we have PVs and nothing else, so that we can be confident that
--		# we are not mucking with someones data on their system
-+		# we are not mucking with someone's data on their system
- 		self.objs, self.bus = get_objects()
- 		if len(self.objs[PV_INT]) == 0:
- 			std_err_print('No PVs present exiting!')
+@@ -900,16 +900,6 @@ class TestDbusService(unittest.TestCase):
+ 				j.Remove()
+ 
+ 				break
+-			else:
+-				# Most of the time we will get this exception as expected, but there is
+-				# a race condition between checking if it's complete and removing it (we want to try to remove while
+-				# it's not complete to raise the exception)
+-				# Thus, we can't reliably use self.assertRaises.
+-				# We have included it here to test this path in the daemon.
+-				try:
+-					j.Remove()
+-				except dbus.exceptions.DBusException:
+-					pass
+ 
+ 			if j.Wait(1):
+ 				self.assertTrue(j.Wait(0))
 
