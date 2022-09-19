@@ -1,76 +1,67 @@
 From: Tony Asleson <tasleson@sourceware.org>
-Date: Mon, 19 Sep 2022 15:58:01 +0000 (GMT)
-Subject: main - lvmdbusd: Remove unused locking functionality
-Message-ID: <20220919155801.47DDA3858400@sourceware.org>
+Date: Mon, 19 Sep 2022 15:58:10 +0000 (GMT)
+Subject: main - lvmdbustest: Add optional option to _create_num_lvs
+Message-ID: <20220919155810.5A5EA3858422@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=60e4ba36e0843c9536278ff33ce6dfda9cfd8079
-Commit:        60e4ba36e0843c9536278ff33ce6dfda9cfd8079
-Parent:        cfc87157a4fdec39c2b570bd35ce812cda3003f6
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=52415b5708aa26fe322b13a9ffdb8cc16904ab45
+Commit:        52415b5708aa26fe322b13a9ffdb8cc16904ab45
+Parent:        d05d2328e0868c60ba95d3bd87b654146c078316
 Author:        Tony Asleson <tasleson@redhat.com>
-AuthorDate:    Wed Aug 17 12:09:30 2022 -0500
+AuthorDate:    Tue Aug 23 10:29:26 2022 -0500
 Committer:     Tony Asleson <tasleson@redhat.com>
 CommitterDate: Fri Sep 16 10:49:37 2022 -0500
 
-lvmdbusd: Remove unused locking functionality
+lvmdbustest: Add optional option to _create_num_lvs
 
-I don't think we have ever utilized this, remove.
+This allows us to create the LVs async., thus queuing them up in daemon.
 ---
- daemons/lvmdbusd/objectmanager.py | 35 -----------------------------------
- 1 file changed, 35 deletions(-)
+ test/dbus/lvmdbustest.py | 20 ++++++++++++--------
+ 1 file changed, 12 insertions(+), 8 deletions(-)
 
-diff --git a/daemons/lvmdbusd/objectmanager.py b/daemons/lvmdbusd/objectmanager.py
-index 95d33db19..a0c4a50ef 100644
---- a/daemons/lvmdbusd/objectmanager.py
-+++ b/daemons/lvmdbusd/objectmanager.py
-@@ -53,15 +53,6 @@ class ObjectManager(AutomatedProperties):
- 									(self, ), cb, cbe, False)
- 		cfg.worker_q.put(r)
+diff --git a/test/dbus/lvmdbustest.py b/test/dbus/lvmdbustest.py
+index bee6eb085..2f1aa98a6 100755
+--- a/test/dbus/lvmdbustest.py
++++ b/test/dbus/lvmdbustest.py
+@@ -1288,24 +1288,28 @@ class TestDbusService(unittest.TestCase):
+ 		vg_path = self._wait_for_job(vg_job)
+ 		self._validate_lookup(vg_name, vg_path)
  
--	def locked(self):
--		"""
--		If some external code need to run across a number of different
--		calls into ObjectManager while blocking others they can use this method
--		to lock others out.
--		:return:
--		"""
--		return ObjectManagerLock(self.rlock)
--
- 	@dbus.service.signal(
- 		dbus_interface="org.freedesktop.DBus.ObjectManager",
- 		signature='oa{sa{sv}}')
-@@ -337,29 +328,3 @@ class ObjectManager(AutomatedProperties):
- 			#	(uuid, lvm_id, str(path_create), path))
+-	def _create_num_lvs(self, num_lvs):
++	def _create_num_lvs(self, num_lvs, no_wait=False):
+ 		vg_proxy = self._vg_create(self._all_pv_object_paths())
++		if no_wait:
++			tmo = 0
++		else:
++			tmo = g_tmo
  
- 			return path
--
--
--class ObjectManagerLock(object):
--	"""
--	The sole purpose of this class is to allow other code the ability to
--	lock the object manager using a `with` statement, eg.
--
--	with cfg.om.locked():
--		# Do stuff with object manager
--
--	This will ensure that the lock is always released (assuming this is done
--	correctly)
--	"""
--
--	def __init__(self, recursive_lock):
--		self._lock = recursive_lock
--
--	def __enter__(self):
--		# Acquire lock
--		self._lock.acquire()
--
--	# noinspection PyUnusedLocal
--	def __exit__(self, e_type, e_value, e_traceback):
--		# Release lock
--		self._lock.release()
--		self._lock = None
+ 		for i in range(0, num_lvs):
+ 			lv_name = lv_n()
+ 			vg_proxy.update()
+ 			if vg_proxy.Vg.FreeCount > 0:
+-				lv_path = self.handle_return(
+-					vg_proxy.Vg.LvCreateLinear(
++				create_result = vg_proxy.Vg.LvCreateLinear(
+ 						dbus.String(lv_name),
+ 						dbus.UInt64(mib(4)),
+ 						dbus.Boolean(False),
+-						dbus.Int32(g_tmo),
+-						EOD))
+-				self.assertTrue(lv_path != '/')
+-				self._validate_lookup(
+-					"%s/%s" % (vg_proxy.Vg.Name, lv_name), lv_path)
++						dbus.Int32(tmo),
++						EOD)
+ 
++				if not no_wait:
++					lv_path = self.handle_return(create_result)
++					self.assertTrue(lv_path != '/')
++					self._validate_lookup("%s/%s" % (vg_proxy.Vg.Name, lv_name), lv_path)
+ 			else:
+ 				# We ran out of space, test(s) may fail
+ 				break
 
