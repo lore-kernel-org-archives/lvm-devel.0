@@ -1,211 +1,98 @@
 From: Tony Asleson <tasleson@sourceware.org>
-Date: Mon, 19 Sep 2022 15:58:34 +0000 (GMT)
-Subject: main - lvmdbusd: Use pseudo tty to get "lvm>" prompt again
-Message-ID: <20220919155834.40EEC3858290@sourceware.org>
+Date: Mon, 19 Sep 2022 15:58:33 +0000 (GMT)
+Subject: main - lvmdbusd: Remove PID from log messages
+Message-ID: <20220919155833.1E7EF385828F@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=b3d13c50d7adb838675929968317f9e42a2f485f
-Commit:        b3d13c50d7adb838675929968317f9e42a2f485f
-Parent:        664a06650db5acca2ac9a285e6ebddbde6157300
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=664a06650db5acca2ac9a285e6ebddbde6157300
+Commit:        664a06650db5acca2ac9a285e6ebddbde6157300
+Parent:        b6dc96d8ef03e7af6624ab88a94654ffa94c50ba
 Author:        Tony Asleson <tasleson@redhat.com>
-AuthorDate:    Tue Sep 6 16:23:06 2022 -0500
+AuthorDate:    Wed Aug 31 21:25:36 2022 -0500
 Committer:     Tony Asleson <tasleson@redhat.com>
 CommitterDate: Fri Sep 16 10:49:37 2022 -0500
 
-lvmdbusd: Use pseudo tty to get "lvm>" prompt again
+lvmdbusd: Remove PID from log messages
 
-When lvm is compiled with editline, if the file descriptors don't look like
-a tty, then no "lvm> " prompt is done.  Having lvm output the shell prompt
-when consuming JSON on a report file descriptor is very useful in
-determining if lvm command is complete.
+Previously the daemon would output PID:TID.  If it's running under systemd
+it skips outputting PID as systemd already does this.
 ---
- daemons/lvmdbusd/lvm_shell_proxy.py.in | 112 ++++++++++++++++++---------------
- 1 file changed, 63 insertions(+), 49 deletions(-)
+ daemons/lvmdbusd/cfg.py   |  2 ++
+ daemons/lvmdbusd/main.py  | 17 +++++++++++++++++
+ daemons/lvmdbusd/utils.py |  8 ++++++--
+ 3 files changed, 25 insertions(+), 2 deletions(-)
 
-diff --git a/daemons/lvmdbusd/lvm_shell_proxy.py.in b/daemons/lvmdbusd/lvm_shell_proxy.py.in
-old mode 100644
-new mode 100755
-index 77c0078ee..9696a70a5
---- a/daemons/lvmdbusd/lvm_shell_proxy.py.in
-+++ b/daemons/lvmdbusd/lvm_shell_proxy.py.in
-@@ -14,11 +14,11 @@
- import subprocess
- import shlex
- import os
-+import pty
- import sys
- import tempfile
- import time
- import select
--from .utils import extract_stack_trace
+diff --git a/daemons/lvmdbusd/cfg.py b/daemons/lvmdbusd/cfg.py
+index 5b342bc20..142cfabc7 100644
+--- a/daemons/lvmdbusd/cfg.py
++++ b/daemons/lvmdbusd/cfg.py
+@@ -113,3 +113,5 @@ def exit_daemon():
  
- try:
- 	import simplejson as json
-@@ -28,7 +28,9 @@ except ImportError:
- 
- from lvmdbusd.cfg import LVM_CMD, run
- from lvmdbusd.utils import log_debug, log_error, add_no_notify, make_non_block,\
--							read_decoded
-+			read_decoded, extract_stack_trace, LvmBug
+ # Debug data for lvm
+ lvmdebug = None
 +
-+SHELL_PROMPT = "lvm> "
++systemd = False
+diff --git a/daemons/lvmdbusd/main.py b/daemons/lvmdbusd/main.py
+index ab66efcc9..ac309aa69 100644
+--- a/daemons/lvmdbusd/main.py
++++ b/daemons/lvmdbusd/main.py
+@@ -129,6 +129,20 @@ def process_args():
+ 	return args
  
  
- def _quote_arg(arg):
-@@ -44,7 +46,7 @@ class LVMShellProxy(object):
- 	# up trying to get one.
- 	#
- 	# Returns stdout, report (JSON), stderr
--	def _read_response(self):
-+	def _read_response(self, no_output=False):
- 		stdout = ""
- 		report = ""
- 		stderr = ""
-@@ -60,50 +62,49 @@ class LVMShellProxy(object):
- 		while keep_reading and run.value != 0:
- 			try:
- 				rd_fd = [
--					self.lvm_shell.stdout.fileno(),
-+					self.parent_stdout_fd,
- 					self.report_stream.fileno(),
--					self.lvm_shell.stderr.fileno()]
-+					self.parent_stderr_fd]
- 				ready = select.select(rd_fd, [], [], 2)
- 
- 				for r in ready[0]:
--					if r == self.lvm_shell.stdout.fileno():
--						stdout += read_decoded(self.lvm_shell.stdout)
-+					if r == self.parent_stdout_fd:
-+						stdout += self.parent_stdout.readline()
- 					elif r == self.report_stream.fileno():
- 						report += read_decoded(self.report_stream)
--					elif r == self.lvm_shell.stderr.fileno():
--						stderr += read_decoded(self.lvm_shell.stderr)
-+					elif r == self.parent_stderr_fd:
-+						stderr += self.parent_stderr.readline()
- 
- 				# Check to see if the lvm process died on us
- 				if self.lvm_shell.poll() is not None:
- 					raise Exception(self.lvm_shell.returncode, "%s" % stderr)
- 
--				cur_report_len = len(report)
--				if cur_report_len != 0:
--					# Only bother to parse if we have more data and the last 2 characters match expected
--					# complete JSON, prevents excessive JSON parsing attempts
--					if prev_report_len != cur_report_len and report[-2:] == "}\n":
--						prev_report_len = cur_report_len
--
--						# Parse the JSON if it's good we are done,
--						# if not we will try to read some more.
--						try:
--							report_json = json.loads(report)
--							keep_reading = False
--						except ValueError:
--							pass
--
--				# As long as lvm is spewing something on one of the FDs we will
--				# keep trying.  If we get a few timeouts with no activity, and
--				# we don't have valid JSON, we will raise an error.
--				if len(ready) == 0 and keep_reading:
--					extra_passes -= 1
--					if extra_passes <= 0:
--						if len(report):
--							raise ValueError("Invalid json: %s" %
--												report)
--						else:
--							raise ValueError(
--								"lvm returned no JSON output!")
-+				if stdout.endswith(SHELL_PROMPT):
-+					if no_output:
-+						keep_reading = False
-+					else:
-+						cur_report_len = len(report)
-+						if cur_report_len != 0:
-+							# Only bother to parse if we have more data
-+							if prev_report_len != cur_report_len:
-+								prev_report_len = cur_report_len
-+								# Parse the JSON if it's good we are done,
-+								# if not we will try to read some more.
-+								try:
-+									report_json = json.loads(report)
-+									keep_reading = False
-+								except ValueError:
-+									pass
++def running_under_systemd():
++	""""
++	Checks to see if we are running under systemd, by checking damon fd 0, 1
++	systemd sets stdin to /dev/null and 1 & 2 are a socket
++	"""
++	base = "/proc/self/fd"
++	stdout = os.readlink("%s/0" % base)
++	if stdout == "/dev/null":
++		stdout = os.readlink("%s/1" % base)
++		if "socket" in stdout:
++			return True
++	return False
 +
-+						if keep_reading:
-+							extra_passes -= 1
-+							if extra_passes <= 0:
-+								if len(report):
-+									raise LvmBug("Invalid json: %s" %
-+														report)
-+								else:
-+									raise LvmBug(
-+										"lvm returned no JSON output!")
- 
- 			except IOError as ioe:
- 				log_debug(str(ioe))
-@@ -119,10 +120,8 @@ class LVMShellProxy(object):
- 		return stdout, report_json, stderr
- 
- 	def _write_cmd(self, cmd):
--		cmd_bytes = bytes(cmd, "utf-8")
--		num_written = self.lvm_shell.stdin.write(cmd_bytes)
--		assert (num_written == len(cmd_bytes))
--		self.lvm_shell.stdin.flush()
-+		self.parent_stdin.write(cmd)
-+		self.parent_stdin.flush()
- 
- 	def __init__(self):
- 		# Create a temp directory
-@@ -147,22 +146,37 @@ class LVMShellProxy(object):
- 			if "LVM" in k:
- 				local_env[k] = v
- 
-+		self.parent_stdin_fd, child_stdin_fd = pty.openpty()
-+		self.parent_stdout_fd, child_stdout_fd = pty.openpty()
-+		self.parent_stderr_fd, child_stderr_fd = pty.openpty()
-+		self.parent_stdin = os.fdopen(self.parent_stdin_fd, "w")
-+		self.parent_stdout = os.fdopen(self.parent_stdout_fd, "r")
-+		self.parent_stderr = os.fdopen(self.parent_stderr_fd, "r")
 +
- 		# run the lvm shell
- 		self.lvm_shell = subprocess.Popen(
- 			[LVM_CMD],
--			stdin=subprocess.PIPE, stdout=subprocess.PIPE, env=local_env,
--			stderr=subprocess.PIPE, close_fds=True, pass_fds=(lvm_fd,), shell=False)
-+			stdin=child_stdin_fd,
-+			stdout=child_stdout_fd, env=local_env,
-+			stderr=child_stderr_fd, close_fds=True,
-+			pass_fds=(lvm_fd,), shell=False)
+ def main():
+ 	start = time.time()
+ 	use_session = os.getenv('LVMDBUSD_USE_SESSION', False)
+@@ -142,6 +156,9 @@ def main():
+ 	# only used for 'fullreport' at this time.
+ 	cfg.lvmdebug = utils.LvmDebugData()
  
- 		try:
--			make_non_block(self.lvm_shell.stdout)
--			make_non_block(self.lvm_shell.stderr)
-+			make_non_block(self.parent_stdout_fd)
-+			make_non_block(self.parent_stderr_fd)
- 
--			# Close our copy of the lvm_fd, child process is open in its process space
-+			# Close our copies of the child FDs there were created with the fork, we don't need them open.
- 			os.close(lvm_fd)
--
--			# Assume we are ready as we may not get the lvm prompt message depending on
--			# if we are using readline or editline.
--
-+			os.close(child_stdin_fd)
-+			os.close(child_stdout_fd)
-+			os.close(child_stderr_fd)
++	# Indicator if we are running under systemd
++	cfg.systemd = running_under_systemd()
 +
-+			# wait for the first prompt
-+			log_debug("waiting for first prompt...")
-+			errors = self._read_response(no_output=True)[2]
-+			if errors and len(errors):
-+				raise LvmBug(errors)
-+			log_debug("lvm prompt read!!!")
- 		except:
- 			raise
- 		finally:
+ 	# Add simple command line handling
+ 	cfg.args = process_args()
+ 
+diff --git a/daemons/lvmdbusd/utils.py b/daemons/lvmdbusd/utils.py
+index ec40236a5..3443bdad7 100644
+--- a/daemons/lvmdbusd/utils.py
++++ b/daemons/lvmdbusd/utils.py
+@@ -308,13 +308,17 @@ class DebugMessages(object):
+ def _format_log_entry(msg):
+ 	tid = ctypes.CDLL('libc.so.6').syscall(186)
+ 
+-	if STDOUT_TTY:
++	if not cfg.systemd and STDOUT_TTY:
+ 		msg = "%s: %d:%d - %s" % \
+ 			(datetime.datetime.now().strftime("%b %d %H:%M:%S.%f"),
+ 			os.getpid(), tid, msg)
+ 
+ 	else:
+-		msg = "%d:%d - %s" % (os.getpid(), tid, msg)
++		if cfg.systemd:
++			# Systemd already puts the daemon pid in the log, we'll just add the tid
++			msg = "[%d]: %s" % (tid, msg)
++		else:
++			msg = "[%d:%d]: %s" % (os.getpid(), tid, msg)
+ 	return msg
+ 
+ 
 
