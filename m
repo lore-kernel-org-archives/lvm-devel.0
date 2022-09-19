@@ -1,51 +1,53 @@
 From: Tony Asleson <tasleson@sourceware.org>
-Date: Mon, 19 Sep 2022 15:57:47 +0000 (GMT)
-Subject: main - lvmdbusd: Remove addl. checks on --nojson
-Message-ID: <20220919155747.A5BFA3858CDA@sourceware.org>
+Date: Mon, 19 Sep 2022 15:58:00 +0000 (GMT)
+Subject: main - lvmdbusd: Make sure to set cfg.got_external_event
+Message-ID: <20220919155800.2569C3858C39@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=3eb19c4b7ae0b0b862a9cf92760922e4a524600a
-Commit:        3eb19c4b7ae0b0b862a9cf92760922e4a524600a
-Parent:        4b4d431631ec8df90d6d5793fbfc26c6999e154c
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=cfc87157a4fdec39c2b570bd35ce812cda3003f6
+Commit:        cfc87157a4fdec39c2b570bd35ce812cda3003f6
+Parent:        068073e924246ebda66b6dff590455d648007007
 Author:        Tony Asleson <tasleson@redhat.com>
-AuthorDate:    Mon Aug 8 16:08:23 2022 -0500
+AuthorDate:    Wed Aug 17 12:08:16 2022 -0500
 Committer:     Tony Asleson <tasleson@redhat.com>
-CommitterDate: Fri Sep 16 10:49:36 2022 -0500
+CommitterDate: Fri Sep 16 10:49:37 2022 -0500
 
-lvmdbusd: Remove addl. checks on --nojson
+lvmdbusd: Make sure to set cfg.got_external_event
 
-We check earlier that if you specify --nojson we will exit.
+We were incorrectly only setting this if --udev wasn't present on the
+command line.  In all cases when we see a manager.ExternalEvent we want
+to set this.
 ---
- daemons/lvmdbusd/main.py | 8 --------
- 1 file changed, 8 deletions(-)
+ daemons/lvmdbusd/manager.py | 5 ++---
+ 1 file changed, 2 insertions(+), 3 deletions(-)
 
-diff --git a/daemons/lvmdbusd/main.py b/daemons/lvmdbusd/main.py
-index 597441a9e..50b8e568f 100644
---- a/daemons/lvmdbusd/main.py
-+++ b/daemons/lvmdbusd/main.py
-@@ -132,20 +132,12 @@ def main():
- 	# cmdhandler is for when we are running other code with a different main.
- 	cfg.blackbox = LvmFlightRecorder(cfg.args.bb_size)
+diff --git a/daemons/lvmdbusd/manager.py b/daemons/lvmdbusd/manager.py
+index e6b0718c4..45e7bb0b8 100644
+--- a/daemons/lvmdbusd/manager.py
++++ b/daemons/lvmdbusd/manager.py
+@@ -194,6 +194,7 @@ class Manager(AutomatedProperties):
+ 	def _external_event(command):
+ 		utils.log_debug("Processing _external_event= %s" % command,
+ 							'bg_black', 'fg_orange')
++		cfg.got_external_event = True
+ 		cfg.load()
  
--	if cfg.args.use_lvm_shell and not cfg.args.use_json:
--		log_error("You cannot specify --lvmshell and --nojson")
--		sys.exit(1)
+ 	@dbus.service.method(
+@@ -204,11 +205,9 @@ class Manager(AutomatedProperties):
+ 		# If a user didn't explicitly specify udev, we will turn it off now.
+ 		if not cfg.args.use_udev:
+ 			if udevwatch.remove():
+-				utils.log_debug("ExternalEvent received, disabling "
++				utils.log_msg("ExternalEvent received, disabling "
+ 								"udev monitoring")
+ 				# We are dependent on external events now to stay current!
+-				cfg.got_external_event = True
 -
- 	log_debug("Using lvm binary: %s" % cfg.LVM_CMD)
- 
- 	# We will dynamically add interfaces which support vdo if it
- 	# exists.
- 	cfg.vdo_support = supports_vdo()
- 
--	if cfg.vdo_support and not cfg.args.use_json:
--		log_error("You cannot specify --nojson when lvm has VDO support")
--		sys.exit(1)
--
- 	# List of threads that we start up
- 	thread_list = []
- 
+ 		r = RequestEntry(
+ 			-1, Manager._external_event, (command,), None, None, False)
+ 		cfg.worker_q.put(r)
 
