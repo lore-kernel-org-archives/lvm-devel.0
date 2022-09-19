@@ -1,48 +1,57 @@
-From: David Teigland <teigland@redhat.com>
-Date: Wed, 14 Sep 2022 14:27:54 -0500
-Subject: [PATCH] vgremove: PVID file leakage in /run/lvm/pvs_online
-In-Reply-To: <49411.122090922135500503@us-mta-519.us.mimecast.lan>
-References: <2cbbffed-1d4c-b351-d9e3-8218d8964a7b@huawei.com>
- <20220909142734.GA23063@redhat.com>
- <49411.122090922135500503@us-mta-519.us.mimecast.lan>
-Message-ID: <20220914192754.GA14873@redhat.com>
+From: Tony Asleson <tasleson@sourceware.org>
+Date: Mon, 19 Sep 2022 15:58:45 +0000 (GMT)
+Subject: main - lvmdbusd: Include lvm debug output for lvmshell
+Message-ID: <20220919155845.9D689385829F@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Hi, a patch for this is here:
-https://sourceware.org/git/?p=lvm2.git;a=commit;h=0887896847807e159a70edc5ac92a4030c13923a
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=11c033c222bde7122b974464dbfb8d3c8734b19b
+Commit:        11c033c222bde7122b974464dbfb8d3c8734b19b
+Parent:        a4b7f988d88afa81fd8f1934482444f97a08d9dd
+Author:        Tony Asleson <tasleson@redhat.com>
+AuthorDate:    Fri Sep 9 10:03:35 2022 -0500
+Committer:     Tony Asleson <tasleson@redhat.com>
+CommitterDate: Fri Sep 16 10:49:37 2022 -0500
 
-Dave
+lvmdbusd: Include lvm debug output for lvmshell
 
-On Sat, Sep 10, 2022 at 01:56:59AM +0000, liuzhiqiang (I) wrote:
-> Thanks for your reply.
-> /run dir is mounted as tmpfs type, which has a setting inode number by systemd service. If the number of leakage pvid files increases with time, it may cause Deny of Service for other apps because cannot create files in /run.
-> 
-> ????David Teigland <teigland@redhat.com>
-> ????LVM2 development <lvm-devel@redhat.com>
-> ????zkabelac <zkabelac@redhat.com>;linfeilong <linfeilong@huawei.com>;wuguanghao <wuguanghao3@huawei.com>;liuzhiqiang (I) <liuzhiqiang26@huawei.com>
-> ????2022-09-09 22:27:45
-> ????Re: [lvm-devel] [PATCH] vgremove: PVID file leakage in /run/lvm/pvs_online
-> 
-> On Thu, Sep 08, 2022 at 10:03:40PM +0800, miaoguanqin wrote:
-> > We found PVID file leakage problem when exec the following test;
-> > pvcreate /dev/sdb
-> > vgcreate -s 1M docker /dev/sdb
-> > lvcreate -L 10M docker
-> > pvscan --cache --listvg --checkcomplete --vgonline --udevoutput
-> > --journal=output /dev/sdb
-> > vgremove -ff docker
-> >
-> > pvcreate operation generates a new PVID, which is used to create PVID pvid
-> > file
-> > when exec pvcan. However vgremove does not delete the old PVID file.
-> >
-> > Here, we will delete all PVID files of each pv in current vg, when exec
-> > vgremove.
-> 
-> Hi, these files are located in tmpfs, so they will disappear automatically
-> when the system reboots. Is there a reason that you want remove them in
-> vgremove instead of waiting for reboot to remove them?
+Move the option to add the debug file into lvm_full_report_json so that
+we collect the debug data when we fork & exec lvm and when we use lvm
+shell.
+---
+ daemons/lvmdbusd/cmdhandler.py | 11 +++++------
+ 1 file changed, 5 insertions(+), 6 deletions(-)
+
+diff --git a/daemons/lvmdbusd/cmdhandler.py b/daemons/lvmdbusd/cmdhandler.py
+index 1a7943f01..0e344d3ca 100644
+--- a/daemons/lvmdbusd/cmdhandler.py
++++ b/daemons/lvmdbusd/cmdhandler.py
+@@ -121,12 +121,6 @@ def call_lvm(command, debug=False, line_cb=None,
+ 	command.insert(0, cfg.LVM_CMD)
+ 	command = add_no_notify(command)
+ 
+-	# If we are running the fullreport command, we will ask lvm to output the debug
+-	# data, so we can have the required information for lvm to debug the fullreport failures.
+-	if "fullreport" in command:
+-		fn = cfg.lvmdebug.setup()
+-		add_config_option(command, "--config", "log {level=7 file=%s syslog=0}" % fn)
+-
+ 	process = Popen(command, stdout=PIPE, stderr=PIPE, close_fds=True,
+ 					env=os.environ)
+ 
+@@ -618,6 +612,11 @@ def lvm_full_report_json():
+ 		'--reportformat', 'json'
+ 	])
+ 
++	# We are running the fullreport command, we will ask lvm to output the debug
++	# data, so we can have the required information for lvm to debug the fullreport failures.
++	fn = cfg.lvmdebug.setup()
++	add_config_option(cmd, "--config", "log {level=7 file=%s syslog=0}" % fn)
++
+ 	rc, out, err = call(cmd)
+ 	# When we have an exported vg the exit code of lvs or fullreport will be 5
+ 	if rc == 0 or rc == 5:
+
