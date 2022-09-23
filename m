@@ -1,46 +1,73 @@
 From: Tony Asleson <tasleson@sourceware.org>
-Date: Fri, 23 Sep 2022 12:59:04 +0000 (GMT)
-Subject: main - lvmdbustest: Refuse to remove a VG we didn't create
-Message-ID: <20220923125904.62A02385734F@sourceware.org>
+Date: Fri, 23 Sep 2022 12:59:05 +0000 (GMT)
+Subject: main - lvmdbustest: Re-work setUp
+Message-ID: <20220923125905.838413857363@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=7966f1dd18ab88199da7dd0d84a44945c2f864ca
-Commit:        7966f1dd18ab88199da7dd0d84a44945c2f864ca
-Parent:        40018cbf5386e4ba76c0d4cc10aa1bd88ef0e6ab
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=897b326cccc017b9e033b83d24ddcb007a3922f4
+Commit:        897b326cccc017b9e033b83d24ddcb007a3922f4
+Parent:        7966f1dd18ab88199da7dd0d84a44945c2f864ca
 Author:        Tony Asleson <tasleson@redhat.com>
-AuthorDate:    Thu Sep 22 16:18:48 2022 -0500
+AuthorDate:    Thu Sep 22 17:10:13 2022 -0500
 Committer:     Tony Asleson <tasleson@redhat.com>
-CommitterDate: Thu Sep 22 16:19:16 2022 -0500
+CommitterDate: Thu Sep 22 17:10:13 2022 -0500
 
-lvmdbustest: Refuse to remove a VG we didn't create
+lvmdbustest: Re-work setUp
 
-One of our previous commits introduced the side effect that we could
-inadvertently remove a VG we didn't create, and lose data.
+Place the addCleanup at the end as we don't want to go through clean up
+if we don't make it through setUp.  If we don't do this we can remove VGs
+that we didn't create in the unit test.
 ---
- test/dbus/lvmdbustest.py | 6 +++++-
- 1 file changed, 5 insertions(+), 1 deletion(-)
+ test/dbus/lvmdbustest.py | 13 +++++++------
+ 1 file changed, 7 insertions(+), 6 deletions(-)
 
 diff --git a/test/dbus/lvmdbustest.py b/test/dbus/lvmdbustest.py
-index fc84026df..9b1024db3 100755
+index 9b1024db3..cf50bc564 100755
 --- a/test/dbus/lvmdbustest.py
 +++ b/test/dbus/lvmdbustest.py
-@@ -410,9 +410,13 @@ class TestDbusService(unittest.TestCase):
+@@ -385,8 +385,7 @@ class DaemonInfo(object):
+ # noinspection PyUnresolvedReferences
+ class TestDbusService(unittest.TestCase):
+ 	def setUp(self):
+-
+-		self.addCleanup(self.clean_up)
++		self.pvs = []
+ 
+ 		# Because of the sensitive nature of running LVM tests we will only
+ 		# run if we have PVs and nothing else, so that we can be confident that
+@@ -395,6 +394,10 @@ class TestDbusService(unittest.TestCase):
+ 		if len(self.objs[PV_INT]) == 0:
+ 			std_err_print('No PVs present exiting!')
+ 			sys.exit(1)
++
++		for p in self.objs[PV_INT]:
++			self.pvs.append(p.Pv.Name)
++
+ 		if len(self.objs[MANAGER_INT]) != 1:
+ 			std_err_print('Expecting a manager object!')
+ 			sys.exit(1)
+@@ -403,9 +406,7 @@ class TestDbusService(unittest.TestCase):
+ 			std_err_print('Expecting no VGs to exist!')
+ 			sys.exit(1)
+ 
+-		self.pvs = []
+-		for p in self.objs[PV_INT]:
+-			self.pvs.append(p.Pv.Name)
++		self.addCleanup(self.clean_up)
+ 
  		self.vdo = supports_vdo()
  
- 	def _recurse_vg_delete(self, vg_proxy, pv_proxy, nested_pv_hash):
-+		vg_name = str(vg_proxy.Vg.Name)
-+
-+		if not vg_name.endswith(VG_TEST_SUFFIX):
-+			std_err_print("Refusing to remove VG: %s" % vg_name)
-+			return
- 
- 		for pv_device_name, t in nested_pv_hash.items():
--			vg_name = str(vg_proxy.Vg.Name)
- 			if vg_name in pv_device_name:
- 				self._recurse_vg_delete(t[0], t[1], nested_pv_hash)
- 				break
+@@ -460,7 +461,7 @@ class TestDbusService(unittest.TestCase):
+ 		# Check to make sure the PVs we had to start exist, else re-create
+ 		# them
+ 		self.objs, self.bus = get_objects()
+-		if hasattr(self, "pvs") and len(self.pvs) != len(self.objs[PV_INT]):
++		if len(self.pvs) != len(self.objs[PV_INT]):
+ 			for p in self.pvs:
+ 				found = False
+ 				for pc in self.objs[PV_INT]:
 
