@@ -1,10 +1,7 @@
 From: Lidong Zhong <lidong.zhong@suse.com>
-Date: Thu, 29 Sep 2022 08:59:26 +0800
+Date: Wed, 28 Sep 2022 16:58:46 +0800
 Subject: [RFC PATCH]lvmlockd: try to adopt the lock resources left in previous lockspace
-In-Reply-To: <20220928220053.GA27856@redhat.com>
-References: <65215053-904b-356e-fb9a-1b7687aca500@suse.com>
- <20220928220053.GA27856@redhat.com>
-Message-ID: <3831aad5-2d8b-63ab-96bb-075297bb0d4c@suse.com>
+Message-ID: <65215053-904b-356e-fb9a-1b7687aca500@suse.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -13,95 +10,212 @@ Content-Transfer-Encoding: 7bit
 
 Hi David,
 
-Thanks for your review.
+Could you share your opinion about this patch please? It's related to 
+the patch I sent for resource-agents.
 
-On 9/29/22 06:00, David Teigland wrote:
-> On Wed, Sep 28, 2022 at 04:58:46PM +0800, Lidong Zhong wrote:
->> Hi David,
->>
->> Could you share your opinion about this patch please? It's related to the
->> patch I sent for resource-agents.
->>
->> https://github.com/ClusterLabs/resource-agents/pull/1808
->>
->> -----------------------------
->>
->> If lvmlockd in cluster is killed accidently or any other reason, the
->> lock resources will become orphaned in the VG lockspace. When the
->> cluster manager tries to restart this daemon, the LVs will probably
->> become inactive because of resource schedule policy and thus the lock
->> resouce will be omited during the adoption process. This patch will
->> check if the lock is left in previous lockspace and if it matches one
->> entry in the adopt file, lvmlockd will also try to adopt it to prevent
->> further resource failure.
-> Hi, I think you're heading in the right direction.  Before looking at the
-> code changes, could you correct anything I'm missing in this description
-> of the problem?
->
-> 1. lvmlock is running
->     LVs are active in a shared VG
->     the lock manager holds locks for those LV
->     the adopt file lists those LVs
->
-> 2. lvmlockd is killed
->     the LV locks are orphaned in the lock manager
->
-> 3. the LVs are deactivated
->     How does this happen?  Does someone run lvchange|vgchange -an?
+https://github.com/ClusterLabs/resource-agents/pull/1808
 
-In our case, it's cluster resource manager(pacemaker) once notices the 
-lvmlockd daemon is down, it
+-----------------------------
 
-will try to stop all the resources above lvmlockd first, then restart 
-lvmlockd and the resources depends
+If lvmlockd in cluster is killed accidently or any other reason, the
+lock resources will become orphaned in the VG lockspace. When the
+cluster manager tries to restart this daemon, the LVs will probably
+become inactive because of resource schedule policy and thus the lock
+resouce will be omited during the adoption process. This patch will
+check if the lock is left in previous lockspace and if it matches one
+entry in the adopt file, lvmlockd will also try to adopt it to prevent
+further resource failure.
+---
+ ?daemons/lvmlockd/lvmlockd-core.c???? | 30 +++++++++--
+ ?daemons/lvmlockd/lvmlockd-dlm.c????? | 75 ++++++++++++++++++++++++++++
+ ?daemons/lvmlockd/lvmlockd-internal.h |? 1 +
+ ?3 files changed, 101 insertions(+), 5 deletions(-)
 
-on it.
+diff --git a/daemons/lvmlockd/lvmlockd-core.c 
+b/daemons/lvmlockd/lvmlockd-core.c
+index 6d0d4d98c..820bba966 100644
+--- a/daemons/lvmlockd/lvmlockd-core.c
++++ b/daemons/lvmlockd/lvmlockd-core.c
+@@ -511,7 +511,7 @@ static struct client *alloc_client(void)
+ ???? return cl;
+ ?}
 
->
-> 4. lvmlockd is restarted with the adopt option
->     Your patch makes lvmlockd adopt orphan locks in the lock manager
->     that have no corresponding active LV.  But, you seem to continue
->     holding these adopted LV locks (maybe I'm missing where they are
->     released.)  I expect you would want to release these adopted locks
->     that have no active LV.
+-static struct resource *alloc_resource(void)
++struct resource *alloc_resource(void)
+ ?{
+ ???? struct resource *r;
 
-Normally just holding these adopted LV locks should work. One exception 
-is after the daemon is dead, LV
+@@ -5308,10 +5308,10 @@ static int match_dm_uuid(char *dm_uuid, char 
+*lv_lock_uuid)
+ ? * will have locks adopted.
+ ? */
 
-will be activated in a different way later. It'll also cause activation 
-failure. So releasing these locks makes
+-static int remove_inactive_lvs(struct list_head *vg_lockd)
++static int remove_inactive_lvs(struct list_head *vg_lockd, struct 
+list_head *ls_found)
+ ?{
+-??? struct lockspace *ls;
+-??? struct resource *r, *rsafe;
++??? struct lockspace *ls, *ls1;
++??? struct resource *r, *rsafe, *r1;
+ ???? struct dm_names *names;
+ ???? struct dm_task *dmt;
+ ???? char *dm_uuid;
+@@ -5396,6 +5396,19 @@ next_dmname:
+ ???? } while (next);
 
-sense to me.
+ ?out:
++??? /* Try to adopt the lock resources left in the lockspace */
++??? list_for_each_entry(ls, vg_lockd, list) {
++??? ??? list_for_each_entry(ls1, ls_found, list) {
++??? ??? ??? if (strcmp(ls->vg_name, ls1->vg_name))
++??? ??? ??? ??? continue;
++??? ??? ??? list_for_each_entry(r, &ls->resources, list) {
++??? ??? ??? ??? list_for_each_entry(r1, &ls1->resources, list) {
++??? ??? ??? ??? ??? if (!strcmp(r->name, r1->name))
++??? ??? ??? ??? ??????? r->adopt = 1;
++??? ??? ??? ??? }
++??? ??? ??? }
++??????? }
++??? }
+ ???? /* Remove any struct resources that do not need locks adopted. */
+ ???? list_for_each_entry(ls, vg_lockd, list) {
+ ???? ??? list_for_each_entry_safe(r, rsafe, &ls->resources, list) {
+@@ -5408,6 +5421,13 @@ out:
+ ???? ??? ??? }
+ ???? ??? }
+ ???? }
++??? /* Remove any resources in ls_found as the resources will be 
+collected later from vg_lockd. */
++??? list_for_each_entry(ls, ls_found, list) {
++??? ??? list_for_each_entry_safe(r, rsafe, &ls->resources, list) {
++??? ??? ??? list_del(&r->list);
++??? ??? ??? free_resource(r);
++??? ??? }
++??? }
+ ?ret:
+ ???? dm_task_destroy(dmt);
+ ???? return rv;
+@@ -5477,7 +5497,7 @@ static void adopt_locks(void)
+ ???? ?* resource struct, if not free the resource struct.
+ ???? ?* The remain entries need to have locks adopted.
+ ???? ?*/
+-??? rv = remove_inactive_lvs(&vg_lockd);
++??? rv = remove_inactive_lvs(&vg_lockd, &ls_found);
+ ???? if (rv < 0) {
+ ???? ??? log_error("adopt_locks remove_inactive_lvs failed");
+ ???? ??? goto fail;
+diff --git a/daemons/lvmlockd/lvmlockd-dlm.c 
+b/daemons/lvmlockd/lvmlockd-dlm.c
+index 1305c3dc2..26089b118 100644
+--- a/daemons/lvmlockd/lvmlockd-dlm.c
++++ b/daemons/lvmlockd/lvmlockd-dlm.c
+@@ -737,6 +737,79 @@ int lm_hosts_dlm(struct lockspace *ls, int notify)
+ ???? return count - 1;
+ ?}
 
++
++/*
++ * collect the resources for later use in remove_inactive_lvs()
++ * code is borrowed from libdlm
++ */
++#define LOCK_LINE_MAX 1024
++static int lm_get_resources_dlm(struct list_head *ls_rejoin)
++{
++??? struct lockspace *ls;
++??? struct resource *r;
++??? FILE *file = NULL;
++??? char path[PATH_MAX];
++??? char line[LOCK_LINE_MAX];
++??? char type[4], namefmt[4], *p;
++??? char addr[64];
++??? char first_lkid[64];
++??? int rv, nodeid, root_list, recover_list, recover_locks_count, namelen;
++??? uint32_t flags;
++
++??? list_for_each_entry(ls, ls_rejoin, list) {
++??????? if (!ls->vg_name)
++??????????? continue;
++??????? snprintf(path, PATH_MAX, "/sys/kernel/debug/dlm/lvm_%s_all", 
+ls->vg_name);
++??????? file = fopen(path, "r");
++??????? if (!file)
++??????????? continue;
++??????? while (fgets(line, LOCK_LINE_MAX, file)) {
++??????????? if (!strncmp(line, "rsb", 3)) {
++??? ??????????? rv = sscanf(line, "%s %s %d %s %u %d %d %u %u %s",
++??? ??????????? ??? ??? type,
++??? ??????????? ??? ??? addr,
++??? ??????????? ??? ??? &nodeid,
++??? ??????????? ??? ??? first_lkid,
++??? ??????????? ??? ??? &flags,
++??? ??????????? ??? ??? &root_list,
++??? ??????????? ??? ??? &recover_list,
++??? ??????????? ??? ??? &recover_locks_count,
++??? ??????????? ??? ??? &namelen,
++??? ??????????? ??? ??? namefmt);
++??????????????? if (rv != 10)
++??????????????????? goto fail;
++??????????????? p = strchr(line, '\n');
++??????????????? if (!p)
++??????????????????? goto fail;
++??????????????? *p = '\0';
++
++??????????????? if (strncmp(namefmt, "str", 3))
++??????????????????? continue;
++??????????????? p = strstr(line, namefmt);
++??????????????? if (!p)
++??????????????????? goto fail;
++??????????????? p += 4;
++
++??????????????? /*
++???????????????? * add resource
++???????????????? */
++??????????????? if (!(r = alloc_resource()))
++??????????????????? goto fail;
++??????????????? r->type = LD_RT_LV;
++??????????????? strcpy(r->name, p);
++??????????????? list_add(&r->list, &ls->resources);
++??????????? }
++??????? }
++??????? fclose(file);
++??? }
++??? return 0;
++fail:
++??? log_error("failed to process resources");
++??? fclose(file);
++??? return rv;
++}
++
++
+ ?int lm_get_lockspaces_dlm(struct list_head *ls_rejoin)
+ ?{
+ ???? static const char closedir_err_msg[] = "lm_get_lockspace_dlm: 
+closedir failed";
+@@ -766,6 +839,8 @@ int lm_get_lockspaces_dlm(struct list_head *ls_rejoin)
+ ???? ??? list_add_tail(&ls->list, ls_rejoin);
+ ???? }
 
->
-> Next, regarding the patch.  You are using debugfs to read all the locks
-> from the kernel, which works, but it would be nice to avoid this if there
-> was another method that works as well (since it's meant for debugging.)
-> Here are a couple options that you might compare with what you've done:
->
-> A general statement of the issue you are seeing is mentioned by:
-> /* FIXME: purge any remaining orphan locks in each rejoined ls? */
-> Replace that fixme with a call to dlm_ls_purge() which is meant to release
-> orphan locks.  You'll need the pid of the previous lvmlockd daemon (it's
-> in the adopt file.)  The purge happens after adopting the orphan locks
-> that you want to keep locked (those for active LVs.)
->
-> Another approach might be to skip remove_inactive_lvs() and attempt to
-> adopt all locks listed in the adopt file.  You would expect some of the
-> lock adopt requests to fail (adjust the -ENOENT error handling in
-> adopt_locks to expect some failures.)  Then unlock the adopted LV locks
-> that have no active LV.
++??? lm_get_resources_dlm(ls_rejoin);
++
+ ???? if (closedir(ls_dir))
+ ???? ??? log_error(closedir_err_msg);
+ ???? return 0;
+diff --git a/daemons/lvmlockd/lvmlockd-internal.h 
+b/daemons/lvmlockd/lvmlockd-internal.h
+index ad32eb3a4..98ee63d84 100644
+--- a/daemons/lvmlockd/lvmlockd-internal.h
++++ b/daemons/lvmlockd/lvmlockd-internal.h
+@@ -365,6 +365,7 @@ void log_level(int level, const char *fmt, ...)? 
+__attribute__((format(printf, 2
+ ?#define log_warn(fmt, args...) log_level(LOG_WARNING, fmt, ##args)
 
-Thanks for the suggestions. I'll rewrite the patch.
-
-
-Thanks,
-
-Lidong
-
-
->
-> Dave
->
+ ?struct lockspace *alloc_lockspace(void);
++struct resource *alloc_resource(void);
+ ?int lockspaces_empty(void);
+ ?int last_string_from_args(char *args_in, char *last);
+ ?int version_from_args(char *args, unsigned int *major, unsigned int 
+*minor, unsigned int *patch);
+-- 
+2.35.3
 
