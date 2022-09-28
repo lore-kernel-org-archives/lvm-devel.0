@@ -1,62 +1,72 @@
-From: David Teigland <teigland@sourceware.org>
-Date: Wed, 28 Sep 2022 16:54:51 +0000 (GMT)
-Subject: main - lvresize: give special advice to reiserfs users
-Message-ID: <20220928165451.2761C3858016@sourceware.org>
+From: David Teigland <teigland@redhat.com>
+Date: Wed, 28 Sep 2022 17:00:53 -0500
+Subject: [RFC PATCH]lvmlockd: try to adopt the lock resources left in previous lockspace
+In-Reply-To: <65215053-904b-356e-fb9a-1b7687aca500@suse.com>
+References: <65215053-904b-356e-fb9a-1b7687aca500@suse.com>
+Message-ID: <20220928220053.GA27856@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=5a0052a1d3b06a071ff6197fc41d9fa312827538
-Commit:        5a0052a1d3b06a071ff6197fc41d9fa312827538
-Parent:        1924fed30807ac0d355d2c6527d2f0a1d7efafcc
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Wed Sep 28 11:52:40 2022 -0500
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Wed Sep 28 11:54:13 2022 -0500
+On Wed, Sep 28, 2022 at 04:58:46PM +0800, Lidong Zhong wrote:
+> Hi David,
+> 
+> Could you share your opinion about this patch please? It's related to the
+> patch I sent for resource-agents.
+> 
+> https://github.com/ClusterLabs/resource-agents/pull/1808
+> 
+> -----------------------------
+> 
+> If lvmlockd in cluster is killed accidently or any other reason, the
+> lock resources will become orphaned in the VG lockspace. When the
+> cluster manager tries to restart this daemon, the LVs will probably
+> become inactive because of resource schedule policy and thus the lock
+> resouce will be omited during the adoption process. This patch will
+> check if the lock is left in previous lockspace and if it matches one
+> entry in the adopt file, lvmlockd will also try to adopt it to prevent
+> further resource failure.
 
-lvresize: give special advice to reiserfs users
+Hi, I think you're heading in the right direction.  Before looking at the
+code changes, could you correct anything I'm missing in this description
+of the problem?
 
----
- lib/metadata/lv_manip.c | 12 +++++++++++-
- 1 file changed, 11 insertions(+), 1 deletion(-)
+1. lvmlock is running
+   LVs are active in a shared VG
+   the lock manager holds locks for those LV
+   the adopt file lists those LVs
 
-diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
-index 083e54150..99045c220 100644
---- a/lib/metadata/lv_manip.c
-+++ b/lib/metadata/lv_manip.c
-@@ -6024,7 +6024,11 @@ static int _fs_reduce_allow(struct cmd_context *cmd, struct logical_volume *lv,
- 			  display_lvname(lv), fsi->mount_dir);
- 
- 	if (!fsi->fs_last_byte) {
--		log_error("File system device usage not available from libblkid, see --fs resize_fsadm.");
-+		if (!strcmp(fsi->fstype, "reiserfs")) {
-+			log_error("File system reduce for reiserfs requires --fs resize_fsadm.");
-+			return 0;
-+		}
-+		log_error("File system device usage is not available from libblkid.");
- 		return 0;
- 	}
- 
-@@ -6064,6 +6068,9 @@ static int _fs_reduce_allow(struct cmd_context *cmd, struct logical_volume *lv,
- 	 */
- 	if (is_ext_fstype) {
- 		log_print("File system reduce is required using resize2fs.");
-+	} else if (!strcmp(fsi->fstype, "reiserfs")) {
-+		log_error("File system reduce for reiserfs requires --fs resize_fsadm.");
-+		return 0;
- 	} else {
- 		log_error("File system reduce is required and not supported (%s).", fsi->fstype);
- 		return 0;
-@@ -6181,6 +6188,9 @@ static int _fs_extend_allow(struct cmd_context *cmd, struct logical_volume *lv,
- 			  fsi->fstype, (unsigned long long)fsi->fs_last_byte);
- 		if (!strncmp(fsi->fstype, "ext", 3))
- 			is_ext_fstype = 1;
-+	} else if (!strcmp(fsi->fstype, "reiserfs")) {
-+		log_error("File system extend for reiserfs requires --fs resize_fsadm.");
-+		return 0;
- 	} else {
- 		log_error("File system extend is not supported (%s).", fsi->fstype);
- 		return 0;
+2. lvmlockd is killed
+   the LV locks are orphaned in the lock manager
 
+3. the LVs are deactivated
+   How does this happen?  Does someone run lvchange|vgchange -an?
+
+4. lvmlockd is restarted with the adopt option
+   Your patch makes lvmlockd adopt orphan locks in the lock manager
+   that have no corresponding active LV.  But, you seem to continue
+   holding these adopted LV locks (maybe I'm missing where they are
+   released.)  I expect you would want to release these adopted locks
+   that have no active LV.
+
+Next, regarding the patch.  You are using debugfs to read all the locks
+from the kernel, which works, but it would be nice to avoid this if there
+was another method that works as well (since it's meant for debugging.)
+Here are a couple options that you might compare with what you've done:
+
+A general statement of the issue you are seeing is mentioned by:
+/* FIXME: purge any remaining orphan locks in each rejoined ls? */
+Replace that fixme with a call to dlm_ls_purge() which is meant to release
+orphan locks.  You'll need the pid of the previous lvmlockd daemon (it's
+in the adopt file.)  The purge happens after adopting the orphan locks
+that you want to keep locked (those for active LVs.)
+
+Another approach might be to skip remove_inactive_lvs() and attempt to
+adopt all locks listed in the adopt file.  You would expect some of the
+lock adopt requests to fail (adjust the -ENOENT error handling in
+adopt_locks to expect some failures.)  Then unlock the adopted LV locks
+that have no active LV.
+
+Dave
