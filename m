@@ -1,54 +1,166 @@
-From: Tony Asleson <tasleson@sourceware.org>
-Date: Fri, 30 Sep 2022 16:52:56 +0000 (GMT)
-Subject: main - lvmdbusd: Correct env. variable
-Message-ID: <20220930165256.3550E385802D@sourceware.org>
+From: Lidong Zhong <lidong.zhong@suse.com>
+Date: Fri, 30 Sep 2022 21:57:08 +0800
+Subject: [RFC PATCH] lvmlockd: purge the lock resources left in previous lockspace
+Message-ID: <ff6e311a-5e87-2fe8-7c11-46aa7aaa048e@suse.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=599cbd7dd37ba50b44579f64207cc1e47e004899
-Commit:        599cbd7dd37ba50b44579f64207cc1e47e004899
-Parent:        b09de683c72b62167fbbd64491708ede652c32a1
-Author:        Tony Asleson <tasleson@redhat.com>
-AuthorDate:    Fri Sep 30 11:49:49 2022 -0500
-Committer:     Tony Asleson <tasleson@redhat.com>
-CommitterDate: Fri Sep 30 11:51:23 2022 -0500
-
-lvmdbusd: Correct env. variable
-
-Make this match the unit test expectation and the form we use for
-other env. variables.
+If lvmlockd in cluster is killed accidently or any other reason, the
+lock resources will become orphaned in the VG lockspace. When the
+cluster manager tries to restart this daemon, the LVs will probably
+become inactive because of resource schedule policy and thus the lock
+resouce will be omited during the adoption process. This patch will
+try to purge the lock resources left in previous lockspace, so the
+following actions can work again.
 ---
- daemons/lvmdbusd/main.py   | 2 +-
- test/dbus/validatestate.py | 2 +-
- 2 files changed, 2 insertions(+), 2 deletions(-)
+ ?daemons/lvmlockd/lvmlockd-core.c???? | 12 +++++
+ ?daemons/lvmlockd/lvmlockd-dlm.c????? | 77 ++++++++++++++++++++++++++++
+ ?daemons/lvmlockd/lvmlockd-internal.h |? 6 +++
+ ?3 files changed, 95 insertions(+)
 
-diff --git a/daemons/lvmdbusd/main.py b/daemons/lvmdbusd/main.py
-index e4531526c..662d7569f 100644
---- a/daemons/lvmdbusd/main.py
-+++ b/daemons/lvmdbusd/main.py
-@@ -146,7 +146,7 @@ def running_under_systemd():
- 
- def main():
- 	start = time.time()
--	use_session = os.getenv('LVMDBUSD_USE_SESSION', False)
-+	use_session = os.getenv('LVM_DBUSD_USE_SESSION', False)
- 
- 	# Ensure that we get consistent output for parsing stdout/stderr and that we
- 	# are using the lvmdbusd profile.
-diff --git a/test/dbus/validatestate.py b/test/dbus/validatestate.py
-index ae999ad17..1af303f15 100755
---- a/test/dbus/validatestate.py
-+++ b/test/dbus/validatestate.py
-@@ -21,7 +21,7 @@ import os
- 
- if __name__ == "__main__":
- 
--	use_session = os.getenv('LVMDBUSD_USE_SESSION', False)
-+	use_session = os.getenv('LVMD_BUSD_USE_SESSION', False)
- 
- 	if use_session:
- 		bus = dbus.SessionBus(mainloop=DBusGMainLoop())
+diff --git a/daemons/lvmlockd/lvmlockd-core.c 
+b/daemons/lvmlockd/lvmlockd-core.c
+index 6d0d4d98c..054bd9a10 100644
+--- a/daemons/lvmlockd/lvmlockd-core.c
++++ b/daemons/lvmlockd/lvmlockd-core.c
+@@ -5955,6 +5955,18 @@ static void adopt_locks(void)
+
+
+ ???? /* FIXME: purge any remaining orphan locks in each rejoined ls? */
++??? /* Try to purge the orphan locks when lock manager is dlm */
++??? if (lm_support_dlm() && lm_is_running_dlm()) {
++??? ??? list_for_each_entry(ls, &ls_found, list) {
++??? ??? ??? pthread_mutex_lock(&lockspaces_mutex);
++??? ??? ??? ls1 = find_lockspace_name(ls->name);
++??? ??? ??? if (ls1) {
++??? ??? ??? ??? log_debug("ls: %s purge locks", ls->name);
++??? ??? ??? ??? lm_purge_locks_dlm(ls1);
++??? ??? ??? }
++??? ??? ??? pthread_mutex_unlock(&lockspaces_mutex);
++??? ??? }
++??? }
+
+ ???? if (count_start_fail || count_adopt_fail)
+ ???? ??? goto fail;
+diff --git a/daemons/lvmlockd/lvmlockd-dlm.c 
+b/daemons/lvmlockd/lvmlockd-dlm.c
+index 1305c3dc2..f63f5ec82 100644
+--- a/daemons/lvmlockd/lvmlockd-dlm.c
++++ b/daemons/lvmlockd/lvmlockd-dlm.c
+@@ -220,6 +220,83 @@ int lm_prepare_lockspace_dlm(struct lockspace *ls)
+ ???? return 0;
+ ?}
+
++#define DLM_COMMS_PATH "/sys/kernel/config/dlm/cluster/comms"
++#define LOCK_LINE_MAX 1024
++static int get_local_nodeid()
++{
++??? struct dirent *de;
++??? DIR *ls_dir;
++??? char ls_comms_path[PATH_MAX];
++??? FILE *file = NULL;
++??? char line[LOCK_LINE_MAX];
++??? int rv = -1, val;
++
++??? memset(ls_comms_path, 0, sizeof(ls_comms_path));
++??? snprintf(ls_comms_path, PATH_MAX, "%s",DLM_COMMS_PATH);
++
++??? if (!(ls_dir = opendir(ls_comms_path)))
++??? ??? return -ECONNREFUSED;
++
++??? while ((de = readdir(ls_dir))) {
++??? ??? if (de->d_name[0] == '.')
++??? ??? ??? continue;
++??? ??? memset(ls_comms_path, 0, sizeof(ls_comms_path));
++??? ??? snprintf(ls_comms_path, PATH_MAX, "%s/%s/local",
++??? ??? ???? DLM_COMMS_PATH, de->d_name);
++??? ??? file = fopen(ls_comms_path, "r");
++??? ??? if (!file)
++??? ??? ??? continue;
++??? ??? if (fgets(line, LOCK_LINE_MAX, file)) {
++??? ??? ??? fclose(file);
++??? ??? ??? rv = sscanf(line, "%d", &val);
++??? ??? ??? if ((rv == 1) && (val == 1 )) {
++??? ??? ??? ??? memset(ls_comms_path, 0, sizeof(ls_comms_path));
++??? ??? ??? ??? snprintf(ls_comms_path, PATH_MAX, "%s/%s/nodeid",
++??? ??? ??? ??? ??? DLM_COMMS_PATH, de->d_name);
++??? ??? ??? ??? file = fopen(ls_comms_path, "r");
++??? ??? ??? ??? if (!file)
++??? ??? ??? ??? ??? continue;
++??? ??? ??? ??? if (fgets(line, LOCK_LINE_MAX, file)) {
++??? ??? ??? ??? ??? rv = sscanf(line, "%d", &val);
++??? ??? ??? ??? ??? if (rv == 1)
++??? ??? ??? ??? ??? ??? return val;
++??? ??? ??? ??? }
++??? ??? ??? }
++??? ??? }
++??? ??? fclose(file);
++??? }
++
++??? if (closedir(ls_dir))
++??? ??? log_error("get_local_nodeid closedir error");
++??? return rv;
++}
++
++int lm_purge_locks_dlm(struct lockspace *ls)
++{
++??? struct lm_dlm *lmd = (struct lm_dlm *)ls->lm_data;
++??? int nodeid;
++??? int rv = -1;
++
++??? if (!lmd || !lmd->dh) {
++??? ??? log_error("purge_locks_dlm %s no dlm_handle_t error", ls->name);
++??? ??? goto fail;
++??? }
++
++??? nodeid = get_local_nodeid();
++??? if (nodeid < 0) {
++??? ??? log_error("failed to get local nodeid");
++??? ??? goto fail;
++??? }
++??? if (dlm_ls_purge(lmd->dh, nodeid, 0)) {
++??? ??? log_error("purge_locks_dlm %s error", ls->name);
++??? ??? goto fail;
++??? }
++
++??? rv = 0;
++fail:
++??? return rv;
++}
++
+ ?int lm_add_lockspace_dlm(struct lockspace *ls, int adopt)
+ ?{
+ ???? struct lm_dlm *lmd = (struct lm_dlm *)ls->lm_data;
+diff --git a/daemons/lvmlockd/lvmlockd-internal.h 
+b/daemons/lvmlockd/lvmlockd-internal.h
+index ad32eb3a4..dd59b6a5d 100644
+--- a/daemons/lvmlockd/lvmlockd-internal.h
++++ b/daemons/lvmlockd/lvmlockd-internal.h
+@@ -392,6 +392,7 @@ static inline const char *mode_str(int x)
+ ?int lm_init_vg_dlm(char *ls_name, char *vg_name, uint32_t flags, char 
+*vg_args);
+ ?int lm_prepare_lockspace_dlm(struct lockspace *ls);
+ ?int lm_add_lockspace_dlm(struct lockspace *ls, int adopt);
++int lm_purge_locks_dlm(struct lockspace *ls);
+ ?int lm_rem_lockspace_dlm(struct lockspace *ls, int free_vg);
+ ?int lm_lock_dlm(struct lockspace *ls, struct resource *r, int ld_mode,
+ ???? ??? struct val_blk *vb_out, int adopt);
+@@ -429,6 +430,11 @@ static inline int lm_add_lockspace_dlm(struct 
+lockspace *ls, int adopt)
+ ???? return -1;
+ ?}
+
++static inline int lm_purge_locks_dlm(struct lockspace *ls)
++{
++??? return -1;
++}
++
+ ?static inline int lm_rem_lockspace_dlm(struct lockspace *ls, int free_vg)
+ ?{
+ ???? return -1;
+-- 
+2.35.3
 
