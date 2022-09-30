@@ -1,31 +1,54 @@
-From: David Teigland <teigland@redhat.com>
-Date: Fri, 30 Sep 2022 10:32:51 -0500
-Subject: [RFC PATCH] lvmlockd: purge the lock resources left in previous lockspace
-In-Reply-To: <ff6e311a-5e87-2fe8-7c11-46aa7aaa048e@suse.com>
-References: <ff6e311a-5e87-2fe8-7c11-46aa7aaa048e@suse.com>
-Message-ID: <20220930153251.GA1502@redhat.com>
+From: Tony Asleson <tasleson@sourceware.org>
+Date: Fri, 30 Sep 2022 16:52:56 +0000 (GMT)
+Subject: main - lvmdbusd: Correct env. variable
+Message-ID: <20220930165256.3550E385802D@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On Fri, Sep 30, 2022 at 09:57:08PM +0800, Lidong Zhong wrote:
-> ???? /* FIXME: purge any remaining orphan locks in each rejoined ls? */
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=599cbd7dd37ba50b44579f64207cc1e47e004899
+Commit:        599cbd7dd37ba50b44579f64207cc1e47e004899
+Parent:        b09de683c72b62167fbbd64491708ede652c32a1
+Author:        Tony Asleson <tasleson@redhat.com>
+AuthorDate:    Fri Sep 30 11:49:49 2022 -0500
+Committer:     Tony Asleson <tasleson@redhat.com>
+CommitterDate: Fri Sep 30 11:51:23 2022 -0500
 
-You're fixing it, so we can drop the comment.
+lvmdbusd: Correct env. variable
 
-> +??? ??? ??? ??? file = fopen(ls_comms_path, "r");
-> +??? ??? ??? ??? if (!file)
-> +??? ??? ??? ??? ??? continue;
-> +??? ??? ??? ??? if (fgets(line, LOCK_LINE_MAX, file)) {
-> +??? ??? ??? ??? ??? rv = sscanf(line, "%d", &val);
-> +??? ??? ??? ??? ??? if (rv == 1)
-> +??? ??? ??? ??? ??? ??? return val;
+Make this match the unit test expectation and the form we use for
+other env. variables.
+---
+ daemons/lvmdbusd/main.py   | 2 +-
+ test/dbus/validatestate.py | 2 +-
+ 2 files changed, 2 insertions(+), 2 deletions(-)
 
-Is this missing an fclose?
+diff --git a/daemons/lvmdbusd/main.py b/daemons/lvmdbusd/main.py
+index e4531526c..662d7569f 100644
+--- a/daemons/lvmdbusd/main.py
++++ b/daemons/lvmdbusd/main.py
+@@ -146,7 +146,7 @@ def running_under_systemd():
+ 
+ def main():
+ 	start = time.time()
+-	use_session = os.getenv('LVMDBUSD_USE_SESSION', False)
++	use_session = os.getenv('LVM_DBUSD_USE_SESSION', False)
+ 
+ 	# Ensure that we get consistent output for parsing stdout/stderr and that we
+ 	# are using the lvmdbusd profile.
+diff --git a/test/dbus/validatestate.py b/test/dbus/validatestate.py
+index ae999ad17..1af303f15 100755
+--- a/test/dbus/validatestate.py
++++ b/test/dbus/validatestate.py
+@@ -21,7 +21,7 @@ import os
+ 
+ if __name__ == "__main__":
+ 
+-	use_session = os.getenv('LVMDBUSD_USE_SESSION', False)
++	use_session = os.getenv('LVMD_BUSD_USE_SESSION', False)
+ 
+ 	if use_session:
+ 		bus = dbus.SessionBus(mainloop=DBusGMainLoop())
 
-Please confirm that this works for your test case and I'll include it.
-
-Thanks,
-Dave
