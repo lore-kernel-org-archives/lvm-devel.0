@@ -1,55 +1,172 @@
-From: Lidong Zhong <lidong.zhong@suse.com>
-Date: Wed, 5 Oct 2022 13:34:13 +0800
-Subject: [RFC PATCH] lvmlockd: purge the lock resources left in previous lockspace
-In-Reply-To: <20220930153251.GA1502@redhat.com>
-References: <ff6e311a-5e87-2fe8-7c11-46aa7aaa048e@suse.com>
- <20220930153251.GA1502@redhat.com>
-Message-ID: <ae1ec033-2f0c-ac5f-a462-7e33bb364f2a@suse.com>
+From: David Teigland <teigland@sourceware.org>
+Date: Fri,  7 Oct 2022 14:58:34 +0000 (GMT)
+Subject: main - lvmlockd: purge the lock resources left in previous lockspace
+Message-ID: <20221007145834.EFF963858CDB@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On 9/30/22 23:32, David Teigland wrote:
-> On Fri, Sep 30, 2022 at 09:57:08PM +0800, Lidong Zhong wrote:
->>  ???? /* FIXME: purge any remaining orphan locks in each rejoined ls? */
-> You're fixing it, so we can drop the comment.
->
->> +??? ??? ??? ??? file = fopen(ls_comms_path, "r");
->> +??? ??? ??? ??? if (!file)
->> +??? ??? ??? ??? ??? continue;
->> +??? ??? ??? ??? if (fgets(line, LOCK_LINE_MAX, file)) {
->> +??? ??? ??? ??? ??? rv = sscanf(line, "%d", &val);
->> +??? ??? ??? ??? ??? if (rv == 1)
->> +??? ??? ??? ??? ??? ??? return val;
-> Is this missing an fclose?
->
-> Please confirm that this works for your test case and I'll include it.
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=39e6c4f749e97c0efae116e1fa0dbc25451de80e
+Commit:        39e6c4f749e97c0efae116e1fa0dbc25451de80e
+Parent:        a23588d77cb1585e642946fe84c3eaafe7e2d270
+Author:        Lidong Zhong <lidong.zhong@suse.com>
+AuthorDate:    Fri Sep 30 16:34:51 2022 +0800
+Committer:     David Teigland <teigland@redhat.com>
+CommitterDate: Fri Oct 7 09:45:57 2022 -0500
 
-Hi David,
+lvmlockd: purge the lock resources left in previous lockspace
 
-I have made the modifications based on your review. Thanks.
+If lvmlockd in cluster is killed accidently or any other reason, the
+lock resources will become orphaned in the VG lockspace. When the
+cluster manager tries to restart this daemon, the LVs will probably
+become inactive because of resource schedule policy and thus the lock
+resouce will be omited during the adoption process. This patch will
+try to purge the lock resources left in previous lockspace, so the
+following actions can work again.
+---
+ daemons/lvmlockd/lvmlockd-core.c     | 13 +++++-
+ daemons/lvmlockd/lvmlockd-dlm.c      | 79 ++++++++++++++++++++++++++++++++++++
+ daemons/lvmlockd/lvmlockd-internal.h |  6 +++
+ 3 files changed, 97 insertions(+), 1 deletion(-)
 
-The patch works in my test. I am sending the new version patch as an 
-attachment. Sorry if it causes any
+diff --git a/daemons/lvmlockd/lvmlockd-core.c b/daemons/lvmlockd/lvmlockd-core.c
+index 6d0d4d98c..b2e98efa3 100644
+--- a/daemons/lvmlockd/lvmlockd-core.c
++++ b/daemons/lvmlockd/lvmlockd-core.c
+@@ -5954,7 +5954,18 @@ static void adopt_locks(void)
+ 	}
+ 
+ 
+-	/* FIXME: purge any remaining orphan locks in each rejoined ls? */
++	/* Try to purge the orphan locks when lock manager is dlm */
++	if (lm_support_dlm() && lm_is_running_dlm()) {
++		list_for_each_entry(ls, &ls_found, list) {
++			pthread_mutex_lock(&lockspaces_mutex);
++			ls1 = find_lockspace_name(ls->name);
++			if (ls1) {
++				log_debug("ls: %s purge locks", ls->name);
++				lm_purge_locks_dlm(ls1);
++			}
++			pthread_mutex_unlock(&lockspaces_mutex);
++		}
++	}
+ 
+ 	if (count_start_fail || count_adopt_fail)
+ 		goto fail;
+diff --git a/daemons/lvmlockd/lvmlockd-dlm.c b/daemons/lvmlockd/lvmlockd-dlm.c
+index 1305c3dc2..01bec6f43 100644
+--- a/daemons/lvmlockd/lvmlockd-dlm.c
++++ b/daemons/lvmlockd/lvmlockd-dlm.c
+@@ -220,6 +220,85 @@ int lm_prepare_lockspace_dlm(struct lockspace *ls)
+ 	return 0;
+ }
+ 
++#define DLM_COMMS_PATH "/sys/kernel/config/dlm/cluster/comms"
++#define LOCK_LINE_MAX 1024
++static int get_local_nodeid()
++{
++	struct dirent *de;
++	DIR *ls_dir;
++	char ls_comms_path[PATH_MAX];
++	FILE *file = NULL;
++	char line[LOCK_LINE_MAX];
++	int rv = -1, val;
++
++	memset(ls_comms_path, 0, sizeof(ls_comms_path));
++	snprintf(ls_comms_path, PATH_MAX, "%s",DLM_COMMS_PATH);
++
++	if (!(ls_dir = opendir(ls_comms_path)))
++		return -ECONNREFUSED;
++
++	while ((de = readdir(ls_dir))) {
++		if (de->d_name[0] == '.')
++			continue;
++		memset(ls_comms_path, 0, sizeof(ls_comms_path));
++		snprintf(ls_comms_path, PATH_MAX, "%s/%s/local",
++		     DLM_COMMS_PATH, de->d_name);
++		file = fopen(ls_comms_path, "r");
++		if (!file)
++			continue;
++		if (fgets(line, LOCK_LINE_MAX, file)) {
++			fclose(file);
++			rv = sscanf(line, "%d", &val);
++			if ((rv == 1) && (val == 1 )) {
++				memset(ls_comms_path, 0, sizeof(ls_comms_path));
++				snprintf(ls_comms_path, PATH_MAX, "%s/%s/nodeid",
++				    DLM_COMMS_PATH, de->d_name);
++				file = fopen(ls_comms_path, "r");
++				if (!file)
++					continue;
++				if (fgets(line, LOCK_LINE_MAX, file)) {
++					rv = sscanf(line, "%d", &val);
++					if (rv == 1) {
++						fclose(file);
++						return val;
++					}
++				}
++			}
++		}
++		fclose(file);
++	}
++
++	if (closedir(ls_dir))
++		log_error("get_local_nodeid closedir error");
++    return rv;
++}
++
++int lm_purge_locks_dlm(struct lockspace *ls)
++{
++	struct lm_dlm *lmd = (struct lm_dlm *)ls->lm_data;
++	int nodeid;
++	int rv = -1;
++
++	if (!lmd || !lmd->dh) {
++		log_error("purge_locks_dlm %s no dlm_handle_t error", ls->name);
++		goto fail;
++	}
++
++	nodeid = get_local_nodeid();
++	if (nodeid < 0) {
++		log_error("failed to get local nodeid");
++		goto fail;
++	}
++	if (dlm_ls_purge(lmd->dh, nodeid, 0)) {
++		log_error("purge_locks_dlm %s error", ls->name);
++		goto fail;
++	}
++
++	rv = 0;
++fail:
++	return rv;
++}
++
+ int lm_add_lockspace_dlm(struct lockspace *ls, int adopt)
+ {
+ 	struct lm_dlm *lmd = (struct lm_dlm *)ls->lm_data;
+diff --git a/daemons/lvmlockd/lvmlockd-internal.h b/daemons/lvmlockd/lvmlockd-internal.h
+index ad32eb3a4..dd59b6a5d 100644
+--- a/daemons/lvmlockd/lvmlockd-internal.h
++++ b/daemons/lvmlockd/lvmlockd-internal.h
+@@ -392,6 +392,7 @@ static inline const char *mode_str(int x)
+ int lm_init_vg_dlm(char *ls_name, char *vg_name, uint32_t flags, char *vg_args);
+ int lm_prepare_lockspace_dlm(struct lockspace *ls);
+ int lm_add_lockspace_dlm(struct lockspace *ls, int adopt);
++int lm_purge_locks_dlm(struct lockspace *ls);
+ int lm_rem_lockspace_dlm(struct lockspace *ls, int free_vg);
+ int lm_lock_dlm(struct lockspace *ls, struct resource *r, int ld_mode,
+ 		struct val_blk *vb_out, int adopt);
+@@ -429,6 +430,11 @@ static inline int lm_add_lockspace_dlm(struct lockspace *ls, int adopt)
+ 	return -1;
+ }
+ 
++static inline int lm_purge_locks_dlm(struct lockspace *ls)
++{
++	return -1;
++}
++
+ static inline int lm_rem_lockspace_dlm(struct lockspace *ls, int free_vg)
+ {
+ 	return -1;
 
-inconvenience.
-
-
-Regards,
-
-Lidong
-
-
->
-> Thanks,
-> Dave
->
--------------- next part --------------
-A non-text attachment was scrubbed...
-Name: 0001-lvmlockd-purge-the-lock-resources-left-in-previous-l.patch
-Type: text/x-patch
-Size: 4927 bytes
-Desc: not available
-URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20221005/15fa3d1b/attachment.bin>
