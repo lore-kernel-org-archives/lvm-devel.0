@@ -1,280 +1,165 @@
 From: David Teigland <teigland@sourceware.org>
-Date: Mon, 10 Oct 2022 16:47:56 +0000 (GMT)
-Subject: main - device id: add new types using values from vpd_pg83
-Message-ID: <20221010164756.9C8A13858D37@sourceware.org>
+Date: Mon, 10 Oct 2022 16:47:58 +0000 (GMT)
+Subject: main - lvmdevices: use deviceidtype option strictly
+Message-ID: <20221010164758.DE06A3858288@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=79e67fc5e4f28d19fe4d93e6831a3a60e9760b68
-Commit:        79e67fc5e4f28d19fe4d93e6831a3a60e9760b68
-Parent:        8de87e0207342b0142778ebe9c51f0d552adfab8
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=13c63f0cfa22a0bc89b8d528b8e2301c49fc7b0d
+Commit:        13c63f0cfa22a0bc89b8d528b8e2301c49fc7b0d
+Parent:        c4e6d675de5b0df5a711971b7828933f07b0efd0
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Wed Aug 31 16:05:07 2022 -0500
+AuthorDate:    Thu Sep 15 09:45:21 2022 -0500
 Committer:     David Teigland <teigland@redhat.com>
 CommitterDate: Mon Oct 10 11:47:29 2022 -0500
 
-device id: add new types using values from vpd_pg83
+lvmdevices: use deviceidtype option strictly
 
-The new device_id types are: wwid_naa, wwid_eui, wwid_t10.
-The new types use the specific wwid type in their name.
-lvm currently gets the values for these types by reading
-the device's vpd_pg83 sysfs file (this could change in the
-future if better methods become available for reading the
-values.)
-
-If a device is added to the devices file using one of these
-types, prior versions of lvm will not recognize the types
-and will be unable to use the devices.
-
-When adding a new device, lvm continues to first use sys_wwid
-from the sysfs wwid file.  If the device has no sysfs wwid file,
-lvm now attempts to use one of the new types from vpd_pg83.
-
-If a devices file entry with type sys_wwid does not match a
-given device's sysfs wwid file, the sys_wwid value will also
-be compared to that device's other wwids from its vpd_pg83 file.
-If the kernel changes the wwid type reported from the sysfs
-wwid file, e.g. from a device's t10 id to its naa id, then lvm
-should still be able to match it correctly using the vpd_pg83
-data which will include both ids.
+Only use the device id type specified by --deviceidtype,
+and fail if that type is not available for the device.
 ---
- lib/config/config_settings.h |   3 ++
- lib/config/defaults.h        |   2 +
- lib/device/device.h          |   4 ++
- lib/device/device_id.c       | 103 ++++++++++++++++++++++++++++++++++++++++++-
- lib/device/device_id.h       |   2 +
- 5 files changed, 112 insertions(+), 2 deletions(-)
+ lib/device/device_id.c  | 15 ++++++++++++---
+ lib/device/device_id.h  |  2 +-
+ tools/lvmdevices.c      |  6 +++---
+ tools/toollib.c         |  4 ++--
+ tools/vgimportclone.c   |  2 +-
+ tools/vgimportdevices.c |  2 +-
+ 6 files changed, 20 insertions(+), 11 deletions(-)
 
-diff --git a/lib/config/config_settings.h b/lib/config/config_settings.h
-index b172c7c5f..699b40bd0 100644
---- a/lib/config/config_settings.h
-+++ b/lib/config/config_settings.h
-@@ -224,6 +224,9 @@ cfg(devices_dir_CFG, "dir", devices_CFG_SECTION, CFG_DEFAULT_COMMENTED | CFG_ADV
- 	"Directory in which to create volume group device nodes.\n"
- 	"Commands also accept this as a prefix on volume group names.\n")
- 
-+cfg(devices_device_id_sysfs_dir_CFG, "device_id_sysfs_dir", devices_CFG_SECTION, CFG_DEFAULT_COMMENTED | CFG_UNSUPPORTED, CFG_TYPE_STRING, DEFAULT_DEVICE_ID_SYSFS_DIR, vsn(2, 3, 17), NULL, 0, NULL,
-+	"Location of sysfs for finding device ids (for testing.)\n")
-+
- cfg_array(devices_scan_CFG, "scan", devices_CFG_SECTION, CFG_DEFAULT_COMMENTED | CFG_ADVANCED, CFG_TYPE_STRING, "#S/dev", vsn(1, 0, 0), NULL, 0, NULL,
- 	"Directories containing device nodes to use with LVM.\n")
- 
-diff --git a/lib/config/defaults.h b/lib/config/defaults.h
-index 3308b1ea6..571054dc4 100644
---- a/lib/config/defaults.h
-+++ b/lib/config/defaults.h
-@@ -332,4 +332,6 @@
- #define VGS_ONLINE_DIR DEFAULT_RUN_DIR "/vgs_online"
- #define PVS_LOOKUP_DIR DEFAULT_RUN_DIR "/pvs_lookup"
- 
-+#define DEFAULT_DEVICE_ID_SYSFS_DIR "/sys/"  /* trailing / to match dm_sysfs_dir() */
-+
- #endif				/* _LVM_DEFAULTS_H */
-diff --git a/lib/device/device.h b/lib/device/device.h
-index 89173a840..ca46490ce 100644
---- a/lib/device/device.h
-+++ b/lib/device/device.h
-@@ -67,7 +67,11 @@ struct dev_ext {
- #define DEV_ID_TYPE_CRYPT_UUID 6
- #define DEV_ID_TYPE_LVMLV_UUID 7
- #define DEV_ID_TYPE_DEVNAME    8
-+#define DEV_ID_TYPE_WWID_NAA   9
-+#define DEV_ID_TYPE_WWID_EUI  10
-+#define DEV_ID_TYPE_WWID_T10  11
- 
-+/* Max length of WWID_NAA, WWID_EUI, WWID_T10 */
- #define DEV_WWID_SIZE 128
- 
- /*
 diff --git a/lib/device/device_id.c b/lib/device/device_id.c
-index 5481bb6b0..6383f69fb 100644
+index 6383f69fb..252654861 100644
 --- a/lib/device/device_id.c
 +++ b/lib/device/device_id.c
-@@ -188,13 +188,17 @@ static int _read_sys_block(struct cmd_context *cmd, struct device *dev,
- 			   int binary, int *retlen)
+@@ -1140,7 +1140,7 @@ struct dev_use *get_du_for_device_id(struct cmd_context *cmd, uint16_t idtype, c
+  * . add or update entry in cmd->use_devices
+  */
+ int device_id_add(struct cmd_context *cmd, struct device *dev, const char *pvid_arg,
+-		  const char *idtype_arg, const char *id_arg)
++		  const char *idtype_arg, const char *id_arg, int use_idtype_only)
  {
- 	char path[PATH_MAX];
-+	const char *sysfs_dir;
- 	dev_t devt = dev->dev;
- 	dev_t prim = 0;
- 	int ret;
- 
-+	if (!(sysfs_dir = find_config_tree_str(cmd, devices_device_id_sysfs_dir_CFG, NULL)))
-+		sysfs_dir = dm_sysfs_dir();
-+
-  retry:
- 	if (dm_snprintf(path, sizeof(path), "%sdev/block/%d:%d/%s",
--			dm_sysfs_dir(), (int)MAJOR(devt), (int)MINOR(devt), suffix) < 0) {
-+			sysfs_dir, (int)MAJOR(devt), (int)MINOR(devt), suffix) < 0) {
- 		log_error("Failed to create sysfs path for %s", dev_name(dev));
- 		return 0;
- 	}
-@@ -338,6 +342,26 @@ static int _wwid_type_num(char *id)
- 		return -1;
- }
- 
-+int wwid_type_to_idtype(int wwid_type)
-+{
-+	switch (wwid_type) {
-+	case 3: return DEV_ID_TYPE_WWID_NAA;
-+	case 2: return DEV_ID_TYPE_WWID_EUI;
-+	case 1: return DEV_ID_TYPE_WWID_T10;
-+	default: return -1;
-+	}
-+}
-+
-+int idtype_to_wwid_type(int idtype)
-+{
-+	switch (idtype) {
-+	case DEV_ID_TYPE_WWID_NAA: return 3;
-+	case DEV_ID_TYPE_WWID_EUI: return 2;
-+	case DEV_ID_TYPE_WWID_T10: return 1;
-+	default: return -1;
-+	}
-+}
-+
- void free_wwids(struct dm_list *ids)
- {
- 	struct dev_wwid *dw, *safe;
-@@ -436,6 +460,7 @@ const char *device_id_system_read(struct cmd_context *cmd, struct device *dev, u
- {
- 	char sysbuf[PATH_MAX] = { 0 };
- 	const char *idname = NULL;
-+	struct dev_wwid *dw;
- 	int i;
- 
- 	if (idtype == DEV_ID_TYPE_SYS_WWID) {
-@@ -485,6 +510,18 @@ const char *device_id_system_read(struct cmd_context *cmd, struct device *dev, u
- 		return idname;
- 	}
- 
-+	else if (idtype == DEV_ID_TYPE_WWID_NAA ||
-+		 idtype == DEV_ID_TYPE_WWID_EUI ||
-+		 idtype == DEV_ID_TYPE_WWID_T10) {
-+		if (!(dev->flags & DEV_ADDED_VPD_WWIDS))
-+			dev_read_vpd_wwids(cmd, dev);
-+		dm_list_iterate_items(dw, &dev->wwids) {
-+			if (idtype_to_wwid_type(idtype) == dw->type)
-+				return strdup(dw->id);
-+		}
-+		return NULL;
-+	}
-+
- 	/* wwids are already munged if needed */
- 	if (idtype != DEV_ID_TYPE_SYS_WWID) {
- 		for (i = 0; i < strlen(sysbuf); i++) {
-@@ -591,6 +628,12 @@ const char *idtype_to_str(uint16_t idtype)
- 		return "md_uuid";
- 	if (idtype == DEV_ID_TYPE_LOOP_FILE)
- 		return "loop_file";
-+	if (idtype == DEV_ID_TYPE_WWID_NAA)
-+		return "wwid_naa";
-+	if (idtype == DEV_ID_TYPE_WWID_EUI)
-+		return "wwid_eui";
-+	if (idtype == DEV_ID_TYPE_WWID_T10)
-+		return "wwid_t10";
- 	return "unknown";
- }
- 
-@@ -612,6 +655,12 @@ uint16_t idtype_from_str(const char *str)
- 		return DEV_ID_TYPE_MD_UUID;
- 	if (!strcmp(str, "loop_file"))
- 		return DEV_ID_TYPE_LOOP_FILE;
-+	if (!strcmp(str, "wwid_naa"))
-+		return DEV_ID_TYPE_WWID_NAA;
-+	if (!strcmp(str, "wwid_eui"))
-+		return DEV_ID_TYPE_WWID_EUI;
-+	if (!strcmp(str, "wwid_t10"))
-+		return DEV_ID_TYPE_WWID_T10;
- 	return 0;
- }
- 
-@@ -1202,13 +1251,26 @@ int device_id_add(struct cmd_context *cmd, struct device *dev, const char *pvid_
- 
- 	/*
- 	 * No device-specific, existing, or user-specified idtypes,
--	 * so use first available of sys_wwid / sys_serial / devname.
-+	 * so use first available of sys_wwid, wwid_naa, wwid_eui,
-+	 * wwid_t10, sys_serial, devname.
+ 	char pvid[ID_LEN+1] = { 0 };
+ 	uint16_t idtype = 0;
+@@ -1194,9 +1194,13 @@ int device_id_add(struct cmd_context *cmd, struct device *dev, const char *pvid_
  	 */
  
- 	idtype = DEV_ID_TYPE_SYS_WWID;
- 	if ((idname = device_id_system_read(cmd, dev, idtype)))
- 		goto id_done;
- 
-+	idtype = DEV_ID_TYPE_WWID_NAA;
-+	if ((idname = device_id_system_read(cmd, dev, idtype)))
-+		goto id_done;
-+
-+	idtype = DEV_ID_TYPE_WWID_EUI;
-+	if ((idname = device_id_system_read(cmd, dev, idtype)))
-+		goto id_done;
-+
-+	idtype = DEV_ID_TYPE_WWID_T10;
-+	if ((idname = device_id_system_read(cmd, dev, idtype)))
-+		goto id_done;
-+
- 	idtype = DEV_ID_TYPE_SYS_SERIAL;
- 	if ((idname = device_id_system_read(cmd, dev, idtype)))
- 		goto id_done;
-@@ -1731,6 +1793,43 @@ static int _match_du_to_dev(struct cmd_context *cmd, struct dev_use *du, struct
- 		  idtype_to_str(du->idtype), du->idname ?: ".", dev_name(dev), idname ?: ".");
- 	*/
- 
-+	/*
-+	 * Make the du match this device if the dev has a vpd_pg83 wwid
-+	 * that matches du->idname, even if the sysfs wwid for dev did
-+	 * not match the du->idname.  This could happen if sysfs changes
-+	 * which wwid it reports (there are often multiple), or if lvm in
-+	 * the future selects a sys_wwid value from vpd_pg83 data rather
-+	 * than from the sysfs wwid.
-+	 *
-+	 * TODO: update the df entry IDTYPE somewhere?
-+	 */
-+	if (du->idtype == DEV_ID_TYPE_SYS_WWID) {
-+		struct dev_wwid *dw;
-+
-+	       	if (!(dev->flags & DEV_ADDED_VPD_WWIDS))
-+			dev_read_vpd_wwids(cmd, dev);
-+
-+		dm_list_iterate_items(dw, &dev->wwids) {
-+			if (!strcmp(dw->id, du->idname)) {
-+				if (!(id = zalloc(sizeof(struct dev_id))))
-+					return_0;
-+				/* wwid types are 1,2,3 and idtypes are DEV_ID_TYPE_ */
-+				id->idtype = wwid_type_to_idtype(dw->type);
-+				id->idname = strdup(dw->id);
-+				id->dev = dev;
-+				dm_list_add(&dev->ids, &id->list);
-+				du->dev = dev;
-+				dev->id = id;
-+				dev->flags |= DEV_MATCHED_USE_ID;
-+				log_print("Match device_id %s %s to vpd_pg83 %s %s",
-+					  idtype_to_str(du->idtype), du->idname,
-+					  idtype_to_str(id->idtype), dev_name(dev));
-+				du->idtype = id->idtype;
-+				return 1;
+ 	if (idtype_arg) {
+-		if (!(idtype = idtype_from_str(idtype_arg)))
++		if (!(idtype = idtype_from_str(idtype_arg))) {
++			if (use_idtype_only) {
++				log_error("The specified --deviceidtype %s is unknown.", idtype_arg);
++				return 0;
 +			}
-+		}
-+	}
-+
- 	return 0;
- }
+ 			log_warn("WARNING: ignoring unknown device_id type %s.", idtype_arg);
+-		else {
++		} else {
+ 			if (id_arg) {
+ 				if ((idname = strdup(id_arg)))
+ 					goto id_done;
+@@ -1206,6 +1210,11 @@ int device_id_add(struct cmd_context *cmd, struct device *dev, const char *pvid_
+ 			if ((idname = device_id_system_read(cmd, dev, idtype)))
+ 				goto id_done;
  
++			if (use_idtype_only) {
++				log_error("The specified --deviceidtype %s is not available for %s.", idtype_arg, dev_name(dev));
++				return 0;
++			}
++
+ 			log_warn("WARNING: ignoring deviceidtype %s which is not available for device.", idtype_arg);
+ 			idtype = 0;
+ 		}
 diff --git a/lib/device/device_id.h b/lib/device/device_id.h
-index 46ab33784..6962925df 100644
+index 6962925df..700176bb5 100644
 --- a/lib/device/device_id.h
 +++ b/lib/device/device_id.h
-@@ -63,6 +63,8 @@ int read_sys_block_binary(struct cmd_context *cmd, struct device *dev,
+@@ -28,7 +28,7 @@ int device_ids_use_devname(struct cmd_context *cmd);
+ int device_ids_read(struct cmd_context *cmd);
+ int device_ids_write(struct cmd_context *cmd);
+ int device_id_add(struct cmd_context *cmd, struct device *dev, const char *pvid,
+-                  const char *idtype_arg, const char *id_arg);
++                  const char *idtype_arg, const char *id_arg, int use_idtype_only);
+ void device_id_pvremove(struct cmd_context *cmd, struct device *dev);
+ void device_ids_match(struct cmd_context *cmd);
+ int device_ids_match_dev(struct cmd_context *cmd, struct device *dev);
+diff --git a/tools/lvmdevices.c b/tools/lvmdevices.c
+index 04f707519..5d9c0c7b7 100644
+--- a/tools/lvmdevices.c
++++ b/tools/lvmdevices.c
+@@ -264,7 +264,7 @@ int lvmdevices(struct cmd_context *cmd, int argc, char **argv)
+ 				if (update_set) {
+ 					log_print("Adding multipath device %s for multipath component %s.",
+ 						  dev_name(mpath_dev), dev_name(du->dev));
+-					if (!device_id_add(cmd, mpath_dev, dev->pvid, NULL, NULL))
++					if (!device_id_add(cmd, mpath_dev, dev->pvid, NULL, NULL, 0))
+ 						stack;
+ 				} else {
+ 					log_print("Missing multipath device %s for multipath component %s.",
+@@ -360,7 +360,7 @@ int lvmdevices(struct cmd_context *cmd, int argc, char **argv)
+ 		/* also allow deviceid_ARG ? */
+ 		deviceidtype = arg_str_value(cmd, deviceidtype_ARG, NULL);
  
- int dev_has_mpath_uuid(struct cmd_context *cmd, struct device *dev, const char **idname_out);
+-		if (!device_id_add(cmd, dev, dev->pvid, deviceidtype, NULL))
++		if (!device_id_add(cmd, dev, dev->pvid, deviceidtype, NULL, 1))
+ 			goto_bad;
+ 		if (!device_ids_write(cmd))
+ 			goto_bad;
+@@ -408,7 +408,7 @@ int lvmdevices(struct cmd_context *cmd, int argc, char **argv)
+ 		}
+ 		dm_list_iterate_items(devl, &found_devs) {
+ 			deviceidtype = arg_str_value(cmd, deviceidtype_ARG, NULL);
+-			if (!device_id_add(cmd, devl->dev, devl->dev->pvid, deviceidtype, NULL))
++			if (!device_id_add(cmd, devl->dev, devl->dev->pvid, deviceidtype, NULL, 1))
+ 				goto_bad;
+ 		}
+ 		if (!device_ids_write(cmd))
+diff --git a/tools/toollib.c b/tools/toollib.c
+index 91eda84dd..e45afb6ee 100644
+--- a/tools/toollib.c
++++ b/tools/toollib.c
+@@ -5833,7 +5833,7 @@ do_command:
  
-+int wwid_type_to_idtype(int wwid_type);
-+int idtype_to_wwid_type(int idtype);
- void free_wwids(struct dm_list *ids);
- struct dev_wwid *dev_add_wwid(char *id, int id_type, struct dm_list *ids);
- int dev_read_vpd_wwids(struct cmd_context *cmd, struct device *dev);
+ 				/* allow deviceidtype_ARG/deviceid_ARG ? */
+ 				memcpy(pvid, &pvl->pv->id.uuid, ID_LEN);
+-				device_id_add(cmd, pd->dev, pvid, NULL, NULL);
++				device_id_add(cmd, pd->dev, pvid, NULL, NULL, 0);
+ 
+ 			} else {
+ 				log_error("Failed to find PV %s", pd->name);
+@@ -5873,7 +5873,7 @@ do_command:
+ 
+ 		/* allow deviceidtype_ARG/deviceid_ARG ? */
+ 		memcpy(pvid, &pv->id.uuid, ID_LEN);
+-		device_id_add(cmd, pd->dev, pvid, NULL, NULL);
++		device_id_add(cmd, pd->dev, pvid, NULL, NULL, 0);
+ 
+ 		log_verbose("Set up physical volume for \"%s\" with %" PRIu64
+ 			    " available sectors.", pv_name, pv_size(pv));
+diff --git a/tools/vgimportclone.c b/tools/vgimportclone.c
+index cab501619..9e426c942 100644
+--- a/tools/vgimportclone.c
++++ b/tools/vgimportclone.c
+@@ -162,7 +162,7 @@ static int _update_vg(struct cmd_context *cmd, struct volume_group *vg,
+ 	 */
+ 	if (vp->import_devices || cmd->enable_devices_file) {
+ 		dm_list_iterate_items(devl, &vp->new_devs) {
+-			if (!device_id_add(cmd, devl->dev, devl->dev->pvid, NULL, NULL)) {
++			if (!device_id_add(cmd, devl->dev, devl->dev->pvid, NULL, NULL, 0)) {
+ 				log_error("Failed to add device id for %s.", dev_name(devl->dev));
+ 				goto bad;
+ 			}
+diff --git a/tools/vgimportdevices.c b/tools/vgimportdevices.c
+index 23c2718ff..ab359d31c 100644
+--- a/tools/vgimportdevices.c
++++ b/tools/vgimportdevices.c
+@@ -60,7 +60,7 @@ static int _vgimportdevices_single(struct cmd_context *cmd,
+ 		idtypestr = pv->device_id_type;
+ 
+ 		memcpy(pvid, &pvl->pv->id.uuid, ID_LEN);
+-		device_id_add(cmd, pv->dev, pvid, idtypestr, NULL);
++		device_id_add(cmd, pv->dev, pvid, idtypestr, NULL, 0);
+ 		vp->added_devices++;
+ 
+ 		/* We could skip update if the device_id has not changed. */
 
