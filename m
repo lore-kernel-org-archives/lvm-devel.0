@@ -1,75 +1,76 @@
 From: David Teigland <teigland@sourceware.org>
-Date: Tue, 11 Oct 2022 17:49:44 +0000 (GMT)
-Subject: main - lvreduce: require active LV when no fs option is used
-Message-ID: <20221011174944.08F073858D39@sourceware.org>
+Date: Tue, 11 Oct 2022 17:49:42 +0000 (GMT)
+Subject: main - tests: add comments to fsadm-renamed
+Message-ID: <20221011174942.DC1943858D32@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=f6f2737015746b1b6c7fbd0d297a4596c584749b
-Commit:        f6f2737015746b1b6c7fbd0d297a4596c584749b
-Parent:        fc52e87f06959f542ea78b75df104bc6c85fd973
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=fc52e87f06959f542ea78b75df104bc6c85fd973
+Commit:        fc52e87f06959f542ea78b75df104bc6c85fd973
+Parent:        657df00c9615ea5abb6faf4c21f01f90de17b207
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Tue Oct 11 11:50:47 2022 -0500
+AuthorDate:    Tue Oct 11 11:28:19 2022 -0500
 Committer:     David Teigland <teigland@redhat.com>
 CommitterDate: Tue Oct 11 12:48:31 2022 -0500
 
-lvreduce: require active LV when no fs option is used
+tests: add comments to fsadm-renamed
 
-Without an --fs option set, make lvreduce of an inactive LV
-fail and report that the LV must be active.
+to explain the what and why of the steps that are
+not obvious
 ---
- lib/metadata/lv_manip.c   | 4 ++++
- test/shell/lvresize-fs.sh | 7 ++++---
- 2 files changed, 8 insertions(+), 3 deletions(-)
+ test/shell/fsadm-renamed.sh | 15 +++++++++++++++
+ 1 file changed, 15 insertions(+)
 
-diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
-index d6452e849..db97a019c 100644
---- a/lib/metadata/lv_manip.c
-+++ b/lib/metadata/lv_manip.c
-@@ -6873,6 +6873,10 @@ int lv_resize(struct cmd_context *cmd, struct logical_volume *lv,
- 	is_active = lv_is_active(lv_top);
+diff --git a/test/shell/fsadm-renamed.sh b/test/shell/fsadm-renamed.sh
+index 5e2e2ed78..698b143cf 100644
+--- a/test/shell/fsadm-renamed.sh
++++ b/test/shell/fsadm-renamed.sh
+@@ -83,29 +83,44 @@ echo "$i"
+ #   https://github.com/systemd/systemd/pull/2017
+ aux udev_wait
  
- 	if (is_reduce && !is_active && !strcmp(lp->fsopt, "checksize")) {
-+		if (!lp->user_set_fs) {
-+			log_error("The LV must be active to safely reduce, or use --fs checksize.");
-+			goto out;
-+		}
- 		lv_top->status |= LV_TEMPORARY;
- 		if (!activate_lv(cmd, lv_top)) {
- 			log_error("Failed to activate %s to check for fs.", display_lvname(lv_top));
-diff --git a/test/shell/lvresize-fs.sh b/test/shell/lvresize-fs.sh
-index d4b6484c0..0be6911a0 100644
---- a/test/shell/lvresize-fs.sh
-+++ b/test/shell/lvresize-fs.sh
-@@ -473,7 +473,8 @@ lvremove $vg/$lv
- lvcreate -n $lv -L 456M $vg
- aux wipefs_a "$DM_DEV_DIR/$vg/$lv"
- lvchange -an $vg/$lv
--lvreduce -L-200M $vg/$lv
-+not lvreduce -L-200M $vg/$lv
-+lvreduce --fs checksize -L-200M $vg/$lv
- check lv_field $vg/$lv lv_size "256.00m"
- lvremove $vg/$lv
++# mount /dev/test/lv1 on /mnt
+ mount "$dev_vg_lv" "$mount_dir"
  
-@@ -1145,7 +1146,7 @@ df --output=size "$mount_dir" |tee df1
+ aux udev_wait
+ 
++# rename lv1 to lv1_renamed, now /dev/test/lv1_renamed is mounted on /mnt,
++# but "df" and "mount" commands will still show /dev/test/lv1 mounted on /mnt.
+ lvrename $vg_lv $vg_lv_ren
+ 
+ check_mounted
+ 
+ # fails on renamed LV
++# lvextend -r test/lv1_renamed succeeds in extending the LV (as lv1_renamed),
++# but xfs_growfs /dev/test/lv1_renamed fails because it doesn't recognize
++# that device is mounted, because the old lv name reported as being mounted.
+ fail lvresize -y -L+10M -r $vg_lv_ren
+ 
+ # fails on unknown mountpoint  (FIXME: umount)
+ not umount "$dev_vg_lv"
+ 
++# create a new LV with the previous name of the renamed lv
+ lvcreate -L300 -n $lv1 $vg
+ "$i" $MKFS_ARGS "$dev_vg_lv"
+ 
+ aux udev_wait
+ 
++# mount the new lv on a dir with a similar name as the other
++# now df will show
++# /dev/mapper/test-lv1 ... /mnt
++# /dev/mapper/test-lv1 ... /mnt $SPACE dir
+ mount "$dev_vg_lv" "$mount_dolar_dir"
+ 
+ check_mounted
+ 
++# try to resize the LV that was renamed:  lvextend -r test/lv1_renamed
++# this succeeds in extending the LV (lv1_renamed), but xfs_growfs fails
++# for the same reason as above, i.e. mount doesn't show the lv1_renamed
++# device is mounted anywhere.
+ not lvresize -L+10M -r $vg_lv_ren
+ 
  umount "$mount_dir"
- lvchange -an $vg/$lv
- # no fs reduce is needed
--lvreduce -L200M $vg/$lv
-+lvreduce --fs checksize -L200M $vg/$lv
- check lv_field $vg/$lv lv_size "200.00m"
- lvchange -ay $vg/$lv
- mount "$DM_DEV_DIR/$vg/$lv" "$mount_dir"
-@@ -1167,7 +1168,7 @@ df --output=size "$mount_dir" |tee df1
- umount "$mount_dir"
- lvchange -an $vg/$lv
- # fs is 200M, reduced size is 216M, so no fs reduce is needed
--lvreduce -L216M $vg/$lv
-+lvreduce --fs checksize -L216M $vg/$lv
- check lv_field $vg/$lv lv_size "216.00m"
- lvchange -ay $vg/$lv
- mount "$DM_DEV_DIR/$vg/$lv" "$mount_dir"
 
