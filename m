@@ -1,128 +1,60 @@
-From: mornfall@sourceware.org <mornfall@sourceware.org>
-Date: 14 Dec 2010 17:51:14 -0000
-Subject: LVM2 lib/metadata/metadata.c tools/vgmerge.c t ...
-Message-ID: <20101214175114.26172.qmail@sourceware.org>
+From: David Teigland <teigland@sourceware.org>
+Date: Wed, 12 Oct 2022 14:22:00 +0000 (GMT)
+Subject: main - lvmlockd: Fix sanlock lvmlock lv size calculation
+Message-ID: <20221012142200.679DA3858034@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	mornfall at sourceware.org	2010-12-14 17:51:11
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=4f4554164b6fec7a92c21d1230b0abb6316db1b5
+Commit:        4f4554164b6fec7a92c21d1230b0abb6316db1b5
+Parent:        908555459f0abbcda687882439589209528e1dc0
+Author:        corubba <corubba@gmx.de>
+AuthorDate:    Wed Oct 12 09:19:01 2022 -0500
+Committer:     David Teigland <teigland@redhat.com>
+CommitterDate: Wed Oct 12 09:19:01 2022 -0500
 
-Modified files:
-	lib/metadata   : metadata.c 
-	tools          : vgmerge.c vgsplit.c 
+lvmlockd: Fix sanlock lvmlock lv size calculation
 
-Log message:
-	Add further consistency checking to vg_validate, ensuring that all segment
-	areas point to LVs or PVs that are listed in the respective VG.
+The number of extents for the sanlock lvmlock lv is calculated using
+integer division, which rounds towards zero. With a physical extent size
+of 129M, instead of the requested 256M the lv is only 129M (1 extent).
+With any physical extent size greater than 256M the lv creation fails
+because the number of extents is zero.
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/metadata.c.diff?cvsroot=lvm2&r1=1.417&r2=1.418
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/vgmerge.c.diff?cvsroot=lvm2&r1=1.70&r2=1.71
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/tools/vgsplit.c.diff?cvsroot=lvm2&r1=1.103&r2=1.104
+This is fixed by replacing the integer division with a division macro
+that rounds up and thus guarantees that the size of the lv will always
+be equal or greater than the requested size. Using the examples above, a
+pes of 129M will result in a 258M lv (2 extents), pes of 300M in a 300M
+lv (1 extent).
 
---- LVM2/lib/metadata/metadata.c	2010/12/14 17:07:35	1.417
-+++ LVM2/lib/metadata/metadata.c	2010/12/14 17:51:09	1.418
-@@ -2153,6 +2153,61 @@
- 	}
- }
- 
-+/*
-+ * Check that an LV and all its PV references are correctly listed in vg->lvs
-+ * and vg->pvs, respectively. This only looks at a single LV, but *not* at the
-+ * LVs it is using. To do the latter, you should use _lv_postorder with this
-+ * function. C.f. vg_validate.
-+ */
-+static int _lv_validate_references_single(struct logical_volume *lv, void *data)
-+{
-+	struct volume_group *vg = lv->vg;
-+	struct lv_segment *lvseg;
-+	struct pv_list *pvl;
-+	struct lv_list *lvl;
-+	int s;
-+	int r = 1;
-+	int ok = 0;
-+
-+	dm_list_iterate_items(lvl, &vg->lvs) {
-+		if (lvl->lv == lv) {
-+			ok = 1;
-+			break;
-+		}
-+	}
-+
-+	if (!ok) {
-+		log_error(INTERNAL_ERROR
-+			  "Referenced LV %s not listed in VG %s.",
-+			  lv->name, vg->name);
-+		r = 0;
-+	}
-+
-+	dm_list_iterate_items(lvseg, &lv->segments) {
-+		for (s = 0; s < lvseg->area_count; ++s) {
-+			if (seg_type(lvseg, s) == AREA_PV) {
-+				ok = 0;
-+				/* look up the reference in vg->pvs */
-+				dm_list_iterate_items(pvl, &vg->pvs) {
-+					if (pvl->pv == seg_pv(lvseg, s)) {
-+						ok = 1;
-+						break;
-+					}
-+				}
-+
-+				if (!ok) {
-+					log_error(INTERNAL_ERROR
-+						  "Referenced PV %s not listed in VG %s.",
-+						  pv_dev_name(seg_pv(lvseg, s)), vg->name);
-+					r = 0;
-+				}
-+			}
-+		}
-+	}
-+
-+	return r;
-+}
-+
- int vg_validate(struct volume_group *vg)
- {
- 	struct pv_list *pvl, *pvl2;
-@@ -2320,6 +2375,11 @@
- 	}
- 
- 	dm_list_iterate_items(lvl, &vg->lvs) {
-+		if (!_lv_postorder(lvl->lv, _lv_validate_references_single, NULL))
-+			r = 0;
-+	}
-+
-+	dm_list_iterate_items(lvl, &vg->lvs) {
- 		if (!(lvl->lv->status & PVMOVE))
- 			continue;
- 		dm_list_iterate_items(seg, &lvl->lv->segments) {
---- LVM2/tools/vgmerge.c	2010/12/08 20:50:51	1.70
-+++ LVM2/tools/vgmerge.c	2010/12/14 17:51:10	1.71
-@@ -114,6 +114,10 @@
- 		}
- 	}
- 
-+	dm_list_iterate_items(lvl1, &vg_from->lvs) {
-+		lvl1->lv->vg = vg_to;
-+	}
-+
- 	while (!dm_list_empty(&vg_from->lvs)) {
- 		struct dm_list *lvh = vg_from->lvs.n;
- 
---- LVM2/tools/vgsplit.c	2010/12/08 20:50:51	1.103
-+++ LVM2/tools/vgsplit.c	2010/12/14 17:51:10	1.104
-@@ -34,6 +34,7 @@
- 	struct logical_volume *lv = dm_list_item(lvh, struct lv_list)->lv;
- 
- 	dm_list_move(&vg_to->lvs, lvh);
-+	lv->vg = vg_to;
- 
- 	if (lv_is_active(lv)) {
- 		log_error("Logical volume \"%s\" must be inactive", lv->name);
+The re-calculation of the lv size in bytes and megabytes is only so the
+debug output shows the correct values. The size in mb there is still
+not byte-perfect-accurate, but good enough for a human-readable estimate;
+and the exact size in bytes and extents is right next to it.
 
+Signed-off-by: corubba <corubba@gmx.de>
+---
+ lib/locking/lvmlockd.c | 4 +++-
+ 1 file changed, 3 insertions(+), 1 deletion(-)
+
+diff --git a/lib/locking/lvmlockd.c b/lib/locking/lvmlockd.c
+index 2ef0900d4..7f8150365 100644
+--- a/lib/locking/lvmlockd.c
++++ b/lib/locking/lvmlockd.c
+@@ -513,9 +513,11 @@ static int _create_sanlock_lv(struct cmd_context *cmd, struct volume_group *vg,
+ 
+ 	lv_size_bytes = num_mb * ONE_MB_IN_BYTES;  /* size of sanlock LV in bytes */
+ 	extent_bytes = vg->extent_size * SECTOR_SIZE; /* size of one extent in bytes */
+-	total_extents = lv_size_bytes / extent_bytes; /* number of extents in sanlock LV */
++	total_extents = dm_div_up(lv_size_bytes, extent_bytes); /* number of extents in sanlock LV */
+ 	lp.extents = total_extents;
+ 
++	lv_size_bytes = total_extents * extent_bytes;
++	num_mb = lv_size_bytes / ONE_MB_IN_BYTES;
+ 	log_debug("Creating lvmlock LV for sanlock with size %um %ub %u extents", num_mb, lv_size_bytes, lp.extents);
+ 
+ 	dm_list_init(&lp.tags);
 
