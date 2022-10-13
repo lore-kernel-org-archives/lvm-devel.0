@@ -1,38 +1,58 @@
-From: David Teigland <teigland@sourceware.org>
-Date: Wed, 12 Oct 2022 15:05:45 +0000 (GMT)
-Subject: main - lvreduce: change error message about --fs options
-Message-ID: <20221012150545.ACE5C3851164@sourceware.org>
+From: Pawan Sharma <sharmapawan@microsoft.com>
+Date: Thu, 13 Oct 2022 06:53:40 +0000
+Subject: LVM2 : performance drop even after deleting the snapshot
+In-Reply-To: <PUZP153MB075126926388815B6F9E1258AC229@PUZP153MB0751.APCP153.PROD.OUTLOOK.COM>
+References: <PUZP153MB075126926388815B6F9E1258AC229@PUZP153MB0751.APCP153.PROD.OUTLOOK.COM>
+Message-ID: <PUZP153MB07512B1B646868F0F8F1D205AC259@PUZP153MB0751.APCP153.PROD.OUTLOOK.COM>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=04097d9f620b5e22ae8fe2884110249116f3dab5
-Commit:        04097d9f620b5e22ae8fe2884110249116f3dab5
-Parent:        4f4554164b6fec7a92c21d1230b0abb6316db1b5
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Wed Oct 12 10:05:14 2022 -0500
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Wed Oct 12 10:05:14 2022 -0500
+adding this to lvm-devel mailing list also.
 
-lvreduce: change error message about --fs options
+Regards,
+Pawan
+________________________________
+From: Pawan Sharma
+Sent: Wednesday, October 12, 2022 10:42 PM
+To: linux-lvm@redhat.com <linux-lvm@redhat.com>
+Cc: Mitta Sai Chaithanya <mittas@microsoft.com>; Kapil Upadhayay <kupadhayay@microsoft.com>
+Subject: LVM2 : performance drop even after deleting the snapshot
 
----
- lib/metadata/lv_manip.c | 2 +-
- 1 file changed, 1 insertion(+), 1 deletion(-)
+Hi Everyone,
 
-diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
-index db97a019c..4cdbc19a0 100644
---- a/lib/metadata/lv_manip.c
-+++ b/lib/metadata/lv_manip.c
-@@ -6874,7 +6874,7 @@ int lv_resize(struct cmd_context *cmd, struct logical_volume *lv,
- 
- 	if (is_reduce && !is_active && !strcmp(lp->fsopt, "checksize")) {
- 		if (!lp->user_set_fs) {
--			log_error("The LV must be active to safely reduce, or use --fs checksize.");
-+			log_error("The LV must be active to safely reduce (see --fs options.)");
- 			goto out;
- 		}
- 		lv_top->status |= LV_TEMPORARY;
 
+We are evaluating lvm2 snapshots and doing performance testing on it. This is what we are doing :
+
+  1.  dump some data to lvm2 volume (using fio)
+  2.  take the snapshot
+  3.  delete the snapshot (no IOs anywhere after creating the snapshot)
+  4.  run the fio on lvm2 volume
+
+Here as you can see, we are just creating the snapshot and immediately deleting it. There are no IOs to the main volume or anywhere. When we run the fio after this (step 4) and we see around 50% drop in performance with reference to the number we get in step 1.
+
+It is expected to see a performance drop if there is a snapshot because of the COW. But here we deleted the snapshot, and it is not referring to any data also. We should not see any performance drop here.
+
+Could someone please help me understand this behavior. Why are we seeing the performance drop in this case? It seems like we deleted the snapshot but still it is not deleted, and we are paying the COW penalty.
+
+System Info:
+
+OS : ubuntu 18.04
+Kernel : 5.4.0
+
+# lvm version
+  LVM version:     2.02.176(2) (2017-11-03)
+  Library version: 1.02.145 (2017-11-03)
+  Driver version:  4.41.0
+
+We also tried on latest ubuntu with newer version of LVM. We got the same behavior.
+
+Any help/pointers would be appreciated. Thanks in advance.
+
+Regards,
+Pawan
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20221013/3a0c62f5/attachment.htm>
