@@ -1,105 +1,73 @@
-From: Roberto Fastec <roberto.fastec@gmail.com>
-Date: Fri, 14 Oct 2022 22:28:28 +0200
-Subject: [linux-lvm] LVM2 : performance drop even after deleting the snapshot
-In-Reply-To: <CAAMCDefYPozC32AdCqw-c1nOZNiEK0j0pG7n+zcu_bRwTfCagg@mail.gmail.com>
+From: Zdenek Kabelac <zdenek.kabelac@gmail.com>
+Date: Mon, 17 Oct 2022 15:10:46 +0200
+Subject: [EXTERNAL] Re: LVM2 : performance drop even after deleting the snapshot
+In-Reply-To: <SI2P153MB0444EE48C7C6E92FB448262ED7249@SI2P153MB0444.APCP153.PROD.OUTLOOK.COM>
 References: <PUZP153MB075126926388815B6F9E1258AC229@PUZP153MB0751.APCP153.PROD.OUTLOOK.COM>
  <PUZP153MB07512B1B646868F0F8F1D205AC259@PUZP153MB0751.APCP153.PROD.OUTLOOK.COM>
- <CAAMCDefYPozC32AdCqw-c1nOZNiEK0j0pG7n+zcu_bRwTfCagg@mail.gmail.com>
-Message-ID: <2e6bad30-2ebf-4162-b62d-092c3ad14003@gmail.com>
+ <91261aec-d0fd-7884-1f38-a575b4e540e2@gmail.com>
+ <SI2P153MB0444EE48C7C6E92FB448262ED7249@SI2P153MB0444.APCP153.PROD.OUTLOOK.COM>
+Message-ID: <0e032336-8658-5686-3dfb-0e50cdcb7d91@gmail.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-TIP and HINT
-forget SSDs with LVM unless of enterprise level 
-especially if you are going to use/implement the thin provisioning
+Dne 14. 10. 22 v 21:31 Mitta Sai Chaithanya napsal(a):
+> Hi Zdenek Kabelac,
+>  ????????? Thanks for your quick reply and suggestions.
+> 
+> We conducted couple of tests on Ubuntu 22.04 and observed similar performance 
+> behavior post thin snapshot deletion without writing any data anywhere.
+> 
+> *Commands used to create Thin LVM volume*:
+> - lvcreate??-L 480G --poolmetadataspare n --poolmetadatasize 16G 
+> --chunksize=64K --thinpool??ThinDataLV ThinVolGrp
+> - lvcreate -n ext4.ThinLV -V 100G --thinpool ThinDataLV ThinVolGrp
 
-How to identify an SSD of enterprise level: 
-it costs from 1,00 euro per gigabyte up to 1,50 euro per gigabyte
 
-Kind regards
-Roberto Gini
-Technical Manager @ www.RecuperoDatiRAIDFAsTec.it 
+Hi
+
+So now it's clear you are talking about thin snapshots - this is a very 
+different story going on here (as we normally use term "COW" volumes for thick 
+old snapshots)
+
+I'll consult more with thinp author - however it does look to me you are using 
+same device to store  data & metadata.
+
+This is always a highly sub-optimal solution - the metadata device is likely 
+best to be stored on fast (low latency) devices.
+
+So my wild guess - you are possibly using rotational device backend to store 
+your  thin-pools metadata volume and then your setups gets very sensitive on 
+the metadata fragmentation.
+
+Thin-pool was designed to be used with SSD/NVMe for metadata which is way less 
+sensitive on seeking.
+
+So when you 'create' snapshot - metadata gets updated - when you remove thin 
+snapshot - metadata gets again a lots of changes (especially when your origin 
+volume is already populated) - and fragmentation is inevitable and you are 
+getting high penalty of holding metadata device on the same drive as your data 
+device.
+
+So while there are some plans to improve some metadata logistic - I'd not 
+expect miracles on you particular setup - I'd highly recommend to plug-in some 
+  SSD/NVMe storage for storing your thinpool metadata - this is the way to go 
+to get better 'benchmarking' numbers here.
+
+For an improvement on your setup - try to seek larger chunk size values where 
+your data 'sharing' is still reasonably valuable - this depends on data-type 
+usage - but chunk size 256K might be possibly a good compromise (with disabled 
+zeroing - if you hunt for the best performance).
 
 
+Regards
 
-?Ottieni BlueMail per Android ?
+Zdenek
 
-Il giorno 14 ott 2022, 21:50, alle ore 21:50, Roger Heflin <rogerheflin@gmail.com> ha scritto:
->What is the underlying disk hardware you are running this on?
->virtual, spinning, ssd, nvme?
->
->On Thu, Oct 13, 2022 at 2:01 AM Pawan Sharma
-><sharmapawan@microsoft.com> wrote:
->>
->> adding this to lvm-devel mailing list also.
->>
->> Regards,
->> Pawan
->> ________________________________
->> From: Pawan Sharma
->> Sent: Wednesday, October 12, 2022 10:42 PM
->> To: linux-lvm at redhat.com <linux-lvm@redhat.com>
->> Cc: Mitta Sai Chaithanya <mittas@microsoft.com>; Kapil Upadhayay
-><kupadhayay@microsoft.com>
->> Subject: LVM2 : performance drop even after deleting the snapshot
->>
->> Hi Everyone,
->>
->>
->> We are evaluating lvm2 snapshots and doing performance testing on it.
->This is what we are doing :
->>
->> dump some data to lvm2 volume (using fio)
->> take the snapshot
->> delete the snapshot (no IOs anywhere after creating the snapshot)
->> run the fio on lvm2 volume
->>
->> Here as you can see, we are just creating the snapshot and
->immediately deleting it. There are no IOs to the main volume or
->anywhere. When we run the fio after this (step 4) and we see around 50%
->drop in performance with reference to the number we get in step 1.
->>
->> It is expected to see a performance drop if there is a snapshot
->because of the COW. But here we deleted the snapshot, and it is not
->referring to any data also. We should not see any performance drop
->here.
->>
->> Could someone please help me understand this behavior. Why are we
->seeing the performance drop in this case? It seems like we deleted the
->snapshot but still it is not deleted, and we are paying the COW
->penalty.
->>
->> System Info:
->>
->> OS : ubuntu 18.04
->> Kernel : 5.4.0
->>
->> # lvm version
->>   LVM version:     2.02.176(2) (2017-11-03)
->>   Library version: 1.02.145 (2017-11-03)
->>   Driver version:  4.41.0
->>
->> We also tried on latest ubuntu with newer version of LVM. We got the
->same behavior.
->>
->> Any help/pointers would be appreciated. Thanks in advance.
->>
->> Regards,
->> Pawan
->> _______________________________________________
->> linux-lvm mailing list
->> linux-lvm at redhat.com
->> https://listman.redhat.com/mailman/listinfo/linux-lvm
->> read the LVM HOW-TO at http://tldp.org/HOWTO/LVM-HOWTO/
->
->_______________________________________________
->linux-lvm mailing list
->linux-lvm at redhat.com
->https://listman.redhat.com/mailman/listinfo/linux-lvm
->read the LVM HOW-TO at http://tldp.org/HOWTO/LVM-HOWTO/
--------------- next part --------------
-An HTML attachment was scrubbed...
-URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20221014/3bcff7ed/attachment.htm>
+PS: later mails suggest you are using some 'MS Azure' devices?? - so please 
+redo your testing with your local hardware/storage - where you have precise 
+guarantees of storage drive performance - testing in the Cloud is random by 
+design....
+
