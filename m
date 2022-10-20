@@ -1,131 +1,72 @@
 From: Tony Asleson <tasleson@sourceware.org>
-Date: Wed, 19 Oct 2022 19:23:12 +0000 (GMT)
-Subject: main - lvmnotify.c: Check to see if dbus daemon is running
-Message-ID: <20221019192312.D514F3858D3C@sourceware.org>
+Date: Thu, 20 Oct 2022 20:11:35 +0000 (GMT)
+Subject: main - lvmdbustest: Add test for wipefs
+Message-ID: <20221020201135.41463384BC20@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=0f56c1ad1262857961aff7b5a0ae6593a3de8db3
-Commit:        0f56c1ad1262857961aff7b5a0ae6593a3de8db3
-Parent:        04097d9f620b5e22ae8fe2884110249116f3dab5
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=5a6ae2d4d8e65452bbdddd9a3cbd317e142fb9f1
+Commit:        5a6ae2d4d8e65452bbdddd9a3cbd317e142fb9f1
+Parent:        0f56c1ad1262857961aff7b5a0ae6593a3de8db3
 Author:        Tony Asleson <tasleson@redhat.com>
-AuthorDate:    Wed Oct 19 12:46:45 2022 -0500
+AuthorDate:    Tue Oct 18 12:26:14 2022 -0500
 Committer:     Tony Asleson <tasleson@redhat.com>
-CommitterDate: Wed Oct 19 14:22:12 2022 -0500
+CommitterDate: Thu Oct 20 15:10:35 2022 -0500
 
-lvmnotify.c: Check to see if dbus daemon is running
+lvmdbustest: Add test for wipefs
 
-The lvm dbus daemon will auto activate on dbus API calls.  To
-prevent the dbus daemon starting when lvm command line tools are
-being used we will check to see if the daemon is running first.
-If the daemon is not running, we will not notify the daemon.
-
-For this check to work it requires the changes done previously
-with commit: 3fdf4493481ff8baae2ac5416dce6d05b69e6b28
-
-Reviewed-by: David Teigland <teigland@redhat.com>
+Ensure that if an external program or user calles wipefs on a PV that we
+correctly update the state of the daemon.
 ---
- lib/notify/lvmnotify.c | 68 ++++++++++++++++++++++++++++++++++++++++++++++++++
- 1 file changed, 68 insertions(+)
+ test/dbus/lvmdbustest.py | 34 ++++++++++++++++++++++++++++++++++
+ 1 file changed, 34 insertions(+)
 
-diff --git a/lib/notify/lvmnotify.c b/lib/notify/lvmnotify.c
-index e24b0acb1..7ac74d755 100644
---- a/lib/notify/lvmnotify.c
-+++ b/lib/notify/lvmnotify.c
-@@ -15,17 +15,79 @@
- #define LVM_DBUS_DESTINATION "com.redhat.lvmdbus1"
- #define LVM_DBUS_PATH        "/com/redhat/lvmdbus1/Manager"
- #define LVM_DBUS_INTERFACE   "com.redhat.lvmdbus1.Manager"
-+#define LVM_DBUS_LOCK_FILE   "/var/lock/lvm/lvmdbusd"
-+#define LVM_DBUS_LOCK_FILE_ENV_KEY        "LVM_DBUSD_LOCKFILE"
- #define SD_BUS_SYSTEMD_NO_SUCH_UNIT_ERROR "org.freedesktop.systemd1.NoSuchUnit"
- #define SD_BUS_DBUS_SERVICE_UNKNOWN_ERROR "org.freedesktop.DBus.Error.ServiceUnknown"
+diff --git a/test/dbus/lvmdbustest.py b/test/dbus/lvmdbustest.py
+index 41ee2fd1b..f158da571 100755
+--- a/test/dbus/lvmdbustest.py
++++ b/test/dbus/lvmdbustest.py
+@@ -2385,6 +2385,40 @@ class TestDbusService(unittest.TestCase):
+ 		finally:
+ 			set_exec_mode(g_lvm_shell)
  
- #ifdef NOTIFYDBUS_SUPPORT
- #include <systemd/sd-bus.h>
-+#include <fcntl.h>
-+#include <stdlib.h>
-+#include <unistd.h>
-+#include <errno.h>
++	@staticmethod
++	def _wipe_it(block_device):
++		cmd = ["/usr/sbin/wipefs", '-a', block_device]
++		config = Popen(cmd, stdout=PIPE, stderr=PIPE, close_fds=True, env=os.environ)
++		config.communicate()
++		if config.returncode != 0:
++			return False
++		return True
++
++	def test_wipefs(self):
++		# Ensure we update the status of the daemon if an external process clears a PV
++		pv = self.objs[PV_INT][0]
++		pv_device_path = pv.Pv.Name
++
++		wipe_result = TestDbusService._wipe_it(pv_device_path)
++		self.assertTrue(wipe_result)
++
++		if wipe_result:
++			# Need to wait a bit before the daemon will reflect the change
++			start = time.time()
++			found = True
++			while found and time.time() < start + 10:
++				if (self._lookup(pv_device_path) == "/"):
++					found = False
++
++			print("Note: Time for udev update = %f" % (time.time() - start))
++			# Make sure that the service no longer has it
++			rc = self._lookup(pv_device_path)
++			self.assertEqual(rc, '/')
++
++			# Put it back
++			pv_object_path = self._pv_create(pv_device_path)
++			self.assertNotEqual(pv_object_path, '/')
++
  
- int lvmnotify_is_supported(void)
- {
- 	return 1;
- }
+ class AggregateResults(object):
  
-+static int lvmdbusd_running(void)
-+{
-+	int fd = 0;
-+	int rc = 0;
-+	int errno_cpy = 0;
-+	int running = 0;
-+	const char *lockfile = NULL;
-+
-+	/*
-+	 * lvm dbusd uses a lock file with a lock on it, thus to determine if the daemon is running
-+	 * requires that you attempt to lock the file as well.  Thus the existence of the file does
-+	 * not mean it's running, but the absence of the file does indicate it's not running.
-+	 *
-+	 * See lvmdbusd for more details.
-+	 */
-+
-+	lockfile = getenv(LVM_DBUS_LOCK_FILE_ENV_KEY);
-+	if (!lockfile) {
-+		lockfile = LVM_DBUS_LOCK_FILE;
-+	}
-+
-+	errno = 0;
-+	fd = open(lockfile, O_RDWR);
-+	if (-1 == fd) {
-+		errno_cpy = errno;
-+		if (errno_cpy == ENOENT) {
-+			return 0;
-+		} else {
-+			/* Safest option is to return running when we encounter unexpected errors */
-+			log_debug_dbus("Unexpected errno: %d on lockfile open, returning running", errno_cpy);
-+			return 1;
-+		}
-+	}
-+
-+	/* Need to ensure we close lock FD now */
-+	errno = 0;
-+	rc = lockf(fd, F_TLOCK|F_TEST, 0);
-+	if (-1 != rc) {
-+		/* Not locked, thus not running */
-+		running = 0;
-+	} else {
-+		errno_cpy = errno;
-+		if (errno_cpy == EACCES || errno_cpy == EAGAIN) {
-+			/* Locked, so daemon is running */
-+			running = 1;
-+		} else {
-+			log_debug_dbus("Unexpected errno: %d on lockf, returning running", errno_cpy);
-+			running = 1 ;
-+		}
-+	}
-+
-+	close(fd);
-+	return running;
-+}
-+
-+
- void lvmnotify_send(struct cmd_context *cmd)
- {
- 	static const char _dbus_notification_failed_msg[] = "D-Bus notification failed";
-@@ -43,6 +105,12 @@ void lvmnotify_send(struct cmd_context *cmd)
- 	cmd->lv_notify = 0;
- 	cmd->pv_notify = 0;
- 
-+	/* If lvmdbusd isn't running, don't notify as you will start it as it will auto activate */
-+	if (!lvmdbusd_running()) {
-+		log_debug_dbus("dbus damon not running, not notifying");
-+		return;
-+	}
-+
- 	cmd_name = get_cmd_name();
- 
- 	ret = sd_bus_open_system(&bus);
 
