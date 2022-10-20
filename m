@@ -1,106 +1,128 @@
 From: Tony Asleson <tasleson@sourceware.org>
-Date: Thu, 20 Oct 2022 20:11:36 +0000 (GMT)
-Subject: main - lvmdbusd: Always leverage udev
-Message-ID: <20221020201136.618A9384BC2B@sourceware.org>
+Date: Thu, 20 Oct 2022 20:11:37 +0000 (GMT)
+Subject: main - lvmdbustest: Add test for copy signature
+Message-ID: <20221020201137.8176A384BC20@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=8a1c73ddbe35be24cde02f77bac7e3b8b6d92242
-Commit:        8a1c73ddbe35be24cde02f77bac7e3b8b6d92242
-Parent:        5a6ae2d4d8e65452bbdddd9a3cbd317e142fb9f1
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=736547e7bb306236e1ea6f4d8d9185ee0ab69638
+Commit:        736547e7bb306236e1ea6f4d8d9185ee0ab69638
+Parent:        8a1c73ddbe35be24cde02f77bac7e3b8b6d92242
 Author:        Tony Asleson <tasleson@redhat.com>
-AuthorDate:    Tue Oct 18 12:30:09 2022 -0500
+AuthorDate:    Thu Oct 20 12:48:40 2022 -0500
 Committer:     Tony Asleson <tasleson@redhat.com>
 CommitterDate: Thu Oct 20 15:10:35 2022 -0500
 
-lvmdbusd: Always leverage udev
+lvmdbustest: Add test for copy signature
 
-Previously we utilized udev until we got a dbus notification from lvm
-command line tools.  This however misses the case where something outside
-of lvm clears the signatures on a block device and we fail to refresh the
-state of the daemon.  Change the behavior so we always monitor udev events,
-but ignore those udev events that pertain to lvm members.
-
-Note: --udev command line option no longer does anything and simply
-outputs a message that it's no longer used.
-
-Resolves: https://bugzilla.redhat.com/show_bug.cgi?id=1967171
+Add test to ensure we detect when a PV signature is copied to a block
+device.
 ---
- daemons/lvmdbusd/main.py      |  3 ++-
- daemons/lvmdbusd/manager.py   |  6 ------
- daemons/lvmdbusd/udevwatch.py | 20 +++++++++++++-------
- 3 files changed, 15 insertions(+), 14 deletions(-)
+ test/dbus/lvmdbustest.py | 71 ++++++++++++++++++++++++++++++++++++++++--------
+ 1 file changed, 60 insertions(+), 11 deletions(-)
 
-diff --git a/daemons/lvmdbusd/main.py b/daemons/lvmdbusd/main.py
-index 662d7569f..e869bcec3 100644
---- a/daemons/lvmdbusd/main.py
-+++ b/daemons/lvmdbusd/main.py
-@@ -125,7 +125,8 @@ def process_args():
- 	# Add udev watching
- 	if args.use_udev:
- 		# Make sure this msg ends up in the journal, so we know
--		log_msg('Utilizing udev to trigger updates')
-+		log_msg('The --udev option is no longer supported,'
-+				'the daemon always uses a combination of dbus notify from lvm tools and udev')
+diff --git a/test/dbus/lvmdbustest.py b/test/dbus/lvmdbustest.py
+index f158da571..9582fe674 100755
+--- a/test/dbus/lvmdbustest.py
++++ b/test/dbus/lvmdbustest.py
+@@ -8,7 +8,7 @@
+ #
+ # You should have received a copy of the GNU General Public License
+ # along with this program. If not, see <http://www.gnu.org/licenses/>.
+-
++import os
+ import signal
+ # noinspection PyUnresolvedReferences
+ import subprocess
+@@ -2394,6 +2394,30 @@ class TestDbusService(unittest.TestCase):
+ 			return False
+ 		return True
  
- 	return args
- 
-diff --git a/daemons/lvmdbusd/manager.py b/daemons/lvmdbusd/manager.py
-index 9c41f0fc3..c6fb11d76 100644
---- a/daemons/lvmdbusd/manager.py
-+++ b/daemons/lvmdbusd/manager.py
-@@ -203,12 +203,6 @@ class Manager(AutomatedProperties):
- 		in_signature='s', out_signature='i')
- 	def ExternalEvent(self, command):
- 		utils.log_debug("ExternalEvent %s" % command)
--		# If a user didn't explicitly specify udev, we will turn it off now.
--		if not cfg.args.use_udev:
--			if udevwatch.remove():
--				utils.log_msg("ExternalEvent received, disabling "
--								"udev monitoring")
--				# We are dependent on external events now to stay current!
- 		r = RequestEntry(
- 			-1, Manager._external_event, (command,), None, None, False)
- 		cfg.worker_q.put(r)
-diff --git a/daemons/lvmdbusd/udevwatch.py b/daemons/lvmdbusd/udevwatch.py
-index f9b3e4ad1..237ff17e8 100644
---- a/daemons/lvmdbusd/udevwatch.py
-+++ b/daemons/lvmdbusd/udevwatch.py
-@@ -52,20 +52,26 @@ def filter_event(action, device):
- 	# when appropriate.
- 	refresh = False
- 
-+	# Ignore everything but change
-+	if action != 'change':
-+		return
++	def _block_present_absent(self, block_device, present=False):
++		start = time.time()
++		keep_looping = True
++		while keep_looping and time.time() < start + 3:
++			if present:
++				if (self._lookup(block_device) != "/"):
++					keep_looping = False
++			else:
++				if (self._lookup(block_device) == "/"):
++					keep_looping = False
 +
- 	if 'ID_FS_TYPE' in device:
- 		fs_type_new = device['ID_FS_TYPE']
--
- 		if 'LVM' in fs_type_new:
--			refresh = True
-+			# Let's skip udev events for LVM devices as we should be handling them
-+			# with the dbus notifications.
-+			pass
- 		elif fs_type_new == '':
- 			# Check to see if the device was one we knew about
- 			if 'DEVNAME' in device:
--				found = cfg.om.get_object_by_lvm_id(device['DEVNAME'])
--				if found:
-+				if cfg.om.get_object_by_lvm_id(device['DEVNAME']):
- 					refresh = True
--
--	if 'DM_LV_NAME' in device:
--		refresh = True
-+	else:
-+		# This handles the wipefs -a path
-+		if not refresh and 'DEVNAME' in device:
-+			if cfg.om.get_object_by_lvm_id(device['DEVNAME']):
-+				refresh = True
++		if keep_looping:
++			print("Daemon failed to update")
++		else:
++			print("Note: Time for udev update = %f" % (time.time() - start))
++		if present:
++			rc = self._lookup(block_device)
++			self.assertNotEqual(rc, '/')
++			return True
++		else:
++			rc = self._lookup(block_device)
++			self.assertEqual(rc, '/')
++			return True
++
+ 	def test_wipefs(self):
+ 		# Ensure we update the status of the daemon if an external process clears a PV
+ 		pv = self.objs[PV_INT][0]
+@@ -2404,21 +2428,46 @@ class TestDbusService(unittest.TestCase):
  
- 	if refresh:
- 		udev_add()
+ 		if wipe_result:
+ 			# Need to wait a bit before the daemon will reflect the change
+-			start = time.time()
+-			found = True
+-			while found and time.time() < start + 10:
+-				if (self._lookup(pv_device_path) == "/"):
+-					found = False
+-
+-			print("Note: Time for udev update = %f" % (time.time() - start))
+-			# Make sure that the service no longer has it
+-			rc = self._lookup(pv_device_path)
+-			self.assertEqual(rc, '/')
++			self._block_present_absent(pv_device_path, False)
+ 
+ 			# Put it back
+ 			pv_object_path = self._pv_create(pv_device_path)
+ 			self.assertNotEqual(pv_object_path, '/')
+ 
++	@staticmethod
++	def _write_signature(device, data=None):
++		fd = os.open(device, os.O_RDWR|os.O_EXCL|os.O_NONBLOCK)
++		existing = os.read(fd, 1024)
++		os.lseek(fd, 0, os.SEEK_SET)
++
++		if data is None:
++			data_copy = bytearray(existing)
++			# Clear lvm signature
++			data_copy[536:536+9] = bytearray(8)
++			os.write(fd, data_copy)
++		else:
++			os.write(fd, data)
++		os.sync()
++		os.close(fd)
++		return existing
++
++	def test_copy_signature(self):
++		# Ensure we update the state of the daemon if an external process copies
++		# a pv signature onto a block device
++		pv = self.objs[PV_INT][0]
++		pv_device_path = pv.Pv.Name
++
++		try:
++			existing = TestDbusService._write_signature(pv_device_path, None)
++			if self._block_present_absent(pv_device_path, False):
++				TestDbusService._write_signature(pv_device_path, existing)
++				self._block_present_absent(pv_device_path, True)
++		finally:
++			# Ensure we put the PV back for sure.
++			rc = self._lookup(pv_device_path)
++			if rc == "/":
++				self._pv_create(pv_device_path)
++
+ 
+ class AggregateResults(object):
+ 
 
