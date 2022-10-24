@@ -1,48 +1,68 @@
-From: Tony Asleson <tasleson@sourceware.org>
-Date: Thu, 20 Oct 2022 20:11:38 +0000 (GMT)
-Subject: main - lvmdbusd: Handle PV signature copy
-Message-ID: <20221020201138.A1952384BC20@sourceware.org>
+From: David Teigland <teigland@sourceware.org>
+Date: Mon, 24 Oct 2022 21:20:43 +0000 (GMT)
+Subject: main - cmd: save device_id_sysfs_dir
+Message-ID: <20221024212043.6A3CD385840C@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=94dde5769984c5ede211d122cc7392a26f8dbef4
-Commit:        94dde5769984c5ede211d122cc7392a26f8dbef4
-Parent:        736547e7bb306236e1ea6f4d8d9185ee0ab69638
-Author:        Tony Asleson <tasleson@redhat.com>
-AuthorDate:    Thu Oct 20 10:46:51 2022 -0500
-Committer:     Tony Asleson <tasleson@redhat.com>
-CommitterDate: Thu Oct 20 15:10:35 2022 -0500
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=830ece75e80b1779de5e81e3424a8ee756f66f88
+Commit:        830ece75e80b1779de5e81e3424a8ee756f66f88
+Parent:        94dde5769984c5ede211d122cc7392a26f8dbef4
+Author:        David Teigland <teigland@redhat.com>
+AuthorDate:    Mon Oct 24 16:15:53 2022 -0500
+Committer:     David Teigland <teigland@redhat.com>
+CommitterDate: Mon Oct 24 16:20:28 2022 -0500
 
-lvmdbusd: Handle PV signature copy
+cmd: save device_id_sysfs_dir
 
-If something manually copies a PV signature to a block device we will
-miss it.  Handle this case too.
+read and save device_id_sysfs_dir to avoid spamming
+debug output from find_config_tree_str.
 ---
- daemons/lvmdbusd/udevwatch.py | 10 +++++++---
- 1 file changed, 7 insertions(+), 3 deletions(-)
+ lib/commands/toolcontext.c | 1 +
+ lib/commands/toolcontext.h | 1 +
+ lib/device/device_id.c     | 4 +---
+ 3 files changed, 3 insertions(+), 3 deletions(-)
 
-diff --git a/daemons/lvmdbusd/udevwatch.py b/daemons/lvmdbusd/udevwatch.py
-index 237ff17e8..7ee7c9d1c 100644
---- a/daemons/lvmdbusd/udevwatch.py
-+++ b/daemons/lvmdbusd/udevwatch.py
-@@ -59,9 +59,13 @@ def filter_event(action, device):
- 	if 'ID_FS_TYPE' in device:
- 		fs_type_new = device['ID_FS_TYPE']
- 		if 'LVM' in fs_type_new:
--			# Let's skip udev events for LVM devices as we should be handling them
--			# with the dbus notifications.
--			pass
-+			# If we get a lvm related udev event for a block device
-+			# we don't know about, it's either a pvcreate which we
-+			# would handle with the dbus notification or something
-+			# copied a pv signature onto a block device, this is
-+			# required to catch the latter.
-+			if not cfg.om.get_object_by_lvm_id(device['DEVNAME']):
-+				refresh = True
- 		elif fs_type_new == '':
- 			# Check to see if the device was one we knew about
- 			if 'DEVNAME' in device:
+diff --git a/lib/commands/toolcontext.c b/lib/commands/toolcontext.c
+index 2666d7b42..b630554a9 100644
+--- a/lib/commands/toolcontext.c
++++ b/lib/commands/toolcontext.c
+@@ -643,6 +643,7 @@ static int _process_config(struct cmd_context *cmd)
+ 	if (!dm_set_uuid_prefix(UUID_PREFIX))
+ 		return_0;
+ #endif
++	cmd->device_id_sysfs_dir = find_config_tree_str(cmd, devices_device_id_sysfs_dir_CFG, NULL);
+ 
+ 	dev_ext_info_src = find_config_tree_str(cmd, devices_external_device_info_source_CFG, NULL);
+ 
+diff --git a/lib/commands/toolcontext.h b/lib/commands/toolcontext.h
+index eb2d1922b..32bfda57a 100644
+--- a/lib/commands/toolcontext.h
++++ b/lib/commands/toolcontext.h
+@@ -247,6 +247,7 @@ struct cmd_context {
+ 	 * Paths.
+ 	 */
+ 	const char *lib_dir;			/* cache value global/library_dir */
++	const char *device_id_sysfs_dir;
+ 	char system_dir[PATH_MAX];
+ 	char dev_dir[PATH_MAX];
+ 	char proc_dir[PATH_MAX];
+diff --git a/lib/device/device_id.c b/lib/device/device_id.c
+index 252654861..34469e262 100644
+--- a/lib/device/device_id.c
++++ b/lib/device/device_id.c
+@@ -193,9 +193,7 @@ static int _read_sys_block(struct cmd_context *cmd, struct device *dev,
+ 	dev_t prim = 0;
+ 	int ret;
+ 
+-	if (!(sysfs_dir = find_config_tree_str(cmd, devices_device_id_sysfs_dir_CFG, NULL)))
+-		sysfs_dir = dm_sysfs_dir();
+-
++	sysfs_dir = cmd->device_id_sysfs_dir ?: dm_sysfs_dir();
+  retry:
+ 	if (dm_snprintf(path, sizeof(path), "%sdev/block/%d:%d/%s",
+ 			sysfs_dir, (int)MAJOR(devt), (int)MINOR(devt), suffix) < 0) {
 
