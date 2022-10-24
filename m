@@ -1,60 +1,39 @@
-From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Thu, 16 Dec 2010 11:36:14 +0100
-Subject: [PATCH 06/20] Replace void* arithmetic with char*
-In-Reply-To: <cover.1292495195.git.zkabelac@redhat.com>
-References: <cover.1292495195.git.zkabelac@redhat.com>
-Message-ID: <6c8ab2db0ea297ec7142f999786a4a8fbffaa97c.1292495195.git.zkabelac@redhat.com>
+From: David Teigland <teigland@sourceware.org>
+Date: Mon, 24 Oct 2022 21:20:44 +0000 (GMT)
+Subject: main - device_id: remove debug trace
+Message-ID: <20221024212044.8AEED385841D@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=f188c9e40319d00a3d5bd59f1d01016325935da6
+Commit:        f188c9e40319d00a3d5bd59f1d01016325935da6
+Parent:        830ece75e80b1779de5e81e3424a8ee756f66f88
+Author:        David Teigland <teigland@redhat.com>
+AuthorDate:    Mon Oct 24 16:19:05 2022 -0500
+Committer:     David Teigland <teigland@redhat.com>
+CommitterDate: Mon Oct 24 16:20:28 2022 -0500
 
-Signed-off-by: Zdenek Kabelac <zkabelac@redhat.com>
+device_id: remove debug trace
+
+for common case where a device id type is not used.
 ---
- lib/activate/activate.c |    2 +-
- tools/dmsetup.c         |    6 +++---
- 2 files changed, 4 insertions(+), 4 deletions(-)
+ lib/device/device_id.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
 
-diff --git a/lib/activate/activate.c b/lib/activate/activate.c
-index 8e7a22f..5510977 100644
---- a/lib/activate/activate.c
-+++ b/lib/activate/activate.c
-@@ -399,7 +399,7 @@ int target_version(const char *target_name, uint32_t *maj,
- 			goto out;
- 		}
- 
--		target = (void *) target + target->next;
-+		target = (struct dm_versions *)((char *) target + target->next);
- 	} while (last_target != target);
- 
-       out:
-diff --git a/tools/dmsetup.c b/tools/dmsetup.c
-index 1a56d24..56f1579 100644
---- a/tools/dmsetup.c
-+++ b/tools/dmsetup.c
-@@ -1288,8 +1288,8 @@ static int _process_all(int argc, char **argv, int silent,
+diff --git a/lib/device/device_id.c b/lib/device/device_id.c
+index 34469e262..bd9b3c4bf 100644
+--- a/lib/device/device_id.c
++++ b/lib/device/device_id.c
+@@ -529,7 +529,7 @@ const char *device_id_system_read(struct cmd_context *cmd, struct device *dev, u
  	}
  
- 	do {
--		names = (void *) names + next;
--		if (!fn(argc, argv, (void *) names))
-+		names = (struct dm_names *)((char *) names + next);
-+		if (!fn(argc, argv, names))
- 			r = 0;
- 		next = names->next;
- 	} while (next);
-@@ -1632,7 +1632,7 @@ static int _targets(int argc __attribute__((unused)), char **argv __attribute__(
- 		printf("%-16s v%d.%d.%d\n", target->name, target->version[0],
- 		       target->version[1], target->version[2]);
+ 	if (!sysbuf[0])
+-		goto_bad;
++		goto bad;
  
--		target = (void *) target + target->next;
-+		target = (struct dm_versions *)((char *) target + target->next);
- 	} while (last_target != target);
- 
- 	r = 1;
--- 
-1.7.3.3
-
+ 	if (!(idname = strdup(sysbuf)))
+ 		goto_bad;
 
