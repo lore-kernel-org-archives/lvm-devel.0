@@ -1,127 +1,41 @@
-From: corubba <corubba@gmx.de>
-Date: Thu, 27 Oct 2022 03:20:24 +0200
-Subject: [PATCH 2/2] report: query lvmlockd for lv_active_exclusively
-In-Reply-To: <752e9d7d-028d-270c-9024-f50feadc2d5a@gmx.de>
-References: <752e9d7d-028d-270c-9024-f50feadc2d5a@gmx.de>
-Message-ID: <b2e8d774-e127-6a62-22c3-5d62c581c9ad@gmx.de>
+From: David Teigland <teigland@sourceware.org>
+Date: Mon, 31 Oct 2022 13:56:12 +0000 (GMT)
+Subject: main - vgchange systemid: use tag or select
+Message-ID: <20221031135612.63F9D385DC38@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Adjusted the lv_active_exclusively option to account for shared VGs.
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=81f10c1d1e844dd3ad9918a31a0d7c00fed36c94
+Commit:        81f10c1d1e844dd3ad9918a31a0d7c00fed36c94
+Parent:        f188c9e40319d00a3d5bd59f1d01016325935da6
+Author:        David Teigland <teigland@redhat.com>
+AuthorDate:    Mon Oct 31 08:54:33 2022 -0500
+Committer:     David Teigland <teigland@redhat.com>
+CommitterDate: Mon Oct 31 08:54:33 2022 -0500
 
-A LV is definitely not exclusively active if:
-- it is not (locally) active, regardless of whether it is in a local or
-   shared VG.
-- it is in a shared VG, locally active, and lvmlockd reports a
-   non-exclusive lock (e.g. shared lock or no lock at all).
+vgchange systemid: use tag or select
 
-A LV is definitely exclusively active if:
-- it is in a local VG, and (locally) active.
-- it is in a shared VG, locally active, and lvmlockd reports a exclusive
-   lock.
-
-The "exclusively active" state of a LV is undefined if:
-- it is in a shared VG, locally active, and lvmlockd can't be reached or
-   responds with an error.
-
-For the sanlock lvmlock LV, lvmlockd reports no lock and it is thus
-shown as not exclusively active.
-
-The lvmlockd socket is opened and closed for every query. This may pose
-a performance bottleneck, and could be optimised by lazy-opening it once
-when needed for the first time, and closing it once after all LVs are
-done.
-
-Signed-off-by: corubba <corubba@gmx.de>
+The command can do this but the command defs
+were missing the annotation to allow it.
 ---
-  lib/report/report.c | 56 +++++++++++++++++++++++++++++++++++++++++++++
-  1 file changed, 56 insertions(+)
+ tools/command-lines.in | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
 
-diff --git a/lib/report/report.c b/lib/report/report.c
-index cb5fc93c8..f3a7ff44d 100644
---- a/lib/report/report.c
-+++ b/lib/report/report.c
-@@ -25,6 +25,8 @@
-  #include "lib/device/device-types.h"
-  #include "lib/datastruct/str_list.h"
-
-+#include "daemons/lvmlockd/lvmlockd-client.h"
-+
-  #include <stddef.h> /* offsetof() */
-  #include <float.h> /* DBL_MAX */
-  #include <time.h>
-@@ -3849,6 +3851,55 @@ static int _lvactiveremotely_disp(struct dm_report *rh, struct dm_pool *mem,
-  	return _binary_disp(rh, mem, field, active_remotely, GET_FIRST_RESERVED_NAME(lv_active_remotely_y), private);
-  }
-
-+/* Returns 0 on success, 1 on error. */
-+static int _lvactiveexclusively_lvmlockd(const struct logical_volume *lv, int *active_exclusively)
-+{
-+	int ret = 0;
-+	daemon_handle lvmlockd;
-+	daemon_reply reply;
-+	const char *reply_str = NULL;
-+
-+	log_debug("lvmlockd query_lock_lv %s/%s", lv->vg->name, lv->name);
-+
-+	lvmlockd = lvmlockd_open(NULL);
-+	if (lvmlockd.socket_fd < 0 || lvmlockd.error) {
-+		log_error("Cannot connect to lvmlockd.");
-+		return 1;
-+	}
-+
-+	reply = daemon_send_simple(lvmlockd,
-+			"query_lock_lv",
-+			"pid = " FMTd64, (int64_t) getpid(),
-+			"opts = %s", "none",
-+			"vg_name = %s", lv->vg->name,
-+			"lv_name = %s", lv->name,
-+			"lv_uuid = %s", lv_uuid_dup(NULL, lv),
-+			"vg_lock_type = %s", lv->vg->lock_type,
-+			"vg_lock_args = %s", lv->vg->lock_args,
-+			"lv_lock_args = %s", lv->lock_args,
-+			NULL);
-+
-+	if (reply.error) {
-+		log_error("reply error %d", reply.error);
-+		ret = 1;
-+	}
-+
-+	if (!ret)
-+		reply_str = daemon_reply_str(reply, "mode", NULL);
-+	if (!ret && !reply_str) {
-+		log_error("query_lock_lv mode not returned");
-+		ret = 1;
-+	} else if (!ret) {
-+		log_debug("query_lock_lv result mode %s", reply_str);
-+		*active_exclusively = strcmp(reply_str, "ex") ? 0 : 1;
-+	}
-+
-+	daemon_reply_destroy(reply);
-+	lvmlockd_close(lvmlockd);
-+
-+	return ret;
-+}
-+
-  static int _lvactiveexclusively_disp(struct dm_report *rh, struct dm_pool *mem,
-  				     struct dm_report_field *field,
-  				     const void *data, void *private)
-@@ -3861,6 +3912,11 @@ static int _lvactiveexclusively_disp(struct dm_report *rh, struct dm_pool *mem,
-
-  	active_exclusively = lv_is_active(lv);
-
-+	if (active_exclusively && vg_is_shared(lv->vg)) {
-+		if (_lvactiveexclusively_lvmlockd(lv, &active_exclusively))
-+			return _binary_undef_disp(rh, mem, field, private);
-+	}
-+
-  	return _binary_disp(rh, mem, field, active_exclusively, GET_FIRST_RESERVED_NAME(lv_active_exclusively_y), private);
-  }
-
---
-2.38.1
-
+diff --git a/tools/command-lines.in b/tools/command-lines.in
+index ec61d3b7d..4bbafd05d 100644
+--- a/tools/command-lines.in
++++ b/tools/command-lines.in
+@@ -1766,7 +1766,8 @@ IO: --ignoreskippedcluster
+ ID: vgchange_refresh
+ DESC: Reactivate LVs using the latest metadata.
+ 
+-vgchange --systemid String VG
++vgchange --systemid String VG|Tag|Select
++OO: --select String
+ ID: vgchange_systemid
+ DESC: Change the system ID of a VG.
+ 
 
