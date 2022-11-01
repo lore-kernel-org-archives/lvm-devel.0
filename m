@@ -1,59 +1,131 @@
 From: corubba <corubba@gmx.de>
-Date: Tue, 1 Nov 2022 22:26:52 +0100
-Subject: [PATCH v2 3/3] lvmlockd: Improve error handling
-In-Reply-To: <ef4eac45-6e5e-06dd-fc9b-2794a261ab90@gmx.de>
+Date: Tue, 1 Nov 2022 22:23:47 +0100
+Subject: [PATCH v2 2/3] report: query lvmlockd for lv_active_exclusively
+In-Reply-To: <9002aa3d-a523-7283-3a53-c9499add0cd6@gmx.de>
 References: <9002aa3d-a523-7283-3a53-c9499add0cd6@gmx.de>
- <ef4eac45-6e5e-06dd-fc9b-2794a261ab90@gmx.de>
-Message-ID: <7f4cae3a-e290-1457-97c1-9eb4c96bca95@gmx.de>
+Message-ID: <ef4eac45-6e5e-06dd-fc9b-2794a261ab90@gmx.de>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-In certain error cases the request to lvmlockd is send using a
-uninitialized lvmlockd handle and its socket_fd 0, resulting in the
-request payload being printed to stdout and then blocking the process
-waiting to read the response from stdout. This is fixed by setting the
-socket_fd and error members to values that trigger existing guards.
+Adjusted the lv_active_exclusively option to account for shared VGs.
 
-To prevent redundant and unnecessary error output, a short-circuit is
-added to the send function.
+A LV is definitely not exclusively active if:
+- it is not (locally) active, regardless of whether it is in a local or
+  shared VG.
+- it is in a shared VG, locally active, and lvmlockd reports a
+  non-exclusive lock (e.g. shared lock or no lock at all).
+
+A LV is definitely exclusively active if:
+- it is in a local VG, and (locally) active.
+- it is in a shared VG, locally active, and lvmlockd reports a exclusive
+  lock.
+
+The "exclusively active" state of a LV is undefined if:
+- it is in a shared VG, locally active, and lvmlockd can't be reached or
+  responds with an error.
+
+For the sanlock lvmlock LV, lvmlockd reports no lock and it is thus
+shown as not exclusively active.
 
 Signed-off-by: corubba <corubba@gmx.de>
 ---
-v2: New commit, not part of v1.
+v2: Rename and use the existing _query_lock_lv(...) function instead of
+    reimplementing the whole lvmlockd communication.
 
- lib/locking/lvmlockd.c | 8 +++++++-
- 1 file changed, 7 insertions(+), 1 deletion(-)
+ lib/locking/lvmlockd.c |  7 +++----
+ lib/locking/lvmlockd.h |  9 +++++++++
+ lib/report/report.c    | 10 +++++++++-
+ 3 files changed, 21 insertions(+), 5 deletions(-)
 
 diff --git a/lib/locking/lvmlockd.c b/lib/locking/lvmlockd.c
-index 790dc70b7..b45ca72e6 100644
+index 7f8150365..790dc70b7 100644
 --- a/lib/locking/lvmlockd.c
 +++ b/lib/locking/lvmlockd.c
-@@ -88,8 +88,11 @@ void lvmlockd_connect(void)
- 		log_error("lvmlockd is already connected.");
- 	}
+@@ -2298,9 +2298,8 @@ int lockd_vg_update(struct volume_group *vg)
+ 	return ret;
+ }
 
--	if (_lvmlockd_init_failed)
-+	if (_lvmlockd_init_failed) {
-+		_lvmlockd.socket_fd = -1;
-+		_lvmlockd.error = -1;
- 		return;
-+	}
+-static int _query_lock_lv(struct cmd_context *cmd, struct volume_group *vg,
+-			  const char *lv_name, char *lv_uuid,
+-			  const char *lock_args, int *ex, int *sh)
++int lockd_query_lv(struct volume_group *vg, const char *lv_name, char *lv_uuid,
++		   const char *lock_args, int *ex, int *sh)
+ {
+ 	daemon_reply reply;
+ 	const char *opts = NULL;
+@@ -2386,7 +2385,7 @@ int lockd_lv_name(struct cmd_context *cmd, struct volume_group *vg,
+ 		    !strcmp(cmd->name, "lvchange") || !strcmp(cmd->name, "lvconvert")) {
+ 			int ex = 0, sh = 0;
 
- 	_lvmlockd = lvmlockd_open(_lvmlockd_socket);
+-			if (!_query_lock_lv(cmd, vg, lv_name, lv_uuid, lock_args, &ex, &sh))
++			if (!lockd_query_lv(vg, lv_name, lv_uuid, lock_args, &ex, &sh))
+ 				return 1;
+ 			if (sh) {
+ 				log_warn("WARNING: shared LV may require refresh on other hosts where it is active.");
+diff --git a/lib/locking/lvmlockd.h b/lib/locking/lvmlockd.h
+index 43934202f..fcaa0a326 100644
+--- a/lib/locking/lvmlockd.h
++++ b/lib/locking/lvmlockd.h
+@@ -103,6 +103,9 @@ int lockd_lv_uses_lock(struct logical_volume *lv);
 
-@@ -195,6 +198,9 @@ static daemon_reply _lockd_send_with_pvs(const char *req_name,
+ int lockd_lv_refresh(struct cmd_context *cmd, struct lvresize_params *lp);
 
- 	req = daemon_request_make(req_name);
-
-+	if (!_lvmlockd_connected)
-+		goto bad;
++int lockd_query_lv(struct volume_group *vg, const char *lv_name, char *lv_uuid,
++		   const char *lock_args, int *ex, int *sh);
 +
- 	va_start(ap, lock_pvs);
- 	daemon_request_extend_v(req, ap);
- 	va_end(ap);
+ #else /* LVMLOCKD_SUPPORT */
+
+ static inline void lvmlockd_set_socket(const char *sock)
+@@ -258,6 +261,12 @@ static inline int lockd_lv_refresh(struct cmd_context *cmd, struct lvresize_para
+ 	return 0;
+ }
+
++static inline int lockd_query_lv(struct volume_group *vg, const char *lv_name,
++		  char *lv_uuid, const char *lock_args, int *ex, int *sh)
++{
++	return 0;
++}
++
+ #endif	/* LVMLOCKD_SUPPORT */
+
+ #endif	/* _LVMLOCKD_H */
+diff --git a/lib/report/report.c b/lib/report/report.c
+index cb5fc93c8..26d35ba95 100644
+--- a/lib/report/report.c
++++ b/lib/report/report.c
+@@ -24,6 +24,7 @@
+ #include "lib/cache/lvmcache.h"
+ #include "lib/device/device-types.h"
+ #include "lib/datastruct/str_list.h"
++#include "lib/locking/lvmlockd.h"
+
+ #include <stddef.h> /* offsetof() */
+ #include <float.h> /* DBL_MAX */
+@@ -3854,13 +3855,20 @@ static int _lvactiveexclusively_disp(struct dm_report *rh, struct dm_pool *mem,
+ 				     const void *data, void *private)
+ {
+ 	const struct logical_volume *lv = (const struct logical_volume *) data;
+-	int active_exclusively;
++	int active_exclusively, _sh = 0;
+
+ 	if (!activation())
+ 		return _binary_undef_disp(rh, mem, field, private);
+
+ 	active_exclusively = lv_is_active(lv);
+
++	if (active_exclusively && vg_is_shared(lv->vg)) {
++		active_exclusively = 0;
++		if (!lockd_query_lv(lv->vg, lv->name, lv_uuid_dup(NULL, lv),
++				    lv->lock_args, &active_exclusively, &_sh))
++			return _binary_undef_disp(rh, mem, field, private);
++	}
++
+ 	return _binary_disp(rh, mem, field, active_exclusively, GET_FIRST_RESERVED_NAME(lv_active_exclusively_y), private);
+ }
+
 --
 2.38.1
 
