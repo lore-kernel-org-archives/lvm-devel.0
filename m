@@ -1,75 +1,59 @@
-From: jbrassow@sourceware.org <jbrassow@sourceware.org>
-Date: 28 Sep 2011 16:32:23 -0000
-Subject: LVM2/scripts gdbinit
-Message-ID: <20110928163223.29878.qmail@sourceware.org>
+From: corubba <corubba@gmx.de>
+Date: Tue, 1 Nov 2022 22:18:19 +0100
+Subject: [PATCH v2 1/3] report: adjust lv_active_remotely for shared VGs
+Message-ID: <9002aa3d-a523-7283-3a53-c9499add0cd6@gmx.de>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	jbrassow at sourceware.org	2011-09-28 16:32:22
+Add a note to the manpage that lvmlockd is unable to determine
+accurately and without side-effects whether a LV is remotely active.
+Also change the value of the lv_active_remotely option from false to
+undefined for shared VGs to distinctly communicate that inability to
+users. Only for local VGs it can be definitely stated that they are not
+remotely active.
 
-Modified files:
-	scripts        : gdbinit 
+Signed-off-by: corubba <corubba@gmx.de>
+---
+v2: No change, the same as v1.
 
-Log message:
-	New handy gdb debugging function, "dm_list_size"
-	
-	Example:
-	(gdb) dm_list_size &split_images
-	1 list items
+ lib/report/report.c | 3 ++-
+ man/lvmlockd.8_main | 4 ++++
+ 2 files changed, 6 insertions(+), 1 deletion(-)
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/scripts/gdbinit.diff?cvsroot=lvm2&r1=1.10&r2=1.11
+diff --git a/lib/report/report.c b/lib/report/report.c
+index 9172c1f0e..cb5fc93c8 100644
+--- a/lib/report/report.c
++++ b/lib/report/report.c
+@@ -3838,9 +3838,10 @@ static int _lvactiveremotely_disp(struct dm_report *rh, struct dm_pool *mem,
+ 				  struct dm_report_field *field,
+ 				  const void *data, void *private)
+ {
++	const struct logical_volume *lv = (const struct logical_volume *) data;
+ 	int active_remotely;
 
---- LVM2/scripts/gdbinit	2011/09/13 13:57:02	1.10
-+++ LVM2/scripts/gdbinit	2011/09/28 16:32:22	1.11
-@@ -16,6 +16,7 @@
- 
- printf "\n\n"
- printf "Loading commands:\n"
-+printf " - dm_list_size <list ptr>\n"
- printf " - first_seg <LV ptr>\n"
- printf " - lv_status <LV ptr>\n"
- printf " - lv_status_r <LV ptr>\n"
-@@ -27,8 +28,8 @@
- printf "Use 'help <command>' for more info\n"
- printf "\n\n"
- printf "Popular breakpoints:\n"
--printf "break _raid_add_images\n"
--printf "run --type raid1 -m 1 vg/lv\n"
-+printf "break _get_udev_flags\n"
-+printf "run --splitmirrors 1 -n split vg/lv\n"
- printf "\n\n"
- 
- set follow-fork-mode child
-@@ -40,6 +41,24 @@
- # External functions should have a corresponding 'document'
- # section.  Internal functions should have leading comments
- 
-+define dm_list_size
-+	set $_DLS_list_head = (struct dm_list *)$arg0
-+	set $_DLS_list = $_DLS_list_head->n
-+	set $_DLS_size = 0
-+	
-+	while (($_DLS_list != $_DLS_list_head) && ($_DLS_size < 100))
-+		set $_DLS_list = $_DLS_list->n
-+		set $_DLS_size++
-+	end
-+
-+	printf "%d list items\n", $_DLS_size
-+end
-+
-+document dm_list_size
-+Returns the number of elements in the dm_list
-+
-+	Usage: dm_list_size <list ptr>
-+end
- 
- #
- # __first_seg <return> <LV>
+-	if (!activation())
++	if (!activation() || vg_is_shared(lv->vg))
+ 		return _binary_undef_disp(rh, mem, field, private);
 
+ 	active_remotely = 0;
+diff --git a/man/lvmlockd.8_main b/man/lvmlockd.8_main
+index 717292dc6..7fa11df54 100644
+--- a/man/lvmlockd.8_main
++++ b/man/lvmlockd.8_main
+@@ -878,6 +878,10 @@ If lvmlockd fails or is killed while in use, locks it held remain but are
+ orphaned in the lock manager.  lvmlockd can be restarted with an option to
+ adopt the orphan locks from the previous instance of lvmlockd.
+ .
++.IP \[bu]
++The 'lvs' command does not report any remote state, because lvmlockd is
++unable to passively check the remote active or lock state of an LV.
++.
+ .SH SEE ALSO
+ .
+ .BR lvm (8),
+--
+2.38.1
 
