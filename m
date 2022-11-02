@@ -1,60 +1,60 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Wed,  2 Nov 2022 13:00:21 +0000 (GMT)
-Subject: main - device_mapper: vdo V4 avoid messaging
-Message-ID: <20221102130021.954C83856947@sourceware.org>
+Date: Wed,  2 Nov 2022 13:00:17 +0000 (GMT)
+Subject: main - configure: update use_devicesfile in example.conf
+Message-ID: <20221102130017.F075B385734A@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=36a923926c2c27c1a8a5ac262387d2a4d3e620f8
-Commit:        36a923926c2c27c1a8a5ac262387d2a4d3e620f8
-Parent:        2e79b005c2013fb03d8a48a3cfd8e70a982dd65b
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=17baeb65a913fb1793d0142b20087b10a7f88e37
+Commit:        17baeb65a913fb1793d0142b20087b10a7f88e37
+Parent:        81f10c1d1e844dd3ad9918a31a0d7c00fed36c94
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu Oct 27 23:58:42 2022 +0200
+AuthorDate:    Mon Oct 24 18:03:42 2022 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Wed Nov 2 13:59:34 2022 +0100
 
-device_mapper: vdo V4 avoid messaging
+configure: update use_devicesfile in example.conf
 
-With V4 format build table line with compression and
-deduplication and skip sending any messages to set up
-these parameters.
+Example.conf missed to properly replace default value for
+use_devicesfile setting and left there @VAR at .
 ---
- device_mapper/libdm-deptree.c | 10 +++++++---
- 1 file changed, 7 insertions(+), 3 deletions(-)
+ configure    | 2 ++
+ configure.ac | 1 +
+ 2 files changed, 3 insertions(+)
 
-diff --git a/device_mapper/libdm-deptree.c b/device_mapper/libdm-deptree.c
-index 0445e1b4b..02a56c8e3 100644
---- a/device_mapper/libdm-deptree.c
-+++ b/device_mapper/libdm-deptree.c
-@@ -2894,12 +2894,15 @@ static int _vdo_emit_segment_line(struct dm_task *dmt,
- 			    (seg->vdo_params.write_policy == DM_VDO_WRITE_POLICY_ASYNC_UNSAFE) ? "async-unsafe" : "auto", // policy
- 			    seg->vdo_name);
- 	} else {
--		EMIT_PARAMS(pos, "V4 %s " FMTu64 " %u " FMTu64 " %u ",
-+		EMIT_PARAMS(pos, "V4 %s " FMTu64 " %u " FMTu64 " %u "
-+			    "deduplication %s compression %s ",
- 			    data_dev,
- 			    seg->vdo_data_size / 8, // this parameter is in 4K units
- 			    seg->vdo_params.minimum_io_size * UINT32_C(512), //  sector to byte units
- 			    seg->vdo_params.block_map_cache_size_mb * UINT64_C(256),	// 1MiB -> 4KiB units
--			    seg->vdo_params.block_map_era_length);
-+			    seg->vdo_params.block_map_era_length,
-+			    seg->vdo_params.use_deduplication ? "on" : "off",
-+			    seg->vdo_params.use_compression ? "on" : "off");
- 	}
+diff --git a/configure b/configure
+index 742012569..ccd5a5938 100755
+--- a/configure
++++ b/configure
+@@ -747,6 +747,7 @@ DLM_CFLAGS
+ DEVMAPPER
+ DEFAULT_USE_LVMLOCKD
+ DEFAULT_USE_LVMPOLLD
++DEFAULT_USE_DEVICES_FILE
+ DEFAULT_USE_BLKID_WIPING
+ DEFAULT_SYS_LOCK_DIR
+ DEFAULT_SYS_DIR
+@@ -15497,6 +15498,7 @@ printf "%s\n" "#define LVM_CONFIGURE_LINE \"$CONFIGURE_LINE\"" >>confdefs.h
  
- 	EMIT_PARAMS(pos, "maxDiscard %u ack %u bio %u bioRotationInterval %u cpu %u hash %u logical %u physical %u",
-@@ -4376,7 +4379,8 @@ int dm_tree_node_add_vdo_target(struct dm_tree_node *node,
- 	seg->vdo_name = vdo_pool_name;
- 	seg->vdo_data_size = data_size;
  
--	node->props.send_messages = 2;
-+	if (seg->vdo_version < 4)
-+		node->props.send_messages = 2;
  
- 	return 1;
- }
++
+ 
+ 
+ ################################################################################
+diff --git a/configure.ac b/configure.ac
+index e0593aba0..704772b62 100644
+--- a/configure.ac
++++ b/configure.ac
+@@ -1877,6 +1877,7 @@ AC_SUBST(DEFAULT_SPARSE_SEGTYPE)
+ AC_SUBST(DEFAULT_SYS_DIR)
+ AC_SUBST(DEFAULT_SYS_LOCK_DIR)
+ AC_SUBST(DEFAULT_USE_BLKID_WIPING)
++AC_SUBST(DEFAULT_USE_DEVICES_FILE)
+ AC_SUBST(DEFAULT_USE_LVMPOLLD)
+ AC_SUBST(DEFAULT_USE_LVMLOCKD)
+ AC_SUBST(DEVMAPPER)
 
