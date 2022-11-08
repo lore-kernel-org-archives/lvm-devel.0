@@ -1,78 +1,89 @@
 From: David Teigland <teigland@sourceware.org>
-Date: Tue,  8 Nov 2022 14:51:04 +0000 (GMT)
-Subject: rhel-8.8.0 - devices file: fix pvcreate --uuid matching pvid entry with no device id
-Message-ID: <20221108145104.99CF1385842F@sourceware.org>
+Date: Tue,  8 Nov 2022 14:51:06 +0000 (GMT)
+Subject: rhel-8.8.0 - vgimportdevices: fix locking when creating devices file
+Message-ID: <20221108145106.E14EF385828F@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=87904fbbb84c10e6f733db1c5ba447537d1cf08c
-Commit:        87904fbbb84c10e6f733db1c5ba447537d1cf08c
-Parent:        377ed7d9bac948e1be97e78aa9f9e525e9af470d
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=19093e37557ae6a94392dcf207b3566a7d3defea
+Commit:        19093e37557ae6a94392dcf207b3566a7d3defea
+Parent:        e5f5e2988377c0f014b30a60709685c19c6d3bf0
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Fri Aug 19 13:31:22 2022 -0500
+AuthorDate:    Tue Aug 30 14:40:48 2022 -0500
 Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Wed Nov 2 13:23:52 2022 -0500
+CommitterDate: Wed Nov 2 13:24:18 2022 -0500
 
-devices file: fix pvcreate --uuid matching pvid entry with no device id
+vgimportdevices: fix locking when creating devices file
 
-pvcreate with --uuid would segfault if a devices file entry matched
-the specified pvid, but the devices file entry had no device_id, which
-could happen if the entry has a devname idtype.
+Take the devices file lock before creating a new devices file.
+(Was missed by the change to preemptively create the devices
+file prior to setup_devices(), which was done to improve the
+error path.)
 ---
- lib/device/device_id.c            |  7 ++++---
- test/shell/devicesfile-devname.sh | 13 +++++++++++++
- 2 files changed, 17 insertions(+), 3 deletions(-)
+ lib/device/dev-cache.c  |  7 +++----
+ lib/device/device_id.c  |  1 +
+ tools/vgimportdevices.c | 10 ++++++++--
+ 3 files changed, 12 insertions(+), 6 deletions(-)
 
+diff --git a/lib/device/dev-cache.c b/lib/device/dev-cache.c
+index 65e1cb138..0c9aaf785 100644
+--- a/lib/device/dev-cache.c
++++ b/lib/device/dev-cache.c
+@@ -1956,10 +1956,9 @@ static int _setup_devices(struct cmd_context *cmd, int no_file_match)
+ 
+ 	if (!file_exists) {
+ 		/*
+-		 * pvcreate/vgcreate/vgimportdevices/lvmdevices-add create
+-		 * a new devices file here if it doesn't exist.
+-		 * They have the create_edit_devices_file flag set.
+-		 * First they create/lock-ex the devices file lockfile.
++		 * pvcreate/vgcreate create a new devices file here if it
++		 * doesn't exist.  They have create_edit_devices_file=1.
++		 * First create/lock-ex the devices file lockfile.
+ 		 * Other commands will not use a devices file if none exists.
+ 		 */
+ 		lock_mode = LOCK_EX;
 diff --git a/lib/device/device_id.c b/lib/device/device_id.c
-index 4d8fa5c9c..c3816a66c 100644
+index c3816a66c..780e08404 100644
 --- a/lib/device/device_id.c
 +++ b/lib/device/device_id.c
-@@ -1142,8 +1142,9 @@ id_done:
- 			  du_devname->devname);
+@@ -2429,6 +2429,7 @@ static int _lock_devices_file(struct cmd_context *cmd, int mode, int nonblock, i
  
- 	if (du_pvid && (du_pvid->dev != dev))
--		log_warn("WARNING: adding device %s with PVID %s which is already used for %s.",
--			 dev_name(dev), pvid, du_pvid->dev ? dev_name(du_pvid->dev) : "missing device");
-+		log_warn("WARNING: adding device %s with PVID %s which is already used for %s device_id %s.",
-+			 dev_name(dev), pvid, du_pvid->dev ? dev_name(du_pvid->dev) : "missing device",
-+			 du_pvid->idname ?: "none");
+ 	if (_devices_file_locked == mode) {
+ 		/* can happen when a command holds an ex lock and does an update in device_ids_validate */
++		/* can happen when vgimportdevices calls this directly, followed later by setup_devices */
+ 		if (held)
+ 			*held = 1;
+ 		return 1;
+diff --git a/tools/vgimportdevices.c b/tools/vgimportdevices.c
+index 9ade1b9e4..23c2718ff 100644
+--- a/tools/vgimportdevices.c
++++ b/tools/vgimportdevices.c
+@@ -132,8 +132,10 @@ int vgimportdevices(struct cmd_context *cmd, int argc, char **argv)
+ 		return ECMD_FAILED;
  
- 	if (du_devid && (du_devid->dev != dev)) {
- 		if (!du_devid->dev) {
-@@ -1189,7 +1190,7 @@ id_done:
- 		else
- 			check_idname = device_id_system_read(cmd, dev, du_pvid->idtype);
- 
--		if (check_idname && !strcmp(check_idname, du_pvid->idname)) {
-+		if (!du_pvid->idname || (check_idname && !strcmp(check_idname, du_pvid->idname))) {
- 			update_du = du_pvid;
- 			dm_list_del(&update_du->list);
- 			update_matching_kind = "PVID";
-diff --git a/test/shell/devicesfile-devname.sh b/test/shell/devicesfile-devname.sh
-index 338637275..211f4dbed 100644
---- a/test/shell/devicesfile-devname.sh
-+++ b/test/shell/devicesfile-devname.sh
-@@ -550,6 +550,19 @@ vgchange -an $vg2
- vgremove -ff $vg1
- vgremove -ff $vg2
- 
-+# bz 2119473
-+
-+aux lvmconf "devices/search_for_devnames = \"none\""
-+sed -e "s|DEVNAME=$dev1|DEVNAME=.|" "$ORIG" > tmp1.devices
-+sed -e "s|IDNAME=$dev1|IDNAME=.|" tmp1.devices > "$DF"
-+pvs
-+lvmdevices
-+pvcreate -ff --yes --uuid "$PVID1" --norestorefile $dev1
-+grep "$PVID1" "$DF" |tee out
-+grep "DEVNAME=$dev1" out
-+grep "IDNAME=$dev1" out
-+aux lvmconf "devices/search_for_devnames = \"auto\""
-+
- # devnames change so the new devname now refers to a filtered device,
- # e.g. an mpath or md component, which is not scanned
- 
+ 	/*
+-	 * Prepare devices file preemptively because the error path for this
+-	 * case from process_each is not as clean.
++	 * Prepare/create devices file preemptively because the error path for
++	 * this case from process_each/setup_devices is not as clean.
++	 * This means that when setup_devices is called, it the devices
++	 * file steps will be redundant, and need to handle being repeated.
+ 	 */
+ 	if (!setup_devices_file(cmd)) {
+ 		log_error("Failed to set up devices file.");
+@@ -143,6 +145,10 @@ int vgimportdevices(struct cmd_context *cmd, int argc, char **argv)
+ 		log_error("Devices file not enabled.");
+ 		return ECMD_FAILED;
+ 	}
++	if (!lock_devices_file(cmd, LOCK_EX)) {
++		log_error("Failed to lock the devices file.");
++		return ECMD_FAILED;
++	}
+ 	if (!devices_file_exists(cmd)) {
+ 	       	if (!devices_file_touch(cmd)) {
+ 			log_error("Failed to create devices file.");
 
