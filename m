@@ -1,244 +1,132 @@
-From: zkabelac@sourceware.org <zkabelac@sourceware.org>
-Date: 29 Sep 2011 08:53:49 -0000
-Subject: LVM2 ./WHATS_NEW_DM libdm/libdevmapper.h libdm ...
-Message-ID: <20110929085349.14351.qmail@sourceware.org>
+From: Zdenek Kabelac <zkabelac@sourceware.org>
+Date: Tue,  8 Nov 2022 10:10:37 +0000 (GMT)
+Subject: main - vdo: replace errors with debug
+Message-ID: <20221108101037.D6F5D3858427@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	zkabelac at sourceware.org	2011-09-29 08:53:49
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=218c7d44b5ac64b6c38dfd40885a22008b5cec81
+Commit:        218c7d44b5ac64b6c38dfd40885a22008b5cec81
+Parent:        c98617c593a84e32ff8ee32ecf2382d4e1369c16
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Fri Nov 4 16:27:56 2022 +0100
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Tue Nov 8 11:07:20 2022 +0100
 
-Modified files:
-	.              : WHATS_NEW_DM 
-	libdm          : libdevmapper.h libdm-deptree.c 
+vdo: replace errors with debug
 
-Log message:
-	Add supporting function for thinp
-	
-	New dm_tree_node_add_thin_pool_target() and  dm_tree_node_add_thin_target()
-	This API is highly experimental and unstable for now.
+As we actully use reading of VDO metadata only as extra 'information' source,
+and not error command - switch to 'log_debug()' severity with messages
+out of parser code.
+---
+ device_mapper/vdo/vdo_reader.c | 32 ++++++++++++++++----------------
+ 1 file changed, 16 insertions(+), 16 deletions(-)
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW_DM.diff?cvsroot=lvm2&r1=1.507&r2=1.508
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/libdevmapper.h.diff?cvsroot=lvm2&r1=1.153&r2=1.154
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/libdm/libdm-deptree.c.diff?cvsroot=lvm2&r1=1.114&r2=1.115
-
---- LVM2/WHATS_NEW_DM	2011/09/25 19:38:59	1.507
-+++ LVM2/WHATS_NEW_DM	2011/09/29 08:53:48	1.508
-@@ -1,5 +1,6 @@
- Version 1.02.68 -
- ==================================
-+  Add functions to support thin provisioning target (API unstable).
-   Improve libdm-config error path reporting.
-   Update dmsetup resume man with --addnodeonresume/create options.
-   Add dependency for dm man pages to man subdirectory make target all:.
---- LVM2/libdm/libdevmapper.h	2011/09/22 17:36:50	1.153
-+++ LVM2/libdm/libdevmapper.h	2011/09/29 08:53:48	1.154
-@@ -535,6 +535,22 @@
- 					   uint32_t slog_region_size);
- /* End of Replicator API */
+diff --git a/device_mapper/vdo/vdo_reader.c b/device_mapper/vdo/vdo_reader.c
+index b765af042..4f91f8011 100644
+--- a/device_mapper/vdo/vdo_reader.c
++++ b/device_mapper/vdo/vdo_reader.c
+@@ -188,19 +188,19 @@ bool dm_vdo_parse_logical_size(const char *vdo_path, uint64_t *logical_blocks)
  
-+/* API for thin provisioning is experimental, DO NOT USE. */
-+int dm_tree_node_add_thin_pool_target(struct dm_tree_node *node,
-+				      uint64_t size,
-+				      uint64_t transation_id,
-+				      const char *pool_uuid,
-+				      const char *metadata_uuid,
-+				      uint32_t data_block_size,
-+				      uint64_t low_water_mark,
-+				      unsigned skip_block_zeroeing); /* Maybe separate _set_ call ? */
-+
-+int dm_tree_node_add_thin_target(struct dm_tree_node *node,
-+				 uint64_t size,
-+				 uint64_t transation_id,
-+				 const char *thin_pool_uuid,
-+				 uint32_t device_id);
-+
- void dm_tree_node_set_presuspend_node(struct dm_tree_node *node,
- 				      struct dm_tree_node *presuspend_node);
- 
---- LVM2/libdm/libdm-deptree.c	2011/09/29 08:50:54	1.114
-+++ LVM2/libdm/libdm-deptree.c	2011/09/29 08:53:48	1.115
-@@ -1,5 +1,5 @@
- /*
-- * Copyright (C) 2005-2010 Red Hat, Inc. All rights reserved.
-+ * Copyright (C) 2005-2011 Red Hat, Inc. All rights reserved.
-  *
-  * This file is part of the device-mapper userspace tools.
-  *
-@@ -29,6 +29,12 @@
- 
- #define REPLICATOR_LOCAL_SITE 0
- 
-+#define THIN_MIN_DATA_SIZE 128
-+#define THIN_MAX_DATA_SIZE 2097152
-+#define THIN_MAX_DEVICE_ID ((1 << 24) - 1)
-+
-+#define QUOTE(x) #x
-+
- /* Supported segment types */
- enum {
- 	SEG_CRYPT,
-@@ -42,6 +48,8 @@
- 	SEG_SNAPSHOT_MERGE,
- 	SEG_STRIPED,
- 	SEG_ZERO,
-+	SEG_THIN_POOL,
-+	SEG_THIN,
- 	SEG_RAID1,
- 	SEG_RAID4,
- 	SEG_RAID5_LA,
-@@ -71,6 +79,8 @@
- 	{ SEG_SNAPSHOT_MERGE, "snapshot-merge" },
- 	{ SEG_STRIPED, "striped" },
- 	{ SEG_ZERO, "zero"},
-+	{ SEG_THIN_POOL, "thin-pool"},
-+	{ SEG_THIN, "thin"},
- 	{ SEG_RAID1, "raid1"},
- 	{ SEG_RAID4, "raid4"},
- 	{ SEG_RAID5_LA, "raid5_la"},
-@@ -156,6 +166,14 @@
- 	uint64_t rdevice_index;		/* Replicator-dev */
- 
- 	uint64_t rebuilds;	      /* raid */
-+
-+	struct dm_tree_node *metadata;	/* Thin_pool */
-+	struct dm_tree_node *pool;	/* Thin_pool, Thin */
-+	uint32_t data_block_size;       /* Thin_pool */
-+	uint64_t low_water_mark;	/* Thin_pool */
-+	unsigned skip_block_zeroeing;	/* Thin_pool */
-+	uint32_t device_id;		/* Thin */
-+
- };
- 
- /* Per-device properties */
-@@ -1825,6 +1843,7 @@
- 	int r;
- 	int target_type_is_raid = 0;
- 	char originbuf[DM_FORMAT_DEV_BUFSIZE], cowbuf[DM_FORMAT_DEV_BUFSIZE];
-+	char pool[DM_FORMAT_DEV_BUFSIZE], metadata[DM_FORMAT_DEV_BUFSIZE];
- 
- 	switch(seg->type) {
- 	case SEG_ERROR:
-@@ -1892,6 +1911,20 @@
- 			return_0;
- 
- 		break;
-+	case SEG_THIN_POOL:
-+		if (!_build_dev_string(metadata, sizeof(metadata), seg->metadata))
-+			return_0;
-+		if (!_build_dev_string(pool, sizeof(pool), seg->pool))
-+			return_0;
-+		EMIT_PARAMS(pos, "%s %s %d %" PRIu64 " %s", metadata, pool,
-+			    seg->data_block_size, seg->low_water_mark,
-+			    seg->skip_block_zeroeing ? "1 skip_block_zeroing" : "");
-+		break;
-+	case SEG_THIN:
-+		if (!_build_dev_string(pool, sizeof(pool), seg->pool))
-+			return_0;
-+		EMIT_PARAMS(pos, "%s %d", pool, seg->device_id);
-+		break;
+ 	*logical_blocks = 0;
+ 	if ((fh = open(vdo_path, O_RDONLY)) == -1) {
+-		log_sys_error("Failed to open VDO backend %s", vdo_path);
++		log_sys_debug("Failed to open VDO backend %s.", vdo_path);
+ 		goto err;
  	}
  
- 	switch(seg->type) {
-@@ -1901,6 +1934,8 @@
- 	case SEG_SNAPSHOT_ORIGIN:
- 	case SEG_SNAPSHOT_MERGE:
- 	case SEG_ZERO:
-+	case SEG_THIN_POOL:
-+	case SEG_THIN:
- 		break;
- 	case SEG_CRYPT:
- 	case SEG_LINEAR:
-@@ -2602,6 +2637,85 @@
- 	return 1;
- }
+ 	if (ioctl(fh, BLKGETSIZE64, &size) == -1) {
+ 		if (errno != ENOTTY) {
+-			log_sys_error("ioctl", vdo_path);
++			log_sys_debug("ioctl", vdo_path);
+ 			goto err;
+ 		}
  
-+int dm_tree_node_add_thin_pool_target(struct dm_tree_node *node,
-+				      uint64_t size,
-+				      uint64_t transation_id,
-+				      const char *pool_uuid,
-+				      const char *metadata_uuid,
-+				      uint32_t data_block_size,
-+				      uint64_t low_water_mark,
-+				      unsigned skip_block_zeroeing)
-+{
-+	struct load_segment *seg;
-+
-+	if (data_block_size < THIN_MIN_DATA_SIZE) {
-+		log_error("Data block size %d is lower then "
-+			  QUOTE(THIN_MIN_DATA_SIZE) " sectors.",
-+			  data_block_size);
-+		return 0;
-+	}
-+
-+	if (data_block_size > THIN_MAX_DATA_SIZE) {
-+		log_error("Data block size %d is higher then "
-+			  QUOTE(THIN_MAX_DATA_SIZE) " sectors.",
-+			  data_block_size);
-+		return 0;
-+	}
-+
-+	if (!(seg = _add_segment(node, SEG_THIN_POOL, size)))
-+		return_0;
-+
-+	if (!(seg->metadata = dm_tree_find_node_by_uuid(node->dtree, metadata_uuid))) {
-+		log_error("Missing metadata uuid %s.", metadata_uuid);
-+		return 0;
-+	}
-+
-+	if (!_link_tree_nodes(node, seg->metadata))
-+		return_0;
-+
-+	if (!(seg->pool = dm_tree_find_node_by_uuid(node->dtree, pool_uuid))) {
-+		log_error("Missing pool uuid %s.", pool_uuid);
-+		return 0;
-+	}
-+
-+	if (!_link_tree_nodes(node, seg->pool))
-+		return_0;
-+
-+	seg->data_block_size = data_block_size;
-+	seg->low_water_mark = low_water_mark;
-+	seg->skip_block_zeroeing = skip_block_zeroeing;
-+
-+	return 1;
-+}
-+
-+int dm_tree_node_add_thin_target(struct dm_tree_node *node,
-+				 uint64_t size,
-+				 uint64_t transation_id,
-+				 const char *thin_pool_uuid,
-+				 uint32_t device_id)
-+{
-+	struct load_segment *seg;
-+
-+	if (device_id > THIN_MAX_DEVICE_ID) {
-+		log_error("Device id %d is higher then " QUOTE(THIN_MAX_DEVICE_ID) ".",
-+			  device_id);
-+		return 0;
-+	}
-+
-+	if (!(seg = _add_segment(node, SEG_THIN, size)))
-+		return_0;
-+
-+	if (!(seg->pool = dm_tree_find_node_by_uuid(node->dtree, thin_pool_uuid))) {
-+		log_error("Missing thin pool uuid %s.", thin_pool_uuid);
-+		return 0;
-+	}
-+
-+	if (!_link_tree_nodes(node, seg->pool))
-+		return_0;
-+
-+	return 1;
-+}
-+
- static int _add_area(struct dm_tree_node *node, struct load_segment *seg, struct dm_tree_node *dev_node, uint64_t offset)
- {
- 	struct seg_area *area;
-
+ 		/* lets retry for file sizes */
+ 		if (fstat(fh, &st) < 0) {
+-			log_sys_error("fstat", vdo_path);
++			log_sys_debug("fstat", vdo_path);
+ 			goto err;
+ 		}
+ 
+@@ -208,12 +208,12 @@ bool dm_vdo_parse_logical_size(const char *vdo_path, uint64_t *logical_blocks)
+ 	}
+ 
+ 	if ((n = read(fh, buffer, sizeof(buffer))) < 0) {
+-		log_sys_error("read", vdo_path);
++		log_sys_debug("read", vdo_path);
+ 		goto err;
+ 	}
+ 
+ 	if (strncmp(buffer, _MAGIC_NUMBER, MAGIC_NUMBER_SIZE)) {
+-		log_sys_error("mismatch header", vdo_path);
++		log_debug_activation("Found mismatching VDO magic header in %s.", vdo_path);
+ 		goto err;
+ 	}
+ 
+@@ -221,7 +221,7 @@ bool dm_vdo_parse_logical_size(const char *vdo_path, uint64_t *logical_blocks)
+ 	_vdo_decode_header(&h);
+ 
+ 	if  (h.version.major_version != 5) {
+-		log_error("Unsupported VDO version %u.%u.", h.version.major_version, h.version.minor_version);
++		log_debug_activation("Unsupported VDO version %u.%u.", h.version.major_version, h.version.minor_version);
+ 		goto err;
+ 	}
+ 
+@@ -231,17 +231,17 @@ bool dm_vdo_parse_logical_size(const char *vdo_path, uint64_t *logical_blocks)
+ 	regpos = vg.regions[VDO_DATA_REGION].start_block * 4096;
+ 
+ 	if ((regpos + sizeof(buffer)) > size) {
+-		log_error("File/Device is shorter and can't provide requested VDO volume region at " FMTu64 " > " FMTu64 ".", regpos, size);
++		log_debug_activation("File/Device is shorter and can't provide requested VDO volume region at " FMTu64 " > " FMTu64 ".", regpos, size);
+ 		goto err;
+ 	}
+ 
+ 	if ((l = lseek(fh, regpos, SEEK_SET)) < 0) {
+-		log_sys_error("lseek", vdo_path);
++		log_sys_debug("lseek", vdo_path);
+ 		goto err;
+ 	}
+ 
+ 	if ((n = read(fh, buffer, sizeof(buffer))) < 0) {
+-		log_sys_error("read error", vdo_path);
++		log_sys_debug("read", vdo_path);
+ 		goto err;
+ 	}
+ 
+@@ -250,7 +250,7 @@ bool dm_vdo_parse_logical_size(const char *vdo_path, uint64_t *logical_blocks)
+ 	_vdo_decode_version(&vn);
+ 
+ 	if (vn.major_version > 41) {
+-		log_error("Unknown VDO component version %u.", vn.major_version); // should be 41!
++		log_debug_activation("Unknown VDO component version %u.", vn.major_version); // should be 41!
+ 		goto err;
+ 	}
+ 
+@@ -258,16 +258,16 @@ bool dm_vdo_parse_logical_size(const char *vdo_path, uint64_t *logical_blocks)
+ 	_vdo_decode_pvc(&pvc);
+ 
+ 	if (pvc.nonce != vg.nonce) {
+-		log_error("Mismatching VDO nonce " FMTu64 " != " FMTu64 ".", pvc.nonce, vg.nonce);
++		log_debug_activation("VDO metadata has mismatching VDO nonces " FMTu64 " != " FMTu64 ".", pvc.nonce, vg.nonce);
+ 		goto err;
+ 	}
+ 
+ #if 0
+-	log_debug("LogBlocks    " FMTu64 ".", pvc.config.logical_blocks);
+-	log_debug("PhyBlocks    " FMTu64 ".", pvc.config.physical_blocks);
+-	log_debug("SlabSize     " FMTu64 ".", pvc.config.slab_size);
+-	log_debug("RecJourSize  " FMTu64 ".", pvc.config.recovery_journal_size);
+-	log_debug("SlabJouSize  " FMTu64 ".", pvc.config.slab_journal_blocks);
++	log_debug_activation("LogBlocks    " FMTu64 ".", pvc.config.logical_blocks);
++	log_debug_activation("PhyBlocks    " FMTu64 ".", pvc.config.physical_blocks);
++	log_debug_activation("SlabSize     " FMTu64 ".", pvc.config.slab_size);
++	log_debug_activation("RecJourSize  " FMTu64 ".", pvc.config.recovery_journal_size);
++	log_debug_activation("SlabJouSize  " FMTu64 ".", pvc.config.slab_journal_blocks);
+ #endif
+ 
+ 	*logical_blocks = pvc.config.logical_blocks;
 
