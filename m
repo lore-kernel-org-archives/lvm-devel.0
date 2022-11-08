@@ -1,454 +1,78 @@
 From: David Teigland <teigland@sourceware.org>
-Date: Tue,  8 Nov 2022 14:51:05 +0000 (GMT)
-Subject: rhel-8.8.0 - vgimportdevices: change result when devices are not added
-Message-ID: <20221108145105.BB660385840A@sourceware.org>
+Date: Tue,  8 Nov 2022 14:51:04 +0000 (GMT)
+Subject: rhel-8.8.0 - devices file: fix pvcreate --uuid matching pvid entry with no device id
+Message-ID: <20221108145104.99CF1385842F@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=e5f5e2988377c0f014b30a60709685c19c6d3bf0
-Commit:        e5f5e2988377c0f014b30a60709685c19c6d3bf0
-Parent:        87904fbbb84c10e6f733db1c5ba447537d1cf08c
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=87904fbbb84c10e6f733db1c5ba447537d1cf08c
+Commit:        87904fbbb84c10e6f733db1c5ba447537d1cf08c
+Parent:        377ed7d9bac948e1be97e78aa9f9e525e9af470d
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Mon Aug 29 15:17:36 2022 -0500
+AuthorDate:    Fri Aug 19 13:31:22 2022 -0500
 Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Wed Nov 2 13:24:12 2022 -0500
+CommitterDate: Wed Nov 2 13:23:52 2022 -0500
 
-vgimportdevices: change result when devices are not added
+devices file: fix pvcreate --uuid matching pvid entry with no device id
 
-When using --all, if one VG is skipped, continue adding
-other VGs, and do not return an error from the command
-if some VGs are added. (A VG is skipped if it's missing PVs.)
-
-If the command fails during devices file setup or device
-scanning, then remove the devices file if it has been
-newly created by the command, and exit with an error.
-
-If devices from a named VG are not imported (e.g. the
-VG is missing devices), then remove the devices file if
-it has been newly created by the command, and exit with
-an error.
-
-If --all VGs are being imported, and no devices are found
-to include in the devices file, then remove the devices
-file if it has been newly created by the command, and
-exit with an error.
+pvcreate with --uuid would segfault if a devices file entry matched
+the specified pvid, but the devices file entry had no device_id, which
+could happen if the entry has a devname idtype.
 ---
- test/shell/vgimportdevices.sh | 308 ++++++++++++++++++++++++++++++++++++++++++
- tools/vgimportdevices.c       |  41 ++++--
- 2 files changed, 336 insertions(+), 13 deletions(-)
+ lib/device/device_id.c            |  7 ++++---
+ test/shell/devicesfile-devname.sh | 13 +++++++++++++
+ 2 files changed, 17 insertions(+), 3 deletions(-)
 
-diff --git a/test/shell/vgimportdevices.sh b/test/shell/vgimportdevices.sh
-new file mode 100644
-index 000000000..47363cec3
---- /dev/null
-+++ b/test/shell/vgimportdevices.sh
-@@ -0,0 +1,308 @@
-+
-+#!/usr/bin/env bash
-+
-+# Copyright (C) 2020 Red Hat, Inc. All rights reserved.
-+#
-+# This copyrighted material is made available to anyone wishing to use,
-+# modify, copy, or redistribute it subject to the terms and conditions
-+# of the GNU General Public License v.2.
-+#
-+# You should have received a copy of the GNU General Public License
-+# along with this program; if not, write to the Free Software Foundation,
-+# Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
-+
-+test_description='vgimportdevices'
-+
-+. lib/inittest
-+
-+aux prepare_devs 5
-+
-+DFDIR="$LVM_SYSTEM_DIR/devices"
-+mkdir "$DFDIR" || true
-+DF="$DFDIR/system.devices"
-+
-+aux lvmconf 'devices/use_devicesfile = 1'
-+
-+not ls "$DF"
-+pvcreate "$dev1"
-+ls "$DF"
-+grep "$dev1" "$DF"
-+rm -f "$DF"
-+dd if=/dev/zero of="$dev1" bs=1M count=1
-+
-+#
-+# vgimportdevices -a with no prev df
-+#
-+
-+# no devs found
-+not vgimportdevices -a
-+not ls "$DF"
-+
-+# one orphan pv, no vgs
-+pvcreate "$dev1"
-+rm -f "$DF"
-+not vgimportdevices -a
-+not ls "$DF"
-+
-+# one complete vg
-+vgcreate $vg1 "$dev1"
-+rm -f "$DF"
-+vgimportdevices -a
-+ls "$DF"
-+grep "$dev1" "$DF"
-+
-+# reset
-+dd if=/dev/zero of="$dev1" bs=1M count=1
-+rm -f "$DF"
-+
-+# two complete vgs
-+vgcreate $vg1 "$dev1"
-+vgcreate $vg2 "$dev2"
-+rm -f "$DF"
-+vgimportdevices -a
-+ls "$DF"
-+grep "$dev1" "$DF"
-+grep "$dev2" "$DF"
-+
-+# reset
-+dd if=/dev/zero of="$dev1" bs=1M count=1
-+dd if=/dev/zero of="$dev2" bs=1M count=1
-+rm -f "$DF"
-+
-+# one incomplete vg
-+vgcreate $vg1 "$dev1" "$dev2"
-+lvcreate -l1 -an $vg1
-+rm -f "$DF"
-+dd if=/dev/zero of="$dev1" bs=1M count=1
-+not vgimportdevices -a
-+not ls "$DF"
-+vgs $vg1
-+pvs "$dev2"
-+
-+# reset
-+dd if=/dev/zero of="$dev1" bs=1M count=1
-+dd if=/dev/zero of="$dev2" bs=1M count=1
-+rm -f "$DF"
-+
-+# three complete, one incomplete vg
-+vgcreate $vg1 "$dev1"
-+vgcreate $vg2 "$dev2"
-+vgcreate $vg3 "$dev3"
-+vgcreate $vg4 "$dev4" "$dev5"
-+rm -f "$DF"
-+dd if=/dev/zero of="$dev5" bs=1M count=1
-+vgimportdevices -a
-+ls "$DF"
-+grep "$dev1" "$DF"
-+grep "$dev2" "$DF"
-+grep "$dev3" "$DF"
-+not grep "$dev4" "$DF"
-+not grep "$dev5" "$DF"
-+
-+# reset
-+dd if=/dev/zero of="$dev1" bs=1M count=1
-+dd if=/dev/zero of="$dev2" bs=1M count=1
-+dd if=/dev/zero of="$dev3" bs=1M count=1
-+dd if=/dev/zero of="$dev4" bs=1M count=1
-+rm -f "$DF"
-+
-+
-+#
-+# vgimportdevices -a with existing df
-+#
-+
-+# no devs found
-+vgcreate $vg1 "$dev1"
-+grep "$dev1" "$DF"
-+dd if=/dev/zero of="$dev1" bs=1M count=1
-+not vgimportdevices -a
-+ls "$DF"
-+
-+# one complete vg
-+vgcreate $vg1 "$dev1"
-+vgimportdevices -a
-+grep "$dev1" "$DF"
-+vgcreate --devicesfile "" $vg2 "$dev2"
-+not grep "$dev2" "$DF"
-+vgimportdevices -a
-+grep "$dev1" "$DF"
-+grep "$dev2" "$DF"
-+
-+# reset
-+dd if=/dev/zero of="$dev1" bs=1M count=1
-+dd if=/dev/zero of="$dev2" bs=1M count=1
-+rm -f "$DF"
-+
-+# two complete vgs
-+vgcreate --devicesfile "" $vg1 "$dev1"
-+vgcreate --devicesfile "" $vg2 "$dev2"
-+rm -f "$DF"
-+vgimportdevices -a
-+ls "$DF"
-+grep "$dev1" "$DF"
-+grep "$dev2" "$DF"
-+
-+# reset
-+dd if=/dev/zero of="$dev1" bs=1M count=1
-+dd if=/dev/zero of="$dev2" bs=1M count=1
-+rm -f "$DF"
-+
-+# one incomplete vg
-+vgcreate $vg1 "$dev1"
-+vgimportdevices -a
-+grep "$dev1" "$DF"
-+dd if=/dev/zero of="$dev1" bs=1M count=1
-+vgcreate --devicesfile "" $vg2 "$dev2" "$dev3"
-+not grep "$dev2" "$DF"
-+not grep "$dev3" "$DF"
-+dd if=/dev/zero of="$dev2" bs=1M count=1
-+not vgimportdevices -a
-+ls "$DF"
-+
-+# reset
-+dd if=/dev/zero of="$dev1" bs=1M count=1
-+dd if=/dev/zero of="$dev2" bs=1M count=1
-+dd if=/dev/zero of="$dev3" bs=1M count=1
-+rm -f "$DF"
-+
-+# import the same vg again
-+vgcreate --devicesfile "" $vg1 "$dev1"
-+not ls "$DF"
-+vgimportdevices -a
-+ls "$DF"
-+grep "$dev1" "$DF"
-+vgimportdevices -a
-+ls "$DF"
-+grep "$dev1" "$DF"
-+
-+# reset
-+dd if=/dev/zero of="$dev1" bs=1M count=1
-+rm -f "$DF"
-+
-+# import a series of vgs
-+vgcreate --devicesfile "" $vg1 "$dev1"
-+vgimportdevices -a
-+grep "$dev1" "$DF"
-+vgcreate --devicesfile "" $vg2 "$dev2"
-+vgimportdevices -a
-+grep "$dev1" "$DF"
-+grep "$dev2" "$DF"
-+vgcreate --devicesfile "" $vg3 "$dev3"
-+vgimportdevices -a
-+grep "$dev1" "$DF"
-+grep "$dev2" "$DF"
-+grep "$dev3" "$DF"
-+
-+# reset
-+dd if=/dev/zero of="$dev1" bs=1M count=1
-+dd if=/dev/zero of="$dev2" bs=1M count=1
-+dd if=/dev/zero of="$dev3" bs=1M count=1
-+rm -f "$DF"
-+
-+#
-+# vgimportdevices vg with no prev df
-+#
-+
-+# no devs found
-+not vgimportdevices $vg1
-+not ls "$DF"
-+
-+# one complete vg
-+vgcreate $vg1 "$dev1"
-+rm -f "$DF"
-+vgimportdevices $vg1
-+ls "$DF"
-+grep "$dev1" "$DF"
-+
-+# reset
-+dd if=/dev/zero of="$dev1" bs=1M count=1
-+rm -f "$DF"
-+
-+# two complete vgs
-+vgcreate $vg1 "$dev1"
-+vgcreate $vg2 "$dev2"
-+rm -f "$DF"
-+vgimportdevices $vg1
-+ls "$DF"
-+grep "$dev1" "$DF"
-+vgimportdevices $vg2
-+ls "$DF"
-+grep "$dev2" "$DF"
-+
-+# reset
-+dd if=/dev/zero of="$dev1" bs=1M count=1
-+dd if=/dev/zero of="$dev2" bs=1M count=1
-+rm -f "$DF"
-+
-+# one incomplete vg
-+vgcreate $vg1 "$dev1" "$dev2"
-+lvcreate -l1 -an $vg1
-+rm -f "$DF"
-+dd if=/dev/zero of="$dev1" bs=1M count=1
-+not vgimportdevices $vg1
-+not ls "$DF"
-+vgs $vg1
-+pvs "$dev2"
-+
-+# reset
-+dd if=/dev/zero of="$dev1" bs=1M count=1
-+dd if=/dev/zero of="$dev2" bs=1M count=1
-+rm -f "$DF"
-+
-+# three complete, one incomplete vg
-+vgcreate $vg1 "$dev1"
-+vgcreate $vg2 "$dev2"
-+vgcreate $vg3 "$dev3"
-+vgcreate $vg4 "$dev4" "$dev5"
-+rm -f "$DF"
-+dd if=/dev/zero of="$dev5" bs=1M count=1
-+not vgimportdevices $vg4
-+not ls "$DF"
-+vgimportdevices $vg3
-+ls "$DF"
-+grep "$dev3" "$DF"
-+not grep "$dev1" "$DF"
-+not grep "$dev2" "$DF"
-+not grep "$dev4" "$DF"
-+not grep "$dev5" "$DF"
-+
-+# reset
-+dd if=/dev/zero of="$dev1" bs=1M count=1
-+dd if=/dev/zero of="$dev2" bs=1M count=1
-+dd if=/dev/zero of="$dev3" bs=1M count=1
-+dd if=/dev/zero of="$dev4" bs=1M count=1
-+rm -f "$DF"
-+
-+#
-+# vgimportdevices vg with existing df
-+#
-+
-+# vg not found
-+vgcreate $vg1 "$dev1"
-+vgimportdevices -a
-+grep "$dev1" "$DF"
-+not vgimportdevices $vg2
-+grep "$dev1" "$DF"
-+
-+# reset
-+dd if=/dev/zero of="$dev1" bs=1M count=1
-+rm -f "$DF"
-+
-+# vg incomplete
-+vgcreate $vg1 "$dev1"
-+vgimportdevices -a
-+grep "$dev1" "$DF"
-+vgcreate --devicesfile "" $vg2 "$dev2" "$dev3"
-+dd if=/dev/zero of="$dev2" bs=1M count=1
-+not vgimportdevices $vg2
-+grep "$dev1" "$DF"
-+not grep "$dev2" "$DF"
-+not grep "$dev3" "$DF"
-+
-+# reset
-+dd if=/dev/zero of="$dev1" bs=1M count=1
-+dd if=/dev/zero of="$dev2" bs=1M count=1
-+dd if=/dev/zero of="$dev3" bs=1M count=1
-+dd if=/dev/zero of="$dev4" bs=1M count=1
-+rm -f "$DF"
-+
-diff --git a/tools/vgimportdevices.c b/tools/vgimportdevices.c
-index ea205d941..9ade1b9e4 100644
---- a/tools/vgimportdevices.c
-+++ b/tools/vgimportdevices.c
-@@ -36,9 +36,9 @@ static int _vgimportdevices_single(struct cmd_context *cmd,
- 	dm_list_iterate_items(pvl, &vg->pvs) {
- 		if (is_missing_pv(pvl->pv) || !pvl->pv->dev) {
- 			memcpy(pvid, &pvl->pv->id.uuid, ID_LEN);
--			log_error("Not importing devices for VG %s with missing PV %s.",
--				 vg->name, pvid);
--			goto bad;
-+			log_print("Not importing devices for VG %s with missing PV %s.",
-+				  vg->name, pvid);
-+			return ECMD_PROCESSED;
- 		}
- 	}
+diff --git a/lib/device/device_id.c b/lib/device/device_id.c
+index 4d8fa5c9c..c3816a66c 100644
+--- a/lib/device/device_id.c
++++ b/lib/device/device_id.c
+@@ -1142,8 +1142,9 @@ id_done:
+ 			  du_devname->devname);
  
-@@ -71,14 +71,17 @@ static int _vgimportdevices_single(struct cmd_context *cmd,
- 		updated_pvs++;
- 	}
+ 	if (du_pvid && (du_pvid->dev != dev))
+-		log_warn("WARNING: adding device %s with PVID %s which is already used for %s.",
+-			 dev_name(dev), pvid, du_pvid->dev ? dev_name(du_pvid->dev) : "missing device");
++		log_warn("WARNING: adding device %s with PVID %s which is already used for %s device_id %s.",
++			 dev_name(dev), pvid, du_pvid->dev ? dev_name(du_pvid->dev) : "missing device",
++			 du_pvid->idname ?: "none");
  
-+	/*
-+	 * Writes the device_id of each PV into the vg metadata.
-+	 * This is not a critial step and should not influence
-+	 * the result of the command.
-+	 */
- 	if (updated_pvs) {
- 		if (!vg_write(vg) || !vg_commit(vg))
--			goto_bad;
-+			log_print("Failed to write device ids in VG metadata.");
- 	}
+ 	if (du_devid && (du_devid->dev != dev)) {
+ 		if (!du_devid->dev) {
+@@ -1189,7 +1190,7 @@ id_done:
+ 		else
+ 			check_idname = device_id_system_read(cmd, dev, du_pvid->idtype);
  
- 	return ECMD_PROCESSED;
--bad:
--	return ECMD_FAILED;
- }
+-		if (check_idname && !strcmp(check_idname, du_pvid->idname)) {
++		if (!du_pvid->idname || (check_idname && !strcmp(check_idname, du_pvid->idname))) {
+ 			update_du = du_pvid;
+ 			dm_list_del(&update_du->list);
+ 			update_matching_kind = "PVID";
+diff --git a/test/shell/devicesfile-devname.sh b/test/shell/devicesfile-devname.sh
+index 338637275..211f4dbed 100644
+--- a/test/shell/devicesfile-devname.sh
++++ b/test/shell/devicesfile-devname.sh
+@@ -550,6 +550,19 @@ vgchange -an $vg2
+ vgremove -ff $vg1
+ vgremove -ff $vg2
  
- /*
-@@ -114,6 +117,7 @@ int vgimportdevices(struct cmd_context *cmd, int argc, char **argv)
- {
- 	struct vgimportdevices_params vp = { 0 };
- 	struct processing_handle *handle;
-+	int created_file = 0;
- 	int ret = ECMD_FAILED;
++# bz 2119473
++
++aux lvmconf "devices/search_for_devnames = \"none\""
++sed -e "s|DEVNAME=$dev1|DEVNAME=.|" "$ORIG" > tmp1.devices
++sed -e "s|IDNAME=$dev1|IDNAME=.|" tmp1.devices > "$DF"
++pvs
++lvmdevices
++pvcreate -ff --yes --uuid "$PVID1" --norestorefile $dev1
++grep "$PVID1" "$DF" |tee out
++grep "DEVNAME=$dev1" out
++grep "IDNAME=$dev1" out
++aux lvmconf "devices/search_for_devnames = \"auto\""
++
+ # devnames change so the new devname now refers to a filtered device,
+ # e.g. an mpath or md component, which is not scanned
  
- 	if (arg_is_set(cmd, foreign_ARG))
-@@ -139,9 +143,12 @@ int vgimportdevices(struct cmd_context *cmd, int argc, char **argv)
- 		log_error("Devices file not enabled.");
- 		return ECMD_FAILED;
- 	}
--	if (!devices_file_exists(cmd) && !devices_file_touch(cmd)) {
--		log_error("Failed to create devices file.");
--		return ECMD_FAILED;
-+	if (!devices_file_exists(cmd)) {
-+	       	if (!devices_file_touch(cmd)) {
-+			log_error("Failed to create devices file.");
-+			return ECMD_FAILED;
-+		}
-+		created_file = 1;
- 	}
- 
- 	/*
-@@ -195,22 +202,30 @@ int vgimportdevices(struct cmd_context *cmd, int argc, char **argv)
- 	 */
- 	ret = process_each_vg(cmd, argc, argv, NULL, NULL, READ_FOR_UPDATE,
- 			      0, handle, _vgimportdevices_single);
--	if (ret == ECMD_FAILED)
--		goto out;
-+	if (ret == ECMD_FAILED) {
-+		/*
-+		 * Error from setting up devices file or label_scan,
-+		 * _vgimportdevices_single does not return an error.
-+		 */
-+		goto_out;
-+	}
- 
- 	if (!vp.added_devices) {
--		log_print("No devices to add.");
-+		log_error("No devices to add.");
-+		ret = ECMD_FAILED;
- 		goto out;
- 	}
- 
- 	if (!device_ids_write(cmd)) {
--		log_print("Failed to update devices file.");
-+		log_error("Failed to write the devices file.");
- 		ret = ECMD_FAILED;
- 		goto out;
- 	}
- 
- 	log_print("Added %u devices to devices file.", vp.added_devices);
- out:
-+	if ((ret == ECMD_FAILED) && created_file)
-+		unlink(cmd->devices_file_path);
- 	destroy_processing_handle(cmd, handle);
- 	return ret;
- }
 
