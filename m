@@ -1,84 +1,109 @@
-From: Lukas Czerner <lczerner@redhat.com>
-Date: Tue, 27 Sep 2011 15:42:48 +0200
-Subject: [PATCH v3 15/18] test: Add test for fsadm add command
-In-Reply-To: <1317130971-24173-1-git-send-email-lczerner@redhat.com>
-References: <1317130971-24173-1-git-send-email-lczerner@redhat.com>
-Message-ID: <1317130971-24173-16-git-send-email-lczerner@redhat.com>
+From: Zdenek Kabelac <zkabelac@sourceware.org>
+Date: Tue,  8 Nov 2022 10:10:39 +0000 (GMT)
+Subject: main - vdo: enhance detection of virtual size
+Message-ID: <20221108101039.0615D385840A@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-The tests exercises the fsadm "add" functionality, by trying various
-combinations of arguments and checking the desired results.
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=8e9410594b3113386a667df400b2c229c745cb6a
+Commit:        8e9410594b3113386a667df400b2c229c745cb6a
+Parent:        218c7d44b5ac64b6c38dfd40885a22008b5cec81
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Sat Nov 5 23:10:36 2022 +0100
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Tue Nov 8 11:10:21 2022 +0100
 
-Signed-off-by: Lukas Czerner <lczerner@redhat.com>
+vdo: enhance detection of virtual size
+
+Improve detection of VDO virtual size - so it's not reading VDO
+metadata when VDO device is already active and instead we reuse
+existing table line for knowing existing metadata size.
+
+NOTE: if there is ever going to be added support for reduction
+of VDO virtual size - this method will need to be reworked to
+allow size difference only within 'extent_size' alignment.
 ---
- test/t-fsadm-add.sh |   53 +++++++++++++++++++++++++++++++++++++++++++++++++++
- 1 files changed, 53 insertions(+), 0 deletions(-)
- create mode 100644 test/t-fsadm-add.sh
+ device_mapper/libdm-deptree.c | 44 ++++++++++++++++++++++++++++++-------------
+ 1 file changed, 31 insertions(+), 13 deletions(-)
 
-diff --git a/test/t-fsadm-add.sh b/test/t-fsadm-add.sh
-new file mode 100644
-index 0000000..4c4eb2e
---- /dev/null
-+++ b/test/t-fsadm-add.sh
-@@ -0,0 +1,53 @@
-+#!/bin/bash
-+# Copyright 2011 (C) Red Hat, Inc., Lukas Czerner <lczerner@redhat.com>
-+#
-+# This copyrighted material is made available to anyone wishing to use,
-+# modify, copy, or redistribute it subject to the terms and conditions
-+# of the GNU General Public License v.2.
-+#
-+# You should have received a copy of the GNU General Public License
-+# along with this program; if not, write to the Free Software Foundation,
-+# Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+diff --git a/device_mapper/libdm-deptree.c b/device_mapper/libdm-deptree.c
+index 02a56c8e3..39af7b1d4 100644
+--- a/device_mapper/libdm-deptree.c
++++ b/device_mapper/libdm-deptree.c
+@@ -2850,7 +2850,7 @@ static int _thin_pool_emit_segment_line(struct dm_task *dmt,
+ 	return 1;
+ }
+ 
+-static int _vdo_emit_segment_line(struct dm_task *dmt,
++static int _vdo_emit_segment_line(struct dm_task *dmt, uint32_t major, uint32_t minor,
+ 				  struct load_segment *seg,
+ 				  char *params, size_t paramsize)
+ {
+@@ -2858,6 +2858,10 @@ static int _vdo_emit_segment_line(struct dm_task *dmt,
+ 	char data[DM_FORMAT_DEV_BUFSIZE];
+ 	char data_dev[128]; // for /dev/dm-XXXX
+ 	uint64_t logical_blocks;
++	struct dm_task *vdo_dmt;
++	uint64_t start, length = 0;
++	char *type = NULL;
++	char *vdo_params = NULL;
+ 
+ 	if (!_build_dev_string(data, sizeof(data), seg->vdo_data))
+ 		return_0;
+@@ -2867,18 +2871,32 @@ static int _vdo_emit_segment_line(struct dm_task *dmt,
+ 		return 0;
+ 	}
+ 
+-	if (dm_vdo_parse_logical_size(data_dev, &logical_blocks)) {
+-		logical_blocks *= 8;
+-		if (seg->size != logical_blocks) {
+-			if (seg->size > logical_blocks) {
+-				log_error("Virtual size of VDO volume is smaller then expected (" FMTu64  " > " FMTu64 ").",
+-					  seg->size, logical_blocks);
+-				return 1;
+-			}
+-			log_debug_activation("Increasing VDO virtual volume size from " FMTu64  " to " FMTu64 ".",
+-					     seg->size, logical_blocks);
+-			seg->size = logical_blocks;
++	/*
++	 * If there is already running VDO target, read 'existing' virtual size out of table line
++	 * and avoid reading it them from VDO metadata device
++	 *
++	 * NOTE: ATM VDO virtual size can be ONLY extended thus it's simple to recongnize 'right' size.
++	 * However if there would be supported also reduction, this check would need to check range.
++	 */
++	if ((vdo_dmt = dm_task_create(DM_DEVICE_TABLE))) {
++		if (dm_task_set_major(vdo_dmt, major) &&
++		    dm_task_set_minor(vdo_dmt, minor) &&
++		    dm_task_run(vdo_dmt)) {
++			(void) dm_get_next_target(vdo_dmt, NULL, &start, &length, &type, &vdo_params);
++			if (!type || strcmp(type, "vdo"))
++				length = 0;
+ 		}
 +
-+test_description='Exercise fsadm add'
++		dm_task_destroy(vdo_dmt);
++	}
 +
-+. lib/test
++	if (!length && dm_vdo_parse_logical_size(data_dev, &logical_blocks))
++		length = logical_blocks * 8;
 +
-+DEV_COUNT=10
-+aux prepare_devs $DEV_COUNT 10
-+TEST_DEVS=$(cat DEVICES)
-+export DEFAULT_DEVICE_POOL=$vg1
-+
-+pool1=$vg2
-+pool2=$vg3
-+
-+# Create default pool with all devices at once
-+fsadm add $TEST_DEVS
-+check vg_field $DEFAULT_DEVICE_POOL pv_count $DEV_COUNT
-+fsadm -f remove $DEFAULT_DEVICE_POOL
-+
-+# Create default pool by adding devices one per a call
-+for i in $TEST_DEVS; do
-+        fsadm add $i
-+done
-+check vg_field $DEFAULT_DEVICE_POOL pv_count $DEV_COUNT
-+fsadm -f remove $DEFAULT_DEVICE_POOL
-+
-+# Create different groups from different devices
-+fsadm add $dev1 $dev2 $dev3 $pool1
-+fsadm add $dev4 $dev5 $dev6
-+fsadm add $dev7 $dev8 $dev9 $pool2
-+fsadm add $dev10 $pool2
-+not fsadm add $dev10 $pool2 $pool1
-+check vg_field $DEFAULT_DEVICE_POOL pv_count 3
-+check vg_field $pool1 pv_count 3
-+check vg_field $pool2 pv_count 4
-+fsadm -f remove --all
-+
-+fsadm add --help
-+
-+# Some cases which should fail
-+not fsadm _garbage_
-+not fsadm add
-+not fsadm add _somepool
-+not fsadm add $dev1 $dev2 $dev3 $pool1 _otherpool
--- 
-1.7.4.4
-
++	if (seg->size < length) {
++		log_debug_activation("Correcting VDO virtual volume size from " FMTu64  " to " FMTu64 ".",
++				     seg->size, length);
++		seg->size = length;
+ 	}
+ 
+ 	if (seg->vdo_version < 4) {
+@@ -2980,7 +2998,7 @@ static int _emit_segment_line(struct dm_task *dmt, uint32_t major,
+ 		EMIT_PARAMS(pos, "%u %u ", seg->area_count, seg->stripe_size);
+ 		break;
+ 	case SEG_VDO:
+-		if (!_vdo_emit_segment_line(dmt, seg, params, paramsize))
++		if (!_vdo_emit_segment_line(dmt, major, minor, seg, params, paramsize))
+ 		      return_0;
+ 		break;
+ 	case SEG_CRYPT:
 
