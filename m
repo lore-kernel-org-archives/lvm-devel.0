@@ -1,89 +1,76 @@
-From: David Teigland <teigland@sourceware.org>
-Date: Tue,  8 Nov 2022 14:51:06 +0000 (GMT)
-Subject: rhel-8.8.0 - vgimportdevices: fix locking when creating devices file
-Message-ID: <20221108145106.E14EF385828F@sourceware.org>
+From: Marian Csontos <mcsontos@sourceware.org>
+Date: Thu, 10 Nov 2022 13:22:21 +0000 (GMT)
+Subject: main - pre-release
+Message-ID: <20221110132221.273AC3858D38@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=19093e37557ae6a94392dcf207b3566a7d3defea
-Commit:        19093e37557ae6a94392dcf207b3566a7d3defea
-Parent:        e5f5e2988377c0f014b30a60709685c19c6d3bf0
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Tue Aug 30 14:40:48 2022 -0500
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Wed Nov 2 13:24:18 2022 -0500
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=f8127c45c5fa8fc8e163565bfa2001a0bb8ae72e
+Commit:        f8127c45c5fa8fc8e163565bfa2001a0bb8ae72e
+Parent:        6b96bf7bc2f548e7ce1de879251c8b90ab40b634
+Author:        Marian Csontos <mcsontos@redhat.com>
+AuthorDate:    Thu Nov 10 10:23:38 2022 +0100
+Committer:     Marian Csontos <mcsontos@redhat.com>
+CommitterDate: Thu Nov 10 14:11:32 2022 +0100
 
-vgimportdevices: fix locking when creating devices file
+pre-release
 
-Take the devices file lock before creating a new devices file.
-(Was missed by the change to preemptively create the devices
-file prior to setup_devices(), which was done to improve the
-error path.)
 ---
- lib/device/dev-cache.c  |  7 +++----
- lib/device/device_id.c  |  1 +
- tools/vgimportdevices.c | 10 ++++++++--
- 3 files changed, 12 insertions(+), 6 deletions(-)
+ VERSION      | 2 +-
+ VERSION_DM   | 2 +-
+ WHATS_NEW    | 7 +++++--
+ WHATS_NEW_DM | 4 ++--
+ 4 files changed, 9 insertions(+), 6 deletions(-)
 
-diff --git a/lib/device/dev-cache.c b/lib/device/dev-cache.c
-index 65e1cb138..0c9aaf785 100644
---- a/lib/device/dev-cache.c
-+++ b/lib/device/dev-cache.c
-@@ -1956,10 +1956,9 @@ static int _setup_devices(struct cmd_context *cmd, int no_file_match)
+diff --git a/VERSION b/VERSION
+index 7f1382bbe..d011ad748 100644
+--- a/VERSION
++++ b/VERSION
+@@ -1 +1 @@
+-2.03.17(2)-git (2022-05-18)
++2.03.17(2) (2022-11-10)
+diff --git a/VERSION_DM b/VERSION_DM
+index 35b742cd4..3f4240a76 100644
+--- a/VERSION_DM
++++ b/VERSION_DM
+@@ -1 +1 @@
+-1.02.187-git (2022-05-18)
++1.02.187 (2022-11-10)
+diff --git a/WHATS_NEW b/WHATS_NEW
+index 2942b0e53..2f4ffd894 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+-Version 2.03.17 - 
+-===============================
++Version 2.03.17 - 10th November 2022
++====================================
++  Add new options (--fs, --fsmode) for FS handling when resizing LVs.
+   Fix 'lvremove -S|--select LV' to not also remove its historical LV right away.
+   Fix lv_active field type to binary so --select and --binary applies properly.
+   Switch to use mallinfo2 and use it only with glibc.
+@@ -11,6 +12,8 @@ Version 2.03.17 -
+   Fix lvconvert --test --type vdo-pool execution.
+   Add json_std output format for more JSON standard compliant version of output.
+   Fix vdo_slab_size_mb value for converted VDO volume.
++  Fix many corner cases in device_id, including handling of S/N duplicates.
++  Fix various issues in lvmdbusd.
  
- 	if (!file_exists) {
- 		/*
--		 * pvcreate/vgcreate/vgimportdevices/lvmdevices-add create
--		 * a new devices file here if it doesn't exist.
--		 * They have the create_edit_devices_file flag set.
--		 * First they create/lock-ex the devices file lockfile.
-+		 * pvcreate/vgcreate create a new devices file here if it
-+		 * doesn't exist.  They have create_edit_devices_file=1.
-+		 * First create/lock-ex the devices file lockfile.
- 		 * Other commands will not use a devices file if none exists.
- 		 */
- 		lock_mode = LOCK_EX;
-diff --git a/lib/device/device_id.c b/lib/device/device_id.c
-index c3816a66c..780e08404 100644
---- a/lib/device/device_id.c
-+++ b/lib/device/device_id.c
-@@ -2429,6 +2429,7 @@ static int _lock_devices_file(struct cmd_context *cmd, int mode, int nonblock, i
+ Version 2.03.16 - 18th May 2022
+ ===============================
+diff --git a/WHATS_NEW_DM b/WHATS_NEW_DM
+index 6856f4302..f676ff7e1 100644
+--- a/WHATS_NEW_DM
++++ b/WHATS_NEW_DM
+@@ -1,5 +1,5 @@
+-Version 1.02.187 - 
+-================================
++Version 1.02.187 - 10th November 2022
++=====================================
+   Add DM_REPORT_GROUP_JSON_STD for more JSON standard compliant output format.
  
- 	if (_devices_file_locked == mode) {
- 		/* can happen when a command holds an ex lock and does an update in device_ids_validate */
-+		/* can happen when vgimportdevices calls this directly, followed later by setup_devices */
- 		if (held)
- 			*held = 1;
- 		return 1;
-diff --git a/tools/vgimportdevices.c b/tools/vgimportdevices.c
-index 9ade1b9e4..23c2718ff 100644
---- a/tools/vgimportdevices.c
-+++ b/tools/vgimportdevices.c
-@@ -132,8 +132,10 @@ int vgimportdevices(struct cmd_context *cmd, int argc, char **argv)
- 		return ECMD_FAILED;
- 
- 	/*
--	 * Prepare devices file preemptively because the error path for this
--	 * case from process_each is not as clean.
-+	 * Prepare/create devices file preemptively because the error path for
-+	 * this case from process_each/setup_devices is not as clean.
-+	 * This means that when setup_devices is called, it the devices
-+	 * file steps will be redundant, and need to handle being repeated.
- 	 */
- 	if (!setup_devices_file(cmd)) {
- 		log_error("Failed to set up devices file.");
-@@ -143,6 +145,10 @@ int vgimportdevices(struct cmd_context *cmd, int argc, char **argv)
- 		log_error("Devices file not enabled.");
- 		return ECMD_FAILED;
- 	}
-+	if (!lock_devices_file(cmd, LOCK_EX)) {
-+		log_error("Failed to lock the devices file.");
-+		return ECMD_FAILED;
-+	}
- 	if (!devices_file_exists(cmd)) {
- 	       	if (!devices_file_touch(cmd)) {
- 			log_error("Failed to create devices file.");
+ Version 1.02.185 - 18th May 2022
 
