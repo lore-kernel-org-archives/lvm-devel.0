@@ -1,135 +1,61 @@
-From: Natanael Copa <ncopa@alpinelinux.org>
-Date: Wed, 16 Nov 2022 12:22:20 +0100
-Subject: [PATCH] lvresize: use POSIX shell for lvresize_fs_helper.sh
-Message-ID: <20221116112220.2091-1-ncopa@alpinelinux.org>
+From: David Seifert <soap@gentoo.org>
+Date: Sat, 19 Nov 2022 17:51:08 +0100
+Subject: [PATCH 1/2] Allow for overriding of `readelf`
+Message-ID: <20221119165109.1225726-1-soap@gentoo.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Use POSIX shell for the fs reisize helper to avoid dependency of bash.
-This is useful for ditributions like Alpine Linux which does not include
-bash by default.
----
- scripts/lvresize_fs_helper.sh | 28 ++++++++++++++--------------
- 1 file changed, 14 insertions(+), 14 deletions(-)
+* This allows users to use e.g. `llvm-readelf` on systems with binutils as default.
 
-diff --git a/scripts/lvresize_fs_helper.sh b/scripts/lvresize_fs_helper.sh
-index 031b8453b..df153eb09 100755
---- a/scripts/lvresize_fs_helper.sh
-+++ b/scripts/lvresize_fs_helper.sh
-@@ -1,4 +1,4 @@
--#!/bin/bash
-+#!/bin/sh
- #
- # Copyright (C) 2022 Red Hat, Inc. All rights reserved.
- #
-@@ -73,7 +73,7 @@ fsextend() {
- 		fi
- 	fi
+Bug: https://bugs.gentoo.org/840628
+---
+ configure.ac       | 1 +
+ libdm/Makefile.in  | 4 ++--
+ libdm/make.tmpl.in | 1 +
+ 3 files changed, 4 insertions(+), 2 deletions(-)
+
+diff --git a/configure.ac b/configure.ac
+index 704772b62..f39c87d08 100644
+--- a/configure.ac
++++ b/configure.ac
+@@ -83,6 +83,7 @@ AC_PROG_LN_S
+ AC_PROG_MAKE_SET
+ AC_PROG_MKDIR_P
+ AC_PROG_RANLIB
++AC_CHECK_TOOL([READELF], [readelf])
+ AC_CHECK_TOOL(AR, ar)
+ AC_PATH_TOOL(CFLOW_CMD, cflow)
+ AC_PATH_TOOL(CSCOPE_CMD, cscope)
+diff --git a/libdm/Makefile.in b/libdm/Makefile.in
+index 35115d7f0..2758648e6 100644
+--- a/libdm/Makefile.in
++++ b/libdm/Makefile.in
+@@ -71,8 +71,8 @@ libdevmapper.$(LIB_SUFFIX) libdevmapper.$(LIB_SUFFIX).$(LIB_VERSION): $(LIB_SHAR
+ # also the older symbol is built-in
+ .symver_check: $(LIB_SHARED)
+ 	@echo "    [CHECK] $<"
+-	$(Q) if readelf -Ws $< | grep -q dm_stats_create_region@@; then \
+-	SYM=$$(readelf -Ws $< | grep dm_stats_create_region at DM_1_02_106); \
++	$(Q) if $(READELF) -Ws $< | grep -q dm_stats_create_region@@; then \
++	SYM=$$($(READELF) -Ws $< | grep dm_stats_create_region@DM_1_02_106); \
+ 	if test -n "$$SYM"; then touch $@; \
+ 	else echo >&2 "Missing versioned symbols in $<"; false; fi; \
+ 	else touch $@; fi
+diff --git a/libdm/make.tmpl.in b/libdm/make.tmpl.in
+index f1c88fac0..095fb028a 100644
+--- a/libdm/make.tmpl.in
++++ b/libdm/make.tmpl.in
+@@ -34,6 +34,7 @@ ifeq ($(CC), cc)
+ endif
  
--	if [[ "$FSTYPE" == "ext"* ]]; then
-+	if [ "${FSTYPE#ext}" != "$FSTYPE" ]; then
- 		logmsg "resize2fs ${DEVPATH}"
- 		resize2fs "$DEVPATH"
- 		if [ $? -eq 0 ]; then
-@@ -82,7 +82,7 @@ fsextend() {
- 			logmsg "resize2fs failed"
- 			RESIZEFS_FAILED=1
- 		fi
--	elif [[ "$FSTYPE" == "xfs" ]]; then
-+	elif [ "$FSTYPE" = "xfs" ]; then
- 		logmsg "xfs_growfs ${DEVPATH}"
- 		xfs_growfs "$DEVPATH"
- 		if [ $? -eq 0 ]; then
-@@ -109,7 +109,7 @@ fsextend() {
- 
- 	# If the fs was temporarily unmounted, now remount it.
- 	# Not considered a command failure if this fails.
--	if [[ $DO_UNMOUNT -eq 1 && $REMOUNT -eq 1 ]]; then
-+	if [ "$DO_UNMOUNT" -eq 1 ] && [ "$REMOUNT" -eq 1 ]; then
- 		logmsg "remount ${DEVPATH} ${MOUNTDIR}"
- 		mount -t "$FSTYPE" "$DEVPATH" "$MOUNTDIR"
- 		if [ $? -eq 0 ]; then
-@@ -162,7 +162,7 @@ fsreduce() {
- 		fi
- 	fi
- 
--	if [[ "$FSTYPE" == "ext"* ]]; then
-+	if [ "${FSTYPE#ext}" != "$FSTYPE" ]; then
- 		NEWSIZEKB=$(($NEWSIZEBYTES/1024))
- 		logmsg "resize2fs ${DEVPATH} ${NEWSIZEKB}k"
- 		resize2fs "$DEVPATH" "$NEWSIZEKB"k
-@@ -208,7 +208,7 @@ fsreduce() {
- 
- 	# If the fs was temporarily unmounted, now remount it.
- 	# Not considered a command failure if this fails.
--	if [[ $DO_UNMOUNT -eq 1 && $REMOUNT -eq 1 ]]; then
-+	if [ "$DO_UNMOUNT" -eq 1 ] && [ "$REMOUNT" -eq 1 ]; then
- 		logmsg "remount ${DEVPATH} ${MOUNTDIR}"
- 		mount -t "$FSTYPE" "$DEVPATH" "$MOUNTDIR"
- 		if [ $? -eq 0 ]; then
-@@ -307,7 +307,7 @@ DO_FSCK=0
- # mounted and the script unmounted it.
- REMOUNT=0
- 
--if [ "$UID" != 0 ] && [ "$EUID" != 0 ]; then
-+if [ "$(id -u)" != 0 ]; then
- 	errorexit "${SCRIPTNAME} must be run as root."
- fi
- 
-@@ -388,11 +388,11 @@ done
- #
- 
- # There are three top level commands: --fsextend, --fsreduce, --cryptresize.
--if [[ "$DO_FSEXTEND" -eq 0 && "$DO_FSREDUCE" -eq 0 && "$DO_CRYPTRESIZE" -eq 0 ]]; then
-+if [ "$DO_FSEXTEND" -eq 0 ] && [ "$DO_FSREDUCE" -eq 0 ]  && [ "$DO_CRYPTRESIZE" -eq 0 ]; then
- 	errorexit "Missing --fsextend|--fsreduce|--cryptresize."
- fi
- 
--if [[ "$DO_FSEXTEND" -eq 1 || "$DO_FSREDUCE" -eq 1 ]]; then
-+if [ "$DO_FSEXTEND" -eq 1 ] || [ "$DO_FSREDUCE" -eq 1 ]; then
- 	case "$FSTYPE" in
- 	  ext[234]) ;;
- 	  "xfs")    ;;
-@@ -404,7 +404,7 @@ if [[ "$DO_FSEXTEND" -eq 1 || "$DO_FSREDUCE" -eq 1 ]]; then
- 	fi
- fi
- 
--if [[ "$DO_CRYPTRESIZE" -eq 1 && -z "$CRYPTPATH" ]]; then
-+if [ "$DO_CRYPTRESIZE" -eq 1 ] && [ -z "$CRYPTPATH" ]; then
- 	errorexit "Missing required --cryptpath for --cryptresize."
- fi
- 
-@@ -422,15 +422,15 @@ if [ ! -e "$DEVPATH" ]; then
- 	errorexit "Device does not exist \"$DEVPATH\"."
- fi
- 
--if [[ "$DO_UNMOUNT" -eq 1 && -z "$MOUNTDIR" ]]; then
-+if [ "$DO_UNMOUNT" -eq 1 ] && [ -z "$MOUNTDIR" ]; then
- 	errorexit "Missing required --mountdir for --unmount."
- fi
- 
--if [[ "$DO_FSREDUCE" -eq 1 && "$FSTYPE" == "xfs" ]]; then
-+if [ "$DO_FSREDUCE" -eq 1 ] && [ "$FSTYPE" = "xfs" ]; then
- 	errorexit "Cannot reduce xfs."
- fi
- 
--if [[ "$DO_FSCK" -eq 1 && "$FSTYPE" == "xfs" ]]; then
-+if [ "$DO_FSCK" -eq 1 ] && [ "$FSTYPE" = "xfs" ]; then
- 	errorexit "Cannot use --fsck with xfs."
- fi
- 
-@@ -440,7 +440,7 @@ if [ "$DO_MOUNT" -eq 1 ]; then
- 		errorexit "Failed to create temp dir."
- 	fi
- 	# In case the script terminates without doing cleanup
--	function finish {
-+	finish() {
- 		if [ "$TMP_MOUNT_DONE" -eq 1 ]; then
- 			logmsg "exit unmount ${TMPDIR}"
- 			umount "$TMPDIR"
+ RANLIB = @RANLIB@
++READELF = @READELF@
+ INSTALL = @INSTALL@
+ MKDIR_P = @MKDIR_P@
+ MSGFMT = @MSGFMT@
 -- 
 2.38.1
 
