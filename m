@@ -1,61 +1,42 @@
 From: David Seifert <soap@gentoo.org>
-Date: Sat, 19 Nov 2022 17:51:08 +0100
-Subject: [PATCH 1/2] Allow for overriding of `readelf`
-Message-ID: <20221119165109.1225726-1-soap@gentoo.org>
+Date: Sat, 19 Nov 2022 17:51:09 +0100
+Subject: [PATCH 2/2] Fix `strerror_r` check for musl
+In-Reply-To: <20221119165109.1225726-1-soap@gentoo.org>
+References: <20221119165109.1225726-1-soap@gentoo.org>
+Message-ID: <20221119165109.1225726-2-soap@gentoo.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-* This allows users to use e.g. `llvm-readelf` on systems with binutils as default.
+From: Sam James <sam@gentoo.org>
 
-Bug: https://bugs.gentoo.org/840628
+* We can't assume that strerror_r returns char* just because _GNU_SOURCE is
+  defined. We already call the appropriate autoconf test, so let's use its
+  result (STRERROR_R_CHAR_P).
+
+  Note that in configure, _GNU_SOURCE is always set, but we add a defined
+  guard just in case for futureproofing.
+
+Bug: https://bugs.gentoo.org/869404
 ---
- configure.ac       | 1 +
- libdm/Makefile.in  | 4 ++--
- libdm/make.tmpl.in | 1 +
- 3 files changed, 4 insertions(+), 2 deletions(-)
+ daemons/lvmpolld/lvmpolld-core.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
 
-diff --git a/configure.ac b/configure.ac
-index 704772b62..f39c87d08 100644
---- a/configure.ac
-+++ b/configure.ac
-@@ -83,6 +83,7 @@ AC_PROG_LN_S
- AC_PROG_MAKE_SET
- AC_PROG_MKDIR_P
- AC_PROG_RANLIB
-+AC_CHECK_TOOL([READELF], [readelf])
- AC_CHECK_TOOL(AR, ar)
- AC_PATH_TOOL(CFLOW_CMD, cflow)
- AC_PATH_TOOL(CSCOPE_CMD, cscope)
-diff --git a/libdm/Makefile.in b/libdm/Makefile.in
-index 35115d7f0..2758648e6 100644
---- a/libdm/Makefile.in
-+++ b/libdm/Makefile.in
-@@ -71,8 +71,8 @@ libdevmapper.$(LIB_SUFFIX) libdevmapper.$(LIB_SUFFIX).$(LIB_VERSION): $(LIB_SHAR
- # also the older symbol is built-in
- .symver_check: $(LIB_SHARED)
- 	@echo "    [CHECK] $<"
--	$(Q) if readelf -Ws $< | grep -q dm_stats_create_region@@; then \
--	SYM=$$(readelf -Ws $< | grep dm_stats_create_region at DM_1_02_106); \
-+	$(Q) if $(READELF) -Ws $< | grep -q dm_stats_create_region@@; then \
-+	SYM=$$($(READELF) -Ws $< | grep dm_stats_create_region@DM_1_02_106); \
- 	if test -n "$$SYM"; then touch $@; \
- 	else echo >&2 "Missing versioned symbols in $<"; false; fi; \
- 	else touch $@; fi
-diff --git a/libdm/make.tmpl.in b/libdm/make.tmpl.in
-index f1c88fac0..095fb028a 100644
---- a/libdm/make.tmpl.in
-+++ b/libdm/make.tmpl.in
-@@ -34,6 +34,7 @@ ifeq ($(CC), cc)
- endif
+diff --git a/daemons/lvmpolld/lvmpolld-core.c b/daemons/lvmpolld/lvmpolld-core.c
+index 47c9376b4..a75f71e2f 100644
+--- a/daemons/lvmpolld/lvmpolld-core.c
++++ b/daemons/lvmpolld/lvmpolld-core.c
+@@ -52,7 +52,7 @@ static pthread_key_t key;
  
- RANLIB = @RANLIB@
-+READELF = @READELF@
- INSTALL = @INSTALL@
- MKDIR_P = @MKDIR_P@
- MSGFMT = @MSGFMT@
+ static const char *_strerror_r(int errnum, struct lvmpolld_thread_data *data)
+ {
+-#ifdef _GNU_SOURCE
++#if defined(_GNU_SOURCE) && defined(STRERROR_R_CHAR_P)
+ 	return strerror_r(errnum, data->buf, sizeof(data->buf)); /* never returns NULL */
+ #elif (_POSIX_C_SOURCE >= 200112L || _XOPEN_SOURCE >= 600)
+ 	return strerror_r(errnum, data->buf, sizeof(data->buf)) ? "" : data->buf;
 -- 
 2.38.1
 
