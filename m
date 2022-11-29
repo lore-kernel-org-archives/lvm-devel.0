@@ -1,76 +1,100 @@
-From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Fri,  9 Jun 2023 16:01:54 +0000 (GMT)
-Subject: main - vdo: fix and enhance vdo metadata reader
-Message-ID: <20230609160154.9E7A93858C41@sourceware.org>
+From: Tony Asleson <tasleson@sourceware.org>
+Date: Tue, 29 Nov 2022 19:01:36 +0000 (GMT)
+Subject: main - lvmdbusd: Move get_error_msg to utils
+Message-ID: <20221129190136.41A813858D20@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=00633f8b668d94a58756d96f5927fd690b8f41d3
-Commit:        00633f8b668d94a58756d96f5927fd690b8f41d3
-Parent:        fcf2057b3824ab461ad43821101d09f2b06dcac8
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Fri Jun 9 13:21:35 2023 +0200
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Fri Jun 9 18:01:16 2023 +0200
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=8f60c494515ddccb20e4afb804edb6b9599e65c0
+Commit:        8f60c494515ddccb20e4afb804edb6b9599e65c0
+Parent:        61917fbac2302e1f0c56aa75437e6ea72834b30d
+Author:        Tony Asleson <tasleson@redhat.com>
+AuthorDate:    Tue Nov 29 10:00:39 2022 -0600
+Committer:     Tony Asleson <tasleson@redhat.com>
+CommitterDate: Tue Nov 29 12:56:55 2022 -0600
 
-vdo: fix and enhance vdo metadata reader
+lvmdbusd: Move get_error_msg to utils
 
-Improve metadata parser to handle volume_geometry bio_offset,
-which needs to be substracted from 'region' start_block when present.
-
-This bio_offset block is non-zero i.e. with converted VDO volumes.
-
-Also fix some converted structure value (but they are not in use).
+Moving this so we can re-use outside of lvm_shell_proxy.
 ---
- device_mapper/vdo/vdo_reader.c | 12 ++++++++----
- 1 file changed, 8 insertions(+), 4 deletions(-)
+ daemons/lvmdbusd/lvm_shell_proxy.py.in | 23 +++--------------------
+ daemons/lvmdbusd/utils.py              | 17 +++++++++++++++++
+ 2 files changed, 20 insertions(+), 20 deletions(-)
 
-diff --git a/device_mapper/vdo/vdo_reader.c b/device_mapper/vdo/vdo_reader.c
-index 9f1344f4b..de8677c79 100644
---- a/device_mapper/vdo/vdo_reader.c
-+++ b/device_mapper/vdo/vdo_reader.c
-@@ -146,13 +146,14 @@ static void _vdo_decode_header(struct vdo_header *h)
- static void _vdo_decode_geometry_region(struct vdo_volume_region *vr)
- {
- 	vr->id = le32_to_cpu(vr->id);
--	vr->start_block = le32_to_cpu(vr->start_block);
-+	vr->start_block = le64_to_cpu(vr->start_block);
- }
+diff --git a/daemons/lvmdbusd/lvm_shell_proxy.py.in b/daemons/lvmdbusd/lvm_shell_proxy.py.in
+index ac6d51e65..37d73218b 100755
+--- a/daemons/lvmdbusd/lvm_shell_proxy.py.in
++++ b/daemons/lvmdbusd/lvm_shell_proxy.py.in
+@@ -28,7 +28,7 @@ except ImportError:
  
- static void _vdo_decode_volume_geometry(struct vdo_volume_geometry *vg)
- {
--	vg->release_version = le64_to_cpu(vg->release_version);
-+	vg->release_version = le32_to_cpu(vg->release_version);
- 	vg->nonce = le64_to_cpu(vg->nonce);
-+	vg->bio_offset = le64_to_cpu(vg->bio_offset);
- 	_vdo_decode_geometry_region(&vg->regions[VDO_DATA_REGION]);
- }
+ import lvmdbusd.cfg as cfg
+ from lvmdbusd.utils import log_debug, log_error, add_no_notify, make_non_block,\
+-			read_decoded, extract_stack_trace, LvmBug
++			read_decoded, extract_stack_trace, LvmBug, get_error_msg
  
-@@ -224,10 +225,14 @@ bool dm_vdo_parse_logical_size(const char *vdo_path, uint64_t *logical_blocks)
- 		goto err;
- 	}
+ SHELL_PROMPT = "lvm> "
  
-+	if (h.id != 5) {
-+		log_debug_activation("Expected geometry VDO block instead of block %u.", h.id);
-+		goto err;
-+	}
- 	memcpy(&vg, buffer + MAGIC_NUMBER_SIZE + sizeof(h), sizeof(vg));
- 	_vdo_decode_volume_geometry(&vg);
- 
--	regpos = vg.regions[VDO_DATA_REGION].start_block * 4096;
-+	regpos = (vg.regions[VDO_DATA_REGION].start_block - vg.bio_offset) * 4096;
- 
- 	if ((regpos + sizeof(buffer)) > size) {
- 		log_debug_activation("File/Device is shorter and can't provide requested VDO volume region at " FMTu64 " > " FMTu64 ".", regpos, size);
-@@ -244,7 +249,6 @@ bool dm_vdo_parse_logical_size(const char *vdo_path, uint64_t *logical_blocks)
- 		goto err;
- 	}
- 
+@@ -191,24 +191,7 @@ class LVMShellProxy(object):
+ 	def get_last_log(self):
+ 		self._write_cmd('lastlog\n')
+ 		report_json = self._read_response()[1]
+-		return LVMShellProxy.get_error_msg(report_json)
 -
- 	memcpy(&vn, buffer + sizeof(struct vdo_geometry_block), sizeof(vn));
- 	_vdo_decode_version(&vn);
+-	@staticmethod
+-	def get_error_msg(report_json):
+-		# Get the error message from the returned JSON
+-		if 'log' in report_json:
+-			error_msg = ""
+-			# Walk the entire log array and build an error string
+-			for log_entry in report_json['log']:
+-				if log_entry['log_type'] == "error":
+-					if error_msg:
+-						error_msg += ', ' + log_entry['log_message']
+-					else:
+-						error_msg = log_entry['log_message']
+-
+-			return error_msg
+-
+-		return None
++		return get_error_msg(report_json)
  
+ 	def call_lvm(self, argv, debug=False):
+ 		rc = 1
+@@ -245,7 +228,7 @@ class LVMShellProxy(object):
+ 				# report json too.
+ 				error_msg = self.get_last_log()
+ 				if error_msg is None:
+-					error_msg = LVMShellProxy.get_error_msg(report_json)
++					error_msg = get_error_msg(report_json)
+ 					if error_msg is None:
+ 						error_msg = 'No error reason provided! (missing "log" section)'
+ 
+diff --git a/daemons/lvmdbusd/utils.py b/daemons/lvmdbusd/utils.py
+index 5aecb1fff..0b81591b2 100644
+--- a/daemons/lvmdbusd/utils.py
++++ b/daemons/lvmdbusd/utils.py
+@@ -859,3 +859,20 @@ class LvmDebugData:
+ 		self._close_fd()
+ 		# In case lvm_complete doesn't get called.
+ 		self._remove_file()
++
++
++def get_error_msg(report_json):
++	# Get the error message from the returned JSON
++	if 'log' in report_json:
++		error_msg = ""
++		# Walk the entire log array and build an error string
++		for log_entry in report_json['log']:
++			if log_entry['log_type'] == "error":
++				if error_msg:
++					error_msg += ', ' + log_entry['log_message']
++				else:
++					error_msg = log_entry['log_message']
++
++		return error_msg
++
++	return None
 
