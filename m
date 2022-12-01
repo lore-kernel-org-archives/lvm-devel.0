@@ -1,67 +1,41 @@
 From: David Teigland <teigland@sourceware.org>
-Date: Thu,  1 Dec 2022 18:07:24 +0000 (GMT)
-Subject: main - lvmcache: fix strncpy len for wwid
-Message-ID: <20221201180724.20E9B3858C52@sourceware.org>
+Date: Thu,  1 Dec 2022 18:07:25 +0000 (GMT)
+Subject: main - device_id: add null id->name null check
+Message-ID: <20221201180725.412453858C52@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=f80273a1071532115219ea7c23054e6bbb096039
-Commit:        f80273a1071532115219ea7c23054e6bbb096039
-Parent:        55b29c1c3d4b5c1366ec0a24fb680cfb81fc4961
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=7552ed9010f823d2ac2b99349c62dce8cd6fd506
+Commit:        7552ed9010f823d2ac2b99349c62dce8cd6fd506
+Parent:        f80273a1071532115219ea7c23054e6bbb096039
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Thu Dec 1 10:03:06 2022 -0600
+AuthorDate:    Thu Dec 1 10:38:48 2022 -0600
 Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Thu Dec 1 10:03:06 2022 -0600
+CommitterDate: Thu Dec 1 10:38:48 2022 -0600
 
-lvmcache: fix strncpy len for wwid
+device_id: add null id->name null check
 
+for covscan
 ---
- lib/cache/lvmcache.c | 10 +++++-----
- 1 file changed, 5 insertions(+), 5 deletions(-)
+ lib/device/device_id.c | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
 
-diff --git a/lib/cache/lvmcache.c b/lib/cache/lvmcache.c
-index 1ae63b3fc..ec32b3be9 100644
---- a/lib/cache/lvmcache.c
-+++ b/lib/cache/lvmcache.c
-@@ -654,13 +654,13 @@ static int _all_multipath_components(struct cmd_context *cmd, struct lvmcache_in
+diff --git a/lib/device/device_id.c b/lib/device/device_id.c
+index aae875776..4fa02edc7 100644
+--- a/lib/device/device_id.c
++++ b/lib/device/device_id.c
+@@ -1844,8 +1844,8 @@ static int _match_du_to_dev(struct cmd_context *cmd, struct dev_use *du, struct
+ 					  idtype_to_str(du->idtype), du->idname, dev_name(dev));
+ 				return 1;
  
- 		if (dev_is_mp) {
- 			if ((wwid1 = dev_mpath_component_wwid(cmd, dev))) {
--				strncpy(wwid1_buf, wwid1, DEV_WWID_SIZE);
-+				strncpy(wwid1_buf, wwid1, DEV_WWID_SIZE-1);
- 				dev_mp = dev;
- 				dev1 = dev;
- 			}
- 		} else {
- 			if ((wwid1 = device_id_system_read(cmd, dev, DEV_ID_TYPE_SYS_WWID))) {
--				strncpy(wwid1_buf, wwid1, DEV_WWID_SIZE);
-+				strncpy(wwid1_buf, wwid1, DEV_WWID_SIZE-1);
- 				free((char *)wwid1);
- 				dev1 = dev;
- 			}
-@@ -673,10 +673,10 @@ static int _all_multipath_components(struct cmd_context *cmd, struct lvmcache_in
- 
- 		if (dev_is_mp) {
- 			if ((wwid = dev_mpath_component_wwid(cmd, dev)))
--				strncpy(wwid_buf, wwid, DEV_WWID_SIZE);
-+				strncpy(wwid_buf, wwid, DEV_WWID_SIZE-1);
- 		} else {
- 			if ((wwid = device_id_system_read(cmd, dev, DEV_ID_TYPE_SYS_WWID))) {
--				strncpy(wwid_buf, wwid, DEV_WWID_SIZE);
-+				strncpy(wwid_buf, wwid, DEV_WWID_SIZE-1);
- 				free((char *)wwid);
- 			}
- 		}
-@@ -692,7 +692,7 @@ static int _all_multipath_components(struct cmd_context *cmd, struct lvmcache_in
- 			continue;
- 
- 		if (!wwid1_buf[0]) {
--			memcpy(wwid1_buf, wwid_buf, DEV_WWID_SIZE);
-+			memcpy(wwid1_buf, wwid_buf, DEV_WWID_SIZE-1);
- 			dev1 = dev;
- 			continue;
- 		}
+-			} else if ((id->idtype == DEV_ID_TYPE_SYS_WWID) && !strncmp(id->idname, "t10", 3) &&
+-				    du_t10[0] && !strcmp(id->idname, du_t10)) {
++			} else if ((id->idtype == DEV_ID_TYPE_SYS_WWID) && id->idname &&
++				   !strncmp(id->idname, "t10", 3) && du_t10[0] && !strcmp(id->idname, du_t10)) {
+ 				/* Compare the shorter form du t10 wwid to the dev t10 wwid. */
+ 				du->dev = dev;
+ 				dev->id = id;
 
