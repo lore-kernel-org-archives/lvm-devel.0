@@ -1,57 +1,45 @@
-From: ccaulfield@sourceware.org <ccaulfield@sourceware.org>
-Date: 28 Mar 2008 12:58:11 -0000
-Subject: LVM2 ./WHATS_NEW daemons/clvmd/clvmd.c
-Message-ID: <20080328125811.12013.qmail@sourceware.org>
+From: Marian Csontos <mcsontos@sourceware.org>
+Date: Thu,  1 Dec 2022 07:21:35 +0000 (GMT)
+Subject: rhel-8.8.0 - lvmdbusd: Set LVM_COMMAND_PROFILE=lvmdbusd
+Message-ID: <20221201072135.6D1813858C54@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	ccaulfield at sourceware.org	2008-03-28 12:58:10
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=0aa45120e92fe8b0f379d00f3a031e3c53feca43
+Commit:        0aa45120e92fe8b0f379d00f3a031e3c53feca43
+Parent:        73943825501daede9963bb5d15abbc4d36febb40
+Author:        Tony Asleson <tasleson@redhat.com>
+AuthorDate:    Wed Aug 24 15:37:56 2022 -0500
+Committer:     Marian Csontos <mcsontos@redhat.com>
+CommitterDate: Mon Nov 28 17:11:21 2022 +0100
 
-Modified files:
-	.              : WHATS_NEW 
-	daemons/clvmd  : clvmd.c 
+lvmdbusd: Set LVM_COMMAND_PROFILE=lvmdbusd
 
-Log message:
-	Fix a couple of uninitialised variables. The newfd one could cause
-	some obscure hangs.
+We need this to prevent lvm from interleaving the JSON output with errors
+written to stderr.
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/WHATS_NEW.diff?cvsroot=lvm2&r1=1.810&r2=1.811
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/daemons/clvmd/clvmd.c.diff?cvsroot=lvm2&r1=1.44&r2=1.45
+(cherry picked from commit a5e6947d74f7b88f7f0df4328a923ad82a970634)
+---
+ daemons/lvmdbusd/main.py | 4 +++-
+ 1 file changed, 3 insertions(+), 1 deletion(-)
 
---- LVM2/WHATS_NEW	2008/03/26 18:03:35	1.810
-+++ LVM2/WHATS_NEW	2008/03/28 12:58:08	1.811
-@@ -1,5 +1,6 @@
- Version 2.02.34 -
- ===================================
-+  Fix uninitialised variable in clvmd that could cause odd hangs.
-   Add vgmerge tests.
-   Add pvseg_is_allocated() for identifying a PV segment allocated to a LV.
-   Add list_move() for moving elements from one list to another.
---- LVM2/daemons/clvmd/clvmd.c	2008/03/17 09:37:47	1.44
-+++ LVM2/daemons/clvmd/clvmd.c	2008/03/28 12:58:09	1.45
-@@ -633,7 +633,7 @@
- 				}
+diff --git a/daemons/lvmdbusd/main.py b/daemons/lvmdbusd/main.py
+index b0a82d492..eaea13ef8 100644
+--- a/daemons/lvmdbusd/main.py
++++ b/daemons/lvmdbusd/main.py
+@@ -112,8 +112,10 @@ def main():
  
- 				if (FD_ISSET(thisfd->fd, &in)) {
--					struct local_client *newfd;
-+					struct local_client *newfd = NULL;
- 					int ret;
+ 	use_session = os.getenv('LVMDBUSD_USE_SESSION', False)
  
- 					/* Do callback */
-@@ -1613,7 +1613,7 @@
- static int send_message(void *buf, int msglen, const char *csid, int fd,
- 			const char *errtext)
- {
--	int len;
-+	int len = 0;
- 	int saved_errno = 0;
- 	struct timespec delay;
- 	struct timespec remtime;
-
+-	# Ensure that we get consistent output for parsing stdout/stderr
++	# Ensure that we get consistent output for parsing stdout/stderr and that we
++	# are using the lvmdbusd profile.
+ 	os.environ["LC_ALL"] = "C"
++	os.environ["LVM_COMMAND_PROFILE"] = "lvmdbusd"
+ 
+ 	cfg.args = parser.parse_args()
+ 	cfg.create_request_entry = RequestEntry
 
