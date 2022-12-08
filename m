@@ -1,144 +1,89 @@
 From: Marian Csontos <mcsontos@sourceware.org>
-Date: Thu,  8 Dec 2022 11:37:12 +0000 (GMT)
-Subject: rhel-8.8.0 - thin: fix message processing on thin-pool extension
-Message-ID: <20221208113712.0E7A53872216@sourceware.org>
+Date: Thu,  8 Dec 2022 11:37:10 +0000 (GMT)
+Subject: rhel-8.8.0 - vgimportdevices: fix locking when creating devices file
+Message-ID: <20221208113710.DF80F3872216@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=7db3a53d8a3aa7401337fb9aaf00f19cf4407e70
-Commit:        7db3a53d8a3aa7401337fb9aaf00f19cf4407e70
-Parent:        0b9d9963b8f15a6f12a0149a62809fa9b846c5c5
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed Mar 30 14:16:11 2022 +0200
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=0b9d9963b8f15a6f12a0149a62809fa9b846c5c5
+Commit:        0b9d9963b8f15a6f12a0149a62809fa9b846c5c5
+Parent:        f1d8c01dff3f8839355004e5fd77e9cd521e26cb
+Author:        David Teigland <teigland@redhat.com>
+AuthorDate:    Tue Aug 30 14:40:48 2022 -0500
 Committer:     Marian Csontos <mcsontos@redhat.com>
-CommitterDate: Tue Nov 29 14:09:25 2022 +0100
+CommitterDate: Mon Nov 28 17:11:21 2022 +0100
 
-thin: fix message processing on thin-pool extension
+vgimportdevices: fix locking when creating devices file
 
-When thin-pool had queued some delete message on extension operation
-such message has been 'lost' and thin-pool kernel metadata has been
-left with a thin volume that no longer existed for lvm2 metadata.
-
-(cherry picked from commit 09371131469f7398c597a5fb30dc565859253cc2)
+Take the devices file lock before creating a new devices file.
+(Was missed by the change to preemptively create the devices
+file prior to setup_devices(), which was done to improve the
+error path.)
 ---
- WHATS_NEW                          |  4 ++
- lib/metadata/lv_manip.c            |  2 +-
- test/shell/lvextend-thin-adddel.sh | 78 ++++++++++++++++++++++++++++++++++++++
- 3 files changed, 83 insertions(+), 1 deletion(-)
+ lib/device/dev-cache.c  |  7 +++----
+ lib/device/device_id.c  |  1 +
+ tools/vgimportdevices.c | 10 ++++++++--
+ 3 files changed, 12 insertions(+), 6 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index e626802ec..bffd24648 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -2,6 +2,10 @@ Version 2.03.17 -
- ===============================
-   Fix lvconvert --test --type vdo-pool execution.
+diff --git a/lib/device/dev-cache.c b/lib/device/dev-cache.c
+index 65e1cb138..0c9aaf785 100644
+--- a/lib/device/dev-cache.c
++++ b/lib/device/dev-cache.c
+@@ -1956,10 +1956,9 @@ static int _setup_devices(struct cmd_context *cmd, int no_file_match)
  
-+Version 2.03.16 - 
-+====================================
-+  Fix lossing of delete message on thin-pool extension.
-+
- Version 2.03.14 - 20th October 2021
- ===================================
-   Device scanning is skipping directories on different filesystems.
-diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
-index 003748d6f..9523e3e66 100644
---- a/lib/metadata/lv_manip.c
-+++ b/lib/metadata/lv_manip.c
-@@ -6179,7 +6179,7 @@ int lv_resize(struct logical_volume *lv,
+ 	if (!file_exists) {
+ 		/*
+-		 * pvcreate/vgcreate/vgimportdevices/lvmdevices-add create
+-		 * a new devices file here if it doesn't exist.
+-		 * They have the create_edit_devices_file flag set.
+-		 * First they create/lock-ex the devices file lockfile.
++		 * pvcreate/vgcreate create a new devices file here if it
++		 * doesn't exist.  They have create_edit_devices_file=1.
++		 * First create/lock-ex the devices file lockfile.
+ 		 * Other commands will not use a devices file if none exists.
+ 		 */
+ 		lock_mode = LOCK_EX;
+diff --git a/lib/device/device_id.c b/lib/device/device_id.c
+index c3816a66c..780e08404 100644
+--- a/lib/device/device_id.c
++++ b/lib/device/device_id.c
+@@ -2429,6 +2429,7 @@ static int _lock_devices_file(struct cmd_context *cmd, int mode, int nonblock, i
  
- 	if (lv_is_thin_pool(lock_lv)) {
- 		/* Update lvm pool metadata (drop messages). */
--		if (!update_pool_lv(lock_lv, 0))
-+		if (!update_pool_lv(lock_lv, 1))
- 			goto_bad;
+ 	if (_devices_file_locked == mode) {
+ 		/* can happen when a command holds an ex lock and does an update in device_ids_validate */
++		/* can happen when vgimportdevices calls this directly, followed later by setup_devices */
+ 		if (held)
+ 			*held = 1;
+ 		return 1;
+diff --git a/tools/vgimportdevices.c b/tools/vgimportdevices.c
+index 9ade1b9e4..23c2718ff 100644
+--- a/tools/vgimportdevices.c
++++ b/tools/vgimportdevices.c
+@@ -132,8 +132,10 @@ int vgimportdevices(struct cmd_context *cmd, int argc, char **argv)
+ 		return ECMD_FAILED;
+ 
+ 	/*
+-	 * Prepare devices file preemptively because the error path for this
+-	 * case from process_each is not as clean.
++	 * Prepare/create devices file preemptively because the error path for
++	 * this case from process_each/setup_devices is not as clean.
++	 * This means that when setup_devices is called, it the devices
++	 * file steps will be redundant, and need to handle being repeated.
+ 	 */
+ 	if (!setup_devices_file(cmd)) {
+ 		log_error("Failed to set up devices file.");
+@@ -143,6 +145,10 @@ int vgimportdevices(struct cmd_context *cmd, int argc, char **argv)
+ 		log_error("Devices file not enabled.");
+ 		return ECMD_FAILED;
  	}
- 
-diff --git a/test/shell/lvextend-thin-adddel.sh b/test/shell/lvextend-thin-adddel.sh
-new file mode 100644
-index 000000000..59b1bfa41
---- /dev/null
-+++ b/test/shell/lvextend-thin-adddel.sh
-@@ -0,0 +1,78 @@
-+#!/usr/bin/env bash
-+
-+# Copyright (C) 2022 Red Hat, Inc. All rights reserved.
-+#
-+# This copyrighted material is made available to anyone wishing to use,
-+# modify, copy, or redistribute it subject to the terms and conditions
-+# of the GNU General Public License v.2.
-+#
-+# You should have received a copy of the GNU General Public License
-+# along with this program; if not, write to the Free Software Foundation,
-+# Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
-+
-+#
-+# Play with thin-pool and thin removal and creation in corner cases
-+#
-+
-+SKIP_WITH_LVMLOCKD=1
-+SKIP_WITH_LVMPOLLD=1
-+
-+export LVM_TEST_THIN_REPAIR_CMD=${LVM_TEST_THIN_REPAIR_CMD-/bin/false}
-+
-+. lib/inittest
-+
-+aux have_thin 1 0 0 || skip
-+
-+test -n "$LVM_TEST_THIN_RESTORE_CMD" || LVM_TEST_THIN_RESTORE_CMD=$(which thin_restore) || skip
-+"$LVM_TEST_THIN_RESTORE_CMD" -V || skip
-+
-+aux have_thin 1 10 0 || skip
-+
-+aux prepare_vg 2
-+
-+lvcreate -V10 -n $lv1 -L10 -T $vg/pool
-+lvcreate -V10 -n $lv2 $vg/pool
-+
-+# Forcibly 'error' _tmeta thin-pool metadata device
-+not dmsetup remove -f $vg-pool_tmeta
-+
-+# Now try to schedule removal of thin volume id 1
-+# that will fail with errored meta device
-+not lvremove -y $vg/$lv1
-+
-+# Check we have queued 'message'
-+vgcfgbackup -f out0 $vg
-+grep "message1" out0
-+
-+vgchange -an $vg || true
-+
-+not dmsetup table ${vg}-pool-tpool
-+
-+# Reactivate thin-pool
-+vgchange -ay $vg
-+
-+# Check message is still queued there
-+vgcfgbackup -f out1 $vg
-+grep "message1" out1
-+
-+lvchange -an $vg
-+
-+lvextend -L+10 $vg/pool
-+
-+# Messages should be now processed and gone
-+vgcfgbackup -f out2 $vg
-+not grep "message1" out2
-+
-+lvchange -an $vg
-+
-+lvchange -y -ay $vg/pool_tmeta
-+
-+# Kernel metadata must not see dev_id 1 either
-+thin_dump $DM_DEV_DIR/$vg/pool_tmeta | tee meta
-+not grep 'dev_id="1"' meta
-+
-+lvremove -ff $vg
-+
-+lvs -a $vg
-+
-+vgremove -ff $vg
++	if (!lock_devices_file(cmd, LOCK_EX)) {
++		log_error("Failed to lock the devices file.");
++		return ECMD_FAILED;
++	}
+ 	if (!devices_file_exists(cmd)) {
+ 	       	if (!devices_file_touch(cmd)) {
+ 			log_error("Failed to create devices file.");
 
