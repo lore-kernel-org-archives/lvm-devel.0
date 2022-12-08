@@ -1,398 +1,934 @@
-From: wysochanski@sourceware.org <wysochanski@sourceware.org>
-Date: 4 Mar 2008 19:48:32 -0000
-Subject: LVM2/test t-vgsplit-operation.sh t-vgsplit-usa ...
-Message-ID: <20080304194832.7074.qmail@sourceware.org>
+From: Marian Csontos <mcsontos@sourceware.org>
+Date: Thu,  8 Dec 2022 13:40:59 +0000 (GMT)
+Subject: rhel-8.8.0 - make: generate
+Message-ID: <20221208134059.13E853834E3A@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	wysochanski at sourceware.org	2008-03-04 19:48:32
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=71354c39350b482ca8cf0fd9dcaf025b1d55b7d1
+Commit:        71354c39350b482ca8cf0fd9dcaf025b1d55b7d1
+Parent:        b56e8fc94d4d2b6d384148e3f74c54f4e1d816e6
+Author:        Marian Csontos <mcsontos@redhat.com>
+AuthorDate:    Thu Dec 8 14:32:23 2022 +0100
+Committer:     Marian Csontos <mcsontos@redhat.com>
+CommitterDate: Thu Dec 8 14:32:23 2022 +0100
 
-Modified files:
-	test           : t-vgsplit-operation.sh 
-Added files:
-	test           : t-vgsplit-usage.sh 
+make: generate
 
-Log message:
-	Update vgsplit tests.
-	- Divide into 'usage' and 'operation' tests.
-	- Add operation tests for specific LV types.
+---
+ man/lvchange.8_pregen        | 20 ++++++++++++++++++--
+ man/lvconvert.8_pregen       | 22 ++++++++++++++++++++--
+ man/lvcreate.8_pregen        | 24 ++++++++++++++++++++++--
+ man/lvdisplay.8_pregen       |  5 +++--
+ man/lvextend.8_pregen        |  5 +++--
+ man/lvm-fullreport.8_pregen  |  5 +++--
+ man/lvm-lvpoll.8_pregen      |  5 +++--
+ man/lvmconfig.8_pregen       |  5 +++--
+ man/lvmdevices.8_pregen      |  8 +++++---
+ man/lvmdiskscan.8_pregen     |  5 +++--
+ man/lvreduce.8_pregen        |  5 +++--
+ man/lvremove.8_pregen        |  5 +++--
+ man/lvrename.8_pregen        |  5 +++--
+ man/lvresize.8_pregen        |  5 +++--
+ man/lvs.8_pregen             |  5 +++--
+ man/lvscan.8_pregen          |  5 +++--
+ man/pvchange.8_pregen        |  5 +++--
+ man/pvck.8_pregen            |  5 +++--
+ man/pvcreate.8_pregen        |  5 +++--
+ man/pvdisplay.8_pregen       |  5 +++--
+ man/pvmove.8_pregen          |  5 +++--
+ man/pvremove.8_pregen        |  5 +++--
+ man/pvresize.8_pregen        |  5 +++--
+ man/pvs.8_pregen             |  5 +++--
+ man/pvscan.8_pregen          |  5 +++--
+ man/vgcfgbackup.8_pregen     |  5 +++--
+ man/vgcfgrestore.8_pregen    |  5 +++--
+ man/vgchange.8_pregen        |  5 +++--
+ man/vgck.8_pregen            |  5 +++--
+ man/vgconvert.8_pregen       |  5 +++--
+ man/vgcreate.8_pregen        |  5 +++--
+ man/vgdisplay.8_pregen       |  5 +++--
+ man/vgexport.8_pregen        |  5 +++--
+ man/vgextend.8_pregen        |  5 +++--
+ man/vgimport.8_pregen        |  5 +++--
+ man/vgimportclone.8_pregen   |  5 +++--
+ man/vgimportdevices.8_pregen |  5 +++--
+ man/vgmerge.8_pregen         |  5 +++--
+ man/vgmknodes.8_pregen       |  5 +++--
+ man/vgreduce.8_pregen        |  5 +++--
+ man/vgremove.8_pregen        |  5 +++--
+ man/vgrename.8_pregen        |  5 +++--
+ man/vgs.8_pregen             |  5 +++--
+ man/vgscan.8_pregen          |  5 +++--
+ man/vgsplit.8_pregen         |  5 +++--
+ 45 files changed, 188 insertions(+), 91 deletions(-)
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/t-vgsplit-usage.sh.diff?cvsroot=lvm2&r1=NONE&r2=1.1
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/test/t-vgsplit-operation.sh.diff?cvsroot=lvm2&r1=1.10&r2=1.11
-
-/cvs/lvm2/LVM2/test/t-vgsplit-usage.sh,v  -->  standard output
-revision 1.1
---- LVM2/test/t-vgsplit-usage.sh
-+++ -	2008-03-04 19:48:32.575367000 +0000
-@@ -0,0 +1,182 @@
-+#!/bin/sh
-+# Copyright (C) 2007 Red Hat, Inc. All rights reserved.
-+#
-+# This copyrighted material is made available to anyone wishing to use,
-+# modify, copy, or redistribute it subject to the terms and conditions
-+# of the GNU General Public License v.2.
-+#
-+# You should have received a copy of the GNU General Public License
-+# along with this program; if not, write to the Free Software Foundation,
-+# Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
-+
-+test_description='Test vgsplit command options for validity'
-+privileges_required_=1
-+
-+. ./test-lib.sh
-+
-+cleanup_()
-+{
-+  test -n "$d1" && losetup -d "$d1"
-+  test -n "$d2" && losetup -d "$d2"
-+  test -n "$d3" && losetup -d "$d3"
-+  test -n "$d4" && losetup -d "$d4"
-+  rm -f "$f1" "$f2" "$f3" "$f4"
-+}
-+
-+# FIXME: paramaterize lvm1 vs lvm2 metadata; most of these tests should run
-+# fine with lvm1 metadata as well; for now, just add disks 5 and 6 as lvm1
-+# metadata
-+test_expect_success \
-+  'set up temp files, loopback devices, PVs, vgnames' \
-+  'f1=$(pwd)/1 && d1=$(loop_setup_ "$f1") &&
-+   f2=$(pwd)/2 && d2=$(loop_setup_ "$f2") &&
-+   f3=$(pwd)/3 && d3=$(loop_setup_ "$f3") &&
-+   f4=$(pwd)/4 && d4=$(loop_setup_ "$f4") &&
-+   vg1=$(this_test_)-test-vg1-$$          &&
-+   vg2=$(this_test_)-test-vg2-$$          &&
-+   lv1=$(this_test_)-test-lv1-$$          &&
-+   lv2=$(this_test_)-test-lv2-$$          &&
-+   lv3=$(this_test_)-test-lv3-$$          &&
-+   pvcreate $d1 $d2 $d3 $d4'
-+
-+test_expect_success \
-+  'vgsplit accepts new vg as destination of split' \
-+  'vgcreate $vg1 $d1 $d2 &&
-+   vgsplit $vg1 $vg2 $d1 1>err;
-+   status=$?; echo status=$?; test $status = 0 &&
-+   grep "New volume group \"$vg2\" successfully split from \"$vg1\"" err &&
-+   vgremove $vg1 &&
-+   vgremove $vg2'
-+
-+test_expect_success \
-+  'vgsplit accepts existing vg as destination of split' \
-+  'vgcreate $vg1 $d1 $d2 &&
-+   vgcreate $vg2 $d3 $d4 &&
-+   vgsplit $vg1 $vg2 $d1 1>err;
-+   status=$?; echo status=$?; test $status = 0 &&
-+   grep "Existing volume group \"$vg2\" successfully split from \"$vg1\"" err &&
-+   vgremove $vg1 &&
-+   vgremove $vg2'
-+
-+test_expect_success \
-+  'vgsplit accepts --maxphysicalvolumes 128 on new VG' \
-+  'vgcreate $vg1 $d1 $d2 &&
-+   vgsplit --maxphysicalvolumes 128 $vg1 $vg2 $d1 &&
-+   check_vg_field_ $vg2 max_pv 128 &&
-+   vgremove $vg1 &&
-+   vgremove $vg2'
-+
-+test_expect_success \
-+  'vgsplit accepts --maxlogicalvolumes 128 on new VG' \
-+  'vgcreate $vg1 $d1 $d2 &&
-+   vgsplit --maxlogicalvolumes 128 $vg1 $vg2 $d1 &&
-+   check_vg_field_ $vg2 max_lv 128 &&
-+   vgremove $vg1 &&
-+   vgremove $vg2'
-+
-+test_expect_success \
-+  'vgsplit rejects split because max_pv of destination would be exceeded' \
-+  'vgcreate --maxphysicalvolumes 2 $vg1 $d1 $d2 &&
-+   vgcreate --maxphysicalvolumes 2 $vg2 $d3 $d4 &&
-+   vgsplit $vg1 $vg2 $d1 2>err;
-+   status=$?; echo status=$?; test $status = 5 &&
-+   grep "^  Maximum number of physical volumes (2) exceeded" err &&
-+   vgremove $vg2 &&
-+   vgremove $vg1'
-+
-+test_expect_success \
-+  'vgsplit rejects split because maxphysicalvolumes given with existing vg' \
-+  'vgcreate --maxphysicalvolumes 2 $vg1 $d1 $d2 &&
-+   vgcreate --maxphysicalvolumes 2 $vg2 $d3 $d4 &&
-+   vgsplit --maxphysicalvolumes 2 $vg1 $vg2 $d1 2>err;
-+   status=$?; echo status=$?; test $status = 5 &&
-+   grep "^  Volume group \"$vg2\" exists, but new VG option specified" err &&
-+   vgremove $vg2 &&
-+   vgremove $vg1'
-+
-+test_expect_success \
-+  'vgsplit rejects split because maxlogicalvolumes given with existing vg' \
-+  'vgcreate --maxlogicalvolumes 2 $vg1 $d1 $d2 &&
-+   vgcreate --maxlogicalvolumes 2 $vg2 $d3 $d4 &&
-+   vgsplit --maxlogicalvolumes 2 $vg1 $vg2 $d1 2>err;
-+   status=$?; echo status=$?; test $status = 5 &&
-+   grep "^  Volume group \"$vg2\" exists, but new VG option specified" err &&
-+   vgremove $vg2 &&
-+   vgremove $vg1'
-+
-+test_expect_success \
-+  'vgsplit rejects split because alloc given with existing vg' \
-+  'vgcreate --alloc cling $vg1 $d1 $d2 &&
-+   vgcreate --alloc cling $vg2 $d3 $d4 &&
-+   vgsplit --alloc cling $vg1 $vg2 $d1 2>err;
-+   status=$?; echo status=$?; test $status = 5 &&
-+   grep "^  Volume group \"$vg2\" exists, but new VG option specified" err &&
-+   vgremove $vg2 &&
-+   vgremove $vg1'
-+
-+test_expect_success \
-+  'vgsplit rejects split because clustered given with existing vg' \
-+  'vgcreate --clustered n $vg1 $d1 $d2 &&
-+   vgcreate --clustered n $vg2 $d3 $d4 &&
-+   vgsplit --clustered n $vg1 $vg2 $d1 2>err;
-+   status=$?; echo status=$?; test $status = 5 &&
-+   grep "^  Volume group \"$vg2\" exists, but new VG option specified" err &&
-+   vgremove $vg2 &&
-+   vgremove $vg1'
-+
-+test_expect_success \
-+  'vgsplit rejects split because metadata types differ' \
-+  'pvcreate -ff -M1 $d3 $d4 &&
-+   pvcreate -ff -M2 $d1 $d2 &&
-+   vgcreate -M1 $vg1 $d3 $d4 &&
-+   vgcreate -M2 $vg2 $d1 $d2 &&
-+   vgsplit $vg1 $vg2 $d3 2>err;
-+   status=$?; echo status=$?; test $status = 5 &&
-+   grep "^  Metadata types differ" err &&
-+   vgremove $vg2 &&
-+   vgremove $vg1'
-+
-+test_expect_success \
-+  'vgsplit rejects vg with active lv' \
-+  'pvcreate -ff -M2 $d3 $d4 &&
-+   vgcreate $vg1 $d1 $d2 &&
-+   vgcreate $vg2 $d3 $d4 &&
-+   lvcreate -l 4 -n $lv1 $vg1 &&
-+   vgsplit $vg1 $vg2 $d1 2>err;
-+   status=$?; echo status=$?; test $status = 5 &&
-+   grep "^  Logical volumes in \"$vg1\" must be inactive\$" err &&
-+   vgremove -f $vg2 &&
-+   vgremove -f $vg1'
-+
-+test_expect_success \
-+  'vgsplit rejects split because max_lv is exceeded' \
-+  'vgcreate --maxlogicalvolumes 2 $vg1 $d1 $d2 &&
-+   vgcreate --maxlogicalvolumes 2 $vg2 $d3 $d4 &&
-+   lvcreate -l 4 -n $lv1 $vg1 &&
-+   lvcreate -l 4 -n $lv2 $vg1 &&
-+   lvcreate -l 4 -n $lv3 $vg2 &&
-+   vgchange -an $vg1 &&
-+   vgchange -an $vg2 &&
-+   vgsplit $vg1 $vg2 $d1 2>err;
-+   status=$?; echo status=$?; test $status = 5 &&
-+   grep "^  Maximum number of logical volumes (2) exceeded" err &&
-+   vgremove -f $vg2 &&
-+   vgremove -f $vg1'
-+
-+test_expect_success \
-+  'vgsplit rejects split because PV not in VG' \
-+  'vgcreate $vg1 $d1 $d2 &&
-+   vgcreate $vg2 $d3 $d4 &&
-+   lvcreate -l 4 -n $lv1 $vg1 &&
-+   lvcreate -l 4 -n $lv2 $vg1 &&
-+   vgchange -an $vg1 &&
-+   vgsplit $vg1 $vg2 $d3 2>err;
-+   status=$?; echo status=$?; test $status = 5 &&
-+   grep "^  Physical volume $d3 not in volume group $vg1" err &&
-+   vgremove -f $vg2 &&
-+   vgremove -f $vg1'
-+
-+test_done
-+# Local Variables:
-+# indent-tabs-mode: nil
-+# End:
---- LVM2/test/t-vgsplit-operation.sh	2008/02/29 00:09:21	1.10
-+++ LVM2/test/t-vgsplit-operation.sh	2008/03/04 19:48:32	1.11
-@@ -9,7 +9,7 @@
- # along with this program; if not, write to the Free Software Foundation,
- # Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
- 
--test_description='Exercise some vgsplit diagnostics'
-+test_description='Test vgsplit operation, including different LV types'
- privileges_required_=1
- 
- . ./test-lib.sh
-@@ -40,141 +40,47 @@
-    pvcreate $d1 $d2 $d3 $d4'
- 
- test_expect_success \
--  'vgsplit accepts new vg as destination of split' \
--  'vgcreate $vg1 $d1 $d2 &&
--   vgsplit $vg1 $vg2 $d1 1>err;
--   status=$?; echo status=$?; test $status = 0 &&
--   grep "New volume group \"$vg2\" successfully split from \"$vg1\"" err &&
--   vgremove $vg1 &&
--   vgremove $vg2'
--
--test_expect_success \
--  'vgsplit accepts existing vg as destination of split' \
-+  'vgsplit correctly splits single linear LV into existing VG' \
-   'vgcreate $vg1 $d1 $d2 &&
-    vgcreate $vg2 $d3 $d4 &&
--   vgsplit $vg1 $vg2 $d1 1>err;
--   status=$?; echo status=$?; test $status = 0 &&
--   grep "Existing volume group \"$vg2\" successfully split from \"$vg1\"" err &&
--   vgremove $vg1 &&
--   vgremove $vg2'
-+   lvcreate -l 4 -n $lv1 $vg1 $d1 &&
-+   vgchange -an $vg1 &&
-+   vgsplit $vg1 $vg2 $d1 &&
-+   lvremove -f $vg2/$lv1 &&
-+   vgremove -f $vg2 &&
-+   vgremove -f $vg1'
- 
- test_expect_success \
--  'vgsplit accepts --maxphysicalvolumes 128 on new VG' \
-+  'vgsplit correctly splits single striped LV into existing VG' \
-   'vgcreate $vg1 $d1 $d2 &&
--   vgsplit --maxphysicalvolumes 128 $vg1 $vg2 $d1 &&
--   check_vg_field_ $vg2 max_pv 128 &&
--   vgremove $vg1 &&
--   vgremove $vg2'
-+   vgcreate $vg2 $d3 $d4 &&
-+   lvcreate -l 4 -i 2 -n $lv1 $vg1 $d1 $d2 &&
-+   vgchange -an $vg1 &&
-+   vgsplit $vg1 $vg2 $d1 $d2 &&
-+   lvremove -f $vg2/$lv1 &&
-+   vgremove -f $vg2'
- 
- test_expect_success \
--  'vgsplit accepts --maxlogicalvolumes 128 on new VG' \
-+  'vgsplit correctly splits origin and snapshot LV into existing VG' \
-   'vgcreate $vg1 $d1 $d2 &&
--   vgsplit --maxlogicalvolumes 128 $vg1 $vg2 $d1 &&
--   check_vg_field_ $vg2 max_lv 128 &&
--   vgremove $vg1 &&
--   vgremove $vg2'
--
--test_expect_success \
--  'vgsplit rejects split because max_pv of destination would be exceeded' \
--  'vgcreate --maxphysicalvolumes 2 $vg1 $d1 $d2 &&
--   vgcreate --maxphysicalvolumes 2 $vg2 $d3 $d4 &&
--   vgsplit $vg1 $vg2 $d1 2>err;
--   status=$?; echo status=$?; test $status = 5 &&
--   grep "^  Maximum number of physical volumes (2) exceeded" err &&
--   vgremove $vg2 &&
--   vgremove $vg1'
--
--test_expect_success \
--  'vgsplit rejects split because maxphysicalvolumes given with existing vg' \
--  'vgcreate --maxphysicalvolumes 2 $vg1 $d1 $d2 &&
--   vgcreate --maxphysicalvolumes 2 $vg2 $d3 $d4 &&
--   vgsplit --maxphysicalvolumes 2 $vg1 $vg2 $d1 2>err;
--   status=$?; echo status=$?; test $status = 5 &&
--   grep "^  Volume group \"$vg2\" exists, but new VG option specified" err &&
--   vgremove $vg2 &&
--   vgremove $vg1'
--
--test_expect_success \
--  'vgsplit rejects split because maxlogicalvolumes given with existing vg' \
--  'vgcreate --maxlogicalvolumes 2 $vg1 $d1 $d2 &&
--   vgcreate --maxlogicalvolumes 2 $vg2 $d3 $d4 &&
--   vgsplit --maxlogicalvolumes 2 $vg1 $vg2 $d1 2>err;
--   status=$?; echo status=$?; test $status = 5 &&
--   grep "^  Volume group \"$vg2\" exists, but new VG option specified" err &&
--   vgremove $vg2 &&
--   vgremove $vg1'
--
--test_expect_success \
--  'vgsplit rejects split because alloc given with existing vg' \
--  'vgcreate --alloc cling $vg1 $d1 $d2 &&
--   vgcreate --alloc cling $vg2 $d3 $d4 &&
--   vgsplit --alloc cling $vg1 $vg2 $d1 2>err;
--   status=$?; echo status=$?; test $status = 5 &&
--   grep "^  Volume group \"$vg2\" exists, but new VG option specified" err &&
--   vgremove $vg2 &&
--   vgremove $vg1'
--
--test_expect_success \
--  'vgsplit rejects split because clustered given with existing vg' \
--  'vgcreate --clustered n $vg1 $d1 $d2 &&
--   vgcreate --clustered n $vg2 $d3 $d4 &&
--   vgsplit --clustered n $vg1 $vg2 $d1 2>err;
--   status=$?; echo status=$?; test $status = 5 &&
--   grep "^  Volume group \"$vg2\" exists, but new VG option specified" err &&
--   vgremove $vg2 &&
--   vgremove $vg1'
--
--test_expect_success \
--  'vgsplit rejects split because metadata types differ' \
--  'pvcreate -ff -M1 $d3 $d4 &&
--   pvcreate -ff -M2 $d1 $d2 &&
--   vgcreate -M1 $vg1 $d3 $d4 &&
--   vgcreate -M2 $vg2 $d1 $d2 &&
--   vgsplit $vg1 $vg2 $d3 2>err;
--   status=$?; echo status=$?; test $status = 5 &&
--   grep "^  Metadata types differ" err &&
--   vgremove $vg2 &&
--   vgremove $vg1'
--
--test_expect_success \
--  'vgsplit rejects vg with active lv' \
--  'pvcreate -ff -M2 $d3 $d4 &&
--   vgcreate $vg1 $d1 $d2 &&
-    vgcreate $vg2 $d3 $d4 &&
--   lvcreate -l 4 -n $lv1 $vg1 &&
--   vgsplit $vg1 $vg2 $d1 2>err;
--   status=$?; echo status=$?; test $status = 5 &&
--   grep "^  Logical volumes in \"$vg1\" must be inactive\$" err &&
--   vgremove -f $vg2 &&
--   vgremove -f $vg1'
--
--test_expect_success \
--  'vgsplit rejects split because max_lv is exceeded' \
--  'vgcreate --maxlogicalvolumes 2 $vg1 $d1 $d2 &&
--   vgcreate --maxlogicalvolumes 2 $vg2 $d3 $d4 &&
--   lvcreate -l 4 -n $lv1 $vg1 &&
--   lvcreate -l 4 -n $lv2 $vg1 &&
--   lvcreate -l 4 -n $lv3 $vg2 &&
-+   lvcreate -l 64 -i 2 -n $lv1 $vg1 $d1 $d2 &&
-+   lvcreate -l 4 -i 2 -s -n $lv2 $vg1/$lv1 &&
-    vgchange -an $vg1 &&
--   vgchange -an $vg2 &&
--   vgsplit $vg1 $vg2 $d1 2>err;
--   status=$?; echo status=$?; test $status = 5 &&
--   grep "^  Maximum number of logical volumes (2) exceeded" err &&
--   vgremove -f $vg2 &&
--   vgremove -f $vg1'
-+   vgsplit $vg1 $vg2 $d1 $d2 &&
-+   lvremove -f $vg2/$lv2 &&
-+   lvremove -f $vg2/$lv1 &&
-+   vgremove -f $vg2'
- 
- test_expect_success \
--  'vgsplit rejects split because PV not in VG' \
--  'vgcreate $vg1 $d1 $d2 &&
--   vgcreate $vg2 $d3 $d4 &&
--   lvcreate -l 4 -n $lv1 $vg1 &&
--   lvcreate -l 4 -n $lv2 $vg1 &&
-+  'vgsplit correctly splits mirror LV into existing VG' \
-+  'vgcreate $vg1 $d1 $d2 $d3 &&
-+   vgcreate $vg2 $d4 &&
-+   lvcreate -l 64 -m1 -n $lv1 $vg1 $d1 $d2 $d3 &&
-    vgchange -an $vg1 &&
--   vgsplit $vg1 $vg2 $d3 2>err;
--   status=$?; echo status=$?; test $status = 5 &&
--   grep "^  Physical volume $d3 not in volume group $vg1" err &&
--   vgremove -f $vg2 &&
--   vgremove -f $vg1'
-+   vgsplit $vg1 $vg2 $d1 $d2 $d3 &&
-+   lvremove -f $vg2/$lv1 &&
-+   vgremove -f $vg2'
- 
- test_done
- # Local Variables:
-
+diff --git a/man/lvchange.8_pregen b/man/lvchange.8_pregen
+index b559c89c9..27bee0f14 100644
+--- a/man/lvchange.8_pregen
++++ b/man/lvchange.8_pregen
+@@ -126,6 +126,8 @@ lvchange \(em Change the attributes of logical volume(s)
+     \fB--sysinit\fP
+ .br
+  \fB-t\fP|\fB--test\fP
++.br
++    \fB--vdosettings\fP \fIString\fP
+ .br
+  \fB-v\fP|\fB--verbose\fP
+ .br
+@@ -202,6 +204,8 @@ required, after which the others are optional.
+      \fB--\fP[\fBraid\fP]\fBminrecoveryrate\fP \fISize\fP[k|UNIT]
+ .br
+      \fB--\fP[\fBraid\fP]\fBmaxrecoveryrate\fP \fISize\fP[k|UNIT]
++.br
++     \fB--vdosettings\fP \fIString\fP
+ .br
+      \fB--\fP[\fBraid\fP]\fBwritebehind\fP \fINumber\fP
+ .br
+@@ -609,8 +613,9 @@ See \fBlvm.conf\fP(5) for more information about profiles.
+ .HP
+ \fB--devices\fP \fIPV\fP
+ .br
+-Devices that the command can use. This option can be repeated
+-or accepts a comma separated list of devices. This overrides
++Restricts the devices that are visible and accessible to the command.
++Devices not listed will appear to be missing. This option can be
++repeated, or accepts a comma separated list of devices. This overrides
+ the devices file.
+ .
+ .HP
+@@ -927,6 +932,17 @@ error messages in multi-stage operations if a tool relies on reading
+ back metadata it believes has changed but hasn't.
+ .
+ .HP
++\fB--vdosettings\fP \fIString\fP
++.br
++Specifies tunable VDO options for VDO LVs.
++Use the form 'option=value' or 'option1=value option2=value', or
++repeat --vdosettings for each option being set.
++These settings override the default VDO behaviors.
++To remove vdosettings and revert to the default
++VDO behaviors, use --vdosettings 'default'.
++See \fBlvmvdo\fP(7) for more information.
++.
++.HP
+ \fB-v\fP|\fB--verbose\fP ...
+ .br
+ Set verbose level. Repeat from 1 to 4 times to increase the detail
+diff --git a/man/lvconvert.8_pregen b/man/lvconvert.8_pregen
+index 679519303..fa52da55c 100644
+--- a/man/lvconvert.8_pregen
++++ b/man/lvconvert.8_pregen
+@@ -155,6 +155,8 @@ lvconvert \(em Change logical volume layout
+     \fB--usepolicies\fP
+ .br
+     \fB--vdopool\fP \fILV\fP
++.br
++    \fB--vdosettings\fP \fIString\fP
+ .br
+  \fB-v\fP|\fB--verbose\fP
+ .br
+@@ -742,6 +744,8 @@ Convert LV to type vdopool.
+ .br
+ [    \fB--deduplication\fP \fBy\fP|\fBn\fP ]
+ .br
++[    \fB--vdosettings\fP \fIString\fP ]
++.br
+ [ COMMON_OPTIONS ]
+ .ad b
+ .RE
+@@ -1131,8 +1135,9 @@ See \fBlvmvdo\fP(7) for more information about VDO usage.
+ .HP
+ \fB--devices\fP \fIPV\fP
+ .br
+-Devices that the command can use. This option can be repeated
+-or accepts a comma separated list of devices. This overrides
++Restricts the devices that are visible and accessible to the command.
++Devices not listed will appear to be missing. This option can be
++repeated, or accepts a comma separated list of devices. This overrides
+ the devices file.
+ .
+ .HP
+@@ -1535,6 +1540,17 @@ The name of a VDO pool LV.
+ See \fBlvmvdo\fP(7) for more information about VDO usage.
+ .
+ .HP
++\fB--vdosettings\fP \fIString\fP
++.br
++Specifies tunable VDO options for VDO LVs.
++Use the form 'option=value' or 'option1=value option2=value', or
++repeat --vdosettings for each option being set.
++These settings override the default VDO behaviors.
++To remove vdosettings and revert to the default
++VDO behaviors, use --vdosettings 'default'.
++See \fBlvmvdo\fP(7) for more information.
++.
++.HP
+ \fB-v\fP|\fB--verbose\fP ...
+ .br
+ Set verbose level. Repeat from 1 to 4 times to increase the detail
+@@ -1808,6 +1824,8 @@ Convert LV to type vdopool.
+ .br
+ [    \fB--deduplication\fP \fBy\fP|\fBn\fP ]
+ .br
++[    \fB--vdosettings\fP \fIString\fP ]
++.br
+ [ COMMON_OPTIONS ]
+ .ad b
+ .RE
+diff --git a/man/lvcreate.8_pregen b/man/lvcreate.8_pregen
+index 2cccbbe56..0ffe92a94 100644
+--- a/man/lvcreate.8_pregen
++++ b/man/lvcreate.8_pregen
+@@ -157,6 +157,8 @@ lvcreate \(em Create a logical volume
+     \fB--vdo\fP
+ .br
+     \fB--vdopool\fP \fILV\fP
++.br
++    \fB--vdosettings\fP \fIString\fP
+ .br
+  \fB-v\fP|\fB--verbose\fP
+ .br
+@@ -537,6 +539,8 @@ Create a LV that returns VDO when used.
+ .br
+ [    \fB--deduplication\fP \fBy\fP|\fBn\fP ]
+ .br
++[    \fB--vdosettings\fP \fIString\fP ]
++.br
+ [ COMMON_OPTIONS ]
+ .ad b
+ .RE
+@@ -1003,8 +1007,9 @@ See \fBlvmvdo\fP(7) for more information about VDO usage.
+ .HP
+ \fB--devices\fP \fIPV\fP
+ .br
+-Devices that the command can use. This option can be repeated
+-or accepts a comma separated list of devices. This overrides
++Restricts the devices that are visible and accessible to the command.
++Devices not listed will appear to be missing. This option can be
++repeated, or accepts a comma separated list of devices. This overrides
+ the devices file.
+ .
+ .HP
+@@ -1438,6 +1443,17 @@ The name of a VDO pool LV.
+ See \fBlvmvdo\fP(7) for more information about VDO usage.
+ .
+ .HP
++\fB--vdosettings\fP \fIString\fP
++.br
++Specifies tunable VDO options for VDO LVs.
++Use the form 'option=value' or 'option1=value option2=value', or
++repeat --vdosettings for each option being set.
++These settings override the default VDO behaviors.
++To remove vdosettings and revert to the default
++VDO behaviors, use --vdosettings 'default'.
++See \fBlvmvdo\fP(7) for more information.
++.
++.HP
+ \fB-v\fP|\fB--verbose\fP ...
+ .br
+ Set verbose level. Repeat from 1 to 4 times to increase the detail
+@@ -1966,6 +1982,8 @@ Create a VDO LV with VDO pool.
+ .br
+ [    \fB--deduplication\fP \fBy\fP|\fBn\fP ]
+ .br
++[    \fB--vdosettings\fP \fIString\fP ]
++.br
+ [ COMMON_OPTIONS ]
+ .ad b
+ .RE
+@@ -1996,6 +2014,8 @@ Create a VDO LV with VDO pool.
+ .br
+ [    \fB--deduplication\fP \fBy\fP|\fBn\fP ]
+ .br
++[    \fB--vdosettings\fP \fIString\fP ]
++.br
+ [ COMMON_OPTIONS ]
+ .ad b
+ .RE
+diff --git a/man/lvdisplay.8_pregen b/man/lvdisplay.8_pregen
+index 04aab4c09..387a7d30d 100644
+--- a/man/lvdisplay.8_pregen
++++ b/man/lvdisplay.8_pregen
+@@ -186,8 +186,9 @@ messages sent to the log file and/or syslog (if configured).
+ .HP
+ \fB--devices\fP \fIPV\fP
+ .br
+-Devices that the command can use. This option can be repeated
+-or accepts a comma separated list of devices. This overrides
++Restricts the devices that are visible and accessible to the command.
++Devices not listed will appear to be missing. This option can be
++repeated, or accepts a comma separated list of devices. This overrides
+ the devices file.
+ .
+ .HP
+diff --git a/man/lvextend.8_pregen b/man/lvextend.8_pregen
+index be6992e94..8a3e1ea4e 100644
+--- a/man/lvextend.8_pregen
++++ b/man/lvextend.8_pregen
+@@ -328,8 +328,9 @@ messages sent to the log file and/or syslog (if configured).
+ .HP
+ \fB--devices\fP \fIPV\fP
+ .br
+-Devices that the command can use. This option can be repeated
+-or accepts a comma separated list of devices. This overrides
++Restricts the devices that are visible and accessible to the command.
++Devices not listed will appear to be missing. This option can be
++repeated, or accepts a comma separated list of devices. This overrides
+ the devices file.
+ .
+ .HP
+diff --git a/man/lvm-fullreport.8_pregen b/man/lvm-fullreport.8_pregen
+index 02b38ef40..edae0efe3 100644
+--- a/man/lvm-fullreport.8_pregen
++++ b/man/lvm-fullreport.8_pregen
+@@ -169,8 +169,9 @@ messages sent to the log file and/or syslog (if configured).
+ .HP
+ \fB--devices\fP \fIPV\fP
+ .br
+-Devices that the command can use. This option can be repeated
+-or accepts a comma separated list of devices. This overrides
++Restricts the devices that are visible and accessible to the command.
++Devices not listed will appear to be missing. This option can be
++repeated, or accepts a comma separated list of devices. This overrides
+ the devices file.
+ .
+ .HP
+diff --git a/man/lvm-lvpoll.8_pregen b/man/lvm-lvpoll.8_pregen
+index 7f45f6eb3..fa8027f8e 100644
+--- a/man/lvm-lvpoll.8_pregen
++++ b/man/lvm-lvpoll.8_pregen
+@@ -115,8 +115,9 @@ messages sent to the log file and/or syslog (if configured).
+ .HP
+ \fB--devices\fP \fIPV\fP
+ .br
+-Devices that the command can use. This option can be repeated
+-or accepts a comma separated list of devices. This overrides
++Restricts the devices that are visible and accessible to the command.
++Devices not listed will appear to be missing. This option can be
++repeated, or accepts a comma separated list of devices. This overrides
+ the devices file.
+ .
+ .HP
+diff --git a/man/lvmconfig.8_pregen b/man/lvmconfig.8_pregen
+index 51946e1ec..e6762f989 100644
+--- a/man/lvmconfig.8_pregen
++++ b/man/lvmconfig.8_pregen
+@@ -156,8 +156,9 @@ messages sent to the log file and/or syslog (if configured).
+ .HP
+ \fB--devices\fP \fIPV\fP
+ .br
+-Devices that the command can use. This option can be repeated
+-or accepts a comma separated list of devices. This overrides
++Restricts the devices that are visible and accessible to the command.
++Devices not listed will appear to be missing. This option can be
++repeated, or accepts a comma separated list of devices. This overrides
+ the devices file.
+ .
+ .HP
+diff --git a/man/lvmdevices.8_pregen b/man/lvmdevices.8_pregen
+index d64c3a31a..a2397e50f 100644
+--- a/man/lvmdevices.8_pregen
++++ b/man/lvmdevices.8_pregen
+@@ -322,7 +322,8 @@ Find a device with the PVID and add the device to the devices file.
+ .HP
+ \fB--check\fP
+ .br
+-Check the content of the devices file.
++Checks the content of the devices file.
++Reports incorrect device names or PVIDs for entries.
+ .
+ .HP
+ \fB--commandprofile\fP \fIString\fP
+@@ -364,8 +365,9 @@ then it will override the default type that lvm would use.
+ .HP
+ \fB--devices\fP \fIPV\fP
+ .br
+-Devices that the command can use. This option can be repeated
+-or accepts a comma separated list of devices. This overrides
++Restricts the devices that are visible and accessible to the command.
++Devices not listed will appear to be missing. This option can be
++repeated, or accepts a comma separated list of devices. This overrides
+ the devices file.
+ .
+ .HP
+diff --git a/man/lvmdiskscan.8_pregen b/man/lvmdiskscan.8_pregen
+index 7fd3d941d..ac0931c88 100644
+--- a/man/lvmdiskscan.8_pregen
++++ b/man/lvmdiskscan.8_pregen
+@@ -102,8 +102,9 @@ messages sent to the log file and/or syslog (if configured).
+ .HP
+ \fB--devices\fP \fIPV\fP
+ .br
+-Devices that the command can use. This option can be repeated
+-or accepts a comma separated list of devices. This overrides
++Restricts the devices that are visible and accessible to the command.
++Devices not listed will appear to be missing. This option can be
++repeated, or accepts a comma separated list of devices. This overrides
+ the devices file.
+ .
+ .HP
+diff --git a/man/lvreduce.8_pregen b/man/lvreduce.8_pregen
+index ea960eb53..cd2e38e5b 100644
+--- a/man/lvreduce.8_pregen
++++ b/man/lvreduce.8_pregen
+@@ -130,8 +130,9 @@ messages sent to the log file and/or syslog (if configured).
+ .HP
+ \fB--devices\fP \fIPV\fP
+ .br
+-Devices that the command can use. This option can be repeated
+-or accepts a comma separated list of devices. This overrides
++Restricts the devices that are visible and accessible to the command.
++Devices not listed will appear to be missing. This option can be
++repeated, or accepts a comma separated list of devices. This overrides
+ the devices file.
+ .
+ .HP
+diff --git a/man/lvremove.8_pregen b/man/lvremove.8_pregen
+index 2bd7997a3..8a4afbdff 100644
+--- a/man/lvremove.8_pregen
++++ b/man/lvremove.8_pregen
+@@ -136,8 +136,9 @@ messages sent to the log file and/or syslog (if configured).
+ .HP
+ \fB--devices\fP \fIPV\fP
+ .br
+-Devices that the command can use. This option can be repeated
+-or accepts a comma separated list of devices. This overrides
++Restricts the devices that are visible and accessible to the command.
++Devices not listed will appear to be missing. This option can be
++repeated, or accepts a comma separated list of devices. This overrides
+ the devices file.
+ .
+ .HP
+diff --git a/man/lvrename.8_pregen b/man/lvrename.8_pregen
+index d41a4c241..27ce2caeb 100644
+--- a/man/lvrename.8_pregen
++++ b/man/lvrename.8_pregen
+@@ -120,8 +120,9 @@ messages sent to the log file and/or syslog (if configured).
+ .HP
+ \fB--devices\fP \fIPV\fP
+ .br
+-Devices that the command can use. This option can be repeated
+-or accepts a comma separated list of devices. This overrides
++Restricts the devices that are visible and accessible to the command.
++Devices not listed will appear to be missing. This option can be
++repeated, or accepts a comma separated list of devices. This overrides
+ the devices file.
+ .
+ .HP
+diff --git a/man/lvresize.8_pregen b/man/lvresize.8_pregen
+index f3ea2536c..10e7dda7c 100644
+--- a/man/lvresize.8_pregen
++++ b/man/lvresize.8_pregen
+@@ -286,8 +286,9 @@ messages sent to the log file and/or syslog (if configured).
+ .HP
+ \fB--devices\fP \fIPV\fP
+ .br
+-Devices that the command can use. This option can be repeated
+-or accepts a comma separated list of devices. This overrides
++Restricts the devices that are visible and accessible to the command.
++Devices not listed will appear to be missing. This option can be
++repeated, or accepts a comma separated list of devices. This overrides
+ the devices file.
+ .
+ .HP
+diff --git a/man/lvs.8_pregen b/man/lvs.8_pregen
+index 2b2c5f193..94a74f9dd 100644
+--- a/man/lvs.8_pregen
++++ b/man/lvs.8_pregen
+@@ -172,8 +172,9 @@ messages sent to the log file and/or syslog (if configured).
+ .HP
+ \fB--devices\fP \fIPV\fP
+ .br
+-Devices that the command can use. This option can be repeated
+-or accepts a comma separated list of devices. This overrides
++Restricts the devices that are visible and accessible to the command.
++Devices not listed will appear to be missing. This option can be
++repeated, or accepts a comma separated list of devices. This overrides
+ the devices file.
+ .
+ .HP
+diff --git a/man/lvscan.8_pregen b/man/lvscan.8_pregen
+index f459ab35b..8d79f22dd 100644
+--- a/man/lvscan.8_pregen
++++ b/man/lvscan.8_pregen
+@@ -119,8 +119,9 @@ messages sent to the log file and/or syslog (if configured).
+ .HP
+ \fB--devices\fP \fIPV\fP
+ .br
+-Devices that the command can use. This option can be repeated
+-or accepts a comma separated list of devices. This overrides
++Restricts the devices that are visible and accessible to the command.
++Devices not listed will appear to be missing. This option can be
++repeated, or accepts a comma separated list of devices. This overrides
+ the devices file.
+ .
+ .HP
+diff --git a/man/pvchange.8_pregen b/man/pvchange.8_pregen
+index 4add9ca69..010845274 100644
+--- a/man/pvchange.8_pregen
++++ b/man/pvchange.8_pregen
+@@ -179,8 +179,9 @@ multiple tags at once. See \fBlvm\fP(8) for information about tags.
+ .HP
+ \fB--devices\fP \fIPV\fP
+ .br
+-Devices that the command can use. This option can be repeated
+-or accepts a comma separated list of devices. This overrides
++Restricts the devices that are visible and accessible to the command.
++Devices not listed will appear to be missing. This option can be
++repeated, or accepts a comma separated list of devices. This overrides
+ the devices file.
+ .
+ .HP
+diff --git a/man/pvck.8_pregen b/man/pvck.8_pregen
+index 88200f21e..7d6652342 100644
+--- a/man/pvck.8_pregen
++++ b/man/pvck.8_pregen
+@@ -351,8 +351,9 @@ messages sent to the log file and/or syslog (if configured).
+ .HP
+ \fB--devices\fP \fIPV\fP
+ .br
+-Devices that the command can use. This option can be repeated
+-or accepts a comma separated list of devices. This overrides
++Restricts the devices that are visible and accessible to the command.
++Devices not listed will appear to be missing. This option can be
++repeated, or accepts a comma separated list of devices. This overrides
+ the devices file.
+ .
+ .HP
+diff --git a/man/pvcreate.8_pregen b/man/pvcreate.8_pregen
+index a74a5ec2a..6ffd596fe 100644
+--- a/man/pvcreate.8_pregen
++++ b/man/pvcreate.8_pregen
+@@ -229,8 +229,9 @@ messages sent to the log file and/or syslog (if configured).
+ .HP
+ \fB--devices\fP \fIPV\fP
+ .br
+-Devices that the command can use. This option can be repeated
+-or accepts a comma separated list of devices. This overrides
++Restricts the devices that are visible and accessible to the command.
++Devices not listed will appear to be missing. This option can be
++repeated, or accepts a comma separated list of devices. This overrides
+ the devices file.
+ .
+ .HP
+diff --git a/man/pvdisplay.8_pregen b/man/pvdisplay.8_pregen
+index 2f26a8727..59628bedd 100644
+--- a/man/pvdisplay.8_pregen
++++ b/man/pvdisplay.8_pregen
+@@ -183,8 +183,9 @@ messages sent to the log file and/or syslog (if configured).
+ .HP
+ \fB--devices\fP \fIPV\fP
+ .br
+-Devices that the command can use. This option can be repeated
+-or accepts a comma separated list of devices. This overrides
++Restricts the devices that are visible and accessible to the command.
++Devices not listed will appear to be missing. This option can be
++repeated, or accepts a comma separated list of devices. This overrides
+ the devices file.
+ .
+ .HP
+diff --git a/man/pvmove.8_pregen b/man/pvmove.8_pregen
+index 0f70497a2..f633b97d2 100644
+--- a/man/pvmove.8_pregen
++++ b/man/pvmove.8_pregen
+@@ -206,8 +206,9 @@ messages sent to the log file and/or syslog (if configured).
+ .HP
+ \fB--devices\fP \fIPV\fP
+ .br
+-Devices that the command can use. This option can be repeated
+-or accepts a comma separated list of devices. This overrides
++Restricts the devices that are visible and accessible to the command.
++Devices not listed will appear to be missing. This option can be
++repeated, or accepts a comma separated list of devices. This overrides
+ the devices file.
+ .
+ .HP
+diff --git a/man/pvremove.8_pregen b/man/pvremove.8_pregen
+index 3d4a86c09..51c589fd7 100644
+--- a/man/pvremove.8_pregen
++++ b/man/pvremove.8_pregen
+@@ -103,8 +103,9 @@ messages sent to the log file and/or syslog (if configured).
+ .HP
+ \fB--devices\fP \fIPV\fP
+ .br
+-Devices that the command can use. This option can be repeated
+-or accepts a comma separated list of devices. This overrides
++Restricts the devices that are visible and accessible to the command.
++Devices not listed will appear to be missing. This option can be
++repeated, or accepts a comma separated list of devices. This overrides
+ the devices file.
+ .
+ .HP
+diff --git a/man/pvresize.8_pregen b/man/pvresize.8_pregen
+index 87d87c8ce..9ce57e325 100644
+--- a/man/pvresize.8_pregen
++++ b/man/pvresize.8_pregen
+@@ -98,8 +98,9 @@ messages sent to the log file and/or syslog (if configured).
+ .HP
+ \fB--devices\fP \fIPV\fP
+ .br
+-Devices that the command can use. This option can be repeated
+-or accepts a comma separated list of devices. This overrides
++Restricts the devices that are visible and accessible to the command.
++Devices not listed will appear to be missing. This option can be
++repeated, or accepts a comma separated list of devices. This overrides
+ the devices file.
+ .
+ .HP
+diff --git a/man/pvs.8_pregen b/man/pvs.8_pregen
+index 32c28e4d1..955b3f887 100644
+--- a/man/pvs.8_pregen
++++ b/man/pvs.8_pregen
+@@ -169,8 +169,9 @@ messages sent to the log file and/or syslog (if configured).
+ .HP
+ \fB--devices\fP \fIPV\fP
+ .br
+-Devices that the command can use. This option can be repeated
+-or accepts a comma separated list of devices. This overrides
++Restricts the devices that are visible and accessible to the command.
++Devices not listed will appear to be missing. This option can be
++repeated, or accepts a comma separated list of devices. This overrides
+ the devices file.
+ .
+ .HP
+diff --git a/man/pvscan.8_pregen b/man/pvscan.8_pregen
+index 1c96d5aab..1e1cc11ab 100644
+--- a/man/pvscan.8_pregen
++++ b/man/pvscan.8_pregen
+@@ -369,8 +369,9 @@ messages sent to the log file and/or syslog (if configured).
+ .HP
+ \fB--devices\fP \fIPV\fP
+ .br
+-Devices that the command can use. This option can be repeated
+-or accepts a comma separated list of devices. This overrides
++Restricts the devices that are visible and accessible to the command.
++Devices not listed will appear to be missing. This option can be
++repeated, or accepts a comma separated list of devices. This overrides
+ the devices file.
+ .
+ .HP
+diff --git a/man/vgcfgbackup.8_pregen b/man/vgcfgbackup.8_pregen
+index 5e658093a..cf984b04b 100644
+--- a/man/vgcfgbackup.8_pregen
++++ b/man/vgcfgbackup.8_pregen
+@@ -123,8 +123,9 @@ messages sent to the log file and/or syslog (if configured).
+ .HP
+ \fB--devices\fP \fIPV\fP
+ .br
+-Devices that the command can use. This option can be repeated
+-or accepts a comma separated list of devices. This overrides
++Restricts the devices that are visible and accessible to the command.
++Devices not listed will appear to be missing. This option can be
++repeated, or accepts a comma separated list of devices. This overrides
+ the devices file.
+ .
+ .HP
+diff --git a/man/vgcfgrestore.8_pregen b/man/vgcfgrestore.8_pregen
+index 695e05582..6165cd36e 100644
+--- a/man/vgcfgrestore.8_pregen
++++ b/man/vgcfgrestore.8_pregen
+@@ -208,8 +208,9 @@ messages sent to the log file and/or syslog (if configured).
+ .HP
+ \fB--devices\fP \fIPV\fP
+ .br
+-Devices that the command can use. This option can be repeated
+-or accepts a comma separated list of devices. This overrides
++Restricts the devices that are visible and accessible to the command.
++Devices not listed will appear to be missing. This option can be
++repeated, or accepts a comma separated list of devices. This overrides
+ the devices file.
+ .
+ .HP
+diff --git a/man/vgchange.8_pregen b/man/vgchange.8_pregen
+index 05c67aead..7c7030c0d 100644
+--- a/man/vgchange.8_pregen
++++ b/man/vgchange.8_pregen
+@@ -556,8 +556,9 @@ See \fBlvm.conf\fP(5) for more information about profiles.
+ .HP
+ \fB--devices\fP \fIPV\fP
+ .br
+-Devices that the command can use. This option can be repeated
+-or accepts a comma separated list of devices. This overrides
++Restricts the devices that are visible and accessible to the command.
++Devices not listed will appear to be missing. This option can be
++repeated, or accepts a comma separated list of devices. This overrides
+ the devices file.
+ .
+ .HP
+diff --git a/man/vgck.8_pregen b/man/vgck.8_pregen
+index a8fa33f4b..cfb828ff9 100644
+--- a/man/vgck.8_pregen
++++ b/man/vgck.8_pregen
+@@ -114,8 +114,9 @@ messages sent to the log file and/or syslog (if configured).
+ .HP
+ \fB--devices\fP \fIPV\fP
+ .br
+-Devices that the command can use. This option can be repeated
+-or accepts a comma separated list of devices. This overrides
++Restricts the devices that are visible and accessible to the command.
++Devices not listed will appear to be missing. This option can be
++repeated, or accepts a comma separated list of devices. This overrides
+ the devices file.
+ .
+ .HP
+diff --git a/man/vgconvert.8_pregen b/man/vgconvert.8_pregen
+index 4d54c2b27..b99de39b8 100644
+--- a/man/vgconvert.8_pregen
++++ b/man/vgconvert.8_pregen
+@@ -124,8 +124,9 @@ messages sent to the log file and/or syslog (if configured).
+ .HP
+ \fB--devices\fP \fIPV\fP
+ .br
+-Devices that the command can use. This option can be repeated
+-or accepts a comma separated list of devices. This overrides
++Restricts the devices that are visible and accessible to the command.
++Devices not listed will appear to be missing. This option can be
++repeated, or accepts a comma separated list of devices. This overrides
+ the devices file.
+ .
+ .HP
+diff --git a/man/vgcreate.8_pregen b/man/vgcreate.8_pregen
+index 9bb8d3868..d5316aa1c 100644
+--- a/man/vgcreate.8_pregen
++++ b/man/vgcreate.8_pregen
+@@ -206,8 +206,9 @@ messages sent to the log file and/or syslog (if configured).
+ .HP
+ \fB--devices\fP \fIPV\fP
+ .br
+-Devices that the command can use. This option can be repeated
+-or accepts a comma separated list of devices. This overrides
++Restricts the devices that are visible and accessible to the command.
++Devices not listed will appear to be missing. This option can be
++repeated, or accepts a comma separated list of devices. This overrides
+ the devices file.
+ .
+ .HP
+diff --git a/man/vgdisplay.8_pregen b/man/vgdisplay.8_pregen
+index 0a12b3c39..b6cd294d5 100644
+--- a/man/vgdisplay.8_pregen
++++ b/man/vgdisplay.8_pregen
+@@ -180,8 +180,9 @@ messages sent to the log file and/or syslog (if configured).
+ .HP
+ \fB--devices\fP \fIPV\fP
+ .br
+-Devices that the command can use. This option can be repeated
+-or accepts a comma separated list of devices. This overrides
++Restricts the devices that are visible and accessible to the command.
++Devices not listed will appear to be missing. This option can be
++repeated, or accepts a comma separated list of devices. This overrides
+ the devices file.
+ .
+ .HP
+diff --git a/man/vgexport.8_pregen b/man/vgexport.8_pregen
+index a87058946..6af64b82a 100644
+--- a/man/vgexport.8_pregen
++++ b/man/vgexport.8_pregen
+@@ -139,8 +139,9 @@ messages sent to the log file and/or syslog (if configured).
+ .HP
+ \fB--devices\fP \fIPV\fP
+ .br
+-Devices that the command can use. This option can be repeated
+-or accepts a comma separated list of devices. This overrides
++Restricts the devices that are visible and accessible to the command.
++Devices not listed will appear to be missing. This option can be
++repeated, or accepts a comma separated list of devices. This overrides
+ the devices file.
+ .
+ .HP
+diff --git a/man/vgextend.8_pregen b/man/vgextend.8_pregen
+index 2b2650527..e55e0a110 100644
+--- a/man/vgextend.8_pregen
++++ b/man/vgextend.8_pregen
+@@ -147,8 +147,9 @@ messages sent to the log file and/or syslog (if configured).
+ .HP
+ \fB--devices\fP \fIPV\fP
+ .br
+-Devices that the command can use. This option can be repeated
+-or accepts a comma separated list of devices. This overrides
++Restricts the devices that are visible and accessible to the command.
++Devices not listed will appear to be missing. This option can be
++repeated, or accepts a comma separated list of devices. This overrides
+ the devices file.
+ .
+ .HP
+diff --git a/man/vgimport.8_pregen b/man/vgimport.8_pregen
+index 5cd8fab84..9f8614205 100644
+--- a/man/vgimport.8_pregen
++++ b/man/vgimport.8_pregen
+@@ -128,8 +128,9 @@ messages sent to the log file and/or syslog (if configured).
+ .HP
+ \fB--devices\fP \fIPV\fP
+ .br
+-Devices that the command can use. This option can be repeated
+-or accepts a comma separated list of devices. This overrides
++Restricts the devices that are visible and accessible to the command.
++Devices not listed will appear to be missing. This option can be
++repeated, or accepts a comma separated list of devices. This overrides
+ the devices file.
+ .
+ .HP
+diff --git a/man/vgimportclone.8_pregen b/man/vgimportclone.8_pregen
+index bf0af5841..80da5454b 100644
+--- a/man/vgimportclone.8_pregen
++++ b/man/vgimportclone.8_pregen
+@@ -113,8 +113,9 @@ messages sent to the log file and/or syslog (if configured).
+ .HP
+ \fB--devices\fP \fIPV\fP
+ .br
+-Devices that the command can use. This option can be repeated
+-or accepts a comma separated list of devices. This overrides
++Restricts the devices that are visible and accessible to the command.
++Devices not listed will appear to be missing. This option can be
++repeated, or accepts a comma separated list of devices. This overrides
+ the devices file.
+ .
+ .HP
+diff --git a/man/vgimportdevices.8_pregen b/man/vgimportdevices.8_pregen
+index 5897e29ad..44e5fc663 100644
+--- a/man/vgimportdevices.8_pregen
++++ b/man/vgimportdevices.8_pregen
+@@ -132,8 +132,9 @@ messages sent to the log file and/or syslog (if configured).
+ .HP
+ \fB--devices\fP \fIPV\fP
+ .br
+-Devices that the command can use. This option can be repeated
+-or accepts a comma separated list of devices. This overrides
++Restricts the devices that are visible and accessible to the command.
++Devices not listed will appear to be missing. This option can be
++repeated, or accepts a comma separated list of devices. This overrides
+ the devices file.
+ .
+ .HP
+diff --git a/man/vgmerge.8_pregen b/man/vgmerge.8_pregen
+index a36e0c7bd..dfe8e2f0f 100644
+--- a/man/vgmerge.8_pregen
++++ b/man/vgmerge.8_pregen
+@@ -107,8 +107,9 @@ messages sent to the log file and/or syslog (if configured).
+ .HP
+ \fB--devices\fP \fIPV\fP
+ .br
+-Devices that the command can use. This option can be repeated
+-or accepts a comma separated list of devices. This overrides
++Restricts the devices that are visible and accessible to the command.
++Devices not listed will appear to be missing. This option can be
++repeated, or accepts a comma separated list of devices. This overrides
+ the devices file.
+ .
+ .HP
+diff --git a/man/vgmknodes.8_pregen b/man/vgmknodes.8_pregen
+index 0a03e1582..d7cd722a4 100644
+--- a/man/vgmknodes.8_pregen
++++ b/man/vgmknodes.8_pregen
+@@ -108,8 +108,9 @@ messages sent to the log file and/or syslog (if configured).
+ .HP
+ \fB--devices\fP \fIPV\fP
+ .br
+-Devices that the command can use. This option can be repeated
+-or accepts a comma separated list of devices. This overrides
++Restricts the devices that are visible and accessible to the command.
++Devices not listed will appear to be missing. This option can be
++repeated, or accepts a comma separated list of devices. This overrides
+ the devices file.
+ .
+ .HP
+diff --git a/man/vgreduce.8_pregen b/man/vgreduce.8_pregen
+index f3178a618..63b0a20f3 100644
+--- a/man/vgreduce.8_pregen
++++ b/man/vgreduce.8_pregen
+@@ -199,8 +199,9 @@ messages sent to the log file and/or syslog (if configured).
+ .HP
+ \fB--devices\fP \fIPV\fP
+ .br
+-Devices that the command can use. This option can be repeated
+-or accepts a comma separated list of devices. This overrides
++Restricts the devices that are visible and accessible to the command.
++Devices not listed will appear to be missing. This option can be
++repeated, or accepts a comma separated list of devices. This overrides
+ the devices file.
+ .
+ .HP
+diff --git a/man/vgremove.8_pregen b/man/vgremove.8_pregen
+index 779c0f13e..661ada673 100644
+--- a/man/vgremove.8_pregen
++++ b/man/vgremove.8_pregen
+@@ -109,8 +109,9 @@ messages sent to the log file and/or syslog (if configured).
+ .HP
+ \fB--devices\fP \fIPV\fP
+ .br
+-Devices that the command can use. This option can be repeated
+-or accepts a comma separated list of devices. This overrides
++Restricts the devices that are visible and accessible to the command.
++Devices not listed will appear to be missing. This option can be
++repeated, or accepts a comma separated list of devices. This overrides
+ the devices file.
+ .
+ .HP
+diff --git a/man/vgrename.8_pregen b/man/vgrename.8_pregen
+index d3e776ca4..2b849d180 100644
+--- a/man/vgrename.8_pregen
++++ b/man/vgrename.8_pregen
+@@ -133,8 +133,9 @@ messages sent to the log file and/or syslog (if configured).
+ .HP
+ \fB--devices\fP \fIPV\fP
+ .br
+-Devices that the command can use. This option can be repeated
+-or accepts a comma separated list of devices. This overrides
++Restricts the devices that are visible and accessible to the command.
++Devices not listed will appear to be missing. This option can be
++repeated, or accepts a comma separated list of devices. This overrides
+ the devices file.
+ .
+ .HP
+diff --git a/man/vgs.8_pregen b/man/vgs.8_pregen
+index ee5083a93..2ca98b0b0 100644
+--- a/man/vgs.8_pregen
++++ b/man/vgs.8_pregen
+@@ -166,8 +166,9 @@ messages sent to the log file and/or syslog (if configured).
+ .HP
+ \fB--devices\fP \fIPV\fP
+ .br
+-Devices that the command can use. This option can be repeated
+-or accepts a comma separated list of devices. This overrides
++Restricts the devices that are visible and accessible to the command.
++Devices not listed will appear to be missing. This option can be
++repeated, or accepts a comma separated list of devices. This overrides
+ the devices file.
+ .
+ .HP
+diff --git a/man/vgscan.8_pregen b/man/vgscan.8_pregen
+index 824e7f673..a8da70d99 100644
+--- a/man/vgscan.8_pregen
++++ b/man/vgscan.8_pregen
+@@ -101,8 +101,9 @@ messages sent to the log file and/or syslog (if configured).
+ .HP
+ \fB--devices\fP \fIPV\fP
+ .br
+-Devices that the command can use. This option can be repeated
+-or accepts a comma separated list of devices. This overrides
++Restricts the devices that are visible and accessible to the command.
++Devices not listed will appear to be missing. This option can be
++repeated, or accepts a comma separated list of devices. This overrides
+ the devices file.
+ .
+ .HP
+diff --git a/man/vgsplit.8_pregen b/man/vgsplit.8_pregen
+index 065c8b52a..99938a4e3 100644
+--- a/man/vgsplit.8_pregen
++++ b/man/vgsplit.8_pregen
+@@ -175,8 +175,9 @@ messages sent to the log file and/or syslog (if configured).
+ .HP
+ \fB--devices\fP \fIPV\fP
+ .br
+-Devices that the command can use. This option can be repeated
+-or accepts a comma separated list of devices. This overrides
++Restricts the devices that are visible and accessible to the command.
++Devices not listed will appear to be missing. This option can be
++repeated, or accepts a comma separated list of devices. This overrides
+ the devices file.
+ .
+ .HP
 
