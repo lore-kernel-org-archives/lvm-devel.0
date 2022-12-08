@@ -1,89 +1,65 @@
 From: Marian Csontos <mcsontos@sourceware.org>
-Date: Thu,  8 Dec 2022 11:37:10 +0000 (GMT)
-Subject: rhel-8.8.0 - vgimportdevices: fix locking when creating devices file
-Message-ID: <20221208113710.DF80F3872216@sourceware.org>
+Date: Thu,  8 Dec 2022 11:37:13 +0000 (GMT)
+Subject: rhel-8.8.0 - vdo: fix --vdosettings parser
+Message-ID: <20221208113713.2F6A63872205@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=0b9d9963b8f15a6f12a0149a62809fa9b846c5c5
-Commit:        0b9d9963b8f15a6f12a0149a62809fa9b846c5c5
-Parent:        f1d8c01dff3f8839355004e5fd77e9cd521e26cb
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Tue Aug 30 14:40:48 2022 -0500
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=b56e8fc94d4d2b6d384148e3f74c54f4e1d816e6
+Commit:        b56e8fc94d4d2b6d384148e3f74c54f4e1d816e6
+Parent:        7db3a53d8a3aa7401337fb9aaf00f19cf4407e70
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Mon Aug 15 13:14:03 2022 +0200
 Committer:     Marian Csontos <mcsontos@redhat.com>
-CommitterDate: Mon Nov 28 17:11:21 2022 +0100
+CommitterDate: Thu Dec 8 12:34:22 2022 +0100
 
-vgimportdevices: fix locking when creating devices file
+vdo: fix --vdosettings parser
 
-Take the devices file lock before creating a new devices file.
-(Was missed by the change to preemptively create the devices
-file prior to setup_devices(), which was done to improve the
-error path.)
+Parser was incorrectly parsing vdo_use_features - move the skip
+of 'use_' prefix into internal loop which handles skipping of '_'.
+
+(cherry picked from commit bba96e8680ef7fa567d6361c269c0bfc05ce3d2c)
 ---
- lib/device/dev-cache.c  |  7 +++----
- lib/device/device_id.c  |  1 +
- tools/vgimportdevices.c | 10 ++++++++--
- 3 files changed, 12 insertions(+), 6 deletions(-)
+ tools/toollib.c | 14 +++++++++-----
+ 1 file changed, 9 insertions(+), 5 deletions(-)
 
-diff --git a/lib/device/dev-cache.c b/lib/device/dev-cache.c
-index 65e1cb138..0c9aaf785 100644
---- a/lib/device/dev-cache.c
-+++ b/lib/device/dev-cache.c
-@@ -1956,10 +1956,9 @@ static int _setup_devices(struct cmd_context *cmd, int no_file_match)
+diff --git a/tools/toollib.c b/tools/toollib.c
+index 210b3dca5..d9a1a92ec 100644
+--- a/tools/toollib.c
++++ b/tools/toollib.c
+@@ -1198,13 +1198,11 @@ out:
+  */
+ static int _compare_vdo_option(const char *b1, const char *b2)
+ {
++	int use_skipped = 0;
++
+ 	if (strncasecmp(b1, "vdo", 3) == 0) // skip vdo prefix
+ 		b1 += 3;
  
- 	if (!file_exists) {
- 		/*
--		 * pvcreate/vgcreate/vgimportdevices/lvmdevices-add create
--		 * a new devices file here if it doesn't exist.
--		 * They have the create_edit_devices_file flag set.
--		 * First they create/lock-ex the devices file lockfile.
-+		 * pvcreate/vgcreate create a new devices file here if it
-+		 * doesn't exist.  They have create_edit_devices_file=1.
-+		 * First create/lock-ex the devices file lockfile.
- 		 * Other commands will not use a devices file if none exists.
- 		 */
- 		lock_mode = LOCK_EX;
-diff --git a/lib/device/device_id.c b/lib/device/device_id.c
-index c3816a66c..780e08404 100644
---- a/lib/device/device_id.c
-+++ b/lib/device/device_id.c
-@@ -2429,6 +2429,7 @@ static int _lock_devices_file(struct cmd_context *cmd, int mode, int nonblock, i
- 
- 	if (_devices_file_locked == mode) {
- 		/* can happen when a command holds an ex lock and does an update in device_ids_validate */
-+		/* can happen when vgimportdevices calls this directly, followed later by setup_devices */
- 		if (held)
- 			*held = 1;
- 		return 1;
-diff --git a/tools/vgimportdevices.c b/tools/vgimportdevices.c
-index 9ade1b9e4..23c2718ff 100644
---- a/tools/vgimportdevices.c
-+++ b/tools/vgimportdevices.c
-@@ -132,8 +132,10 @@ int vgimportdevices(struct cmd_context *cmd, int argc, char **argv)
- 		return ECMD_FAILED;
- 
- 	/*
--	 * Prepare devices file preemptively because the error path for this
--	 * case from process_each is not as clean.
-+	 * Prepare/create devices file preemptively because the error path for
-+	 * this case from process_each/setup_devices is not as clean.
-+	 * This means that when setup_devices is called, it the devices
-+	 * file steps will be redundant, and need to handle being repeated.
- 	 */
- 	if (!setup_devices_file(cmd)) {
- 		log_error("Failed to set up devices file.");
-@@ -143,6 +145,10 @@ int vgimportdevices(struct cmd_context *cmd, int argc, char **argv)
- 		log_error("Devices file not enabled.");
- 		return ECMD_FAILED;
+-	if ((tolower(*b1) != tolower(*b2)) &&
+-	    (strncmp(b2, "use_", 4) == 0))
+-		b2 += 4;  // try again with skipped prefix 'use_'
+-
+ 	while (*b1 && *b2) {
+ 		if (tolower(*b1) == tolower(*b2)) {
+ 			++b1;
+@@ -1216,8 +1214,14 @@ static int _compare_vdo_option(const char *b1, const char *b2)
+ 			++b1;           // skip to next char
+ 		else if (*b2 == '_')
+ 			++b2;           // skip to next char
+-		else
++		else {
++			if (!use_skipped++ && (strncmp(b2, "use_", 4) == 0)) {
++				b2 += 4;  // try again with skipped prefix 'use_'
++				continue;
++			}
++
+ 			break;          // mismatch
++		}
  	}
-+	if (!lock_devices_file(cmd, LOCK_EX)) {
-+		log_error("Failed to lock the devices file.");
-+		return ECMD_FAILED;
-+	}
- 	if (!devices_file_exists(cmd)) {
- 	       	if (!devices_file_touch(cmd)) {
- 			log_error("Failed to create devices file.");
+ 
+ 	return (*b1 || *b2) ? 0 : 1;
 
