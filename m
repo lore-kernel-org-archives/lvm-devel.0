@@ -1,59 +1,36 @@
-From: agk@sourceware.org <agk@sourceware.org>
-Date: 31 Oct 2008 22:41:52 -0000
-Subject: LVM2 include/.symlinks lib/snapshot/snapshot.c ...
-Message-ID: <20081031224152.1178.qmail@sourceware.org>
+From: wangzhiqiang (Q) <wangzhiqiang95@huawei.com>
+Date: Fri, 9 Dec 2022 01:27:09 +0000
+Subject: 答复: [PATCH] pvscan --cache /dev/xx needs to scan all disks and aliases when enable device filter
+In-Reply-To: <20221207152936.GA12874@redhat.com>
+References: <971ecec87dad4fe2a1771f3c75c5cffb@huawei.com>
+ <20221207152936.GA12874@redhat.com>
+Message-ID: <7a7c6e61cecc4e73838617e5ce5fe612@huawei.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	agk at sourceware.org	2008-10-31 22:41:51
+Thanks. the _filter_uses_symlinks function handles this case well.
 
-Modified files:
-	include        : .symlinks 
-	lib/snapshot   : snapshot.c 
-	lib/mirror     : mirrored.c 
+wangzhiqiang
 
-Log message:
-	add libdevmapper-event.h
+-----????-----
+???: David Teigland <teigland@redhat.com> 
+????: 2022?12?7? 23:30
+???: wangzhiqiang (Q) <wangzhiqiang95@huawei.com>
+??: lvm-devel at redhat.com; linfeilong <linfeilong@huawei.com>; liuzhiqiang (I) <liuzhiqiang26@huawei.com>
+??: Re: [PATCH] pvscan --cache /dev/xx needs to scan all disks and aliases when enable device filter
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/include/.symlinks.diff?cvsroot=lvm2&r1=1.51&r2=1.52
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/snapshot/snapshot.c.diff?cvsroot=lvm2&r1=1.31&r2=1.32
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/mirror/mirrored.c.diff?cvsroot=lvm2&r1=1.57&r2=1.58
+On Wed, Dec 07, 2022 at 09:34:13AM +0000, wangzhiqiang (Q) wrote:
+> When the system restarts and the disk goes online, the udev rule will 
+> be triggered to scan the metadata on the disk to automatically 
+> activate the logical volume, If we specify the scanned disk alias in lvm.conf, reject other unspecified disks, then lv cannot activate since the aliases mismatch with disk name.
+> 
+> If device filtering is configured in lvm.conf, then pvscan --cache 
+> /dev/xx needs to scan all disks and aliases
 
---- LVM2/include/.symlinks	2008/10/31 22:22:04	1.51
-+++ LVM2/include/.symlinks	2008/10/31 22:41:51	1.52
-@@ -1,4 +1,5 @@
- ../daemons/clvmd/clvm.h
-+../daemons/dmeventd/libdevmapper-event.h
- ../lib/activate/activate.h
- ../lib/activate/targets.h
- ../lib/cache/lvmcache.h
---- LVM2/lib/snapshot/snapshot.c	2008/07/15 00:25:52	1.31
-+++ LVM2/lib/snapshot/snapshot.c	2008/10/31 22:41:51	1.32
-@@ -23,7 +23,7 @@
- #include "str_list.h"
- #ifdef DMEVENTD
- #  include "sharedlib.h"
--#  include <libdevmapper-event.h>
-+#  include "libdevmapper-event.h"
- #endif
- 
- static const char *_snap_name(const struct lv_segment *seg)
---- LVM2/lib/mirror/mirrored.c	2008/07/31 14:43:39	1.57
-+++ LVM2/lib/mirror/mirrored.c	2008/10/31 22:41:51	1.58
-@@ -29,7 +29,7 @@
- #include "str_list.h"
- 
- #ifdef DMEVENTD
--#  include <libdevmapper-event.h>
-+#  include "libdevmapper-event.h"
- #endif
- 
- static int _block_on_error_available = 0;
+Hi, if I understand correctly, pvscan is already attempting to handle this case.  See the use of "_filter_uses_symlinks" in pvscan.c.  Perhaps it needs check for other symlink substrings?  The problem with your patch is that it's a significant performance penalty for a common configuration.
 
+Dave
 
