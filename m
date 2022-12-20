@@ -1,42 +1,39 @@
-From: David Teigland <teigland@sourceware.org>
-Date: Fri,  9 Dec 2022 14:51:41 +0000 (GMT)
-Subject: main - lvchange: handle unrecognized writecache setting
-Message-ID: <20221209145141.E140A38388F8@sourceware.org>
+From: Zdenek Kabelac <zkabelac@sourceware.org>
+Date: Tue, 20 Dec 2022 15:23:33 +0000 (GMT)
+Subject: main - vdo: fix reader error path
+Message-ID: <20221220152333.2049D385B50E@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=9ce55a43d0165da9827e7b8e75bf25583a571e89
-Commit:        9ce55a43d0165da9827e7b8e75bf25583a571e89
-Parent:        6613a61d3b5ce4d12a6fef79195eac34f30ef4da
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Thu Dec 8 15:48:30 2022 -0600
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Thu Dec 8 15:48:30 2022 -0600
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=b6b1c19365d20d926d8aa39bf591731a7f9bb75a
+Commit:        b6b1c19365d20d926d8aa39bf591731a7f9bb75a
+Parent:        4baef0f93f608403b6f2db445e7bf1e80f8f3ee6
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Tue Dec 20 13:52:31 2022 +0100
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Tue Dec 20 15:04:36 2022 +0100
 
-lvchange: handle unrecognized writecache setting
+vdo: fix reader error path
 
-It was being ignored.
+Nothing to be closed on this error path.
 ---
- tools/lvchange.c | 5 +++++
- 1 file changed, 5 insertions(+)
+ device_mapper/vdo/vdo_reader.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
 
-diff --git a/tools/lvchange.c b/tools/lvchange.c
-index 34c9e36fd..dfbefa000 100644
---- a/tools/lvchange.c
-+++ b/tools/lvchange.c
-@@ -665,6 +665,11 @@ static int _lvchange_writecache(struct cmd_context *cmd,
- 		seg->writecache_settings.max_age = settings.max_age;
- 		set_count++;
+diff --git a/device_mapper/vdo/vdo_reader.c b/device_mapper/vdo/vdo_reader.c
+index 4f91f8011..3596afbd3 100644
+--- a/device_mapper/vdo/vdo_reader.c
++++ b/device_mapper/vdo/vdo_reader.c
+@@ -189,7 +189,7 @@ bool dm_vdo_parse_logical_size(const char *vdo_path, uint64_t *logical_blocks)
+ 	*logical_blocks = 0;
+ 	if ((fh = open(vdo_path, O_RDONLY)) == -1) {
+ 		log_sys_debug("Failed to open VDO backend %s.", vdo_path);
+-		goto err;
++		return false;
  	}
-+	if (settings.new_key && settings.new_val) {
-+		seg->writecache_settings.new_key = settings.new_key;
-+		seg->writecache_settings.new_val = settings.new_val;
-+		set_count++;
-+	}
  
- 	if (!set_count) {
- 		/*
+ 	if (ioctl(fh, BLKGETSIZE64, &size) == -1) {
 
