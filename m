@@ -1,47 +1,63 @@
-From: David Teigland <teigland@sourceware.org>
-Date: Thu, 15 Dec 2022 16:02:27 +0000 (GMT)
-Subject: main - lvextend: fix overprovisioning check for thin lvs
-Message-ID: <20221215160227.0C8663854098@sourceware.org>
+From: Zdenek Kabelac <zkabelac@sourceware.org>
+Date: Tue, 20 Dec 2022 15:23:34 +0000 (GMT)
+Subject: main - cov: remove unused header files
+Message-ID: <20221220152334.40FF23857B9B@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=4baef0f93f608403b6f2db445e7bf1e80f8f3ee6
-Commit:        4baef0f93f608403b6f2db445e7bf1e80f8f3ee6
-Parent:        fa7fe5cbbe927d13a8b93aba24640ce5d8c11896
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Thu Dec 15 09:57:04 2022 -0600
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Thu Dec 15 10:00:17 2022 -0600
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=44a2f2df9281ac0f5aef67d5f3c32fc2ee6ad0e9
+Commit:        44a2f2df9281ac0f5aef67d5f3c32fc2ee6ad0e9
+Parent:        b6b1c19365d20d926d8aa39bf591731a7f9bb75a
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Tue Dec 20 13:54:59 2022 +0100
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Tue Dec 20 15:04:36 2022 +0100
 
-lvextend: fix overprovisioning check for thin lvs
+cov: remove unused header files
 
-18722dfdf4d3 lvresize: restructure code
-mistakenly changed the overprovisioning check from applying
-to all lv_is_thin_type lvs to only lv_is_thin_pool lvs, so
-it no longer applied when extending thin lvs.  The result
-was missing warning messages when extending thin lvs.
 ---
- lib/metadata/lv_manip.c | 5 +++--
- 1 file changed, 3 insertions(+), 2 deletions(-)
+ lib/device/filesystem.c | 1 -
+ lib/device/online.c     | 1 -
+ lib/device/parse_vpd.c  | 1 -
+ 3 files changed, 3 deletions(-)
 
-diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
-index 4cdbc19a0..f8eae0447 100644
---- a/lib/metadata/lv_manip.c
-+++ b/lib/metadata/lv_manip.c
-@@ -7007,9 +7007,10 @@ int lv_resize(struct cmd_context *cmd, struct logical_volume *lv,
- 	if (lv_is_thin_pool(lv_top)) {
- 		if (!update_thin_pool_lv(lv_top, 1))
- 			goto_out;
--		if (is_extend)
--			thin_pool_check_overprovisioning(lv_top);
- 	}
-+	if (lv_is_thin_type(lv_top) && is_extend)
-+		thin_pool_check_overprovisioning(lv_top);
-+
- 	if (lv_main && lv_is_cow_covering_origin(lv_main)) {
- 		if (!monitor_dev_for_events(cmd, lv_main, 0, 0))
- 			stack;
+diff --git a/lib/device/filesystem.c b/lib/device/filesystem.c
+index bdc230175..61e4d805e 100644
+--- a/lib/device/filesystem.c
++++ b/lib/device/filesystem.c
+@@ -22,7 +22,6 @@
+ 
+ #include <dirent.h>
+ #include <mntent.h>
+-#include <sys/ioctl.h>
+ 
+ static const char *_lvresize_fs_helper_path;
+ 
+diff --git a/lib/device/online.c b/lib/device/online.c
+index 7ffe14b18..b97b71d92 100644
+--- a/lib/device/online.c
++++ b/lib/device/online.c
+@@ -17,7 +17,6 @@
+ #include "lib/commands/toolcontext.h"
+ #include "lib/device/device.h"
+ #include "lib/device/online.h"
+-#include "lib/metadata/metadata.h"
+ 
+ #include <dirent.h>
+ 
+diff --git a/lib/device/parse_vpd.c b/lib/device/parse_vpd.c
+index 23b0c6efa..bea8834d4 100644
+--- a/lib/device/parse_vpd.c
++++ b/lib/device/parse_vpd.c
+@@ -26,7 +26,6 @@
+ #include <string.h>
+ #include <inttypes.h>
+ #include <sys/types.h>
+-#include <sys/ioctl.h>
+ #include <sys/stat.h>
+ #include <fcntl.h>
+ #include <ctype.h>
 
