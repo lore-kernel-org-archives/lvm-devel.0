@@ -1,41 +1,39 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Tue, 20 Dec 2022 15:23:36 +0000 (GMT)
-Subject: main - cov: use long type for time_t calcs
-Message-ID: <20221220152336.98AA13858000@sourceware.org>
+Date: Tue, 20 Dec 2022 15:23:37 +0000 (GMT)
+Subject: main - pvscan: free unused device_id
+Message-ID: <20221220152337.B8CBD3857B8E@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=8f091d379860cf71577629cc1f56191b5f418310
-Commit:        8f091d379860cf71577629cc1f56191b5f418310
-Parent:        f443d16fd7409b46b77be2aa74090ab558c51425
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=edd6d84159f4d540c8283771da6702971518ccd7
+Commit:        edd6d84159f4d540c8283771da6702971518ccd7
+Parent:        8f091d379860cf71577629cc1f56191b5f418310
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Dec 20 14:11:57 2022 +0100
+AuthorDate:    Tue Dec 20 14:17:34 2022 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Tue Dec 20 15:04:36 2022 +0100
 
-cov: use long type for time_t calcs
+pvscan: free unused device_id
 
-Some for y38k - calculations can handle 64b time_t.
+Fix memleak in function.
 ---
- daemons/dmeventd/libdevmapper-event.c | 4 ++--
- 1 file changed, 2 insertions(+), 2 deletions(-)
+ tools/pvscan.c | 2 ++
+ 1 file changed, 2 insertions(+)
 
-diff --git a/daemons/dmeventd/libdevmapper-event.c b/daemons/dmeventd/libdevmapper-event.c
-index 30df1da21..c6532b9a5 100644
---- a/daemons/dmeventd/libdevmapper-event.c
-+++ b/daemons/dmeventd/libdevmapper-event.c
-@@ -928,8 +928,8 @@ void dm_event_log(const char *subsys, int level, const char *file,
- 			start = now;
- 		now -= start;
- 		if (_debug_level)
--			fprintf(stream, "[%2d:%02d] %8x:%-6s%s",
--				(int)now / 60, (int)now % 60,
-+			fprintf(stream, "[%2ld:%02ld] %8x:%-6s%s",
-+				(long)now / 60, (long)now % 60,
- 				// TODO: Maybe use shorter ID
- 				// ((int)(pthread_self()) >> 6) & 0xffff,
- 				(int)pthread_self(), subsys,
+diff --git a/tools/pvscan.c b/tools/pvscan.c
+index 96935a43b..773862227 100644
+--- a/tools/pvscan.c
++++ b/tools/pvscan.c
+@@ -1441,6 +1441,8 @@ static void _warn_excluded_root(struct cmd_context *cmd, struct device *dev)
+ 
+ 	log_warn("WARNING: no autoactivation for %s: system.devices %s current %s.",
+ 		 dev_name(dev), du->idname, cur_idname ?: "missing device id");
++
++	free((void*) cur_idname);
+ }
+ 
+ static int _pvscan_cache_args(struct cmd_context *cmd, int argc, char **argv,
 
