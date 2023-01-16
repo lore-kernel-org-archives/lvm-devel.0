@@ -1,46 +1,39 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Mon, 16 Jan 2023 11:39:19 +0000 (GMT)
-Subject: main - makefiles: comment out hiding dir entering
-Message-ID: <20230116113919.B8B323858D32@sourceware.org>
+Date: Mon, 16 Jan 2023 11:39:20 +0000 (GMT)
+Subject: main - makefiles: fix grep warning from make
+Message-ID: <20230116113920.D9D883858D32@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=3a58e08b8c1ef8b988a588301e097f50c843f0aa
-Commit:        3a58e08b8c1ef8b988a588301e097f50c843f0aa
-Parent:        3bedceec3882e00caf62df6fbeb946aeafea9df2
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=92199ad0b98586182a52e2f8cd82c06336e306f1
+Commit:        92199ad0b98586182a52e2f8cd82c06336e306f1
+Parent:        3a58e08b8c1ef8b988a588301e097f50c843f0aa
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu Jan 12 16:52:01 2023 +0100
+AuthorDate:    Sun Jan 15 21:42:41 2023 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Mon Jan 16 12:37:40 2023 +0100
 
-makefiles: comment out hiding dir entering
+makefiles: fix grep warning from make
 
-While the output of building looks more polished, text editors fail to
-find source file from compile errors - so until we start to print
-all file with full paths - comment out this make build parameter.
+Remove unnecessary '\'.
 ---
- make.tmpl.in | 7 ++++---
- 1 file changed, 4 insertions(+), 3 deletions(-)
+ udev/Makefile.in | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
 
-diff --git a/make.tmpl.in b/make.tmpl.in
-index e942893a0..222ed671a 100644
---- a/make.tmpl.in
-+++ b/make.tmpl.in
-@@ -182,9 +182,10 @@ ifndef MAKEFLAGS
- MAKEFLAGS = @JOBS@
- endif
+diff --git a/udev/Makefile.in b/udev/Makefile.in
+index e777dda16..ac4de0a6a 100644
+--- a/udev/Makefile.in
++++ b/udev/Makefile.in
+@@ -20,7 +20,7 @@ include $(top_builddir)/make.tmpl
+ DM_RULES=10-dm.rules 13-dm-disk.rules 95-dm-notify.rules
+ LVM_RULES=11-dm-lvm.rules 69-dm-lvm.rules
  
--ifneq (1, $(firstword $(V)))
--MAKEFLAGS += --no-print-directory
--endif
-+# Hiding dir entering makes hard for editors to look for files
-+#ifneq (1, $(firstword $(V)))
-+#MAKEFLAGS += --no-print-directory
-+#endif
+-DM_DIR=$(shell $(GREP) "\#define DM_DIR" $(top_srcdir)/libdm/misc/dm-ioctl.h | $(AWK) '{print $$3}')
++DM_DIR=$(shell $(GREP) "#define DM_DIR" $(top_srcdir)/libdm/misc/dm-ioctl.h | $(AWK) '{print $$3}')
  
- # Handle installation of files
- ifeq ("@WRITE_INSTALL@", "yes")
+ BINDIR=@bindir@
+ ifeq ("@UDEV_RULE_EXEC_DETECTION@", "yes")
 
