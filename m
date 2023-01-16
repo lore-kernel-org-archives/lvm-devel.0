@@ -1,49 +1,46 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Mon, 16 Jan 2023 11:39:17 +0000 (GMT)
-Subject: main - tests: vdo resizing
-Message-ID: <20230116113917.7803C3858D32@sourceware.org>
+Date: Mon, 16 Jan 2023 11:39:19 +0000 (GMT)
+Subject: main - makefiles: comment out hiding dir entering
+Message-ID: <20230116113919.B8B323858D32@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=aa09232dc4fb825f4e643bbe87a95e2318dd5a93
-Commit:        aa09232dc4fb825f4e643bbe87a95e2318dd5a93
-Parent:        c20f01a0cbb24e8276734a00f26a510cf6daaf21
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=3a58e08b8c1ef8b988a588301e097f50c843f0aa
+Commit:        3a58e08b8c1ef8b988a588301e097f50c843f0aa
+Parent:        3bedceec3882e00caf62df6fbeb946aeafea9df2
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Mon Jan 16 01:11:37 2023 +0100
+AuthorDate:    Thu Jan 12 16:52:01 2023 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Mon Jan 16 12:37:40 2023 +0100
 
-tests: vdo resizing
+makefiles: comment out hiding dir entering
 
+While the output of building looks more polished, text editors fail to
+find source file from compile errors - so until we start to print
+all file with full paths - comment out this make build parameter.
 ---
- test/shell/lvresize-vdo.sh | 15 +++++++++++++++
- 1 file changed, 15 insertions(+)
+ make.tmpl.in | 7 ++++---
+ 1 file changed, 4 insertions(+), 3 deletions(-)
 
-diff --git a/test/shell/lvresize-vdo.sh b/test/shell/lvresize-vdo.sh
-index 6fe0e9c26..cbe8ce967 100644
---- a/test/shell/lvresize-vdo.sh
-+++ b/test/shell/lvresize-vdo.sh
-@@ -32,4 +32,19 @@ check lv_field $vg/${lv2}_vdata size "6.00g"
- lvresize -L6G $vg/$lv1
- check lv_field $vg/$lv1 size "6.00g"
+diff --git a/make.tmpl.in b/make.tmpl.in
+index e942893a0..222ed671a 100644
+--- a/make.tmpl.in
++++ b/make.tmpl.in
+@@ -182,9 +182,10 @@ ifndef MAKEFLAGS
+ MAKEFLAGS = @JOBS@
+ endif
  
-+# Check too large size
-+not lvresize -L4P $vg/$lv1 2>err
-+grep "Volume too large" err
-+
-+# Can't resize inactive VDO
-+lvchange -an $vg
-+not lvresize -L10G $vg/$lv1  2>err
-+grep "Cannot resize inactive" err
-+
-+not lvresize -L10G $vg/$lv2 2>err
-+grep "Cannot resize inactive" err
-+
-+not lvresize -L10G $vg/${lv2}_vdata 2>err
-+grep "Cannot resize inactive" err
-+
- vgremove -ff $vg
+-ifneq (1, $(firstword $(V)))
+-MAKEFLAGS += --no-print-directory
+-endif
++# Hiding dir entering makes hard for editors to look for files
++#ifneq (1, $(firstword $(V)))
++#MAKEFLAGS += --no-print-directory
++#endif
+ 
+ # Handle installation of files
+ ifeq ("@WRITE_INSTALL@", "yes")
 
