@@ -1,51 +1,41 @@
-From: David Teigland <teigland@sourceware.org>
-Date: Fri, 20 Jan 2023 18:06:16 +0000 (GMT)
-Subject: main - lvresize: enable crypt resizing with --force
-Message-ID: <20230120180616.4EA603858434@sourceware.org>
+From: Marian Csontos <mcsontos@sourceware.org>
+Date: Wed, 25 Jan 2023 09:00:36 +0000 (GMT)
+Subject: main - Revert "makefiles: fix grep warning from make"
+Message-ID: <20230125090036.966573858D28@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=ed808a9b548ca59221d512bfb7ae581e8367fe50
-Commit:        ed808a9b548ca59221d512bfb7ae581e8367fe50
-Parent:        3bb55765286dc8e4f0000957d85a6b8ee2752852
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Fri Jan 20 11:56:40 2023 -0600
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Fri Jan 20 12:04:55 2023 -0600
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=49c650423a17197c66b1c839a0274db8fba9a7d9
+Commit:        49c650423a17197c66b1c839a0274db8fba9a7d9
+Parent:        ed808a9b548ca59221d512bfb7ae581e8367fe50
+Author:        Marian Csontos <mcsontos@redhat.com>
+AuthorDate:    Wed Jan 25 09:46:18 2023 +0100
+Committer:     Marian Csontos <mcsontos@redhat.com>
+CommitterDate: Wed Jan 25 09:46:18 2023 +0100
 
-lvresize: enable crypt resizing with --force
+Revert "makefiles: fix grep warning from make"
 
-Update previous commit
-  "lvresize: only resize crypt when fs resize is enabled"
-to enable crypt resizing when --force is set and --resizefs
-is not set.  This is because it's been allowed in the past
-and people have used it, but it's not a good idea.
+This reverts commit 92199ad0b98586182a52e2f8cd82c06336e306f1.
+
+This breaks make rpm.
 ---
- lib/metadata/lv_manip.c | 10 +++++++---
- 1 file changed, 7 insertions(+), 3 deletions(-)
+ udev/Makefile.in | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
 
-diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
-index cfb118f11..f06b08254 100644
---- a/lib/metadata/lv_manip.c
-+++ b/lib/metadata/lv_manip.c
-@@ -6417,9 +6417,13 @@ static int _fs_reduce(struct cmd_context *cmd, struct logical_volume *lv,
- 			goto out;
- 		}
- 		if (!strcmp(lp->fsopt, "checksize")) {
--			log_error("crypt reduce is required (see --resizefs or cryptsetup resize.)");
--			ret = 0;
--			goto out;
-+			if (!lp->force) {
-+				log_error("crypt reduce is required (see --resizefs or cryptsetup resize.)");
-+				ret = 0;
-+				goto out;
-+			}
-+			/* This is only because it has been allowed in the past. */
-+			log_print("Forcing cryptsetup resize (--resizefs preferred.)");
- 		}
- 		if (test_mode()) {
- 			ret = 1;
+diff --git a/udev/Makefile.in b/udev/Makefile.in
+index ac4de0a6a..e777dda16 100644
+--- a/udev/Makefile.in
++++ b/udev/Makefile.in
+@@ -20,7 +20,7 @@ include $(top_builddir)/make.tmpl
+ DM_RULES=10-dm.rules 13-dm-disk.rules 95-dm-notify.rules
+ LVM_RULES=11-dm-lvm.rules 69-dm-lvm.rules
+ 
+-DM_DIR=$(shell $(GREP) "#define DM_DIR" $(top_srcdir)/libdm/misc/dm-ioctl.h | $(AWK) '{print $$3}')
++DM_DIR=$(shell $(GREP) "\#define DM_DIR" $(top_srcdir)/libdm/misc/dm-ioctl.h | $(AWK) '{print $$3}')
+ 
+ BINDIR=@bindir@
+ ifeq ("@UDEV_RULE_EXEC_DETECTION@", "yes")
 
