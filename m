@@ -1,92 +1,199 @@
-From: Marian Csontos <mcsontos@sourceware.org>
-Date: Thu, 26 Jan 2023 16:52:51 +0000 (GMT)
-Subject: rhel-9.2.0 - lvmdbusd: Add command_log_selection to command line
-Message-ID: <20230126165251.BEF9C3858D28@sourceware.org>
+From: David Teigland <teigland@sourceware.org>
+Date: Thu, 26 Jan 2023 20:30:45 +0000 (GMT)
+Subject: main - lvresize: fail early if mounted LV was renamed
+Message-ID: <20230126203045.32B613858D28@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=0441d340e752427d0d355a85e5e5e465e911a102
-Commit:        0441d340e752427d0d355a85e5e5e465e911a102
-Parent:        4e34edd6e4e52328dd77b6a55aeadd9b0454c743
-Author:        Tony Asleson <tasleson@redhat.com>
-AuthorDate:    Tue Nov 29 10:04:17 2022 -0600
-Committer:     Marian Csontos <mcsontos@redhat.com>
-CommitterDate: Thu Jan 26 16:54:56 2023 +0100
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=5374a44c57127cdd832a675545c1d2bbf0b3751a
+Commit:        5374a44c57127cdd832a675545c1d2bbf0b3751a
+Parent:        8adfcddc35be16ac1d1a00a169ec89a7f12d69af
+Author:        David Teigland <teigland@redhat.com>
+AuthorDate:    Thu Jan 26 14:00:00 2023 -0600
+Committer:     David Teigland <teigland@redhat.com>
+CommitterDate: Thu Jan 26 14:02:20 2023 -0600
 
-lvmdbusd: Add command_log_selection to command line
+lvresize: fail early if mounted LV was renamed
 
-Resolves: https://bugzilla.redhat.com/show_bug.cgi?id=2145114
-(cherry picked from commit e63b0c7262f50ab43fcde1c50b6d880acab68407)
+If a mounted LV is renamed, then fs resizing utilities will fail,
+so detect this condition and fail the command before any changes
+are made.
 ---
- daemons/lvmdbusd/cmdhandler.py | 33 +++++++++++++++++----------------
- 1 file changed, 17 insertions(+), 16 deletions(-)
+ lib/device/filesystem.c   | 110 ++++++++++++++++++++++++++++++++++++++++++++++
+ lib/device/filesystem.h   |   2 +
+ lib/metadata/lv_manip.c   |   3 ++
+ test/shell/lvresize-fs.sh |  11 +++++
+ 4 files changed, 126 insertions(+)
 
-diff --git a/daemons/lvmdbusd/cmdhandler.py b/daemons/lvmdbusd/cmdhandler.py
-index 0c7bd8528..9a76db4c9 100644
---- a/daemons/lvmdbusd/cmdhandler.py
-+++ b/daemons/lvmdbusd/cmdhandler.py
-@@ -17,7 +17,7 @@ import os
+diff --git a/lib/device/filesystem.c b/lib/device/filesystem.c
+index b4c43a626..db507bdda 100644
+--- a/lib/device/filesystem.c
++++ b/lib/device/filesystem.c
+@@ -214,6 +214,116 @@ int fs_get_info(struct cmd_context *cmd, struct logical_volume *lv,
+ 	return ret;
+ }
  
- from lvmdbusd import cfg
- from lvmdbusd.utils import pv_dest_ranges, log_debug, log_error, add_no_notify,\
--			make_non_block, read_decoded, extract_stack_trace, LvmBug, add_config_option
-+			make_non_block, read_decoded, extract_stack_trace, LvmBug, add_config_option, get_error_msg
- from lvmdbusd.lvm_shell_proxy import LVMShellProxy
- 
- try:
-@@ -121,6 +121,9 @@ def call_lvm(command, debug=False, line_cb=None,
- 	command.insert(0, cfg.LVM_CMD)
- 	command = add_no_notify(command)
- 
-+	# Ensure we get an error message when we fork & exec the lvm command line
-+	command = add_config_option(command, "--config", 'log/command_log_selection="log_context!=''"')
++int fs_mount_state_is_misnamed(struct cmd_context *cmd, struct logical_volume *lv, char *lv_path, char *fstype)
++{
++	FILE *fp;
++	char proc_line[PATH_MAX];
++	char proc_fstype[FSTYPE_MAX];
++	char proc_devpath[1024];
++	char proc_mntpath[1024];
++	char lv_mapper_path[1024];
++	char mntent_mount_dir[1024];
++	char *dm_name;
++	struct stat st_lv;
++	struct stat stme;
++	FILE *fme = NULL;
++	struct mntent *me;
++	int renamed = 0;
++	int found_dir = 0;
++	int found_dev = 0;
++	int dev_match, dir_match;
 +
- 	process = Popen(command, stdout=PIPE, stderr=PIPE, close_fds=True,
- 					env=os.environ)
- 
-@@ -167,7 +170,17 @@ def call_lvm(command, debug=False, line_cb=None,
- 		if debug or (process.returncode != 0 and (process.returncode != 5 and "fullreport" in command)):
- 			_debug_c(command, process.returncode, (stdout_text, stderr_text))
- 
--		return process.returncode, stdout_text, stderr_text
-+		try:
-+			report_json = json.loads(stdout_text)
-+		except json.decoder.JSONDecodeError:
-+			# Some lvm commands don't return json even though we are asking for it to do so.
-+			return process.returncode, stdout_text, stderr_text
++	if (stat(lv_path, &st_lv) < 0) {
++		log_error("Failed to get LV path %s", lv_path);
++		return 0;
++	}
 +
-+		error_msg = get_error_msg(report_json)
-+		if error_msg:
-+			stderr_text += error_msg
++	/*
++	 * If LVs have been renamed while their file systems were mounted, then
++	 * inconsistencies appear in the device path and mount point info
++	 * provided by getmntent and /proc/mounts.  If there's any
++	 * inconsistency or duplication of info for the LV name or the mount
++	 * point, then give up and don't try fs resize which is likely to fail
++	 * due to kernel problems where mounts reference old device names
++	 * causing fs resizing tools to fail.
++	 */
 +
-+		return process.returncode, report_json, stderr_text
- 	else:
- 		if cfg.run.value == 0:
- 			raise SystemExit
-@@ -619,20 +632,8 @@ def lvm_full_report_json():
- 	rc, out, err = call(cmd)
- 	# When we have an exported vg the exit code of lvs or fullreport will be 5
- 	if rc == 0 or rc == 5:
--		# If the 'call' implementation is lvmshell, the out is a dictionary as lvmshell has to
--		# parse the output to get the exit value.  When doing fork & exec, out is a string
--		# representing the JSON.  TODO: Make this consistent between implementations.
--		if cfg.SHELL_IN_USE:
--			assert(type(out) == dict)
--			return out
--		else:
--			try:
--				return json.loads(out)
--			except json.decoder.JSONDecodeError as joe:
--				log_error("JSONDecodeError %s, \n JSON=\n%s\n" %
--							(str(joe), out))
--				raise LvmBug("'fullreport' returned invalid JSON")
--
-+		assert(type(out) == dict)
-+		return out
- 	raise LvmBug("'fullreport' exited with code '%d'" % rc)
++	if (!(fme = setmntent("/etc/mtab", "r")))
++		return_0;
++
++	while ((me = getmntent(fme))) {
++		if (strcmp(me->mnt_type, fstype))
++			continue;
++		if (me->mnt_dir[0] != '/')
++			continue;
++		if (me->mnt_fsname[0] != '/')
++			continue;
++		if (stat(me->mnt_dir, &stme) < 0)
++			continue;
++		if (stme.st_dev != st_lv.st_rdev)
++			continue;
++		strncpy(mntent_mount_dir, me->mnt_dir, PATH_MAX-1);
++	}
++	endmntent(fme);
++
++	if (!(dm_name = dm_build_dm_name(cmd->mem, lv->vg->name, lv->name, NULL)))
++		return_0;
++
++	if ((dm_snprintf(lv_mapper_path, 1024, "%s/%s", dm_dir(), dm_name) < 0))
++		return_0;
++
++	if (!(fp = fopen("/proc/mounts", "r")))
++		return_0;
++
++	while (fgets(proc_line, sizeof(proc_line), fp)) {
++		if (proc_line[0] != '/')
++			continue;
++		if (sscanf(proc_line, "%s %s %s", proc_devpath, proc_mntpath, proc_fstype) != 3)
++			continue;
++		if (strcmp(fstype, proc_fstype))
++			continue;
++
++		dir_match = !strcmp(mntent_mount_dir, proc_mntpath);
++		dev_match = !strcmp(lv_mapper_path, proc_devpath);
++
++		if (dir_match)
++			found_dir++;
++		if (dev_match)
++			found_dev++;
++
++		if (dir_match != dev_match) {
++			log_error("LV %s mounted@%s may have been renamed (from %s).",
++				  lv_mapper_path, proc_mntpath, proc_devpath);
++			renamed = 1;
++		}
++	}
++
++	if (fclose(fp))
++		stack;
++
++	/*
++	 * Don't try resizing if:
++	 * - different device names apppear for the mount point
++	 *   (LVs probably renamed while mounted), or
++	 * - the mount point for the LV appears multiple times, or
++	 * - the LV device is listed for multiple mounts. 
++	 */
++	if (renamed) {
++		log_error("File system resizing not supported: fs utilities do not support renamed devices.");
++		return 1;
++	}
++	/* These two are likely detected as renamed, but include checks in case. */
++	if (found_dir > 1) {
++		log_error("File system resizing not supported: %s appears more than once in /proc/mounts.", mntent_mount_dir);
++		return 1;
++	}
++	if (found_dev > 1) {
++		log_error("File system resizing not supported: %s appears more than once in /proc/mounts.", lv_mapper_path);
++		return 1;
++	}
++	return 0;
++}
++
+ #define FS_CMD_MAX_ARGS 16
  
+ int crypt_resize_script(struct cmd_context *cmd, struct logical_volume *lv, struct fs_info *fsi,
+diff --git a/lib/device/filesystem.h b/lib/device/filesystem.h
+index fd1af0416..77eac34d0 100644
+--- a/lib/device/filesystem.h
++++ b/lib/device/filesystem.h
+@@ -48,4 +48,6 @@ int fs_reduce_script(struct cmd_context *cmd, struct logical_volume *lv, struct
+ 		uint64_t newsize_bytes, char *fsmode);
+ int crypt_resize_script(struct cmd_context *cmd, struct logical_volume *lv, struct fs_info *fsi,
+ 		uint64_t newsize_bytes_fs);
++
++int fs_mount_state_is_misnamed(struct cmd_context *cmd, struct logical_volume *lv, char *lv_path, char *fstype);
+ #endif
+diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
+index cfb118f11..fa6393a48 100644
+--- a/lib/metadata/lv_manip.c
++++ b/lib/metadata/lv_manip.c
+@@ -6939,6 +6939,9 @@ int lv_resize(struct cmd_context *cmd, struct logical_volume *lv,
+ 			log_error("File system not found for --resizefs or --fs options.");
+ 			goto out;
+ 		}
++		/* FS utils will fail if LVs were renamed while mounted. */
++		if (fs_mount_state_is_misnamed(cmd, lv_top, lv_path, fstype))
++			goto_out;
+ 	}
  
+ 	/*
+diff --git a/test/shell/lvresize-fs.sh b/test/shell/lvresize-fs.sh
+index 0be6911a0..f437652d6 100644
+--- a/test/shell/lvresize-fs.sh
++++ b/test/shell/lvresize-fs.sh
+@@ -262,6 +262,17 @@ umount "$mount_dir"
+ lvchange -an $vg/$lv
+ lvremove $vg/$lv
+ 
++# lvextend|lvreduce, ext4, active, mounted, --fs resize, renamed LV
++lvcreate -n $lv -L 256M $vg
++mkfs.ext4 "$DM_DEV_DIR/$vg/$lv"
++mount "$DM_DEV_DIR/$vg/$lv" "$mount_dir"
++lvrename $vg/$lv $vg/$lv2
++not lvextend --fs resize -L+32M $vg/$lv2
++not lvreduce --fs resize -L-32M $vg/$lv2
++umount "$mount_dir"
++lvchange -an $vg/$lv2
++lvremove $vg/$lv2
++
+ 
+ #
+ # lvextend, xfs
 
