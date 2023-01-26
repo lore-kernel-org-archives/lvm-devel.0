@@ -1,61 +1,92 @@
 From: Marian Csontos <mcsontos@sourceware.org>
-Date: Thu, 26 Jan 2023 16:52:49 +0000 (GMT)
-Subject: rhel-9.2.0 - vgimportclone: fix importing PV without metadata
-Message-ID: <20230126165249.7A7443858D28@sourceware.org>
+Date: Thu, 26 Jan 2023 16:52:51 +0000 (GMT)
+Subject: rhel-9.2.0 - lvmdbusd: Add command_log_selection to command line
+Message-ID: <20230126165251.BEF9C3858D28@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=8f7b4456ad93c3907a82fd03d0feceb9785e3bfc
-Commit:        8f7b4456ad93c3907a82fd03d0feceb9785e3bfc
-Parent:        db067b9054d87ada6aa133394e65e3af9d75fc08
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Thu Jan 5 14:28:31 2023 -0600
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=0441d340e752427d0d355a85e5e5e465e911a102
+Commit:        0441d340e752427d0d355a85e5e5e465e911a102
+Parent:        4e34edd6e4e52328dd77b6a55aeadd9b0454c743
+Author:        Tony Asleson <tasleson@redhat.com>
+AuthorDate:    Tue Nov 29 10:04:17 2022 -0600
 Committer:     Marian Csontos <mcsontos@redhat.com>
-CommitterDate: Thu Jan 26 16:51:12 2023 +0100
+CommitterDate: Thu Jan 26 16:54:56 2023 +0100
 
-vgimportclone: fix importing PV without metadata
+lvmdbusd: Add command_log_selection to command line
 
-If one of the PVs in the VG does not hold metadata, then the
-command would fail, thinking that PV was from a different VG.
-Also add missing free on that error path.
-
-(cherry picked from commit c4b898a53eec39bc28b5451e7fde87945303a644)
+Resolves: https://bugzilla.redhat.com/show_bug.cgi?id=2145114
+(cherry picked from commit e63b0c7262f50ab43fcde1c50b6d880acab68407)
 ---
- tools/vgimportclone.c | 6 ++++--
- 1 file changed, 4 insertions(+), 2 deletions(-)
+ daemons/lvmdbusd/cmdhandler.py | 33 +++++++++++++++++----------------
+ 1 file changed, 17 insertions(+), 16 deletions(-)
 
-diff --git a/tools/vgimportclone.c b/tools/vgimportclone.c
-index 60ef20762..93fa3b18d 100644
---- a/tools/vgimportclone.c
-+++ b/tools/vgimportclone.c
-@@ -203,7 +203,7 @@ int vgimportclone(struct cmd_context *cmd, int argc, char **argv)
- 	struct device *dev;
- 	struct device_list *devl;
- 	struct dm_list other_devs;
--	struct volume_group *vg, *error_vg;
-+	struct volume_group *vg, *error_vg = NULL;
- 	const char *vgname;
- 	char base_vgname[NAME_LEN] = { 0 };
- 	char tmp_vgname[NAME_LEN] = { 0 };
-@@ -322,7 +322,7 @@ int vgimportclone(struct cmd_context *cmd, int argc, char **argv)
- 			goto out;
- 		}
+diff --git a/daemons/lvmdbusd/cmdhandler.py b/daemons/lvmdbusd/cmdhandler.py
+index 0c7bd8528..9a76db4c9 100644
+--- a/daemons/lvmdbusd/cmdhandler.py
++++ b/daemons/lvmdbusd/cmdhandler.py
+@@ -17,7 +17,7 @@ import os
  
--		if (!(vgname = lvmcache_vgname_from_info(info))) {
-+		if (!(vgname = lvmcache_vgname_from_info(info)) || is_orphan_vg(vgname)) {
- 			/* The PV may not have metadata, this will be resolved in
- 			   the process_each_vg/vg_read at the end. */
- 			continue;
-@@ -503,6 +503,8 @@ retry_name:
- 	}
- 	ret = ECMD_PROCESSED;
- out:
-+	if (error_vg)
-+		release_vg(error_vg);
- 	unlock_devices_file(cmd);
- 	return ret;
- }
+ from lvmdbusd import cfg
+ from lvmdbusd.utils import pv_dest_ranges, log_debug, log_error, add_no_notify,\
+-			make_non_block, read_decoded, extract_stack_trace, LvmBug, add_config_option
++			make_non_block, read_decoded, extract_stack_trace, LvmBug, add_config_option, get_error_msg
+ from lvmdbusd.lvm_shell_proxy import LVMShellProxy
+ 
+ try:
+@@ -121,6 +121,9 @@ def call_lvm(command, debug=False, line_cb=None,
+ 	command.insert(0, cfg.LVM_CMD)
+ 	command = add_no_notify(command)
+ 
++	# Ensure we get an error message when we fork & exec the lvm command line
++	command = add_config_option(command, "--config", 'log/command_log_selection="log_context!=''"')
++
+ 	process = Popen(command, stdout=PIPE, stderr=PIPE, close_fds=True,
+ 					env=os.environ)
+ 
+@@ -167,7 +170,17 @@ def call_lvm(command, debug=False, line_cb=None,
+ 		if debug or (process.returncode != 0 and (process.returncode != 5 and "fullreport" in command)):
+ 			_debug_c(command, process.returncode, (stdout_text, stderr_text))
+ 
+-		return process.returncode, stdout_text, stderr_text
++		try:
++			report_json = json.loads(stdout_text)
++		except json.decoder.JSONDecodeError:
++			# Some lvm commands don't return json even though we are asking for it to do so.
++			return process.returncode, stdout_text, stderr_text
++
++		error_msg = get_error_msg(report_json)
++		if error_msg:
++			stderr_text += error_msg
++
++		return process.returncode, report_json, stderr_text
+ 	else:
+ 		if cfg.run.value == 0:
+ 			raise SystemExit
+@@ -619,20 +632,8 @@ def lvm_full_report_json():
+ 	rc, out, err = call(cmd)
+ 	# When we have an exported vg the exit code of lvs or fullreport will be 5
+ 	if rc == 0 or rc == 5:
+-		# If the 'call' implementation is lvmshell, the out is a dictionary as lvmshell has to
+-		# parse the output to get the exit value.  When doing fork & exec, out is a string
+-		# representing the JSON.  TODO: Make this consistent between implementations.
+-		if cfg.SHELL_IN_USE:
+-			assert(type(out) == dict)
+-			return out
+-		else:
+-			try:
+-				return json.loads(out)
+-			except json.decoder.JSONDecodeError as joe:
+-				log_error("JSONDecodeError %s, \n JSON=\n%s\n" %
+-							(str(joe), out))
+-				raise LvmBug("'fullreport' returned invalid JSON")
+-
++		assert(type(out) == dict)
++		return out
+ 	raise LvmBug("'fullreport' exited with code '%d'" % rc)
+ 
+ 
 
