@@ -1,47 +1,39 @@
-From: agk@sourceware.org <agk@sourceware.org>
-Date: 10 Dec 2011 00:47:24 -0000
-Subject: LVM2/lib/metadata thin_manip.c
-Message-ID: <20111210004724.2181.qmail@sourceware.org>
+From: Zdenek Kabelac <zkabelac@sourceware.org>
+Date: Wed,  1 Feb 2023 10:53:10 +0000 (GMT)
+Subject: main - archive: update message
+Message-ID: <20230201105310.2654E3857C43@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	agk at sourceware.org	2011-12-10 00:47:23
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=f89c369a0119a701a5a550694258a145202ab4a2
+Commit:        f89c369a0119a701a5a550694258a145202ab4a2
+Parent:        6d14144d311fb347e4225ad6a48d4900b39445c4
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Tue Jan 17 23:58:41 2023 +0100
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Wed Feb 1 11:47:30 2023 +0100
 
-Modified files:
-	lib/metadata   : thin_manip.c 
+archive: update message
 
-Log message:
-	update FIXMEs
+Better suggesting message as suggested by RHBZ 2123151.
+---
+ lib/format_text/archive.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/lib/metadata/thin_manip.c.diff?cvsroot=lvm2&r1=1.26&r2=1.27
-
---- LVM2/lib/metadata/thin_manip.c	2011/11/10 12:43:05	1.26
-+++ LVM2/lib/metadata/thin_manip.c	2011/12/10 00:47:23	1.27
-@@ -244,6 +244,7 @@
- 	return max_id;
+diff --git a/lib/format_text/archive.c b/lib/format_text/archive.c
+index 2e8792a93..5acf0c04a 100644
+--- a/lib/format_text/archive.c
++++ b/lib/format_text/archive.c
+@@ -219,7 +219,7 @@ static void _remove_expired(const char *dir, const char *vgname,
+ 
+ 	sum /= 1024 * 1024;
+ 	if (sum > 128 || archives_size > 8192)
+-		log_print_unless_silent("Consider pruning %s VG archive with more then %u MiB in %u files (check archiving is needed in lvm.conf).",
++		log_print_unless_silent("Consider pruning %s VG archive with more then %u MiB in %u files (see archiving settings in lvm.conf).",
+ 					vgname, (unsigned)sum, archives_size);
  }
  
-+// FIXME Rename this fn: it doesn't extend an already-existing pool AFAICT
- int extend_pool(struct logical_volume *pool_lv, const struct segment_type *segtype,
- 		struct alloc_handle *ah, uint32_t stripes, uint32_t stripe_size)
- {
-@@ -285,10 +286,8 @@
- 		 * FIXME: implement lazy clearing when activation is disabled
- 		 */
- 
--		// FIXME: activate_lv_local_excl is actually wanted here
-+		/* pool_lv is a new LV so the VG lock protects us */
- 		if (!activate_lv_local(pool_lv->vg->cmd, pool_lv) ||
--		    // FIXME: maybe -zero n  should  allow to recreate same thin pool
--		    // and different option should be used for zero_new_blocks
- 		    /* Clear 4KB of metadata device for new thin-pool. */
- 		    !set_lv(pool_lv->vg->cmd, pool_lv, UINT64_C(0), 0)) {
- 			log_error("Aborting. Failed to wipe pool metadata %s.",
-
 
