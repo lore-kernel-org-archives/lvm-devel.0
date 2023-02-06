@@ -1,91 +1,106 @@
 From: David Teigland <teigland@sourceware.org>
-Date: Thu,  2 Feb 2023 22:18:31 +0000 (GMT)
-Subject: main - vg_read: remove unused code for md components
-Message-ID: <20230202221831.07D7E3858C53@sourceware.org>
+Date: Mon,  6 Feb 2023 18:24:59 +0000 (GMT)
+Subject: main - device_id: ignore quotes in device id
+Message-ID: <20230206182459.14A033858D1E@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=57ad78d4369ee531ab0173b42aa91048eb316353
-Commit:        57ad78d4369ee531ab0173b42aa91048eb316353
-Parent:        8498874147c886032817c24d11231947a041bc2e
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=dc99f0def17b936f95c63612a56ae2a6ae81db0e
+Commit:        dc99f0def17b936f95c63612a56ae2a6ae81db0e
+Parent:        57ad78d4369ee531ab0173b42aa91048eb316353
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Thu Feb 2 16:15:13 2023 -0600
+AuthorDate:    Mon Feb 6 12:18:55 2023 -0600
 Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Thu Feb 2 16:15:13 2023 -0600
+CommitterDate: Mon Feb 6 12:24:18 2023 -0600
 
-vg_read: remove unused code for md components
+device_id: ignore quotes in device id
 
-This code was no longer used after ommit
-87ee401eea3c3c3958ec5cda6e5c246b80503b8c
+A t10 wwid string was found containing a " character
+which breaks vg metadata parsing.  Ignore any quotation
+marks in device id strings.
 ---
- lib/metadata/metadata.c | 44 +-------------------------------------------
- 1 file changed, 1 insertion(+), 43 deletions(-)
+ lib/device/device_id.c            |  6 ++++--
+ lib/device/parse_vpd.c            |  6 ++++++
+ test/shell/devicesfile-vpd-ids.sh | 24 ++++++++++++++++++++++++
+ 3 files changed, 34 insertions(+), 2 deletions(-)
 
-diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
-index 30b2c1779..91a23f931 100644
---- a/lib/metadata/metadata.c
-+++ b/lib/metadata/metadata.c
-@@ -4643,11 +4643,9 @@ static struct volume_group *_vg_read(struct cmd_context *cmd,
- 	struct volume_group *vg, *vg_ret = NULL;
- 	struct metadata_area *mda, *mda2;
- 	unsigned use_precommitted = precommitted;
--	struct device *mda_dev, *dev_ret = NULL, *dev;
-+	struct device *mda_dev, *dev_ret = NULL;
- 	struct cached_vg_fmtdata *vg_fmtdata = NULL;	/* Additional format-specific data about the vg */
--	struct pv_list *pvl;
- 	int found_old_metadata = 0;
--	int found_md_component = 0;
- 	unsigned use_previous_vg;
+diff --git a/lib/device/device_id.c b/lib/device/device_id.c
+index 1be6b0787..79da12884 100644
+--- a/lib/device/device_id.c
++++ b/lib/device/device_id.c
+@@ -438,8 +438,8 @@ int dev_read_sys_wwid(struct cmd_context *cmd, struct device *dev,
+ 	if (!ret || !buf[0])
+ 		return 0;
  
- 	log_debug_metadata("Reading VG %s %s", vgname ?: "<no name>", vgid ?: "<no vgid>");
-@@ -4866,46 +4864,6 @@ static struct volume_group *_vg_read(struct cmd_context *cmd,
- 		goto_out;
- 	}
+-	/* in t10 id, replace series of spaces with one _ */
+-	if (!strncmp(buf, "t10.", 4) && strchr(buf, ' ')) {
++	/* in t10 id, replace characters like space and quote */
++	if (!strncmp(buf, "t10.", 4)) {
+ 		if (bufsize < DEV_WWID_SIZE)
+ 			return 0;
+ 		memcpy(tmpbuf, buf, DEV_WWID_SIZE);
+@@ -587,6 +587,8 @@ const char *device_id_system_read(struct cmd_context *cmd, struct device *dev, u
+ 	/* wwids are already munged if needed */
+ 	if (idtype != DEV_ID_TYPE_SYS_WWID) {
+ 		for (i = 0; i < strlen(sysbuf); i++) {
++			if (sysbuf[i] == '"')
++				continue;
+ 			if (isblank(sysbuf[i]) || isspace(sysbuf[i]) || iscntrl(sysbuf[i]))
+ 				sysbuf[i] = '_';
+ 		}
+diff --git a/lib/device/parse_vpd.c b/lib/device/parse_vpd.c
+index bea8834d4..c1ac974fd 100644
+--- a/lib/device/parse_vpd.c
++++ b/lib/device/parse_vpd.c
+@@ -53,6 +53,12 @@ int format_t10_id(const unsigned char *in, int in_bytes, unsigned char *out, int
+ 		/* skip leading spaces */
+ 		if (!retlen && (in[i] == ' '))
+ 			continue;
++		/* skip non-ascii non-printable characters */
++		if (!isascii(in[i]) || !isprint(in[i]))
++			continue;
++		/* skip quote */
++		if (in[i] == '"')
++			continue;
+ 		/* replace one or more spaces with _ */
+ 		if (in[i] == ' ') {
+ 			in_space = 1;
+diff --git a/test/shell/devicesfile-vpd-ids.sh b/test/shell/devicesfile-vpd-ids.sh
+index 2801310ef..b2042fb9a 100644
+--- a/test/shell/devicesfile-vpd-ids.sh
++++ b/test/shell/devicesfile-vpd-ids.sh
+@@ -219,6 +219,30 @@ vgremove $vg
+ rm $SYS_DIR/dev/block/$MAJOR1:$MINOR1/wwid
+ cleanup_sysfs
  
--	/*
--	 * Usually md components are eliminated during label scan, or duplicate
--	 * resolution, but sometimes an md component can get through and be
--	 * detected in set_pv_device() (which will do an md component check if
--	 * the device/PV sizes don't match.)  In this case we need to fix up
--	 * lvmcache to drop the component dev and fix up metadata_areas_in_use
--	 * to drop it also.
--	 */
--	if (found_md_component) {
--		dm_list_iterate_items(pvl, &vg_ret->pvs) {
--			if (!(dev = lvmcache_device_from_pv_id(cmd, &pvl->pv->id, NULL)))
--				continue;
--
--			/* dev_is_md_component set this flag if it was found */
--			if (!(dev->flags & DEV_IS_MD_COMPONENT))
--				continue;
--
--			log_debug_metadata("Drop dev for MD component from cache %s.", dev_name(dev));
--			lvmcache_del_dev(dev);
--
--			dm_list_iterate_items(mda, &fid->metadata_areas_in_use)
--				if (mda_get_device(mda) == dev) {
--					log_debug_metadata("Drop mda from MD component from mda list %s.", dev_name(dev));
--					dm_list_del(&mda->list);
--					break;
--				}
--		}
--	}
--
--	/*
--	 * After dropping MD components there may be no remaining legitimate
--	 * devices for this VG.
--	 */
--	if (!lvmcache_vginfo_from_vgid(vgid)) {
--		log_debug_metadata("VG %s not found on any remaining devices.", vgname);
--		release_vg(vg_ret);
--		vg_ret = NULL;
--		goto out;
--	}
--
- 	/*
- 	 * Correct the lvmcache representation of the VG using the metadata
- 	 * that we have chosen above (vg_ret).
++# Test t10 wwid containing quote
++rm $DF
++aux wipefs_a "$DEV1"
++mkdir -p $SYS_DIR/dev/block/$MAJOR1:$MINOR1/
++echo "t10.ATA_2.5\"_SATA_SSD_1112-A___111111111111" > $SYS_DIR/dev/block/$MAJOR1:$MINOR1/wwid
++lvmdevices --adddev "$DEV1"
++cat $DF
++vgcreate $vg "$DEV1"
++lvcreate -l1 -an $vg
++cat $DF
++# check wwid string in metadata output
++pvs -o+deviceidtype,deviceid "$DEV1" |tee out
++grep sys_wwid out
++# the quote is removed after the 5
++grep 2.5_SATA_SSD out
++# check wwid string in system.devices
++grep sys_wwid $DF
++# the quote is removed after the 5
++grep 2.5_SATA_SSD $DF
++lvremove -y $vg
++vgremove $vg
++rm $SYS_DIR/dev/block/$MAJOR1:$MINOR1/wwid
++cleanup_sysfs
++
+ # TODO: lvmdevices --adddev <dev> --deviceidtype <type> --deviceid <val>
+ # This would let the user specify the second naa wwid.
+ 
 
