@@ -1,62 +1,127 @@
 From: Marian Csontos <mcsontos@sourceware.org>
-Date: Thu,  9 Feb 2023 20:40:46 +0000 (GMT)
-Subject: rhel-9.2.0 - tests: lvresize-fs-crypt using helper only for crypt dev
-Message-ID: <20230209204046.AE0F83858C5F@sourceware.org>
+Date: Thu,  9 Feb 2023 20:40:47 +0000 (GMT)
+Subject: rhel-9.2.0 - lvresize: only resize crypt when fs resize is enabled
+Message-ID: <20230209204047.CF4023858C74@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=380e3855fbc661eed490665cf1e3d05e985da189
-Commit:        380e3855fbc661eed490665cf1e3d05e985da189
-Parent:        611b768134fe39ddfb2eec99eb5417e7e001d8cd
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=7e0c2e1581225a916269edc8f04fb10e4ef5e952
+Commit:        7e0c2e1581225a916269edc8f04fb10e4ef5e952
+Parent:        380e3855fbc661eed490665cf1e3d05e985da189
 Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Tue Jan 3 14:35:26 2023 -0600
+AuthorDate:    Thu Jan 19 11:36:51 2023 -0600
 Committer:     Marian Csontos <mcsontos@redhat.com>
-CommitterDate: Thu Feb 9 16:28:32 2023 +0100
+CommitterDate: Thu Feb 9 16:29:07 2023 +0100
 
-tests: lvresize-fs-crypt using helper only for crypt dev
+lvresize: only resize crypt when fs resize is enabled
 
-(cherry picked from commit 2580f007f0aaa3bf22c43295caa2c60c6142494f)
+There were a couple of cases where lvresize, without --fs resize,
+was resizing the crypt layer above the LV.  Resizing the crypt
+layer should only be done when fs resizing is enabled (even if the
+fs is already small enough due to being independently reduced.)
+
+Also, check the size of the crypt device to see if it's already
+been reduced independently, and skip the cryptsetup resize if
+it's not needed.
+
+(cherry picked from commit 3bb55765286dc8e4f0000957d85a6b8ee2752852)
 ---
- test/shell/lvresize-fs-crypt.sh | 25 +++++++++++++++++++++++++
- 1 file changed, 25 insertions(+)
+ lib/device/filesystem.c         | 12 ++++++++++++
+ lib/device/filesystem.h         |  1 +
+ lib/metadata/lv_manip.c         | 18 +++++++++++++++++-
+ test/shell/lvresize-fs-crypt.sh |  7 ++++++-
+ 4 files changed, 36 insertions(+), 2 deletions(-)
 
+diff --git a/lib/device/filesystem.c b/lib/device/filesystem.c
+index bdc230175..b4c43a626 100644
+--- a/lib/device/filesystem.c
++++ b/lib/device/filesystem.c
+@@ -106,6 +106,7 @@ int fs_get_info(struct cmd_context *cmd, struct logical_volume *lv,
+ 	struct fs_info info;
+ 	FILE *fme = NULL;
+ 	struct mntent *me;
++	int fd;
+ 	int ret;
+ 
+ 	if (dm_snprintf(lv_path, PATH_MAX, "%s%s/%s", lv->vg->cmd->dev_dir,
+@@ -151,6 +152,17 @@ int fs_get_info(struct cmd_context *cmd, struct logical_volume *lv,
+ 		log_print("File system found on crypt device %s on LV %s.",
+ 			  crypt_path, display_lvname(lv));
+ 
++		if ((fd = open(crypt_path, O_RDONLY)) < 0) {
++			log_error("Failed to open crypt path %s", crypt_path);
++			return 0;
++		}
++		if (ioctl(fd, BLKGETSIZE64, &info.crypt_dev_size_bytes) < 0) {
++			log_error("Failed to get crypt device size %s", crypt_path);
++			close(fd);
++			return 0;
++		}
++		close(fd);
++
+ 		if (!fs_get_blkid(crypt_path, &info)) {
+ 			log_error("No file system info from blkid for dm-crypt device %s on LV %s.",
+ 				  crypt_path, display_lvname(lv));
+diff --git a/lib/device/filesystem.h b/lib/device/filesystem.h
+index 7a34d2ae0..fd1af0416 100644
+--- a/lib/device/filesystem.h
++++ b/lib/device/filesystem.h
+@@ -25,6 +25,7 @@ struct fs_info {
+ 	uint64_t fs_last_byte; /* last byte on the device used by the fs */
+ 	uint32_t crypt_offset_bytes; /* offset in bytes of crypt data on LV */
+ 	dev_t crypt_devt; /* dm-crypt device between the LV and FS */
++	uint64_t crypt_dev_size_bytes;
+ 
+ 	unsigned nofs:1;
+ 	unsigned unmounted:1;
+diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
+index f8eae0447..a2e9db2c9 100644
+--- a/lib/metadata/lv_manip.c
++++ b/lib/metadata/lv_manip.c
+@@ -6397,7 +6397,23 @@ static int _fs_reduce(struct cmd_context *cmd, struct logical_volume *lv,
+ 	 * but the crypt dev over the LV should be shrunk to correspond with
+ 	 * the LV size, so that the FS does not see an incorrect device size.
+ 	 */
+-	if (!fsinfo.needs_reduce && fsinfo.needs_crypt && !test_mode()) {
++	if (!fsinfo.needs_reduce && fsinfo.needs_crypt) {
++		/* Check if the crypt device is already sufficiently reduced. */
++		if (fsinfo.crypt_dev_size_bytes <= newsize_bytes_fs) {
++			log_print("crypt device is already reduced to %llu bytes.",
++				  (unsigned long long)fsinfo.crypt_dev_size_bytes);
++			ret = 1;
++			goto out;
++		}
++		if (!strcmp(lp->fsopt, "checksize")) {
++			log_error("crypt reduce is required (see --resizefs or cryptsetup resize.)");
++			ret = 0;
++			goto out;
++		}
++		if (test_mode()) {
++			ret = 1;
++			goto_out;
++		}
+ 		ret = crypt_resize_script(cmd, lv, &fsinfo, newsize_bytes_fs);
+ 		goto out;
+ 	}
 diff --git a/test/shell/lvresize-fs-crypt.sh b/test/shell/lvresize-fs-crypt.sh
-index e7b8b9426..61a6de022 100644
+index 61a6de022..4bef771dc 100644
 --- a/test/shell/lvresize-fs-crypt.sh
 +++ b/test/shell/lvresize-fs-crypt.sh
-@@ -135,6 +135,31 @@ cryptsetup close $cr
- lvchange -an $vg/$lv
- lvremove $vg/$lv
- 
-+# lvresize uses helper only for crypt dev resize
-+# because the fs was resized separately beforehand
-+lvcreate -n $lv -L 456M $vg
-+echo 93R4P4pIqAH8 | cryptsetup luksFormat -i1 --type luks1 "$DM_DEV_DIR/$vg/$lv"
-+echo 93R4P4pIqAH8 | cryptsetup luksOpen "$DM_DEV_DIR/$vg/$lv" $cr
-+mkfs.ext4 /dev/mapper/$cr
-+mount /dev/mapper/$cr "$mount_dir"
-+dd if=/dev/zero of="$mount_dir/zeros1" bs=1M count=100 conv=fdatasync
-+df --output=size "$mount_dir" |tee df1
-+# resize only the fs (to 256M), not the crypt dev or LV
-+umount "$mount_dir"
-+resize2fs /dev/mapper/$cr 262144k
-+mount /dev/mapper/$cr "$mount_dir"
-+# this lvresize will not resize the fs (which is already reduced
-+# to smaller than the requested LV size), but lvresize will use
-+# the helper to resize the crypt dev before resizing the LV.
-+lvresize -L-100M $vg/$lv
-+check lv_field $vg/$lv lv_size "356.00m"
-+df --output=size "$mount_dir" |tee df2
-+not diff df1 df2
-+umount "$mount_dir"
-+cryptsetup close $cr
-+lvchange -an $vg/$lv
-+lvremove $vg/$lv
-+
- # test with LUKS2?
- 
- vgremove -ff $vg
+@@ -151,7 +151,12 @@ mount /dev/mapper/$cr "$mount_dir"
+ # this lvresize will not resize the fs (which is already reduced
+ # to smaller than the requested LV size), but lvresize will use
+ # the helper to resize the crypt dev before resizing the LV.
+-lvresize -L-100M $vg/$lv
++# Using --fs resize is required to allow lvresize to look above
++# the lv at crypt&fs layers for potential resizing.  Without
++# --fs resize, lvresize fails because it sees that crypt resize
++# is needed and --fs resize is needed to enable that.
++not lvresize -L-100 $vg/$lv
++lvresize -L-100M --fs resize $vg/$lv
+ check lv_field $vg/$lv lv_size "356.00m"
+ df --output=size "$mount_dir" |tee df2
+ not diff df1 df2
 
