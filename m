@@ -1,81 +1,96 @@
-From: Marian Csontos <mcsontos@sourceware.org>
-Date: Thu,  9 Feb 2023 20:40:50 +0000 (GMT)
-Subject: rhel-9.2.0 - udev: import previous results of blkid when in suspended state
-Message-ID: <20230209204050.219333858C74@sourceware.org>
+From: David Teigland <teigland@sourceware.org>
+Date: Thu,  9 Feb 2023 23:39:00 +0000 (GMT)
+Subject: main - vgimportclone: fix non-duplicate PV with non-unique basevgname arg
+Message-ID: <20230209233900.539D5385828E@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=285c766877b54b24234f84c313bb5806c0dcfa21
-Commit:        285c766877b54b24234f84c313bb5806c0dcfa21
-Parent:        fba3614c3ed596b99d8adf2fe6c60886db10b2c0
-Author:        Yu Watanabe <watanabe.yu+github@gmail.com>
-AuthorDate:    Thu Feb 2 00:28:12 2023 +0900
-Committer:     Marian Csontos <mcsontos@redhat.com>
-CommitterDate: Thu Feb 9 17:06:18 2023 +0100
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=be124ae81027e8736106e4958bd2dfab971d6764
+Commit:        be124ae81027e8736106e4958bd2dfab971d6764
+Parent:        94f77a4d8d9737fca05fb4e451678ec440c68670
+Author:        David Teigland <teigland@redhat.com>
+AuthorDate:    Thu Feb 9 17:14:19 2023 -0600
+Committer:     David Teigland <teigland@redhat.com>
+CommitterDate: Thu Feb 9 17:37:22 2023 -0600
 
-udev: import previous results of blkid when in suspended state
+vgimportclone: fix non-duplicate PV with non-unique basevgname arg
 
-Follow-up for e10f67e91728f1e576803df884049ecbd92874d0.
+Fix hang of vgimportclone command when:
+the PV(s) being imported are not actually clones/duplicates, and
+the -n vgname arg is the same as the current vgname.
 
-The commit e10f67e91728f1e576803df884049ecbd92874d0 tries to keep device
-node symlinks even if the device is in the suspended state. However,
-necessary properties that may previously obtained by the blkid command
-were not imported at least in the .rules file. So, unless ID_FS_xyz
-properties are imported by another earlier .rules file, the device node
-symlinks are still lost when event is processed in the suspended state.
+(Not the intended use of the command, but it should still work.)
 
-Let's explicitly import the necessary properties.
+In this case, the old and new vgnames ended up being the same, when
+the code expected they would be different.  A file lock on both the
+old and new vgnames is used, so when both flocks are on the same
+file, the second blocks indefinitely.
 
-RHBZ: https://bugzilla.redhat.com/show_bug.cgi?id=2158628
-GHPR: https://github.com/lvmteam/lvm2/pull/105
-(cherry picked from commit 94f77a4d8d9737fca05fb4e451678ec440c68670)
+Fix the new vgname to be the old name plus a numeric suffix, which
+is the expected result.
 ---
- WHATS_NEW_DM             |  4 ++++
- udev/13-dm-disk.rules.in | 14 ++++++++++++--
- 2 files changed, 16 insertions(+), 2 deletions(-)
+ test/shell/vgimportclone.sh | 20 ++++++++++++++++++++
+ tools/vgimportclone.c       | 15 +++++++++++++--
+ 2 files changed, 33 insertions(+), 2 deletions(-)
 
-diff --git a/WHATS_NEW_DM b/WHATS_NEW_DM
-index f676ff7e1..c129c7f8a 100644
---- a/WHATS_NEW_DM
-+++ b/WHATS_NEW_DM
-@@ -1,3 +1,7 @@
-+Version 1.02.191 - 
-+=====================================
-+  Import previous ID_FS_* udev records in 13-dm-disk.rules for suspended DM dev.
+diff --git a/test/shell/vgimportclone.sh b/test/shell/vgimportclone.sh
+index e1b9d3832..13924c3dd 100644
+--- a/test/shell/vgimportclone.sh
++++ b/test/shell/vgimportclone.sh
+@@ -104,6 +104,26 @@ pvremove "$dev1"
+ pvremove "$dev2"
+ pvremove "$dev3"
+ 
++# Test importing a non-duplicate pv using the existing vg name
++vgcreate $vg1 "$dev1"
++vgimportclone -n $vg1 "$dev1"
++vgs ${vg1}1
++not vgs $vg1
++vgremove ${vg1}1
 +
- Version 1.02.187 - 10th November 2022
- =====================================
-   Add DM_REPORT_GROUP_JSON_STD for more JSON standard compliant output format.
-diff --git a/udev/13-dm-disk.rules.in b/udev/13-dm-disk.rules.in
-index 5cc08121e..dca00bc01 100644
---- a/udev/13-dm-disk.rules.in
-+++ b/udev/13-dm-disk.rules.in
-@@ -17,12 +17,22 @@ ENV{DM_UDEV_DISABLE_DISK_RULES_FLAG}=="1", GOTO="dm_end"
- SYMLINK+="disk/by-id/dm-name-$env{DM_NAME}"
- ENV{DM_UUID}=="?*", SYMLINK+="disk/by-id/dm-uuid-$env{DM_UUID}"
- 
--ENV{DM_SUSPENDED}=="1", ENV{DM_UDEV_PRIMARY_SOURCE_FLAG}=="1", GOTO="dm_link"
--ENV{DM_NOSCAN}=="1", ENV{DM_UDEV_PRIMARY_SOURCE_FLAG}=="1", GOTO="dm_link"
-+ENV{DM_SUSPENDED}=="1", ENV{DM_UDEV_PRIMARY_SOURCE_FLAG}=="1", GOTO="dm_import"
-+ENV{DM_NOSCAN}=="1", ENV{DM_UDEV_PRIMARY_SOURCE_FLAG}=="1", GOTO="dm_import"
- ENV{DM_SUSPENDED}=="1", GOTO="dm_end"
- ENV{DM_NOSCAN}=="1", GOTO="dm_watch"
- 
- (BLKID_RULE)
-+GOTO="dm_link"
++# Test importing a non-duplicate pv using the existing vg name
++# Another existing VG is using the initial generated vgname with
++# the "1" suffix, so "2" is used.
++vgcreate $vg1 "$dev1"
++vgcreate ${vg1}1 "$dev2"
++vgimportclone -n $vg1 "$dev1"
++vgs ${vg1}1
++vgs ${vg1}2
++vgremove ${vg1}1
++vgremove ${vg1}2
++pvremove "$dev1"
++pvremove "$dev2"
 +
-+LABEL="dm_import"
-+IMPORT{db}="ID_FS_USAGE"
-+IMPORT{db}="ID_FS_UUID_ENC"
-+IMPORT{db}="ID_FS_LABEL_ENC"
-+IMPORT{db}="ID_PART_ENTRY_NAME"
-+IMPORT{db}="ID_PART_ENTRY_UUID"
-+IMPORT{db}="ID_PART_ENTRY_SCHEME"
-+IMPORT{db}="ID_PART_GPT_AUTO_ROOT"
- 
- LABEL="dm_link"
- ENV{DM_UDEV_LOW_PRIORITY_FLAG}=="1", OPTIONS="link_priority=-100"
+ # Verify that if we provide the -n|--basevgname,
+ # the number suffix is not added unnecessarily.
+ vgcreate $SHARED --metadatasize 128k A${vg1}B "$dev1"
+diff --git a/tools/vgimportclone.c b/tools/vgimportclone.c
+index 93fa3b18d..a6d055f7f 100644
+--- a/tools/vgimportclone.c
++++ b/tools/vgimportclone.c
+@@ -407,8 +407,19 @@ int vgimportclone(struct cmd_context *cmd, int argc, char **argv)
+ 			log_error("Base vg name %s is too long.", vgname);
+ 			goto out;
+ 		}
+-		(void) dm_strncpy(tmp_vgname, base_vgname, NAME_LEN);
+-		vgname_count = 0;
++		if (strcmp(vgname, vp.old_vgname)) {
++			(void) dm_strncpy(tmp_vgname, base_vgname, NAME_LEN);
++			vgname_count = 0;
++		} else {
++			/* Needed when basename matches old name, and PV is not a duplicate
++			   which means old name is not found on other devs, and is not seen
++			   in the vgnames search below, causing old and new names to match. */
++			if (dm_snprintf(tmp_vgname, sizeof(tmp_vgname), "%s1", vp.old_vgname) < 0) {
++				log_error("Temporary vg name %s1 is too long.", vp.old_vgname);
++				goto out;
++			}
++			vgname_count = 1;
++		}
+ 	} else {
+ 		if (dm_snprintf(base_vgname, sizeof(base_vgname), "%s", vp.old_vgname) < 0) {
+ 			log_error(INTERNAL_ERROR "Old vg name %s is too long.", vp.old_vgname);
 
