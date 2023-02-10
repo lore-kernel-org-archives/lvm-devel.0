@@ -1,114 +1,200 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Fri, 10 Feb 2023 16:53:22 +0000 (GMT)
-Subject: main - lvresize: better detection of BLKID_SUBLKS_FSINFO
-Message-ID: <20230210165322.853E0385840D@sourceware.org>
+Date: Fri, 10 Feb 2023 16:53:27 +0000 (GMT)
+Subject: main - lvresize_fs_helper: cleanup shellcheck warns
+Message-ID: <20230210165327.40F91385841A@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=1fb5107eea2182415eef50ba7bec0fdf7600659c
-Commit:        1fb5107eea2182415eef50ba7bec0fdf7600659c
-Parent:        cf204ce55ea892ffaa4ff63dac548145544679fb
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=35e1f15e0386341617c5810c481a2c8d227026d1
+Commit:        35e1f15e0386341617c5810c481a2c8d227026d1
+Parent:        b681b774dcacd35d08f16d8952ec99d1e85433d6
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed Feb 8 14:39:43 2023 +0100
+AuthorDate:    Thu Feb 9 16:22:11 2023 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Fri Feb 10 17:50:27 2023 +0100
 
-lvresize: better detection of BLKID_SUBLKS_FSINFO
+lvresize_fs_helper: cleanup shellcheck warns
 
-Use configure detection instead of trying to directly include
-blkid.h inside lvresize.c - where we do not pass in BLKID_CFLAGS
-and since we actually do not need to use blkid there, introeduce
-test variable HAVE_BLKID_SUBLKS_FSINFO and avoid trying to
-use blkid.h in this place - this also fixes builing problem for
-systems without blkid.h.
+Use commands directly in 'if cmd; then'.
+Use shell vars in $(( )) in recommended way.
 ---
- configure.ac           | 25 ++++++++++++++++++++++++-
- include/configure.h.in |  3 +++
- tools/lvresize.c       |  4 +---
- 3 files changed, 28 insertions(+), 4 deletions(-)
+ scripts/lvresize_fs_helper.sh | 54 +++++++++++++++----------------------------
+ 1 file changed, 19 insertions(+), 35 deletions(-)
 
-diff --git a/configure.ac b/configure.ac
-index 4ddf0a430..95bc44b32 100644
---- a/configure.ac
-+++ b/configure.ac
-@@ -1109,9 +1109,30 @@ AC_ARG_ENABLE(blkid_wiping,
- 			     [disable libblkid detection of signatures when wiping and use native code instead]),
- 	      BLKID_WIPING=$enableval, BLKID_WIPING=maybe)
+diff --git a/scripts/lvresize_fs_helper.sh b/scripts/lvresize_fs_helper.sh
+index f531dd447..90b1a9782 100755
+--- a/scripts/lvresize_fs_helper.sh
++++ b/scripts/lvresize_fs_helper.sh
+@@ -30,8 +30,7 @@ RESIZEFS_FAILED=0
+ fsextend() {
+ 	if [ "$DO_UNMOUNT" -eq 1 ]; then
+ 		logmsg "unmount ${MOUNTDIR}"
+-		umount "$MOUNTDIR"
+-		if [ $? -eq 0 ]; then
++		if umount "$MOUNTDIR"; then
+ 			logmsg "unmount done"
+ 		else
+ 			logmsg "unmount failed"
+@@ -41,8 +40,7 @@ fsextend() {
  
-+# TODO: possibly detect right version of blkid with BLKID_SUBLKS_FSINFO support
-+#       so lvresize can check detected flag here
-+#
- DEFAULT_USE_BLKID_WIPING=0
-+AS_IF([test "$BLKID_WIPING" != "no"], [blkdir_version=">= 2.24"], [blkid_version=""])
-+
-+PKG_CHECK_MODULES([BLKID], [blkid $blkid_version ], [
-+	HAVE_BLKID=1
-+
-+	AC_CACHE_CHECK([for blkdid.h supports SUBLKS_FSINFO.],
-+		[ac_cv_have_blkid_sublks_fsinfo],
-+		[AC_COMPILE_IFELSE([AC_LANG_PROGRAM([#include <blkid/blkid.h>
-+#ifndef BLKID_SUBLKS_FSINFO
-+#error BLKID_SUBLKS_FSINFO is missing
-+#endif])],
-+		[ac_cv_have_blkid_sublks_fsinfo="yes"], [ac_cv_have_blkid_sublks_fsinfo="no"])])
-+
-+		AC_IF_YES(ac_cv_have_blkid_sublks_fsinfo,
-+			  AC_DEFINE(HAVE_BLKID_SUBLKS_FSINFO, 1,
-+				    [Define if blkid.h has BLKID_SUBLKS_FSINFO]))
-+])
-+
- AS_IF([test "$BLKID_WIPING" != "no"], [
--	PKG_CHECK_MODULES([BLKID], [blkid >= 2.24], [
-+	AS_IF([test "$HAVE_BLKID" = 1], [
- 		BLKID_WIPING=yes
- 		BLKID_PC="blkid"
- 		DEFAULT_USE_BLKID_WIPING=1
-@@ -1858,6 +1879,8 @@ AC_SUBST(FSADM)
- AC_SUBST(FSADM_PATH)
- AC_SUBST(LVRESIZE_FS_HELPER_PATH)
- AC_SUBST(BLKDEACTIVATE)
-+AC_SUBST(HAVE_BLKID)
-+AC_SUBST(HAVE_BLKID_SUBLKS_FSINFO)
- AC_SUBST(HAVE_LIBDL)
- AC_SUBST(HAVE_REALTIME)
- AC_SUBST(HAVE_VALGRIND)
-diff --git a/include/configure.h.in b/include/configure.h.in
-index e7abca2f1..fb5625156 100644
---- a/include/configure.h.in
-+++ b/include/configure.h.in
-@@ -154,6 +154,9 @@
- /* Define to 1 if you have the `atexit' function. */
- #undef HAVE_ATEXIT
+ 	if [ "$DO_FSCK" -eq 1 ]; then
+ 		logmsg "e2fsck ${DEVPATH}"
+-		e2fsck -f -p "$DEVPATH"
+-		if [ $? -eq 0 ]; then
++		if e2fsck -f -p "$DEVPATH"; then
+ 			logmsg "e2fsck done"
+ 		else
+ 			logmsg "e2fsck failed"
+@@ -52,8 +50,7 @@ fsextend() {
+ 	
+ 	if [ "$DO_CRYPTRESIZE" -eq 1 ]; then
+ 		logmsg "cryptsetup resize ${DEVPATH}"
+-		cryptsetup resize "$DEVPATH"
+-		if [ $? -eq 0 ]; then
++		if cryptsetup resize "$DEVPATH"; then
+ 			logmsg "cryptsetup done"
+ 		else
+ 			logmsg "cryptsetup failed"
+@@ -63,8 +60,7 @@ fsextend() {
  
-+/* Define if blkid.h has BLKID_SUBLKS_FSINFO */
-+#undef HAVE_BLKID_SUBLKS_FSINFO
-+
- /* Define if ioctl BLKZEROOUT can be used for device zeroing. */
- #undef HAVE_BLKZEROOUT
+ 	if [ "$DO_MOUNT" -eq 1 ]; then
+ 		logmsg "mount ${DEVPATH} ${TMPDIR}"
+-		mount -t "$FSTYPE" "$DEVPATH" "$TMPDIR"
+-		if [ $? -eq 0 ]; then
++		if mount -t "$FSTYPE" "$DEVPATH" "$TMPDIR"; then
+ 			logmsg "mount done"
+ 			TMP_MOUNT_DONE=1
+ 		else
+@@ -75,8 +71,7 @@ fsextend() {
  
-diff --git a/tools/lvresize.c b/tools/lvresize.c
-index f3cee8322..fc66bf0b8 100644
---- a/tools/lvresize.c
-+++ b/tools/lvresize.c
-@@ -15,8 +15,6 @@
+ 	if [[ "$FSTYPE" == "ext"* ]]; then
+ 		logmsg "resize2fs ${DEVPATH}"
+-		resize2fs "$DEVPATH"
+-		if [ $? -eq 0 ]; then
++		if resize2fs "$DEVPATH"; then
+ 			logmsg "resize2fs done"
+ 		else
+ 			logmsg "resize2fs failed"
+@@ -84,8 +79,7 @@ fsextend() {
+ 		fi
+ 	elif [[ "$FSTYPE" == "xfs" ]]; then
+ 		logmsg "xfs_growfs ${DEVPATH}"
+-		xfs_growfs "$DEVPATH"
+-		if [ $? -eq 0 ]; then
++		if xfs_growfs "$DEVPATH"; then
+ 			logmsg "xfs_growfs done"
+ 		else
+ 			logmsg "xfs_growfs failed"
+@@ -96,8 +90,7 @@ fsextend() {
+ 	# If the fs was temporarily mounted, now unmount it.
+ 	if [ $TMP_MOUNT_DONE -eq 1 ]; then
+ 		logmsg "cleanup unmount ${TMPDIR}"
+-		umount "$TMPDIR"
+-		if [ $? -eq 0 ]; then
++		if umount "$TMPDIR"; then
+ 			logmsg "cleanup unmount done"
+ 			TMP_MOUNT_DONE=0
+ 			rmdir "$TMPDIR"
+@@ -111,8 +104,7 @@ fsextend() {
+ 	# Not considered a command failure if this fails.
+ 	if [[ $DO_UNMOUNT -eq 1 && $REMOUNT -eq 1 ]]; then
+ 		logmsg "remount ${DEVPATH} ${MOUNTDIR}"
+-		mount -t "$FSTYPE" "$DEVPATH" "$MOUNTDIR"
+-		if [ $? -eq 0 ]; then
++		if mount -t "$FSTYPE" "$DEVPATH" "$MOUNTDIR"; then
+ 			logmsg "remount done"
+ 		else
+ 			logmsg "remount failed"
+@@ -130,8 +122,7 @@ fsextend() {
+ fsreduce() {
+ 	if [ "$DO_UNMOUNT" -eq 1 ]; then
+ 		logmsg "unmount ${MOUNTDIR}"
+-		umount "$MOUNTDIR"
+-		if [ $? -eq 0 ]; then
++		if umount "$MOUNTDIR"; then
+ 			logmsg "unmount done"
+ 		else
+ 			logmsg "unmount failed"
+@@ -141,8 +132,7 @@ fsreduce() {
  
- #include "tools.h"
+ 	if [ "$DO_FSCK" -eq 1 ]; then
+ 		logmsg "e2fsck ${DEVPATH}"
+-		e2fsck -f -p "$DEVPATH"
+-		if [ $? -eq 0 ]; then
++		if e2fsck -f -p "$DEVPATH"; then
+ 			logmsg "e2fsck done"
+ 		else
+ 			logmsg "e2fsck failed"
+@@ -152,8 +142,7 @@ fsreduce() {
+ 	
+ 	if [ "$DO_MOUNT" -eq 1 ]; then
+ 		logmsg "mount ${DEVPATH} ${TMPDIR}"
+-		mount -t "$FSTYPE" "$DEVPATH" "$TMPDIR"
+-		if [ $? -eq 0 ]; then
++		if mount -t "$FSTYPE" "$DEVPATH" "$TMPDIR"; then
+ 			logmsg "mount done"
+ 			TMP_MOUNT_DONE=1
+ 		else
+@@ -163,10 +152,9 @@ fsreduce() {
+ 	fi
  
--#include <blkid/blkid.h>
--
- static int _lvresize_params(struct cmd_context *cmd, struct lvresize_params *lp)
- {
- 	const char *type_str = arg_str_value(cmd, type_ARG, NULL);
-@@ -98,7 +96,7 @@ static int _lvresize_params(struct cmd_context *cmd, struct lvresize_params *lp)
- 			return 0;
- 		}
+ 	if [[ "$FSTYPE" == "ext"* ]]; then
+-		NEWSIZEKB=$(($NEWSIZEBYTES/1024))
++		NEWSIZEKB=$(( NEWSIZEBYTES / 1024 ))
+ 		logmsg "resize2fs ${DEVPATH} ${NEWSIZEKB}k"
+-		resize2fs "$DEVPATH" "$NEWSIZEKB"k
+-		if [ $? -eq 0 ]; then
++		if resize2fs "$DEVPATH" "$NEWSIZEKB"k; then
+ 			logmsg "resize2fs done"
+ 		else
+ 			logmsg "resize2fs failed"
+@@ -178,8 +166,7 @@ fsreduce() {
+ 	# If the fs was temporarily mounted, now unmount it.
+ 	if [ $TMP_MOUNT_DONE -eq 1 ]; then
+ 		logmsg "cleanup unmount ${TMPDIR}"
+-		umount "$TMPDIR"
+-		if [ $? -eq 0 ]; then
++		if umount "$TMPDIR"; then
+ 			logmsg "cleanup unmount done"
+ 			TMP_MOUNT_DONE=0
+ 			rmdir "$TMPDIR"
+@@ -195,10 +182,9 @@ fsreduce() {
+ 	fi
  
--#ifdef BLKID_SUBLKS_FSINFO
-+#ifdef HAVE_BLKID_SUBLKS_FSINFO
- 		/*
- 		 * When the libblkid fs info feature is available, use the
- 		 * the newer fs resizing capabability unless the older
+ 	if [ "$DO_CRYPTRESIZE" -eq 1 ]; then
+-		NEWSIZESECTORS=$(($NEWSIZEBYTES/512))
++		NEWSIZESECTORS=$(( NEWSIZEBYTES / 512 ))
+ 		logmsg "cryptsetup resize ${NEWSIZESECTORS} sectors ${DEVPATH}"
+-		cryptsetup resize --size "$NEWSIZESECTORS" "$DEVPATH"
+-		if [ $? -eq 0 ]; then
++		if cryptsetup resize --size "$NEWSIZESECTORS" "$DEVPATH"; then
+ 			logmsg "cryptsetup done"
+ 		else
+ 			logmsg "cryptsetup failed"
+@@ -210,8 +196,7 @@ fsreduce() {
+ 	# Not considered a command failure if this fails.
+ 	if [[ $DO_UNMOUNT -eq 1 && $REMOUNT -eq 1 ]]; then
+ 		logmsg "remount ${DEVPATH} ${MOUNTDIR}"
+-		mount -t "$FSTYPE" "$DEVPATH" "$MOUNTDIR"
+-		if [ $? -eq 0 ]; then
++		if mount -t "$FSTYPE" "$DEVPATH" "$MOUNTDIR"; then
+ 			logmsg "remount done"
+ 		else
+ 			logmsg "remount failed"
+@@ -222,10 +207,9 @@ fsreduce() {
+ }
+ 
+ cryptresize() {
+-	NEWSIZESECTORS=$(($NEWSIZEBYTES/512))
++	NEWSIZESECTORS=$(( NEWSIZEBYTES / 512 ))
+ 	logmsg "cryptsetup resize ${NEWSIZESECTORS} sectors ${DEVPATH}"
+-	cryptsetup resize --size "$NEWSIZESECTORS" "$DEVPATH"
+-	if [ $? -eq 0 ]; then
++	if cryptsetup resize --size "$NEWSIZESECTORS" "$DEVPATH"; then
+ 		logmsg "cryptsetup done"
+ 	else
+ 		logmsg "cryptsetup failed"
 
