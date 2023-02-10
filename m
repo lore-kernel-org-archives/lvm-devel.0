@@ -1,60 +1,37 @@
-From: Jun'ichi Nomura <j-nomura@ce.jp.nec.com>
-Date: Thu, 13 Dec 2007 16:05:08 -0500
-Subject: [PATCH lvconvert 0/6] Refactoring lvconvert mirror
-Message-ID: <47619E84.2060905@ce.jp.nec.com>
+From: Zdenek Kabelac <zkabelac@sourceware.org>
+Date: Fri, 10 Feb 2023 19:56:15 +0000 (GMT)
+Subject: main - WHATS_NEW: update
+Message-ID: <20230210195615.7C2663858414@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Hi,
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=d1bfa400a18c0223dcc60379dcec8b05b2ef6d5c
+Commit:        d1bfa400a18c0223dcc60379dcec8b05b2ef6d5c
+Parent:        21edfc4a5ea11d888f506b41d36a0ec983dc63c9
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Fri Feb 10 20:51:46 2023 +0100
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Fri Feb 10 20:54:05 2023 +0100
 
-This patchset refactors lvconvert mirror.
-The patches are applicable on top of the pvmove refactoring patches.
-https://www.redhat.com/archives/lvm-devel/2007-December/msg00020.html
+WHATS_NEW: update
 
-I would like to know whether this changes are acceptable.
-I guess there might be other needs for layer insertion/removal
-APIs. Comments are welcome.
-If they looks ok, I'll convert add-mirror-to-mirror patches based
-on this.
+---
+ WHATS_NEW | 2 ++
+ 1 file changed, 2 insertions(+)
 
-The patches add following APIs:
-  - lv_add_mirrors(), lv_remove_mirrors()
-      Generic APIs for lvconvert mirror.
-      Having 2 modes of conversion: MIRROR_BY_SEG and MIRROR_BY_LV.
-      MIRROR_BY_LV is for the current version of lvconvert,
-      i.e. mirroring by mimage LVs.
-      MIRROR_BY_SEG is for the current version of pvmove,
-      i.e. mirroring segment by segment.
-  - add_mirror_images()
-      Add mirrors (mimage LVs) to LV.
-      The counter part of existing remove_mirror_images().
-      Wrapped by lv_add_mirrors().
-  - add_mirror_log(), remove_mirror_log()
-      Simplified version of the APIs specific to add/remove disk log.
-  - lv_mirror_count()
-      Returns the number of mirrors
-  - insert_layer_for_lv(), remove_layer_from_lv()
-      Insert a layer on top of the LV and remove it.
-
-Then, lvconvert, lvcreate and pvmove are converted to use them.
-
-The patchset also includes an experimental patch to allow
-  - lvcreate/lvconvert to create segment-by-segment mirrored LV
-  - pvmove to use disk log
-
-[1/6] add insert_layer_for_lv() / remove_layer_from_lv()
-[2/6] add add_mirror_images(), {add,remove}_mirror_log()
-[3/6] change lvconvert to use the new APIs
-[4/6] change lvcreate to use the new APIs
-[5/6] remove unused mirror functions
-[6/6] add and convert tools to use lv_{add,remove}_mirrors()
-[Appendix] experimental: pvmove with disk log and seg-by-seg mirror LV
-
-Thanks,
--- 
-Jun'ichi Nomura, NEC Corporation of America
-
+diff --git a/WHATS_NEW b/WHATS_NEW
+index 1a0812df8..248e30f5c 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,7 @@
+ version 2.03.19 - 
+ ====================================
++  Configure supports --with-systemd-run executed from udev rules.
++  Enhancement for build with MuslC systemd and non-bash system shells (dash).
+   Do not reset SYSTEMD_READY variable in udev for PVs on MD and loop devices.
+   Ensure udev is processing origin LV before its thick snapshots LVs.
+   Fix and improve runtime memory size detection for VDO volumes.
 
