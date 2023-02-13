@@ -1,195 +1,261 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Mon, 13 Feb 2023 13:31:42 +0000 (GMT)
-Subject: main - configure.ac: more cleanup
-Message-ID: <20230213133142.E23E638493CA@sourceware.org>
+Date: Mon, 13 Feb 2023 13:31:44 +0000 (GMT)
+Subject: main - configure: update
+Message-ID: <20230213133144.10BBB3858436@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=1e55e5c60a1b6067d7a46f881d78b2ab7d1431eb
-Commit:        1e55e5c60a1b6067d7a46f881d78b2ab7d1431eb
-Parent:        f46610e9b0a75ce9610c146a317cfc6dfe1ac6f0
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=07cd341bd87a7559f33862a5a7480687b30e5f9c
+Commit:        07cd341bd87a7559f33862a5a7480687b30e5f9c
+Parent:        1e55e5c60a1b6067d7a46f881d78b2ab7d1431eb
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Mon Feb 13 00:07:01 2023 +0100
+AuthorDate:    Fri Feb 10 22:54:33 2023 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Mon Feb 13 14:30:47 2023 +0100
 
-configure.ac: more cleanup
+configure: update
 
-Some variable simplification,
-correct messages with PATH_SBIN.
 ---
- configure.ac | 52 ++++++++++++++++++++++------------------------------
- 1 file changed, 22 insertions(+), 30 deletions(-)
+ configure | 86 +++++++++++++++++++++++++++++----------------------------------
+ 1 file changed, 39 insertions(+), 47 deletions(-)
 
-diff --git a/configure.ac b/configure.ac
-index 079bbd07f..e8dc7a92c 100644
---- a/configure.ac
-+++ b/configure.ac
-@@ -1,6 +1,6 @@
- ###############################################################################
- ## Copyright (C) 2000-2004 Sistina Software, Inc. All rights reserved.
--## Copyright (C) 2004-2022 Red Hat, Inc. All rights reserved.
-+## Copyright (C) 2004-2023 Red Hat, Inc. All rights reserved.
- ##
- ## This copyrighted material is made available to anyone wishing to use,
- ## modify, copy, or redistribute it subject to the terms and conditions
-@@ -403,7 +403,7 @@ AS_CASE(["$THIN"],
- 	AS_IF([test "$THIN_CHECK_CMD" = "autodetect"], [
- 		AC_PATH_TOOL(THIN_CHECK_CMD, thin_check, [], [$PATH_SBIN])
- 		AS_IF([test -z "$THIN_CHECK_CMD"], [
--			AC_MSG_WARN([thin_check not found in path $PATH])
-+			AC_MSG_WARN([thin_check not found in path $PATH_SBIN])
+diff --git a/configure b/configure
+index 7b160639f..3e09aa265 100755
+--- a/configure
++++ b/configure
+@@ -674,7 +674,6 @@ SILENT_RULES
+ USE_TRACKING
+ UDEV_HAS_BUILTIN_BLKID
+ UDEV_RULE_EXEC_DETECTION
+-UDEV_SYSTEMD_BACKGROUND_JOBS
+ UDEV_SYNC
+ UDEV_RULES
+ UDEV_PC
+@@ -773,6 +772,7 @@ CLDNOWHOLEARCHIVE
+ CLDFLAGS
+ CACHE
+ BUILD_DMFILEMAPD
++BUILD_LOCKDIDM
+ BUILD_LOCKDDLM_CONTROL
+ BUILD_LOCKDDLM
+ BUILD_LOCKDSANLOCK
+@@ -9623,8 +9623,8 @@ fi
+ 		if test -z "$THIN_CHECK_CMD"
+ then :
+ 
+-			{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: WARNING: thin_check not found in path $PATH" >&5
+-printf "%s\n" "$as_me: WARNING: thin_check not found in path $PATH" >&2;}
++			{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: WARNING: thin_check not found in path $PATH_SBIN" >&5
++printf "%s\n" "$as_me: WARNING: thin_check not found in path $PATH_SBIN" >&2;}
  			THIN_CHECK_CMD="/usr/sbin/thin_check"
  			THIN_CONFIGURE_WARN="y"
- 		])
-@@ -427,7 +427,7 @@ AS_CASE(["$THIN"],
- 	AS_IF([test "$THIN_DUMP_CMD" = "autodetect"], [
- 		AC_PATH_TOOL(THIN_DUMP_CMD, thin_dump, [], [$PATH_SBIN])
- 		AS_IF([test -z "$THIN_DUMP_CMD"], [
--			AC_MSG_WARN(["thin_dump not found in path $PATH"])
-+			AC_MSG_WARN(["thin_dump not found in path $PATH_SBIN"])
+ 
+@@ -9772,8 +9772,8 @@ fi
+ 		if test -z "$THIN_DUMP_CMD"
+ then :
+ 
+-			{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: WARNING: \"thin_dump not found in path $PATH\"" >&5
+-printf "%s\n" "$as_me: WARNING: \"thin_dump not found in path $PATH\"" >&2;}
++			{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: WARNING: \"thin_dump not found in path $PATH_SBIN\"" >&5
++printf "%s\n" "$as_me: WARNING: \"thin_dump not found in path $PATH_SBIN\"" >&2;}
  			THIN_DUMP_CMD="/usr/sbin/thin_dump"
  			THIN_CONFIGURE_WARN="y"
- 		])
-@@ -436,7 +436,7 @@ AS_CASE(["$THIN"],
- 	AS_IF([test "$THIN_REPAIR_CMD" = "autodetect"], [
- 		AC_PATH_TOOL(THIN_REPAIR_CMD, thin_repair, [], [$PATH_SBIN])
- 		AS_IF([test -z "$THIN_REPAIR_CMD"], [
--			AC_MSG_WARN(["thin_repair not found in path $PATH"])
-+			AC_MSG_WARN(["thin_repair not found in path $PATH_SBIN"])
+ 
+@@ -9895,8 +9895,8 @@ fi
+ 		if test -z "$THIN_REPAIR_CMD"
+ then :
+ 
+-			{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: WARNING: \"thin_repair not found in path $PATH\"" >&5
+-printf "%s\n" "$as_me: WARNING: \"thin_repair not found in path $PATH\"" >&2;}
++			{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: WARNING: \"thin_repair not found in path $PATH_SBIN\"" >&5
++printf "%s\n" "$as_me: WARNING: \"thin_repair not found in path $PATH_SBIN\"" >&2;}
  			THIN_REPAIR_CMD="/usr/sbin/thin_repair"
  			THIN_CONFIGURE_WARN="y"
- 		])
-@@ -445,7 +445,7 @@ AS_CASE(["$THIN"],
- 	AS_IF([test "$THIN_RESTORE_CMD" = "autodetect"], [
- 		AC_PATH_TOOL(THIN_RESTORE_CMD, thin_restore, [], [$PATH_SBIN])
- 		AS_IF([test -z "$THIN_RESTORE_CMD"], [
--			AC_MSG_WARN(["thin_restore not found in path $PATH"])
-+			AC_MSG_WARN(["thin_restore not found in path $PATH_SBIN"])
+ 
+@@ -10018,8 +10018,8 @@ fi
+ 		if test -z "$THIN_RESTORE_CMD"
+ then :
+ 
+-			{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: WARNING: \"thin_restore not found in path $PATH\"" >&5
+-printf "%s\n" "$as_me: WARNING: \"thin_restore not found in path $PATH\"" >&2;}
++			{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: WARNING: \"thin_restore not found in path $PATH_SBIN\"" >&5
++printf "%s\n" "$as_me: WARNING: \"thin_restore not found in path $PATH_SBIN\"" >&2;}
  			THIN_RESTORE_CMD="/usr/sbin/thin_restore"
  			THIN_CONFIGURE_WARN="y"
- 		])
-@@ -515,7 +515,7 @@ AS_CASE(["$CACHE"],
- 	AS_IF([test "$CACHE_CHECK_CMD" = "autodetect"], [
- 		AC_PATH_TOOL(CACHE_CHECK_CMD, cache_check, [], [$PATH_SBIN])
- 		AS_IF([test -z "$CACHE_CHECK_CMD"], [
--			AC_MSG_WARN([cache_check not found in path $PATH])
-+			AC_MSG_WARN([cache_check not found in path $PATH_SBIN])
+ 
+@@ -10252,8 +10252,8 @@ fi
+ 		if test -z "$CACHE_CHECK_CMD"
+ then :
+ 
+-			{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: WARNING: cache_check not found in path $PATH" >&5
+-printf "%s\n" "$as_me: WARNING: cache_check not found in path $PATH" >&2;}
++			{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: WARNING: cache_check not found in path $PATH_SBIN" >&5
++printf "%s\n" "$as_me: WARNING: cache_check not found in path $PATH_SBIN" >&2;}
  			CACHE_CHECK_CMD="/usr/sbin/cache_check"
  			CACHE_CONFIGURE_WARN="y"
- 		])
-@@ -550,7 +550,7 @@ AS_CASE(["$CACHE"],
- 	AS_IF([test "$CACHE_DUMP_CMD" = "autodetect"], [
- 		AC_PATH_TOOL(CACHE_DUMP_CMD, cache_dump, [], [$PATH_SBIN])
- 		AS_IF([test -z "$CACHE_DUMP_CMD"], [
--			AC_MSG_WARN(["cache_dump not found in path $PATH"])
-+			AC_MSG_WARN(["cache_dump not found in path $PATH_SBIN"])
+ 
+@@ -10419,8 +10419,8 @@ fi
+ 		if test -z "$CACHE_DUMP_CMD"
+ then :
+ 
+-			{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: WARNING: \"cache_dump not found in path $PATH\"" >&5
+-printf "%s\n" "$as_me: WARNING: \"cache_dump not found in path $PATH\"" >&2;}
++			{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: WARNING: \"cache_dump not found in path $PATH_SBIN\"" >&5
++printf "%s\n" "$as_me: WARNING: \"cache_dump not found in path $PATH_SBIN\"" >&2;}
  			CACHE_DUMP_CMD="/usr/sbin/cache_dump"
  			CACHE_CONFIGURE_WARN="y"
- 		])
-@@ -559,7 +559,7 @@ AS_CASE(["$CACHE"],
- 	AS_IF([test "$CACHE_REPAIR_CMD" = "autodetect"], [
- 		AC_PATH_TOOL(CACHE_REPAIR_CMD, cache_repair, [], [$PATH_SBIN])
- 		AS_IF([test -z "$CACHE_REPAIR_CMD"], [
--			AC_MSG_WARN(["cache_repair not found in path $PATH"])
-+			AC_MSG_WARN(["cache_repair not found in path $PATH_SBIN"])
+ 
+@@ -10542,8 +10542,8 @@ fi
+ 		if test -z "$CACHE_REPAIR_CMD"
+ then :
+ 
+-			{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: WARNING: \"cache_repair not found in path $PATH\"" >&5
+-printf "%s\n" "$as_me: WARNING: \"cache_repair not found in path $PATH\"" >&2;}
++			{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: WARNING: \"cache_repair not found in path $PATH_SBIN\"" >&5
++printf "%s\n" "$as_me: WARNING: \"cache_repair not found in path $PATH_SBIN\"" >&2;}
  			CACHE_REPAIR_CMD="/usr/sbin/cache_repair"
  			CACHE_CONFIGURE_WARN="y"
- 		])
-@@ -568,7 +568,7 @@ AS_CASE(["$CACHE"],
- 	AS_IF([test "$CACHE_RESTORE_CMD" = "autodetect"], [
- 		AC_PATH_TOOL(CACHE_RESTORE_CMD, cache_restore, [], [$PATH_SBIN])
- 		AS_IF([test -z "$CACHE_RESTORE_CMD"], [
--			AC_MSG_WARN(["cache_restore not found in path $PATH"])
-+			AC_MSG_WARN(["cache_restore not found in path $PATH_SBIN"])
+ 
+@@ -10665,8 +10665,8 @@ fi
+ 		if test -z "$CACHE_RESTORE_CMD"
+ then :
+ 
+-			{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: WARNING: \"cache_restore not found in path $PATH\"" >&5
+-printf "%s\n" "$as_me: WARNING: \"cache_restore not found in path $PATH\"" >&2;}
++			{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: WARNING: \"cache_restore not found in path $PATH_SBIN\"" >&5
++printf "%s\n" "$as_me: WARNING: \"cache_restore not found in path $PATH_SBIN\"" >&2;}
  			CACHE_RESTORE_CMD="/usr/sbin/cache_restore"
  			CACHE_CONFIGURE_WARN="y"
- 		])
-@@ -908,14 +908,12 @@ AC_MSG_CHECKING([whether to build lvmlockdsanlock])
- AC_ARG_ENABLE(lvmlockd-sanlock,
- 	      AS_HELP_STRING([--enable-lvmlockd-sanlock],
- 			     [enable the LVM lock daemon using sanlock]),
--	      LOCKDSANLOCK=$enableval, LOCKDSANLOCK="no")
--AC_MSG_RESULT([$LOCKDSANLOCK])
+ 
+@@ -12051,15 +12051,13 @@ printf %s "checking whether to build lvmlockdsanlock... " >&6; }
+ # Check whether --enable-lvmlockd-sanlock was given.
+ if test ${enable_lvmlockd_sanlock+y}
+ then :
+-  enableval=$enable_lvmlockd_sanlock; LOCKDSANLOCK=$enableval
++  enableval=$enable_lvmlockd_sanlock; BUILD_LOCKDSANLOCK=$enableval
+ else $as_nop
+-  LOCKDSANLOCK="no"
++  BUILD_LOCKDSANLOCK="no"
+ fi
+ 
+-{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $LOCKDSANLOCK" >&5
+-printf "%s\n" "$LOCKDSANLOCK" >&6; }
 -
 -BUILD_LOCKDSANLOCK=$LOCKDSANLOCK
-+	      BUILD_LOCKDSANLOCK=$enableval, BUILD_LOCKDSANLOCK="no")
-+AC_MSG_RESULT([$BUILD_LOCKDSANLOCK])
++{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $BUILD_LOCKDSANLOCK" >&5
++printf "%s\n" "$BUILD_LOCKDSANLOCK" >&6; }
  
- dnl -- Look for sanlock libraries
- AS_IF([test "$BUILD_LOCKDSANLOCK" = "yes"], [
--	PKG_CHECK_MODULES(LOCKD_SANLOCK, libsanlock_client >= 3.3.0, [HAVE_LOCKD_SANLOCK=yes], $bailout)
-+	PKG_CHECK_MODULES(LOCKD_SANLOCK, libsanlock_client >= 3.3.0, [HAVE_LOCKD_SANLOCK="yes"], $bailout)
- 	AC_DEFINE([LOCKDSANLOCK_SUPPORT], 1, [Define to 1 to include code that uses lvmlockd sanlock option.])
- 	BUILD_LVMLOCKD=yes
- ])
-@@ -926,14 +924,12 @@ AC_MSG_CHECKING([whether to build lvmlockddlm])
- AC_ARG_ENABLE(lvmlockd-dlm,
- 	      AS_HELP_STRING([--enable-lvmlockd-dlm],
- 			     [enable the LVM lock daemon using dlm]),
--	      LOCKDDLM=$enableval, LOCKDDLM="no")
--AC_MSG_RESULT([$LOCKDDLM])
+ if test "$BUILD_LOCKDSANLOCK" = "yes"
+ then :
+@@ -12133,7 +12131,7 @@ else
+ 	LOCKD_SANLOCK_LIBS=$pkg_cv_LOCKD_SANLOCK_LIBS
+         { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: yes" >&5
+ printf "%s\n" "yes" >&6; }
+-	HAVE_LOCKD_SANLOCK=yes
++	HAVE_LOCKD_SANLOCK="yes"
+ fi
+ 
+ printf "%s\n" "#define LOCKDSANLOCK_SUPPORT 1" >>confdefs.h
+@@ -12148,15 +12146,13 @@ printf %s "checking whether to build lvmlockddlm... " >&6; }
+ # Check whether --enable-lvmlockd-dlm was given.
+ if test ${enable_lvmlockd_dlm+y}
+ then :
+-  enableval=$enable_lvmlockd_dlm; LOCKDDLM=$enableval
++  enableval=$enable_lvmlockd_dlm; BUILD_LOCKDDLM=$enableval
+ else $as_nop
+-  LOCKDDLM="no"
++  BUILD_LOCKDDLM="no"
+ fi
+ 
+-{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $LOCKDDLM" >&5
+-printf "%s\n" "$LOCKDDLM" >&6; }
 -
 -BUILD_LOCKDDLM=$LOCKDDLM
-+	      BUILD_LOCKDDLM=$enableval, BUILD_LOCKDDLM="no")
-+AC_MSG_RESULT([$BUILD_LOCKDDLM])
++{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $BUILD_LOCKDDLM" >&5
++printf "%s\n" "$BUILD_LOCKDDLM" >&6; }
  
- dnl -- Look for dlm libraries
- AS_IF([test "$BUILD_LOCKDDLM" = "yes"], [
--	PKG_CHECK_MODULES(LOCKD_DLM, libdlm, [HAVE_LOCKD_DLM=yes], $bailout)
-+	PKG_CHECK_MODULES(LOCKD_DLM, libdlm, [HAVE_LOCKD_DLM="yes"], $bailout)
- 	AC_DEFINE([LOCKDDLM_SUPPORT], 1, [Define to 1 to include code that uses lvmlockd dlm option.])
- 	BUILD_LVMLOCKD=yes
- ])
-@@ -944,10 +940,8 @@ AC_MSG_CHECKING([whether to build lvmlockddlmcontrol])
- AC_ARG_ENABLE(lvmlockd-dlmcontrol,
- 	      AS_HELP_STRING([--enable-lvmlockd-dlmcontrol],
- 			     [enable lvmlockd remote refresh using libdlmcontrol]),
--	      LOCKDDLM_CONTROL=$enableval, LOCKDDLM_CONTROL="no")
--AC_MSG_RESULT([$LOCKDDLM_CONTROL])
+ if test "$BUILD_LOCKDDLM" = "yes"
+ then :
+@@ -12230,7 +12226,7 @@ else
+ 	LOCKD_DLM_LIBS=$pkg_cv_LOCKD_DLM_LIBS
+         { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: yes" >&5
+ printf "%s\n" "yes" >&6; }
+-	HAVE_LOCKD_DLM=yes
++	HAVE_LOCKD_DLM="yes"
+ fi
+ 
+ printf "%s\n" "#define LOCKDDLM_SUPPORT 1" >>confdefs.h
+@@ -12245,15 +12241,13 @@ printf %s "checking whether to build lvmlockddlmcontrol... " >&6; }
+ # Check whether --enable-lvmlockd-dlmcontrol was given.
+ if test ${enable_lvmlockd_dlmcontrol+y}
+ then :
+-  enableval=$enable_lvmlockd_dlmcontrol; LOCKDDLM_CONTROL=$enableval
++  enableval=$enable_lvmlockd_dlmcontrol; BUILD_LOCKDDLM_CONTROL=$enableval
+ else $as_nop
+-  LOCKDDLM_CONTROL="no"
++  BUILD_LOCKDDLM_CONTROL="no"
+ fi
+ 
+-{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $LOCKDDLM_CONTROL" >&5
+-printf "%s\n" "$LOCKDDLM_CONTROL" >&6; }
 -
 -BUILD_LOCKDDLM_CONTROL=$LOCKDDLM_CONTROL
-+	      BUILD_LOCKDDLM_CONTROL=$enableval, BUILD_LOCKDDLM_CONTROL="no")
-+AC_MSG_RESULT([$BUILD_LOCKDDLM_CONTROL])
++{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $BUILD_LOCKDDLM_CONTROL" >&5
++printf "%s\n" "$BUILD_LOCKDDLM_CONTROL" >&6; }
  
- dnl -- Look for libdlmcontrol libraries
- AS_IF([test "$BUILD_LOCKDDLM_CONTROL" = "yes"], [
-@@ -962,10 +956,8 @@ AC_MSG_CHECKING([whether to build lvmlockdidm])
- AC_ARG_ENABLE(lvmlockd-idm,
- 	      AS_HELP_STRING([--enable-lvmlockd-idm],
- 			     [enable the LVM lock daemon using idm]),
--	      LOCKDIDM=$enableval, LOCKDIDM="no")
--AC_MSG_RESULT([$LOCKDIDM])
+ if test "$BUILD_LOCKDDLM_CONTROL" = "yes"
+ then :
+@@ -12342,15 +12336,13 @@ printf %s "checking whether to build lvmlockdidm... " >&6; }
+ # Check whether --enable-lvmlockd-idm was given.
+ if test ${enable_lvmlockd_idm+y}
+ then :
+-  enableval=$enable_lvmlockd_idm; LOCKDIDM=$enableval
++  enableval=$enable_lvmlockd_idm; BUILD_LOCKDIDM=$enableval
+ else $as_nop
+-  LOCKDIDM="no"
++  BUILD_LOCKDIDM="no"
+ fi
+ 
+-{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $LOCKDIDM" >&5
+-printf "%s\n" "$LOCKDIDM" >&6; }
 -
 -BUILD_LOCKDIDM=$LOCKDIDM
-+	      BUILD_LOCKDIDM=$enableval, BUILD_LOCKDIDM="no")
-+AC_MSG_RESULT([$BUILD_LOCKDIDM])
++{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $BUILD_LOCKDIDM" >&5
++printf "%s\n" "$BUILD_LOCKDIDM" >&6; }
  
- dnl -- Look for Seagate IDM libraries
- AS_IF([test "$BUILD_LOCKDIDM" = "yes"], [
-@@ -1080,10 +1072,10 @@ AS_IF([test "$SYSTEMD_JOURNAL_SUPPORT" = "yes"],
+ if test "$BUILD_LOCKDIDM" = "yes"
+ then :
+@@ -12672,9 +12664,9 @@ if test -n "$PKG_CONFIG" && \
+   ac_status=$?
+   printf "%s\n" "$as_me:${as_lineno-$LINENO}: \$? = $ac_status" >&5
+   test $ac_status = 0; }; then
+-  SYSTEMD_MIN_VERSION=234  APP_MACHINEID_SUPPORT=maybe
++  SYSTEMD_MIN_VERSION=234  APP_MACHINEID_SUPPORT="maybe"
+ else
+-  APP_MACHINEID_SUPPORT=no
++  APP_MACHINEID_SUPPORT="no"
+ fi
+ ac_fn_c_check_header_compile "$LINENO" "systemd/sd-id128.h" "ac_cv_header_systemd_sd_id128_h" "$ac_includes_default"
+ if test "x$ac_cv_header_systemd_sd_id128_h" = xyes
+@@ -12684,7 +12676,7 @@ then :
+   APP_MACHINEID_SUPPORT="yes"
+ fi
+ else $as_nop
+-  APP_MACHINEID_SUPPORT=no
++  APP_MACHINEID_SUPPORT="no"
+ fi
  
- ################################################################################
- dnl -- Build appmachineid when header file sd-id128.h is present
--PKG_CHECK_EXISTS(systemd >= 234, [SYSTEMD_MIN_VERSION=234  APP_MACHINEID_SUPPORT=maybe], [APP_MACHINEID_SUPPORT=no])
-+PKG_CHECK_EXISTS(systemd >= 234, [SYSTEMD_MIN_VERSION=234  APP_MACHINEID_SUPPORT="maybe"], [APP_MACHINEID_SUPPORT="no"])
- AC_CHECK_HEADER([systemd/sd-id128.h],
- 		[AS_IF([test "$APP_MACHINEID_SUPPORT" != "no"], [APP_MACHINEID_SUPPORT="yes"])],
--		[APP_MACHINEID_SUPPORT=no])
-+		[APP_MACHINEID_SUPPORT="no"])
- AC_MSG_CHECKING([whether to support systemd appmachineid])
- AC_ARG_ENABLE(app-machineid,
- 	      AS_HELP_STRING([--disable-app-machineid],
-@@ -1508,7 +1500,7 @@ Note: (n)curses also seems to work as a substitute for termcap.  This was
- 		AC_DEFINE([READLINE_SUPPORT], 1,
- 			[Define to 1 to include the LVM readline shell.])
- 		dnl -- Try only with -lreadline and check for different symbol
--		READLINE=yes
-+		READLINE="yes"
+ { printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking whether to support systemd appmachineid" >&5
+@@ -14885,7 +14877,7 @@ then :
+ 
+ printf "%s\n" "#define READLINE_SUPPORT 1" >>confdefs.h
+ 
+-				READLINE=yes
++				READLINE="yes"
  		LIBS=$lvm_saved_libs
- 		AC_CHECK_LIB([readline], [rl_line_buffer],
- 			[ READLINE_LIBS="-lreadline" ], [
+ 		{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for rl_line_buffer in -lreadline" >&5
+ printf %s "checking for rl_line_buffer in -lreadline... " >&6; }
 
