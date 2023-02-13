@@ -1,61 +1,74 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Mon, 13 Feb 2023 13:31:27 +0000 (GMT)
-Subject: main - filesystem: use PATH_MAX for linux paths
-Message-ID: <20230213133127.083473881D1D@sourceware.org>
+Date: Mon, 13 Feb 2023 13:31:28 +0000 (GMT)
+Subject: main - libdm: improve parallel create of control node
+Message-ID: <20230213133128.28A0D3881D1D@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=cf0dc9a13cf365859e7dad3bb1ad02040925ae11
-Commit:        cf0dc9a13cf365859e7dad3bb1ad02040925ae11
-Parent:        615347da20f7ede98c3cc8b1fd0aaaae15603c6e
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=7e14835a46a6c9e66087d6502d23df53c2a9954f
+Commit:        7e14835a46a6c9e66087d6502d23df53c2a9954f
+Parent:        cf0dc9a13cf365859e7dad3bb1ad02040925ae11
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Sun Feb 12 19:23:12 2023 +0100
+AuthorDate:    Sun Feb 12 23:44:43 2023 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Sun Feb 12 23:56:29 2023 +0100
+CommitterDate: Mon Feb 13 13:41:59 2023 +0100
 
-filesystem: use PATH_MAX for linux paths
+libdm: improve parallel create of control node
 
+When two parallel commands would have tried to create our
+/dev/mapper/control node at the same time, one of them could
+actually fail even if the 2nd. command actually mknod()
+this control node correctly.
+
+So for EEXIST case add detection if the control node is ok.
+
+This may possibly help with some race case in early boot.
 ---
- lib/device/filesystem.c | 12 ++++++------
- 1 file changed, 6 insertions(+), 6 deletions(-)
+ device_mapper/ioctl/libdm-iface.c | 9 +++++++--
+ libdm/ioctl/libdm-iface.c         | 9 +++++++--
+ 2 files changed, 14 insertions(+), 4 deletions(-)
 
-diff --git a/lib/device/filesystem.c b/lib/device/filesystem.c
-index c9cc7c553..9b086d8c1 100644
---- a/lib/device/filesystem.c
-+++ b/lib/device/filesystem.c
-@@ -232,10 +232,10 @@ int fs_mount_state_is_misnamed(struct cmd_context *cmd, struct logical_volume *l
- 	FILE *fp;
- 	char proc_line[PATH_MAX];
- 	char proc_fstype[FSTYPE_MAX];
--	char proc_devpath[1024];
--	char proc_mntpath[1024];
--	char lv_mapper_path[1024];
--	char mntent_mount_dir[1024];
-+	char proc_devpath[PATH_MAX];
-+	char proc_mntpath[PATH_MAX];
-+	char lv_mapper_path[PATH_MAX];
-+	char mntent_mount_dir[PATH_MAX];
- 	char *dm_name;
- 	struct stat st_lv;
- 	struct stat stme;
-@@ -275,14 +275,14 @@ int fs_mount_state_is_misnamed(struct cmd_context *cmd, struct logical_volume *l
- 			continue;
- 		if (stme.st_dev != st_lv.st_rdev)
- 			continue;
--		strncpy(mntent_mount_dir, me->mnt_dir, PATH_MAX-1);
-+		dm_strncpy(mntent_mount_dir, me->mnt_dir, sizeof(mntent_mount_dir));
+diff --git a/device_mapper/ioctl/libdm-iface.c b/device_mapper/ioctl/libdm-iface.c
+index d25b07800..ffcbc8a48 100644
+--- a/device_mapper/ioctl/libdm-iface.c
++++ b/device_mapper/ioctl/libdm-iface.c
+@@ -312,8 +312,13 @@ static int _create_control(const char *control, uint32_t major, uint32_t minor)
+ 	old_umask = umask(DM_CONTROL_NODE_UMASK);
+ 	if (mknod(control, S_IFCHR | S_IRUSR | S_IWUSR,
+ 		  MKDEV(major, minor)) < 0)  {
+-		log_sys_error("mknod", control);
+-		ret = 0;
++		if (errno != EEXIST) {
++			log_sys_error("mknod", control);
++			ret = 0;
++		} else if (_control_exists(control, major, minor) != 1) {
++			stack; /* Invalid control node created by parallel command ? */
++			ret = 0;
++		}
  	}
- 	endmntent(fme);
- 
- 	if (!(dm_name = dm_build_dm_name(cmd->mem, lv->vg->name, lv->name, NULL)))
- 		return_0;
- 
--	if ((dm_snprintf(lv_mapper_path, 1024, "%s/%s", dm_dir(), dm_name) < 0))
-+	if ((dm_snprintf(lv_mapper_path, sizeof(lv_mapper_path), "%s/%s", dm_dir(), dm_name) < 0))
- 		return_0;
- 
- 	if (!(fp = fopen("/proc/mounts", "r")))
+ 	umask(old_umask);
+ 	(void) dm_prepare_selinux_context(NULL, 0);
+diff --git a/libdm/ioctl/libdm-iface.c b/libdm/ioctl/libdm-iface.c
+index dfa91b866..2e2da8b99 100644
+--- a/libdm/ioctl/libdm-iface.c
++++ b/libdm/ioctl/libdm-iface.c
+@@ -311,8 +311,13 @@ static int _create_control(const char *control, uint32_t major, uint32_t minor)
+ 	old_umask = umask(DM_CONTROL_NODE_UMASK);
+ 	if (mknod(control, S_IFCHR | S_IRUSR | S_IWUSR,
+ 		  MKDEV(major, minor)) < 0)  {
+-		log_sys_error("mknod", control);
+-		ret = 0;
++		if (errno != EEXIST) {
++			log_sys_error("mknod", control);
++			ret = 0;
++		} else if (_control_exists(control, major, minor) != 1) {
++			stack; /* Invalid control node created by parallel command ? */
++			ret = 0;
++		}
+ 	}
+ 	umask(old_umask);
+ 	(void) dm_prepare_selinux_context(NULL, 0);
 
