@@ -1,36 +1,41 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Mon, 13 Feb 2023 13:31:30 +0000 (GMT)
-Subject: main - WHATS_NEW_DM: update
-Message-ID: <20230213133130.696DF3881D33@sourceware.org>
+Date: Mon, 13 Feb 2023 13:31:31 +0000 (GMT)
+Subject: main - makefiles: use configured systemd library paths
+Message-ID: <20230213133131.8A01C3881D2D@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=0fc2d418f76a9e98ab988ff5a3440a3beef5295f
-Commit:        0fc2d418f76a9e98ab988ff5a3440a3beef5295f
-Parent:        9b78f7eee9f231d88ed5ca05fbf6da8c473ab41e
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=50f73de4b27c11c810c8f7aea3e36a5c947408af
+Commit:        50f73de4b27c11c810c8f7aea3e36a5c947408af
+Parent:        0fc2d418f76a9e98ab988ff5a3440a3beef5295f
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Sun Feb 12 23:50:09 2023 +0100
+AuthorDate:    Sat Feb 11 16:06:26 2023 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Mon Feb 13 13:41:59 2023 +0100
 
-WHATS_NEW_DM: update
+makefiles: use configured systemd library paths
 
+Use discovered/selected systemd library from configure.
 ---
- WHATS_NEW_DM | 1 +
- 1 file changed, 1 insertion(+)
+ daemons/lvmlockd/Makefile.in | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
 
-diff --git a/WHATS_NEW_DM b/WHATS_NEW_DM
-index 020efe6f4..1f94e5e27 100644
---- a/WHATS_NEW_DM
-+++ b/WHATS_NEW_DM
-@@ -1,5 +1,6 @@
- Version 1.02.191 - 
- =====================================
-+  Improve parallel creation of /dev/mapper/control device node.
-   Import previous ID_FS_* udev records in 13-dm-disk.rules for suspended DM dev.
-   Remove NAME="mapper/control" rule from 10-dm.rules to avoid udev warnings.
+diff --git a/daemons/lvmlockd/Makefile.in b/daemons/lvmlockd/Makefile.in
+index 91beb1ad8..e5ba82517 100644
+--- a/daemons/lvmlockd/Makefile.in
++++ b/daemons/lvmlockd/Makefile.in
+@@ -52,8 +52,8 @@ LDFLAGS += -L$(top_builddir)/libdaemon/server $(EXTRA_EXEC_LDFLAGS) $(ELDFLAGS)
+ LIBS += $(DAEMON_LIBS) $(PTHREAD_LIBS)
  
+ ifeq ($(USE_SD_NOTIFY),yes)
+-	CFLAGS += $(shell pkg-config --cflags libsystemd) -DUSE_SD_NOTIFY
+-	LIBS += $(shell pkg-config --libs libsystemd)
++	CFLAGS += $(SYSTEMD_CFLAGS) -DUSE_SD_NOTIFY
++	LIBS += $(SYSTEMD_LIBS)
+ endif
+ 
+ lvmlockd: $(OBJECTS) $(top_builddir)/libdaemon/server/libdaemonserver.a $(INTERNAL_LIBS)
 
