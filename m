@@ -1,59 +1,51 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Thu, 16 Feb 2023 23:10:55 +0000 (GMT)
-Subject: main - makefiles: move include earlier
-Message-ID: <20230216231055.530C63858D33@sourceware.org>
+Date: Thu, 16 Feb 2023 23:10:56 +0000 (GMT)
+Subject: main - tests: check failing vdo conversion
+Message-ID: <20230216231056.BEBFF3858C78@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=d58b475f6320257e72f01be3c57badd65af28d56
-Commit:        d58b475f6320257e72f01be3c57badd65af28d56
-Parent:        b9697acbd6b4283b430b5c6a9ced45676c54bc1d
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=06c5c29443fdd48730a282a5db16e46c793db27b
+Commit:        06c5c29443fdd48730a282a5db16e46c793db27b
+Parent:        d58b475f6320257e72f01be3c57badd65af28d56
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu Feb 16 23:40:25 2023 +0100
+AuthorDate:    Fri Feb 17 00:06:56 2023 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Fri Feb 17 00:00:12 2023 +0100
+CommitterDate: Fri Feb 17 00:08:50 2023 +0100
 
-makefiles: move include earlier
+tests: check failing vdo conversion
 
+When we detect not usable vdo on a machine, check lvconvert fails.
 ---
- daemons/lvmlockd/Makefile.in | 11 +++++------
- 1 file changed, 5 insertions(+), 6 deletions(-)
+ test/shell/lvconvert-vdo.sh | 10 ++++++++--
+ 1 file changed, 8 insertions(+), 2 deletions(-)
 
-diff --git a/daemons/lvmlockd/Makefile.in b/daemons/lvmlockd/Makefile.in
-index aff4c0123..24191c439 100644
---- a/daemons/lvmlockd/Makefile.in
-+++ b/daemons/lvmlockd/Makefile.in
-@@ -16,6 +16,11 @@ top_srcdir = @top_srcdir@
- top_builddir = @top_builddir@
+diff --git a/test/shell/lvconvert-vdo.sh b/test/shell/lvconvert-vdo.sh
+index c42d8f25a..7c0bce56b 100644
+--- a/test/shell/lvconvert-vdo.sh
++++ b/test/shell/lvconvert-vdo.sh
+@@ -18,12 +18,18 @@ SKIP_WITH_LVMPOLLD=1
+ #
+ # Main
+ #
+-aux have_vdo 6 2 0 || skip
+-
+ aux prepare_vg 2 6400
  
- SOURCES = lvmlockd-core.c
-+SOURCES2 = lvmlockctl.c
+ # Conversion to vdo-pool
+ lvcreate -L5G -n $lv1 $vg
 +
-+TARGETS = lvmlockd lvmlockctl
++if not aux have_vdo 6 2 0 ; then
++# For unsupported VDO let's check lvconvert fails
++	not lvconvert --yes --type vdo-pool $vg/$lv1 |& tee out
++	vgremove -ff $vg
++	exit
++fi
 +
-+include $(top_builddir)/make.tmpl
- 
- ifeq ("@BUILD_LOCKDSANLOCK@", "yes")
-   SOURCES += lvmlockd-sanlock.c
-@@ -36,17 +41,11 @@ ifeq ("@BUILD_LOCKDIDM@", "yes")
-   LOCK_LIBS += -lseagate_ilm $(BLKID_LIBS)
- endif
- 
--SOURCES2 = lvmlockctl.c
--
--TARGETS = lvmlockd lvmlockctl
--
- CFLOW_SOURCES = $(addprefix $(srcdir)/, $(SOURCES))
- CFLOW_TARGET = lvmlockd
- 
- .PHONY: install_lvmlockd install_lvmlockctl
- 
--include $(top_builddir)/make.tmpl
--
- CFLAGS += $(EXTRA_EXEC_CFLAGS)
- INCLUDES += -I$(top_srcdir)/libdaemon/server
- LDFLAGS += -L$(top_builddir)/libdaemon/server $(EXTRA_EXEC_LDFLAGS) $(ELDFLAGS)
+ # Check there is big prompting warning
+ not lvconvert --type vdo-pool $vg/$lv1 |& tee out
+ grep "WARNING" out
 
