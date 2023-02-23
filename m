@@ -1,50 +1,57 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Thu, 23 Feb 2023 15:48:54 +0000 (GMT)
-Subject: main - makefiles: add pthread to libdevmapper pkgconfig
-Message-ID: <20230223154854.977563858C5E@sourceware.org>
+Date: Thu, 23 Feb 2023 15:48:46 +0000 (GMT)
+Subject: main - tests: some skips with 6.2 kernel
+Message-ID: <20230223154846.A65C23858C5E@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=d91bc6904dce256b06687217ec66caba15b33a7a
-Commit:        d91bc6904dce256b06687217ec66caba15b33a7a
-Parent:        e0c95f15a7a859ee41a6561cae1e53c17a23a0c3
-Author:        David Seifert <soap@gentoo.org>
-AuthorDate:    Wed Feb 22 13:10:16 2023 +0100
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=d5c0b68dde47f7a6feb9f84764a8055b033c21c4
+Commit:        d5c0b68dde47f7a6feb9f84764a8055b033c21c4
+Parent:        25cb6a042fab1af7ea4f4a164771a810e1acdef5
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Thu Feb 23 15:06:17 2023 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Thu Feb 23 16:46:35 2023 +0100
+CommitterDate: Thu Feb 23 16:01:50 2023 +0100
 
-makefiles: add pthread to libdevmapper pkgconfig
+tests: some skips with 6.2 kernel
 
-Add pthread to pkg_config file.
+Fix did not managed to get to final release so skip test on this kernel.
 ---
- libdm/libdevmapper.pc.in | 2 +-
- make.tmpl.in             | 2 +-
- 2 files changed, 2 insertions(+), 2 deletions(-)
+ test/shell/cache-single-split.sh | 4 ++++
+ test/shell/lvextend-caches.sh    | 4 ++++
+ 2 files changed, 8 insertions(+)
 
-diff --git a/libdm/libdevmapper.pc.in b/libdm/libdevmapper.pc.in
-index a325aeb9e..aa0980378 100644
---- a/libdm/libdevmapper.pc.in
-+++ b/libdm/libdevmapper.pc.in
-@@ -9,4 +9,4 @@ Version: @DM_LIB_PATCHLEVEL@
- Cflags: -I${includedir} 
- Libs: -L${libdir} -ldevmapper
- Requires.private: @SELINUX_PC@ @UDEV_PC@
--Libs.private: -lm @RT_LIBS@
-+Libs.private: -lm @RT_LIBS@ @PTHREAD_LIBS@
-diff --git a/make.tmpl.in b/make.tmpl.in
-index b73176f5a..df4c5850d 100644
---- a/make.tmpl.in
-+++ b/make.tmpl.in
-@@ -59,7 +59,7 @@ PYCOMPILE = $(top_srcdir)/autoconf/py-compile
- LIBS += @LIBS@ $(SELINUX_LIBS) $(UDEV_LIBS) $(RT_LIBS) $(M_LIBS)
- LVMLIBS = $(DMEVENT_LIBS) $(READLINE_LIBS) $(EDITLINE_LIBS) $(LIBSYSTEMD_LIBS) $(BLKID_LIBS) $(AIO_LIBS) $(LIBS)
- # Extra libraries always linked with static binaries
--STATIC_LIBS = $(PTHREAD_LIBS)
-+STATIC_LIBS = $(PTHREAD_LIBS) $(SELINUX_STATIC_LIBS) $(UDEV_STATIC_LIBS) $(BLKID_STATIC_LIBS)
- DEFS += @DEFS@
- # FIXME set this only where it's needed, not globally?
- CFLAGS ?= @COPTIMISE_FLAG@ @CFLAGS@
+diff --git a/test/shell/cache-single-split.sh b/test/shell/cache-single-split.sh
+index fa4c3fd9d..25f83b1ba 100644
+--- a/test/shell/cache-single-split.sh
++++ b/test/shell/cache-single-split.sh
+@@ -16,6 +16,10 @@ SKIP_WITH_LVMPOLLD=1
+ 
+ . lib/inittest
+ 
++case "$(uname -r)" in
++6.2*) skip "Skippen test that kills this kernel" ;;
++esac
++
+ mkfs_mount_umount()
+ {
+         lvt=$1
+diff --git a/test/shell/lvextend-caches.sh b/test/shell/lvextend-caches.sh
+index f2768903f..a1a862e40 100644
+--- a/test/shell/lvextend-caches.sh
++++ b/test/shell/lvextend-caches.sh
+@@ -16,6 +16,10 @@ SKIP_WITH_LVMPOLLD=1
+ 
+ . lib/inittest
+ 
++case "$(uname -r)" in
++6.2*) skip "Skippen test that kills this kernel" ;;
++esac
++
+ do_test()
+ {
+ 	# create some initial data
 
