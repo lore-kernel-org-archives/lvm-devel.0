@@ -1,217 +1,50 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Fri, 10 Feb 2023 16:53:23 +0000 (GMT)
-Subject: main - configure.ac: remove some lvmetad leftovers
-Message-ID: <20230210165323.A733A3858C5F@sourceware.org>
+Date: Thu, 23 Feb 2023 15:48:54 +0000 (GMT)
+Subject: main - makefiles: add pthread to libdevmapper pkgconfig
+Message-ID: <20230223154854.977563858C5E@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=042fbd43d25f4cc69ceec1aea4d0658bec54b6e3
-Commit:        042fbd43d25f4cc69ceec1aea4d0658bec54b6e3
-Parent:        1fb5107eea2182415eef50ba7bec0fdf7600659c
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed Feb 8 16:30:40 2023 +0100
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=d91bc6904dce256b06687217ec66caba15b33a7a
+Commit:        d91bc6904dce256b06687217ec66caba15b33a7a
+Parent:        e0c95f15a7a859ee41a6561cae1e53c17a23a0c3
+Author:        David Seifert <soap@gentoo.org>
+AuthorDate:    Wed Feb 22 13:10:16 2023 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Fri Feb 10 17:50:27 2023 +0100
+CommitterDate: Thu Feb 23 16:46:35 2023 +0100
 
-configure.ac: remove some lvmetad leftovers
+makefiles: add pthread to libdevmapper pkgconfig
 
-Remove unused parts of configure and udev rules since lvmetad is gone.
+Add pthread to pkg_config file.
 ---
- configure.ac                  |  24 --------
- udev/69-dm-lvm-metad.rules.in | 126 ------------------------------------------
- udev/Makefile.in              |  10 +---
- 3 files changed, 1 insertion(+), 159 deletions(-)
+ libdm/libdevmapper.pc.in | 2 +-
+ make.tmpl.in             | 2 +-
+ 2 files changed, 2 insertions(+), 2 deletions(-)
 
-diff --git a/configure.ac b/configure.ac
-index 95bc44b32..907391406 100644
---- a/configure.ac
-+++ b/configure.ac
-@@ -1150,30 +1150,6 @@ AC_MSG_RESULT($BLKID_WIPING)
- AC_DEFINE_UNQUOTED(DEFAULT_USE_BLKID_WIPING, [$DEFAULT_USE_BLKID_WIPING],
- 		   [Use blkid wiping by default.])
- 
--################################################################################
--dnl -- Enable udev-systemd protocol to instantiate a service for background jobs
--dnl -- Requires systemd version 205 at least (including support for systemd-run)
--AC_ARG_ENABLE(udev-systemd-background-jobs,
--	      AS_HELP_STRING([--disable-udev-systemd-background-jobs],
--			     [disable udev-systemd protocol to instantiate a service for background job]),
--	      UDEV_SYSTEMD_BACKGROUND_JOBS=$enableval,
--	      UDEV_SYSTEMD_BACKGROUND_JOBS=maybe)
--
--AS_IF([test "$UDEV_SYSTEMD_BACKGROUND_JOBS" != "no"], [
--	AS_IF([test "$SYSTEMD_MIN_VERSION" -ge 205], [
--		UDEV_SYSTEMD_BACKGROUND_JOBS=yes
--	], [
--		AS_IF([test "$UDEV_SYSTEMD_BACKGROUND_JOBS" = "maybe"], [
--			UDEV_SYSTEMD_BACKGROUND_JOBS=no
--		], [
--			AC_MSG_ERROR([bailing out... systemd >= 205 is required])
--		])
--	])
--])
--
--AC_MSG_CHECKING(whether to use udev-systemd protocol for jobs in background)
--AC_MSG_RESULT($UDEV_SYSTEMD_BACKGROUND_JOBS)
--
- ################################################################################
- dnl -- Enable udev synchronisation
- AC_MSG_CHECKING(whether to enable synchronisation with udev processing)
-diff --git a/udev/69-dm-lvm-metad.rules.in b/udev/69-dm-lvm-metad.rules.in
-deleted file mode 100644
-index aec13f039..000000000
---- a/udev/69-dm-lvm-metad.rules.in
-+++ /dev/null
-@@ -1,126 +0,0 @@
--# Copyright (C) 2012 Red Hat, Inc. All rights reserved.
--#
--# This file is part of LVM2.
--
--# Udev rules for LVM.
--#
--# This rule requires blkid to be called on block devices before so only devices
--# used as LVM PVs are processed (ID_FS_TYPE="LVM2_member" or "LVM1_member").
--
--SUBSYSTEM!="block", GOTO="lvm_end"
--(LVM_EXEC_RULE)
--
--ENV{DM_UDEV_DISABLE_OTHER_RULES_FLAG}=="1", GOTO="lvm_end"
--
--# Detect removed PV label by comparing previous ID_FS_TYPE value with current one.
--ENV{.ID_FS_TYPE_NEW}="$env{ID_FS_TYPE}"
--IMPORT{db}="ID_FS_TYPE"
--ENV{ID_FS_TYPE}=="LVM2_member|LVM1_member", ENV{.ID_FS_TYPE_NEW}!="LVM2_member|LVM1_member", ENV{LVM_PV_GONE}="1"
--ENV{ID_FS_TYPE}="$env{.ID_FS_TYPE_NEW}"
--ENV{LVM_PV_GONE}=="1", GOTO="lvm_scan"
--
--# Only process devices already marked as a PV - this requires blkid to be called before.
--ENV{ID_FS_TYPE}!="LVM2_member|LVM1_member", GOTO="lvm_end"
--ENV{DM_MULTIPATH_DEVICE_PATH}=="1", GOTO="lvm_end"
--
--ACTION=="remove", GOTO="lvm_scan"
--
--# Create /dev/disk/by-id/lvm-pv-uuid-<PV_UUID> symlink for each PV
--ENV{ID_FS_UUID_ENC}=="?*", SYMLINK+="disk/by-id/lvm-pv-uuid-$env{ID_FS_UUID_ENC}"
--
--# If the PV is a special device listed below, scan only if the device is
--# properly activated. These devices are not usable after an ADD event,
--# but they require an extra setup and they are ready after a CHANGE event.
--# Also support coldplugging with ADD event but only if the device is already
--# properly activated.
--# This logic should be eventually moved to rules where those particular
--# devices are processed primarily (MD and loop).
--
--# DM device:
--KERNEL!="dm-[0-9]*", GOTO="next"
--ENV{DM_UDEV_PRIMARY_SOURCE_FLAG}=="1", ENV{DM_ACTIVATION}=="1", GOTO="lvm_scan"
--GOTO="lvm_end"
--
--# MD device:
--LABEL="next"
--KERNEL!="md[0-9]*", GOTO="next"
--IMPORT{db}="LVM_MD_PV_ACTIVATED"
--ACTION=="add", ENV{LVM_MD_PV_ACTIVATED}=="1", GOTO="lvm_scan"
--ACTION=="change", ENV{LVM_MD_PV_ACTIVATED}!="1", TEST=="md/array_state", ENV{LVM_MD_PV_ACTIVATED}="1", GOTO="lvm_scan"
--ACTION=="add", KERNEL=="md[0-9]*p[0-9]*", GOTO="lvm_scan"
--ENV{LVM_MD_PV_ACTIVATED}!="1", ENV{SYSTEMD_READY}="0"
--GOTO="lvm_end"
--
--# Loop device:
--LABEL="next"
--KERNEL!="loop[0-9]*", GOTO="next"
--ACTION=="add", ENV{LVM_LOOP_PV_ACTIVATED}=="1", GOTO="lvm_scan"
--ACTION=="change", ENV{LVM_LOOP_PV_ACTIVATED}!="1", TEST=="loop/backing_file", ENV{LVM_LOOP_PV_ACTIVATED}="1", GOTO="lvm_scan"
--ENV{LVM_LOOP_PV_ACTIVATED}!="1", ENV{SYSTEMD_READY}="0"
--GOTO="lvm_end"
--
--# If the PV is not a special device listed above, scan only if necessary.
--# For "systemd_background" mode, systemd takes care of this by activating
--# the lvm2-pvscan at .service only once.
--LABEL="next"
--ACTION!="(PVSCAN_ACTION)", GOTO="lvm_end"
--
--LABEL="lvm_scan"
--
--ENV{SYSTEMD_READY}="1"
--
--# The method for invoking pvscan is selected at build time with the option
--# --(enable|disable)-udev-systemd-background-jobs to "configure".
--# On modern distributions with recent systemd, it's "systemd_background";
--# on others, "direct_pvscan".
--GOTO="(PVSCAN_RULE)"
--
--LABEL="systemd_background"
--
--# The table below summarises the situations in which we reach the LABEL="lvm_scan"
--# in the "systemd_background" case.
--# Marked by X, X* means only if the special dev is properly set up.
--# The artificial ADD is supported for coldplugging. We avoid running the pvscan
--# on artificial CHANGE so there's no unexpected autoactivation when WATCH rule fires.
--# N.B. MD and loop never actually  reaches lvm_scan on REMOVE as the PV label is gone
--# within a CHANGE event (these are caught by the "LVM_PV_GONE" rule at the beginning).
--#
--# In this case, we simply set up the dependency between the device and the pvscan
--# job using SYSTEMD_ALIAS (which sets up a simplified device identifier that
--# allows using "BindsTo" in the systemd unit file) and SYSTEMD_WANTS (which tells
--# systemd to start the pvscan job once the device is ready).
--# We need to set these variables for both "add" and "change" events, otherwise
--# systemd may loose information about the device/unit dependencies.
--#
--#        | real ADD | real CHANGE | artificial ADD | artificial CHANGE | REMOVE
--# =============================================================================
--#  DM    |          |      X      |       X*       |                   |   X
--#  MD    |          |      X      |       X*       |                   |
--#  loop  |          |      X      |       X*       |                   |
--#  other |    X     |      X      |       X        |                   |   X
--ACTION!="remove", ENV{LVM_PV_GONE}=="1", RUN+="(BINDIR)/systemd-run (LVM_EXEC)/lvm pvscan --cache $major:$minor", GOTO="lvm_end"
--ENV{SYSTEMD_ALIAS}="/dev/block/$major:$minor"
--ENV{SYSTEMD_WANTS}+="lvm2-pvscan@$major:$minor.service"
--GOTO="lvm_end"
--
--# FIXME: this mode is not used and should be removed.
--LABEL="direct_pvscan"
--
--# The table below summarises the situations in which we reach the LABEL="lvm_scan"
--# for the "direct_pvscan" case.
--# Marked by X, X* means only if the special dev is properly set up.
--# The artificial ADD is supported for coldplugging. We avoid running the pvscan
--# on artificial CHANGE so there's no unexpected autoactivation when WATCH rule fires.
--#
--# In this case, we need to make sure that pvscan is not invoked spuriously, therefore
--# we invoke it only for "add" events for "other" devices.
--#
--#        | real ADD | real CHANGE | artificial ADD | artificial CHANGE | REMOVE
--# =============================================================================
--#  DM    |          |      X      |       X*       |                   |   X
--#  MD    |          |      X      |       X*       |                   |
--#  loop  |          |      X      |       X*       |                   |
--#  other |    X     |             |       X        |                   |   X
--RUN+="(LVM_EXEC)/lvm pvscan --cache --aay --autoactivation event --major $major --minor $minor", ENV{LVM_SCANNED}="1"
--
--LABEL="lvm_end"
-diff --git a/udev/Makefile.in b/udev/Makefile.in
-index e777dda16..106fca113 100644
---- a/udev/Makefile.in
-+++ b/udev/Makefile.in
-@@ -43,16 +43,8 @@ else
- BLKID_RULE=IMPORT{program}=\"${SBIN}\/blkid -o udev -p \$$tempnode\"
- endif
- 
--ifeq ("@UDEV_SYSTEMD_BACKGROUND_JOBS@", "yes")
--PVSCAN_RULE=systemd_background
--PVSCAN_ACTION=add|change
--else
--PVSCAN_RULE=direct_pvscan
--PVSCAN_ACTION=add
--endif
--
- %.rules: $(srcdir)/%.rules.in
--	$(Q) $(SED) -e "s+(DM_DIR)+$(DM_DIR)+;s+(BINDIR)+$(BINDIR)+;s+(BLKID_RULE)+$(BLKID_RULE)+;s+(PVSCAN_RULE)+$(PVSCAN_RULE)+;s+(PVSCAN_ACTION)+$(PVSCAN_ACTION)+;s+(DM_EXEC_RULE)+$(DM_EXEC_RULE)+;s+(DM_EXEC)+$(DM_EXEC)+;s+(LVM_EXEC_RULE)+$(LVM_EXEC_RULE)+;s+(LVM_EXEC)+$(LVM_EXEC)+;" $< >$@
-+	$(Q) $(SED) -e "s+(DM_DIR)+$(DM_DIR)+;s+(BINDIR)+$(BINDIR)+;s+(BLKID_RULE)+$(BLKID_RULE)+;s+(DM_EXEC_RULE)+$(DM_EXEC_RULE)+;s+(DM_EXEC)+$(DM_EXEC)+;s+(LVM_EXEC_RULE)+$(LVM_EXEC_RULE)+;s+(LVM_EXEC)+$(LVM_EXEC)+;" $< >$@
- 
- %_install: %.rules
- 	@echo "    [INSTALL] $<"
+diff --git a/libdm/libdevmapper.pc.in b/libdm/libdevmapper.pc.in
+index a325aeb9e..aa0980378 100644
+--- a/libdm/libdevmapper.pc.in
++++ b/libdm/libdevmapper.pc.in
+@@ -9,4 +9,4 @@ Version: @DM_LIB_PATCHLEVEL@
+ Cflags: -I${includedir} 
+ Libs: -L${libdir} -ldevmapper
+ Requires.private: @SELINUX_PC@ @UDEV_PC@
+-Libs.private: -lm @RT_LIBS@
++Libs.private: -lm @RT_LIBS@ @PTHREAD_LIBS@
+diff --git a/make.tmpl.in b/make.tmpl.in
+index b73176f5a..df4c5850d 100644
+--- a/make.tmpl.in
++++ b/make.tmpl.in
+@@ -59,7 +59,7 @@ PYCOMPILE = $(top_srcdir)/autoconf/py-compile
+ LIBS += @LIBS@ $(SELINUX_LIBS) $(UDEV_LIBS) $(RT_LIBS) $(M_LIBS)
+ LVMLIBS = $(DMEVENT_LIBS) $(READLINE_LIBS) $(EDITLINE_LIBS) $(LIBSYSTEMD_LIBS) $(BLKID_LIBS) $(AIO_LIBS) $(LIBS)
+ # Extra libraries always linked with static binaries
+-STATIC_LIBS = $(PTHREAD_LIBS)
++STATIC_LIBS = $(PTHREAD_LIBS) $(SELINUX_STATIC_LIBS) $(UDEV_STATIC_LIBS) $(BLKID_STATIC_LIBS)
+ DEFS += @DEFS@
+ # FIXME set this only where it's needed, not globally?
+ CFLAGS ?= @COPTIMISE_FLAG@ @CFLAGS@
 
