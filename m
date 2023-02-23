@@ -1,40 +1,61 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Thu, 23 Feb 2023 15:48:53 +0000 (GMT)
-Subject: main - makefiles: avoid grep
-Message-ID: <20230223154853.76FA73858C00@sourceware.org>
+Date: Thu, 23 Feb 2023 15:48:48 +0000 (GMT)
+Subject: main - tests: remove option chunk for mdadm raid1
+Message-ID: <20230223154848.E97C63858C00@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=e0c95f15a7a859ee41a6561cae1e53c17a23a0c3
-Commit:        e0c95f15a7a859ee41a6561cae1e53c17a23a0c3
-Parent:        c1cecc3dc5164856f27e08e5d031315785be2c9f
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=d7c4fb77436d529c3a8d7a454a5acb7ff767abba
+Commit:        d7c4fb77436d529c3a8d7a454a5acb7ff767abba
+Parent:        6943afe9d5dc6e82444bdadf9abc54198cadfd16
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed Feb 22 21:53:41 2023 +0100
+AuthorDate:    Thu Feb 23 15:30:50 2023 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Thu Feb 23 16:46:35 2023 +0100
 
-makefiles: avoid grep
+tests: remove option chunk for mdadm raid1
 
-Avoid getting annoyting grep warning and use just awk to get the
-value.
+Not sure why, but --chunk specification for mdadm raid1 is no longer
+'wanted' ???
 ---
- udev/Makefile.in | 2 +-
- 1 file changed, 1 insertion(+), 1 deletion(-)
+ test/shell/lvm-on-md.sh            | 8 ++++++--
+ test/shell/pvcreate-md-fake-hdr.sh | 3 ++-
+ 2 files changed, 8 insertions(+), 3 deletions(-)
 
-diff --git a/udev/Makefile.in b/udev/Makefile.in
-index 5ee30d09c..e592c534d 100644
---- a/udev/Makefile.in
-+++ b/udev/Makefile.in
-@@ -20,7 +20,7 @@ include $(top_builddir)/make.tmpl
- DM_RULES=10-dm.rules 13-dm-disk.rules 95-dm-notify.rules
- LVM_RULES=11-dm-lvm.rules 69-dm-lvm.rules
+diff --git a/test/shell/lvm-on-md.sh b/test/shell/lvm-on-md.sh
+index f932ca623..83478e5a1 100644
+--- a/test/shell/lvm-on-md.sh
++++ b/test/shell/lvm-on-md.sh
+@@ -53,8 +53,12 @@ for level in 1 0 ; do
+ #
+ # When a raid0 md array is stopped, the components will not look like
+ # duplicate PVs as they do with raid1.
+-
+-aux mdadm_create --metadata=1.0 --level=$level --chunk=64 --raid-devices=2 "$dev1" "$dev2"
++# mdadm does not seem to like --chunk=64 with raid1
++case "$level" in
++0) CHUNK="--chunk=64" ;;
++*) CHUNK="" ;;
++esac
++aux mdadm_create --metadata=1.0 --level=$level $CHUNK --raid-devices=2 "$dev1" "$dev2"
+ mddev=$(< MD_DEV)
  
--DM_DIR=$(shell $(GREP) "\#define DM_DIR" $(top_srcdir)/libdm/misc/dm-ioctl.h | $(AWK) '{print $$3}')
-+DM_DIR=$(shell $(AWK) '/\#define DM_DIR/ {print $$3}' $(top_srcdir)/libdm/misc/dm-ioctl.h)
+ vgcreate $vg "$mddev"
+diff --git a/test/shell/pvcreate-md-fake-hdr.sh b/test/shell/pvcreate-md-fake-hdr.sh
+index f610d6fb3..856b26c24 100644
+--- a/test/shell/pvcreate-md-fake-hdr.sh
++++ b/test/shell/pvcreate-md-fake-hdr.sh
+@@ -36,7 +36,8 @@ vgcreate $SHARED $vg "$dev3" "$dev4"
  
- SYSTEMDRUN=@SYSTEMD_RUN_CMD@
- ifeq ("@UDEV_RULE_EXEC_DETECTION@", "yes")
+ # create 2 disk MD raid1 array
+ # by default using metadata format 1.0 with data@the end of device
+-aux mdadm_create --metadata=1.0 --level=1 --chunk=64 --raid-devices=2 "$dev1" "$dev2"
++# passing --chunk=64 makes mdadm non functional
++aux mdadm_create --metadata=1.0 --level=1 --raid-devices=2 "$dev1" "$dev2"
+ 
+ mddev=$(< MD_DEV)
+ pvdev=$(< MD_DEV_PV)
 
