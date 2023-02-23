@@ -1,308 +1,154 @@
-From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Thu, 23 Feb 2023 15:48:58 +0000 (GMT)
-Subject: main - configure.ac: misc
-Message-ID: <20230223154858.052E53858C00@sourceware.org>
+From: David Teigland <teigland@sourceware.org>
+Date: Thu, 23 Feb 2023 22:58:41 +0000 (GMT)
+Subject: main - lvresize: fix check for mounted and renamed LV to handle spaces
+Message-ID: <20230223225841.6AB993858C00@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=2b592a67d69bc22ec32929052320731abd8aad61
-Commit:        2b592a67d69bc22ec32929052320731abd8aad61
-Parent:        255e8c8eaa0ca76de9ce8da0ebc78e8e0c9a4482
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed Feb 22 14:11:50 2023 +0100
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Thu Feb 23 16:46:35 2023 +0100
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=1857eb9fe08924c2e4e5adfc322ee4a2ae5a2e67
+Commit:        1857eb9fe08924c2e4e5adfc322ee4a2ae5a2e67
+Parent:        86ac529b99d04cb7feb9b52fae3cbeda6144660c
+Author:        David Teigland <teigland@redhat.com>
+AuthorDate:    Thu Feb 23 16:32:37 2023 -0600
+Committer:     David Teigland <teigland@redhat.com>
+CommitterDate: Thu Feb 23 16:55:36 2023 -0600
 
-configure.ac: misc
+lvresize: fix check for mounted and renamed LV to handle spaces
 
+Replace spaces with \040 in directory paths from getmntent (mtab).
+
+The recent commit 5374a44c5712 compares mount point directory paths
+from /etc/mtab and /proc/mounts, in order to detect when a mounted
+LV has been renamed.  The directory path comparison does not work
+correctly when the path contains spaces because getmntent uses
+ascii space chars and proc replaces spaces with \040.
 ---
- configure.ac | 122 +++++++++++++++++++++++++++++------------------------------
- 1 file changed, 59 insertions(+), 63 deletions(-)
+ lib/device/filesystem.c   | 41 ++++++++++++++++++++++++++++++++---------
+ test/shell/lvresize-fs.sh | 14 ++++++++++++++
+ 2 files changed, 46 insertions(+), 9 deletions(-)
 
-diff --git a/configure.ac b/configure.ac
-index 71006d895..cee24c93c 100644
---- a/configure.ac
-+++ b/configure.ac
-@@ -37,7 +37,6 @@ AS_CASE(["$host_os"],
- 		CLDNOWHOLEARCHIVE="-Wl,-no-whole-archive"
- 		LIB_SUFFIX="so"
- 		DEVMAPPER="yes"
--		BUILD_LVMPOLLD="no"
- 		ODIRECT="yes"
- 		DM_IOCTLS="yes"
- 		SELINUX="yes"
-@@ -671,14 +670,6 @@ AS_CASE(["$INTEGRITY"],
- 		AC_DEFINE([INTEGRITY_INTERNAL], 1, [Define to 1 to include built-in support for integrity.])],
- 	[AC_MSG_ERROR([--with-integrity parameter invalid])])
+diff --git a/lib/device/filesystem.c b/lib/device/filesystem.c
+index 9b086d8c1..2163276ed 100644
+--- a/lib/device/filesystem.c
++++ b/lib/device/filesystem.c
+@@ -234,8 +234,9 @@ int fs_mount_state_is_misnamed(struct cmd_context *cmd, struct logical_volume *l
+ 	char proc_fstype[FSTYPE_MAX];
+ 	char proc_devpath[PATH_MAX];
+ 	char proc_mntpath[PATH_MAX];
+-	char lv_mapper_path[PATH_MAX];
+-	char mntent_mount_dir[PATH_MAX];
++	char mtab_mntpath[PATH_MAX];
++	char dm_devpath[PATH_MAX];
++	char tmp_path[PATH_MAX];
+ 	char *dm_name;
+ 	struct stat st_lv;
+ 	struct stat stme;
+@@ -275,14 +276,36 @@ int fs_mount_state_is_misnamed(struct cmd_context *cmd, struct logical_volume *l
+ 			continue;
+ 		if (stme.st_dev != st_lv.st_rdev)
+ 			continue;
+-		dm_strncpy(mntent_mount_dir, me->mnt_dir, sizeof(mntent_mount_dir));
++		dm_strncpy(mtab_mntpath, me->mnt_dir, sizeof(mtab_mntpath));
++		break;
+ 	}
+ 	endmntent(fme);
  
--################################################################################
--# Allow users to override default location for libaio
--# there seems to be no pkg-config support available
--AIO_CFLAGS=
--AIO_LIBS=${AIO_LIBS:--laio}
--AC_ARG_VAR([AIO_CFLAGS], [C compiler flags for AIO])
--AC_ARG_VAR([AIO_LIBS], [linker flags for AIO])
--
- ################################################################################
- dnl -- Disable readline
- AC_ARG_ENABLE([readline],
-@@ -715,7 +706,7 @@ AC_ARG_WITH(ocfdir,
- ################################################################################
- AC_MSG_CHECKING([for default run directory])
- RUN_DIR="/run"
--test -d "/run" || RUN_DIR="/var/run"
-+AS_IF([test ! -d "$RUN_DIR"], [RUN_DIR="/var/run"])
- AC_MSG_RESULT([$RUN_DIR])
- dnl -- Set up pidfile and run directory
- AH_TEMPLATE(DEFAULT_PID_DIR)
-@@ -748,10 +739,8 @@ AC_MSG_CHECKING([whether to build cluster mirror log daemon])
- AC_ARG_ENABLE(cmirrord,
- 	      AS_HELP_STRING([--enable-cmirrord],
- 			     [enable the cluster mirror log daemon]),
--	      CMIRRORD=$enableval, CMIRRORD="no")
--AC_MSG_RESULT([$CMIRRORD])
--
--BUILD_CMIRRORD=$CMIRRORD
-+	      BUILD_CMIRRORD=$enableval, BUILD_CMIRRORD="no")
-+AC_MSG_RESULT([$BUILD_CMIRRORD])
- 
- ################################################################################
- dnl -- cmirrord pidfile
-@@ -896,8 +885,7 @@ AC_MSG_CHECKING([whether to build lvmpolld])
- AC_ARG_ENABLE(lvmpolld,
- 	      AS_HELP_STRING([--enable-lvmpolld],
- 			     [enable the LVM Polling Daemon]),
--	      LVMPOLLD=$enableval, LVMPOLLD="no")
--test -n "$LVMPOLLD" && BUILD_LVMPOLLD=$LVMPOLLD
-+	      BUILD_LVMPOLLD=$enableval, BUILD_LVMPOLLD="no")
- AC_MSG_RESULT([$BUILD_LVMPOLLD])
- 
- ################################################################################
-@@ -1686,22 +1674,20 @@ AC_DEFINE_UNQUOTED(LVRESIZE_FS_HELPER_PATH, ["$LVRESIZE_FS_HELPER_PATH"], [Path
- 
- ################################################################################
- dnl -- dmeventd pidfile and executable path
-+AC_ARG_WITH(dmeventd-pidfile,
-+	    AS_HELP_STRING([--with-dmeventd-pidfile=PATH],
-+			   [dmeventd pidfile [PID_DIR/dmeventd.pid]]),
-+	    DMEVENTD_PIDFILE=$withval,
-+	    DMEVENTD_PIDFILE="$DEFAULT_PID_DIR/dmeventd.pid")
-+AC_ARG_WITH(dmeventd-path,
-+	    AS_HELP_STRING([--with-dmeventd-path=PATH],
-+			   [dmeventd path [EPREFIX/sbin/dmeventd]]),
-+	    DMEVENTD_PATH=$withval,
-+	    DMEVENTD_PATH="$SBINDIR/dmeventd")
++	/*
++	 * In mtab dir path, replace each ascii space character with the
++	 * four characters \040 which is how /proc/mounts represents spaces.
++	 * The mnt dir from /etc/mtab and /proc/mounts are compared below.
++	 */
++	if (strchr(mtab_mntpath, ' ')) {
++		int i, j = 0;
++		memcpy(tmp_path, mtab_mntpath, sizeof(tmp_path));
++		memset(mtab_mntpath, 0, sizeof(mtab_mntpath));
++		for (i = 0; i < sizeof(tmp_path); i++) {
++			if (tmp_path[i] == ' ') {
++				mtab_mntpath[j++] = '\\';
++				mtab_mntpath[j++] = '0';
++				mtab_mntpath[j++] = '4';
++				mtab_mntpath[j++] = '0';
++				continue;
++			}
++			mtab_mntpath[j++] = tmp_path[i];
++		}
++	}
 +
- AS_IF([test "$BUILD_DMEVENTD" = "yes"], [
--	AC_ARG_WITH(dmeventd-pidfile,
--		    AS_HELP_STRING([--with-dmeventd-pidfile=PATH],
--				   [dmeventd pidfile [PID_DIR/dmeventd.pid]]),
--		    DMEVENTD_PIDFILE=$withval,
--		    DMEVENTD_PIDFILE="$DEFAULT_PID_DIR/dmeventd.pid")
- 	AC_DEFINE_UNQUOTED(DMEVENTD_PIDFILE, ["$DMEVENTD_PIDFILE"],
- 			   [Path to dmeventd pidfile.])
--])
--
--AS_IF([test "$BUILD_DMEVENTD" = "yes"], [
--	AC_ARG_WITH(dmeventd-path,
--		    AS_HELP_STRING([--with-dmeventd-path=PATH],
--				   [dmeventd path [EPREFIX/sbin/dmeventd]]),
--		    DMEVENTD_PATH=$withval,
--		    DMEVENTD_PATH="$SBINDIR/dmeventd")
- 	AC_DEFINE_UNQUOTED(DMEVENTD_PATH, ["$DMEVENTD_PATH"],
- 			   [Path to dmeventd binary.])
- ])
-@@ -1766,14 +1752,15 @@ AC_ARG_WITH(interface,
- 	    AS_HELP_STRING([--with-interface=IFACE],
- 			   [choose kernel interface (ioctl) [ioctl]]),
- 	    interface=$withval, interface="ioctl")
--test "$interface" != "ioctl" && AC_MSG_ERROR([--with-interface=ioctl required. fs no longer supported.])
-+AS_IF([test "$interface" != "ioctl"],
-+      [AC_MSG_ERROR([--with-interface=ioctl required. fs no longer supported.])])
- AC_MSG_RESULT([$interface])
+ 	if (!(dm_name = dm_build_dm_name(cmd->mem, lv->vg->name, lv->name, NULL)))
+ 		return_0;
  
- ################################################################################
- read DM_LIB_VERSION < "$srcdir"/VERSION_DM 2>/dev/null || DM_LIB_VERSION="Unknown"
- AC_DEFINE_UNQUOTED(DM_LIB_VERSION, "$DM_LIB_VERSION", [Library version])
+-	if ((dm_snprintf(lv_mapper_path, sizeof(lv_mapper_path), "%s/%s", dm_dir(), dm_name) < 0))
++	if ((dm_snprintf(dm_devpath, sizeof(dm_devpath), "%s/%s", dm_dir(), dm_name) < 0))
+ 		return_0;
  
--DM_LIB_PATCHLEVEL=$(cat "$srcdir"/VERSION_DM | $AWK -F '[[-. ]]' '{printf "%s.%s.%s",$1,$2,$3}')
-+DM_LIB_PATCHLEVEL=$($AWK -F '[[-. ]]' '{printf "%s.%s.%s",$1,$2,$3}' "$srcdir"/VERSION_DM)
+ 	if (!(fp = fopen("/proc/mounts", "r")))
+@@ -296,8 +319,8 @@ int fs_mount_state_is_misnamed(struct cmd_context *cmd, struct logical_volume *l
+ 		if (strcmp(fstype, proc_fstype))
+ 			continue;
  
- read VER < "$srcdir"/VERSION 2>/dev/null || VER=Unknown
+-		dir_match = !strcmp(mntent_mount_dir, proc_mntpath);
+-		dev_match = !strcmp(lv_mapper_path, proc_devpath);
++		dir_match = !strcmp(mtab_mntpath, proc_mntpath);
++		dev_match = !strcmp(dm_devpath, proc_devpath);
  
-@@ -1789,23 +1776,36 @@ LVM_LIBAPI=$(echo "$VER" | $AWK -F '[[()]]' '{print $2}')
+ 		if (dir_match)
+ 			found_dir++;
+@@ -306,7 +329,7 @@ int fs_mount_state_is_misnamed(struct cmd_context *cmd, struct logical_volume *l
  
- AC_DEFINE_UNQUOTED(LVM_CONFIGURE_LINE, "$CONFIGURE_LINE", [configure command line used])
+ 		if (dir_match != dev_match) {
+ 			log_error("LV %s mounted@%s may have been renamed (from %s).",
+-				  lv_mapper_path, proc_mntpath, proc_devpath);
++				  dm_devpath, proc_mntpath, proc_devpath);
+ 			renamed = 1;
+ 		}
+ 	}
+@@ -327,11 +350,11 @@ int fs_mount_state_is_misnamed(struct cmd_context *cmd, struct logical_volume *l
+ 	}
+ 	/* These two are likely detected as renamed, but include checks in case. */
+ 	if (found_dir > 1) {
+-		log_error("File system resizing not supported: %s appears more than once in /proc/mounts.", mntent_mount_dir);
++		log_error("File system resizing not supported: %s appears more than once in /proc/mounts.", mtab_mntpath);
+ 		return 1;
+ 	}
+ 	if (found_dev > 1) {
+-		log_error("File system resizing not supported: %s appears more than once in /proc/mounts.", lv_mapper_path);
++		log_error("File system resizing not supported: %s appears more than once in /proc/mounts.", dm_devpath);
+ 		return 1;
+ 	}
+ 	return 0;
+diff --git a/test/shell/lvresize-fs.sh b/test/shell/lvresize-fs.sh
+index f437652d6..de234aad5 100644
+--- a/test/shell/lvresize-fs.sh
++++ b/test/shell/lvresize-fs.sh
+@@ -30,6 +30,9 @@ which mkfs.xfs || skip
+ mount_dir="mnt_lvresize_fs"
+ mkdir -p "$mount_dir"
  
-+################################################################################
-+# Allow users to override default location for libaio
-+# there seems to be no pkg-config support available
-+AIO_CFLAGS=${AIO_CFLAGS:-}
-+AIO_LIBS=${AIO_LIBS:--laio}
-+AC_ARG_VAR([AIO_CFLAGS], [C compiler flags for AIO])
-+AC_ARG_VAR([AIO_LIBS], [linker flags for AIO])
++mount_dir_space="other mnt dir"
++mkdir -p "$mount_dir_space"
 +
- AC_ARG_VAR([READLINE_CFLAGS], [C compiler flags for readline])
- AC_ARG_VAR([READLINE_LIBS], [linker flags for readline])
+ # Tests require a libblkid version that shows FSLASTBLOCK
+ lvcreate -n $lv1 -L 300 $vg
+ mkfs.xfs -f "$DM_DEV_DIR/$vg/$lv1"
+@@ -273,6 +276,17 @@ umount "$mount_dir"
+ lvchange -an $vg/$lv2
+ lvremove $vg/$lv2
  
- ################################################################################
- AC_SUBST(AWK)
-+AC_SUBST(BLKDEACTIVATE)
- AC_SUBST(BLKID_PC)
- AC_SUBST(BUILD_CMIRRORD)
- AC_SUBST(BUILD_DMEVENTD)
--AC_SUBST(BUILD_LVMDBUSD)
--AC_SUBST(BUILD_LVMPOLLD)
--AC_SUBST(BUILD_LVMLOCKD)
--AC_SUBST(BUILD_LOCKDSANLOCK)
-+AC_SUBST(BUILD_DMFILEMAPD)
- AC_SUBST(BUILD_LOCKDDLM)
- AC_SUBST(BUILD_LOCKDDLM_CONTROL)
- AC_SUBST(BUILD_LOCKDIDM)
--AC_SUBST(BUILD_DMFILEMAPD)
-+AC_SUBST(BUILD_LOCKDSANLOCK)
-+AC_SUBST(BUILD_LVMDBUSD)
-+AC_SUBST(BUILD_LVMLOCKD)
-+AC_SUBST(BUILD_LVMPOLLD)
- AC_SUBST(CACHE)
-+AC_SUBST(CACHE_CHECK_CMD)
-+AC_SUBST(CACHE_DUMP_CMD)
-+AC_SUBST(CACHE_REPAIR_CMD)
-+AC_SUBST(CACHE_RESTORE_CMD)
- AC_SUBST(CFLAGS)
- AC_SUBST(CFLOW_CMD)
- AC_SUBST(CHMOD)
-@@ -1813,8 +1813,10 @@ AC_SUBST(CLDFLAGS)
- AC_SUBST(CLDNOWHOLEARCHIVE)
- AC_SUBST(CLDWHOLEARCHIVE)
- AC_SUBST(CMDLIB)
-+AC_SUBST(CMIRRORD_PIDFILE)
- AC_SUBST(CONFDIR)
- AC_SUBST(COPTIMISE_FLAG)
-+AC_SUBST(CPPFLAGS)
- AC_SUBST(CSCOPE_CMD)
- AC_SUBST(DEBUG)
- AC_SUBST(DEFAULT_ARCHIVE_SUBDIR)
-@@ -1832,24 +1834,27 @@ AC_SUBST(DEFAULT_SYS_DIR)
- AC_SUBST(DEFAULT_SYS_LOCK_DIR)
- AC_SUBST(DEFAULT_USE_BLKID_WIPING)
- AC_SUBST(DEFAULT_USE_DEVICES_FILE)
--AC_SUBST(DEFAULT_USE_LVMPOLLD)
- AC_SUBST(DEFAULT_USE_LVMLOCKD)
-+AC_SUBST(DEFAULT_USE_LVMPOLLD)
- AC_SUBST(DEVMAPPER)
- AC_SUBST(DL_LIBS)
- AC_SUBST(DMEVENTD_PATH)
-+AC_SUBST(DMEVENTD_PIDFILE)
- AC_SUBST(DM_LIB_PATCHLEVEL)
- AC_SUBST(ELDFLAGS)
- AC_SUBST(FSADM)
- AC_SUBST(FSADM_PATH)
--AC_SUBST(LVRESIZE_FS_HELPER_PATH)
--AC_SUBST(BLKDEACTIVATE)
- AC_SUBST(INTEGRITY)
- AC_SUBST(INTL)
- AC_SUBST(JOBS)
- AC_SUBST(LDDEPS)
- AC_SUBST(LIBS)
- AC_SUBST(LIB_SUFFIX)
--AC_SUBST(LVM_VERSION)
-+AC_SUBST(localedir)
-+AC_SUBST(LVMIMPORTVDO)
-+AC_SUBST(LVMIMPORTVDO_PATH)
-+AC_SUBST(LVMLOCKD_PIDFILE)
-+AC_SUBST(LVMPOLLD_PIDFILE)
- AC_SUBST(LVM_LIBAPI)
- AC_SUBST(LVM_MAJOR)
- AC_SUBST(LVM_MINOR)
-@@ -1857,48 +1862,43 @@ AC_SUBST(LVM_PATCHLEVEL)
- AC_SUBST(LVM_PATH)
- AC_SUBST(LVM_RELEASE)
- AC_SUBST(LVM_RELEASE_DATE)
--AC_SUBST(LVMIMPORTVDO)
--AC_SUBST(LVMIMPORTVDO_PATH)
--AC_SUBST(localedir)
-+AC_SUBST(LVM_VERSION)
-+AC_SUBST(LVRESIZE_FS_HELPER_PATH)
- AC_SUBST(MANGLING)
- AC_SUBST(MIRRORS)
- AC_SUBST(MSGFMT)
-+AC_SUBST(M_LIBS)
- AC_SUBST(OCF)
- AC_SUBST(OCFDIR)
- AC_SUBST(ODIRECT)
- AC_SUBST(PKGCONFIG)
--AC_SUBST(M_LIBS)
- AC_SUBST(PTHREAD_LIBS)
- AC_SUBST(PYTHON2)
--AC_SUBST(PYTHON3)
- AC_SUBST(PYTHON2DIR)
-+AC_SUBST(PYTHON3)
- AC_SUBST(PYTHON3DIR)
- AC_SUBST(RT_LIBS)
- AC_SUBST(SBINDIR)
- AC_SUBST(SELINUX_LIBS)
- AC_SUBST(SELINUX_PC)
--AC_SUBST(SYSCONFDIR)
--AC_SUBST(SYSTEMD_RUN_CMD)
-+AC_SUBST(SILENT_RULES)
- AC_SUBST(SNAPSHOTS)
- AC_SUBST(STATICDIR)
- AC_SUBST(STATIC_LINK)
-+AC_SUBST(SYSCONFDIR)
-+AC_SUBST(SYSTEMD_RUN_CMD)
- AC_SUBST(TESTSUITE_DATA)
- AC_SUBST(THIN)
- AC_SUBST(THIN_CHECK_CMD)
- AC_SUBST(THIN_DUMP_CMD)
- AC_SUBST(THIN_REPAIR_CMD)
- AC_SUBST(THIN_RESTORE_CMD)
--AC_SUBST(CACHE_CHECK_CMD)
--AC_SUBST(CACHE_DUMP_CMD)
--AC_SUBST(CACHE_REPAIR_CMD)
--AC_SUBST(CACHE_RESTORE_CMD)
-+AC_SUBST(UDEV_HAS_BUILTIN_BLKID)
- AC_SUBST(UDEV_PC)
- AC_SUBST(UDEV_RULES)
--AC_SUBST(UDEV_SYNC)
- AC_SUBST(UDEV_RULE_EXEC_DETECTION)
--AC_SUBST(UDEV_HAS_BUILTIN_BLKID)
-+AC_SUBST(UDEV_SYNC)
- AC_SUBST(USE_TRACKING)
--AC_SUBST(SILENT_RULES)
- AC_SUBST(USRSBINDIR)
- AC_SUBST(VALGRIND_POOL)
- AC_SUBST(VDO)
-@@ -1907,23 +1907,19 @@ AC_SUBST(VDO_INCLUDE)
- AC_SUBST(VDO_LIB)
- AC_SUBST(WRITECACHE)
- AC_SUBST(WRITE_INSTALL)
--AC_SUBST(DMEVENTD_PIDFILE)
--AC_SUBST(LVMPOLLD_PIDFILE)
--AC_SUBST(LVMLOCKD_PIDFILE)
--AC_SUBST(CMIRRORD_PIDFILE)
- AC_SUBST(interface)
- AC_SUBST(kerneldir)
--AC_SUBST(missingkernel)
- AC_SUBST(kernelvsn)
--AC_SUBST(tmpdir)
--AC_SUBST(udev_prefix)
--AC_SUBST(udevdir)
-+AC_SUBST(libexecdir)
-+AC_SUBST(missingkernel)
- AC_SUBST(systemdsystemunitdir)
- AC_SUBST(systemdutildir)
-+AC_SUBST(tmpdir)
- AC_SUBST(tmpfilesdir)
-+AC_SUBST(udevdir)
-+AC_SUBST(udev_prefix)
- AC_SUBST(usrlibdir)
- AC_SUBST(usrsbindir)
--AC_SUBST(libexecdir)
++# lvextend|lvreduce, ext4, active, mounted, mount dir with space, --fs resize, renamed LV
++lvcreate -n $lv -L 256M $vg
++mkfs.ext4 "$DM_DEV_DIR/$vg/$lv"
++mount "$DM_DEV_DIR/$vg/$lv" "$mount_dir_space"
++lvrename $vg/$lv $vg/$lv2
++not lvextend --fs resize -L+32M $vg/$lv2
++not lvreduce --fs resize -L-32M $vg/$lv2
++umount "$mount_dir_space"
++lvchange -an $vg/$lv2
++lvremove $vg/$lv2
++
  
- ################################################################################
- dnl -- First and last lines should not contain files to generate in order to
+ #
+ # lvextend, xfs
 
