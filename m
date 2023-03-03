@@ -1,48 +1,39 @@
 From: Tony Asleson <tasleson@sourceware.org>
-Date: Fri,  3 Mar 2023 18:03:26 +0000 (GMT)
-Subject: main - lvmdbustest.py: Increase udev timeout
-Message-ID: <20230303180326.542743858CDB@sourceware.org>
+Date: Fri,  3 Mar 2023 18:03:28 +0000 (GMT)
+Subject: main - lvmdbustest: Don't hard code to /tmp
+Message-ID: <20230303180328.952AE3858D37@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=80f6655956273b84ec2301dae7c6454ca62d124c
-Commit:        80f6655956273b84ec2301dae7c6454ca62d124c
-Parent:        4cbe789f9c273cd03a3b0aff39aa43fc7674099f
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=95afd315b163143296a1a42d2cad2b1cd762725d
+Commit:        95afd315b163143296a1a42d2cad2b1cd762725d
+Parent:        50e6efafb92367beacc0ee85afcb1279163d601d
 Author:        Tony Asleson <tasleson@redhat.com>
-AuthorDate:    Wed Mar 1 15:25:00 2023 -0600
+AuthorDate:    Wed Mar 1 15:59:14 2023 -0600
 Committer:     Tony Asleson <tasleson@redhat.com>
-CommitterDate: Wed Mar 1 15:26:37 2023 -0600
+CommitterDate: Wed Mar 1 15:59:18 2023 -0600
 
-lvmdbustest.py: Increase udev timeout
+lvmdbustest: Don't hard code to /tmp
 
+During lvm testing they use an alternative tmp directory.
 ---
- test/dbus/lvmdbustest.py | 5 +++--
- 1 file changed, 3 insertions(+), 2 deletions(-)
+ test/dbus/lvmdbustest.py | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
 
 diff --git a/test/dbus/lvmdbustest.py b/test/dbus/lvmdbustest.py
-index b1c965bb7..b98332d65 100755
+index 8d70b4477..9a3cb175a 100755
 --- a/test/dbus/lvmdbustest.py
 +++ b/test/dbus/lvmdbustest.py
-@@ -2410,7 +2410,8 @@ class TestDbusService(unittest.TestCase):
- 	def _block_present_absent(self, block_device, present=False):
- 		start = time.time()
- 		keep_looping = True
--		while keep_looping and time.time() < start + 3:
-+		max_wait = 10
-+		while keep_looping and time.time() < start + max_wait:
- 			if present:
- 				if (self._lookup(block_device) != "/"):
- 					keep_looping = False
-@@ -2419,7 +2420,7 @@ class TestDbusService(unittest.TestCase):
- 					keep_looping = False
+@@ -2301,7 +2301,7 @@ class TestDbusService(unittest.TestCase):
+ 			self._vdo_pool_lv(), test_ss=False)
  
- 		if keep_looping:
--			print("Daemon failed to update")
-+			print("Daemon failed to update within %d seconds!" % max_wait)
- 		else:
- 			print("Note: Time for udev update = %f" % (time.time() - start))
- 		if present:
+ 	def _log_file_option(self):
+-		fn = "/tmp/%s" % rs(8, "_lvm.log")
++		fn = os.path.join(tempfile.gettempdir(), rs(8, "_lvm.log"))
+ 		try:
+ 			options = dbus.Dictionary({}, signature=dbus.Signature('sv'))
+ 			option_str = "log { level=7 file=%s syslog=0 }" % fn
 
