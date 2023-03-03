@@ -1,40 +1,48 @@
 From: Tony Asleson <tasleson@sourceware.org>
-Date: Fri,  3 Mar 2023 18:03:27 +0000 (GMT)
-Subject: main - lvmdbustest: Add more output for test_log_file_option
-Message-ID: <20230303180327.74C0C3858D37@sourceware.org>
+Date: Fri,  3 Mar 2023 18:03:26 +0000 (GMT)
+Subject: main - lvmdbustest.py: Increase udev timeout
+Message-ID: <20230303180326.542743858CDB@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=50e6efafb92367beacc0ee85afcb1279163d601d
-Commit:        50e6efafb92367beacc0ee85afcb1279163d601d
-Parent:        80f6655956273b84ec2301dae7c6454ca62d124c
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=80f6655956273b84ec2301dae7c6454ca62d124c
+Commit:        80f6655956273b84ec2301dae7c6454ca62d124c
+Parent:        4cbe789f9c273cd03a3b0aff39aa43fc7674099f
 Author:        Tony Asleson <tasleson@redhat.com>
-AuthorDate:    Wed Mar 1 15:52:23 2023 -0600
+AuthorDate:    Wed Mar 1 15:25:00 2023 -0600
 Committer:     Tony Asleson <tasleson@redhat.com>
-CommitterDate: Wed Mar 1 15:52:23 2023 -0600
+CommitterDate: Wed Mar 1 15:26:37 2023 -0600
 
-lvmdbustest: Add more output for test_log_file_option
+lvmdbustest.py: Increase udev timeout
 
 ---
- test/dbus/lvmdbustest.py | 4 +++-
- 1 file changed, 3 insertions(+), 1 deletion(-)
+ test/dbus/lvmdbustest.py | 5 +++--
+ 1 file changed, 3 insertions(+), 2 deletions(-)
 
 diff --git a/test/dbus/lvmdbustest.py b/test/dbus/lvmdbustest.py
-index b98332d65..8d70b4477 100755
+index b1c965bb7..b98332d65 100755
 --- a/test/dbus/lvmdbustest.py
 +++ b/test/dbus/lvmdbustest.py
-@@ -2307,7 +2307,9 @@ class TestDbusService(unittest.TestCase):
- 			option_str = "log { level=7 file=%s syslog=0 }" % fn
- 			options["config"] = dbus.String(option_str)
- 			self._vg_create(None, None, options)
--			self.assertTrue(os.path.exists(fn))
-+			self.assertTrue(os.path.exists(fn),
-+							"We passed the following options %s to lvm while creating a VG and the "
-+							"log file we expected to exist (%s) was not found" % (option_str, fn))
- 		finally:
- 			if os.path.exists(fn):
- 				os.unlink(fn)
+@@ -2410,7 +2410,8 @@ class TestDbusService(unittest.TestCase):
+ 	def _block_present_absent(self, block_device, present=False):
+ 		start = time.time()
+ 		keep_looping = True
+-		while keep_looping and time.time() < start + 3:
++		max_wait = 10
++		while keep_looping and time.time() < start + max_wait:
+ 			if present:
+ 				if (self._lookup(block_device) != "/"):
+ 					keep_looping = False
+@@ -2419,7 +2420,7 @@ class TestDbusService(unittest.TestCase):
+ 					keep_looping = False
+ 
+ 		if keep_looping:
+-			print("Daemon failed to update")
++			print("Daemon failed to update within %d seconds!" % max_wait)
+ 		else:
+ 			print("Note: Time for udev update = %f" % (time.time() - start))
+ 		if present:
 
