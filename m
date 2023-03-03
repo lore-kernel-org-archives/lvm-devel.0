@@ -1,90 +1,99 @@
 From: Tony Asleson <tasleson@sourceware.org>
-Date: Fri,  3 Mar 2023 18:03:29 +0000 (GMT)
-Subject: main - lvmdbustest: Add more info on asserts
-Message-ID: <20230303180329.B592D3858D37@sourceware.org>
+Date: Fri,  3 Mar 2023 18:03:30 +0000 (GMT)
+Subject: main - lvmdbustest: Test duplicate VG rename
+Message-ID: <20230303180330.DF4E73858D37@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=3e616230f2627d31599d1f4a2c7ff29b5ba86703
-Commit:        3e616230f2627d31599d1f4a2c7ff29b5ba86703
-Parent:        95afd315b163143296a1a42d2cad2b1cd762725d
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=8e27dfd40576f4e2828b169bfe18d8cae9968244
+Commit:        8e27dfd40576f4e2828b169bfe18d8cae9968244
+Parent:        3e616230f2627d31599d1f4a2c7ff29b5ba86703
 Author:        Tony Asleson <tasleson@redhat.com>
-AuthorDate:    Thu Mar 2 11:44:16 2023 -0600
+AuthorDate:    Fri Mar 3 11:17:30 2023 -0600
 Committer:     Tony Asleson <tasleson@redhat.com>
-CommitterDate: Thu Mar 2 11:44:16 2023 -0600
+CommitterDate: Fri Mar 3 11:17:30 2023 -0600
 
-lvmdbustest: Add more info on asserts
+lvmdbustest: Test duplicate VG rename
 
 ---
- test/dbus/lvmdbustest.py | 16 +++++++++-------
- 1 file changed, 9 insertions(+), 7 deletions(-)
+ daemons/lvmdbusd/cmdhandler.py |  6 ++++--
+ test/dbus/lvmdbustest.py       | 43 ++++++++++++++++++++++++++++++++++++++++++
+ 2 files changed, 47 insertions(+), 2 deletions(-)
 
+diff --git a/daemons/lvmdbusd/cmdhandler.py b/daemons/lvmdbusd/cmdhandler.py
+index ea7e300cf..8bc741dc6 100644
+--- a/daemons/lvmdbusd/cmdhandler.py
++++ b/daemons/lvmdbusd/cmdhandler.py
+@@ -324,10 +324,12 @@ def vg_rename(vg_uuid, new_name, rename_options):
+ 	return call(cmd)
+ 
+ 
+-def vg_remove(vg_name, remove_options):
++def vg_remove(vg_id, remove_options):
+ 	cmd = ['vgremove']
+ 	cmd.extend(options_to_cli_args(remove_options))
+-	cmd.extend(['-f', vg_name])
++	cmd.extend(['-f', vg_id])
++	# https://bugzilla.redhat.com/show_bug.cgi?id=2175220 is preventing us from doing the following
++	# cmd.extend(['-f', "--select", "vg_uuid=%s" % vg_id])
+ 	return call(cmd)
+ 
+ 
 diff --git a/test/dbus/lvmdbustest.py b/test/dbus/lvmdbustest.py
-index 9a3cb175a..ab68e7e5c 100755
+index ab68e7e5c..b7224df96 100755
 --- a/test/dbus/lvmdbustest.py
 +++ b/test/dbus/lvmdbustest.py
-@@ -446,7 +446,7 @@ class TestDbusService(unittest.TestCase):
- 		self.handle_return(vg_proxy.Vg.Remove(dbus.Int32(g_tmo), EOD))
- 		if is_nested_pv(pv_proxy.Pv.Name):
- 			rc = self._pv_remove(pv_proxy)
--			self.assertTrue(rc == '/')
-+			self.assertTrue(rc == '/', "We expected a '/', but got %s when removing a PV" % str(rc))
- 
- 	def clean_up(self):
- 		self.objs, self.bus = get_objects()
-@@ -522,7 +522,8 @@ class TestDbusService(unittest.TestCase):
- 
- 		self._validate_lookup(device, pv_path)
- 
--		self.assertTrue(pv_path is not None and len(pv_path) > 0)
-+		self.assertTrue(pv_path is not None and len(pv_path) > 0,
-+						"When creating a PV we expected the returned path to be valid")
- 		return pv_path
- 
- 	def _manager(self):
-@@ -536,7 +537,7 @@ class TestDbusService(unittest.TestCase):
- 
- 	def test_version(self):
- 		rc = self.objs[MANAGER_INT][0].Manager.Version
--		self.assertTrue(rc is not None and len(rc) > 0)
-+		self.assertTrue(rc is not None and len(rc) > 0, "Manager.Version is invalid")
- 		self._check_consistency()
- 
- 	def _vg_create(self, pv_paths=None, vg_prefix=None, options=None):
-@@ -557,7 +558,7 @@ class TestDbusService(unittest.TestCase):
- 				options))
- 
- 		self._validate_lookup(vg_name, vg_path)
--		self.assertTrue(vg_path is not None and len(vg_path) > 0)
-+		self.assertTrue(vg_path is not None and len(vg_path) > 0, "During VG creation, returned path is empty")
- 
- 		intf = [VG_INT, ]
- 		if self.vdo:
-@@ -2427,11 +2428,11 @@ class TestDbusService(unittest.TestCase):
- 			print("Note: Time for udev update = %f" % (time.time() - start))
- 		if present:
- 			rc = self._lookup(block_device)
--			self.assertNotEqual(rc, '/')
-+			self.assertNotEqual(rc, '/', "Daemon failed to update, missing udev change event?")
- 			return True
- 		else:
- 			rc = self._lookup(block_device)
--			self.assertEqual(rc, '/')
-+			self.assertEqual(rc, '/', "Daemon failed to update, missing udev change event?")
- 			return True
- 
- 	def test_wipefs(self):
-@@ -2500,7 +2501,8 @@ class TestDbusService(unittest.TestCase):
- 			j.update()
- 			if j.Complete:
- 				(ec, error_msg) = j.GetError
--				self.assertTrue("insufficient free space" in error_msg, error_msg)
-+				self.assertTrue("insufficient free space" in error_msg,
-+								"We're expecting 'insufficient free space' in \n\"%s\"\n, stderr missing?" % error_msg)
- 				break
+@@ -2507,6 +2507,49 @@ class TestDbusService(unittest.TestCase):
  			else:
  				time.sleep(0.1)
+ 
++	@staticmethod
++	def _is_vg_devices_supported():
++		rc, stdout_txt, stderr_txt = call_lvm(["vgcreate", "--help"])
++		if rc == 0:
++			for line in stdout_txt.split("\n"):
++				if "--devices " in line:
++					return True
++		return False
++
++	@staticmethod
++	def _vg_create_specify_devices(name, device):
++		cmd = [LVM_EXECUTABLE, "vgcreate", "--devices", device, name, device]
++		outcome = Popen(cmd, stdout=PIPE, stderr=PIPE, close_fds=True, env=os.environ)
++		outcome.communicate()
++		if outcome.returncode == 0:
++			return True
++		else:
++			print("Failed to create vg %s, stdout= %s, stderr= %s" % (name, outcome.stdout, outcome.stderr))
++			return False
++
++	def test_duplicate_vg_name(self):
++		# LVM allows duplicate VG names, test handling renames for now
++		if not TestDbusService._is_vg_devices_supported():
++			raise unittest.SkipTest("lvm does not support vgcreate with --device syntax")
++
++		if len(self.objs[PV_INT]) < 2:
++			raise unittest.SkipTest("we need@least 2 PVs to run test")
++
++		vg_name = vg_n()
++		if TestDbusService._vg_create_specify_devices(vg_name, self.objs[PV_INT][0].Pv.Name) and \
++				TestDbusService._vg_create_specify_devices(vg_name, self.objs[PV_INT][1].Pv.Name):
++			objects, _ = get_objects()
++			self.assertEqual(len(objects[VG_INT]), 2)
++
++			if len(objects[VG_INT]) == 2:
++				for vg in objects[VG_INT]:
++					new_name = vg_n()
++					vg.Vg.Rename(dbus.String(new_name), dbus.Int32(g_tmo), EOD)
++					# Ensure we find the renamed VG
++					self.assertNotEqual("/", self._lookup(new_name), "Expecting to find VG='%s'" % new_name)
++		else:
++			self.assertFalse(True, "We failed to create 2 VGs with same name!")
++
+ 
+ class AggregateResults(object):
+ 
 
