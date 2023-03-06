@@ -1,39 +1,61 @@
-From: Tony Asleson <tasleson@sourceware.org>
-Date: Mon,  6 Mar 2023 17:26:17 +0000 (GMT)
-Subject: main - lvmdbusd: Add needed env. variables
-Message-ID: <20230306172617.3E85F3858D39@sourceware.org>
+From: Lakshmi Narasimhan Sundararajan <lsundararajan@purestorage.com>
+Date: Mon, 6 Mar 2023 20:32:46 +0530
+Subject: lvmetad status
+In-Reply-To: <655bd398-9bc0-7b1c-0891-598ca4c8d36d@redhat.com>
+References: <CAFe+wq235CR3DavwD+z200MAe4-CnWQveF2CX2S5vm0qSmTfLA@mail.gmail.com>
+ <655bd398-9bc0-7b1c-0891-598ca4c8d36d@redhat.com>
+Message-ID: <CAFe+wq1_AqQRREpvW9AkztbC54+mbWWb7nOQD=pCzERrg25JZQ@mail.gmail.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=c8f2125b85afe043af1b2e887a80f882b8d8d7c7
-Commit:        c8f2125b85afe043af1b2e887a80f882b8d8d7c7
-Parent:        df6120e9f715c58327451f650c003d09842f33c7
-Author:        Tony Asleson <tasleson@redhat.com>
-AuthorDate:    Mon Mar 6 10:26:44 2023 -0600
-Committer:     Tony Asleson <tasleson@redhat.com>
-CommitterDate: Mon Mar 6 10:26:44 2023 -0600
+Thanks Zdenek, How about in memory caching of device properties? That was
+also supposedly a function of lvmetad isnt it?
+Do we have a suitable replacement for the same?
 
-lvmdbusd: Add needed env. variables
+Also, why is lvmetad deprecation not called out more noticeable. I still
+see man pages and many distro continue to use lvmetad.
 
-When running lvmdb.py by itself for testing we need these.
----
- daemons/lvmdbusd/lvmdb.py.in | 2 ++
- 1 file changed, 2 insertions(+)
+Thanks
 
-diff --git a/daemons/lvmdbusd/lvmdb.py.in b/daemons/lvmdbusd/lvmdb.py.in
-index 41fedb80f..e6bec926a 100644
---- a/daemons/lvmdbusd/lvmdb.py.in
-+++ b/daemons/lvmdbusd/lvmdb.py.in
-@@ -437,6 +437,8 @@ class DataStore(object):
- 
- 
- if __name__ == "__main__":
-+	os.environ["LC_ALL"] = "C"
-+	os.environ["LVM_COMMAND_PROFILE"] = "lvmdbusd"
- 	pp = prettyprint.PrettyPrinter(indent=4)
- 
- 	ds = DataStore()
 
+On Mon, Mar 6, 2023 at 4:15?PM Zdenek Kabelac <zkabelac@redhat.com> wrote:
+
+> Dne 03. 03. 23 v 13:19 Lakshmi Narasimhan Sundararajan napsal(a):
+> > Hi Team!
+> > A very good day to you all.
+> > Can anyone please confirm the current status of lvmetad?
+> > Is this deprecated? On the lvm2 dev branch I see as early as 2018 that
+> it
+> > has been removed, but I do not see any other information anywhere on its
+> status.
+> >
+> > Is there some place where the reason is called out?
+> > I still see distros default flag to use_lvmetad = true and man pages
+> calling
+> > out usage of lvmetad.
+>
+>
+> Hi
+>
+>
+> lvmetad has been removed and replaced with better udev rule logic and
+> files
+> stored in /run/lvm directory.
+>
+> So autoactivation works without this daemon.
+>
+>
+> Regards
+>
+>
+> Zdenek
+>
+>
+>
+>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20230306/6d7e10a8/attachment.htm>
