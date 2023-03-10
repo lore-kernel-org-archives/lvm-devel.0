@@ -1,41 +1,44 @@
 From: Tony Asleson <tasleson@sourceware.org>
-Date: Fri, 10 Mar 2023 18:52:36 +0000 (GMT)
-Subject: main - lvmdbustest: Add env. variable to skip signal testing
-Message-ID: <20230310185236.A995F385841A@sourceware.org>
+Date: Fri, 10 Mar 2023 18:52:37 +0000 (GMT)
+Subject: main - lvmdbustest: Add notes on error injection testing
+Message-ID: <20230310185237.CA48E385840E@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=1c550d7124d4bc1954f7d1d7efc372e1d996b570
-Commit:        1c550d7124d4bc1954f7d1d7efc372e1d996b570
-Parent:        f8876290bfc8d11400901e9eac32f6d613b0ed70
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=baf99ff974b408c59dd4f51db6e006d659c061e7
+Commit:        baf99ff974b408c59dd4f51db6e006d659c061e7
+Parent:        1c550d7124d4bc1954f7d1d7efc372e1d996b570
 Author:        Tony Asleson <tasleson@redhat.com>
-AuthorDate:    Fri Mar 10 10:43:02 2023 -0600
+AuthorDate:    Fri Mar 10 10:44:55 2023 -0600
 Committer:     Tony Asleson <tasleson@redhat.com>
 CommitterDate: Fri Mar 10 12:51:53 2023 -0600
 
-lvmdbustest: Add env. variable to skip signal testing
+lvmdbustest: Add notes on error injection testing
 
-This is currently need if we are collecting code coverage data as we don't
-handle this unit test correctly.
+Not doing this by default for automated build testing as it generates a
+lot of output and slows things down by another ~10%.
 ---
- test/dbus/lvmdbustest.py | 3 +++
- 1 file changed, 3 insertions(+)
+ test/dbus/lvmdbustest.py | 6 ++++++
+ 1 file changed, 6 insertions(+)
 
 diff --git a/test/dbus/lvmdbustest.py b/test/dbus/lvmdbustest.py
-index b7224df96..e1c994e90 100755
+index e1c994e90..00d9303b6 100755
 --- a/test/dbus/lvmdbustest.py
 +++ b/test/dbus/lvmdbustest.py
-@@ -2347,6 +2347,9 @@ class TestDbusService(unittest.TestCase):
+@@ -2577,6 +2577,12 @@ if __name__ == '__main__':
+ 	r = AggregateResults()
+ 	mode = int(test_shell)
  
- 	def test_z_sigint(self):
- 		# Issue SIGINT while daemon is processing work to ensure we shut down.
-+		if not bool(int(os.getenv("LVM_DBUSD_TEST_SKIP_SIGNAL", "0"))):
-+			raise unittest.SkipTest("Skipping as env. LVM_DBUSD_TEST_SKIP_SIGNAL is '0'")
++	# To test with error injection, simply set the env. variable LVM_BINARY to the error inject script
++	# and the LVM_MAN_IN_MIDDLE variable to the lvm binary to test which defaults to "/usr/sbin/lvm"
++	# An example
++	# export LVM_BINARY=/home/tasleson/projects/lvm2/test/dbus/lvm_error_inject.py
++	# export LVM_MAN_IN_MIDDLE=/home/tasleson/projects/lvm2/tools/lvm
 +
- 		di = DaemonInfo.get()
- 		self.assertTrue(di is not None)
- 		if di:
+ 	if mode == 0:
+ 		std_err_print('\n*** Testing only lvm fork & exec test mode ***\n')
+ 	elif mode == 1:
 
