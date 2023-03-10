@@ -1,48 +1,41 @@
-From: David Teigland <teigland@sourceware.org>
-Date: Wed,  8 Mar 2023 22:34:43 +0000 (GMT)
-Subject: main - vg_read: keep MISSING_PV when device with no mda reappears
-Message-ID: <20230308223443.E62993858C83@sourceware.org>
+From: Tony Asleson <tasleson@sourceware.org>
+Date: Fri, 10 Mar 2023 18:52:26 +0000 (GMT)
+Subject: main - lvmdbusd: Replace assert with exception
+Message-ID: <20230310185226.7229D385840A@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=69ea2e3f94815dc94b5fdd8284d30a667690f5df
-Commit:        69ea2e3f94815dc94b5fdd8284d30a667690f5df
-Parent:        937f1d320980b78b0d70cd778310bf31356ec6da
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Wed Feb 8 13:34:35 2023 -0600
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Wed Mar 8 16:31:28 2023 -0600
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=3d854b39bd8c3740eae087c4d46e5f685b368f5e
+Commit:        3d854b39bd8c3740eae087c4d46e5f685b368f5e
+Parent:        e79c6feb080f30fc4bb4adbfd69c41ac90b6cde3
+Author:        Tony Asleson <tasleson@redhat.com>
+AuthorDate:    Thu Mar 9 11:19:29 2023 -0600
+Committer:     Tony Asleson <tasleson@redhat.com>
+CommitterDate: Fri Mar 10 12:51:53 2023 -0600
 
-vg_read: keep MISSING_PV when device with no mda reappears
+lvmdbusd: Replace assert with exception
 
-Remove old code that became incorrect at some point.
-It's probably a fragment of an old condition that was left
-behind because it wasn't understood.  We don't want to drop
-the MISSING_PV flag just because the PV has no mda in use.
-The device that was missing may have stale data, so the user
-needs to decide if the device should be removed or restored.
+Instead of using an assert we will raise an LvmBug exception
 ---
- lib/metadata/metadata.c | 6 ------
- 1 file changed, 6 deletions(-)
+ daemons/lvmdbusd/cmdhandler.py | 4 +++-
+ 1 file changed, 3 insertions(+), 1 deletion(-)
 
-diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
-index 91a23f931..10af75665 100644
---- a/lib/metadata/metadata.c
-+++ b/lib/metadata/metadata.c
-@@ -3571,12 +3571,6 @@ static void _set_pv_device(struct format_instance *fid,
- 	if (!pv->dev)
- 		pv->status |= MISSING_PV;
+diff --git a/daemons/lvmdbusd/cmdhandler.py b/daemons/lvmdbusd/cmdhandler.py
+index 8bc741dc6..cf2a70875 100644
+--- a/daemons/lvmdbusd/cmdhandler.py
++++ b/daemons/lvmdbusd/cmdhandler.py
+@@ -637,7 +637,9 @@ def lvm_full_report_json():
+ 	rc, out, err = call(cmd)
+ 	# When we have an exported vg the exit code of lvs or fullreport will be 5
+ 	if rc == 0 or rc == 5:
+-		assert(type(out) == dict)
++		if type(out) != dict:
++			raise LvmBug("lvm likely returned invalid JSON, lvm exit code = %d, output = %s, err= %s" %
++						 (rc, str(out), str(err)))
+ 		return out
+ 	raise LvmBug("'fullreport' exited with code '%d'" % rc)
  
--	/* is this correct? */
--	if ((pv->status & MISSING_PV) && pv->dev && (pv_mda_used_count(pv) == 0)) {
--		pv->status &= ~MISSING_PV;
--		log_info("Found a previously MISSING PV %s with no MDAs.", pv_dev_name(pv));
--	}
--
- 	/* Fix up pv size if missing or impossibly large */
- 	if ((!pv->size || pv->size > (1ULL << 62)) && pv->dev) {
- 		if (!dev_get_size(pv->dev, &pv->size)) {
 
