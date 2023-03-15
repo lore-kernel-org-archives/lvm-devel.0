@@ -1,41 +1,49 @@
 From: Tony Asleson <tasleson@sourceware.org>
-Date: Tue, 14 Mar 2023 14:36:52 +0000 (GMT)
-Subject: main - lvmdbustest: Correct env. logic
-Message-ID: <20230314143652.13B753858D37@sourceware.org>
+Date: Wed, 15 Mar 2023 14:10:09 +0000 (GMT)
+Subject: main - lvmdbusd: Add a new 'Shared' property to the Vg interface
+Message-ID: <20230315141009.C3F763858D39@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=0c73d3545b2c964cea7e74cc022d2bc599ce7739
-Commit:        0c73d3545b2c964cea7e74cc022d2bc599ce7739
-Parent:        baf99ff974b408c59dd4f51db6e006d659c061e7
-Author:        Tony Asleson <tasleson@redhat.com>
-AuthorDate:    Tue Mar 14 08:05:57 2023 -0500
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=ddfe839dd1aa42e3d2a15a19eaf86c4b6fc65d19
+Commit:        ddfe839dd1aa42e3d2a15a19eaf86c4b6fc65d19
+Parent:        0c73d3545b2c964cea7e74cc022d2bc599ce7739
+Author:        Vojtech Trefny <vtrefny@redhat.com>
+AuthorDate:    Wed Mar 15 12:31:14 2023 +0100
 Committer:     Tony Asleson <tasleson@redhat.com>
-CommitterDate: Tue Mar 14 09:36:38 2023 -0500
+CommitterDate: Wed Mar 15 09:09:38 2023 -0500
 
-lvmdbustest: Correct env. logic
+lvmdbusd: Add a new 'Shared' property to the Vg interface
 
-Signed-off-by: Tony Asleson <tasleson@redhat.com>
+Signed-off-by: Vojtech Trefny <vtrefny@redhat.com>
 ---
- test/dbus/lvmdbustest.py | 4 ++--
- 1 file changed, 2 insertions(+), 2 deletions(-)
+ daemons/lvmdbusd/vg.py | 5 +++++
+ 1 file changed, 5 insertions(+)
 
-diff --git a/test/dbus/lvmdbustest.py b/test/dbus/lvmdbustest.py
-index 00d9303b6..8f95757eb 100755
---- a/test/dbus/lvmdbustest.py
-+++ b/test/dbus/lvmdbustest.py
-@@ -2347,8 +2347,8 @@ class TestDbusService(unittest.TestCase):
+diff --git a/daemons/lvmdbusd/vg.py b/daemons/lvmdbusd/vg.py
+index 6e7d6ec9b..c65d9db2b 100644
+--- a/daemons/lvmdbusd/vg.py
++++ b/daemons/lvmdbusd/vg.py
+@@ -151,6 +151,7 @@ class Vg(AutomatedProperties):
+ 	_AllocNormal_meta = ('b', VG_INTERFACE)
+ 	_AllocAnywhere_meta = ('b', VG_INTERFACE)
+ 	_Clustered_meta = ('b', VG_INTERFACE)
++	_Shared_meta = ('b', VG_INTERFACE)
+ 	_Name_meta = ('s', VG_INTERFACE)
  
- 	def test_z_sigint(self):
- 		# Issue SIGINT while daemon is processing work to ensure we shut down.
--		if not bool(int(os.getenv("LVM_DBUSD_TEST_SKIP_SIGNAL", "0"))):
--			raise unittest.SkipTest("Skipping as env. LVM_DBUSD_TEST_SKIP_SIGNAL is '0'")
-+		if bool(int(os.getenv("LVM_DBUSD_TEST_SKIP_SIGNAL", "0"))):
-+			raise unittest.SkipTest("Skipping as env. LVM_DBUSD_TEST_SKIP_SIGNAL is '1'")
+ 	# noinspection PyUnusedLocal,PyPep8Naming
+@@ -785,6 +786,10 @@ class Vg(AutomatedProperties):
+ 	def Clustered(self):
+ 		return self._attribute(5, 'c')
  
- 		di = DaemonInfo.get()
- 		self.assertTrue(di is not None)
++	@property
++	def Shared(self):
++		return self._attribute(5, 's')
++
+ 
+ class VgVdo(Vg):
+ 
 
