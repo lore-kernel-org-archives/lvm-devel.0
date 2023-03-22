@@ -1,64 +1,39 @@
-From: Marian Csontos <mcsontos@sourceware.org>
-Date: Tue, 21 Mar 2023 12:39:29 +0000 (GMT)
-Subject: main - post-release
-Message-ID: <20230321123929.01F7838582B0@sourceware.org>
+From: Tony Asleson <tasleson@sourceware.org>
+Date: Wed, 22 Mar 2023 03:42:52 +0000 (GMT)
+Subject: main - Fix import of utils from lvmdbusd.cfg
+Message-ID: <20230322034252.D08333858D38@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=238e3777777e1e75b388d8e05f9c1212aa4d1eed
-Commit:        238e3777777e1e75b388d8e05f9c1212aa4d1eed
-Parent:        3e0ee8dbad69b01c63b13f41ba449cba48756968
-Author:        Marian Csontos <mcsontos@redhat.com>
-AuthorDate:    Tue Mar 21 13:36:36 2023 +0100
-Committer:     Marian Csontos <mcsontos@redhat.com>
-CommitterDate: Tue Mar 21 13:36:36 2023 +0100
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=d6f8f59239c65a7f1f9be1d24bf9ba02cfee5b0e
+Commit:        d6f8f59239c65a7f1f9be1d24bf9ba02cfee5b0e
+Parent:        238e3777777e1e75b388d8e05f9c1212aa4d1eed
+Author:        Adam Williamson <awilliam@redhat.com>
+AuthorDate:    Tue Mar 21 11:46:54 2023 -0700
+Committer:     Tony Asleson <tasleson@redhat.com>
+CommitterDate: Tue Mar 21 22:42:25 2023 -0500
 
-post-release
+Fix import of utils from lvmdbusd.cfg
 
+Signed-off-by: Adam Williamson <awilliam@redhat.com>
 ---
- VERSION      | 2 +-
- VERSION_DM   | 2 +-
- WHATS_NEW    | 3 +++
- WHATS_NEW_DM | 3 +++
- 4 files changed, 8 insertions(+), 2 deletions(-)
+ daemons/lvmdbusd/cfg.py | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
 
-diff --git a/VERSION b/VERSION
-index 8f75291df..60c7a1dd4 100644
---- a/VERSION
-+++ b/VERSION
-@@ -1 +1 @@
--2.03.20(2) (2023-03-21)
-+2.03.21(2)-git (2023-03-21)
-diff --git a/VERSION_DM b/VERSION_DM
-index a1f7b8fce..68bf19e27 100644
---- a/VERSION_DM
-+++ b/VERSION_DM
-@@ -1 +1 @@
--1.02.193 (2023-03-21)
-+1.02.195-git (2023-03-21)
-diff --git a/WHATS_NEW b/WHATS_NEW
-index 8328a668a..6f801828f 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,3 +1,6 @@
-+version 2.03.21 - 
-+=================================
-+
- version 2.03.20 - 21st March 2023
- =================================
-   Fix segfault if using -S|--select with log/report_command_log=1 setting.
-diff --git a/WHATS_NEW_DM b/WHATS_NEW_DM
-index 2227b10d9..88298caad 100644
---- a/WHATS_NEW_DM
-+++ b/WHATS_NEW_DM
-@@ -1,3 +1,6 @@
-+Version 1.02.195 - 
-+==================================
-+
- Version 1.02.193 - 21st March 2023
- ==================================
+diff --git a/daemons/lvmdbusd/cfg.py b/daemons/lvmdbusd/cfg.py
+index 9da4b1267..9f4360100 100644
+--- a/daemons/lvmdbusd/cfg.py
++++ b/daemons/lvmdbusd/cfg.py
+@@ -11,7 +11,7 @@ import os
+ import multiprocessing
+ import queue
+ import itertools
+-from utils import LvmDebugData
++from lvmdbusd.utils import LvmDebugData
+ 
+ from lvmdbusd import path
  
 
