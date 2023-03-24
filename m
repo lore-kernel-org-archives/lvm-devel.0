@@ -1,66 +1,50 @@
-From: Tony Asleson <tasleson@sourceware.org>
-Date: Wed, 22 Mar 2023 12:44:19 +0000 (GMT)
-Subject: main - pre-release
-Message-ID: <20230322124419.F1A6A3857C48@sourceware.org>
+From: Simon Rowe <simon.rowe@nutanix.com>
+Date: Fri, 24 Mar 2023 09:32:29 +0000
+Subject: [PATCH 2/2] log: use freopen() to reopen standard streams
+In-Reply-To: <20230324093229.23480-1-simon.rowe@nutanix.com>
+References: <20230324093229.23480-1-simon.rowe@nutanix.com>
+Message-ID: <20230324093229.23480-2-simon.rowe@nutanix.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=3e0ee8dbad69b01c63b13f41ba449cba48756968
-Commit:        3e0ee8dbad69b01c63b13f41ba449cba48756968
-Parent:        6204fda003804e2bad022347baab510cb845f315
-Author:        Marian Csontos <mcsontos@redhat.com>
-AuthorDate:    Tue Mar 21 13:35:48 2023 +0100
-Committer:     Marian Csontos <mcsontos@redhat.com>
-CommitterDate: Tue Mar 21 13:35:48 2023 +0100
+In glibc stdin, stdout & stderr are variables that can be assigned to
+(https://www.gnu.org/software/libc/manual/html_node/Standard-Streams.html)
+however this not necessarily true of other C libraries.
 
-pre-release
+The gentoo musl porting notes
+(https://wiki.gentoo.org/wiki/Musl_porting_notes)
+recommend the substitution of
 
+    stdX = fopen(...)
+
+with
+
+    freopen(..., stdX)
+
+Signed-off-by: Simon Rowe <simon.rowe@nutanix.com>
 ---
- VERSION      | 2 +-
- VERSION_DM   | 2 +-
- WHATS_NEW    | 4 ++--
- WHATS_NEW_DM | 4 ++--
- 4 files changed, 6 insertions(+), 6 deletions(-)
+ lib/log/log.c | 4 ++++
+ 1 file changed, 4 insertions(+)
 
-diff --git a/VERSION b/VERSION
-index 2a5ec2776..8f75291df 100644
---- a/VERSION
-+++ b/VERSION
-@@ -1 +1 @@
--2.03.20(2)-git (2023-02-21)
-+2.03.20(2) (2023-03-21)
-diff --git a/VERSION_DM b/VERSION_DM
-index 20aaeb0b7..a1f7b8fce 100644
---- a/VERSION_DM
-+++ b/VERSION_DM
-@@ -1 +1 @@
--1.02.193-git (2023-02-21)
-+1.02.193 (2023-03-21)
-diff --git a/WHATS_NEW b/WHATS_NEW
-index 7c979d69c..8328a668a 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,5 @@
--version 2.03.20 - 
--====================================
-+version 2.03.20 - 21st March 2023
-+=================================
-   Fix segfault if using -S|--select with log/report_command_log=1 setting.
-   Configure now fails when requested lvmlockd dependencies are missing.
-   Add some configure Gentoo enhancements for static builds.
-diff --git a/WHATS_NEW_DM b/WHATS_NEW_DM
-index c2eefc8db..2227b10d9 100644
---- a/WHATS_NEW_DM
-+++ b/WHATS_NEW_DM
-@@ -1,5 +1,5 @@
--Version 1.02.193 - 
--=====================================
-+Version 1.02.193 - 21st March 2023
-+==================================
+diff --git a/lib/log/log.c b/lib/log/log.c
+index 118a3ba42..a94016d81 100644
+--- a/lib/log/log.c
++++ b/lib/log/log.c
+@@ -208,7 +208,11 @@ int reopen_standard_stream(FILE **stream, const char *mode)
  
- Version 1.02.191 - 21st February 2023
- =====================================
+ 	_check_and_replace_standard_log_streams(old_stream, new_stream);
+ 
++#ifdef __GLIBC__
+ 	*stream = new_stream;
++#else
++	freopen(NULL, mode, *stream);
++#endif
+ 	return 1;
+ }
+ 
+-- 
+2.22.3
 
