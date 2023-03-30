@@ -1,52 +1,60 @@
 From: Tony Asleson <tasleson@sourceware.org>
-Date: Thu, 30 Mar 2023 16:05:15 +0000 (GMT)
-Subject: main - lvmdbusd: Correct locking for _common_log
-Message-ID: <20230330160515.32D253858CDA@sourceware.org>
+Date: Thu, 30 Mar 2023 16:05:16 +0000 (GMT)
+Subject: main - lvmdbusd: Correct seg. fault on s390x ELN
+Message-ID: <20230330160516.560ED3858CDB@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=f7ca470abe995210e8008084c0b4436292b2816b
-Commit:        f7ca470abe995210e8008084c0b4436292b2816b
-Parent:        d6f8f59239c65a7f1f9be1d24bf9ba02cfee5b0e
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=300c8209a810f287992376e8a0561fdf878d1520
+Commit:        300c8209a810f287992376e8a0561fdf878d1520
+Parent:        f7ca470abe995210e8008084c0b4436292b2816b
 Author:        Tony Asleson <tasleson@redhat.com>
-AuthorDate:    Thu Mar 30 10:07:13 2023 -0500
+AuthorDate:    Thu Mar 30 10:10:23 2023 -0500
 Committer:     Tony Asleson <tasleson@redhat.com>
-CommitterDate: Thu Mar 30 11:04:42 2023 -0500
+CommitterDate: Thu Mar 30 11:04:49 2023 -0500
 
-lvmdbusd: Correct locking for _common_log
+lvmdbusd: Correct seg. fault on s390x ELN
 
-Reduce the lock time and include the flush in the lock.
+syscall 186 is specific to x86 64bit.  As this is different from arch
+to arch and between same arch different arch size we will only grab
+thread ID using built-in python support if it is supported.
 
-Reported by: Zbigniew J??drzejewski-Szmek <zbyszek@in.waw.pl>
+Resolves: https://bugzilla.redhat.com/show_bug.cgi?id=2166931
 ---
- daemons/lvmdbusd/utils.py | 5 +++--
- 1 file changed, 3 insertions(+), 2 deletions(-)
+ daemons/lvmdbusd/utils.py | 11 +++++++++--
+ 1 file changed, 9 insertions(+), 2 deletions(-)
 
 diff --git a/daemons/lvmdbusd/utils.py b/daemons/lvmdbusd/utils.py
-index 6013b656f..fdd7578c1 100644
+index fdd7578c1..27b869c13 100644
 --- a/daemons/lvmdbusd/utils.py
 +++ b/daemons/lvmdbusd/utils.py
-@@ -323,16 +323,17 @@ def _format_log_entry(msg):
+@@ -11,7 +11,6 @@ import xml.etree.ElementTree as Et
+ import sys
+ import inspect
+ import collections
+-import ctypes
+ import errno
+ import fcntl
+ import os
+@@ -305,8 +304,16 @@ class DebugMessages(object):
+ 					self.queue.clear()
  
  
- def _common_log(msg, *attributes):
--	cfg.stdout_lock.acquire()
- 	msg = _format_log_entry(msg)
- 
-+	cfg.stdout_lock.acquire()
++def _get_tid():
++	try:
++		# Only 3.8 and later have this
++		return threading.get_native_id()
++	except:
++		return -1
 +
- 	if STDOUT_TTY and attributes:
- 		print(color(msg, *attributes))
- 	else:
- 		print(msg)
++
+ def _format_log_entry(msg):
+-	tid = ctypes.CDLL('libc.so.6').syscall(186)
++	tid = _get_tid()
  
--	cfg.stdout_lock.release()
- 	sys.stdout.flush()
-+	cfg.stdout_lock.release()
- 
- 
- # Serializes access to stdout to prevent interleaved output
+ 	if not cfg.systemd and STDOUT_TTY:
+ 		msg = "%s: %d:%d - %s" % \
 
