@@ -1,72 +1,52 @@
-From: Simon Rowe <simon.rowe@nutanix.com>
-Date: Fri, 24 Mar 2023 09:32:28 +0000
-Subject: [PATCH 1/2] cmdline: use freopen() to reopen standard streams
-Message-ID: <20230324093229.23480-1-simon.rowe@nutanix.com>
+From: Tony Asleson <tasleson@sourceware.org>
+Date: Thu, 30 Mar 2023 16:05:15 +0000 (GMT)
+Subject: main - lvmdbusd: Correct locking for _common_log
+Message-ID: <20230330160515.32D253858CDA@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-In glibc stdin, stdout & stderr are variables that can be assigned to
-(https://www.gnu.org/software/libc/manual/html_node/Standard-Streams.html)
-however this not necessarily true of other C libraries.
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=f7ca470abe995210e8008084c0b4436292b2816b
+Commit:        f7ca470abe995210e8008084c0b4436292b2816b
+Parent:        d6f8f59239c65a7f1f9be1d24bf9ba02cfee5b0e
+Author:        Tony Asleson <tasleson@redhat.com>
+AuthorDate:    Thu Mar 30 10:07:13 2023 -0500
+Committer:     Tony Asleson <tasleson@redhat.com>
+CommitterDate: Thu Mar 30 11:04:42 2023 -0500
 
-The gentoo musl porting notes
-(https://wiki.gentoo.org/wiki/Musl_porting_notes)
-recommend the substitution of
+lvmdbusd: Correct locking for _common_log
 
-    stdX = fopen(...)
+Reduce the lock time and include the flush in the lock.
 
-with
-
-    freopen(..., stdX)
-
-Signed-off-by: Simon Rowe <simon.rowe@nutanix.com>
+Reported by: Zbigniew J??drzejewski-Szmek <zbyszek@in.waw.pl>
 ---
- tools/lvmcmdline.c | 12 ++++++++++++
- 1 file changed, 12 insertions(+)
+ daemons/lvmdbusd/utils.py | 5 +++--
+ 1 file changed, 3 insertions(+), 2 deletions(-)
 
-diff --git a/tools/lvmcmdline.c b/tools/lvmcmdline.c
-index a5bb6a5c5..dafff5ba4 100644
---- a/tools/lvmcmdline.c
-+++ b/tools/lvmcmdline.c
-@@ -3422,7 +3422,11 @@ static int _check_standard_fds(void)
- 	int err = is_valid_fd(STDERR_FILENO);
+diff --git a/daemons/lvmdbusd/utils.py b/daemons/lvmdbusd/utils.py
+index 6013b656f..fdd7578c1 100644
+--- a/daemons/lvmdbusd/utils.py
++++ b/daemons/lvmdbusd/utils.py
+@@ -323,16 +323,17 @@ def _format_log_entry(msg):
  
- 	if (!is_valid_fd(STDIN_FILENO) &&
-+#ifdef __GLIBC__
- 	    !(stdin = fopen(_PATH_DEVNULL, "r"))) {
-+#else
-+	    !freopen(_PATH_DEVNULL, "r", stdin)) {
-+#endif
- 		if (err)
- 			perror("stdin stream open");
- 		else
-@@ -3432,7 +3436,11 @@ static int _check_standard_fds(void)
- 	}
  
- 	if (!is_valid_fd(STDOUT_FILENO) &&
-+#ifdef __GLIBC__
- 	    !(stdout = fopen(_PATH_DEVNULL, "w"))) {
-+#else
-+	    !freopen(_PATH_DEVNULL, "w", stdout)) {
-+#endif
- 		if (err)
- 			perror("stdout stream open");
- 		/* else no stdout */
-@@ -3440,7 +3448,11 @@ static int _check_standard_fds(void)
- 	}
+ def _common_log(msg, *attributes):
+-	cfg.stdout_lock.acquire()
+ 	msg = _format_log_entry(msg)
  
- 	if (!is_valid_fd(STDERR_FILENO) &&
-+#ifdef __GLIBC__
- 	    !(stderr = fopen(_PATH_DEVNULL, "w"))) {
-+#else
-+	    !freopen(_PATH_DEVNULL, "w", stderr)) {
-+#endif
- 		printf("stderr stream open: %s\n",
- 		       strerror(errno));
- 		return 0;
--- 
-2.22.3
++	cfg.stdout_lock.acquire()
++
+ 	if STDOUT_TTY and attributes:
+ 		print(color(msg, *attributes))
+ 	else:
+ 		print(msg)
+ 
+-	cfg.stdout_lock.release()
+ 	sys.stdout.flush()
++	cfg.stdout_lock.release()
+ 
+ 
+ # Serializes access to stdout to prevent interleaved output
 
