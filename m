@@ -1,47 +1,49 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Thu,  6 Apr 2023 11:47:39 +0000 (GMT)
-Subject: main - tests: use less demanding ext4
-Message-ID: <20230406114739.D57EA385843E@sourceware.org>
+Date: Thu,  6 Apr 2023 11:47:37 +0000 (GMT)
+Subject: main - vdo: use fixed size vdopool wrapper
+Message-ID: <20230406114737.9452D385843A@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=e59e7aa0ab9dd2d45a1cac46620ffb8d1d2e765c
-Commit:        e59e7aa0ab9dd2d45a1cac46620ffb8d1d2e765c
-Parent:        7b5291a8ed7917a396232024880b252ecf6ab23f
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=e8e6347ba3f59cbd2f7e92aa707543b90fa607a3
+Commit:        e8e6347ba3f59cbd2f7e92aa707543b90fa607a3
+Parent:        334117ee00aa6751ff7589b983497e1b7eee9d76
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu Apr 6 13:40:16 2023 +0200
+AuthorDate:    Mon Mar 6 14:52:59 2023 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Thu Apr 6 13:41:30 2023 +0200
+CommitterDate: Thu Apr 6 11:06:04 2023 +0200
 
-tests: use less demanding ext4
+vdo: use fixed size vdopool wrapper
 
+Instead of using size of 'empty header' in vdopool use fixed size 4K
+for a 'wrappeing' vdo-pool device.
+
+This fixes the issue when user tried to activate vdo-pool after
+a conversion from vdo managed device with 'vgchange -ay' - where
+this command activated all LVs with 'vdo-pool' wrapping device as well,
+but this converted pool uses  0-length header.
+
+This 4k size should usually prevent other tools like 'blkid' recognize
+such device as anything - so it shouldn't cause any problems with
+duplicate indentification of devices.
 ---
- test/shell/integrity-caching.sh | 4 ++--
- 1 file changed, 2 insertions(+), 2 deletions(-)
+ lib/activate/dev_manager.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
 
-diff --git a/test/shell/integrity-caching.sh b/test/shell/integrity-caching.sh
-index 158a31932..5539ac575 100644
---- a/test/shell/integrity-caching.sh
-+++ b/test/shell/integrity-caching.sh
-@@ -49,7 +49,7 @@ _prepare_vg() {
- }
+diff --git a/lib/activate/dev_manager.c b/lib/activate/dev_manager.c
+index c4bd6ab7b..ec642f421 100644
+--- a/lib/activate/dev_manager.c
++++ b/lib/activate/dev_manager.c
+@@ -3115,7 +3115,7 @@ static int _add_layer_target_to_dtree(struct dev_manager *dm,
  
- _test_fs_with_read_repair() {
--	mkfs.xfs -f -s size=4096 "$DM_DEV_DIR/$vg/$lv1"
-+	mkfs.ext4 "$DM_DEV_DIR/$vg/$lv1"
- 
- 	mount "$DM_DEV_DIR/$vg/$lv1" $mnt
- 
-@@ -103,7 +103,7 @@ _test_fs_with_read_repair() {
- }
- 
- _add_new_data_to_mnt() {
--	mkfs.xfs -f -s size=4096 "$DM_DEV_DIR/$vg/$lv1"
-+	mkfs.ext4 "$DM_DEV_DIR/$vg/$lv1"
- 
- 	mount "$DM_DEV_DIR/$vg/$lv1" $mnt
- 
+ 	/* Add linear mapping over layered LV */
+ 	/* From VDO layer expose ONLY vdo pool header, we would need to use virtual size otherwise */
+-	if (!add_linear_area_to_dtree(dnode, lv_is_vdo_pool(lv) ? first_seg(lv)->vdo_pool_header_size : lv->size,
++	if (!add_linear_area_to_dtree(dnode, lv_is_vdo_pool(lv) ? 8 : lv->size,
+ 				      lv->vg->extent_size,
+ 				      lv->vg->cmd->use_linear_target,
+ 				      lv->vg->name, lv->name) ||
 
