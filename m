@@ -1,50 +1,37 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Thu,  6 Apr 2023 11:47:31 +0000 (GMT)
-Subject: main - integrity: hide creation of internal LVs
-Message-ID: <20230406114731.DF46D385842E@sourceware.org>
+Date: Thu,  6 Apr 2023 11:47:41 +0000 (GMT)
+Subject: main - WHATS_NEW: update
+Message-ID: <20230406114741.04FCA3858433@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=51117b579350e2e44e3dae72642010a18b8506b1
-Commit:        51117b579350e2e44e3dae72642010a18b8506b1
-Parent:        390ff5be2fd9dda47f2bfd2db96de64acc925002
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=b1789b84c39a10241f3e09a4bad16e482db784e4
+Commit:        b1789b84c39a10241f3e09a4bad16e482db784e4
+Parent:        e59e7aa0ab9dd2d45a1cac46620ffb8d1d2e765c
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Sat Feb 25 20:29:05 2023 +0100
+AuthorDate:    Thu Apr 6 13:45:42 2023 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Thu Apr 6 11:06:04 2023 +0200
+CommitterDate: Thu Apr 6 13:45:42 2023 +0200
 
-integrity: hide creation of internal LVs
+WHATS_NEW: update
 
-Creation of 'hidden' local LVs should be visible only in
-verbose mode (-v) when creating a raid LV with integrity.
 ---
- lib/metadata/integrity_manip.c | 5 +++--
- 1 file changed, 3 insertions(+), 2 deletions(-)
+ WHATS_NEW | 2 ++
+ 1 file changed, 2 insertions(+)
 
-diff --git a/lib/metadata/integrity_manip.c b/lib/metadata/integrity_manip.c
-index e9895b836..ffb869b08 100644
---- a/lib/metadata/integrity_manip.c
-+++ b/lib/metadata/integrity_manip.c
-@@ -99,6 +99,7 @@ static int _lv_create_integrity_metadata(struct cmd_context *cmd,
- 		.read_ahead = DM_READ_AHEAD_NONE,
- 		.stripes = 1,
- 		.vg_name = vg->name,
-+		.temporary = 1,
- 		.zero = 0,
- 		.wipe_signatures = 0,
- 		.suppress_zero_warn = 1,
-@@ -118,8 +119,8 @@ static int _lv_create_integrity_metadata(struct cmd_context *cmd,
- 	meta_sectors = meta_bytes / 512;
- 	lp_meta.extents = meta_sectors / vg->extent_size;
+diff --git a/WHATS_NEW b/WHATS_NEW
+index 6f801828f..2bff3445d 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,7 @@
+ version 2.03.21 - 
+ =================================
++  Fix activation of vdo-pool for with 0 length headers (converted pools).
++  Avoid printing internal init messages when creation integration devices.
  
--	log_print_unless_silent("Creating integrity metadata LV %s with size %s.",
--		  metaname, display_size(cmd, meta_sectors));
-+	log_verbose("Creating integrity metadata LV %s with size %s.",
-+		    metaname, display_size(cmd, meta_sectors));
- 
- 	dm_list_init(&lp_meta.tags);
- 
+ version 2.03.20 - 21st March 2023
+ =================================
 
