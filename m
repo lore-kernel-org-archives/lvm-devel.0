@@ -1,49 +1,50 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Thu,  6 Apr 2023 11:47:37 +0000 (GMT)
-Subject: main - vdo: use fixed size vdopool wrapper
-Message-ID: <20230406114737.9452D385843A@sourceware.org>
+Date: Thu,  6 Apr 2023 11:47:35 +0000 (GMT)
+Subject: main - cleanup: simplify
+Message-ID: <20230406114735.5328F385842A@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=e8e6347ba3f59cbd2f7e92aa707543b90fa607a3
-Commit:        e8e6347ba3f59cbd2f7e92aa707543b90fa607a3
-Parent:        334117ee00aa6751ff7589b983497e1b7eee9d76
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=1fb3e08033570365580b576777e312d2f9c2d86d
+Commit:        1fb3e08033570365580b576777e312d2f9c2d86d
+Parent:        a7cf55c6a19a0a70dab7f2b8a406d52e24d5e3cd
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Mon Mar 6 14:52:59 2023 +0100
+AuthorDate:    Wed Mar 1 21:05:47 2023 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Thu Apr 6 11:06:04 2023 +0200
 
-vdo: use fixed size vdopool wrapper
+cleanup: simplify
 
-Instead of using size of 'empty header' in vdopool use fixed size 4K
-for a 'wrappeing' vdo-pool device.
-
-This fixes the issue when user tried to activate vdo-pool after
-a conversion from vdo managed device with 'vgchange -ay' - where
-this command activated all LVs with 'vdo-pool' wrapping device as well,
-but this converted pool uses  0-length header.
-
-This 4k size should usually prevent other tools like 'blkid' recognize
-such device as anything - so it shouldn't cause any problems with
-duplicate indentification of devices.
 ---
- lib/activate/dev_manager.c | 2 +-
- 1 file changed, 1 insertion(+), 1 deletion(-)
+ lib/metadata/integrity_manip.c | 7 +++----
+ 1 file changed, 3 insertions(+), 4 deletions(-)
 
-diff --git a/lib/activate/dev_manager.c b/lib/activate/dev_manager.c
-index c4bd6ab7b..ec642f421 100644
---- a/lib/activate/dev_manager.c
-+++ b/lib/activate/dev_manager.c
-@@ -3115,7 +3115,7 @@ static int _add_layer_target_to_dtree(struct dev_manager *dm,
+diff --git a/lib/metadata/integrity_manip.c b/lib/metadata/integrity_manip.c
+index ffb869b08..456795532 100644
+--- a/lib/metadata/integrity_manip.c
++++ b/lib/metadata/integrity_manip.c
+@@ -936,7 +936,9 @@ int lv_integrity_mismatches(struct cmd_context *cmd,
+ 			    const struct logical_volume *lv,
+ 			    uint64_t *mismatches)
+ {
+-	struct lv_with_info_and_seg_status status;
++	struct lv_with_info_and_seg_status status = {
++		.seg_status.type = SEG_STATUS_NONE,
++	};
  
- 	/* Add linear mapping over layered LV */
- 	/* From VDO layer expose ONLY vdo pool header, we would need to use virtual size otherwise */
--	if (!add_linear_area_to_dtree(dnode, lv_is_vdo_pool(lv) ? first_seg(lv)->vdo_pool_header_size : lv->size,
-+	if (!add_linear_area_to_dtree(dnode, lv_is_vdo_pool(lv) ? 8 : lv->size,
- 				      lv->vg->extent_size,
- 				      lv->vg->cmd->use_linear_target,
- 				      lv->vg->name, lv->name) ||
+ 	if (lv_is_raid(lv) && lv_raid_has_integrity((struct logical_volume *)lv))
+ 		return lv_raid_integrity_total_mismatches(cmd, lv, mismatches);
+@@ -944,9 +946,6 @@ int lv_integrity_mismatches(struct cmd_context *cmd,
+ 	if (!lv_is_integrity(lv))
+ 		return_0;
+ 
+-	memset(&status, 0, sizeof(status));
+-	status.seg_status.type = SEG_STATUS_NONE;
+-
+ 	status.seg_status.seg = first_seg(lv);
+ 
+ 	/* FIXME: why reporter_pool? */
 
