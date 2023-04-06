@@ -1,782 +1,218 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Thu,  6 Apr 2023 11:47:38 +0000 (GMT)
-Subject: main - tests: lower demand for disk resources
-Message-ID: <20230406114738.B58683857704@sourceware.org>
+Date: Thu,  6 Apr 2023 11:47:33 +0000 (GMT)
+Subject: main - configure.ac: print locking dir
+Message-ID: <20230406114733.0C12A3858C30@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=7b5291a8ed7917a396232024880b252ecf6ab23f
-Commit:        7b5291a8ed7917a396232024880b252ecf6ab23f
-Parent:        e8e6347ba3f59cbd2f7e92aa707543b90fa607a3
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=0f2c48a10e6085d483d560277b9d582835582ec4
+Commit:        0f2c48a10e6085d483d560277b9d582835582ec4
+Parent:        51117b579350e2e44e3dae72642010a18b8506b1
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Apr 4 14:44:47 2023 +0200
+AuthorDate:    Tue Feb 28 23:13:00 2023 +0100
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Thu Apr 6 13:34:26 2023 +0200
+CommitterDate: Thu Apr 6 11:06:04 2023 +0200
 
-tests: lower demand for disk resources
+configure.ac: print locking dir
 
-Convert test to use a single skeleton and only different pieces
-keep in separate tests.
+Correcting output results from configure script when
+printing locking dir.
 
-Lower raid disk usage to smaller size and switch to ext4
-as way less demanding fileystem.
+Shuffle dmfilemapd close to dmeventd option and tracing.
+
+Couple indent changes.
 ---
- test/shell/vg-raid-takeover-1.sh | 149 ++++++++++++++++++++-------------------
- test/shell/vg-raid-takeover-2.sh | 139 +++---------------------------------
- test/shell/vg-raid-takeover-3.sh | 133 ++--------------------------------
- test/shell/vg-raid-takeover-4.sh | 124 ++------------------------------
- 4 files changed, 97 insertions(+), 448 deletions(-)
+ configure.ac | 92 +++++++++++++++++++++++++++---------------------------------
+ 1 file changed, 42 insertions(+), 50 deletions(-)
 
-diff --git a/test/shell/vg-raid-takeover-1.sh b/test/shell/vg-raid-takeover-1.sh
-index f186606a6..98e043aae 100644
---- a/test/shell/vg-raid-takeover-1.sh
-+++ b/test/shell/vg-raid-takeover-1.sh
-@@ -1,6 +1,6 @@
- #!/usr/bin/env bash
+diff --git a/configure.ac b/configure.ac
+index eed25d4db..efe5176db 100644
+--- a/configure.ac
++++ b/configure.ac
+@@ -964,14 +964,15 @@ dnl -- Build lvmlockd
+ AC_MSG_CHECKING([whether to build lvmlockd])
+ AC_MSG_RESULT([$BUILD_LVMLOCKD])
  
--# Copyright (C) 2015 Red Hat, Inc. All rights reserved.
-+# Copyright (C) 2023 Red Hat, Inc. All rights reserved.
- #
- # This copyrighted material is made available to anyone wishing to use,
- # modify, copy, or redistribute it subject to the terms and conditions
-@@ -16,13 +16,10 @@ test_description='Test VG takeover with raid LVs'
- SKIP_WITH_LVMLOCKD=1
- SKIP_WITH_LVMPOLLD=1
++DEFAULT_USE_LVMLOCKD=0
+ AS_IF([test "$BUILD_LVMLOCKD" = "yes"], [
+ 	AS_IF([test "$LVMPOLLD" = "no"], [AC_MSG_ERROR([cannot build lvmlockd with --disable-lvmpolld.])])
+ 	AS_IF([test "$BUILD_LVMPOLLD" = "no"], [BUILD_LVMPOLLD=yes; AC_MSG_WARN([Enabling lvmpolld - required by lvmlockd.])])
+ 	AC_MSG_CHECKING([defaults for use_lvmlockd])
+ 	AC_ARG_ENABLE(use_lvmlockd,
+-		[AS_HELP_STRING([--disable-use-lvmlockd], [disable usage of LVM lock daemon])],
+-		[AS_IF([test "$enableval" = "yes"], [DEFAULT_USE_LVMLOCKD=1], [DEFAULT_USE_LVMLOCKD=0])],
+-		[DEFAULT_USE_LVMLOCKD=1])
++		      [AS_HELP_STRING([--disable-use-lvmlockd], [disable usage of LVM lock daemon])],
++		      [use_lvmlockd=$enableval],[use_lvmlockd="yes"])
++	AS_IF([test "$use_lvmlockd" = "yes"], [DEFAULT_USE_LVMLOCKD=1])
+ 	AC_MSG_RESULT([$DEFAULT_USE_LVMLOCKD])
+ 	AC_DEFINE([LVMLOCKD_SUPPORT], 1, [Define to 1 to include code that uses lvmlockd.])
  
--print_lvmlocal() {
--	{ echo "local {"; printf "%s\n" "$@"; echo "}"; } >"$LVMLOCAL"
--}
+@@ -982,20 +983,19 @@ AS_IF([test "$BUILD_LVMLOCKD" = "yes"], [
+ 		    LVMLOCKD_PIDFILE="$DEFAULT_PID_DIR/lvmlockd.pid")
+ 	AC_DEFINE_UNQUOTED(LVMLOCKD_PIDFILE, ["$LVMLOCKD_PIDFILE"],
+ 			   [Path to lvmlockd pidfile.])
+-], [
+-	DEFAULT_USE_LVMLOCKD=0
+ ])
+ AC_DEFINE_UNQUOTED(DEFAULT_USE_LVMLOCKD, [$DEFAULT_USE_LVMLOCKD],
+ 		   [Use lvmlockd by default.])
+ 
+ ################################################################################
+ dnl -- Check lvmpolld
++DEFAULT_USE_LVMPOLLD=0
+ AS_IF([test "$BUILD_LVMPOLLD" = "yes"], [
+ 	AC_MSG_CHECKING([defaults for use_lvmpolld])
+ 	AC_ARG_ENABLE(use_lvmpolld,
+-		[AS_HELP_STRING([--disable-use-lvmpolld], [disable usage of LVM Poll Daemon])],
+-		[AS_IF([test "$enableval" = "yes"], [DEFAULT_USE_LVMPOLLD=1], [DEFAULT_USE_LVMPOLLD=0])],
+-		[DEFAULT_USE_LVMPOLLD=1])
++		      [AS_HELP_STRING([--disable-use-lvmpolld], [disable usage of LVM Poll Daemon])],
++		      [use_lvmpolld=$enableval], [use_lvmpolld="yes"])
++	AS_IF([test "$use_lvmpolld" = "yes"], [DEFAULT_USE_LVMPOLLD=1])
+ 	AC_MSG_RESULT([$DEFAULT_USE_LVMPOLLD])
+ 	AC_DEFINE([LVMPOLLD_SUPPORT], 1, [Define to 1 to include code that uses lvmpolld.])
+ 
+@@ -1006,39 +1006,24 @@ AS_IF([test "$BUILD_LVMPOLLD" = "yes"], [
+ 		    LVMPOLLD_PIDFILE="$DEFAULT_PID_DIR/lvmpolld.pid")
+ 	AC_DEFINE_UNQUOTED(LVMPOLLD_PIDFILE, ["$LVMPOLLD_PIDFILE"],
+ 			   [Path to lvmpolld pidfile.])
+-], [
+-	DEFAULT_USE_LVMPOLLD=0
+ ])
+ AC_DEFINE_UNQUOTED(DEFAULT_USE_LVMPOLLD, [$DEFAULT_USE_LVMPOLLD],
+ 		   [Use lvmpolld by default.])
+ 
+-################################################################################
+-dnl -- Check dmfilemapd
+-AC_MSG_CHECKING([whether to build dmfilemapd])
+-AC_ARG_ENABLE(dmfilemapd, AS_HELP_STRING([--enable-dmfilemapd],
+-					 [enable the dmstats filemap daemon]),
+-	      BUILD_DMFILEMAPD=$enableval, BUILD_DMFILEMAPD="no")
+-AC_MSG_RESULT([$BUILD_DMFILEMAPD])
+-AC_DEFINE([DMFILEMAPD], $BUILD_DMFILEMAPD, [Define to 1 to enable the device-mapper filemap daemon.])
 -
- . lib/inittest
+-dnl -- dmfilemapd requires FIEMAP
+-AS_IF([test "$BUILD_DMFILEMAPD" = "yes"], [
+-   AC_CHECK_HEADER([linux/fiemap.h], , [AC_MSG_ERROR(--enable-dmfilemapd requires fiemap.h)])
+-])
  
--aux prepare_devs 3 1024
-+aux have_raid 1 9 0 || skip
-+aux prepare_devs ${PREPARE_DEVS-3}
+ SYSTEMD_MIN_VERSION=0
+-PKG_CHECK_EXISTS(systemd >= 205, [SYSTEMD_MIN_VERSION=205], [])
++PKG_CHECK_EXISTS(systemd >= 221, [SYSTEMD_MIN_VERSION=221])
++PKG_CHECK_EXISTS(systemd >= 234, [SYSTEMD_MIN_VERSION=234])
  
- SIDFILE="etc/lvm_test.conf"
- LVMLOCAL="etc/lvmlocal.conf"
-@@ -30,6 +27,10 @@ LVMLOCAL="etc/lvmlocal.conf"
- DFDIR="$LVM_SYSTEM_DIR/devices"
- DF="$DFDIR/system.devices"
+ ################################################################################
+ dnl -- Build notifydbus
+-PKG_CHECK_EXISTS(systemd >= 221, [SYSTEMD_MIN_VERSION=221], [])
+ AC_MSG_CHECKING([whether to build notifydbus])
+ AC_ARG_ENABLE(notify-dbus,
+ 	      AS_HELP_STRING([--enable-notify-dbus],
+ 			     [enable LVM notification using dbus]),
+-	      AS_IF([test "$enableval" = "yes" && test "$SYSTEMD_MIN_VERSION" -lt 221],
+-		    AC_MSG_ERROR([Enabling notify-dbus requires systemd >= 221]))
+ 	      NOTIFYDBUS_SUPPORT=$enableval, NOTIFYDBUS_SUPPORT="no")
++AS_IF([test "$NOTIFYDBUS_SUPPORT" = "yes" && test "$SYSTEMD_MIN_VERSION" -lt 221],
++      [AC_MSG_ERROR([Enabling notify-dbus requires systemd >= 221])])
+ AC_MSG_RESULT([$NOTIFYDBUS_SUPPORT])
  
-+print_lvmlocal() {
-+	{ echo "local {"; printf "%s\n" "$@"; echo "}"; } >"$LVMLOCAL"
-+}
+ AS_IF([test "$NOTIFYDBUS_SUPPORT" = "yes"],
+@@ -1064,7 +1049,7 @@ AS_IF([test "$SYSTEMD_JOURNAL_SUPPORT" = "yes"],
+ 
+ ################################################################################
+ dnl -- Build appmachineid when header file sd-id128.h is present
+-PKG_CHECK_EXISTS(systemd >= 234, [SYSTEMD_MIN_VERSION=234  APP_MACHINEID_SUPPORT="maybe"], [APP_MACHINEID_SUPPORT="no"])
++AS_IF([test "$SYSTEMD_MIN_VERSION" -ge 234], [APP_MACHINEID_SUPPORT="maybe"], [APP_MACHINEID_SUPPORT="no"])
+ AC_CHECK_HEADER([systemd/sd-id128.h],
+ 		[AS_IF([test "$APP_MACHINEID_SUPPORT" != "no"], [APP_MACHINEID_SUPPORT="yes"])],
+ 		[APP_MACHINEID_SUPPORT="no"])
+@@ -1091,12 +1076,10 @@ AC_ARG_WITH(systemd-run,
+ 	    AS_HELP_STRING([--with-systemd-run=PATH],
+ 			   [systemd-run tool: [autodetect]]),
+ 			   SYSTEMD_RUN_CMD=$withval, SYSTEMD_RUN_CMD="autodetect")
+-
+-AS_IF([test "$SYSTEMD_RUN_CMD" = "autodetect"],
+-      [AC_PATH_TOOL(SYSTEMD_RUN_CMD, systemd-run)
+-       AS_IF([test -z "$SYSTEMD_RUN_CMD"], [SYSTEMD_RUN_CMD="/usr/bin/systemd-run"])],
+-      [AC_MSG_CHECKING([for defined systemd-run])
+-       AC_MSG_RESULT([$SYSTEMD_RUN_CMD])])
++AS_IF([test "$SYSTEMD_RUN_CMD" = "autodetect"], [AC_PATH_TOOL(SYSTEMD_RUN_CMD, systemd-run)])
++AC_MSG_CHECKING([for app running udev background service])
++AS_IF([test -z "$SYSTEMD_RUN_CMD"], [SYSTEMD_RUN_CMD="/usr/bin/systemd-run"])
++AC_MSG_RESULT([$SYSTEMD_RUN_CMD])
+ 
+ ################################################################################
+ 
+@@ -1329,11 +1312,25 @@ AS_IF([test "$BUILD_DMEVENTD" = "yes"], [
+    AC_DEFINE([DMEVENTD], 1, [Define to 1 to enable the device-mapper event daemon.])
+ ])
+ 
++################################################################################
++dnl -- Check dmfilemapd
++AC_MSG_CHECKING([whether to build dmfilemapd])
++AC_ARG_ENABLE(dmfilemapd, AS_HELP_STRING([--enable-dmfilemapd],
++					 [enable the dmstats filemap daemon]),
++	      BUILD_DMFILEMAPD=$enableval, BUILD_DMFILEMAPD="no")
++AC_MSG_RESULT([$BUILD_DMFILEMAPD])
 +
- # Avoid system id validation in the devices file
- # which gets in the way of the test switching the
- # local system id.
-@@ -40,54 +41,74 @@ clear_df_systemid() {
- 	fi
- }
- 
-+test_check_mount() {
-+	pvs -o+missing
-+	vgs -o+systemid,partial $vg
-+	lvs -a -o+devices $vg
++dnl -- dmfilemapd requires FIEMAP
++AS_IF([test "$BUILD_DMFILEMAPD" = "yes"],
++      [AC_CHECK_HEADER([linux/fiemap.h], [],    
++		      ,[AC_MSG_ERROR(--enable-dmfilemapd requires fiemap.h)])
++       AC_DEFINE([DMFILEMAPD], 1, [Define to 1 to enable the device-mapper filemap daemon.])])
 +
-+	mount "$DM_DEV_DIR/$vg/$lv1" "$mount_dir"
-+	diff pattern1 "$mount_dir/pattern1a"
-+	diff pattern1 "$mount_dir/pattern1c"
-+	umount "$mount_dir"
-+	fsck -n "$DM_DEV_DIR/$vg/$lv1"
-+
-+	mount "$DM_DEV_DIR/$vg/$lv2" "$mount_dir"
-+	diff pattern1 "$mount_dir/pattern1a"
-+	diff pattern1 "$mount_dir/pattern1c"
-+	umount "$mount_dir"
-+	fsck -n "$DM_DEV_DIR/$vg/$lv2"
-+}
-+
-+
- SID1=sidfoofile1
- SID2=sidfoofile2
- echo "$SID1" > "$SIDFILE"
- clear_df_systemid
- aux lvmconf "global/system_id_source = file" \
--	    "global/system_id_file = \"$SIDFILE\""
-+            "global/system_id_file = \"$SIDFILE\""
- vgcreate $vg "$dev1" "$dev2" "$dev3"
- vgs -o+systemid,partial $vg
- check vg_field $vg systemid "$SID1"
+ ################################################################################
+ dnl -- getline included in recent libc
+ 
+-AC_CHECK_LIB(c, getline, AC_DEFINE([HAVE_GETLINE], 1,
+-  [Define to 1 if getline is available.]))
++AC_CHECK_LIB(c, getline,
++	     [AC_DEFINE([HAVE_GETLINE], 1, [Define to 1 if getline is available.])])
+ 
+ ################################################################################
+ dnl -- canonicalize_file_name included in recent libc
+@@ -1586,17 +1583,13 @@ AC_ARG_WITH(systemdsystemunitdir,
+ 	    AS_HELP_STRING([--with-systemdsystemunitdir=DIR],
+ 			   [systemd service files in DIR]))
+ 
+-AS_IF([test -z "$with_systemdsystemunitdir"], [
+-	PKG_CHECK_VAR([systemdsystemunitdir], [systemd], [systemdsystemunitdir], [], [
+-		systemdsystemunitdir='${exec_prefix}/lib/systemd/system'
+-	])
+-], [
+-	systemdsystemunitdir="$with_systemdsystemunitdir"
+-])
++AS_IF([test -z "$with_systemdsystemunitdir"],
++      [PKG_CHECK_VAR([systemdsystemunitdir], [systemd], [systemdsystemunitdir], [],
++		     [systemdsystemunitdir='${exec_prefix}/lib/systemd/system'])],
++      [systemdsystemunitdir="$with_systemdsystemunitdir"])
+ 
+-PKG_CHECK_VAR([systemdutildir], [systemd], [systemdutildir], [], [
+-	systemdutildir='${exec_prefix}/lib/systemd'
+-])
++PKG_CHECK_VAR([systemdutildir], [systemd], [systemdutildir], [],
++	      [systemdutildir='${exec_prefix}/lib/systemd'])
+ 
+ ################################################################################
+ AC_ARG_WITH(tmpfilesdir,
+@@ -1744,13 +1737,12 @@ DEFAULT_SYS_LOCK_DIR="$RUN_DIR/lock"
+ test -d "$DEFAULT_SYS_LOCK_DIR" || DEFAULT_SYS_LOCK_DIR="/var/lock"
+ 
+ # Support configurable locking subdir for lvm
++AC_MSG_CHECKING([for default lock directory])
+ AC_ARG_WITH(default-locking-dir,
+ 	    AS_HELP_STRING([--with-default-locking-dir=DIR],
+ 			   [default locking directory [autodetect_lock_dir/lvm]]),
+-	    DEFAULT_LOCK_DIR=$withval,
+-	    [AC_MSG_CHECKING([for default lock directory])
+-	     DEFAULT_LOCK_DIR="$DEFAULT_SYS_LOCK_DIR/lvm"
+-	     AC_MSG_RESULT([$DEFAULT_LOCK_DIR])])
++	    [DEFAULT_LOCK_DIR=$withval], [DEFAULT_LOCK_DIR="$DEFAULT_SYS_LOCK_DIR/lvm"])
++AC_MSG_RESULT([$DEFAULT_LOCK_DIR])
+ AC_DEFINE_UNQUOTED(DEFAULT_LOCK_DIR, ["$DEFAULT_LOCK_DIR"],
+ 		   [Name of default locking directory.])
  
--lvcreate --type raid1 -L 400 -m1 -n $lv1 $vg "$dev1" "$dev2"
--lvcreate --type raid1 -L 400 -m2 -n $lv2 $vg "$dev1" "$dev2" "$dev3"
-+lvcreate --type raid1 -L 8 -m1 -n $lv1 $vg "$dev1" "$dev2"
-+lvcreate --type raid1 -L 8 -m2 -n $lv2 $vg "$dev1" "$dev2" "$dev3"
- 
- # give some time for raid init
--sleep 2
-+aux wait_for_sync $vg $lv1
-+aux wait_for_sync $vg $lv2
- lvs -a -o+devices $vg
- 
--mkfs.xfs -f "$DM_DEV_DIR/$vg/$lv1"
--mkfs.xfs -f "$DM_DEV_DIR/$vg/$lv2"
-+mkfs.ext4 "$DM_DEV_DIR/$vg/$lv1"
-+mkfs.ext4 "$DM_DEV_DIR/$vg/$lv2"
- 
- dd if=/dev/urandom of=pattern1 bs=512K count=1
- 
- mount_dir="mnt_takeover"
- mkdir -p "$mount_dir"
- 
--mount "$DM_DEV_DIR/$vg/$lv1" $mount_dir
--dd if=/dev/zero of=$mount_dir/file1 bs=4096 count=1024
--cp pattern1 $mount_dir/pattern1a
--cp pattern1 $mount_dir/pattern1b
--umount $mount_dir
-+mount "$DM_DEV_DIR/$vg/$lv1" "$mount_dir"
-+dd if=/dev/zero of="$mount_dir/file1" bs=1M count=4 oflag=direct
-+cp pattern1 "$mount_dir/pattern1a"
-+cp pattern1 "$mount_dir/pattern1b"
-+umount "$mount_dir"
- 
--mount "$DM_DEV_DIR/$vg/$lv2" $mount_dir
--dd if=/dev/zero of=$mount_dir/file1 bs=4096 count=1024
--cp pattern1 $mount_dir/pattern1a
--cp pattern1 $mount_dir/pattern1b
--umount $mount_dir
-+mount "$DM_DEV_DIR/$vg/$lv2" "$mount_dir"
-+dd if=/dev/zero of="$mount_dir/file1" bs=1M count=4 oflag=direct
-+cp pattern1 "$mount_dir/pattern1a"
-+cp pattern1 "$mount_dir/pattern1b"
-+umount "$mount_dir"
- 
- vgchange -an $vg
- 
- # make the vg foreign
--vgchange --yes --systemid $SID2 $vg
-+vgchange --yes --systemid "$SID2" $vg
- not vgs $vg
- 
- # make one dev missing
- aux hide_dev "$dev1"
- 
- # take over the vg, like cluster failover would do
--vgchange --majoritypvs --config "local/extra_system_ids=[\"${SID2}\"]" --systemid $SID1 $vg
-+vgchange --majoritypvs --config "local/extra_system_ids=[\"${SID2}\"]" --systemid "$SID1" $vg
- pvs -o+missing
- vgs -o+systemid,partial $vg
- lvs -a -o+devices $vg
-@@ -95,28 +116,37 @@ lvs -a -o+devices $vg
- lvchange -ay --activationmode degraded $vg/$lv1
- lvchange -ay --activationmode degraded $vg/$lv2
- 
--mount "$DM_DEV_DIR/$vg/$lv1" $mount_dir
--dd of=/dev/null if=$mount_dir/file1 bs=4096 count=1024
--diff pattern1 $mount_dir/pattern1a
--diff pattern1 $mount_dir/pattern1b
--rm $mount_dir/pattern1b
--rm $mount_dir/file1
--cp pattern1 $mount_dir/pattern1c
--umount $mount_dir
--
--mount "$DM_DEV_DIR/$vg/$lv2" $mount_dir
--dd of=/dev/null if=$mount_dir/file1 bs=4096 count=1024
--diff pattern1 $mount_dir/pattern1a
--diff pattern1 $mount_dir/pattern1b
--rm $mount_dir/pattern1b
--rm $mount_dir/file1
--cp pattern1 $mount_dir/pattern1c
--umount $mount_dir
-+mount "$DM_DEV_DIR/$vg/$lv1" "$mount_dir"
-+dd of=/dev/null if="$mount_dir/file1" bs=1M count=4
-+diff pattern1 "$mount_dir/pattern1a"
-+diff pattern1 "$mount_dir/pattern1b"
-+rm "$mount_dir/pattern1b"
-+rm "$mount_dir/file1"
-+cp pattern1 "$mount_dir/pattern1c"
-+umount "$mount_dir"
-+
-+mount "$DM_DEV_DIR/$vg/$lv2" "$mount_dir"
-+dd of=/dev/null if="$mount_dir/file1" bs=1M count=4
-+diff pattern1 "$mount_dir/pattern1a"
-+diff pattern1 "$mount_dir/pattern1b"
-+rm "$mount_dir/pattern1b"
-+rm "$mount_dir/file1"
-+cp pattern1 "$mount_dir/pattern1c"
-+umount "$mount_dir"
- 
- pvs -o+missing
- vgs -o+systemid,partial $vg
- lvs -a -o+devices $vg
- 
-+
-+
-+#----------------------------------------------------------
-+# test will continue differently when var OTHER_TEST is set
-+#----------------------------------------------------------
-+test -n "${CONTINUE_ELSEWHERE-}" && return 0
-+
-+
-+
- # fails because the missing dev is used by lvs
- not vgreduce --removemissing $vg
- # works because lvs can be used with missing leg
-@@ -131,19 +161,9 @@ lvconvert --repair $vg/$lv1
- # fails to find another disk to use to repair
- not lvconvert -y --repair $vg/$lv2
- 
--pvs -o+missing
--vgs -o+systemid,partial $vg
--lvs -a -o+devices $vg
- 
--mount "$DM_DEV_DIR/$vg/$lv1" $mount_dir
--diff pattern1 $mount_dir/pattern1a
--diff pattern1 $mount_dir/pattern1c
--umount $mount_dir
-+test_check_mount
- 
--mount "$DM_DEV_DIR/$vg/$lv2" $mount_dir
--diff pattern1 $mount_dir/pattern1a
--diff pattern1 $mount_dir/pattern1c
--umount $mount_dir
- 
- aux unhide_dev "$dev1"
- 
-@@ -162,36 +182,21 @@ lvconvert -y -m-1 $vg/$lv2
- # remove the failed unused leg, leaving 1 leg
- lvconvert -y -m-1 $vg/$lv1
- 
--pvs -o+missing
--vgs -o+systemid,partial,partial $vg
--lvs -a -o+devices $vg
- 
--mount "$DM_DEV_DIR/$vg/$lv1" $mount_dir
--diff pattern1 $mount_dir/pattern1a
--diff pattern1 $mount_dir/pattern1c
--umount $mount_dir
-+test_check_mount
- 
--mount "$DM_DEV_DIR/$vg/$lv2" $mount_dir
--diff pattern1 $mount_dir/pattern1a
--diff pattern1 $mount_dir/pattern1c
--umount $mount_dir
- 
- vgextend $vg "$dev1"
- lvconvert -y -m+1 $vg/$lv1 "$dev1"
- lvconvert -y -m+1 $vg/$lv2 "$dev1"
- 
- # let raid sync new leg
--sleep 3
-+aux wait_for_sync $vg $lv1
-+aux wait_for_sync $vg $lv2
-+
- 
--mount "$DM_DEV_DIR/$vg/$lv1" $mount_dir
--diff pattern1 $mount_dir/pattern1a
--diff pattern1 $mount_dir/pattern1c
--umount $mount_dir
-+test_check_mount
- 
--mount "$DM_DEV_DIR/$vg/$lv2" $mount_dir
--diff pattern1 $mount_dir/pattern1a
--diff pattern1 $mount_dir/pattern1c
--umount $mount_dir
- 
- vgchange -an $vg
- vgremove -f $vg
-diff --git a/test/shell/vg-raid-takeover-2.sh b/test/shell/vg-raid-takeover-2.sh
-index e0b46dece..afc8db432 100644
---- a/test/shell/vg-raid-takeover-2.sh
-+++ b/test/shell/vg-raid-takeover-2.sh
-@@ -1,6 +1,6 @@
- #!/usr/bin/env bash
- 
--# Copyright (C) 2015 Red Hat, Inc. All rights reserved.
-+# Copyright (C) 2023 Red Hat, Inc. All rights reserved.
- #
- # This copyrighted material is made available to anyone wishing to use,
- # modify, copy, or redistribute it subject to the terms and conditions
-@@ -12,110 +12,10 @@
- 
- test_description='Test VG takeover with raid LVs'
- 
--# test does not apply to lvmlockd
--SKIP_WITH_LVMLOCKD=1
--SKIP_WITH_LVMPOLLD=1
--
--print_lvmlocal() {
--	{ echo "local {"; printf "%s\n" "$@"; echo "}"; } >"$LVMLOCAL"
--}
--
--. lib/inittest
--
--aux prepare_devs 4 1024
--
--SIDFILE="etc/lvm_test.conf"
--LVMLOCAL="etc/lvmlocal.conf"
--
--DFDIR="$LVM_SYSTEM_DIR/devices"
--DF="$DFDIR/system.devices"
--
--# Avoid system id validation in the devices file
--# which gets in the way of the test switching the
--# local system id.
--clear_df_systemid() {
--	if [[ -f $DF ]]; then
--		sed -e "s|SYSTEMID=.||" "$DF" > tmpdf
--		cp tmpdf $DF
--	fi
--}
--
--SID1=sidfoofile1
--SID2=sidfoofile2
--echo "$SID1" > "$SIDFILE"
--clear_df_systemid
--aux lvmconf "global/system_id_source = file" \
--	    "global/system_id_file = \"$SIDFILE\""
--vgcreate $vg "$dev1" "$dev2" "$dev3"
--vgs -o+systemid,partial $vg
--check vg_field $vg systemid "$SID1"
--
--lvcreate --type raid1 -L 400 -m1 -n $lv1 $vg "$dev1" "$dev2"
--lvcreate --type raid1 -L 400 -m2 -n $lv2 $vg "$dev1" "$dev2" "$dev3"
--
--# give some time for raid init
--sleep 2
--lvs -a -o+devices $vg
--
--mkfs.xfs -f "$DM_DEV_DIR/$vg/$lv1"
--mkfs.xfs -f "$DM_DEV_DIR/$vg/$lv2"
--
--dd if=/dev/urandom of=pattern1 bs=512K count=1
--
--mount_dir="mnt_takeover"
--mkdir -p "$mount_dir"
--
--mount "$DM_DEV_DIR/$vg/$lv1" $mount_dir
--dd if=/dev/zero of=$mount_dir/file1 bs=4096 count=1024
--cp pattern1 $mount_dir/pattern1a
--cp pattern1 $mount_dir/pattern1b
--umount $mount_dir
-+CONTINUE_ELSEWHERE=y
-+PREPARE_DEVS=4
- 
--mount "$DM_DEV_DIR/$vg/$lv2" $mount_dir
--dd if=/dev/zero of=$mount_dir/file1 bs=4096 count=1024
--cp pattern1 $mount_dir/pattern1a
--cp pattern1 $mount_dir/pattern1b
--umount $mount_dir
--
--vgchange -an $vg
--
--# make the vg foreign
--vgchange --yes --systemid $SID2 $vg
--not vgs $vg
--
--# make one dev missing
--aux hide_dev "$dev1"
--
--# take over the vg, like cluster failover would do
--vgchange --majoritypvs --config "local/extra_system_ids=[\"${SID2}\"]" --systemid $SID1 $vg
--pvs -o+missing
--vgs -o+systemid,partial $vg
--lvs -a -o+devices $vg
--
--lvchange -ay --activationmode degraded $vg/$lv1
--lvchange -ay --activationmode degraded $vg/$lv2
--
--mount "$DM_DEV_DIR/$vg/$lv1" $mount_dir
--dd of=/dev/null if=$mount_dir/file1 bs=4096 count=1024
--diff pattern1 $mount_dir/pattern1a
--diff pattern1 $mount_dir/pattern1b
--rm $mount_dir/pattern1b
--rm $mount_dir/file1
--cp pattern1 $mount_dir/pattern1c
--umount $mount_dir
--
--mount "$DM_DEV_DIR/$vg/$lv2" $mount_dir
--dd of=/dev/null if=$mount_dir/file1 bs=4096 count=1024
--diff pattern1 $mount_dir/pattern1a
--diff pattern1 $mount_dir/pattern1b
--rm $mount_dir/pattern1b
--rm $mount_dir/file1
--cp pattern1 $mount_dir/pattern1c
--umount $mount_dir
--
--pvs -o+missing
--vgs -o+systemid,partial $vg
--lvs -a -o+devices $vg
-+. ./shell/vg-raid-takeover-1.sh
- 
- # fails because the missing dev is used by lvs
- not vgreduce --removemissing $vg
-@@ -147,42 +47,19 @@ vgextend $vg "$dev4"
- 
- lvconvert -y --repair $vg/$lv2
- 
--pvs -o+missing
--vgs -o+systemid,partial $vg
--lvs -a -o+devices $vg
- 
--mount "$DM_DEV_DIR/$vg/$lv1" $mount_dir
--diff pattern1 $mount_dir/pattern1a
--diff pattern1 $mount_dir/pattern1c
--umount $mount_dir
-+test_check_mount
- 
--mount "$DM_DEV_DIR/$vg/$lv2" $mount_dir
--diff pattern1 $mount_dir/pattern1a
--diff pattern1 $mount_dir/pattern1c
--umount $mount_dir
- 
- # let the new legs sync
--sleep 3
-+aux wait_for_sync $vg $lv1
-+aux wait_for_sync $vg $lv2
- 
- vgck --updatemetadata $vg
- 
--pvs -o+missing
--vgs -o+systemid,partial $vg
--lvs -a -o+devices $vg
--
--mount "$DM_DEV_DIR/$vg/$lv1" $mount_dir
--diff pattern1 $mount_dir/pattern1a
--diff pattern1 $mount_dir/pattern1c
--umount $mount_dir
- 
--mount "$DM_DEV_DIR/$vg/$lv2" $mount_dir
--diff pattern1 $mount_dir/pattern1a
--diff pattern1 $mount_dir/pattern1c
--umount $mount_dir
-+test_check_mount
- 
--pvs -o+missing
--vgs -o+systemid,partial $vg
--lvs -a -o+devices $vg
- 
- vgchange -an $vg
- vgremove -f $vg
-diff --git a/test/shell/vg-raid-takeover-3.sh b/test/shell/vg-raid-takeover-3.sh
-index 5df53d1d7..0050c1918 100644
---- a/test/shell/vg-raid-takeover-3.sh
-+++ b/test/shell/vg-raid-takeover-3.sh
-@@ -1,6 +1,6 @@
- #!/usr/bin/env bash
- 
--# Copyright (C) 2015 Red Hat, Inc. All rights reserved.
-+# Copyright (C) 2023 Red Hat, Inc. All rights reserved.
- #
- # This copyrighted material is made available to anyone wishing to use,
- # modify, copy, or redistribute it subject to the terms and conditions
-@@ -12,111 +12,11 @@
- 
- test_description='Test VG takeover with raid LVs'
- 
--# test does not apply to lvmlockd
--SKIP_WITH_LVMLOCKD=1
--SKIP_WITH_LVMPOLLD=1
--
--print_lvmlocal() {
--	{ echo "local {"; printf "%s\n" "$@"; echo "}"; } >"$LVMLOCAL"
--}
--
--. lib/inittest
--
--aux prepare_devs 3 1024
--
--SIDFILE="etc/lvm_test.conf"
--LVMLOCAL="etc/lvmlocal.conf"
--
--DFDIR="$LVM_SYSTEM_DIR/devices"
--DF="$DFDIR/system.devices"
--
--# Avoid system id validation in the devices file
--# which gets in the way of the test switching the
--# local system id.
--clear_df_systemid() {
--	if [[ -f $DF ]]; then
--		sed -e "s|SYSTEMID=.||" "$DF" > tmpdf
--		cp tmpdf $DF
--	fi
--}
--
--SID1=sidfoofile1
--SID2=sidfoofile2
--echo "$SID1" > "$SIDFILE"
--clear_df_systemid
--aux lvmconf "global/system_id_source = file" \
--	    "global/system_id_file = \"$SIDFILE\""
--vgcreate $vg "$dev1" "$dev2" "$dev3"
--vgs -o+systemid,partial $vg
--check vg_field $vg systemid "$SID1"
--
--lvcreate --type raid1 -L 400 -m1 -n $lv1 $vg "$dev1" "$dev2"
--lvcreate --type raid1 -L 400 -m2 -n $lv2 $vg "$dev1" "$dev2" "$dev3"
--
--# give some time for raid init
--sleep 2
--lvs -a -o+devices $vg
--
--mkfs.xfs -f "$DM_DEV_DIR/$vg/$lv1"
--mkfs.xfs -f "$DM_DEV_DIR/$vg/$lv2"
--
--dd if=/dev/urandom of=pattern1 bs=512K count=1
--
--mount_dir="mnt_takeover"
--mkdir -p "$mount_dir"
--
--mount "$DM_DEV_DIR/$vg/$lv1" $mount_dir
--dd if=/dev/zero of=$mount_dir/file1 bs=4096 count=1024
--cp pattern1 $mount_dir/pattern1a
--cp pattern1 $mount_dir/pattern1b
--umount $mount_dir
--
--mount "$DM_DEV_DIR/$vg/$lv2" $mount_dir
--dd if=/dev/zero of=$mount_dir/file1 bs=4096 count=1024
--cp pattern1 $mount_dir/pattern1a
--cp pattern1 $mount_dir/pattern1b
--umount $mount_dir
--
--vgchange -an $vg
--
--# make the vg foreign
--vgchange --yes --systemid $SID2 $vg
--not vgs $vg
--
--# make one dev missing
--aux hide_dev "$dev1"
--
--# take over the vg, like cluster failover would do
--vgchange --majoritypvs --config "local/extra_system_ids=[\"${SID2}\"]" --systemid $SID1 $vg
--pvs -o+missing
--vgs -o+systemid,partial $vg
--lvs -a -o+devices $vg
--
--lvchange -ay --activationmode degraded $vg/$lv1
--lvchange -ay --activationmode degraded $vg/$lv2
--
--mount "$DM_DEV_DIR/$vg/$lv1" $mount_dir
--dd of=/dev/null if=$mount_dir/file1 bs=4096 count=1024
--diff pattern1 $mount_dir/pattern1a
--diff pattern1 $mount_dir/pattern1b
--rm $mount_dir/pattern1b
--rm $mount_dir/file1
--cp pattern1 $mount_dir/pattern1c
--umount $mount_dir
--
--mount "$DM_DEV_DIR/$vg/$lv2" $mount_dir
--dd of=/dev/null if=$mount_dir/file1 bs=4096 count=1024
--diff pattern1 $mount_dir/pattern1a
--diff pattern1 $mount_dir/pattern1b
--rm $mount_dir/pattern1b
--rm $mount_dir/file1
--cp pattern1 $mount_dir/pattern1c
--umount $mount_dir
-+CONTINUE_ELSEWHERE=y
- 
--pvs -o+missing
--vgs -o+systemid,partial $vg
--lvs -a -o+devices $vg
-+. ./shell/vg-raid-takeover-1.sh
- 
-+#-----------------------
- # replaces dev1 with dev3
- lvconvert -y --repair $vg/$lv1
- 
-@@ -124,24 +24,15 @@ lvconvert -y --repair $vg/$lv1
- # but that's not allowed until the missing disk is removed from the vg
- not lvconvert -y -m-1 $vg/$lv2
- vgreduce --removemissing --mirrorsonly --force $vg
-+
- pvs -o+missing
- vgs -o+systemid,partial $vg
- lvs -a -o+devices $vg
- lvconvert -y -m-1 $vg/$lv2
- 
--pvs -o+missing
--vgs -o+systemid,partial $vg
--lvs -a -o+devices $vg
- 
--mount "$DM_DEV_DIR/$vg/$lv1" $mount_dir
--diff pattern1 $mount_dir/pattern1a
--diff pattern1 $mount_dir/pattern1c
--umount $mount_dir
-+test_check_mount
- 
--mount "$DM_DEV_DIR/$vg/$lv2" $mount_dir
--diff pattern1 $mount_dir/pattern1a
--diff pattern1 $mount_dir/pattern1c
--umount $mount_dir
- 
- aux unhide_dev "$dev1"
- 
-@@ -153,19 +44,9 @@ vgextend $vg "$dev1"
- pvs -o+missing
- lvconvert -y -m+1 $vg/$lv2 "$dev1"
- 
--pvs -o+missing
--vgs -o+systemid,partial $vg
--lvs -a -o+devices $vg
- 
--mount "$DM_DEV_DIR/$vg/$lv1" $mount_dir
--diff pattern1 $mount_dir/pattern1a
--diff pattern1 $mount_dir/pattern1c
--umount $mount_dir
-+test_check_mount
- 
--mount "$DM_DEV_DIR/$vg/$lv2" $mount_dir
--diff pattern1 $mount_dir/pattern1a
--diff pattern1 $mount_dir/pattern1c
--umount $mount_dir
- 
- vgchange -an $vg
- vgremove -f $vg
-diff --git a/test/shell/vg-raid-takeover-4.sh b/test/shell/vg-raid-takeover-4.sh
-index bdb78a215..8e29f2d7b 100644
---- a/test/shell/vg-raid-takeover-4.sh
-+++ b/test/shell/vg-raid-takeover-4.sh
-@@ -1,6 +1,6 @@
- #!/usr/bin/env bash
- 
--# Copyright (C) 2015 Red Hat, Inc. All rights reserved.
-+# Copyright (C) 2023 Red Hat, Inc. All rights reserved.
- #
- # This copyrighted material is made available to anyone wishing to use,
- # modify, copy, or redistribute it subject to the terms and conditions
-@@ -12,110 +12,10 @@
- 
- test_description='Test VG takeover with raid LVs'
- 
--# test does not apply to lvmlockd
--SKIP_WITH_LVMLOCKD=1
--SKIP_WITH_LVMPOLLD=1
-+CONTINUE_ELSEWHERE=y
-+PREPARE_DEVS=4
- 
--print_lvmlocal() {
--	{ echo "local {"; printf "%s\n" "$@"; echo "}"; } >"$LVMLOCAL"
--}
--
--. lib/inittest
--
--aux prepare_devs 4 1024
--
--SIDFILE="etc/lvm_test.conf"
--LVMLOCAL="etc/lvmlocal.conf"
--
--DFDIR="$LVM_SYSTEM_DIR/devices"
--DF="$DFDIR/system.devices"
--
--# Avoid system id validation in the devices file
--# which gets in the way of the test switching the
--# local system id.
--clear_df_systemid() {
--	if [[ -f $DF ]]; then
--		sed -e "s|SYSTEMID=.||" "$DF" > tmpdf
--		cp tmpdf $DF
--	fi
--}
--
--SID1=sidfoofile1
--SID2=sidfoofile2
--echo "$SID1" > "$SIDFILE"
--clear_df_systemid
--aux lvmconf "global/system_id_source = file" \
--	    "global/system_id_file = \"$SIDFILE\""
--vgcreate $vg "$dev1" "$dev2" "$dev3"
--vgs -o+systemid,partial $vg
--check vg_field $vg systemid "$SID1"
--
--lvcreate --type raid1 -L 400 -m1 -n $lv1 $vg "$dev1" "$dev2"
--lvcreate --type raid1 -L 400 -m2 -n $lv2 $vg "$dev1" "$dev2" "$dev3"
--
--# give some time for raid init
--sleep 2
--lvs -a -o+devices $vg
--
--mkfs.xfs -f "$DM_DEV_DIR/$vg/$lv1"
--mkfs.xfs -f "$DM_DEV_DIR/$vg/$lv2"
--
--dd if=/dev/urandom of=pattern1 bs=512K count=1
--
--mount_dir="mnt_takeover"
--mkdir -p "$mount_dir"
--
--mount "$DM_DEV_DIR/$vg/$lv1" $mount_dir
--dd if=/dev/zero of=$mount_dir/file1 bs=4096 count=1024
--cp pattern1 $mount_dir/pattern1a
--cp pattern1 $mount_dir/pattern1b
--umount $mount_dir
--
--mount "$DM_DEV_DIR/$vg/$lv2" $mount_dir
--dd if=/dev/zero of=$mount_dir/file1 bs=4096 count=1024
--cp pattern1 $mount_dir/pattern1a
--cp pattern1 $mount_dir/pattern1b
--umount $mount_dir
--
--vgchange -an $vg
--
--# make the vg foreign
--vgchange --yes --systemid $SID2 $vg
--not vgs $vg
--
--# make one dev missing
--aux hide_dev "$dev1"
--
--# take over the vg, like cluster failover would do
--vgchange --majoritypvs --config "local/extra_system_ids=[\"${SID2}\"]" --systemid $SID1 $vg
--pvs -o+missing
--vgs -o+systemid,partial $vg
--lvs -a -o+devices $vg
--
--lvchange -ay --activationmode degraded $vg/$lv1
--lvchange -ay --activationmode degraded $vg/$lv2
--
--mount "$DM_DEV_DIR/$vg/$lv1" $mount_dir
--dd of=/dev/null if=$mount_dir/file1 bs=4096 count=1024
--diff pattern1 $mount_dir/pattern1a
--diff pattern1 $mount_dir/pattern1b
--rm $mount_dir/pattern1b
--rm $mount_dir/file1
--cp pattern1 $mount_dir/pattern1c
--umount $mount_dir
--
--mount "$DM_DEV_DIR/$vg/$lv2" $mount_dir
--dd of=/dev/null if=$mount_dir/file1 bs=4096 count=1024
--diff pattern1 $mount_dir/pattern1a
--diff pattern1 $mount_dir/pattern1b
--rm $mount_dir/pattern1b
--rm $mount_dir/file1
--cp pattern1 $mount_dir/pattern1c
--umount $mount_dir
--
--pvs -o+missing
--vgs -o+systemid,partial $vg
--lvs -a -o+devices $vg
-+. ./shell/vg-raid-takeover-1.sh
- 
- # unhide_dev
- # the device reappears before the LVs are repaired
-@@ -129,23 +29,9 @@ lvs -a -o+devices $vg
- 
- vgextend --restoremissing $vg "$dev1"
- 
--pvs -o+missing
--vgs -o+systemid,partial $vg
--lvs -a -o+devices $vg
- 
--mount "$DM_DEV_DIR/$vg/$lv1" $mount_dir
--diff pattern1 $mount_dir/pattern1a
--diff pattern1 $mount_dir/pattern1c
--umount $mount_dir
-+test_check_mount
- 
--mount "$DM_DEV_DIR/$vg/$lv2" $mount_dir
--diff pattern1 $mount_dir/pattern1a
--diff pattern1 $mount_dir/pattern1c
--umount $mount_dir
--
--pvs -o+missing
--vgs -o+systemid,partial $vg
--lvs -a -o+devices $vg
- 
- vgchange -an $vg
- vgremove -f $vg
 
