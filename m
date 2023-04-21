@@ -1,38 +1,59 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Mon, 24 Apr 2023 22:14:38 +0000 (GMT)
-Subject: main - tests: use 300M lv size for xfs
-Message-ID: <20230424221438.7F4FC3858D39@sourceware.org>
+Date: Fri, 21 Apr 2023 12:53:34 +0000 (GMT)
+Subject: main - aux: add corrupt_dev
+Message-ID: <20230421125334.625783858C83@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=7c8901dabde8d962a95a827f249ad50a86b0a42c
-Commit:        7c8901dabde8d962a95a827f249ad50a86b0a42c
-Parent:        e42b56c31b71751bcd9d9cc9bae765433fa68027
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=c331a3b1da280f78aefcfc8dad82eb042022bc84
+Commit:        c331a3b1da280f78aefcfc8dad82eb042022bc84
+Parent:        11562bcc6b9dc09eb0c5bccb69a7741dec9e626b
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Mon Apr 24 22:18:10 2023 +0200
+AuthorDate:    Fri Apr 21 01:43:13 2023 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Tue Apr 25 00:12:31 2023 +0200
+CommitterDate: Fri Apr 21 14:52:43 2023 +0200
 
-tests: use 300M lv size for xfs
+aux: add corrupt_dev
 
+Add function to corrupt some bytes in give file path presenting
+a device.  1st. patern in just once replaced with 2nd. pattern.
+
+Usable to simulate some bit corruption for integrity devices.
 ---
- test/shell/integrity-large.sh | 2 +-
- 1 file changed, 1 insertion(+), 1 deletion(-)
+ test/lib/aux.sh | 19 +++++++++++++++++++
+ 1 file changed, 19 insertions(+)
 
-diff --git a/test/shell/integrity-large.sh b/test/shell/integrity-large.sh
-index 68822e3ef..37823ab96 100644
---- a/test/shell/integrity-large.sh
-+++ b/test/shell/integrity-large.sh
-@@ -96,7 +96,7 @@ _verify_data_on_lv() {
- # be extended from 4MB to 8MB.
+diff --git a/test/lib/aux.sh b/test/lib/aux.sh
+index 3ab599f60..33710a007 100644
+--- a/test/lib/aux.sh
++++ b/test/lib/aux.sh
+@@ -952,6 +952,25 @@ clear_devs() {
+ 	done
+ }
  
- _prepare_vg
--lvcreate --type raid1 -m1 -n $lv1 -l 8 $vg
-+lvcreate --type raid1 -m1 -n $lv1 -L 300 $vg
- lvchange -an $vg/$lv1
- lvchange -ay $vg/$lv1
- _add_data_to_lv
++#
++# corrupt device content
++# $1  file_path
++# $2  string/pattern search for curruption
++# $3  string/pattern replacing/corruptiong
++corrupt_dev() {
++	local a
++
++	# search for string on a file
++	# Note: returned string may possibly start with other ASCII chars
++	# a[0] is position in file,  a[1] is the actual string
++	a=( $(strings -t d -n 64 "$1" | grep -m 1 "$2") ) || true
++
++	test -n "${a[0]-}" || return 0
++
++	# Seek for the sequence and replace it with corruption pattern
++	echo -n "${a[1]/$2/$3}" | dd of="$1" bs=1 oseek="${a[0]}" conv=fdatasync
++}
++
+ prepare_backing_dev() {
+ 	local size=${1=32}
+ 	shift
 
