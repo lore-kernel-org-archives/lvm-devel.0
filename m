@@ -1,54 +1,47 @@
-From: Tony Asleson <tasleson@sourceware.org>
-Date: Thu, 20 Apr 2023 17:11:45 +0000 (GMT)
-Subject: main - lvmdbusd: Add a flag to activate LVs in shared mode to Lv.Activate
-Message-ID: <20230420171145.3D2943858D37@sourceware.org>
+From: Zdenek Kabelac <zkabelac@sourceware.org>
+Date: Mon, 24 Apr 2023 22:14:33 +0000 (GMT)
+Subject: main - aux: use unused brd device for testing
+Message-ID: <20230424221433.EE42F3858D3C@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=7807672975cc991720d817b4e541ca5e720df26e
-Commit:        7807672975cc991720d817b4e541ca5e720df26e
-Parent:        317071ec53c2f6e338c53a8964fdbb61dc3e8b57
-Author:        Vojtech Trefny <vtrefny@redhat.com>
-AuthorDate:    Thu Apr 20 11:49:21 2023 +0200
-Committer:     Tony Asleson <tasleson@redhat.com>
-CommitterDate: Thu Apr 20 12:09:11 2023 -0500
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=a51b6d5e4269ba4a5b335a3894873c750c2e8384
+Commit:        a51b6d5e4269ba4a5b335a3894873c750c2e8384
+Parent:        5e4c0701d9d37eaa46468319c4df8f221acd38b3
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Mon Apr 24 23:46:50 2023 +0200
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Tue Apr 25 00:12:31 2023 +0200
 
-lvmdbusd: Add a flag to activate LVs in shared mode to Lv.Activate
+aux: use unused brd device for testing
 
+When 'brd' device can be removed (is unused AKA not opened),
+remove such device and use again for testing.
+
+Let's assume user has no unused brd device left in the system.
+
+When the 'tests' sometimes fail to cleanup devices, with this
+change futher cleanup from some next test may evenually release
+brd device and make it available for testing.
 ---
- daemons/lvmdbusd/cmdhandler.py | 4 ++++
- test/dbus/lvmdbustest.py       | 2 +-
- 2 files changed, 5 insertions(+), 1 deletion(-)
+ test/lib/aux.sh | 3 +++
+ 1 file changed, 3 insertions(+)
 
-diff --git a/daemons/lvmdbusd/cmdhandler.py b/daemons/lvmdbusd/cmdhandler.py
-index cf2a70875..cf9803e76 100644
---- a/daemons/lvmdbusd/cmdhandler.py
-+++ b/daemons/lvmdbusd/cmdhandler.py
-@@ -787,6 +787,10 @@ def activate_deactivate(op, name, activate, control_flags, options):
- 		if (1 << 5) & control_flags:
- 			cmd.append('--ignoreactivationskip')
+diff --git a/test/lib/aux.sh b/test/lib/aux.sh
+index 8b04e1d30..b2660b65c 100644
+--- a/test/lib/aux.sh
++++ b/test/lib/aux.sh
+@@ -675,6 +675,9 @@ prepare_loop() {
+ prepare_ramdisk() {
+ 	local size=$1
  
-+		# Shared locking (Cluster)
-+		if (1 << 6) & control_flags:
-+			op += 's'
++	# if brd is unused, remove and use for test
++	modprobe -r brd || return 0
 +
- 	if activate:
- 		op += 'y'
- 	else:
-diff --git a/test/dbus/lvmdbustest.py b/test/dbus/lvmdbustest.py
-index 8f95757eb..475f328cb 100755
---- a/test/dbus/lvmdbustest.py
-+++ b/test/dbus/lvmdbustest.py
-@@ -1243,7 +1243,7 @@ class TestDbusService(unittest.TestCase):
- 			self._check_consistency()
+ 	echo -n "## preparing ramdisk device..."
+ 	modprobe brd rd_size=$((size * 1024)) || return
  
- 		# Try control flags
--		for i in range(0, 5):
-+		for i in range(0, 6):
- 
- 			self.handle_return(lv_p.Lv.Activate(
- 				dbus.UInt64(1 << i),
 
