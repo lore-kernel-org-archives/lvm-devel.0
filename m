@@ -1,68 +1,47 @@
-From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Mon, 24 Apr 2023 22:14:39 +0000 (GMT)
-Subject: main - tests: fix pattern for raid4
-Message-ID: <20230424221439.A01823858D32@sourceware.org>
+From: haaber <haaber@web.de>
+Date: Tue, 25 Apr 2023 15:49:07 +0200
+Subject: Data recovery -- thin provisioned LVM metadata (?) problem after hardware failure
+Message-ID: <54726276-8f4e-7538-f0b5-e825920a0357@web.de>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=4a003ba671bd4f38d9108f5dd174eccda1522c3b
-Commit:        4a003ba671bd4f38d9108f5dd174eccda1522c3b
-Parent:        7c8901dabde8d962a95a827f249ad50a86b0a42c
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Mon Apr 24 22:41:54 2023 +0200
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Tue Apr 25 00:12:31 2023 +0200
+Dear all,
 
-tests: fix pattern for raid4
+I had a lethally bad hardware failure and to replace the machine.  Now I try to get some data back that is not contained in half-year backups ... (I know! but it's too late to be sorry). OK,  the old SSD is attached  via usb adapter to a brand new machine. I started
 
-Since the strip in raid4 might be XOR - we might eventually end
-with 2 blocks of 'B' on 2 disks - so will rest of stripe with 'b'.
----
- test/shell/integrity-caching.sh    | 2 +-
- test/shell/integrity-syncaction.sh | 2 +-
- test/shell/integrity.sh            | 2 +-
- 3 files changed, 3 insertions(+), 3 deletions(-)
+sudo pvscan
+sudo vgscan --mknodes
+sudo vgchange -ay
 
-diff --git a/test/shell/integrity-caching.sh b/test/shell/integrity-caching.sh
-index 73d33de18..838bbded0 100644
---- a/test/shell/integrity-caching.sh
-+++ b/test/shell/integrity-caching.sh
-@@ -28,7 +28,7 @@ aux prepare_devs 6 80
- # Use awk instead of anoyingly long log out from printf
- #printf "%0.sA" {1..16384} >> fileA
- awk 'BEGIN { while (z++ < 16384) printf "A" }' > fileA
--awk 'BEGIN { while (z++ < 4096) printf "B" }' > fileB
-+awk 'BEGIN { while (z++ < 4096) printf "B" ; while (z++ < 16384) printf "b" }' > fileB
- awk 'BEGIN { while (z++ < 16384) printf "C" }' > fileC
- 
- # generate random data
-diff --git a/test/shell/integrity-syncaction.sh b/test/shell/integrity-syncaction.sh
-index ededda010..0f8ce17d2 100644
---- a/test/shell/integrity-syncaction.sh
-+++ b/test/shell/integrity-syncaction.sh
-@@ -27,7 +27,7 @@ aux prepare_devs 3 40
- # Use awk instead of anoyingly long log out from printf
- #printf "%0.sA" {1..16384} >> fileA
- awk 'BEGIN { while (z++ < 16384) printf "A" }' > fileA
--awk 'BEGIN { while (z++ < 4096) printf "B" }' > fileB
-+awk 'BEGIN { while (z++ < 4096) printf "B" ; while (z++ < 16384) printf "b" }' > fileB
- awk 'BEGIN { while (z++ < 16384) printf "C" }' > fileC
- 
- _prepare_vg() {
-diff --git a/test/shell/integrity.sh b/test/shell/integrity.sh
-index b55855ab4..1ba75d230 100644
---- a/test/shell/integrity.sh
-+++ b/test/shell/integrity.sh
-@@ -28,7 +28,7 @@ aux prepare_devs 5 64
- # Use awk instead of anoyingly long log out from printf
- #printf "%0.sA" {1..16384} >> fileA
- awk 'BEGIN { while (z++ < 16384) printf "A" }' > fileA
--awk 'BEGIN { while (z++ < 4096) printf "B" }' > fileB
-+awk 'BEGIN { while (z++ < 4096) printf "B" ; while (z++ < 16384) printf "b" }' > fileB
- awk 'BEGIN { while (z++ < 16384) printf "C" }' > fileC
- 
- # generate random data
+Here is the  unexpected output:
+
+ ?PV /dev/mapper/OLDSSD ? VG   vg0 ????? lvm2 [238.27 GiB / <15.79 GiB free]
+ ? Total: 1 [238.27 GiB] / in use: 1 [238.27 GiB] / in no VG: 0 [0?? ]
+ ? Found volume group "vg0" using metadata type lvm2
+ ? Check of pool vg0/pool00 failed (status:1). Manual repair required!
+ ? 1 logical volume(s) in volume group "vg0" now active
+
+then I consulted dr. google for diagnosis, but found only little help. This one
+
+https://mellowhost.com/billing/index.php?rp=/knowledgebase/65/How-to-Repair-a-lvm-thin-pool.html
+
+suggested to deactivate all sub-volumes so that a repair can work correctly. It happened that only swap was
+active, so I deactivated it. But repair does still not work:
+
+lvconvert --repair vg0/pool00
+terminate called after throwing an instance of 'std::runtime_error'
+ ? what():? transaction_manager::new_block() couldn't allocate new block
+ ? Child 21255 exited abnormally
+ ? Repair of thin metadata volume of thin pool vg0/pool00 failed
+(status:-1). Manual repair required!
+
+
+I would like to find a good soul out there that can give more hints. In particular,
+could it be a metadata overflow? How to check? I seek not for repair, but a "once only"
+read access to the pool data ....
+
+thank you so much!   Bernhard
 
