@@ -1,56 +1,54 @@
-From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Tue, 25 Apr 2023 17:55:39 +0000 (GMT)
-Subject: main - tests: utils now print also df_h
-Message-ID: <20230425175539.0BFE53858D32@sourceware.org>
+From: David Teigland <teigland@sourceware.org>
+Date: Tue, 25 Apr 2023 19:50:02 +0000 (GMT)
+Subject: main - lvmcache: fix valgrind error when dropping md duplicate
+Message-ID: <20230425195002.93EF83858D1E@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=7f2939d328cf273f7f086a2ddf6cfaab86cf07c1
-Commit:        7f2939d328cf273f7f086a2ddf6cfaab86cf07c1
-Parent:        7b88c9f6199499692c8b4b47488dffd0f187b9f7
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Tue Apr 25 15:07:46 2023 +0200
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Tue Apr 25 19:02:39 2023 +0200
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=6d262eaf640dead7861c1a7716e216b9bcea75e5
+Commit:        6d262eaf640dead7861c1a7716e216b9bcea75e5
+Parent:        ffead4f333d4d2a80a6913842a50fd265d5c4018
+Author:        David Teigland <teigland@redhat.com>
+AuthorDate:    Tue Apr 25 14:46:36 2023 -0500
+Committer:     David Teigland <teigland@redhat.com>
+CommitterDate: Tue Apr 25 14:46:36 2023 -0500
 
-tests: utils now print also df_h
+lvmcache: fix valgrind error when dropping md duplicate
 
-Add info about space usage on devices after the test.
-
-Add some more skipped dirs.
+When lvmcache info is dropped because it's an md component,
+then the lvmcache vginfo can also be dropped, but the list
+iterator was still using the list head in vginfo, so break
+from the loop earlier to avoid it.
 ---
- test/lib/utils.sh | 12 ++++++++----
- 1 file changed, 8 insertions(+), 4 deletions(-)
+ lib/cache/lvmcache.c | 7 +++++++
+ 1 file changed, 7 insertions(+)
 
-diff --git a/test/lib/utils.sh b/test/lib/utils.sh
-index 5e462605f..427bc6112 100644
---- a/test/lib/utils.sh
-+++ b/test/lib/utils.sh
-@@ -189,15 +189,19 @@ STACKTRACE() {
- 			echo "<======== Tree ========>"
- 			dmsetup ls --tree | sed -e "s,^,## DMTREE:   ,"
- 			echo "<======== Recursive list of $DM_DEV_DIR ========>"
--			ls -Rl --hide=shm --hide=bus --hide=snd --hide=input --hide=dri \
--				--hide=net --hide=hugepages --hide=mqueue --hide=pts \
--				--hide=tty?*  --hide=vcs?* --hide=usb --hide=char \
--			       "$DM_DEV_DIR" | sed -e "s,^,## LSLR:	,"
-+			ls -lR -I bsg -I bus -I char -Idma_heap -I dri \
-+			   -I hugepages -I input -I mqueue \
-+			   -I net -I pts -I shm -I snd \
-+			   -I tty?* -I usb -I vfio -I vcs?* \
-+			   -I virtio-ports \
-+			   "$DM_DEV_DIR" | sed -e "s,^,## LS_LR:	,"
- 			echo "<======== Udev DB content ========>"
- 			for i in /sys/block/dm-* /sys/block/loop* ; do
- 				udevadm info --query=all --path "$i" 2>/dev/null || true
- 			done | sed -e "s,^,## UDEV:	,"
- 		fi
-+		echo "<======== Free space ========>"
-+		df -h | sed -e "s,^,## DF_H:	,"
- 		echo "<======== Script file \"$(< TESTNAME)\" ========>"
- 		local script=$0
- 		test -f "$script" || script="$TESTOLDPWD/$0"
+diff --git a/lib/cache/lvmcache.c b/lib/cache/lvmcache.c
+index b8a9eac25..127d29229 100644
+--- a/lib/cache/lvmcache.c
++++ b/lib/cache/lvmcache.c
+@@ -1503,6 +1503,9 @@ void lvmcache_extra_md_component_checks(struct cmd_context *cmd)
+ 	 */
+ 
+ 	dm_list_iterate_items_safe(vginfo, vginfo2, &_vginfos) {
++		char vgid[ID_LEN + 1] __attribute__((aligned(8))) = { 0 };
++		memcpy(vgid, vginfo->vgid, ID_LEN);
++
+ 		dm_list_iterate_items_safe(info, info2, &vginfo->infos) {
+ 			dev = info->dev;
+ 			device_hint = _get_pvsummary_device_hint(dev->pvid);
+@@ -1557,6 +1560,10 @@ void lvmcache_extra_md_component_checks(struct cmd_context *cmd)
+ 				/* lvmcache_del will also delete vginfo if info was last one */
+ 				lvmcache_del(info);
+ 				cmd->filter->wipe(cmd, cmd->filter, dev, NULL);
++
++				/* If vginfo was deleted don't continue using vginfo->infos */
++				if (!_search_vginfos_list(NULL, vgid))
++					break;
+ 			}
+ 		}
+ 	}
 
