@@ -1,47 +1,83 @@
-From: haaber <haaber@web.de>
-Date: Tue, 25 Apr 2023 15:49:07 +0200
-Subject: Data recovery -- thin provisioned LVM metadata (?) problem after hardware failure
-Message-ID: <54726276-8f4e-7538-f0b5-e825920a0357@web.de>
+From: Zdenek Kabelac <zkabelac@sourceware.org>
+Date: Tue, 25 Apr 2023 17:55:37 +0000 (GMT)
+Subject: main - tests: some aux corrections
+Message-ID: <20230425175537.DF0793858D1E@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Dear all,
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=7b88c9f6199499692c8b4b47488dffd0f187b9f7
+Commit:        7b88c9f6199499692c8b4b47488dffd0f187b9f7
+Parent:        4a003ba671bd4f38d9108f5dd174eccda1522c3b
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Tue Apr 25 15:07:25 2023 +0200
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Tue Apr 25 18:59:04 2023 +0200
 
-I had a lethally bad hardware failure and to replace the machine.  Now I try to get some data back that is not contained in half-year backups ... (I know! but it's too late to be sorry). OK,  the old SSD is attached  via usb adapter to a brand new machine. I started
+tests: some aux corrections
 
-sudo pvscan
-sudo vgscan --mknodes
-sudo vgchange -ay
+Keep backups within test_dir instead of dev_dir (so it doesn't
+leak large files there if the tests are run over real /dev dir).
 
-Here is the  unexpected output:
+Move restoring of dm_mirror throttling before test_dir is removed.
+---
+ test/lib/aux.sh | 13 +++++++------
+ 1 file changed, 7 insertions(+), 6 deletions(-)
 
- ?PV /dev/mapper/OLDSSD ? VG   vg0 ????? lvm2 [238.27 GiB / <15.79 GiB free]
- ? Total: 1 [238.27 GiB] / in use: 1 [238.27 GiB] / in no VG: 0 [0?? ]
- ? Found volume group "vg0" using metadata type lvm2
- ? Check of pool vg0/pool00 failed (status:1). Manual repair required!
- ? 1 logical volume(s) in volume group "vg0" now active
-
-then I consulted dr. google for diagnosis, but found only little help. This one
-
-https://mellowhost.com/billing/index.php?rp=/knowledgebase/65/How-to-Repair-a-lvm-thin-pool.html
-
-suggested to deactivate all sub-volumes so that a repair can work correctly. It happened that only swap was
-active, so I deactivated it. But repair does still not work:
-
-lvconvert --repair vg0/pool00
-terminate called after throwing an instance of 'std::runtime_error'
- ? what():? transaction_manager::new_block() couldn't allocate new block
- ? Child 21255 exited abnormally
- ? Repair of thin metadata volume of thin pool vg0/pool00 failed
-(status:-1). Manual repair required!
-
-
-I would like to find a good soul out there that can give more hints. In particular,
-could it be a metadata overflow? How to check? I seek not for repair, but a "once only"
-read access to the pool data ....
-
-thank you so much!   Bernhard
+diff --git a/test/lib/aux.sh b/test/lib/aux.sh
+index 6a0b9da93..c773485f5 100644
+--- a/test/lib/aux.sh
++++ b/test/lib/aux.sh
+@@ -448,6 +448,7 @@ teardown_devs_prefixed() {
+ teardown_devs() {
+ 	# Delete any remaining dm/udev semaphores
+ 	teardown_udev_cookies
++	restore_dm_mirror
+ 
+ 	test ! -f MD_DEV || cleanup_md_dev
+ 	test ! -f DEVICES || teardown_devs_prefixed "$PREFIX"
+@@ -483,7 +484,6 @@ teardown_devs() {
+ 			udev_wait
+ 		}
+ 	}
+-	restore_dm_mirror
+ }
+ 
+ kill_sleep_kill_() {
+@@ -1394,7 +1394,8 @@ backup_dev() {
+ 	local dev
+ 
+ 	for dev in "$@"; do
+-		dd if="$dev" of="${dev}.backup" bs=1024
++		dd if="$dev" of="${dev##*/}.backup" bs=16K conv=fdatasync || \
++			die "Cannot backup device: \"$dev\"  with size $(blockdev --getsize64 "$dev" || true) bytes."
+ 	done
+ }
+ 
+@@ -1402,9 +1403,9 @@ restore_dev() {
+ 	local dev
+ 
+ 	for dev in "$@"; do
+-		test -e "${dev}.backup" || \
++		test -e "${dev##*/}.backup" || \
+ 			die "Internal error: $dev not backed up, can't restore!"
+-		dd of="$dev" if="${dev}.backup" bs=1024
++		dd of="$dev" if="${dev##*/}.backup" bs=16K
+ 	done
+ }
+ 
+@@ -1743,9 +1744,9 @@ udev_wait() {
+ 	pgrep udev >/dev/null || return 0
+ 	which udevadm &>/dev/null || return 0
+ 	if test -n "${1-}" ; then
+-		udevadm settle --exit-if-exists="$1" || true
++		udevadm settle --exit-if-exists="$1" 2>/dev/null || true
+ 	else
+-		udevadm settle --timeout=15 || true
++		udevadm settle --timeout=15 2>/dev/null || true
+ 	fi
+ }
+ 
 
