@@ -1,98 +1,68 @@
-From: David Teigland <teigland@sourceware.org>
-Date: Wed,  3 May 2023 19:28:35 +0000 (GMT)
-Subject: main - lvreduce: make _lvseg_get_stripes handle integrity layer
-Message-ID: <20230503192835.9DB4D3858D28@sourceware.org>
+From: Zdenek Kabelac <zdenek.kabelac@gmail.com>
+Date: Thu, 4 May 2023 15:17:53 +0200
+Subject: Data recovery -- thin provisioned LVM metadata (?) problem after hardware failure
+In-Reply-To: <0c82e706-8051-d131-91fb-f8f5556d88e7@web.de>
+References: <54726276-8f4e-7538-f0b5-e825920a0357@web.de>
+ <b987f331-b2c8-ed18-14eb-e039830ed436@gmail.com>
+ <7de7fbb2-7c52-4564-e63e-e4c1523962f7@web.de>
+ <5b8439e8-f7a0-c9c3-cdc8-257ee68db41c@redhat.com>
+ <0c82e706-8051-d131-91fb-f8f5556d88e7@web.de>
+Message-ID: <0780dc89-f6b8-e204-18c3-12e404aeaaff@gmail.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=368381fd4022dc99ffe551b30ed75c3ddbc5c5c8
-Commit:        368381fd4022dc99ffe551b30ed75c3ddbc5c5c8
-Parent:        c4440b5b495a2d11ff541dd7e7791e2a83c83609
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Tue May 2 16:12:23 2023 -0500
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Wed May 3 11:34:59 2023 -0500
+Dne 03. 05. 23 v 18:48 haaber napsal(a):
+> Dear Zdenek,
+>
+> I had a forced break, but the subject is still active..
+>
+>>
+>> To get to your thin-pool metadata, you have to activate LV with them.
+>> (lvchange -ay? vgname/thinpoolmetadata).
+>>
+> my pool is called? qubes_dom0/pool00 (now you know my previous operating
+> system :) So I tried
+>
+> lvchange -ay? qubes_dom0/thinpoolmetadata
+>
+> but that fails: ? Failed to find logical volume
+> "qubes_dom0/thinpoolmetadata"
+>
+> Then I tried
+>
+> lvchange -ay qubes_dom0/pool00_tmeta
 
-lvreduce: make _lvseg_get_stripes handle integrity layer
 
-lvreduce uses _lvseg_get_stripes() which was unable to get raid stripe
-info with an integrity layer present.  This caused lvreduce on a
-raid+integrity LV to fail prematurely when checking stripe parameters.
-An unhelpful error message about stripe size would be printed.
----
- lib/metadata/lv_manip.c | 35 ++++++++++++++++++++++++++---------
- 1 file changed, 26 insertions(+), 9 deletions(-)
+Looking at your 'lvs -a' output - you should be able to get this one active.
 
-diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
-index 762a65785..2dfa3c77b 100644
---- a/lib/metadata/lv_manip.c
-+++ b/lib/metadata/lv_manip.c
-@@ -5144,22 +5144,39 @@ int lv_extend_policy_calculate_percent(struct logical_volume *lv,
- 
- static uint32_t _lvseg_get_stripes(struct lv_segment *seg, uint32_t *stripesize)
- {
--	uint32_t s;
--	struct lv_segment *seg_mirr;
-+	uint32_t s, a;
-+	struct lv_segment *seg_get, *seg_image, *seg_iorig;
-+	struct logical_volume *lv_image, *lv_iorig;
- 
- 	/* If segment mirrored, check if images are striped */
--	if (seg_is_mirrored(seg))
-+	if (seg_is_mirrored(seg)) {
- 		for (s = 0; s < seg->area_count; s++) {
- 			if (seg_type(seg, s) != AREA_LV)
- 				continue;
--			seg_mirr = first_seg(seg_lv(seg, s));
- 
--			if (seg_is_striped(seg_mirr)) {
--				seg = seg_mirr;
-+			lv_image = seg_lv(seg, s);
-+			seg_image = first_seg(lv_image);
-+			seg_get = NULL;
-+
-+			if (seg_is_integrity(seg_image)) {
-+				/* Get stripe values from the iorig layer. */
-+				for (a = 0; a < seg_image->area_count; a++) {
-+					lv_iorig = seg_lv(seg_image, a);
-+					seg_iorig = first_seg(lv_iorig);
-+					seg_get = seg_iorig;
-+					break;
-+				}
-+			} else {
-+				/* Get stripe values from the image layer. */
-+				seg_get = seg_image;
-+			}
-+
-+			if (seg_get && seg_is_striped(seg_get)) {
-+				seg = seg_get;
- 				break;
- 			}
- 		}
--
-+	}
- 
- 	if (seg_is_striped(seg)) {
- 		*stripesize = seg->stripe_size;
-@@ -5168,7 +5185,7 @@ static uint32_t _lvseg_get_stripes(struct lv_segment *seg, uint32_t *stripesize)
- 
- 	if (seg_is_raid(seg)) {
- 		*stripesize = seg->stripe_size;
--		return _raid_stripes_count(seg);
-+		return _raid_stripes_count(seg); 
- 	}
- 
- 	*stripesize = 0;
-@@ -5593,7 +5610,7 @@ static int _lvresize_adjust_extents(struct logical_volume *lv,
- 						seg_size /= seg_mirrors;
- 					lp->extents = logical_extents_used + seg_size;
- 					break;
--			}
-+				}
- 			} else if (new_extents <= logical_extents_used + seg_logical_extents) {
- 				seg_size = new_extents - logical_extents_used;
- 				lp->extents = new_extents;
+
+You will need another LV to write fixed metadata into
+
+# lvcreate -L128M -n newlv? qubes_dom0
+
+
+Then you run
+
+# thin_repair -i /dev/qubes_dom0/pool00_tmeta -o /dev/qubes_dom0/newlv
+
+If you get some repaired set? which you could probably validate with
+
+ ?# thin_dump?? /dev/qubes_dom0/newlv
+
+if you will some some 'good amount' of some data which describe block mapping 
+for many thin volumes.
+
+However if you only see couple lines - basically empty thin-pool metadta - you 
+will need to store the content of your original unmodified metadata into a 
+compressed file and upload the file for futher exploration.
+
+Let me know what you get from those steps above.
+
+
+Zdenek
+
+
 
