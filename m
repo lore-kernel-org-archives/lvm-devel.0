@@ -1,38 +1,59 @@
-From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Sat,  6 May 2023 20:46:21 +0000 (GMT)
-Subject: main - tests: needs to be exported for tracing
-Message-ID: <20230506204621.18E313858D28@sourceware.org>
+From: Ming Hung Tsai <mtsai@redhat.com>
+Date: Fri, 5 May 2023 17:42:15 +0800
+Subject: Data recovery -- thin provisioned LVM metadata (?) problem after hardware failure
+In-Reply-To: <6c1b291d-b4e4-4698-b9b4-63c43e9e484d@web.de>
+References: <54726276-8f4e-7538-f0b5-e825920a0357@web.de>
+ <b987f331-b2c8-ed18-14eb-e039830ed436@gmail.com>
+ <7de7fbb2-7c52-4564-e63e-e4c1523962f7@web.de>
+ <5b8439e8-f7a0-c9c3-cdc8-257ee68db41c@redhat.com>
+ <0c82e706-8051-d131-91fb-f8f5556d88e7@web.de>
+ <0780dc89-f6b8-e204-18c3-12e404aeaaff@gmail.com>
+ <6c1b291d-b4e4-4698-b9b4-63c43e9e484d@web.de>
+Message-ID: <CALjSBEvobNgcycoivTCq5xr6i5b_=Y9+WQ7BD5KSZawqDtGFRg@mail.gmail.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=0cc5c2203b72e84b12cc93f2f73fb679f3f7ae09
-Commit:        0cc5c2203b72e84b12cc93f2f73fb679f3f7ae09
-Parent:        7267322fc19a6e09d6949058ee0efdb107e7ef81
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Sat May 6 22:39:16 2023 +0200
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Sat May 6 22:43:22 2023 +0200
+Hi,
 
-tests: needs to be exported for tracing
+The thin_dump output looks fine, so I would like to know why there's error
+messages emitted. Could you help provide the raw metadata dump please? Just
+'dd' the entire '/dev/qubes_dom0/pool00_tmeta' into a file, then upload the
+compressed file.
 
----
- test/shell/lvresize-rounding.sh | 2 +-
- 1 file changed, 1 insertion(+), 1 deletion(-)
 
-diff --git a/test/shell/lvresize-rounding.sh b/test/shell/lvresize-rounding.sh
-index c2251eb06..52bedb4e8 100644
---- a/test/shell/lvresize-rounding.sh
-+++ b/test/shell/lvresize-rounding.sh
-@@ -36,7 +36,7 @@ lvresize -l+64 -i3 -I128 $vg/$lv1
- vgremove -f $vg
- 
- # 15 extents
--LVM_TEST_AUX_TRACE=yes
-+export LVM_TEST_AUX_TRACE=yes
- aux prepare_vg 3 22
- unset LVM_TEST_AUX_TRACE
- 
+Thanks,
+Ming-Hung Tsai
 
+On Fri, May 5, 2023 at 1:07?AM haaber <haaber@web.de> wrote:
+
+> Dear Zdenek,
+>
+> here https://we.tl/t-41PiPG2V1G     is the output of
+>
+> #thin_dump   /dev/qubes_dom0/pool00_tmeta  > pool00_tmeta
+>
+> metadata contains errors (run thin_check for details).
+>
+> perhaps you wanted to run with --repairmetadata contains errors (run
+> thin_check for details).
+>
+> perhaps you wanted to run with --repair
+>
+>
+> best, Bernhard
+>
+>
+>
+>
+>
+> --
+> lvm-devel mailing list
+> lvm-devel at redhat.com
+> https://listman.redhat.com/mailman/listinfo/lvm-devel
+>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20230505/c1dec7d8/attachment.htm>
