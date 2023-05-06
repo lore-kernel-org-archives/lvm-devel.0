@@ -1,98 +1,81 @@
-From: Peter Rajnoha <prajnoha@sourceware.org>
-Date: Wed, 31 May 2023 07:39:36 +0000 (GMT)
-Subject: main - reporter: restore report type to initial value after processing report_for_selection
-Message-ID: <20230531073936.462683858C00@sourceware.org>
+From: Zdenek Kabelac <zkabelac@sourceware.org>
+Date: Sat,  6 May 2023 20:46:08 +0000 (GMT)
+Subject: main - cov: some initializers
+Message-ID: <20230506204608.8DB183858D28@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=e2ecc6c763557462a4bc3d88bbc883917eb0f010
-Commit:        e2ecc6c763557462a4bc3d88bbc883917eb0f010
-Parent:        0591131a539fb668412fc38807686d2a89decd27
-Author:        Peter Rajnoha <prajnoha@redhat.com>
-AuthorDate:    Tue May 30 21:14:37 2023 +0200
-Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Wed May 31 09:38:11 2023 +0200
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=39b2bd06b8a992607ef6a315b08d2bf97cc6f24f
+Commit:        39b2bd06b8a992607ef6a315b08d2bf97cc6f24f
+Parent:        4fd2f433ad7d49b404a897c64191826e7b3c9f4c
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Wed Apr 26 14:15:21 2023 +0200
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Sat May 6 19:22:05 2023 +0200
 
-reporter: restore report type to initial value after processing report_for_selection
+cov: some initializers
 
-If we are executing 'report_for_selection' to do an internal report
-just for the selection itself (not for display), we can call it more
-than once. In that case, we are reusing the same selection handle
-(e.g. inside 'process_each_lv_in_vg').
-
-The selection handle has 'report_type' field which is a union of all
-report types needed for the report based on selection fields we actually
-use.
-
-The 'report_type' is further clarified based on checks and rules inside
-'_get_final_report_type' which 'report_for_selection' calls. Then, this
-final report type unambiguously identifies proper branch to take in
-'report_all_in_{pv,vg,lv}' that is called next.
-
-If the 'report_for_selection' is called more than once with the same
-selection handle, we need to make sure that we always restore the report
-type to its initial value, so all the rules inside 'report_for_selection'
-are applied correctly next time.
-
-This patch fixes the missing restoration of the 'report_type' value in
-'selection_handle' that is reused for recurring 'report_for_selection'
-calls.
-
-An example scenario where this failed was with selecting an LV for
-removal with "lvremove --select" while using a field in the selection
-that required extra DM info or DM status call for the LV (that is,
-"Logical Volume Device Info Fields" and "Logical Volume Device Status Fields"
-as visible in 'lvs -S help').
 ---
- WHATS_NEW        | 1 +
- tools/reporter.c | 7 ++++++-
- 2 files changed, 7 insertions(+), 1 deletion(-)
+ lib/device/dev-type.c   | 6 +++---
+ lib/device/filesystem.c | 6 +++---
+ 2 files changed, 6 insertions(+), 6 deletions(-)
 
-diff --git a/WHATS_NEW b/WHATS_NEW
-index ad870317d..493567c5d 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- version 2.03.22 - 
- =================================
-+  Fix failing -S|--select for non-reporting cmds if using LV info/status fields.
- 
- version 2.03.21 - 21st April 2023
- =================================
-diff --git a/tools/reporter.c b/tools/reporter.c
-index e62858f42..45273c0a4 100644
---- a/tools/reporter.c
-+++ b/tools/reporter.c
-@@ -633,6 +633,7 @@ int report_for_selection(struct cmd_context *cmd,
- 			 struct logical_volume *lv)
+diff --git a/lib/device/dev-type.c b/lib/device/dev-type.c
+index 8b51a672a..999b939c5 100644
+--- a/lib/device/dev-type.c
++++ b/lib/device/dev-type.c
+@@ -827,7 +827,7 @@ int fs_block_size_and_type(const char *pathname, uint32_t *fs_block_size_bytes,
  {
- 	struct selection_handle *sh = parent_handle->selection_handle;
-+	report_type_t initial_report_type = sh->report_type;
- 	struct report_args args = {0};
- 	struct single_report_args *single_args = &args.single_args[REPORT_IDX_SINGLE];
- 	int do_lv_info, do_lv_seg_status;
-@@ -648,8 +649,10 @@ int report_for_selection(struct cmd_context *cmd,
- 				    &sh->report_type))
- 		return_0;
+ 	blkid_probe probe = NULL;
+ 	const char *type_str = NULL, *size_str = NULL;
+-	size_t len;
++	size_t len = 0;
+ 	int ret = 1;
+ 	int rc;
  
--	if (!(handle = init_processing_handle(cmd, parent_handle)))
-+	if (!(handle = init_processing_handle(cmd, parent_handle))) {
-+		sh->report_type = initial_report_type;
- 		return_0;
-+	}
+@@ -887,8 +887,8 @@ out:
+ int fs_get_blkid(const char *pathname, struct fs_info *fsi)
+ {
+ 	blkid_probe probe = NULL;
+-	const char *str;
+-	size_t len;
++	const char *str = "";
++	size_t len = 0;
+ 	uint64_t fslastblock = 0;
+ 	unsigned int fsblocksize = 0;
+ 	int rc;
+diff --git a/lib/device/filesystem.c b/lib/device/filesystem.c
+index 2163276ed..5ec090a2c 100644
+--- a/lib/device/filesystem.c
++++ b/lib/device/filesystem.c
+@@ -96,7 +96,7 @@ static int _get_crypt_path(dev_t lv_devt, char *lv_path, char *crypt_path)
  
- 	/*
- 	 * We're already reporting for select so override
-@@ -695,6 +698,8 @@ int report_for_selection(struct cmd_context *cmd,
- 			break;
- 	}
+ int lv_crypt_is_active(struct cmd_context *cmd, char *lv_path)
+ {
+-	char crypt_path[PATH_MAX];
++	char crypt_path[PATH_MAX] = { 0 };
+ 	struct stat st_lv;
  
-+	sh->report_type = initial_report_type;
-+
- 	/*
- 	 * Keep the selection handle provided from the caller -
- 	 * do not destroy it - the caller will still use it to
+ 	if (stat(lv_path, &st_lv) < 0) {
+@@ -111,7 +111,7 @@ int fs_get_info(struct cmd_context *cmd, struct logical_volume *lv,
+ 		struct fs_info *fsi, int include_mount)
+ {
+ 	char lv_path[PATH_MAX];
+-	char crypt_path[PATH_MAX];
++	char crypt_path[PATH_MAX] = { 0 };
+ 	struct stat st_lv;
+ 	struct stat st_crypt;
+ 	struct stat st_top;
+@@ -234,7 +234,7 @@ int fs_mount_state_is_misnamed(struct cmd_context *cmd, struct logical_volume *l
+ 	char proc_fstype[FSTYPE_MAX];
+ 	char proc_devpath[PATH_MAX];
+ 	char proc_mntpath[PATH_MAX];
+-	char mtab_mntpath[PATH_MAX];
++	char mtab_mntpath[PATH_MAX] = { 0 };
+ 	char dm_devpath[PATH_MAX];
+ 	char tmp_path[PATH_MAX];
+ 	char *dm_name;
 
