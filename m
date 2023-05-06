@@ -1,55 +1,38 @@
-From: David Teigland <teigland@sourceware.org>
-Date: Thu, 25 May 2023 17:11:36 +0000 (GMT)
-Subject: main - lvreduce: simplify _lvseg_get_stripes integrity check
-Message-ID: <20230525171136.C2F223858D32@sourceware.org>
+From: Zdenek Kabelac <zkabelac@sourceware.org>
+Date: Sat,  6 May 2023 20:46:07 +0000 (GMT)
+Subject: main - cov: hide problem with 64bit time_t
+Message-ID: <20230506204607.6E1323858D28@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=0591131a539fb668412fc38807686d2a89decd27
-Commit:        0591131a539fb668412fc38807686d2a89decd27
-Parent:        4cdb178968b44125c41dee6dd28997283c0afefa
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Thu May 25 12:09:41 2023 -0500
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Thu May 25 12:09:41 2023 -0500
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=4fd2f433ad7d49b404a897c64191826e7b3c9f4c
+Commit:        4fd2f433ad7d49b404a897c64191826e7b3c9f4c
+Parent:        242bf56413f67dc3dd16770d420ced06eed0c4be
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Wed Apr 26 14:05:12 2023 +0200
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Sat May 6 19:22:05 2023 +0200
 
-lvreduce: simplify _lvseg_get_stripes integrity check
+cov: hide problem with 64bit time_t
 
-Simplify unnecessary loop to avoid coverity complaint.
 ---
- lib/metadata/lv_manip.c | 11 ++++-------
- 1 file changed, 4 insertions(+), 7 deletions(-)
+ lib/commands/toolcontext.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
 
-diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
-index fa3661739..a4593c969 100644
---- a/lib/metadata/lv_manip.c
-+++ b/lib/metadata/lv_manip.c
-@@ -5187,7 +5187,7 @@ int lv_extend_policy_calculate_percent(struct logical_volume *lv,
+diff --git a/lib/commands/toolcontext.c b/lib/commands/toolcontext.c
+index 4e05f9078..22563528e 100644
+--- a/lib/commands/toolcontext.c
++++ b/lib/commands/toolcontext.c
+@@ -1506,7 +1506,7 @@ static void _init_rand(struct cmd_context *cmd)
+ 		return;
+ 	}
  
- static uint32_t _lvseg_get_stripes(struct lv_segment *seg, uint32_t *stripesize)
- {
--	uint32_t s, a;
-+	uint32_t s;
- 	struct lv_segment *seg_get, *seg_image, *seg_iorig;
- 	struct logical_volume *lv_image, *lv_iorig;
+-	cmd->rand_seed = (unsigned) time(NULL) + (unsigned) getpid();
++	cmd->rand_seed = (unsigned) ((time(NULL) + getpid()) & 0xffffffff);
+ 	reset_lvm_errno(1);
+ }
  
-@@ -5203,12 +5203,9 @@ static uint32_t _lvseg_get_stripes(struct lv_segment *seg, uint32_t *stripesize)
- 
- 			if (seg_is_integrity(seg_image)) {
- 				/* Get stripe values from the iorig layer. */
--				for (a = 0; a < seg_image->area_count; a++) {
--					lv_iorig = seg_lv(seg_image, a);
--					seg_iorig = first_seg(lv_iorig);
--					seg_get = seg_iorig;
--					break;
--				}
-+				lv_iorig = seg_lv(seg_image, 0);
-+				seg_iorig = first_seg(lv_iorig);
-+				seg_get = seg_iorig;
- 			} else {
- 				/* Get stripe values from the image layer. */
- 				seg_get = seg_image;
 
