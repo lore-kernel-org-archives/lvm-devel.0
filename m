@@ -1,44 +1,40 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Sat,  6 May 2023 20:46:17 +0000 (GMT)
-Subject: main - tests: check for lvmdbusd running in the system
-Message-ID: <20230506204617.AE0F23858D28@sourceware.org>
+Date: Sat,  6 May 2023 20:46:18 +0000 (GMT)
+Subject: main - tests: different check for mounted volume
+Message-ID: <20230506204618.CD92B3858D28@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=2fde4b6baa09f33890d4a5b951dc51b81828ef63
-Commit:        2fde4b6baa09f33890d4a5b951dc51b81828ef63
-Parent:        aa19f2aa3d93b48c5e58a897f26de38b8080d483
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=4af8063c963f0610761d9cecbd6ed23b52f77256
+Commit:        4af8063c963f0610761d9cecbd6ed23b52f77256
+Parent:        2fde4b6baa09f33890d4a5b951dc51b81828ef63
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Sat May 6 20:35:42 2023 +0200
+AuthorDate:    Sat May 6 19:39:25 2023 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Sat May 6 22:43:22 2023 +0200
 
-tests: check for lvmdbusd running in the system
+tests: different check for mounted volume
 
-Check for running (possibly leftover) lvmdbusd running in the
-system - as this daemon may interfere with this test as in this
-case both be operating on same  'live' data in /run/lvm.
+It appears newer mount allows repeated mounting ??
+Anyway - do the check with grep.
 ---
- test/shell/hints.sh | 5 +++++
- 1 file changed, 5 insertions(+)
+ test/shell/lvconvert-thin-external-cache.sh | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
 
-diff --git a/test/shell/hints.sh b/test/shell/hints.sh
-index 7fe0e33f5..6c1711643 100644
---- a/test/shell/hints.sh
-+++ b/test/shell/hints.sh
-@@ -17,6 +17,11 @@ SKIP_WITH_LVMLOCKD=1
+diff --git a/test/shell/lvconvert-thin-external-cache.sh b/test/shell/lvconvert-thin-external-cache.sh
+index 465ce52ad..a8b95b274 100644
+--- a/test/shell/lvconvert-thin-external-cache.sh
++++ b/test/shell/lvconvert-thin-external-cache.sh
+@@ -51,7 +51,7 @@ not lvconvert --thin --thinpool $vg/tpool $vg/$lv1
+ lvchange --cachemode writethrough $vg/$lv1
  
- . lib/inittest
+ # Check $lv1 remains mounted (so it's not been unmounted by systemd)
+-not mount "$DM_DEV_DIR/$vg/$lv1" mnt
++mountpoint "$PWD/mnt"
  
-+# Since this test is currenly using 'system's' hints,
-+# it cannot be running, while lvmdbusd operates in the system.
-+# FIXME: sometimes test suite itself 'leaks' lvmdbusd process.
-+pgrep lvmdbusd && skip "Can't run this test, while lvmdbusd is running"
-+
- RUNDIR="/run"
- test -d "$RUNDIR" || RUNDIR="/var/run"
- HINTS="$RUNDIR/lvm/hints"
+ lvconvert --thin $vg/$lv1 --originname extorg --thinpool $vg/tpool
+ 
 
