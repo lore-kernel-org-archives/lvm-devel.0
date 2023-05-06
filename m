@@ -1,95 +1,82 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Sat,  6 May 2023 20:46:14 +0000 (GMT)
-Subject: main - aux: wipefs_a takes list of devices
-Message-ID: <20230506204614.47C603858D35@sourceware.org>
+Date: Sat,  6 May 2023 20:46:15 +0000 (GMT)
+Subject: main - aux: retry brd removal
+Message-ID: <20230506204615.66FFF3858D28@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=87eae82195d5272808614b14843c302e7bed80d5
-Commit:        87eae82195d5272808614b14843c302e7bed80d5
-Parent:        534269d0fb834fb9a3b115bf859319fc1acb2275
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=6e8ede833ba4b974f7e2acf8c7e36eaba9661fe8
+Commit:        6e8ede833ba4b974f7e2acf8c7e36eaba9661fe8
+Parent:        87eae82195d5272808614b14843c302e7bed80d5
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Sat May 6 20:36:28 2023 +0200
+AuthorDate:    Sat May 6 22:38:58 2023 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Sat May 6 22:40:23 2023 +0200
+CommitterDate: Sat May 6 22:41:23 2023 +0200
 
-aux: wipefs_a takes list of devices
+aux: retry brd removal
 
-Enhance function to take list of device so set of devices
-can be wiped with a single call:
-
-aux wipefs_a  "$dev1" "$dev2"
+Try to remove brd twice if there is some collision with udevd.
+Instanciate only 1 ramdisk.
+Use just 'eval' for '--nameprefixes' results.
 ---
- test/lib/aux.sh | 48 ++++++++++++++++++++++++------------------------
- 1 file changed, 24 insertions(+), 24 deletions(-)
+ test/lib/aux.sh | 23 ++++++++++++++---------
+ 1 file changed, 14 insertions(+), 9 deletions(-)
 
 diff --git a/test/lib/aux.sh b/test/lib/aux.sh
-index 241bbd595..c6b6ac1cc 100644
+index c6b6ac1cc..5a3f0fe44 100644
 --- a/test/lib/aux.sh
 +++ b/test/lib/aux.sh
-@@ -872,37 +872,37 @@ cleanup_md_dev() {
- }
+@@ -418,9 +418,7 @@ teardown_devs_prefixed() {
  
- wipefs_a() {
--	local dev=$1
--	local have_wipefs=1
--	shift
--
--	if test -n "$LVM_TEST_DEVICES_FILE"; then
--		lvmdevices --deldev "$dev" || true
--	fi
-+	local have_wipefs=
+ 			for dm in $(dm_info name,open --separator ';'  --nameprefixes --unquoted --sort open,"$sortby" -S "name=~$prefix" --mangle none || true) ; do
+ 				test "$dm" != "No devices found" || break 2
+-				DM_NAME=${dm##DM_NAME=}
+-				DM_NAME=${DM_NAME%%;DM_OPEN*}
+-				DM_OPEN=${dm##*;DM_OPEN=}
++				eval "$dm"
+ 				local force="-f"
+ 				if test "$i" = 0; then
+ 					if test "$once" = 1 ; then
+@@ -452,17 +450,24 @@ teardown_devs() {
  
--	if test -f HAVE_WIPEFS ; then
-+	if test -e HAVE_WIPEFS; then
- 		have_wipefs=$(< HAVE_WIPEFS)
- 	else
--		wipefs -V >/dev/null 2>&1 || have_wipefs=0
--		echo "$have_wipefs" > HAVE_WIPEFS
-+		wipefs -V >HAVE_WIPEFS 2>/dev/null && have_wipefs=yes
- 	fi
+ 	test ! -f MD_DEV || cleanup_md_dev
+ 	test ! -f DEVICES || teardown_devs_prefixed "$PREFIX"
+-	test ! -f RAMDISK || { modprobe -r brd || true ; }
++	if test -f RAMDISK ; then
++		for i in 1 2 ; do
++			modprobe -r brd && break
++			sleep .1
++			udev_wait
++		done
++	fi
  
- 	udev_wait
--	if [ "$have_wipefs" = "1" ] ; then
--		wipefs -a "$dev" || {
--			echo "$dev: device in-use, retrying wipe again."
--			sleep 1
--			udev_wait
--			wipefs -a "$dev"
--		}
--	else
--		dd if=/dev/zero of="$dev" bs=4096 count=8 oflag=direct >/dev/null || true
--		mdadm --zero-superblock "$dev" 2>/dev/null || true
--	fi
- 
--	if test -n "$LVM_TEST_DEVICES_FILE"; then
--		lvmdevices --adddev "$dev" || true
--	fi
-+	for dev in "$@"; do
-+		if test -n "$LVM_TEST_DEVICES_FILE"; then
-+			lvmdevices --deldev "$dev" || true
-+		fi
-+
-+		if test -n "$have_wipefs"; then
-+			wipefs -a "$dev" || {
-+				echo "$dev: device in-use, retrying wipe again."
+ 	# NOTE: SCSI_DEBUG_DEV test must come before the LOOP test because
+ 	# prepare_scsi_debug_dev() also sets LOOP to short-circuit prepare_loop()
+ 	if test -f SCSI_DEBUG_DEV; then
+ 		udev_wait
+ 		test "${LVM_TEST_PARALLEL:-0}" -eq 1 || {
+-			if ! modprobe -r scsi_debug ; then
+-				sleep 1
+-				modprobe -r scsi_debug || true
+-			fi
++			for i in 1 2 ; do
++				modprobe -r scsi_debug && break
 +				sleep .1
 +				udev_wait
-+				wipefs -a "$dev"
-+			}
-+		else
-+			dd if=/dev/zero of="$dev" bs=4096 count=8 oflag=direct >/dev/null || true
-+			mdadm --zero-superblock "$dev" 2>/dev/null || true
-+		fi
-+
-+		if test -n "$LVM_TEST_DEVICES_FILE"; then
-+			lvmdevices --adddev "$dev" || true
-+		fi
-+	done
++			done
+ 		}
+ 	else
+ 		test ! -f LOOP || losetup -d "$(< LOOP)" || true
+@@ -684,7 +689,7 @@ prepare_ramdisk() {
+ 	modprobe -r brd || return 0
  
- 	udev_wait
- }
+ 	echo -n "## preparing ramdisk device..."
+-	modprobe brd rd_size=$((size * 1024)) || return
++	modprobe brd rd_size=$((size * 1024)) rd_nr=1 || return
+ 
+ 	BACKING_DEV=/dev/ram0
+ 	echo "ok ($BACKING_DEV)"
 
