@@ -1,70 +1,42 @@
-From: Anton Lundin <glance@ac2.se>
-Date: Wed, 17 May 2023 13:50:38 +0200
-Subject: [PATCH] Fix header include for out of tree builds
-In-Reply-To: <740f6a11-b7aa-91cc-35c6-3dd39b7d5823@redhat.com>
-References: <20230516160511.2053800-1-glance@ac2.se>
- <ddfeb159-4148-4aae-7760-0556ca3cda1d@redhat.com>
- <20230517113557.GD18946@accum.se>
- <740f6a11-b7aa-91cc-35c6-3dd39b7d5823@redhat.com>
-Message-ID: <20230517115038.GE18946@accum.se>
+From: Zdenek Kabelac <zkabelac@sourceware.org>
+Date: Sat,  6 May 2023 20:46:06 +0000 (GMT)
+Subject: main - cov: validata top_lv
+Message-ID: <20230506204606.4EBC63858D35@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-On 17 May, 2023 - Zdenek Kabelac wrote:
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=242bf56413f67dc3dd16770d420ced06eed0c4be
+Commit:        242bf56413f67dc3dd16770d420ced06eed0c4be
+Parent:        fae0ed8f10bc5771423f2b7af63690800de1ce9f
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Wed Apr 26 13:44:52 2023 +0200
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Sat May 6 19:22:05 2023 +0200
 
-> Dne 17. 05. 23 v 13:35 Anton Lundin napsal(a):
-> > On 17 May, 2023 - Zdenek Kabelac wrote:
-> > 
-> > > Dne 16. 05. 23 v 18:05 Anton Lundin napsal(a):
-> > > > The relative include didn't match up for out of tree builds. The
-> > > > build tree include directory is in the include paths already.
-> > > > 
-> > > > Signed-off-by: Anton Lundin <glance@ac2.se>
-> > > > ---
-> > > > 
-> > > > Now the following works:
-> > > > $ mkdir lvm2-build
-> > > > $ cd lvm2-build
-> > > > $ ../lvm2/configure
-> > > Hi
-> > > 
-> > > Your bug is actually in this command:
-> > > 
-> > > configure --srcdir=XXXXX
-> > > 
-> > > > $ make
-> > > > 
-> > > Otherwise srcdir is located in your builddir and you would actually get more
-> > > errors in various parts of lvmb building - as we tend to use $(srcdir)
-> > > inside makefiles..
-> > I might be misunderstanding you. Are your comment about the fix or the
-> > example on now to trigger the bug?
-> > 
-> > Just running configure from another directory will set srcdir
-> > automatically. At least in any kind of modern auto-tools.
-> 
-> 
-> While we certainly can push this minor change? (and I'll likely push this
-> change upstream with my next changeset) - the usage should be based on
-> srcdir settings - which I'm setting myself for a long time? - as there were
-> always some problems if this was not set properly.
-> 
-> So I could try if this got eventually better over time? - but lvm2 is using
-> somewhat hybrid approach - as we only use 'autoconf' but not 'automake'?
-> historically.
+cov: validata top_lv
 
-With this fix out of tree builds works with or without --srcdir= , and
-if I revert this fix on my local tree the builds fails with or without
---srcdir= like:
+Add explicit pointer check is never NULL.
+---
+ lib/metadata/lv_manip.c | 5 +++++
+ 1 file changed, 5 insertions(+)
 
-In file included from ../../lvm2/lib/commands/toolcontext.h:21,
-                 from ../../lvm2/lib/integrity/integrity.c:17:
-				 ../../lvm2/lib/commands/cmd_enum.h:15:10: fatal error:
-				 ../../include/cmds.h: No such file or directory
-				    15 | #include "../../include/cmds.h"
-
-//Anton
+diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
+index 2dfa3c77b..8975bf180 100644
+--- a/lib/metadata/lv_manip.c
++++ b/lib/metadata/lv_manip.c
+@@ -5951,6 +5951,11 @@ static void _setup_params_for_extend_metadata(struct logical_volume *lv,
+ 
+ static int _lv_resize_check_used(struct logical_volume *lv)
+ {
++	if (!lv) {
++		log_error(INTERNAL_ERROR "LV is not specified.");
++		return 0;
++	}
++
+ 	if (lv_is_locked(lv)) {
+ 		log_error("Can't resize locked logical volume %s.", display_lvname(lv));
+ 		return 0;
 
