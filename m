@@ -1,50 +1,40 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Wed, 10 May 2023 14:22:29 +0000 (GMT)
-Subject: main - cov: remove unneeded header file inclusion
-Message-ID: <20230510142229.91E653853831@sourceware.org>
+Date: Wed, 10 May 2023 14:22:28 +0000 (GMT)
+Subject: main - cov: validate dev_get_primary_dev result
+Message-ID: <20230510142228.70D3D3853831@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=cc7c41abbdb51a1e6c60c4a79aa56fe40ab7937a
-Commit:        cc7c41abbdb51a1e6c60c4a79aa56fe40ab7937a
-Parent:        7b52a663a6436581cfacd9212929db551a00920f
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=7b52a663a6436581cfacd9212929db551a00920f
+Commit:        7b52a663a6436581cfacd9212929db551a00920f
+Parent:        0cc5c2203b72e84b12cc93f2f73fb679f3f7ae09
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed May 10 12:55:38 2023 +0200
+AuthorDate:    Wed May 10 13:28:38 2023 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Wed May 10 15:27:48 2023 +0200
 
-cov: remove unneeded header file inclusion
+cov: validate dev_get_primary_dev result
 
+Make sure primary_dev is defined when using it.
 ---
- lib/label/label.c | 1 -
- tools/pvscan.c    | 1 -
- 2 files changed, 2 deletions(-)
+ lib/device/dev-mpath.c | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
 
-diff --git a/lib/label/label.c b/lib/label/label.c
-index 330089f1a..4b1362cf2 100644
---- a/lib/label/label.c
-+++ b/lib/label/label.c
-@@ -27,7 +27,6 @@
- #include "lib/format_text/layout.h"
- #include "lib/device/device_id.h"
- #include "lib/device/online.h"
--#include "lib/filters/filter.h"
+diff --git a/lib/device/dev-mpath.c b/lib/device/dev-mpath.c
+index 5433b64e1..e6fc63afd 100644
+--- a/lib/device/dev-mpath.c
++++ b/lib/device/dev-mpath.c
+@@ -688,7 +688,8 @@ int dev_is_mpath_component(struct cmd_context *cmd, struct device *dev, dev_t *h
+ 	 * primary_result 2: dev is a partition, primary_dev is the whole device
+ 	 * primary_result 1: dev is a whole device
+ 	 */
+-	primary_result = dev_get_primary_dev(dt, dev, &primary_dev);
++	if (!(primary_result = dev_get_primary_dev(dt, dev, &primary_dev)))
++		return_0;
  
- #include <sys/stat.h>
- #include <fcntl.h>
-diff --git a/tools/pvscan.c b/tools/pvscan.c
-index 8f51a0b42..058e8b658 100644
---- a/tools/pvscan.c
-+++ b/tools/pvscan.c
-@@ -19,7 +19,6 @@
- #include "lib/metadata/metadata.h"
- #include "lib/label/hints.h"
- #include "lib/device/online.h"
--#include "lib/filters/filter.h"
- 
- #include <dirent.h>
- 
+ 	if (_dev_is_mpath_component_sysfs(cmd, dev, primary_result, primary_dev, holder_devno) == 1)
+ 		goto found;
 
