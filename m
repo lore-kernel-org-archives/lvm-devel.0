@@ -1,52 +1,50 @@
-From: Ming Hung Tsai <mtsai@redhat.com>
-Date: Sat, 6 May 2023 00:25:03 +0800
-Subject: Data recovery -- thin provisioned LVM metadata (?) problem after hardware failure
-In-Reply-To: <2b1b2d49-fe46-e544-03d3-79b831df4a52@gmail.com>
-References: <54726276-8f4e-7538-f0b5-e825920a0357@web.de>
- <b987f331-b2c8-ed18-14eb-e039830ed436@gmail.com>
- <7de7fbb2-7c52-4564-e63e-e4c1523962f7@web.de>
- <5b8439e8-f7a0-c9c3-cdc8-257ee68db41c@redhat.com>
- <0c82e706-8051-d131-91fb-f8f5556d88e7@web.de>
- <0780dc89-f6b8-e204-18c3-12e404aeaaff@gmail.com>
- <6c1b291d-b4e4-4698-b9b4-63c43e9e484d@web.de>
- <2b1b2d49-fe46-e544-03d3-79b831df4a52@gmail.com>
-Message-ID: <CALjSBEvZUKygHzzMyA2Ga+kqTHV911Jofox91Q8UzDC-cb3OQg@mail.gmail.com>
+From: Zdenek Kabelac <zkabelac@sourceware.org>
+Date: Wed, 10 May 2023 14:22:29 +0000 (GMT)
+Subject: main - cov: remove unneeded header file inclusion
+Message-ID: <20230510142229.91E653853831@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-RHEL & Fedora RPMs already have the thin_metadata_pack/unpack tools
-integrated. Other distros may offer the tools if they had updated the
-package to v1.0.x
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=cc7c41abbdb51a1e6c60c4a79aa56fe40ab7937a
+Commit:        cc7c41abbdb51a1e6c60c4a79aa56fe40ab7937a
+Parent:        7b52a663a6436581cfacd9212929db551a00920f
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Wed May 10 12:55:38 2023 +0200
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Wed May 10 15:27:48 2023 +0200
 
-On Fri, May 5, 2023 at 11:08?PM Zdenek Kabelac
+cov: remove unneeded header file inclusion
 
-> Hi
->
-> We need the exact binary copy of _tmeta  LV  - thus just use
->
-> dd if=/dev/qubes_dom0/pool00_tmeta  /tmp/tmeta_copy  bs=512K
-> bzip2 /tmp/tmeta_copy
->
-> With this data - also provide full lvm2 metadata for this VG
-> (should be as a file in  /etc/lvm/backup  - or you could run
-> just vgcfgbackup)
->
-> thin_dump is already 'processed' result - so not usable for futher
-> investigation.
->
-> (Although it might interesting idea to add some 'option' to actually
-> provide
-> the above 'binary backup' is  built-in feature of this tool for bug
-> reporting...)
->
->
-> Regards
->
-> Zdenek
->
--------------- next part --------------
-An HTML attachment was scrubbed...
-URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20230506/fd287b37/attachment.htm>
+---
+ lib/label/label.c | 1 -
+ tools/pvscan.c    | 1 -
+ 2 files changed, 2 deletions(-)
+
+diff --git a/lib/label/label.c b/lib/label/label.c
+index 330089f1a..4b1362cf2 100644
+--- a/lib/label/label.c
++++ b/lib/label/label.c
+@@ -27,7 +27,6 @@
+ #include "lib/format_text/layout.h"
+ #include "lib/device/device_id.h"
+ #include "lib/device/online.h"
+-#include "lib/filters/filter.h"
+ 
+ #include <sys/stat.h>
+ #include <fcntl.h>
+diff --git a/tools/pvscan.c b/tools/pvscan.c
+index 8f51a0b42..058e8b658 100644
+--- a/tools/pvscan.c
++++ b/tools/pvscan.c
+@@ -19,7 +19,6 @@
+ #include "lib/metadata/metadata.h"
+ #include "lib/label/hints.h"
+ #include "lib/device/online.h"
+-#include "lib/filters/filter.h"
+ 
+ #include <dirent.h>
+ 
+
