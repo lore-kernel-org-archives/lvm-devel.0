@@ -1,89 +1,42 @@
-From: Heinz Mauelshagen <heinzm@sourceware.org>
-Date: Wed, 10 May 2023 16:36:11 +0000 (GMT)
-Subject: main - Fix "multisegment RAID1, allocator uses one disk for both legs"
-Message-ID: <20230510163611.2FE883851C19@sourceware.org>
+From: haaber <haaber@web.de>
+Date: Thu, 11 May 2023 09:39:31 +0200
+Subject: Data recovery -- thin provisioned LVM metadata (?) problem after hardware failure
+In-Reply-To: <2b1b2d49-fe46-e544-03d3-79b831df4a52@gmail.com>
+References: <54726276-8f4e-7538-f0b5-e825920a0357@web.de>
+ <b987f331-b2c8-ed18-14eb-e039830ed436@gmail.com>
+ <7de7fbb2-7c52-4564-e63e-e4c1523962f7@web.de>
+ <5b8439e8-f7a0-c9c3-cdc8-257ee68db41c@redhat.com>
+ <0c82e706-8051-d131-91fb-f8f5556d88e7@web.de>
+ <0780dc89-f6b8-e204-18c3-12e404aeaaff@gmail.com>
+ <6c1b291d-b4e4-4698-b9b4-63c43e9e484d@web.de>
+ <2b1b2d49-fe46-e544-03d3-79b831df4a52@gmail.com>
+Message-ID: <3ce7f8b3-8c37-8b5f-a4f4-b088baedbb65@web.de>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=05c2b10c5d0a99993430ffbcef684a099ba810ad
-Commit:        05c2b10c5d0a99993430ffbcef684a099ba810ad
-Parent:        bf794b66f412765e49c4d79a4bb95b454f2357fc
-Author:        heinzm <heinzm@redhat.com>
-AuthorDate:    Wed May 10 18:22:11 2023 +0200
-Committer:     heinzm <heinzm@redhat.com>
-CommitterDate: Wed May 10 18:35:21 2023 +0200
+Dear all,
 
-Fix "multisegment RAID1, allocator uses one disk for both legs"
+We need the exact binary copy of _tmeta? LV? - thus just use
+>
+> dd if=/dev/qubes_dom0/pool00_tmeta? /tmp/tmeta_copy? bs=512K
+> bzip2 /tmp/tmeta_copy
+>
+the output is here: https://we.tl/t-AEmlc5CYeH
 
-In case of e.g. 3 PVs, creating or extending a RaidLV causes SubLV
-collocation thus putting segments of diffent rimage (and potentially
-larger rmeta) SubLVs onto the same PV.  For redundant RaidLVs this'll
-compromise redundancy.  Fix by detecting such bogus allocation on
-lvcreate/lvextend and reject the request.
----
- lib/metadata/lv_manip.c | 41 +++++++++++++++++++++++++++++++++++++++++
- 1 file changed, 41 insertions(+)
+> With this data - also provide full lvm2 metadata for this VG
+> (should be as a file in? /etc/lvm/backup? - or you could run
+> just vgcfgbackup)
+>
+I attached that one directly. Thank you very much!
 
-diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
-index 298d307f3..9a9e547be 100644
---- a/lib/metadata/lv_manip.c
-+++ b/lib/metadata/lv_manip.c
-@@ -4454,6 +4454,38 @@ static int _lv_extend_layered_lv(struct alloc_handle *ah,
- 	return 1;
- }
- 
-+/* Check either RAID images and metas are being allocated redundantly. */
-+static int _lv_raid_redundant(struct logical_volume *lv,
-+			      struct dm_list *allocatable_pvs, int meta)
-+{
-+	uint32_t nlvs, s;
-+	struct lv_segment *seg = first_seg(lv);
-+	struct pv_list *pvl;
-+
-+	if (meta && !seg->meta_areas)
-+		return 1;
-+
-+	dm_list_iterate_items(pvl, allocatable_pvs) {
-+		nlvs = 0;
-+
-+		for (s = 0; s < seg->area_count; s++) {
-+			struct logical_volume *slv = meta ? seg_metalv(seg, s) : seg_lv(seg, s);
-+
-+			if (slv && lv_is_on_pv(slv, pvl->pv) && nlvs++)
-+				return 0;
-+		}
-+	}
-+
-+	return 1;
-+}
-+
-+/* Check both RAID images and metas are being allocated redundantly. */
-+static int _lv_raid_redundant_allocation(struct logical_volume *lv, struct dm_list *allocatable_pvs)
-+{
-+	return _lv_raid_redundant(lv, allocatable_pvs, 0) &&
-+	       _lv_raid_redundant(lv, allocatable_pvs, 1);
-+}
-+
- /*
-  * Entry point for single-step LV allocation + extension.
-  * Extents is the number of logical extents to append to the LV unless
-@@ -4556,6 +4588,15 @@ int lv_extend(struct logical_volume *lv,
- 						mirrors, stripes, stripe_size)))
- 			goto_out;
- 
-+		if (segtype_is_raid(segtype) &&
-+		    alloc != ALLOC_ANYWHERE &&
-+		    !(r = _lv_raid_redundant_allocation(lv, allocatable_pvs))) {
-+			log_error("Insufficient suitable allocatable extents for logical volume %s", display_lvname(lv));
-+			if (!lv_remove(lv) || !vg_write(lv->vg) || !vg_commit(lv->vg))
-+				return_0;
-+			goto out;
-+		}
-+
- 		if (lv_raid_has_integrity(lv)) {
- 			if (!lv_extend_integrity_in_raid(lv, allocatable_pvs)) {
- 				r = 0;
-
+best, Bernhard
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: qubes_dom0.bz2
+Type: application/octet-stream
+Size: 8156 bytes
+Desc: not available
+URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20230511/aab57f85/attachment-0001.obj>
