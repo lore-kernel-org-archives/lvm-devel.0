@@ -1,38 +1,69 @@
-From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Sat,  6 May 2023 20:46:04 +0000 (GMT)
-Subject: main - cov: ensure NULL baton is not dereferenced
-Message-ID: <20230506204604.0EC393858D35@sourceware.org>
+From: Ming Hung Tsai <mtsai@redhat.com>
+Date: Fri, 12 May 2023 11:29:48 +0800
+Subject: Data recovery -- thin provisioned LVM metadata (?) problem after hardware failure
+In-Reply-To: <3ce7f8b3-8c37-8b5f-a4f4-b088baedbb65@web.de>
+References: <54726276-8f4e-7538-f0b5-e825920a0357@web.de>
+ <b987f331-b2c8-ed18-14eb-e039830ed436@gmail.com>
+ <7de7fbb2-7c52-4564-e63e-e4c1523962f7@web.de>
+ <5b8439e8-f7a0-c9c3-cdc8-257ee68db41c@redhat.com>
+ <0c82e706-8051-d131-91fb-f8f5556d88e7@web.de>
+ <0780dc89-f6b8-e204-18c3-12e404aeaaff@gmail.com>
+ <6c1b291d-b4e4-4698-b9b4-63c43e9e484d@web.de>
+ <2b1b2d49-fe46-e544-03d3-79b831df4a52@gmail.com>
+ <3ce7f8b3-8c37-8b5f-a4f4-b088baedbb65@web.de>
+Message-ID: <CALjSBEtkaooosocEAOpa9uuA0d_dYVLhbkfRbTSHGnuixPAyUg@mail.gmail.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=871d9f379f79f1969d71b660164efe18515826c2
-Commit:        871d9f379f79f1969d71b660164efe18515826c2
-Parent:        662020c221fdb3e23c66947f6c81f99a0950744a
-Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed Apr 26 13:37:41 2023 +0200
-Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Sat May 6 19:22:05 2023 +0200
+Hi,
 
-cov: ensure NULL baton is not dereferenced
+There's one corrupted leaf node in device #20081, which might possibly be
+caused by the hardware failure and that stops thin_dump or lvconvert from
+working. Running thin_check would show you the details (I'm using the
+v1.0.5):
 
----
- tools/pvmove_poll.c | 2 +-
- 1 file changed, 1 insertion(+), 1 deletion(-)
+TRANSACTION_ID=45452
+METADATA_FREE_BLOCKS=11827
+1 nodes in data mapping tree contain errors
+0 io errors, 1 checksum errors
+Thin device 20081 has 1 error nodes and is missing 22664 mappings, while
+expected 296263
+Check of mappings failed
 
-diff --git a/tools/pvmove_poll.c b/tools/pvmove_poll.c
-index 751313cd7..6b3ab4550 100644
---- a/tools/pvmove_poll.c
-+++ b/tools/pvmove_poll.c
-@@ -20,7 +20,7 @@
- static int _is_pvmove_image_removable(struct logical_volume *mimage_lv,
- 				      void *baton)
- {
--	uint32_t mimage_to_remove = *((uint32_t *)baton);
-+	uint32_t mimage_to_remove = baton ? *((uint32_t *)baton) : UINT32_MAX;
- 	struct lv_segment *mirror_seg;
- 
- 	if (!(mirror_seg = get_only_segment_using_this_lv(mimage_lv))) {
+The issue is repairable by rolling back to the previous transaction. I'm
+going to patch the program to make it easier to use. It should be ready
+next week, and you can try to learn how to build the Rust version for now.
 
+1. Install the Rust toolchain via the rustup script (https://rustup.rs/)
+2. Clone the thin-provisioning-tools.git repo, then build it (cargo build
+--release)
+3. Try the built pdata_tools binary (placed under ./target/release/)
+
+
+Ming-Hung Tsai
+
+On Thu, May 11, 2023 at 3:39?PM haaber <haaber@web.de> wrote:
+
+> Dear all,
+>
+> We need the exact binary copy of _tmeta  LV  - thus just use
+> >
+> > dd if=/dev/qubes_dom0/pool00_tmeta  /tmp/tmeta_copy  bs=512K
+> > bzip2 /tmp/tmeta_copy
+> >
+> the output is here: https://we.tl/t-AEmlc5CYeH
+>
+> > With this data - also provide full lvm2 metadata for this VG
+> > (should be as a file in  /etc/lvm/backup  - or you could run
+> > just vgcfgbackup)
+> >
+> I attached that one directly. Thank you very much!
+>
+> best, Bernhard
+>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20230512/8865d41b/attachment.htm>
