@@ -1,7 +1,7 @@
 From: Anton Lundin <glance@ac2.se>
-Date: Tue, 16 May 2023 18:20:10 +0200
+Date: Tue, 16 May 2023 18:05:11 +0200
 Subject: [PATCH] Fix header include for out of tree builds
-Message-ID: <20230516162009.GC18946@accum.se>
+Message-ID: <20230516160511.2053800-1-glance@ac2.se>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -15,11 +15,10 @@ Signed-off-by: Anton Lundin <glance@ac2.se>
 ---
 
 Now the following works:
-
-$ mkdir lvm2-build       
+$ mkdir lvm2-build
 $ cd lvm2-build
 $ ../lvm2/configure
-$ make                             
+$ make
 
 Please keep me on Cc on any related discussions because I'm not
 subscribed to the mailinglist.
