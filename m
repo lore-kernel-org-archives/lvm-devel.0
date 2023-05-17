@@ -1,82 +1,49 @@
-From: Zdenek Kabelac <zkabelac@redhat.com>
-Date: Wed, 17 May 2023 16:33:04 +0200
-Subject: [PATCH] Fix header include for out of tree builds
-In-Reply-To: <09363fec-dc42-f257-0063-d2bd36d1411e@redhat.com>
-References: <20230516160511.2053800-1-glance@ac2.se>
- <ddfeb159-4148-4aae-7760-0556ca3cda1d@redhat.com>
- <20230517113557.GD18946@accum.se>
- <740f6a11-b7aa-91cc-35c6-3dd39b7d5823@redhat.com>
- <20230517115038.GE18946@accum.se>
- <09363fec-dc42-f257-0063-d2bd36d1411e@redhat.com>
-Message-ID: <9d6b1dc2-fe01-c80a-d5f6-ba359f0683ff@redhat.com>
+From: David Teigland <teigland@sourceware.org>
+Date: Wed, 17 May 2023 16:12:13 +0000 (GMT)
+Subject: main - tests: integrity: snapshots now work on raid+integrity
+Message-ID: <20230517161213.853983858D39@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Dne 17. 05. 23 v 14:09 Zdenek Kabelac napsal(a):
-> Dne 17. 05. 23 v 13:50 Anton Lundin napsal(a):
->> On 17 May, 2023 - Zdenek Kabelac wrote:
->>
->>> Dne 17. 05. 23 v 13:35 Anton Lundin napsal(a):
->>>> On 17 May, 2023 - Zdenek Kabelac wrote:
->>>>
->>>>> Dne 16. 05. 23 v 18:05 Anton Lundin napsal(a):
->>>>>> The relative include didn't match up for out of tree builds. The
->>>>>> build tree include directory is in the include paths already.
->>>>>>
->>>>>> Signed-off-by: Anton Lundin <glance@ac2.se>
->>>>>> ---
->>>>>>
->>>>>> Now the following works:
->>>>>> $ mkdir lvm2-build
->>>>>> $ cd lvm2-build
->>>>>> $ ../lvm2/configure
->>>>> Hi
->>>>>
->>>>> Your bug is actually in this command:
->>>>>
->>>>> configure --srcdir=XXXXX
->>>>>
->>>>>> $ make
->>>>>>
->>>>> Otherwise srcdir is located in your builddir and you would actually get 
->>>>> more
->>>>> errors in various parts of lvmb building - as we tend to use $(srcdir)
->>>>> inside makefiles..
->>>> I might be misunderstanding you. Are your comment about the fix or the
->>>> example on now to trigger the bug?
->>>>
->>>> Just running configure from another directory will set srcdir
->>>> automatically. At least in any kind of modern auto-tools.
->>>
->>> While we certainly can push this minor change? (and I'll likely push this
->>> change upstream with my next changeset) - the usage should be based on
->>> srcdir settings - which I'm setting myself for a long time? - as there were
->>> always some problems if this was not set properly.
->>>
->>> So I could try if this got eventually better over time? - but lvm2 is using
->>> somewhat hybrid approach - as we only use 'autoconf' but not 'automake'
->>> historically.
->> With this fix out of tree builds works with or without --srcdir= , and
->> if I revert this fix on my local tree the builds fails with or without
->> --srcdir= like:
->>
->> In file included from ../../lvm2/lib/commands/toolcontext.h:21,
->> ????????????????? from ../../lvm2/lib/integrity/integrity.c:17:
->> ???????????????? ../../lvm2/lib/commands/cmd_enum.h:15:10: fatal error:
->> ???????????????? ../../include/cmds.h: No such file or directory
->> ??????????????????? 15 | #include "../../include/cmds.h"
->>
->> //Anton
->
->
-> Can you please provide? corresponding??? 'make V=1' log ?
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=3a757047560d75a28d7e4c7d9a5253a72d786544
+Commit:        3a757047560d75a28d7e4c7d9a5253a72d786544
+Parent:        3b4e7d1625ddc48dd9393f03a59cc6b74113275a
+Author:        David Teigland <teigland@redhat.com>
+AuthorDate:    Wed May 17 11:10:45 2023 -0500
+Committer:     David Teigland <teigland@redhat.com>
+CommitterDate: Wed May 17 11:10:45 2023 -0500
 
+tests: integrity: snapshots now work on raid+integrity
 
-Actuallly not needed - reproduced myself.
+---
+ test/shell/integrity.sh | 8 --------
+ 1 file changed, 8 deletions(-)
 
-
-Zdenek
+diff --git a/test/shell/integrity.sh b/test/shell/integrity.sh
+index 1ba75d230..61229c83a 100644
+--- a/test/shell/integrity.sh
++++ b/test/shell/integrity.sh
+@@ -585,7 +585,6 @@ not lvconvert --splitmirrors 1 -n tmp -y $vg/$lv1
+ not lvconvert --splitmirrors 1 --trackchanges -y $vg/$lv1
+ not lvchange --syncaction repair $vg/$lv1
+ not lvreduce -L4M $vg/$lv1
+-not lvcreate -s -n snap -L4M $vg/$lv1
+ not pvmove -n $vg/$lv1 "$dev1"
+ not pvmove "$dev1"
+ _verify_data_on_mnt
+@@ -769,11 +768,4 @@ not lvconvert --raidintegrity y $vg/${lv2}_cpool_cdata
+ not lvconvert --raidintegrity y $vg/${lv2}_cpool_cmeta
+ lvremove -y $vg/$lv1
+ 
+-# cannot add integrity to raid that has a snapshot
+-
+-lvcreate --type raid1 -m1 -n $lv1 -l 8 $vg
+-lvcreate -s -n $lv2 -l 8 $vg/$lv1
+-not lvconvert --raidintegrity y $vg/$lv1
+-lvremove -y $vg/$lv1
+-
+ vgremove -ff $vg
 
