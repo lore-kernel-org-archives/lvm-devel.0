@@ -1,44 +1,42 @@
-From: Anton Lundin <glance@ac2.se>
-Date: Tue, 16 May 2023 18:05:11 +0200
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Wed, 17 May 2023 12:29:03 +0200
 Subject: [PATCH] Fix header include for out of tree builds
-Message-ID: <20230516160511.2053800-1-glance@ac2.se>
+In-Reply-To: <20230516160511.2053800-1-glance@ac2.se>
+References: <20230516160511.2053800-1-glance@ac2.se>
+Message-ID: <ddfeb159-4148-4aae-7760-0556ca3cda1d@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-The relative include didn't match up for out of tree builds. The
-build tree include directory is in the include paths already.
+Dne 16. 05. 23 v 18:05 Anton Lundin napsal(a):
+> The relative include didn't match up for out of tree builds. The
+> build tree include directory is in the include paths already.
+> 
+> Signed-off-by: Anton Lundin <glance@ac2.se>
+> ---
+> 
+> Now the following works:
+> $ mkdir lvm2-build
+> $ cd lvm2-build
+> $ ../lvm2/configure
 
-Signed-off-by: Anton Lundin <glance@ac2.se>
----
+Hi
 
-Now the following works:
-$ mkdir lvm2-build
-$ cd lvm2-build
-$ ../lvm2/configure
-$ make
+Your bug is actually in this command:
 
-Please keep me on Cc on any related discussions because I'm not
-subscribed to the mailinglist.
+configure --srcdir=XXXXX
 
- lib/commands/cmd_enum.h | 2 +-
- 1 file changed, 1 insertion(+), 1 deletion(-)
+> $ make
+>
 
-diff --git a/lib/commands/cmd_enum.h b/lib/commands/cmd_enum.h
-index 9e9902224..9d0937a50 100644
---- a/lib/commands/cmd_enum.h
-+++ b/lib/commands/cmd_enum.h
-@@ -12,7 +12,7 @@
- 
- enum {
- #define cmd(a, b) a ,
--#include "../../include/cmds.h"
-+#include "cmds.h"
- #undef cmd
- };
- 
--- 
-2.30.2
+Otherwise srcdir is located in your builddir and you would actually get more 
+errors in various parts of lvmb building - as we tend to use $(srcdir) inside 
+makefiles..
+
+
+Regards
+
+Zdenek
 
