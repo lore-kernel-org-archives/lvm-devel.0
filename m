@@ -1,10 +1,12 @@
 From: Anton Lundin <glance@ac2.se>
-Date: Wed, 17 May 2023 13:35:58 +0200
+Date: Wed, 17 May 2023 13:50:38 +0200
 Subject: [PATCH] Fix header include for out of tree builds
-In-Reply-To: <ddfeb159-4148-4aae-7760-0556ca3cda1d@redhat.com>
+In-Reply-To: <740f6a11-b7aa-91cc-35c6-3dd39b7d5823@redhat.com>
 References: <20230516160511.2053800-1-glance@ac2.se>
  <ddfeb159-4148-4aae-7760-0556ca3cda1d@redhat.com>
-Message-ID: <20230517113557.GD18946@accum.se>
+ <20230517113557.GD18946@accum.se>
+ <740f6a11-b7aa-91cc-35c6-3dd39b7d5823@redhat.com>
+Message-ID: <20230517115038.GE18946@accum.se>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -13,37 +15,56 @@ Content-Transfer-Encoding: 7bit
 
 On 17 May, 2023 - Zdenek Kabelac wrote:
 
-> Dne 16. 05. 23 v 18:05 Anton Lundin napsal(a):
-> > The relative include didn't match up for out of tree builds. The
-> > build tree include directory is in the include paths already.
+> Dne 17. 05. 23 v 13:35 Anton Lundin napsal(a):
+> > On 17 May, 2023 - Zdenek Kabelac wrote:
 > > 
-> > Signed-off-by: Anton Lundin <glance@ac2.se>
-> > ---
+> > > Dne 16. 05. 23 v 18:05 Anton Lundin napsal(a):
+> > > > The relative include didn't match up for out of tree builds. The
+> > > > build tree include directory is in the include paths already.
+> > > > 
+> > > > Signed-off-by: Anton Lundin <glance@ac2.se>
+> > > > ---
+> > > > 
+> > > > Now the following works:
+> > > > $ mkdir lvm2-build
+> > > > $ cd lvm2-build
+> > > > $ ../lvm2/configure
+> > > Hi
+> > > 
+> > > Your bug is actually in this command:
+> > > 
+> > > configure --srcdir=XXXXX
+> > > 
+> > > > $ make
+> > > > 
+> > > Otherwise srcdir is located in your builddir and you would actually get more
+> > > errors in various parts of lvmb building - as we tend to use $(srcdir)
+> > > inside makefiles..
+> > I might be misunderstanding you. Are your comment about the fix or the
+> > example on now to trigger the bug?
 > > 
-> > Now the following works:
-> > $ mkdir lvm2-build
-> > $ cd lvm2-build
-> > $ ../lvm2/configure
+> > Just running configure from another directory will set srcdir
+> > automatically. At least in any kind of modern auto-tools.
 > 
-> Hi
 > 
-> Your bug is actually in this command:
+> While we certainly can push this minor change? (and I'll likely push this
+> change upstream with my next changeset) - the usage should be based on
+> srcdir settings - which I'm setting myself for a long time? - as there were
+> always some problems if this was not set properly.
 > 
-> configure --srcdir=XXXXX
-> 
-> > $ make
-> > 
-> 
-> Otherwise srcdir is located in your builddir and you would actually get more
-> errors in various parts of lvmb building - as we tend to use $(srcdir)
-> inside makefiles..
+> So I could try if this got eventually better over time? - but lvm2 is using
+> somewhat hybrid approach - as we only use 'autoconf' but not 'automake'?
+> historically.
 
-I might be misunderstanding you. Are your comment about the fix or the
-example on now to trigger the bug?
+With this fix out of tree builds works with or without --srcdir= , and
+if I revert this fix on my local tree the builds fails with or without
+--srcdir= like:
 
-Just running configure from another directory will set srcdir
-automatically. At least in any kind of modern auto-tools.
-
+In file included from ../../lvm2/lib/commands/toolcontext.h:21,
+                 from ../../lvm2/lib/integrity/integrity.c:17:
+				 ../../lvm2/lib/commands/cmd_enum.h:15:10: fatal error:
+				 ../../include/cmds.h: No such file or directory
+				    15 | #include "../../include/cmds.h"
 
 //Anton
 
