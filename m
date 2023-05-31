@@ -1,27 +1,27 @@
 From: Peter Rajnoha <prajnoha@sourceware.org>
-Date: Wed, 31 May 2023 07:30:05 +0000 (GMT)
+Date: Wed, 31 May 2023 07:39:36 +0000 (GMT)
 Subject: main - reporter: restore report type to initial value after processing report_for_selection
-Message-ID: <20230531073005.1D89B3858C00@sourceware.org>
+Message-ID: <20230531073936.462683858C00@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=031f7a4639eb808e2a86e57a215dd9def7519ac4
-Commit:        031f7a4639eb808e2a86e57a215dd9def7519ac4
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=e2ecc6c763557462a4bc3d88bbc883917eb0f010
+Commit:        e2ecc6c763557462a4bc3d88bbc883917eb0f010
 Parent:        0591131a539fb668412fc38807686d2a89decd27
 Author:        Peter Rajnoha <prajnoha@redhat.com>
 AuthorDate:    Tue May 30 21:14:37 2023 +0200
 Committer:     Peter Rajnoha <prajnoha@redhat.com>
-CommitterDate: Wed May 31 09:28:11 2023 +0200
+CommitterDate: Wed May 31 09:38:11 2023 +0200
 
 reporter: restore report type to initial value after processing report_for_selection
 
 If we are executing 'report_for_selection' to do an internal report
-just for the selection itself (not for display), we call
-'report_for_selection'. We can call this  more than once, in which case
-we are reusing the same selection handle (e.g. inside 'process_each_lv_in_vg').
+just for the selection itself (not for display), we can call it more
+than once. In that case, we are reusing the same selection handle
+(e.g. inside 'process_each_lv_in_vg').
 
 The selection handle has 'report_type' field which is a union of all
 report types needed for the report based on selection fields we actually
