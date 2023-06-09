@@ -1,62 +1,48 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Fri,  9 Jun 2023 16:01:58 +0000 (GMT)
-Subject: main - cov: drop unneeded constness
-Message-ID: <20230609160158.0F60C3858D3C@sourceware.org>
+Date: Fri,  9 Jun 2023 16:01:59 +0000 (GMT)
+Subject: main - tests: tmp dir inside test dir
+Message-ID: <20230609160159.2FF9E3858C52@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=4d648380484ecf58c33f92a84950bb0bf39424ef
-Commit:        4d648380484ecf58c33f92a84950bb0bf39424ef
-Parent:        17ee5df8576acf628d88fd6840ce55aa1388d6d1
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=734d9791f817693f1d6f396b34d105894aacb16c
+Commit:        734d9791f817693f1d6f396b34d105894aacb16c
+Parent:        4d648380484ecf58c33f92a84950bb0bf39424ef
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu May 11 19:17:18 2023 +0200
+AuthorDate:    Mon May 29 14:17:43 2023 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Fri Jun 9 18:01:16 2023 +0200
 
-cov: drop unneeded constness
+tests: tmp dir inside test dir
 
-If we want to have const structure - use a const pointer to avoid,
-however making individual members const make it only assingle
-in construct time and we already violate this logic since
-we memcpy into the structure -  so drop these unnecessary consts...
+Keep even temporary files within testing dir so generated files are
+not left behind in system's /tmp directory.
 ---
- daemons/lvmpolld/lvmpolld-data-utils.h | 20 ++++++++++----------
- 1 file changed, 10 insertions(+), 10 deletions(-)
+ test/lib/inittest.sh | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
 
-diff --git a/daemons/lvmpolld/lvmpolld-data-utils.h b/daemons/lvmpolld/lvmpolld-data-utils.h
-index 96a27f1c8..eeae4137c 100644
---- a/daemons/lvmpolld/lvmpolld-data-utils.h
-+++ b/daemons/lvmpolld/lvmpolld-data-utils.h
-@@ -45,18 +45,18 @@ struct lvmpolld_lv {
- 	 * accessing following vars doesn't
- 	 * require struct lvmpolld_lv lock
- 	 */
--	struct lvmpolld_state *const ls;
-+	struct lvmpolld_state *ls;
- 	const enum poll_type type;
--	const char *const lvid;
--	const char *const lvmpolld_id;
--	const char *const devicesfile;
--	const char *const lvname; /* full vg/lv name */
-+	const char *lvid;
-+	const char *lvmpolld_id;
-+	const char *devicesfile;
-+	const char *lvname; /* full vg/lv name */
- 	const unsigned pdtimeout; /* in seconds */
--	const char *const sinterval;
--	const char *const lvm_system_dir_env;
--	struct lvmpolld_store *const pdst;
--	const char *const *cmdargv;
--	const char *const *cmdenvp;
-+	const char *sinterval;
-+	const char *lvm_system_dir_env;
-+	struct lvmpolld_store *pdst;
-+	const char **cmdargv;
-+	const char **cmdenvp;
+diff --git a/test/lib/inittest.sh b/test/lib/inittest.sh
+index 9f2713062..c41f4c5b4 100644
+--- a/test/lib/inittest.sh
++++ b/test/lib/inittest.sh
+@@ -106,7 +106,7 @@ else
+ fi
  
- 	/* only used by write */
- 	pid_t cmd_pid;
+ cd "$TESTDIR"
+-mkdir lib
++mkdir lib tmp
+ 
+ # Setting up symlink from $i to $TESTDIR/lib
+ test -n "${abs_top_builddir+varset}" && \
+@@ -118,6 +118,7 @@ find "$TESTOLDPWD/lib" ! \( -name '*.sh' -o -name '*.[cdo]' \
+ DM_DEFAULT_NAME_MANGLING_MODE=none
+ DM_DEV_DIR="$TESTDIR/dev"
+ LVM_SYSTEM_DIR="$TESTDIR/etc"
++TMPDIR="$TESTDIR/tmp"
+ # abort on the internal dm errors in the tests (allowing test user override)
+ DM_ABORT_ON_INTERNAL_ERRORS=${DM_ABORT_ON_INTERNAL_ERRORS:-1}
+ DM_DEBUG_WITH_LINE_NUMBERS=${DM_DEBUG_WITH_LINE_NUMBERS:-1}
 
