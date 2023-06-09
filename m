@@ -1,41 +1,62 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Fri,  9 Jun 2023 16:01:53 +0000 (GMT)
-Subject: main - cmd_enum: correct inclusion
-Message-ID: <20230609160153.7790C3858D3C@sourceware.org>
+Date: Fri,  9 Jun 2023 16:01:58 +0000 (GMT)
+Subject: main - cov: drop unneeded constness
+Message-ID: <20230609160158.0F60C3858D3C@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=fcf2057b3824ab461ad43821101d09f2b06dcac8
-Commit:        fcf2057b3824ab461ad43821101d09f2b06dcac8
-Parent:        74feebdab723c1ea46d4316f8a581750c1d8cda3
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=4d648380484ecf58c33f92a84950bb0bf39424ef
+Commit:        4d648380484ecf58c33f92a84950bb0bf39424ef
+Parent:        17ee5df8576acf628d88fd6840ce55aa1388d6d1
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu May 18 21:53:33 2023 +0200
+AuthorDate:    Thu May 11 19:17:18 2023 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Fri Jun 9 18:01:16 2023 +0200
 
-cmd_enum: correct inclusion
+cov: drop unneeded constness
 
-Ensure we use generated header file for this build from -Iinclude.
-
-Reported-by: Anton Lundin <glance@ac2.se>
+If we want to have const structure - use a const pointer to avoid,
+however making individual members const make it only assingle
+in construct time and we already violate this logic since
+we memcpy into the structure -  so drop these unnecessary consts...
 ---
- lib/commands/cmd_enum.h | 2 +-
- 1 file changed, 1 insertion(+), 1 deletion(-)
+ daemons/lvmpolld/lvmpolld-data-utils.h | 20 ++++++++++----------
+ 1 file changed, 10 insertions(+), 10 deletions(-)
 
-diff --git a/lib/commands/cmd_enum.h b/lib/commands/cmd_enum.h
-index 9e9902224..9d0937a50 100644
---- a/lib/commands/cmd_enum.h
-+++ b/lib/commands/cmd_enum.h
-@@ -12,7 +12,7 @@
+diff --git a/daemons/lvmpolld/lvmpolld-data-utils.h b/daemons/lvmpolld/lvmpolld-data-utils.h
+index 96a27f1c8..eeae4137c 100644
+--- a/daemons/lvmpolld/lvmpolld-data-utils.h
++++ b/daemons/lvmpolld/lvmpolld-data-utils.h
+@@ -45,18 +45,18 @@ struct lvmpolld_lv {
+ 	 * accessing following vars doesn't
+ 	 * require struct lvmpolld_lv lock
+ 	 */
+-	struct lvmpolld_state *const ls;
++	struct lvmpolld_state *ls;
+ 	const enum poll_type type;
+-	const char *const lvid;
+-	const char *const lvmpolld_id;
+-	const char *const devicesfile;
+-	const char *const lvname; /* full vg/lv name */
++	const char *lvid;
++	const char *lvmpolld_id;
++	const char *devicesfile;
++	const char *lvname; /* full vg/lv name */
+ 	const unsigned pdtimeout; /* in seconds */
+-	const char *const sinterval;
+-	const char *const lvm_system_dir_env;
+-	struct lvmpolld_store *const pdst;
+-	const char *const *cmdargv;
+-	const char *const *cmdenvp;
++	const char *sinterval;
++	const char *lvm_system_dir_env;
++	struct lvmpolld_store *pdst;
++	const char **cmdargv;
++	const char **cmdenvp;
  
- enum {
- #define cmd(a, b) a ,
--#include "../../include/cmds.h"
-+#include "cmds.h"
- #undef cmd
- };
- 
+ 	/* only used by write */
+ 	pid_t cmd_pid;
 
