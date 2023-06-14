@@ -1,59 +1,47 @@
 From: Marian Csontos <mcsontos@sourceware.org>
-Date: Wed, 14 Jun 2023 11:26:10 +0000 (GMT)
-Subject: main - tests: tmp is used for TMPDIR
-Message-ID: <20230614112610.B94853858D1E@sourceware.org>
+Date: Wed, 14 Jun 2023 11:50:00 +0000 (GMT)
+Subject: main - tests: Skip integrity tests if target not present
+Message-ID: <20230614115000.4354C3858D1E@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=4cf005d3959fdee5f78948164f22a0f0aff25173
-Commit:        4cf005d3959fdee5f78948164f22a0f0aff25173
-Parent:        7ac5dbfd09e771f087a9467aca8a0d5905084459
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=f0b48a23d9d8b5d858be1772ea5c9083d235b3b3
+Commit:        f0b48a23d9d8b5d858be1772ea5c9083d235b3b3
+Parent:        4cf005d3959fdee5f78948164f22a0f0aff25173
 Author:        Marian Csontos <mcsontos@redhat.com>
-AuthorDate:    Wed Jun 14 13:23:41 2023 +0200
+AuthorDate:    Wed Jun 14 13:48:51 2023 +0200
 Committer:     Marian Csontos <mcsontos@redhat.com>
-CommitterDate: Wed Jun 14 13:23:41 2023 +0200
+CommitterDate: Wed Jun 14 13:48:51 2023 +0200
 
-tests:  tmp is used for TMPDIR
+tests: Skip integrity tests if target not present
 
-Fixes tests failing due to previous commit 734d9791f817.
 ---
- test/shell/pvck-dump.sh           | 4 ++--
- test/shell/pvscan-autoactivate.sh | 6 +++---
- 2 files changed, 5 insertions(+), 5 deletions(-)
+ test/shell/snapshot-raid.sh | 5 +++++
+ 1 file changed, 5 insertions(+)
 
-diff --git a/test/shell/pvck-dump.sh b/test/shell/pvck-dump.sh
-index 81e164d73..76da38d3e 100644
---- a/test/shell/pvck-dump.sh
-+++ b/test/shell/pvck-dump.sh
-@@ -100,8 +100,8 @@ grep "zero metadata copies" m4
- diff m1 m2
- diff m1 m3
+diff --git a/test/shell/snapshot-raid.sh b/test/shell/snapshot-raid.sh
+index 757bf911e..7b045d79e 100644
+--- a/test/shell/snapshot-raid.sh
++++ b/test/shell/snapshot-raid.sh
+@@ -348,6 +348,9 @@ test_extend_snap
+ test_fill_snap
+ lvremove -y $vg/$lv1
  
--not diff m1 m3b > tmp
--grep "metadata text at" tmp
-+not diff m1 m3b > out
-+grep "metadata text at" out
++# INTEGRITY TESTS FOLLOWING:
++if aux have_integrity 1 5 0; then
++
+ lvcreate --type raid1 -m1 --raidintegrity y -n $lv1 -L128M $vg "$dev1" "$dev2"
+ _wait_sync $vg/${lv1}_rimage_0
+ _wait_sync $vg/${lv1}_rimage_1
+@@ -437,5 +440,7 @@ umount "$mount_dir"
+ lvremove -y $vg/snap
+ lvremove -y $vg/$lv1
  
- lvcreate -an -l1 $vg
++fi # INTEGRITY TESTS SKIPPED
++
+ vgremove -ff $vg
  
-diff --git a/test/shell/pvscan-autoactivate.sh b/test/shell/pvscan-autoactivate.sh
-index 297ceb96d..f57473104 100644
---- a/test/shell/pvscan-autoactivate.sh
-+++ b/test/shell/pvscan-autoactivate.sh
-@@ -169,9 +169,9 @@ _clear_online_files
- 
- pvscan --cache -aay "$dev3"
- not ls "$RUNDIR/lvm/pvs_online/$PVID3"
--lvs --foreign $vg2 > tmp
--cat tmp
--grep $lv2 tmp
-+lvs --foreign $vg2 > out
-+cat out
-+grep $lv2 out
- check lv_field $vg2/$lv2 lv_active "" --foreign
- 
- fi
 
