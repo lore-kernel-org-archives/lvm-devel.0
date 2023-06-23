@@ -1,91 +1,67 @@
-From: Tony Asleson <tasleson@sourceware.org>
-Date: Tue, 29 Nov 2022 19:01:37 +0000 (GMT)
-Subject: main - lvmdbusd: Add command_log_selection to command line
-Message-ID: <20221129190137.621AD3858D28@sourceware.org>
+From: Zdenek Kabelac <zkabelac@sourceware.org>
+Date: Fri, 23 Jun 2023 16:09:43 +0000 (GMT)
+Subject: main - tests: ensure test defines its own etc dir
+Message-ID: <20230623160943.A8B503858C36@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=e63b0c7262f50ab43fcde1c50b6d880acab68407
-Commit:        e63b0c7262f50ab43fcde1c50b6d880acab68407
-Parent:        8f60c494515ddccb20e4afb804edb6b9599e65c0
-Author:        Tony Asleson <tasleson@redhat.com>
-AuthorDate:    Tue Nov 29 10:04:17 2022 -0600
-Committer:     Tony Asleson <tasleson@redhat.com>
-CommitterDate: Tue Nov 29 12:56:55 2022 -0600
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=39d6a9601fd3d85ac4237a4731297cddfd5ecb1f
+Commit:        39d6a9601fd3d85ac4237a4731297cddfd5ecb1f
+Parent:        2cb43449ee4c92ae443bd72138fa91bb132aabf7
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Tue Jun 20 21:56:28 2023 +0200
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Fri Jun 23 18:06:22 2023 +0200
 
-lvmdbusd: Add command_log_selection to command line
+tests: ensure test defines its own etc dir
 
-Resolves: https://bugzilla.redhat.com/show_bug.cgi?id=2145114
+Compilation may configure it's own /etc path so ensure the test
+has a defined location for access to this dir during testing.
+
+Also prepare machine_id filei (with the use of uuidgen tool)
+for the test.
 ---
- daemons/lvmdbusd/cmdhandler.py | 33 +++++++++++++++++----------------
- 1 file changed, 17 insertions(+), 16 deletions(-)
+ test/lib/aux.sh      | 3 ++-
+ test/lib/inittest.sh | 3 ++-
+ 2 files changed, 4 insertions(+), 2 deletions(-)
 
-diff --git a/daemons/lvmdbusd/cmdhandler.py b/daemons/lvmdbusd/cmdhandler.py
-index 0c7bd8528..9a76db4c9 100644
---- a/daemons/lvmdbusd/cmdhandler.py
-+++ b/daemons/lvmdbusd/cmdhandler.py
-@@ -17,7 +17,7 @@ import os
+diff --git a/test/lib/aux.sh b/test/lib/aux.sh
+index 5a3f0fe44..966707f23 100644
+--- a/test/lib/aux.sh
++++ b/test/lib/aux.sh
+@@ -1538,7 +1538,7 @@ allocation/vdo_slab_size_mb = 128
+ allocation/zero_metadata = 0
+ backup/archive = 0
+ backup/backup = 0
+-devices/cache_dir = "$TESTDIR/etc"
++devices/cache_dir = "$LVM_SYSTEM_DIR"
+ devices/default_data_alignment = 1
+ devices/dir = "$DM_DEV_DIR"
+ devices/md_component_detection = 0
+@@ -1554,6 +1554,7 @@ global/cache_dump_executable = "$LVM_TEST_CACHE_DUMP_CMD"
+ global/cache_repair_executable = "$LVM_TEST_CACHE_REPAIR_CMD"
+ global/detect_internal_vg_cache_corruption = 1
+ global/fallback_to_local_locking = 0
++global/etc = "$LVM_SYSTEM_DIR"
+ global/locking_type=$LVM_TEST_LOCKING
+ global/notify_dbus = 0
+ global/si_unit_consistency = 1
+diff --git a/test/lib/inittest.sh b/test/lib/inittest.sh
+index c41f4c5b4..0becf2215 100644
+--- a/test/lib/inittest.sh
++++ b/test/lib/inittest.sh
+@@ -124,8 +124,9 @@ DM_ABORT_ON_INTERNAL_ERRORS=${DM_ABORT_ON_INTERNAL_ERRORS:-1}
+ DM_DEBUG_WITH_LINE_NUMBERS=${DM_DEBUG_WITH_LINE_NUMBERS:-1}
  
- from lvmdbusd import cfg
- from lvmdbusd.utils import pv_dest_ranges, log_debug, log_error, add_no_notify,\
--			make_non_block, read_decoded, extract_stack_trace, LvmBug, add_config_option
-+			make_non_block, read_decoded, extract_stack_trace, LvmBug, add_config_option, get_error_msg
- from lvmdbusd.lvm_shell_proxy import LVMShellProxy
- 
- try:
-@@ -121,6 +121,9 @@ def call_lvm(command, debug=False, line_cb=None,
- 	command.insert(0, cfg.LVM_CMD)
- 	command = add_no_notify(command)
- 
-+	# Ensure we get an error message when we fork & exec the lvm command line
-+	command = add_config_option(command, "--config", 'log/command_log_selection="log_context!=''"')
-+
- 	process = Popen(command, stdout=PIPE, stderr=PIPE, close_fds=True,
- 					env=os.environ)
- 
-@@ -167,7 +170,17 @@ def call_lvm(command, debug=False, line_cb=None,
- 		if debug or (process.returncode != 0 and (process.returncode != 5 and "fullreport" in command)):
- 			_debug_c(command, process.returncode, (stdout_text, stderr_text))
- 
--		return process.returncode, stdout_text, stderr_text
-+		try:
-+			report_json = json.loads(stdout_text)
-+		except json.decoder.JSONDecodeError:
-+			# Some lvm commands don't return json even though we are asking for it to do so.
-+			return process.returncode, stdout_text, stderr_text
-+
-+		error_msg = get_error_msg(report_json)
-+		if error_msg:
-+			stderr_text += error_msg
-+
-+		return process.returncode, report_json, stderr_text
- 	else:
- 		if cfg.run.value == 0:
- 			raise SystemExit
-@@ -619,20 +632,8 @@ def lvm_full_report_json():
- 	rc, out, err = call(cmd)
- 	# When we have an exported vg the exit code of lvs or fullreport will be 5
- 	if rc == 0 or rc == 5:
--		# If the 'call' implementation is lvmshell, the out is a dictionary as lvmshell has to
--		# parse the output to get the exit value.  When doing fork & exec, out is a string
--		# representing the JSON.  TODO: Make this consistent between implementations.
--		if cfg.SHELL_IN_USE:
--			assert(type(out) == dict)
--			return out
--		else:
--			try:
--				return json.loads(out)
--			except json.decoder.JSONDecodeError as joe:
--				log_error("JSONDecodeError %s, \n JSON=\n%s\n" %
--							(str(joe), out))
--				raise LvmBug("'fullreport' returned invalid JSON")
+ export DM_DEFAULT_NAME_MANGLING_MODE DM_DEV_DIR LVM_SYSTEM_DIR DM_ABORT_ON_INTERNAL_ERRORS
 -
-+		assert(type(out) == dict)
-+		return out
- 	raise LvmBug("'fullreport' exited with code '%d'" % rc)
- 
- 
+ mkdir "$LVM_SYSTEM_DIR" "$DM_DEV_DIR"
++MACHINEID=$(uuidgen 2>/dev/null || echo "abcdefabcdefabcdefabcdefabcdefab")
++echo "${MACHINEID//-/}" > "$LVM_SYSTEM_DIR/machine-id"   # remove all '-'
+ if test -n "$LVM_TEST_DEVDIR" ; then
+ 	test -d "$LVM_TEST_DEVDIR" || die "Test device directory LVM_TEST_DEVDIR=\"$LVM_TEST_DEVDIR\" is not valid."
+ 	DM_DEV_DIR=$LVM_TEST_DEVDIR
 
