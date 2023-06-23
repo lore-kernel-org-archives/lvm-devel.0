@@ -1,97 +1,81 @@
-From: David Teigland <teigland@sourceware.org>
-Date: Tue, 20 Jun 2023 20:48:54 +0000 (GMT)
-Subject: main - lvcreate: allow thin snapshot syntax that broke
-Message-ID: <20230620204854.A59B03856263@sourceware.org>
+From: Zdenek Kabelac <zkabelac@sourceware.org>
+Date: Fri, 23 Jun 2023 16:09:40 +0000 (GMT)
+Subject: main - tests: update test for automatic virtual size correction
+Message-ID: <20230623160940.31D4B3858288@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=ea6b5b694bf0886052b048b2e04b941ec65d90f9
-Commit:        ea6b5b694bf0886052b048b2e04b941ec65d90f9
-Parent:        1dbb86f8c7cd95cb484a5b3c465b847f35d2b760
-Author:        David Teigland <teigland@redhat.com>
-AuthorDate:    Tue Jun 20 15:41:24 2023 -0500
-Committer:     David Teigland <teigland@redhat.com>
-CommitterDate: Tue Jun 20 15:47:01 2023 -0500
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=8d09124c6204d49f6bda833229c96e8a76665127
+Commit:        8d09124c6204d49f6bda833229c96e8a76665127
+Parent:        657dde6208ddc8172b7d0e1466751046c8ddaeaa
+Author:        Zdenek Kabelac <zkabelac@redhat.com>
+AuthorDate:    Fri Jun 23 18:03:25 2023 +0200
+Committer:     Zdenek Kabelac <zkabelac@redhat.com>
+CommitterDate: Fri Jun 23 18:06:22 2023 +0200
 
-lvcreate: allow thin snapshot syntax that broke
+tests: update test for automatic virtual size correction
 
-The command "lvcreate --type thin --snapshot ..." to create a thin
-snapshot would fail.
-
-commit d651b340e68d97ada25e558eb50aa40062bba936 removed the optional
-"--type thin" from the command definition "lvcreate --snapshot LV_thin",
-and added --type thin as AUTOTYPE.  This was correct and should not have
-changed anything if all the command defs were correct, but it broke
-the "lvcreate --type thin --snapshot" case.  It reveals a problem in a
-different command definintion:  "lvcreate --type thin LV_thin" that was
-missing --snapshot in its OO list.
+lvm_import_vdo will adjust the virtual size within conversion
+so the volume can be use without any futher tweaking.
 ---
- test/shell/lvcreate-thin-snap.sh | 20 ++++++++++++++++++++
- tools/command-lines.in           |  6 +++---
- 2 files changed, 23 insertions(+), 3 deletions(-)
+ test/shell/vdo-convert.sh | 16 ++++++++++++----
+ 1 file changed, 12 insertions(+), 4 deletions(-)
 
-diff --git a/test/shell/lvcreate-thin-snap.sh b/test/shell/lvcreate-thin-snap.sh
-index 6e6410cc1..8f1987986 100644
---- a/test/shell/lvcreate-thin-snap.sh
-+++ b/test/shell/lvcreate-thin-snap.sh
-@@ -74,5 +74,25 @@ lvcreate -L10M --zero n -T $vg/pool -V10M --name $lv1
- mkfs.ext4 "$DM_DEV_DIR/$vg/$lv1"
- lvcreate -K -s $vg/$lv1 --name snap
- fsck -n "$DM_DEV_DIR/$vg/snap"
-+vgchange -an $vg
-+lvremove -y $vg
+diff --git a/test/shell/vdo-convert.sh b/test/shell/vdo-convert.sh
+index cb3dd7100..231939cf4 100644
+--- a/test/shell/vdo-convert.sh
++++ b/test/shell/vdo-convert.sh
+@@ -61,7 +61,6 @@ aux have_vdo 6 2 5 || skip
+ #
+ #  In this case we do not need to move any VDO headers.
+ #
+-if [ 1 -eq 0 ]; then
+ vgcreate $vg "$dev1"
+ 
+ lvcreate -L5G -n $lv1 $vg
+@@ -139,7 +138,6 @@ lvm_import_vdo --vdo-config "$VDO_CONFIG" -y -v --name $vg1/$lv2 "$dev1"
+ fsck -n "$DM_DEV_DIR/$vg1/$lv2"
+ 
+ vgremove -f $vg1
+-fi
+ 
+ aux wipefs_a "$dev1"
+ 
+@@ -189,6 +187,8 @@ dmsetup table
+ # Get VDO table line
+ dmsetup table "$VDONAME" | tr " " "\n" | sed -e '5,6d' -e '12d' | tee vdo-orig
+ 
++mkfs.ext4 -E nodiscard "$DM_DEV_DIR/mapper/$VDONAME"
 +
-+# One thin pool and one thin LV
-+lvcreate --type thin-pool -L 10M -n tp $vg
-+lvcreate --type thin -n thin1 -V 20M --thinpool tp $vg
-+# Different syntaxes for creating a thin snapshot
-+lvcreate --type thin -n snap1 $vg/thin1
-+lvcreate --type thin --snapshot -n snap2 $vg/thin1
-+lvcreate --type thin --thin -n snap3 $vg/thin1
-+lvcreate --type thin --snapshot --thin -n snap4 $vg/thin1
-+lvcreate --snapshot -n snap5 $vg/thin1
-+lvcreate --thin -n snap6 $vg/thin1
-+# The command defs allow --snapshot --thin, but the internal
-+# lvcreate option checks disallow it.  It doesn't seem to make
-+# sense to disallow this from a syntax point of view, but it's
-+# possible that the lvcreate implementation would do the wrong
-+# thing (that should probably be fixed.)
-+not lvcreate --thin --snapshot -n snap7 $vg/thin1
-+vgchange -an $vg
+ # For conversion we
+ aux lvmconf 'global/vdo_disabled_features = [ "version4" ]'
  
- vgremove -ff $vg
-diff --git a/tools/command-lines.in b/tools/command-lines.in
-index 3d311288f..bb6e09933 100644
---- a/tools/command-lines.in
-+++ b/tools/command-lines.in
-@@ -1088,7 +1088,7 @@ AUTOTYPE: thin
- ---
+@@ -209,14 +209,22 @@ unset LVM_VDO_PREPARE
  
- lvcreate --type thin LV_thin
--OO: --thin, OO_LVCREATE
-+OO: --thin, --snapshot, OO_LVCREATE
- IO: --mirrors 0
- ID: lvcreate_thin_snapshot
- DESC: Create a thin LV that is a snapshot of an existing thin LV.
-@@ -1096,7 +1096,7 @@ FLAGS: SECONDARY_SYNTAX
+ #lvm_import_vdo --no-snapshot --vdo-config "$VDO_CONFIG" -v -y --name $vg/$lv "$TEST"
+ lvm_import_vdo --vdo-config "$VDO_CONFIG" --uuid-prefix "$PREFIX" -v -y --name $vg/$lv "$TEST"
++dmsetup table
++
++# check our filesystem is OK
++fsck -n "$DM_DEV_DIR/$vg/$lv"
  
- # alternate form of lvcreate --type thin
- lvcreate --thin LV_thin
--OO: OO_LVCREATE
-+OO: --snapshot, OO_LVCREATE
- IO: --mirrors 0
- ID: lvcreate_thin_snapshot
- DESC: Create a thin LV that is a snapshot of an existing thin LV.
-@@ -1105,7 +1105,7 @@ AUTOTYPE: thin
+ # Compare converted LV uses same VDO table line
+ dmsetup table "$vg-${lv}_vpool-vpool" | tr " " "\n" | sed -e '5,6d' -e '12d' | tee new-vdo-lv
  
- # alternate form of lvcreate --type thin
- lvcreate --snapshot LV_thin
--OO: OO_LVCREATE
-+OO: --thin, OO_LVCREATE
- IO: --mirrors 0
- ID: lvcreate_thin_snapshot
- DESC: Create a thin LV that is a snapshot of an existing thin LV.
++tail -n+3 vdo-orig >vdo-orig-3
++tail -n+3 new-vdo-lv >new-vdo-lv-3
++
+ # Check there is a match between VDO and LV managed volume
+ # (when differentiating parameters are deleted first)
+-diff -u vdo-orig new-vdo-lv || die "Found mismatching VDO table lines!"
++# we need to skip first 2 lines as the device size gets rounded to match VG extent size
++diff -u vdo-orig-3 new-vdo-lv-3 || die "Found mismatching VDO table lines!"
+ 
+-check lv_field $vg/$lv size "<23.00g"
++check lv_field $vg/$lv size "23.00g"
+ unset LVM_VDO_PREPARE
+ 
 
