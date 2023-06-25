@@ -1,50 +1,55 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Sun, 25 Jun 2023 11:04:01 +0000 (GMT)
-Subject: main - tests: correct generated metadata
-Message-ID: <20230625110401.1D6FF3858D35@sourceware.org>
+Date: Sun, 25 Jun 2023 11:04:04 +0000 (GMT)
+Subject: main - tests: simplify
+Message-ID: <20230625110404.831EA3858C62@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=5848f75278250835dd718fbcacc167133af66b35
-Commit:        5848f75278250835dd718fbcacc167133af66b35
-Parent:        0a5712ada4753cd034d862389e6e91af387c406f
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=fa434a18373e42108aed319d3257c935f510f2c3
+Commit:        fa434a18373e42108aed319d3257c935f510f2c3
+Parent:        b8db2c0a4a4bbfc39338141cd7eee67c05b2b31d
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Sat Jun 24 22:34:38 2023 +0200
+AuthorDate:    Sun Jun 25 12:58:27 2023 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
-CommitterDate: Sun Jun 25 12:00:57 2023 +0200
+CommitterDate: Sun Jun 25 13:02:36 2023 +0200
 
-tests: correct generated metadata
+tests: simplify
 
-Newer thin_check actually rejects such restored data.
 ---
- test/shell/lvextend-thin-metadata-dmeventd.sh | 6 +++++-
- 1 file changed, 5 insertions(+), 1 deletion(-)
+ test/shell/vgsplit-cache.sh | 5 +++--
+ 1 file changed, 3 insertions(+), 2 deletions(-)
 
-diff --git a/test/shell/lvextend-thin-metadata-dmeventd.sh b/test/shell/lvextend-thin-metadata-dmeventd.sh
-index 3193cc29c..732f67023 100644
---- a/test/shell/lvextend-thin-metadata-dmeventd.sh
-+++ b/test/shell/lvextend-thin-metadata-dmeventd.sh
-@@ -48,7 +48,7 @@ fake_metadata_() {
- 	for i in $(seq 10 $1)
- 	do
- 		echo ' <device dev_id="'$i'" mapped_blocks="30" transaction="0" creation_time="0" snap_time="0">'
--		echo '  <range_mapping origin_begin="0" data_begin="0" length="29" time="0"/>'
-+		echo '  <range_mapping origin_begin="0" data_begin="0" length="30" time="0"/>'
- 		echo ' </device>'
- 		set +x
- 	done
-@@ -98,6 +98,10 @@ DATA=7200  # Newer version of thin-pool have hidden reserve, so use lower value
- test -z "$BIG_DATA" || DATA=7400
- fake_metadata_ "$DATA" 2 >data
- "$LVM_TEST_THIN_RESTORE_CMD" -i data -o "$DM_DEV_DIR/mapper/$vg-$lv2"
-+
-+# Check tha restored metadata are OK for thin_check
-+"$LVM_TEST_THIN_CHECK_CMD" "$DM_DEV_DIR/mapper/$vg-$lv2"
-+
- # Swap volume with restored fake metadata
- lvconvert -y --chunksize 64k --thinpool $vg/pool --poolmetadata $vg/$lv2
- lvchange -ay $vg/pool
+diff --git a/test/shell/vgsplit-cache.sh b/test/shell/vgsplit-cache.sh
+index 202e4b562..65a711f75 100644
+--- a/test/shell/vgsplit-cache.sh
++++ b/test/shell/vgsplit-cache.sh
+@@ -20,6 +20,7 @@ SKIP_WITH_LVMPOLLD=1
+ aux have_cache 1 3 0 || skip
+ 
+ aux prepare_vg 7
++vgcfgbackup -f vgb $vg
+ 
+ lvcreate -L5 -n $lv2 $vg "$dev2"
+ lvcreate -L5 -n $lv3 $vg "$dev3"
+@@ -78,7 +79,7 @@ vgremove -ff $vg1
+ #
+ # Check we handle pmspare for splitted VGs
+ #
+-aux prepare_vg 7
++vgcfgrestore -f vgb $vg
+ 
+ # Create cache-pool and pmspare on single PV1
+ lvcreate -L10 --type cache-pool $vg/cpool "$dev1"
+@@ -100,7 +101,7 @@ vgremove $vg
+ vgremove -f $vg1
+ 
+ 
+-aux prepare_vg 7
++vgcfgrestore -f vgb $vg
+ 
+ # Again - now with handling _pmspare by vgsplit
+ lvcreate -L10 --type cache-pool $vg/cpool "$dev1"
 
