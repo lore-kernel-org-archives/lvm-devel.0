@@ -1,61 +1,47 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Thu, 29 Jun 2023 18:25:01 +0000 (GMT)
-Subject: main - vdo: lvm_import_vdo correct parsing output
-Message-ID: <20230629182501.7C86D3858412@sourceware.org>
+Date: Thu, 29 Jun 2023 18:25:03 +0000 (GMT)
+Subject: main - lv: more details about monitoring lvs
+Message-ID: <20230629182503.C3C873858416@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=8b75bbe47d2a2961b0fb029ad7a01dc37ee6a8e5
-Commit:        8b75bbe47d2a2961b0fb029ad7a01dc37ee6a8e5
-Parent:        e48c9826e3069b06a5aa31e1e59200dce4915983
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=3596558861e62ca0c6f37bfba6a4e80e46dcca47
+Commit:        3596558861e62ca0c6f37bfba6a4e80e46dcca47
+Parent:        8a07f57ba478c16ca5d5eacf778ee2708109aa65
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Thu Jun 29 13:06:18 2023 +0200
+AuthorDate:    Wed Jun 28 11:51:35 2023 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Thu Jun 29 13:10:42 2023 +0200
 
-vdo: lvm_import_vdo correct parsing output
+lv: more details about monitoring lvs
 
-Output from vdo manager may actually indent output with spaces,
-so trim leading and ending space.
-
-Also add support for verbosity flag for vdo conversion tool.
+Show "not supported" when LV does not support dmeventd monitoring.
+Show "disabled" for LV with disabled dmeventd monitoring.
+(lvdisplay -m)
 ---
- scripts/lvm_import_vdo.sh | 7 ++++---
+ lib/metadata/lv.c | 7 ++++---
  1 file changed, 4 insertions(+), 3 deletions(-)
 
-diff --git a/scripts/lvm_import_vdo.sh b/scripts/lvm_import_vdo.sh
-index 307233429..319bcb33d 100755
---- a/scripts/lvm_import_vdo.sh
-+++ b/scripts/lvm_import_vdo.sh
-@@ -370,7 +370,7 @@ convert_non_lv_() {
- 	fi
+diff --git a/lib/metadata/lv.c b/lib/metadata/lv.c
+index 21aa3b422..1e3fc02d4 100644
+--- a/lib/metadata/lv.c
++++ b/lib/metadata/lv.c
+@@ -311,10 +311,11 @@ char *lvseg_monitor_dup(struct dm_pool *mem, const struct lv_segment *seg)
+ 		segm = first_seg(seg->lv->snapshot->lv);
  
- 	verbose "Moving VDO header."
--	output=$(dry "$VDO" convert $VDOCONF --force --name "$VDONAME")
-+	output=$(dry "$VDO" convert $VDOCONF $VERB --force --name "$VDONAME")
- 
- 	if [ "$ABORT_AFTER_VDO_CONVERT" != "0" ] ; then
- 		verbose "Aborting VDO coversion after moving VDO, volume is useless!"
-@@ -384,7 +384,8 @@ convert_non_lv_() {
- 	local vdo_offset=0
- 	local vdo_non_converted=0
- 	while IFS=  read -r line ; do
--		case "$line" in
-+		# trim leading spaces
-+		case "$(echo $line)" in
- 		"Non converted"*) vdo_non_converted=1 ;;
- 		"Length"*) vdo_length=${line##* = } ;;
- 		"Conversion completed"*)
-@@ -579,7 +580,7 @@ EOF
- 	verbose "VDO conversion parameters: $VDO_ALLOCATION_PARAMS"
- 
- 	verbose "Stopping VDO volume."
--	dry "$VDO" stop $VDOCONF --name "$VDONAME"
-+	dry "$VDO" stop $VDOCONF --name "$VDONAME" $VERB
- 
- 	# If user has not provided '--yes', prompt before conversion
- 	if [ -z "$YES" ] && [ "$USE_VDO_DM_SNAPSHOT" != "1" ]; then
+ 	// log_debug("Query LV:%s mon:%s segm:%s tgtm:%p  segmon:%d statusm:%d", seg->lv->name, segm->lv->name, segm->segtype->name, segm->segtype->ops->target_monitored, seg_monitored(segm), (int)(segm->status & PVMOVE));
+-	if ((dmeventd_monitor_mode() != 1) ||
+-	    !segm->segtype->ops ||
++	if (!segm->segtype->ops ||
+ 	    !segm->segtype->ops->target_monitored)
+-		/* Nothing to do, monitoring not supported */;
++		s = "disabled";
++	else if (dmeventd_monitor_mode() != 1)
++		s = "not enabled";
+ 	else if (lv_is_cow_covering_origin(seg->lv))
+ 		/* Nothing to do, snapshot already covers origin */;
+ 	else if (!seg_monitored(segm) || (segm->status & PVMOVE))
 
