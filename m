@@ -1,47 +1,61 @@
 From: Zdenek Kabelac <zkabelac@sourceware.org>
-Date: Thu, 29 Jun 2023 18:25:00 +0000 (GMT)
-Subject: main - vdo: indent for lvdisplay
-Message-ID: <20230629182500.5A1653858410@sourceware.org>
+Date: Thu, 29 Jun 2023 18:25:01 +0000 (GMT)
+Subject: main - vdo: lvm_import_vdo correct parsing output
+Message-ID: <20230629182501.7C86D3858412@sourceware.org>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=e48c9826e3069b06a5aa31e1e59200dce4915983
-Commit:        e48c9826e3069b06a5aa31e1e59200dce4915983
-Parent:        6ff65e675582265a673136f1edd5358b26c9e481
+Gitweb:        https://sourceware.org/git/?p=lvm2.git;a=commitdiff;h=8b75bbe47d2a2961b0fb029ad7a01dc37ee6a8e5
+Commit:        8b75bbe47d2a2961b0fb029ad7a01dc37ee6a8e5
+Parent:        e48c9826e3069b06a5aa31e1e59200dce4915983
 Author:        Zdenek Kabelac <zkabelac@redhat.com>
-AuthorDate:    Wed Jun 28 11:53:29 2023 +0200
+AuthorDate:    Thu Jun 29 13:06:18 2023 +0200
 Committer:     Zdenek Kabelac <zkabelac@redhat.com>
 CommitterDate: Thu Jun 29 13:10:42 2023 +0200
 
-vdo: indent for lvdisplay
+vdo: lvm_import_vdo correct parsing output
 
+Output from vdo manager may actually indent output with spaces,
+so trim leading and ending space.
+
+Also add support for verbosity flag for vdo conversion tool.
 ---
- lib/vdo/vdo.c | 4 ++--
- 1 file changed, 2 insertions(+), 2 deletions(-)
+ scripts/lvm_import_vdo.sh | 7 ++++---
+ 1 file changed, 4 insertions(+), 3 deletions(-)
 
-diff --git a/lib/vdo/vdo.c b/lib/vdo/vdo.c
-index 133678ae7..6d3b67421 100644
---- a/lib/vdo/vdo.c
-+++ b/lib/vdo/vdo.c
-@@ -173,7 +173,7 @@ static void _vdo_pool_display(const struct lv_segment *seg)
- 		  display_size(cmd, vtp->minimum_io_size));
- 	log_print("  Block map cache sz\t%s",
- 		  display_size(cmd, vtp->block_map_cache_size_mb * UINT64_C(2 * 1024)));
--	log_print("  Block map era length\t%u", vtp->block_map_era_length);
-+	log_print("  Block map era length %u", vtp->block_map_era_length);
+diff --git a/scripts/lvm_import_vdo.sh b/scripts/lvm_import_vdo.sh
+index 307233429..319bcb33d 100755
+--- a/scripts/lvm_import_vdo.sh
++++ b/scripts/lvm_import_vdo.sh
+@@ -370,7 +370,7 @@ convert_non_lv_() {
+ 	fi
  
- 	_print_yes_no("Sparse index", vtp->use_sparse_index);
+ 	verbose "Moving VDO header."
+-	output=$(dry "$VDO" convert $VDOCONF --force --name "$VDONAME")
++	output=$(dry "$VDO" convert $VDOCONF $VERB --force --name "$VDONAME")
  
-@@ -190,7 +190,7 @@ static void _vdo_pool_display(const struct lv_segment *seg)
- 	log_print("  # Hash zone threads\t%u", (unsigned) vtp->hash_zone_threads);
- 	log_print("  # Logical threads\t%u", (unsigned) vtp->logical_threads);
- 	log_print("  # Physical threads\t%u", (unsigned) vtp->physical_threads);
--	log_print("  Max discard\t%u", (unsigned) vtp->max_discard);
-+	log_print("  Max discard\t\t%u", (unsigned) vtp->max_discard);
- 	log_print("  Write policy\t%s", get_vdo_write_policy_name(vtp->write_policy));
- }
+ 	if [ "$ABORT_AFTER_VDO_CONVERT" != "0" ] ; then
+ 		verbose "Aborting VDO coversion after moving VDO, volume is useless!"
+@@ -384,7 +384,8 @@ convert_non_lv_() {
+ 	local vdo_offset=0
+ 	local vdo_non_converted=0
+ 	while IFS=  read -r line ; do
+-		case "$line" in
++		# trim leading spaces
++		case "$(echo $line)" in
+ 		"Non converted"*) vdo_non_converted=1 ;;
+ 		"Length"*) vdo_length=${line##* = } ;;
+ 		"Conversion completed"*)
+@@ -579,7 +580,7 @@ EOF
+ 	verbose "VDO conversion parameters: $VDO_ALLOCATION_PARAMS"
  
+ 	verbose "Stopping VDO volume."
+-	dry "$VDO" stop $VDOCONF --name "$VDONAME"
++	dry "$VDO" stop $VDOCONF --name "$VDONAME" $VERB
+ 
+ 	# If user has not provided '--yes', prompt before conversion
+ 	if [ -z "$YES" ] && [ "$USE_VDO_DM_SNAPSHOT" != "1" ]; then
 
