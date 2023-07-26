@@ -1,54 +1,48 @@
-From: David Teigland (@teigland) <gitlab@mg.gitlab.com>
-Date: Mon, 24 Jul 2023 17:04:58 +0000
-Subject: [Git][lvmteam/lvm2][main] vgmknodes: skipping thin pool is not an error
-Message-ID: <64beaf3a40441_29bb86406026c@gitlab-sidekiq-low-urgency-cpu-bound-v2-85cdd7cd69-q2rzj.mail>
+From: 程智星 <zhixing@nj.iscas.ac.cn>
+Date: Wed, 26 Jul 2023 14:25:36 +0800 (GMT+08:00)
+Subject: Problems encountered in compiling lvm packages using the musl Toolchain
+Message-ID: <5b660067.3cd51.18990dfd7d3.Coremail.zhixing@nj.iscas.ac.cn>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
+hi?friend?
+
+I encountered the following problems when compiling lvm packages using the musl Toolchain:
+
+Question 1 ?
 
 
-David Teigland pushed to branch main at LVM team / lvm2
+| vgimportdevices.c: In function 'vgimportdevices':
+| vgimportdevices.c:148:30: error: 'LOCK_EX' undeclared (first use in this function); did you mean 'LOCKED'?
+|   148 |  if (!lock_devices_file(cmd, LOCK_EX)) {
+|       |                              ^~~~~~~
+|       |                              LOCKED
+| vgimportdevices.c:148:30: note: each undeclared identifier is reported only once for each function it appears in
 
+About LOCK_EX definition is in file.h, I can compile this package by adding this Header file in vgimportdevices.c:
 
-Commits:
-e3cc3e55 by Paul van Genderen-Tjie A Loi at 2023-07-24T12:03:06-05:00
-vgmknodes: skipping thin pool is not an error
-
-- - - - -
-
-
-1 changed file:
-
-- lib/activate/dev_manager.c
-
-
-Changes:
-
-=====================================
-lib/activate/dev_manager.c
-=====================================
-@@ -2066,6 +2066,8 @@ int dev_manager_mknodes(const struct logical_volume *lv)
- 		/* read-only component LV is also made visible */
- 		if (_lv_has_mknode(lv) || (dminfo.read_only && lv_is_component(lv)))
- 			r = _dev_manager_lv_mknodes(lv);
-+		else
-+			r = 1;
- 	} else
- 		r = _dev_manager_lv_rmnodes(lv);
- 
+#include <sys/file.h>
 
 
 
-View it on GitLab: https://gitlab.com/lvmteam/lvm2/-/commit/e3cc3e55c8e75f20997f321bfac766859337bef6
 
--- 
-View it on GitLab: https://gitlab.com/lvmteam/lvm2/-/commit/e3cc3e55c8e75f20997f321bfac766859337bef6
-You're receiving this email because of your account on gitlab.com.
+Could you add this Header file to our source code to fix this problem or do you have a better solution?
+
+
+
+
+Looking forward to your reply!
+
+
+
+
+
+
 
 
 -------------- next part --------------
 An HTML attachment was scrubbed...
-URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20230724/9e1ea47a/attachment-0001.htm>
+URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20230726/61a8c89c/attachment.htm>
