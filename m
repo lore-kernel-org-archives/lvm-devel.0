@@ -1,7 +1,7 @@
 From: Zdeněk Kabeláč (@zdenek.kabelac) <gitlab@mg.gitlab.com>
-Date: Tue, 12 Sep 2023 12:45:49 +0000
-Subject: [Git][lvmteam/lvm2][main] 4 commits: vdo: lvm_import_vdo enhancements
-Message-ID: <65005d7d9562e_27a459c12065@gitlab-sidekiq-low-urgency-cpu-bound-v2-6b46947f6d-lf79w.mail>
+Date: Wed, 13 Sep 2023 23:46:37 +0000
+Subject: [Git][lvmteam/lvm2][main] 8 commits: vdo: avoid using of valuesonly
+Message-ID: <650249dd1be4d_28a4740515a1@gitlab-sidekiq-low-urgency-cpu-bound-v2-f6bdb45d-gth5p.mail>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
@@ -14,730 +14,788 @@ Zden?k Kabel?? pushed to branch main at LVM team / lvm2
 
 
 Commits:
-d9cebeaf by Zdenek Kabelac at 2023-09-12T14:30:48+02:00
-vdo: lvm_import_vdo enhancements
+f9688335 by Zdenek Kabelac at 2023-09-14T01:44:27+02:00
+vdo: avoid using of valuesonly
 
-Work also with devices that may have &#39;:&#39; inside their generated
-/dev/disk/by-id
-
-Ensure there is no race with systems&#39; auto activation while using
-the snapshot for conversion.
-
-Update system&#39;s vdoconf.yml after the use of snapshot for conversion.
-
-Skip unnecesary prompt for &#39;convert&#39; while using snapshot and query only
-for final snaphot merge.
-
-Prohibit conversion for a device with the PV header.
-
-Enhance &#39;trap&#39; protection for more signals.
-
-Improve clean() recovery path.
-
-Replace bash &#39;test&#39; command with [].
-
-Correct some output message to print $TOOL.
-
-Support also options without &#39;-&#39; in the middle i.e. --nosnapshot.
-
-For shellcheck predefine all variables extracted from vdoconf.yml.
+To retain backward compatibility with some older version of lvm
+avoid using --valuesonly option with lvmconfig.
 
 - - - - -
-b1b60887 by Zdenek Kabelac at 2023-09-12T14:39:14+02:00
-debug: missing dots
+4276c703 by Zdenek Kabelac at 2023-09-14T01:45:34+02:00
+tests: aux try with extra sleep
+
+Since udev_wait is not really adding any major delay to wait
+for any udev worker processing - add extra sleep .1.
 
 - - - - -
-ab73ad4e by Mikulas Patocka at 2023-09-12T14:41:22+02:00
-gcc: fix warnings for x32 architecture
+de4cb219 by Zdenek Kabelac at 2023-09-14T01:45:34+02:00
+tests: aux using singl lvmconf call
 
-Warning from x32 ABI compilation.
-
-- - - - -
-8cbfd72f by Zdenek Kabelac at 2023-09-12T14:44:32+02:00
-WHATS_NEW: updates
+lvmconf can handle multiple options in a single pass.
 
 - - - - -
+738c4b84 by Zdenek Kabelac at 2023-09-14T01:45:34+02:00
+tests: missing to check for writecache support
+
+Ono more case requires writecache presence.
+
+- - - - -
+fba81cf3 by Zdenek Kabelac at 2023-09-14T01:45:34+02:00
+tests: pvmove large disk area
+
+With some faster test hw machine we need to make this test
+a bit more resource consuming.
+
+- - - - -
+fac2e073 by Zdenek Kabelac at 2023-09-14T01:45:34+02:00
+tests: enforce full fs check
+
+- - - - -
+f9d17f1f by Zdenek Kabelac at 2023-09-14T01:45:34+02:00
+tests: update for work in fake dev environment
+
+No write outside of $LVM_TEST_DIR  (removed /test access).
+Use &#39;aux prepare_scsi_debug_dev&#39; for automated scsi_debug handling
+Properly use &quot;&quot; around shell vars.
+Smarter read of PVS values.
+Relax requirement to only work with real /dev dir.
+
+- - - - -
+9d7061f1 by Zdenek Kabelac at 2023-09-14T01:45:34+02:00
+tests: skip test when lvmdbusd runs on the system
+
+lvmdbusd changes $RUNDIR results.
+
+- - - - -
 
 
-5 changed files:
+7 changed files:
 
-- WHATS_NEW
-- lib/log/log.c
-- lib/metadata/vdo_manip.c
 - scripts/lvm_import_vdo.sh
-- tools/vgchange.c
+- test/lib/aux.sh
+- test/shell/caching-snapshot.sh
+- test/shell/devicesfile-vpd-ids.sh
+- test/shell/duplicate-pvs-md0.sh
+- test/shell/lvresize-fs-crypt.sh
+- test/shell/pvmove-abort-all.sh
 
 
 Changes:
 
 =====================================
-WHATS_NEW
-=====================================
-@@ -1,7 +1,8 @@
- version 2.03.23 - 
- ==================================
-+  Enhance error detection for lvm_import_vdo.
-   Support PV lists with thin lvconvert.
--  Fix support for lvm_import_vdo and SCSI VDO volumes.
-+  Fix support for lvm_import_vdo with SCSI VDO volumes.
-   Recognize lvm.conf report/headings=2 for full column names in report headings.
-   Add --headings none|abbrev|full cmd line option to set report headings type.
-   Require writable LV for convertion to vdo pool.
-
-
-=====================================
-lib/log/log.c
-=====================================
-@@ -515,7 +515,7 @@ static void _set_time_prefix(char *prefix, int buflen)
- 	if (!len)
- 		goto fail;
- 
--	len = dm_snprintf(prefix + len, buflen - len, ".%06ld ", ts.tv_nsec/1000);
-+	len = dm_snprintf(prefix + len, buflen - len, ".%06d ", (int)ts.tv_nsec/1000);
- 	if (len < 0)
- 		goto fail;
- 
-
-
-=====================================
-lib/metadata/vdo_manip.c
-=====================================
-@@ -522,9 +522,9 @@ static int _get_sysinfo_memory(uint64_t *total_mb, uint64_t *available_mb)
- 	if (sysinfo(&si) != 0)
- 		return 0;
- 
--	log_debug("Sysinfo free:%lu  bufferram:%lu  sharedram:%lu  freehigh:%lu  unit:%u.",
--		  si.freeram >> 20, si.bufferram >> 20, si.sharedram >> 20,
--		  si.freehigh >> 20, si.mem_unit);
-+	log_debug("Sysinfo free:%llu  bufferram:%llu  sharedram:%llu  freehigh:%llu  unit:%u.",
-+		  (unsigned long long)si.freeram >> 20, (unsigned long long)si.bufferram >> 20, (unsigned long long)si.sharedram >> 20,
-+		  (unsigned long long)si.freehigh >> 20, si.mem_unit);
- 
- 	*available_mb = ((uint64_t)(si.freeram + si.bufferram) * si.mem_unit) >> 30;
- 	*total_mb = si.totalram >> 30;
-
-
-=====================================
 scripts/lvm_import_vdo.sh
 =====================================
-@@ -36,6 +36,9 @@ TEMPDIR="${TMPDIR:-/tmp}/$IMPORT_NAME"
- _SAVEPATH=$PATH
- PATH="/sbin:/usr/sbin:/bin:/usr/sbin:$PATH"
+@@ -531,9 +531,9 @@ convert_non_lv_() {
+ 	dry snapshot_merge_ "$DEVICE"
  
-+# Set of trapped signals
-+declare -a SIGNALS=("HUP" "INT" "QUIT" "ABRT" "TERM" "EXIT")
-+
- # user may override lvm location by setting LVM_BINARY
- LVM=${LVM_BINARY:-lvm}
- VDO=${VDO_BINARY:-vdo}
-@@ -52,7 +55,9 @@ DM_DEV_DIR="${DM_DEV_DIR:-/dev}"
- DM_UUID_PREFIX="${DM_UUID_PREFIX:-}"
- DM_VG_NAME=
- DM_LV_NAME=
-+DEFAULT_VDO_CONFIG="/etc/vdoconf.yml" # Default location of vdo's manager config file
- VDO_CONFIG=${VDO_CONFIG:-}   # can be overridden with --vdo-config
-+VDO_CONFIG_RESTORE=
- VDOCONF=
- test -n "$VDO_CONFIG" && VDOCONF="-f $VDO_CONFIG"
+ 	# For systems using devicesfile add 'merged' PV into system.devices.
+-	if [ "$("$LVM" lvmconfig --valuesonly devices/use_devicesfile --typeconfig full)" = "1" ]; then
+-		dry "$LVM" lvmdevices --adddev "$DEVICE"
+-	fi
++	# Bypassing use of --valuesonly to keep compatibility with older lvm.
++	local usedev=$("$LVM" lvmconfig --typeconfig full devices/use_devicesfile || true)
++	[ "${usedev#*=" = "1" ] && dry "$LVM" lvmdevices --adddev "$DEVICE"
  
-@@ -61,16 +66,17 @@ VGNAME=
- LVNAME=
- DEVMAJOR=0
- DEVMINOR=0
--PROMPTING=""
--USE_VDO_DM_SNAPSHOT=1
-+PROMPTING=
-+USE_VDO_DM_SNAPSHOT="--yes"
- VDO_DM_SNAPSHOT_NAME=
- VDO_DM_SNAPSHOT_DEVICE=
- VDO_SNAPSHOT_LOOP=
-+VDO_INCONSISTENT=
+ 	# Restore auto activation for a VG
+ 	dry "$LVM" vgchange --setautoactivation y $VERB $FORCE "$VGNAME"
+
+
+=====================================
+test/lib/aux.sh
+=====================================
+@@ -430,6 +430,7 @@ teardown_devs_prefixed() {
  
- DRY=0
--VERB=""
--FORCE=""
--YES=""
-+VERB=
-+FORCE=
-+YES=
- ABORT_AFTER_VDO_CONVERT=0
- VDO_ALLOCATION_PARAMS=
+ 			test "$progress" = 1 || break
  
-@@ -78,6 +84,25 @@ VDO_ALLOCATION_PARAMS=
- DEFAULT_NAME="vdovg/vdolvol"
- NAME=""
- 
-+# predefine empty
-+vdo_ackThreads=
-+vdo_bioRotationInterval=
-+vdo_bioThreads=
-+vdo_blockMapCacheSize=
-+vdo_blockMapPeriod=
-+vdo_compression=
-+vdo_cpuThreads=
-+vdo_deduplication=
-+vdo_hashZoneThreads=
-+vdo_indexMemory=
-+vdo_indexSparse=
-+vdo_logicalBlockSize=
-+vdo_logicalThreads=
-+vdo_maxDiscardSize=
-+vdo_physicalThreads=
-+vdo_slabSize=
-+vdo_writePolicy=
-+
- # help message
- tool_usage() {
- 	echo "${TOOL}: Utility to convert VDO volume to VDO LV."
-@@ -107,7 +132,11 @@ error() {
- 	for i in "$@" ;  do
- 		echo "$TOOL: $i" >&2
++			sleep .1
+ 			udev_wait
+ 			wait
+ 			progress=0
+@@ -1453,8 +1454,7 @@ extend_filter_md() {
+ 	for rx in "$@"; do
+ 		filter=$(echo "$filter" | sed -e "s:\\[:[ \"$rx\", :")
  	done
--	cleanup 1
-+	return 1
-+}
-+
-+warn() {
-+	echo "$TOOL: WARNING: $i" >&2
+-	lvmconf "$filter"
+-	lvmconf "devices/scan = [ \"$DM_DEV_DIR\", \"/dev\" ]"
++	lvmconf "$filter" "devices/scan = [ \"$DM_DEV_DIR\", \"/dev\" ]"
  }
  
- dry() {
-@@ -120,20 +149,31 @@ dry() {
- }
+ extend_filter_LVMTEST() {
+
+
+=====================================
+test/shell/caching-snapshot.sh
+=====================================
+@@ -72,7 +72,8 @@ test_snap_create() {
  
- cleanup() {
--	trap '' 2
--	test -n "$VDO_DM_SNAPSHOT_NAME" && {
-+	RC=$?	# Return code + 128  of the last command eg INT=2 + 128 -> 130
+ test_snap_create cache --cachepool
+ test_snap_create cache --cachevol
+-test_snap_create writecache --cachevol
 +
-+	trap '' "${SIGNALS[@]}" # mute trap for all signals to not interrupt cleanup() on any next signal
-+
-+	[ -z "$PROMPTING" ] || echo "No"
-+
-+	[ -e "$VDO_CONFIG_RESTORE" ] && { dry cp -a "$VDO_CONFIG_RESTORE" "${VDO_CONFIG:-"$DEFAULT_VDO_CONFIG"}" || true ; }
-+
-+	if [ -n "$VDO_DM_SNAPSHOT_NAME" ]; then
-+		dry "$LVM" vgchange -an --devices "$VDO_DM_SNAPSHOT_DEVICE" "$VGNAME" &>/dev/null || true
- 		for i in {1..20} ; do
--			test "$("$DMSETUP" info --noheading -co open "$VDO_DM_SNAPSHOT_NAME")" = "0" && break
-+			[ "$(dry "$DMSETUP" info --noheading -co open "$VDO_DM_SNAPSHOT_NAME")" = "0" ] && break
- 			sleep .1
- 		done
--		"$DMSETUP" remove "$VDO_DM_SNAPSHOT_NAME" || true
--	}
--	test -n "$VDO_SNAPSHOT_LOOP" && { "$LOSETUP" -d "$VDO_SNAPSHOT_LOOP" || true ; }
-+		dry "$DMSETUP" remove "$VDO_DM_SNAPSHOT_NAME" &>/dev/null || true
-+	fi
-+
-+
-+	[ -n "$VDO_SNAPSHOT_LOOP" ] && { dry "$LOSETUP" -d "$VDO_SNAPSHOT_LOOP" || true ; }
-+
-+	[ -z "$VDO_INCONSISTENT" ] || echo "$TOOL: VDO volume import process exited unexpectedly!" >&2
++[ "$HAVE_WRITECACHE" = "1" ] && test_snap_create writecache --cachevol
  
--	test -z "$PROMPTING" || echo "No"
- 	rm -rf "$TEMPDIR" || true
--	# error exit status for break
--	exit "${1:-1}"
-+
-+	exit "$RC"
- }
+ # removing cache|writecache while snapshot exists
  
- # Create snapshot target like for persistent snapshot with 16KiB chunksize
-@@ -148,7 +188,7 @@ snapshot_create_() {
- 	# TODO: maybe use ramdisk via 'brd' device ?)
- 	"$TRUNCATE" -s 20M "$file"
- 	VDO_SNAPSHOT_LOOP=$("$LOSETUP" -f --show "$file")
--	"$DMSETUP" create "$VDO_DM_SNAPSHOT_NAME" -u "${DM_UUID_PREFIX}-${VDO_DM_SNAPSHOT_NAME}-priv" --table "$(snapshot_target_line_ "$1" "$VDO_SNAPSHOT_LOOP")"
-+	"$DMSETUP" create "$VDO_DM_SNAPSHOT_NAME" -u "${DM_UUID_PREFIX}${VDO_DM_SNAPSHOT_NAME}-priv" --table "$(snapshot_target_line_ "$1" "$VDO_SNAPSHOT_LOOP")"
- 	VDO_DM_SNAPSHOT_DEVICE="$DM_DEV_DIR/mapper/$VDO_DM_SNAPSHOT_NAME"
- 	verbose "Snapshot of VDO device $1 created: $VDO_DM_SNAPSHOT_DEVICE."
- }
-@@ -164,6 +204,8 @@ snapshot_merge_() {
- 	}
+@@ -109,9 +110,7 @@ test_snap_remove() {
+ test_snap_remove cache --cachepool
+ test_snap_remove cache --cachevol
  
- 	verbose "Merging converted VDO volume..."
-+	VDO_INCONSISTENT=1
-+
- 	# Running merging
- 	"$DMSETUP" resume "$VDO_DM_SNAPSHOT_NAME"
+-if [ "$HAVE_WRITECACHE" = "1" ]; then
+-test_snap_remove writecache --cachevol
+-fi
++[ "$HAVE_WRITECACHE" = "1" ] && test_snap_remove writecache --cachevol
  
-@@ -171,24 +213,28 @@ snapshot_merge_() {
+ # adding cache|writecache to an LV that has a snapshot
  
- 	# Loop for a while, till the snapshot is merged.
- 	# Should be nearly instantaneous.
--        # FIXME: Recovery when something prevents merging is hard
-+	# FIXME: Recovery when something prevents merging is hard
- 	for i in $(seq 1 20) ; do
- 		status=( $("$DMSETUP" status "$VDO_DM_SNAPSHOT_NAME") )
- 		# Check if merging is finished
--		test "${status[3]%/*}" = "${status[4]}" && break
-+		[ "${status[3]%/*}" = "${status[4]}" ] && break
- 		# Wait a bit and retry
- 		sleep .2
- 	done
--	test "${status[3]%/*}" = "${status[4]}" || {
-+
-+	if [ "${status[3]%/*}" != "${status[4]}" ]; then
- 		# FIXME: Now what shall we do ??? Help....
--		# Keep snapshot in table for possible analysis...
-+		# Keep snapshot in DM table for possible analysis...
- 		VDO_DM_SNAPSHOT_NAME=
- 		VDO_SNAPSHOT_LOOP=
--		echo "Initial snapshot status ${initial_status[*]}"
--		echo "Failing merge snapshot status ${status[*]}"
-+		echo "$TOOL: Initial snapshot status ${initial_status[*]}"
-+		echo "$TOOL: Failing merge snapshot status ${status[*]}"
- 		error "ABORTING: Snapshot failed to merge! (Administrator required...)"
--	}
--	sync
-+	fi
-+
-+	VDO_INCONSISTENT=
-+	VDO_CONFIG_RESTORE=
-+
- 	"$DMSETUP" remove "$VDO_DM_SNAPSHOT_NAME" || {
- 		sleep 1 # sleep and retry once more
- 		"$DMSETUP" remove "$VDO_DM_SNAPSHOT_NAME" || {
-@@ -227,9 +273,9 @@ get_largest_extent_size_() {
+@@ -150,9 +149,7 @@ test_caching_with_snap() {
+ test_caching_with_snap cache --cachepool
+ test_caching_with_snap cache --cachevol
  
- 	for i in 8 16 32 64 128 256 512 1024 2048 4096 ; do
- 		d=$(( $1 / i ))
--		test $(( d * i )) -eq "$1" || break
-+		[ $(( d * i )) -eq "$1" ] || break
- 		d=$(( $2 / i ))
--		test $(( d * i )) -eq "$2" || break
-+		[ $(( d * i )) -eq "$2" ] || break
- 		max=$i
- 	done
- 	echo "$max"
-@@ -244,7 +290,7 @@ detect_lv_() {
+-if [ "$HAVE_WRITECACHE" = "1" ]; then
+-test_caching_with_snap writecache --cachevol
+-fi
++[ "$HAVE_WRITECACHE" = "1" ] && test_caching_with_snap writecache --cachevol
  
- 	DEVICE=${1/#"${DM_DEV_DIR}/"/}
- 	DEVICE=$("$READLINK" $READLINK_E "$DM_DEV_DIR/$DEVICE" || true)
--	test -n "$DEVICE" || error "Readlink cannot access device \"$1\"."
-+	[ -n "$DEVICE" ] || error "Readlink cannot access device \"$1\"."
- 	RDEVICE=$DEVICE
- 	case "$RDEVICE" in
- 	  # hardcoded /dev  since udev does not create these entries elsewhere
-@@ -256,12 +302,12 @@ detect_lv_() {
- 		;;
- 	  *)
- 		RSTAT=$("$STAT" --format "DEVMAJOR=\$((0x%t)) DEVMINOR=\$((0x%T))" "$RDEVICE" || true)
--		test -n "$RSTAT" || error "Cannot get major:minor for \"$DEVICE\"."
-+		[ -n "$RSTAT" ] || error "Cannot get major:minor for \"$DEVICE\"."
- 		eval "$RSTAT"
- 		;;
- 	esac
+ # adding cache|writecache to a snapshot is not allowed
  
--	test "$DEVMAJOR" != "$(grep device-mapper /proc/devices | cut -f1 -d' ')" && return
-+	[ "$DEVMAJOR" != "$(grep device-mapper /proc/devices | cut -f1 -d' ')" ] && return
+
+
+=====================================
+test/shell/devicesfile-vpd-ids.sh
+=====================================
+@@ -16,12 +16,10 @@ SKIP_WITH_LVMPOLLD=1
  
- 	DEV="$("$DMSETUP" info -c -j "$DEVMAJOR" -m "$DEVMINOR" -o uuid,name --noheadings --nameprefixes --separator ' ')"
- 	case "$DEV" in
-@@ -337,9 +383,10 @@ convert_lv_() {
- 	vg_extent_size=$("$LVM" vgs -o vg_extent_size --units b --nosuffix --noheadings "$VGNAME")
- 	vg_extent_size=$(( vg_extent_size / 1024 ))
+ . lib/inittest
  
--	test "$vg_extent_size" -le "$extent_size" || {
-+	[ "$vg_extent_size" -le "$extent_size" ] || {
- 		error "Please vgchange extent_size to at most $extent_size KiB or extend and align virtual size of VDO device on $vg_extent_size KiB before retrying conversion."
- 	}
-+
- 	verbose "Renaming existing LV to be used as _vdata volume for VDO pool LV."
- 	dry "$LVM" lvrename $YES $VERB "$VGNAME/$DM_LV_NAME" "$VGNAME/${LVNAME}_vpool" || {
- 		error "Rename of LV \"$VGNAME/$DM_LV_NAME\" failed, while VDO header has been already moved!"
-@@ -367,25 +414,39 @@ convert_non_lv_() {
- 	local output
- 	local pvfree
- 
--	if [ "$USE_VDO_DM_SNAPSHOT" = "1" ]; then
-+	if [ -n "$USE_VDO_DM_SNAPSHOT" ]; then
- 		dry snapshot_create_ "$DEVICE"
--		sed "s:$DEVICE:$VDO_DM_SNAPSHOT_DEVICE:" "$TEMPDIR/vdoconf.yml" > "$TEMPDIR/vdo_snap.yml"
-+		sed "s|$DEVICE|$VDO_DM_SNAPSHOT_DEVICE|" "$TEMPDIR/vdoconf.yml" > "$TEMPDIR/vdo_snap.yml"
-+		# In case of error in the middle of conversion restore original config file
-+		VDO_CONFIG_RESTORE="$TEMPDIR/vdoconf.yml"
- 		# Let VDO manager operate on snapshot volume
--		VDOCONF="-f $TEMPDIR/vdo_snap.yml"
-+		dry cp -a "$TEMPDIR/vdo_snap.yml" "${VDO_CONFIG:-"$DEFAULT_VDO_CONFIG"}"
-+	else
-+		# If error in the following section, report possible problems ahead
-+		VDO_INCONSISTENT=1
- 	fi
- 
--	verbose "Moving VDO header."
-+	# In case we operate with snapshot, all lvm2 operation will also run on top of snapshot
-+	local device=${VDO_DM_SNAPSHOT_DEVICE:-$DEVICE}
-+
-+	# Check if there is not already an existing PV header, this would have fail on pvcreate after conversion
-+	"$LVM" pvs --devices "$device" "$device" 2>/dev/null && {
-+		error "Cannot convert volume \"$DEVICE\" with existing PV header."
-+	}
-+
-+	verbose "Moving VDO header on \"$device\"."
- 
- 	output=$(dry "$VDO" convert $VDOCONF $VERB --force --name "$VDONAME" 2>&1) || {
-+		local rc=$?
- 		echo "$output"
--		error "Failed to convert VDO volume \"$DEVICE\" (exit code $?)."
-+		error "Failed to convert VDO volume \"$DEVICE\" (exit code $rc)."
- 	}
- 
- 	echo "$output"
- 
--	if [ "$ABORT_AFTER_VDO_CONVERT" != "0" ] ; then
--		verbose "Aborting VDO conversion after moving VDO header, volume is useless!"
--		cleanup 0
-+	if [ "$ABORT_AFTER_VDO_CONVERT" != "0" ]; then
-+		warn "Aborting VDO conversion after moving VDO header, volume is useless!"
-+		return 0
- 	fi
- 
- 	# Parse result from VDO preparation/conversion tool
-@@ -410,12 +471,7 @@ convert_non_lv_() {
- 		esac
- 	done <<< "$output"
- 
--	# In case we operation with snapshot, all lvm2 operation will also run on top of snapshot
--	local devices=${VDO_DM_SNAPSHOT_DEVICE:-$DEVICE}
+-test "$DM_DEV_DIR" = "/dev" || skip "Only works with /dev access -> make check LVM_TEST_DEVDIR=/dev"
 -
--	dry "$LVM" pvcreate $YES --devices "$devices" --dataalignment "$vdo_offset"b "$devices" || {
--		error "Creation of PV on \"$DEVICE\" failed, while VDO header has been already moved!"
--	}
-+	dry "$LVM" pvcreate $YES $VERB $FORCE --devices "$device" --dataalignment "$vdo_offset"b "$device"
+-aux lvmconf 'devices/use_devicesfile = 1'
++SYS_DIR="sys"
+ # requires trailing / to match dm
+-aux lvmconf 'devices/device_id_sysfs_dir = "/test/sys/"'
+-SYS_DIR="/test/sys"
++aux lvmconf "devices/device_id_sysfs_dir = \"$PWD/$SYS_DIR/\"" \
++	"devices/use_devicesfile = 1"
  
- 	# Obtain free space in this new PV
- 	# after 'vdo convert' call there is ~(1-2)M free space@the front of the device
-@@ -432,54 +488,57 @@ convert_non_lv_() {
- 	# To precisely byte-synchronize the size of VDO LV, user can lvresize such VDO LV later.
- 	vdo_logicalSizeRounded=$(( ( vdo_logicalSize / extent_size ) * extent_size ))
+ # These values match the values encoded in the binary blob
+ # written to dev1_vpd_pg83
+@@ -34,7 +32,7 @@ DEV1_NAA2=naa.600a098000000002ac18542400000dbd
+ DEV1_NAA3=naa.553b13644430344b4e3f486d32647962
  
--	verbose "Creating VG \"${NAME%/*}\" with extent size $extent_size KiB."
--	dry "$LVM" vgcreate $YES $VERB --devices "$devices" -s "${extent_size}k" "$VGNAME" "$devices" || {
--		error "Creation of VG \"$VGNAME\" failed, while VDO header has been already moved!"
--	}
-+	verbose "Creating volume group \"$VGNAME\" with the extent size $extent_size KiB."
-+	dry "$LVM" vgcreate $YES $VERB --devices "$device" -s "${extent_size}k" "$VGNAME" "$device"
+ create_base() {
+-	mkdir -p $SYS_DIR/dev/block
++	mkdir -p "$SYS_DIR/dev/block"
  
--	verbose "Creating VDO pool data LV from all extents in volume group $VGNAME."
--	dry "$LVM" lvcreate -Zn -Wn -an $YES $VERB --devices "$devices" -l100%VG -n "${LVNAME}_vpool" "$VGNAME" "$devices"
-+	verbose "Creating VDO pool data LV from all extents in the volume group \"$VGNAME\"."
-+	dry "$LVM" lvcreate -Zn -Wn -an $YES $VERB --devices "$device" -l100%VG -n "${LVNAME}_vpool" "$VGNAME" "$device"
- 
- 	verbose "Converting to VDO pool."
--	dry "$LVM" lvconvert $YES $VERB $FORCE --devices "$devices" --config "$VDO_ALLOCATION_PARAMS" -Zn -V "${vdo_logicalSizeRounded}k" -n "$LVNAME" --type vdo-pool "$VGNAME/${LVNAME}_vpool"
--	if [ "$vdo_logicalSizeRounded" -lt "$vdo_logicalSize" ] ; then
-+	dry "$LVM" lvconvert ${USE_VDO_DM_SNAPSHOT:-"$YES"} $VERB $FORCE --devices "$device" --config "$VDO_ALLOCATION_PARAMS" -Zn -V "${vdo_logicalSizeRounded}k" -n "$LVNAME" --type vdo-pool "$VGNAME/${LVNAME}_vpool"
-+
-+	if [ "$vdo_logicalSizeRounded" -lt "$vdo_logicalSize" ]; then
- 		# need to extend virtual size to be covering all the converted area
- 		# let lvm2 to round to the proper virtual size of VDO LV
--		dry "$LVM" lvextend $YES $VERB --fs ignore --devices "$devices" -L "$vdo_logicalSize"k "$VGNAME/$LVNAME"
-+		dry "$LVM" lvextend $YES $VERB --fs ignore --devices "$device" -L "$vdo_logicalSize"k "$VGNAME/$LVNAME"
- 	fi
- 
--	dry "$LVM" vgchange -an $VERB $FORCE --devices "$devices" "$VGNAME"
-+	VDO_INCONSISTENT=
-+
-+	if [ -n "$USE_VDO_DM_SNAPSHOT" ]; then
-+		dry "$LVM" vgchange -an $VERB $FORCE --devices "$device" "$VGNAME"
-+
-+		# Prevent unwanted auto activation when VG is merged
-+		dry "$LVM" vgchange --setautoactivation n $VERB $FORCE --devices "$device" "$VGNAME"
- 
--	if [ "$USE_VDO_DM_SNAPSHOT" = "1" ]; then
- 		if [ -z "$YES" ]; then
- 			PROMPTING=yes
--			echo "Warning: Do not interrupt merging process once it starts (VDO data may become irrecoverable)!"
--			echo -n "Do you want to merge converted VDO device \"$DEVICE\" to VDO LV \"$VGNAME/$LVNAME\"? [y|N]: "
-+			warn "Do not interrupt merging process once it starts (VDO data may become irrecoverable)!"
-+			echo -n "$TOOL: Do you want to merge converted VDO device \"$DEVICE\" to VDO LV \"$VGNAME/$LVNAME\"? [y|N]: "
- 			read -r -n 1 -s ANSWER
- 			case "${ANSWER:0:1}" in
- 			  y|Y )  echo "Yes" ;;
--			    * )  echo "No" ; PROMPTING=""; cleanup 1 ;;
-+			    * )  echo "No" ; PROMPTING=""; return 1 ;;
- 			esac
- 			PROMPTING=""
- 			YES="-y" # From now, now prompting
- 		fi
- 
- 		dry snapshot_merge_ "$DEVICE"
--		if [ -e "$TEMPDIR/vdo_snap.yml" ]; then
--			dry cp "$TEMPDIR/vdo_snap.yml" "$VDO_CONFIG"
--		elif [ -e "$VDO_CONFIG" ]; then
--			dry rm -f "$VDO_CONFIG"
--		fi
-+
- 		verbose "Merging of VDO device finished."
- 	fi
- 
--	output=$(dry "$LVM" pvs "$DEVICE" 2>&1) || {
-+	output=$("$LVM" pvs "$DEVICE" 2>&1) || {
- 		if echo "$output" | grep -q "not in devices file" ; then
- 			verbose "Adding \"$DEVICE\" to devices file."
- 			dry "$LVM" lvmdevices --adddev "$DEVICE"
- 		fi
- 	}
- 
-+	# Restore auto activation for a VG
-+	[ -n "$USE_VDO_DM_SNAPSHOT" ] && dry "$LVM" vgchange --setautoactivation y $VERB $FORCE "$VGNAME"
-+
- 	dry "$LVM" lvchange -ay $VERB $FORCE "$VGNAME/$LVNAME"
+ 	echo -n "0083 009c 0201 0020 4c56 4d54 5354 2020 \
+ 	204c 554e 2038 3039 7741 4c56 4d54 5354 \
+@@ -45,39 +43,36 @@ create_base() {
+ 	0000 0dbd 0114 0004 0101 0005 0115 0004 \
+ 	0000 03ec 0328 0028 6e61 612e 3535 3342 \
+ 	3133 3634 3434 3330 3334 3442 3445 3346 \
+-	3438 3644 3332 3634 3739 3632 0000 0000" | xxd -r -p > $SYS_DIR/dev1_vpd_pg83
++	3438 3644 3332 3634 3739 3632 0000 0000" | xxd -r -p > "$SYS_DIR/dev1_vpd_pg83"
  }
  
-@@ -497,43 +556,43 @@ convert2lvm_() {
- 	detect_lv_ "$DEVICE"
- 	case "$DM_UUID" in
- 		LVM-*)	eval "$("$DMSETUP" splitname --nameprefixes --noheadings --separator ' ' "$DM_NAME")"
--			if [ -z "$VGNAME" ] || [ "$VGNAME" = "$LVNAME" ] ; then
-+			if [ -z "$VGNAME" ] || [ "$VGNAME" = "$LVNAME" ]; then
- 				VGNAME=$DM_VG_NAME
- 				verbose "Using existing volume group name \"$VGNAME\"."
--				test -n "$LVNAME" || LVNAME=$DM_LV_NAME
-+				[ -n "$LVNAME" ] || LVNAME=$DM_LV_NAME
- 			elif [ "$VGNAME" != "$DM_VG_NAME" ]; then
- 				error "Volume group name \"$VGNAME\" does not match name \"$DM_VG_NAME\" for VDO device \"$DEVICE\"."
- 			fi
- 			;;
- 		*)
- 			# Check if we need to generate unused $VGNANE
--			if [ -z "$VGNAME" ] || [ "$VGNAME" = "$LVNAME" ] ; then
-+			if [ -z "$VGNAME" ] || [ "$VGNAME" = "$LVNAME" ]; then
- 				VGNAME=${DEFAULT_NAME%/*}
- 				# Find largest matching VG name to our 'default' vgname
--				LASTVGNAME=$(LC_ALL=C "$LVM" vgs -oname -O-name --noheadings -S name=~"${VGNAME}" | grep -E "${VGNAME}[0-9]? ?" | head -1 || true)
-+				LASTVGNAME=$(LC_ALL=C "$LVM" vgs -oname -O-name --noheadings -S name=~"${VGNAME}" | grep -m 1 -E "${VGNAME}[0-9]? ?" || true)
- 				if [ -n "$LASTVGNAME" ]; then
- 					LASTVGNAME=${LASTVGNAME#*"${VGNAME}"}
- 					# If the number is becoming too high, try some random number
--					test "$LASTVGNAME" -gt 99999999 2>/dev/null && LASTVGNAME=$RANDOM
-+					[ -n "$LASTVGNAME" ] && [ "$LASTVGNAME" -gt 99999999 ] && LASTVGNAME=$RANDOM
- 					# Generate new unused VG name
- 					VGNAME="${VGNAME}$(( LASTVGNAME + 1 ))"
- 					verbose "Selected unused volume group name \"$VGNAME\"."
- 				fi
- 			fi
- 			# New VG is created, LV name should be always unused.
--			test -n "$LVNAME" || LVNAME=${DEFAULT_NAME#*/}
-+			[ -n "$LVNAME" ] || LVNAME=${DEFAULT_NAME#*/}
- 			"$LVM" vgs "$VGNAME" >/dev/null 2>&1 && error "Cannot use already existing volume group name \"$VGNAME\"."
- 			;;
- 	esac
+ remove_base() {
+-	rm $SYS_DIR/dev1_vpd_pg83
+-	rmdir $SYS_DIR/dev/block
+-	rmdir $SYS_DIR/dev
+-	rmdir $SYS_DIR
++	rm "$SYS_DIR/dev1_vpd_pg83"
++	rmdir "$SYS_DIR/dev/block"
++	rmdir "$SYS_DIR/dev"
++	rmdir "$SYS_DIR"
+ }
  
- 	verbose "Checked whether device \"$DEVICE\" is already logical volume."
+ setup_sysfs() {
+-	mkdir -p $SYS_DIR/dev/block/$MAJOR1:$MINOR1/device
+-	echo $1 > $SYS_DIR/dev/block/$MAJOR1:$MINOR1/device/wwid
+-	cp $SYS_DIR/dev1_vpd_pg83 $SYS_DIR/dev/block/$MAJOR1:$MINOR1/device/vpd_pg83
++	mkdir -p "$SYS_DIR/dev/block/$MAJOR1:$MINOR1/device"
++	echo "$1" > "$SYS_DIR/dev/block/$MAJOR1:$MINOR1/device/wwid"
++	cp "$SYS_DIR/dev1_vpd_pg83" "$SYS_DIR/dev/block/$MAJOR1:$MINOR1/device/vpd_pg83"
+ }
  
--	"$MKDIR" -p -m 0000 "$TEMPDIR" || error "Failed to create $TEMPDIR."
-+	"$MKDIR" -p -m 0000 "$TEMPDIR" || error "Failed to create \"$TEMPDIR\"."
+ cleanup_sysfs() {
+-	rm -f $SYS_DIR/dev/block/$MAJOR1:$MINOR1/device/wwid
+-	rm -f $SYS_DIR/dev/block/$MAJOR1:$MINOR1/device/vpd_pg83
+-	rmdir $SYS_DIR/dev/block/$MAJOR1:$MINOR1/device || true
+-	rmdir $SYS_DIR/dev/block/$MAJOR1:$MINOR1 || true
++	rm -f "$SYS_DIR/dev/block/$MAJOR1:$MINOR1/device/wwid"
++	rm -f "$SYS_DIR/dev/block/$MAJOR1:$MINOR1/device/vpd_pg83"
++	rmdir "$SYS_DIR/dev/block/$MAJOR1:$MINOR1/device" || true
++	rmdir "$SYS_DIR/dev/block/$MAJOR1:$MINOR1" || true
+ }
  
- 	# TODO: might use directly  /etc/vdoconf.yml (avoiding need of 'vdo' manager)
- 	verbose "Getting YAML VDO configuration."
- 	"$VDO" printConfigFile $VDOCONF >"$TEMPDIR/vdoconf.yml"
--	test -s "$TEMPDIR/vdoconf.yml" || error "Cannot work without VDO configuration"
-+	[ -s "$TEMPDIR/vdoconf.yml" ] || error "Cannot work without VDO configuration."
++aux prepare_scsi_debug_dev 16 || skip
  
- 	# Check list of devices in VDO configure file for their major:minor
- 	# and match with given $DEVICE devmajor:devminor
-@@ -542,13 +601,13 @@ convert2lvm_() {
- 		DEV=$("$READLINK" $READLINK_E "$i") || continue
- 		RSTAT=$("$STAT" --format "MAJOR=\$((0x%t)) MINOR=\$((0x%T))" "$DEV" 2>/dev/null) || continue
- 		eval "$RSTAT"
--		test "$MAJOR" = "$DEVMAJOR" && test "$MINOR" = "$DEVMINOR" && {
--			test -z "$FOUND" || error "VDO configuration contains duplicate entries $FOUND and $i"
-+		if [ "$MAJOR" = "$DEVMAJOR" ] && [ "$MINOR" = "$DEVMINOR" ]; then
-+			[ -z "$FOUND" ] || error "VDO configuration contains duplicate entries $FOUND and $i."
- 			FOUND=$i
--		}
-+		fi
- 	done
+-modprobe scsi_debug dev_size_mb=16 num_tgts=1
+-sleep 2
+ # Get scsi device name created by scsi_debug.
+ # SD = sdh
+ # DEV1 = /dev/sdh
+-SD=$(grep -H scsi_debug /sys/block/sd*/device/model | cut -f4 -d /);
+-echo $SD
+-DEV1=/dev/$SD
+-echo $DEV1
++DEV1=$(< SCSI_DEBUG_DEV)
++echo "Using scsi_debug device: $DEV1"
  
--	test -n "$FOUND" || error "Can't find matching device in VDO configuration file."
-+	[ -n "$FOUND" ] || error "Can't find matching device in VDO configuration file."
- 	verbose "Found matching device $FOUND  $MAJOR:$MINOR."
+ DFDIR="$LVM_SYSTEM_DIR/devices"
+ mkdir -p "$DFDIR" || true
+@@ -87,22 +82,23 @@ touch $DF
  
- 	VDONAME=$(awk -v DNAME="$FOUND" '/.*VDOService$/ {VNAME=substr($1, 0, length($1) - 1)} /[[:space:]]*device:/ { if ($2 ~ DNAME) {print VNAME}}' "$TEMPDIR/vdoconf.yml")
-@@ -559,7 +618,7 @@ convert2lvm_() {
- 	case "$DM_OPEN" in
- 	Device*) ;; # no devices
- 	*)	eval "$DM_OPEN"
--		test "${DM_OPEN:-0}" -eq 0 || error "Cannot convert in use VDO volume \"$VDONAME\"!"
-+		[ "${DM_OPEN:-0}" -eq 0 ] || error "Cannot convert in use VDO volume \"$VDONAME\"!"
- 		;;
- 	esac
+ pvcreate "$DEV1"
+ vgcreate $vg "$DEV1"
+-MAJOR1=`pvs "$DEV1" --noheading -o major | tr -d - | awk '{print $1}'`
+-MINOR1=`pvs "$DEV1" --noheading -o minor | tr -d - | awk '{print $1}'`
+-PVID1=`pvs "$DEV1" --noheading -o uuid | tr -d - | awk '{print $1}'`
++eval "$(pvs --noheading --nameprefixes -o major,minor,uuid "$DEV1")"
++MAJOR1=$LVM2_PV_MAJOR
++MINOR1=$LVM2_PV_MINOR
++PVID1=${LVM2_PV_UUID//-/}
  
-@@ -601,20 +660,20 @@ EOF
- 	dry "$VDO" stop $VDOCONF --name "$VDONAME" $VERB
+ create_base
  
- 	# If user has not provided '--yes', prompt before conversion
--	if [ -z "$YES" ] && [ "$USE_VDO_DM_SNAPSHOT" != "1" ]; then
-+	if [ -z "$YES" ] && [ -z "$USE_VDO_DM_SNAPSHOT" ]; then
- 		PROMPTING=yes
--		echo -n "Convert VDO device \"$DEVICE\" to VDO LV \"$VGNAME/$LVNAME\"? [y|N]: "
-+		echo -n "$TOOL: Convert VDO device \"$DEVICE\" to VDO LV \"$VGNAME/$LVNAME\"? [y|N]: "
- 		read -r -n 1 -s ANSWER
- 		case "${ANSWER:0:1}" in
- 		  y|Y )  echo "Yes" ;;
--		    * )  echo "No" ; PROMPTING=""; cleanup 1 ;;
-+		    * )  echo "No" ; PROMPTING=""; return 1 ;;
- 		esac
- 		PROMPTING=""
- 		YES="-y" # From now, no prompting
- 	fi
+ # No sys/wwid, lvm uses wwid from sys/vpd
  
- 	# Make a backup of the existing VDO yaml configuration file
--	test -e "$VDO_CONFIG" && dry cp -a "$VDO_CONFIG" "${VDO_CONFIG}.backup"
-+	[ -e "$VDO_CONFIG" ] && dry cp -a "$VDO_CONFIG" "${VDO_CONFIG}.backup"
+-setup_sysfs $DEV1_NAA
++setup_sysfs "$DEV1_NAA"
+ # no sys/wwid is reported
+-rm $SYS_DIR/dev/block/$MAJOR1:$MINOR1/device/wwid
+-rm $DF
++rm "$SYS_DIR/dev/block/$MAJOR1:$MINOR1/device/wwid"
++rm "$DF"
+ lvmdevices --adddev "$DEV1"
+-cat $DF
++cat "$DF"
+ pvs "$DEV1"
+-grep $DEV1_NAA $DF
++grep "$DEV1_NAA" "$DF"
+ cleanup_sysfs
  
- 	DEVICE=$FOUND
- 	case "$DM_UUID" in
-@@ -627,9 +686,9 @@ EOF
- # start point of this script
- # - parsing parameters
- #############################
--trap "cleanup 2" 2
-+trap "cleanup" "${SIGNALS[@]}"
+ # Kernel changes the type printed from sys/wwid from t10 to naa
+@@ -113,15 +109,15 @@ cleanup_sysfs
+ # reporting pvs should still find the dev based on using vpd data
+ #  and find the t10 value there
  
--test "$#" -eq 0 && tool_usage
-+[ "$#" -eq 0 ] && tool_usage
+-setup_sysfs $DEV1_T10
+-rm $DF
++setup_sysfs "$DEV1_T10"
++rm "$DF"
+ lvmdevices --adddev "$DEV1"
+-cat $DF
+-grep sys_wwid $DF
+-grep $DEV1_T10 $DF
++cat "$DF"
++grep sys_wwid "$DF"
++grep "$DEV1_T10" "$DF"
+ pvs "$DEV1"
+ # kernel changes what it reports from sys/wwid
+-echo $DEV1_NAA > $SYS_DIR/dev/block/$MAJOR1:$MINOR1/device/wwid
++echo "$DEV1_NAA" > "$SYS_DIR/dev/block/$MAJOR1:$MINOR1/device/wwid"
+ # lvm finds the original t10 id in vpd
+ pvs "$DEV1"
+ cleanup_sysfs
+@@ -132,229 +128,231 @@ cleanup_sysfs
+ # df entry uses the specified type
+ # reporting pvs should show the pv
  
- while [ "$#" -ne 0 ]
+-setup_sysfs $DEV1_T10
+-rm $DF
++setup_sysfs "$DEV1_T10"
++rm "$DF"
+ lvmdevices --adddev "$DEV1" --deviceidtype wwid_naa
+-cat $DF
+-grep wwid_naa $DF
+-grep $DEV1_NAA $DF
++cat "$DF"
++grep wwid_naa "$DF"
++grep "$DEV1_NAA" "$DF"
+ pvs "$DEV1"
+ lvmdevices --deldev "$DEV1"
+ lvmdevices --addpvid "$PVID1" --deviceidtype wwid_naa
+-cat $DF
+-grep $DEV1_NAA $DF
++cat "$DF"
++grep "$DEV1_NAA" "$DF"
+ pvs "$DEV1"
+ lvmdevices --deldev "$DEV1"
+ lvmdevices --adddev "$DEV1" --deviceidtype wwid_eui
+-cat $DF
+-grep wwid_eui $DF
+-grep $DEV1_EUI $DF
++cat "$DF"
++grep wwid_eui "$DF"
++grep "$DEV1_EUI" "$DF"
+ pvs "$DEV1"
+ cleanup_sysfs
+ 
+-# Any of the vpd wwids can be used in the devices file 
++# Any of the vpd wwids can be used in the devices file
+ # with type sys_wwid and the device will be matched to
+ # it by finding that wwid in the vpd data.
+ 
+-setup_sysfs $DEV1_NAA
+-rm $DF
++setup_sysfs "$DEV1_NAA"
++rm "$DF"
+ lvmdevices --adddev "$DEV1"
+-cat $DF
+-rm $SYS_DIR/dev/block/$MAJOR1:$MINOR1/device/wwid
++cat "$DF"
++rm "$SYS_DIR/dev/block/$MAJOR1:$MINOR1/device/wwid"
+ pvs "$DEV1"
+ cleanup_sysfs
+ 
+-setup_sysfs $DEV1_NAA2
+-rm $DF
++setup_sysfs "$DEV1_NAA2"
++rm "$DF"
+ lvmdevices --adddev "$DEV1"
+-cat $DF
+-rm $SYS_DIR/dev/block/$MAJOR1:$MINOR1/device/wwid
++cat "$DF"
++rm "$SYS_DIR/dev/block/$MAJOR1:$MINOR1/device/wwid"
+ pvs "$DEV1"
+ cleanup_sysfs
+ 
+-setup_sysfs $DEV1_NAA3
+-rm $DF
++setup_sysfs "$DEV1_NAA3"
++rm "$DF"
+ lvmdevices --adddev "$DEV1"
+-cat $DF
+-rm $SYS_DIR/dev/block/$MAJOR1:$MINOR1/device/wwid
++cat "$DF"
++rm "$SYS_DIR/dev/block/$MAJOR1:$MINOR1/device/wwid"
+ pvs "$DEV1"
+ cleanup_sysfs
+ 
+-setup_sysfs $DEV1_EUI
+-rm $DF
++setup_sysfs "$DEV1_EUI"
++rm "$DF"
+ lvmdevices --adddev "$DEV1"
+-cat $DF
+-rm $SYS_DIR/dev/block/$MAJOR1:$MINOR1/device/wwid
++cat "$DF"
++rm "$SYS_DIR/dev/block/$MAJOR1:$MINOR1/device/wwid"
+ pvs "$DEV1"
+ cleanup_sysfs
+ 
+-setup_sysfs $DEV1_T10
+-rm $DF
++setup_sysfs "$DEV1_T10"
++rm "$DF"
+ lvmdevices --adddev "$DEV1"
+-cat $DF
+-rm $SYS_DIR/dev/block/$MAJOR1:$MINOR1/device/wwid
++cat "$DF"
++rm "$SYS_DIR/dev/block/$MAJOR1:$MINOR1/device/wwid"
+ pvs "$DEV1"
+ cleanup_sysfs
+ 
+ # Test nvme wwid that starts with "nvme" instead of naa/eui/t10
+-rm $DF
++rm "$DF"
+ aux wipefs_a "$DEV1"
+-mkdir -p $SYS_DIR/dev/block/$MAJOR1:$MINOR1/
+-echo "nvme.111111111111111111122222222222333333333333333-44444444444444444445555555555556666666666666666662-00000001" > $SYS_DIR/dev/block/$MAJOR1:$MINOR1/wwid
++mkdir -p "$SYS_DIR/dev/block/$MAJOR1:$MINOR1"
++echo "nvme.111111111111111111122222222222333333333333333-44444444444444444445555555555556666666666666666662-00000001" > "$SYS_DIR/dev/block/$MAJOR1:$MINOR1/wwid"
+ lvmdevices --adddev "$DEV1"
+-cat $DF
++cat "$DF"
+ vgcreate $vg "$DEV1"
+ lvcreate -l1 -an $vg
+-cat $DF
++cat "$DF"
+ pvs -o+deviceidtype,deviceid "$DEV1" |tee out
+ grep sys_wwid out
+ grep nvme.111 out
+-grep sys_wwid $DF
+-grep nvme.111 $DF
++grep sys_wwid "$DF"
++grep nvme.111 "$DF"
+ lvmdevices --deldev "$DEV1"
+ not lvmdevices --adddev "$DEV1" --deviceidtype wwid_eui
+ lvmdevices --adddev "$DEV1" --deviceidtype sys_wwid
+ lvmdevices | grep nvme.111
+ lvremove -y $vg
+-sleep 1
++sleep .1
+ lvs $vg
+ vgremove $vg
+-rm $SYS_DIR/dev/block/$MAJOR1:$MINOR1/wwid
++rm "$SYS_DIR/dev/block/$MAJOR1:$MINOR1/wwid"
+ cleanup_sysfs
+ 
+ # Test t10 wwid containing quote
+-rm $DF
++rm "$DF"
+ aux wipefs_a "$DEV1"
+-mkdir -p $SYS_DIR/dev/block/$MAJOR1:$MINOR1/device
+-echo "t10.ATA_2.5\"_SATA_SSD_1112-A___111111111111" > $SYS_DIR/dev/block/$MAJOR1:$MINOR1/device/wwid
++mkdir -p "$SYS_DIR/dev/block/$MAJOR1:$MINOR1/device"
++echo "t10.ATA_2.5\"_SATA_SSD_1112-A___111111111111" > "$SYS_DIR/dev/block/$MAJOR1:$MINOR1/device/wwid"
+ lvmdevices --adddev "$DEV1"
+-cat $DF
++cat "$DF"
+ vgcreate $vg "$DEV1"
+ lvcreate -l1 -an $vg
+-cat $DF
++cat "$DF"
+ # check wwid string in metadata output
+ pvs -o+deviceidtype,deviceid "$DEV1" |tee out
+ grep sys_wwid out
+ # the quote is removed after the 5
+ grep 2.5_SATA_SSD out
+ # check wwid string in system.devices
+-grep sys_wwid $DF
++grep sys_wwid "$DF"
+ # the quote is removed after the 5
+-grep 2.5_SATA_SSD $DF
++grep 2.5_SATA_SSD "$DF"
+ lvremove -y $vg
+ vgremove $vg
+-rm $SYS_DIR/dev/block/$MAJOR1:$MINOR1/device/wwid
++rm "$SYS_DIR/dev/block/$MAJOR1:$MINOR1/device/wwid"
+ cleanup_sysfs
+ 
+ # Test t10 wwid with trailing space and line feed at the end
+-rm $DF
++rm "$DF"
+ aux wipefs_a "$DEV1"
+-mkdir -p $SYS_DIR/dev/block/$MAJOR1:$MINOR1/device
++mkdir -p "$SYS_DIR/dev/block/$MAJOR1:$MINOR1/device"
+ echo -n "7431 302e 4154 4120 2020 2020 5642 4f58 \
+ 2048 4152 4444 4953 4b20 2020 2020 2020 \
+ 2020 2020 2020 2020 2020 2020 2020 2020 \
+ 2020 2020 5642 3963 3130 6433 3138 2d31 \
+-3838 6439 6562 6320 0a" | xxd -r -p > $SYS_DIR/dev/block/$MAJOR1:$MINOR1/device/wwid
+-cat $SYS_DIR/dev/block/$MAJOR1:$MINOR1/device/wwid
++3838 6439 6562 6320 0a" | xxd -r -p > "$SYS_DIR/dev/block/$MAJOR1:$MINOR1/device/wwid"
++cat "$SYS_DIR/dev/block/$MAJOR1:$MINOR1/device/wwid"
+ lvmdevices --adddev "$DEV1"
+-cat $DF
++cat "$DF"
+ vgcreate $vg "$DEV1"
+ lvcreate -l1 -an $vg
+-cat $DF
++cat "$DF"
+ # check wwid string in metadata output
+ pvs -o+deviceidtype,deviceid "$DEV1" |tee out
+ grep sys_wwid out
+ # check wwid string in system.devices
+-grep sys_wwid $DF
++grep sys_wwid "$DF"
+ lvremove -y $vg
+ vgremove $vg
+-rm $SYS_DIR/dev/block/$MAJOR1:$MINOR1/device/wwid
++rm "$SYS_DIR/dev/block/$MAJOR1:$MINOR1/device/wwid"
+ cleanup_sysfs
+ 
+ # Test t10 wwid with trailing space at the end that was created by 9.0/9.1
+-rm $DF
++rm "$DF"
+ aux wipefs_a "$DEV1"
+-mkdir -p $SYS_DIR/dev/block/$MAJOR1:$MINOR1/device
++mkdir -p "$SYS_DIR/dev/block/$MAJOR1:$MINOR1/device"
+ echo -n "7431 302e 4154 4120 2020 2020 5642 4f58 \
+ 2048 4152 4444 4953 4b20 2020 2020 2020 \
+ 2020 2020 2020 2020 2020 2020 2020 2020 \
+ 2020 2020 5642 3963 3130 6433 3138 2d31 \
+-3838 6439 6562 6320 0a" | xxd -r -p > $SYS_DIR/dev/block/$MAJOR1:$MINOR1/device/wwid
+-cat $SYS_DIR/dev/block/$MAJOR1:$MINOR1/device/wwid
++3838 6439 6562 6320 0a" | xxd -r -p > "$SYS_DIR/dev/block/$MAJOR1:$MINOR1/device/wwid"
++cat "$SYS_DIR/dev/block/$MAJOR1:$MINOR1/device/wwid"
+ lvmdevices --adddev "$DEV1"
+-cat $DF
++cat "$DF"
+ vgcreate $vg "$DEV1"
+-PVID1=`pvs "$DEV1" --noheading -o uuid | tr -d - | awk '{print $1}'`
++eval "$(pvs --noheading --nameprefixes -o uuid "$DEV1")"
++PVID1=${LVM2_PV_UUID//-/}
+ T10_WWID_RHEL91="t10.ATA_____VBOX_HARDDISK___________________________VB9c10d318-188d9ebc_"
+ lvcreate -l1 -an $vg
+-cat $DF
++cat "$DF"
+ # check wwid string in metadata output
+ pvs -o+deviceidtype,deviceid "$DEV1" |tee out
+ grep sys_wwid out
+ # check wwid string in system.devices
+-grep sys_wwid $DF
++grep sys_wwid "$DF"
+ # Replace IDNAME with the IDNAME that 9.0/9.1 created from this wwid
+-cat $DF | grep -v IDNAME > $DFTMP
+-cat $DFTMP
+-echo "IDTYPE=sys_wwid IDNAME=t10.ATA_____VBOX_HARDDISK___________________________VB9c10d318-188d9ebc_ DEVNAME=${DEV1} PVID=${PVID1}" >> $DFTMP
+-cp $DFTMP $DF
+-cat $DF
++cat "$DF" | grep -v IDNAME > "$DFTMP"
++cat "$DFTMP"
++echo "IDTYPE=sys_wwid IDNAME=t10.ATA_____VBOX_HARDDISK___________________________VB9c10d318-188d9ebc_ DEVNAME=${DEV1} PVID=${PVID1}" >> "$DFTMP"
++cp "$DFTMP" "$DF"
++cat "$DF"
+ vgs
+ pvs
+ pvs -o+deviceidtype,deviceid "$DEV1"
+ # Removing the trailing _ which should then work
+-cat $DF | grep -v IDNAME > $DFTMP
+-cat $DFTMP
+-echo "IDTYPE=sys_wwid IDNAME=t10.ATA_____VBOX_HARDDISK___________________________VB9c10d318-188d9ebc DEVNAME=${DEV1} PVID=${PVID1}" >> $DFTMP
+-cp $DFTMP $DF
+-cat $DF
++cat "$DF" | grep -v IDNAME > "$DFTMP"
++cat "$DFTMP"
++echo "IDTYPE=sys_wwid IDNAME=t10.ATA_____VBOX_HARDDISK___________________________VB9c10d318-188d9ebc DEVNAME=${DEV1} PVID=${PVID1}" >> "$DFTMP"
++cp "$DFTMP" "$DF"
++cat "$DF"
+ vgs
+ pvs
+ pvs -o+deviceidtype,deviceid "$DEV1"
+ lvremove -y $vg
+ vgremove $vg
+-rm $SYS_DIR/dev/block/$MAJOR1:$MINOR1/device/wwid
++rm "$SYS_DIR/dev/block/$MAJOR1:$MINOR1/device/wwid"
+ cleanup_sysfs
+ 
+ # test a t10 wwid that has actual trailing underscore which
+ # is followed by a trailing space.
+-rm $DF
++rm "$DF"
+ aux wipefs_a "$DEV1"
+-mkdir -p $SYS_DIR/dev/block/$MAJOR1:$MINOR1/device
++mkdir -p "$SYS_DIR/dev/block/$MAJOR1:$MINOR1/device"
+ echo -n "7431 302e 4154 4120 2020 2020 5642 4f58 \
+ 2048 4152 4444 4953 4b20 2020 2020 2020 \
+ 2020 2020 2020 2020 2020 2020 2020 2020 \
+ 2020 2020 5642 3963 3130 6433 3138 2d31 \
+-3838 6439 6562 5f20 0a" | xxd -r -p > $SYS_DIR/dev/block/$MAJOR1:$MINOR1/device/wwid
+-cat $SYS_DIR/dev/block/$MAJOR1:$MINOR1/device/wwid
++3838 6439 6562 5f20 0a" | xxd -r -p > "$SYS_DIR/dev/block/$MAJOR1:$MINOR1/device/wwid"
++cat "$SYS_DIR/dev/block/$MAJOR1:$MINOR1/device/wwid"
+ # The wwid has an actual underscore char (5f) followed by a space char (20)
+ # 9.1 converts the trailing space to an underscore
+ T10_WWID_RHEL91="t10.ATA_____VBOX_HARDDISK___________________________VB9c10d318-188d9eb__"
+ # 9.2 ignores the trailing space
+ T10_WWID_RHEL92="t10.ATA_____VBOX_HARDDISK___________________________VB9c10d318-188d9eb_"
+ lvmdevices --adddev "$DEV1"
+-cat $DF
++cat "$DF"
+ vgcreate $vg "$DEV1"
+-PVID1=`pvs "$DEV1" --noheading -o uuid | tr -d - | awk '{print $1}'`
++eval "$(pvs --noheading --nameprefixes -o uuid "$DEV1")"
++PVID1=${LVM2_PV_UUID//-/}
+ lvcreate -l1 -an $vg
+-cat $DF
++cat "$DF"
+ # check wwid string in metadata output
+ pvs -o+deviceidtype,deviceid "$DEV1" |tee out
+ grep sys_wwid out
+ # check wwid string in system.devices
+-grep sys_wwid $DF
++grep sys_wwid "$DF"
+ # Replace IDNAME with the IDNAME that 9.0/9.1 created from this wwid
+-cat $DF | grep -v IDNAME > $DFTMP
+-cat $DFTMP
+-echo "IDTYPE=sys_wwid IDNAME=${T10_WWID_RHEL91} DEVNAME=${DEV1} PVID=${PVID1}" >> $DFTMP
+-cp $DFTMP $DF
+-cat $DF
++cat "$DF" | grep -v IDNAME > "$DFTMP"
++cat "$DFTMP"
++echo "IDTYPE=sys_wwid IDNAME=${T10_WWID_RHEL91} DEVNAME=${DEV1} PVID=${PVID1}" >> "$DFTMP"
++cp "$DFTMP" "$DF"
++cat "$DF"
+ vgs
+ pvs
+ pvs -o+deviceidtype,deviceid "$DEV1"
+ lvremove -y $vg
+ vgremove $vg
+-rm $SYS_DIR/dev/block/$MAJOR1:$MINOR1/device/wwid
++rm "$SYS_DIR/dev/block/$MAJOR1:$MINOR1/device/wwid"
+ cleanup_sysfs
+ 
+ #
+@@ -363,67 +361,70 @@ cleanup_sysfs
+ # underscores are understood.
+ #
+ 
+-rm $DF
++rm "$DF"
+ aux wipefs_a "$DEV1"
+-mkdir -p $SYS_DIR/dev/block/$MAJOR1:$MINOR1/device
+-echo -n "  s123  456  " > $SYS_DIR/dev/block/$MAJOR1:$MINOR1/device/serial
++mkdir -p "$SYS_DIR/dev/block/$MAJOR1:$MINOR1/device"
++echo -n "  s123  456  " > "$SYS_DIR/dev/block/$MAJOR1:$MINOR1/device/serial"
+ lvmdevices --adddev "$DEV1"
+-cat $DF
+-grep "IDNAME=s123__456 DEVNAME" $DF
++cat "$DF"
++grep "IDNAME=s123__456 DEVNAME" "$DF"
+ vgcreate $vg "$DEV1"
+-PVID1=`pvs "$DEV1" --noheading -o uuid | tr -d - | awk '{print $1}'`
+-cat $DF | grep -v IDNAME > $DFTMP
+-cat $DFTMP
+-echo "IDTYPE=sys_serial IDNAME=__s123__456__ DEVNAME=${DEV1} PVID=${PVID1}" >> $DFTMP
+-cp $DFTMP $DF
+-cat $DF
++eval "$(pvs --noheading --nameprefixes -o uuid "$DEV1")"
++PVID1=${LVM2_PV_UUID//-/}
++cat "$DF" | grep -v IDNAME > "$DFTMP"
++cat "$DFTMP"
++echo "IDTYPE=sys_serial IDNAME=__s123__456__ DEVNAME=${DEV1} PVID=${PVID1}" >> "$DFTMP"
++cp "$DFTMP" "$DF"
++cat "$DF"
+ vgs
+ pvs -o+deviceidtype,deviceid "$DEV1"
+ lvremove -y $vg
+ vgremove $vg
+-rm $SYS_DIR/dev/block/$MAJOR1:$MINOR1/device/serial
++rm "$SYS_DIR/dev/block/$MAJOR1:$MINOR1/device/serial"
+ cleanup_sysfs
+ 
+-rm $DF
++rm "$DF"
+ aux wipefs_a "$DEV1"
+-mkdir -p $SYS_DIR/dev/block/$MAJOR1:$MINOR1/device
+-echo -n "  t10.123  456  " > $SYS_DIR/dev/block/$MAJOR1:$MINOR1/device/wwid
++mkdir -p "$SYS_DIR/dev/block/$MAJOR1:$MINOR1/device"
++echo -n "  t10.123  456  " > "$SYS_DIR/dev/block/$MAJOR1:$MINOR1/device/wwid"
+ lvmdevices --adddev "$DEV1"
+-cat $DF
+-grep "IDNAME=t10.123_456 DEVNAME" $DF
++cat "$DF"
++grep "IDNAME=t10.123_456 DEVNAME" "$DF"
+ vgcreate $vg "$DEV1"
+-PVID1=`pvs "$DEV1" --noheading -o uuid | tr -d - | awk '{print $1}'`
+-cat $DF | grep -v IDNAME > $DFTMP
+-cat $DFTMP
+-echo "IDTYPE=sys_wwid IDNAME=__t10.123__456__ DEVNAME=${DEV1} PVID=${PVID1}" >> $DFTMP
+-cp $DFTMP $DF
+-cat $DF
++eval "$(pvs --noheading --nameprefixes -o uuid "$DEV1")"
++PVID1=${LVM2_PV_UUID//-/}
++cat "$DF" | grep -v IDNAME > "$DFTMP"
++cat "$DFTMP"
++echo "IDTYPE=sys_wwid IDNAME=__t10.123__456__ DEVNAME=${DEV1} PVID=${PVID1}" >> "$DFTMP"
++cp "$DFTMP" "$DF"
++cat "$DF"
+ vgs
+ pvs -o+deviceidtype,deviceid "$DEV1"
+ lvremove -y $vg
+ vgremove $vg
+-rm $SYS_DIR/dev/block/$MAJOR1:$MINOR1/device/wwid
++rm "$SYS_DIR/dev/block/$MAJOR1:$MINOR1/device/wwid"
+ cleanup_sysfs
+ 
+-rm $DF
++rm "$DF"
+ aux wipefs_a "$DEV1"
+-mkdir -p $SYS_DIR/dev/block/$MAJOR1:$MINOR1/device
+-echo -n "  naa.123  456  " > $SYS_DIR/dev/block/$MAJOR1:$MINOR1/device/wwid
++mkdir -p "$SYS_DIR/dev/block/$MAJOR1:$MINOR1/device"
++echo -n "  naa.123  456  " > "$SYS_DIR/dev/block/$MAJOR1:$MINOR1/device/wwid"
+ lvmdevices --adddev "$DEV1"
+-cat $DF
+-grep "IDNAME=naa.123__456 DEVNAME" $DF
++cat "$DF"
++grep "IDNAME=naa.123__456 DEVNAME" "$DF"
+ vgcreate $vg "$DEV1"
+-PVID1=`pvs "$DEV1" --noheading -o uuid | tr -d - | awk '{print $1}'`
+-cat $DF | grep -v IDNAME > $DFTMP
+-cat $DFTMP
+-echo "IDTYPE=sys_wwid IDNAME=__naa.123__456__ DEVNAME=${DEV1} PVID=${PVID1}" >> $DFTMP
+-cp $DFTMP $DF
+-cat $DF
++eval "$(pvs --noheading --nameprefixes -o uuid "$DEV1")"
++PVID1=${LVM2_PV_UUID//-/}
++cat "$DF" | grep -v IDNAME > "$DFTMP"
++cat "$DFTMP"
++echo "IDTYPE=sys_wwid IDNAME=__naa.123__456__ DEVNAME=${DEV1} PVID=${PVID1}" >> "$DFTMP"
++cp "$DFTMP" "$DF"
++cat "$DF"
+ vgs
+ pvs -o+deviceidtype,deviceid "$DEV1"
+ lvremove -y $vg
+ vgremove $vg
+-rm $SYS_DIR/dev/block/$MAJOR1:$MINOR1/device/wwid
++rm "$SYS_DIR/dev/block/$MAJOR1:$MINOR1/device/wwid"
+ cleanup_sysfs
+ 
+ 
+@@ -433,4 +434,3 @@ cleanup_sysfs
+ # This would let the user specify the second naa wwid.
+ 
+ remove_base
+-rmmod scsi_debug || true
+
+
+=====================================
+test/shell/duplicate-pvs-md0.sh
+=====================================
+@@ -27,6 +27,9 @@ _clear_online_files() {
+ 
+ . lib/inittest
+ 
++# Running lvmdbusd with its fullreport scannnig changes $RUNDIR results
++pgrep lvmdbusd && skip "Test cannot work, while there is running lvmdbusd."
++
+ MD_LEVEL=${MD_LEVEL-0}
+ 
+ aux prepare_devs 4 10
+
+
+=====================================
+test/shell/lvresize-fs-crypt.sh
+=====================================
+@@ -139,7 +139,7 @@ dd if=/dev/zero of="$mount_dir/zeros1" bs=1M count=10 oflag=direct
+ df --output=size "$mount_dir" |tee df1
+ # resize only the fs (to 256M), not the crypt dev or LV
+ umount "$mount_dir"
+-fsck -n /dev/mapper/$cr
++fsck -fn /dev/mapper/$cr
+ resize2fs /dev/mapper/$cr 262144k
+ mount /dev/mapper/$cr "$mount_dir"
+ # this lvresize will not resize the fs (which is already reduced
+
+
+=====================================
+test/shell/pvmove-abort-all.sh
+=====================================
+@@ -26,7 +26,7 @@ aux target_at_least dm-mirror 1 10 0 || skip
+ # Throttle mirroring
+ aux throttle_dm_mirror || skip
+ 
+-aux prepare_pvs 6 60
++aux prepare_pvs 6 90
+ 
+ vgcreate -s 512k $vg "$dev1" "$dev2"
+ pvcreate --metadatacopies 0 "$dev3"
+@@ -41,9 +41,9 @@ for backgroundarg in "-b" "" ;
  do
-@@ -640,19 +699,17 @@ do
- 	  "-n"|"--name"   ) shift; NAME=$1 ;;
- 	  "-v"|"--verbose") VERB="--verbose" ;;
- 	  "-y"|"--yes"    ) YES="-y" ;;
--	  "--abort-after-vdo-convert" ) ABORT_AFTER_VDO_CONVERT=1; USE_VDO_DM_SNAPSHOT=0 ;; # For testing only
--	  "--dry-run"     ) DRY="1" ; VERB="-v" ;;
--	  "--no-snapshot" ) USE_VDO_DM_SNAPSHOT=0 ;;
--	  "--uuid-prefix" ) shift; DM_UUID_PREFIX=$1 ;; # For testing only
--	  "--vdo-config"  ) shift; VDO_CONFIG=$1 ; VDOCONF="-f $VDO_CONFIG" ;;
--	  "-*") error "Wrong argument \"$1\". (see: $TOOL --help)" ;;
-+	  "--abort-after-vdo-convert"|"--abortaftervdoconvert" ) ABORT_AFTER_VDO_CONVERT=1; USE_VDO_DM_SNAPSHOT= ;; # For testing only
-+	  "--dry-run"|"--dryrun" ) DRY="1" ; VERB="-v" ;;
-+	  "--no-snapshot"|"--nosnapshot" ) USE_VDO_DM_SNAPSHOT= ;;
-+	  "--uuid-prefix"|"--uuidprefix" ) shift; DM_UUID_PREFIX=$1 ;; # For testing only
-+	  "--vdo-config"|"--vdoconfig" ) shift; VDO_CONFIG=$1 ; VDOCONF="-f $VDO_CONFIG" ;;
-+	  -* ) error "Wrong argument \"$1\". (see: $TOOL --help)" ;;
- 	  *) DEVICE=$1 ;;  # device name does not start with '-'
- 	esac
- 	shift
- done
  
--test -n "$DEVICE" || error "Device name is not specified. (see: $TOOL --help)"
-+[ -n "$DEVICE" ] || error "Device name is not specified. (see: $TOOL --help)"
+ # Create multisegment LV
+-lvcreate -an -Zn -l30 -n $lv1 $vg "$dev1"
+-lvcreate -an -Zn -l30 -n $lv2 $vg "$dev2"
+-lvcreate -an -Zn -l30 -n $lv1 $vg1 "$dev4"
++lvcreate -an -Zn -l60 -n $lv1 $vg "$dev1"
++lvcreate -an -Zn -l60 -n $lv2 $vg "$dev2"
++lvcreate -an -Zn -l60 -n $lv1 $vg1 "$dev4"
+ lvextend -l+30 -n $vg1/$lv1 "$dev5"
  
- convert2lvm_
--
--cleanup 0
-
-
-=====================================
-tools/vgchange.c
-=====================================
-@@ -428,7 +428,7 @@ static int _vgchange_uuid(struct cmd_context *cmd __attribute__((unused)),
- 	struct id old_vg_id;
- 
- 	if (lvs_in_vg_activated(vg)) {
--		log_error("Volume group has active logical volumes");
-+		log_error("Volume group has active logical volumes.");
- 		return 0;
- 	}
- 
-@@ -588,12 +588,12 @@ static int _passes_lock_start_filter(struct cmd_context *cmd,
- 		if (cv->type == DM_CFG_EMPTY_ARRAY)
- 			break;
- 		if (cv->type != DM_CFG_STRING) {
--			log_error("Ignoring invalid string in lock_start list");
-+			log_error("Ignoring invalid string in lock_start list.");
- 			continue;
- 		}
- 		str = cv->v.str;
- 		if (!*str) {
--			log_error("Ignoring empty string in config file");
-+			log_error("Ignoring empty string in config file.");
- 			continue;
- 		}
- 
-@@ -709,7 +709,7 @@ static int _vgchange_single(struct cmd_context *cmd, const char *vg_name,
- 		if (!vg_write(vg) || !vg_commit(vg))
- 			return_ECMD_FAILED;
- 
--		log_print_unless_silent("Volume group \"%s\" successfully changed", vg->name);
-+		log_print_unless_silent("Volume group \"%s\" successfully changed.", vg->name);
- 	}
- 
- 	if (arg_is_set(cmd, activate_ARG)) {
-@@ -921,7 +921,7 @@ int vgchange(struct cmd_context *cmd, int argc, char **argv)
- 
- 	if ((arg_is_set(cmd, ignorelockingfailure_ARG) ||
- 	     arg_is_set(cmd, sysinit_ARG)) && update) {
--		log_error("Only -a permitted with --ignorelockingfailure and --sysinit");
-+		log_error("Only -a permitted with --ignorelockingfailure and --sysinit.");
- 		return EINVALID_CMD_LINE;
- 	}
- 
-@@ -940,13 +940,13 @@ int vgchange(struct cmd_context *cmd, int argc, char **argv)
- 
- 	if (arg_is_set(cmd, maxphysicalvolumes_ARG) &&
- 	    arg_sign_value(cmd, maxphysicalvolumes_ARG, SIGN_NONE) == SIGN_MINUS) {
--		log_error("MaxPhysicalVolumes may not be negative");
-+		log_error("MaxPhysicalVolumes may not be negative.");
- 		return EINVALID_CMD_LINE;
- 	}
- 
- 	if (arg_is_set(cmd, physicalextentsize_ARG) &&
- 	    arg_sign_value(cmd, physicalextentsize_ARG, SIGN_NONE) == SIGN_MINUS) {
--		log_error("Physical extent size may not be negative");
-+		log_error("Physical extent size may not be negative.");
- 		return EINVALID_CMD_LINE;
- 	}
- 
-@@ -1216,7 +1216,7 @@ static int _vgchange_locktype_single(struct cmd_context *cmd, const char *vg_nam
- 		}
- 	}
- 
--	log_print_unless_silent("Volume group \"%s\" successfully changed", vg->name);
-+	log_print_unless_silent("Volume group \"%s\" successfully changed.", vg->name);
- 
- 	return ECMD_PROCESSED;
- }
-@@ -1347,7 +1347,7 @@ int vgchange_lock_start_stop_cmd(struct cmd_context *cmd, int argc, char **argv)
- 		cmd->lockd_vg_disable = 1;
- 
- 		if (!lockd_global(cmd, "sh"))
--			log_debug("No global lock for lock start");
-+			log_debug("No global lock for lock start.");
- 
- 		/* Disable the lockd_gl in process_each_vg. */
- 		cmd->lockd_gl_disable = 1;
-@@ -1399,7 +1399,7 @@ static int _vgchange_systemid_single(struct cmd_context *cmd, const char *vg_nam
- 				found_pvs++;
- 		}
- 		if (found_pvs <= missing_pvs) {
--			log_error("Cannot change system ID without the majority of PVs (found %d of %d)",
-+			log_error("Cannot change system ID without the majority of PVs (found %d of %d).",
- 				  found_pvs, found_pvs+missing_pvs);
- 			return ECMD_FAILED;
- 		}
-@@ -1411,7 +1411,7 @@ static int _vgchange_systemid_single(struct cmd_context *cmd, const char *vg_nam
- 	if (!vg_write(vg) || !vg_commit(vg))
- 		return_ECMD_FAILED;
- 
--	log_print_unless_silent("Volume group \"%s\" successfully changed", vg->name);
-+	log_print_unless_silent("Volume group \"%s\" successfully changed.", vg->name);
- 
- 	return ECMD_PROCESSED;
- }
+ cmd1=(pvmove -i1 $backgroundarg $mode "$dev1" "$dev3")
 
 
 
-View it on GitLab: https://gitlab.com/lvmteam/lvm2/-/compare/fa496513010976aac21584b5081529b76462f9a9...8cbfd72f6894fe8668477f96281eaecfadacb505
+View it on GitLab: https://gitlab.com/lvmteam/lvm2/-/compare/1885655e9a8fc305e70982b2e7992d06e7b0a474...9d7061f1a3b5795a4beccd0e285a5b9d32980a52
 
 -- 
-View it on GitLab: https://gitlab.com/lvmteam/lvm2/-/compare/fa496513010976aac21584b5081529b76462f9a9...8cbfd72f6894fe8668477f96281eaecfadacb505
+View it on GitLab: https://gitlab.com/lvmteam/lvm2/-/compare/1885655e9a8fc305e70982b2e7992d06e7b0a474...9d7061f1a3b5795a4beccd0e285a5b9d32980a52
 You're receiving this email because of your account on gitlab.com.
 
 
 -------------- next part --------------
 An HTML attachment was scrubbed...
-URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20230912/0372915b/attachment-0001.htm>
+URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20230913/adb499d0/attachment-0001.htm>
