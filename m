@@ -1,217 +1,150 @@
-From: Zdeněk Kabeláč (@zdenek.kabelac) <gitlab@mg.gitlab.com>
-Date: Tue, 19 Sep 2023 12:57:28 +0000
-Subject: [Git][lvmteam/lvm2][main] 4 commits: pvmove: fix building sibling raid lv name
-Message-ID: <65099ab83161e_28a546090386@gitlab-sidekiq-low-urgency-cpu-bound-v2-6486775c7f-xzqf4.mail>
+From: Adam Joseph <adam@westernsemico.com>
+Date: Thu, 21 Sep 2023 23:47:38 -0700
+Subject: [PATCH] autoconf: handle the standard --disable-shared flag
+Message-ID: <20230922064737.31282-2-adam@westernsemico.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
+Since LVM 2.02 it appears that compiling LVM on a platform which
+lacks a shared library linker/loader will fail to produce any
+binaries (dmsetup, lvm2, etc).
 
+This commit adds support for the standard --disable-shared flag, and
+uses it to disable attempts at building shared libraries.
+---
+ configure.ac               | 9 +++++++++
+ libdm/Makefile.in          | 7 +++++++
+ libdm/dm-tools/Makefile.in | 9 +++++++++
+ libdm/make.tmpl.in         | 6 ++++++
+ make.tmpl.in               | 4 ++++
+ 5 files changed, 35 insertions(+)
 
-Zden?k Kabel?? pushed to branch main at LVM team / lvm2
-
-
-Commits:
-e2f29c49 by Zdenek Kabelac at 2023-09-19T14:47:27+02:00
-pvmove: fix building sibling raid lv name
-
-Make a local copy of the &#39;idx&#39; string to avoid
-overlapping during the rebuild of name.
-
-This fixes cases where users specified raid
-component LVs for moving.
-
-Reported-by: kotarou3 at github.com
-
-- - - - -
-c7c51329 by Zdenek Kabelac at 2023-09-19T14:54:51+02:00
-tests: check pvmove with raid legs
-
-Check pvmove correctly handles raid legs on input
-(testing previous pvmove fix).
-
-- - - - -
-984c024e by Zdenek Kabelac at 2023-09-19T14:54:51+02:00
-typos: misc
-
-- - - - -
-fc2feabe by Zdenek Kabelac at 2023-09-19T14:54:51+02:00
-WHATS_NEW: updates
-
-- - - - -
-
-
-8 changed files:
-
-- WHATS_NEW
-- daemons/lvmpolld/lvmpolld-data-utils.h
-- device_mapper/libdm-string.c
-- libdm/libdm-string.c
-- test/Makefile.in
-- test/lib/aux.sh
-- test/shell/pvmove-raid-segtypes.sh
-- tools/pvmove.c
-
-
-Changes:
-
-=====================================
-WHATS_NEW
-=====================================
-@@ -1,5 +1,6 @@
- version 2.03.23 - 
- ==================================
-+  Fix pvmove when specifying raid components as moved LVs.
-   Enhance error detection for lvm_import_vdo.
-   Support PV lists with thin lvconvert.
-   Fix support for lvm_import_vdo with SCSI VDO volumes.
-
-
-=====================================
-daemons/lvmpolld/lvmpolld-data-utils.h
-=====================================
-@@ -66,7 +66,7 @@ struct lvmpolld_lv {
+diff --git a/configure.ac b/configure.ac
+index b43d8b9be..78aee5a9a 100644
+--- a/configure.ac
++++ b/configure.ac
+@@ -185,6 +185,15 @@ AC_ARG_ENABLE(static_link,
+ 	      STATIC_LINK=$enableval, STATIC_LINK="no")
+ AC_MSG_RESULT([$STATIC_LINK])
  
- 	/* block of shared variables protected by lock */
- 	struct lvmpolld_cmd_stat cmd_state;
--	unsigned init_rq_count; /* for debuging purposes only */
-+	unsigned init_rq_count; /* for debugging purposes only */
- 	unsigned polling_finished:1; /* no more updates */
- 	unsigned error:1; /* unrecoverable error occured in lvmpolld */
- };
-
-
-=====================================
-device_mapper/libdm-string.c
-=====================================
-@@ -192,7 +192,7 @@ int dm_asprintf(char **result, const char *format, ...)
- }
- 
- /*
-- * Count occurences of 'c' in 'str' until we reach a null char.
-+ * Count occurrences of 'c' in 'str' until we reach a null char.
-  *
-  * Returns:
-  *  len - incremented for each char we encounter.
-
-
-=====================================
-libdm/libdm-string.c
-=====================================
-@@ -192,7 +192,7 @@ int dm_asprintf(char **result, const char *format, ...)
- }
- 
- /*
-- * Count occurences of 'c' in 'str' until we reach a null char.
-+ * Count occurrences of 'c' in 'str' until we reach a null char.
-  *
-  * Returns:
-  *  len - incremented for each char we encounter.
-
-
-=====================================
-test/Makefile.in
-=====================================
-@@ -110,7 +110,7 @@ help:
- 	@echo "  LVM_TEST_LOCKING	Normal (1), Cluster (3)."
- 	@echo "  LVM_TEST_LVMPOLLD	Start lvmpolld"
- 	@echo "  LVM_TEST_NODEBUG	Do not debug lvm commands."
--	@echo "  LVM_TEST_PARALLEL	May skip agresive wipe of LVMTEST resources."
-+	@echo "  LVM_TEST_PARALLEL	May skip agressive wipe of LVMTEST resources."
- 	@echo "  LVM_TEST_RESULTS	Where to create result files [results]."
- 	@echo "  LVM_TEST_THIN_CHECK_CMD   Command for thin_check   [$(LVM_TEST_THIN_CHECK_CMD)]."
- 	@echo "  LVM_TEST_THIN_DUMP_CMD    Command for thin_dump    [$(LVM_TEST_THIN_DUMP_CMD)]."
-@@ -126,7 +126,7 @@ help:
- 	@echo "  LVM_VALGRIND_DMEVENTD	Enable valgrind testing of dmeventd (1)."
- 	@echo "  LVM_VALGRIND_LVMPOLLD	Enable valgrind testing of lvmpolld (1)."
- 	@echo "  LVM_STRACE		Enable strace logging."
--	@echo "  LVM_DEBUG_LEVEL	Sets debuging level for valgrind/strace (use > 0)."
-+	@echo "  LVM_DEBUG_LEVEL	Sets debugging level for valgrind/strace (use > 0)."
- 	@echo "  LVM_DEBUG_LVMDBUS	Run lvmdbus with --debug option."
- 	@echo "  LVM_VERIFY_UDEV	Default verify state for lvm.conf."
- 	@echo "  LVM_LOG_FILE_MAX_LINES	Maximum number of logged lines for lvm2 command [1000000]."
-
-
-=====================================
-test/lib/aux.sh
-=====================================
-@@ -24,7 +24,7 @@ expect_failure() {
- }
- 
- check_daemon_in_builddir() {
--	# skip if we don't have our own deamon...
-+	# skip if we don't have our own daemon...
- 	if test -z "${installed_testsuite+varset}"; then
- 		(which "$1" 2>/dev/null | grep "$abs_builddir" >/dev/null ) || skip "$1 is not in executed path."
- 	fi
-
-
-=====================================
-test/shell/pvmove-raid-segtypes.sh
-=====================================
-@@ -46,6 +46,20 @@ pvmove $mode -n $lv1 "$dev5" "$dev4"
- check lv_tree_on $vg $lv1 "$dev2" "$dev4"
- check lv_tree_on $vg ${lv1}_foo "$dev5"
- check dev_md5sum $vg $lv1
++AC_ARG_ENABLE(shared, AS_HELP_STRING([--enable-shared],[whether to build shared libraries [default=yes]]),
++  shared=$enableval, shared=yes)
++if test "$shared" = yes; then
++  AC_SUBST(ENABLE_SHARED, "yes", [whether to build shared libraries.])
++else
++  AC_SUBST(ENABLE_SHARED, "no", [whether to build shared libraries.])
++fi
 +
-+# Check moving raid component LVs
-+pvmove $mode -n ${lv1}_rimage_0 "$dev4" "$dev1"
-+check lv_tree_on $vg $lv1 "$dev1" "$dev2"
-+check lv_on $vg ${lv1}_rimage_0 "$dev1"
-+check lv_on $vg ${lv1}_rmeta_0 "$dev4"
-+check dev_md5sum $vg $lv1
-+lvs -ao+devices  $vg
 +
-+pvmove $mode -n ${lv1}_rmeta_0 "$dev4" "$dev1"
-+check lv_tree_on $vg $lv1 "$dev1" "$dev2"
-+check lv_on $vg ${lv1}_rimage_0 "$dev1"
-+check lv_on $vg ${lv1}_rmeta_0 "$dev1"
-+check dev_md5sum $vg $lv1
- lvremove -ff $vg
+ ################################################################################
+ dnl -- Check if compiler/linker supports PIE and RELRO
+ AC_TRY_CCFLAG([-pie], [HAVE_PIE], [], [])
+diff --git a/libdm/Makefile.in b/libdm/Makefile.in
+index 2758648e6..30b2c798b 100644
+--- a/libdm/Makefile.in
++++ b/libdm/Makefile.in
+@@ -47,7 +47,9 @@ endif
  
- # Testing pvmove of RAID10 LV
-
-
-=====================================
-tools/pvmove.c
-=====================================
-@@ -141,6 +141,7 @@ static int _remove_sibling_pvs_from_trim_list(struct logical_volume *lv,
- 	char *idx, *suffix;
- 	const char *sibling;
- 	char sublv_name[NAME_LEN];
-+	char idx_buf[16];
- 	struct logical_volume *sublv;
- 	struct dm_list untrim_list, *pvh1, *pvh2;
- 	struct pv_list *pvl1, *pvl2;
-@@ -174,9 +175,15 @@ static int _remove_sibling_pvs_from_trim_list(struct logical_volume *lv,
- 	}
- 	idx++;
+ LIB_SHARED = $(interface)/libdevmapper.$(LIB_SUFFIX)
+ LIB_VERSION = $(LIB_VERSION_DM)
++ifeq ("@ENABLE_SHARED@", "yes")
+ TARGETS = libdevmapper.$(LIB_SUFFIX) libdevmapper.$(LIB_SUFFIX).$(LIB_VERSION) .symver_check
++endif
  
-+        /* Copy idx to local buffer */
-+	if (!dm_strncpy(idx_buf, idx, sizeof(idx_buf))) {
-+		log_error(INTERNAL_ERROR "Unexpected LV index %s.", idx);
-+		return 0;
-+	}
-+
- 	/* Create the siblings name (e.g. "raidlv_rmeta_N" -> "raidlv_rimage_N" */
- 	if (dm_snprintf(suffix + 2, sizeof(sublv_name) - 2 - (suffix - sublv_name),
--			"%s_%s", sibling, idx) < 0) {
-+			"%s_%s", sibling, idx_buf) < 0) {
- 		log_error("Raid sublv for name %s too long.", lv_name);
- 		return 0;
- 	}
-
-
-
-View it on GitLab: https://gitlab.com/lvmteam/lvm2/-/compare/970e4d295eddb47d4540bb0762e35bd17b07841f...fc2feabef7507108311c01e48c6262606caf37fd
-
+ CFLOW_LIST = $(SOURCES)
+ CFLOW_LIST_TARGET = libdevmapper.cflow
+@@ -103,7 +105,12 @@ install_dynamic: install_ at interface@
+ 
+ install_static: install_ at interface@_static
+ 
++ifeq ("@STATIC_LINK@", "yes")
++install_ioctl: install_ioctl_static
++endif
++ifeq ("@ENABLE_SHARED@", "yes")
+ install_ioctl: install_lib_shared
++endif
+ 
+ install_pkgconfig: libdevmapper.pc
+ 	@echo "    [INSTALL] $<"
+diff --git a/libdm/dm-tools/Makefile.in b/libdm/dm-tools/Makefile.in
+index 78d2d719d..325f180c0 100644
+--- a/libdm/dm-tools/Makefile.in
++++ b/libdm/dm-tools/Makefile.in
+@@ -19,13 +19,17 @@ top_builddir = @top_builddir@
+ all: device-mapper
+ 
+ SOURCES2 = dmsetup.c
++ifeq ("@ENABLE_SHARED@", "yes")
+ TARGETS_DM = dmsetup
++endif
+ 
+ CFLOW_SOURCES = $(addprefix $(srcdir)/, $(SOURCES2))
+ CFLOW_TARGET := $(TARGETS_DM)
+ -include $(top_builddir)/libdm/libdevmapper.cflow
+ 
++ifeq ("@ENABLE_SHARED@", "yes")
+ install_device-mapper: install_dmsetup_dynamic
++endif
+ 
+ ifeq ("@STATIC_LINK@", "yes")
+   TARGETS_DM += dmsetup.static
+@@ -99,6 +103,11 @@ install_dmfilemapd_static: dmfilemapd.static
+ .PHONY: install_dmsetup_dynamic install_dmsetup_static
+ .PHONY: install_dmfilemapd install_dmfilemapd_static
+ 
++ifeq ("@ENABLE_SHARED@", "yes")
+ install: install_device-mapper install_dmfilemapd
++endif
++ifeq ("@STATIC_LINK@", "yes")
++install: install_dmsetup_static install_dmfilemapd_static
++endif
+ 
+ device-mapper: $(TARGETS_DM)
+diff --git a/libdm/make.tmpl.in b/libdm/make.tmpl.in
+index cc28e73cb..454e23512 100644
+--- a/libdm/make.tmpl.in
++++ b/libdm/make.tmpl.in
+@@ -318,7 +318,11 @@ SUBDIRS.cflow := $(SUBDIRS:=.cflow)
+ SUBDIRS.clean := $(SUBDIRS:=.clean)
+ SUBDIRS.distclean := $(SUBDIRS:=.distclean)
+ 
++ifeq ("@ENABLE_SHARED@", "yes")
+ TARGETS += $(LIB_SHARED) $(LIB_STATIC)
++else
++TARGETS += $(LIB_STATIC)
++endif
+ 
+ all: $(SUBDIRS) $(TARGETS)
+ 
+@@ -435,7 +439,9 @@ DEFS+=-D_FILE_OFFSET_BITS=64
+ 
+ ifneq (,$(LIB_SHARED))
+ 
++ifeq ("@ENABLE_SHARED@", "yes")
+ TARGETS += $(LIB_SHARED).$(LIB_VERSION)
++endif
+ $(LIB_SHARED).$(LIB_VERSION): $(OBJECTS) $(LDDEPS)
+ 	@echo "    [CC] $@"
+ ifeq ("@LIB_SUFFIX@","so")
+diff --git a/make.tmpl.in b/make.tmpl.in
+index fcb62f78a..f61307b31 100644
+--- a/make.tmpl.in
++++ b/make.tmpl.in
+@@ -372,7 +372,11 @@ SUBDIRS.cflow := $(SUBDIRS:=.cflow)
+ SUBDIRS.clean := $(SUBDIRS:=.clean)
+ SUBDIRS.distclean := $(SUBDIRS:=.distclean)
+ 
++ifeq ("@ENABLE_SHARED@", "yes")
+ TARGETS += $(LIB_SHARED) $(LIB_STATIC)
++else
++TARGETS += $(LIB_STATIC)
++endif
+ 
+ INTERNAL_LIBS = \
+ 	$(top_builddir)/libdaemon/client/libdaemonclient.a \
 -- 
-View it on GitLab: https://gitlab.com/lvmteam/lvm2/-/compare/970e4d295eddb47d4540bb0762e35bd17b07841f...fc2feabef7507108311c01e48c6262606caf37fd
-You're receiving this email because of your account on gitlab.com.
+2.41.0
 
-
--------------- next part --------------
-An HTML attachment was scrubbed...
-URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20230919/337422fa/attachment-0001.htm>
