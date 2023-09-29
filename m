@@ -1,39 +1,54 @@
-From: jbrassow@sourceware.org <jbrassow@sourceware.org>
-Date: 27 Apr 2012 18:37:42 -0000
-Subject: LVM2/doc example.conf.in
-Message-ID: <20120427183742.5948.qmail@sourceware.org>
+From: David Teigland <teigland@redhat.com>
+Date: Fri, 29 Sep 2023 16:01:40 -0500
+Subject: dmeventd is not respecting /etc/lvm/devices/system.devices
+In-Reply-To: <fd47987d-5137-ee79-3e81-2c3228f2c9b3@ewheeler.net>
+References: <fd47987d-5137-ee79-3e81-2c3228f2c9b3@ewheeler.net>
+Message-ID: <20230929210140.GA28125@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-CVSROOT:	/cvs/lvm2
-Module name:	LVM2
-Changes by:	jbrassow at sourceware.org	2012-04-27 18:37:42
+On Fri, Sep 29, 2023 at 12:18:07PM -0700, Eric Wheeler wrote:
+> Hello all,
+> 
+> I am not sure how to resolve the dmeventd warning below, maybe you can 
+> help. It appears that dmeventd is finding PVs attached to VMs, but those 
+> volumes are not listed in /etc/lvm/devices/system.devices so, presumably, 
+> they should be ignored by dmeventd.
 
-Modified files:
-	doc            : example.conf.in 
+Thanks for bringing his up, it's a neglected and hidden corner of the
+devices file feature that's not well developed.
 
-Log message:
-	Make a note that "raid1" is not cluster-aware in the example lvm.conf.
-	
-	In the description of the segment types for the 'mirror_segtype_default'
-	field, we mention that "raid1" is not cluster-aware.
+The existing solution to this problem isn't great, but should work: create
+/etc/lvm/devices/dmeventd.devices, where dmeventd.devices contains devs
+for any VG where dmeventd is needed.  That might be the same as
+system.devices (you could just copy system.devices to dmeventd.devices.)
+If you don't actually need dmeventd, then dmeventd.devices could be empty,
+or better just disable that service.
 
-Patches:
-http://sourceware.org/cgi-bin/cvsweb.cgi/LVM2/doc/example.conf.in.diff?cvsroot=lvm2&r1=1.47&r2=1.48
+Without a dmeventd.devices file, dmeventd does not use any devices file
+and looks at all PVs on the system, as you've seen.  This was a quick way
+get around the fact that multiple devices files can be used, but dmeventd
+needs to service all of them.  It turns out multiple devices files aren't
+really used by anyone, as far as I can tell (at least not yet.)  The
+default should be for dmeventd to use system.devices, I expect we can make
+that change for the next release.
 
---- LVM2/doc/example.conf.in	2012/03/14 17:13:45	1.47
-+++ LVM2/doc/example.conf.in	2012/04/27 18:37:42	1.48
-@@ -441,6 +441,8 @@
-     #		 on the same device as the image - no separate devices are
-     #		 required.)  This mirror implementation does not require I/O
-     #		 to be blocked in the kernel in the event of a failure.
-+    #		 This mirror implementation is not cluster-aware and cannot be
-+    #		 used in a shared (active/active) fashion in a cluster.
-     #
-     # Specify the '--type <mirror|raid1>' option to override this default
-     # setting.
+> We used to use `global_filter` and that worked fine, but that seems to be 
+> deprecated starting in el9 in favor of system.devices. If we try to enable 
+> the filters in lvm.conf, then pvs/lvs/vgs commands complain about the 
+> filter options being used together with `use_devicesfile=1`. Note that we 
+> have PVs on LVs for ssd allocation to different VGs, so `scan_lvs=1` is 
+> enabled.  (Maybe turning off scan_lvs would "fix" dmeventd, but I can't 
+> test that because we need PVs on LVs for this deployment.)
 
+I don't think scan_lvs will have any impact on this.
 
+> Aug 28 15:25:29 hv1.ewheeler.net dmeventd[886522]: WARNING: VG name data is used by VGs pcqIki-TjE0-iFMN-D8MH-19Er-ypSm-djfl5D and 9UEiuo-DYzj-UTLi-XYCi-KiBO-wQi2-w5QUtX.
+
+It's always been difficult to know what dmeventd is doing, and I wonder
+what it's running so frequently.
+
+Dave
