@@ -1,83 +1,74 @@
-From: Eric Wheeler <lvm-devel@lists.ewheeler.net>
-Date: Fri, 29 Sep 2023 12:18:07 -0700 (PDT)
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Sat, 30 Sep 2023 16:03:09 +0200
 Subject: dmeventd is not respecting /etc/lvm/devices/system.devices
-Message-ID: <fd47987d-5137-ee79-3e81-2c3228f2c9b3@ewheeler.net>
+In-Reply-To: <20230929210140.GA28125@redhat.com>
+References: <fd47987d-5137-ee79-3e81-2c3228f2c9b3@ewheeler.net>
+ <20230929210140.GA28125@redhat.com>
+Message-ID: <02883eeb-d5c3-486a-a5fb-084b51f9b751@redhat.com>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-Hello all,
-
-I am not sure how to resolve the dmeventd warning below, maybe you can 
-help. It appears that dmeventd is finding PVs attached to VMs, but those 
-volumes are not listed in /etc/lvm/devices/system.devices so, presumably, 
-they should be ignored by dmeventd.
-
-We used to use `global_filter` and that worked fine, but that seems to be 
-deprecated starting in el9 in favor of system.devices. If we try to enable 
-the filters in lvm.conf, then pvs/lvs/vgs commands complain about the 
-filter options being used together with `use_devicesfile=1`. Note that we 
-have PVs on LVs for ssd allocation to different VGs, so `scan_lvs=1` is 
-enabled.  (Maybe turning off scan_lvs would "fix" dmeventd, but I can't 
-test that because we need PVs on LVs for this deployment.)
-
-Except for the very noisy dmeventd logs, the system works just fine.
-
-Questions:
-
-- Is there an option somewhere to make dmeventd behave, or is this a bug?
-
-- In the log example below, dmeventd on the hypervisor is scanning logical 
-  volumes that contain PVs/VGs in use by VMs, for which multiple VMs have 
-  unrelated volume groups called "data" (directly on the volume, no 
-  partitions)...but those volumes are _not_ in 
-  /etc/lvm/devices/system.devices so shouldn't dmeventd ignore them?
-
-
-More info:
-
-== /var/log/messages ==
-Aug 28 15:25:29 hv1.ewheeler.net dmeventd[886522]: WARNING: VG name data is used by VGs pcqIki-TjE0-iFMN-D8MH-19Er-ypSm-djfl5D and 9UEiuo-DYzj-UTLi-XYCi-KiBO-wQi2-w5QUtX.
-Aug 28 15:25:29 hv1.ewheeler.net dmeventd[886522]: Fix duplicate VG names with vgrename uuid, a device filter, or system IDs.
-Aug 28 15:25:29 hv1.ewheeler.net dmeventd[886522]: WARNING: VG name data is used by VGs H0qj4Q-M6dR-hW0v-PbmL-Jrz1-sJ2N-paWdPI and 9UEiuo-DYzj-UTLi-XYCi-KiBO-wQi2-w5QUtX.
-Aug 28 15:25:29 hv1.ewheeler.net dmeventd[886522]: Fix duplicate VG names with vgrename uuid, a device filter, or system IDs.
-Aug 28 15:25:29 hv1.ewheeler.net dmeventd[886522]: WARNING: VG name data is used by VGs fPVczf-ehDy-fQti-lKQE-LJkW-g0gt-0ZiikJ and 9UEiuo-DYzj-UTLi-XYCi-KiBO-wQi2-w5QUtX.
-Aug 28 15:25:29 hv1.ewheeler.net dmeventd[886522]: Fix duplicate VG names with vgrename uuid, a device filter, or system IDs.
-Aug 28 15:25:29 hv1.ewheeler.net dmeventd[886522]: WARNING: VG name data is used by VGs NzRLdW-ST9X-O7X5-ZnGz-0uge-i0lb-lk5xjV and 9UEiuo-DYzj-UTLi-XYCi-KiBO-wQi2-w5QUtX.
-Aug 28 15:25:29 hv1.ewheeler.net dmeventd[886522]: Fix duplicate VG names with vgrename uuid, a device filter, or system IDs.
-Aug 28 15:25:29 hv1.ewheeler.net dmeventd[886522]: WARNING: VG name data is used by VGs z6fwJ2-S3oK-J0W5-pVHC-ZlDG-FjmP-RUWF7h and 9UEiuo-DYzj-UTLi-XYCi-KiBO-wQi2-w5QUtX.
-Aug 28 15:25:29 hv1.ewheeler.net dmeventd[886522]: Fix duplicate VG names with vgrename uuid, a device filter, or system IDs.
-Aug 28 15:25:29 hv1.ewheeler.net dmeventd[886522]: WARNING: VG name data is used by VGs R1oDQS-JP4G-cNFe-3EwV-kk2Z-KZou-w3uisW and 9UEiuo-DYzj-UTLi-XYCi-KiBO-wQi2-w5QUtX.
-Aug 28 15:25:29 hv1.ewheeler.net dmeventd[886522]: Fix duplicate VG names with vgrename uuid, a device filter, or system IDs.
-Aug 28 15:25:29 hv1.ewheeler.net dmeventd[886522]: WARNING: VG name data is used by VGs jcQyYa-dcCn-3nB6-iKYl-nI1n-EPr7-IHHWbs and 9UEiuo-DYzj-UTLi-XYCi-KiBO-wQi2-w5QUtX.
-Aug 28 15:25:29 hv1.ewheeler.net dmeventd[886522]: Fix duplicate VG names with vgrename uuid, a device filter, or system IDs.
-Aug 28 15:25:29 hv1.ewheeler.net dmeventd[886522]: WARNING: VG name data is used by VGs lPkJve-7oGk-6zcC-I2JL-nVuK-VY7d-Ar1pFK and 9UEiuo-DYzj-UTLi-XYCi-KiBO-wQi2-w5QUtX.
-Aug 28 15:25:29 hv1.ewheeler.net dmeventd[886522]: Fix duplicate VG names with vgrename uuid, a device filter, or system IDs.
-Aug 28 15:25:29 hv1.ewheeler.net dmeventd[886522]: WARNING: VG name data is used by VGs bAiQsf-Thbq-KPAU-Iykv-vmtr-AvwV-Ey078P and 9UEiuo-DYzj-UTLi-XYCi-KiBO-wQi2-w5QUtX.
-Aug 28 15:25:29 hv1.ewheeler.net dmeventd[886522]: Fix duplicate VG names with vgrename uuid, a device filter, or system IDs.
-Aug 28 15:25:29 hv1.ewheeler.net dmeventd[886522]: Multiple VGs found with the same name: skipping data 
-
-== /etc/lvm/devices/system.devices ==
-# LVM uses devices listed in this file.
-# Created by LVM command lvs pid 2549 at Sat Sep 23 12:37:29 2023
-VERSION=1.1.16
-IDTYPE=sys_wwid IDNAME=naa.60027e370b5750002af3f68fd1e3b01c DEVNAME=/dev/sda3 PVID=HcTMIGPbMd2j1QrV84oKx6W402wzYAe9 PART=3
-IDTYPE=md_uuid IDNAME=46faca15-b9b8-9393-120c-33d72c4de014 DEVNAME=/dev/md0 PVID=E1DCFhfN0D6vTnxnSMVOBkouNgNlVgvs
-IDTYPE=devname IDNAME=/dev/bcache0 DEVNAME=/dev/bcache0 PVID=kZPEaDEk2Be2j05EgrBc05zjkrwEifeN
-IDTYPE=lvmlv_uuid IDNAME=LVM-XSrtW65TBeE9rfMfGQZvDXAowpdkklsdZrCnfSeMxKo0eP10wdGtw66tHRXZfcfX DEVNAME=/dev/ssd/pv-tmeta PVID=w1LcofA64NPZakz45HPHAvuiw7YAs4P8
-
-Running `pvs` shows only the volumes listed in system.devices, so that part works correctly:
-
-0 [root at hv1:devices]# pvs
-  PV                VG     Fmt  Attr PSize    PFree  
-  /dev/bcache0      data   lvm2 a--    27.28t   1.02t
-  /dev/md0          ssd    lvm2 a--  <953.73g <90.73g
-  /dev/sda3         hv1    lvm2 a--   108.41g  97.41g
-  /dev/ssd/pv-tmeta data   lvm2 a--   <49.86g  <4.86g
+Dne 29. 09. 23 v 23:01 David Teigland napsal(a):
+> On Fri, Sep 29, 2023 at 12:18:07PM -0700, Eric Wheeler wrote:
+>> Hello all,
+>>
+>> I am not sure how to resolve the dmeventd warning below, maybe you can
+>> help. It appears that dmeventd is finding PVs attached to VMs, but those
+>> volumes are not listed in /etc/lvm/devices/system.devices so, presumably,
+>> they should be ignored by dmeventd.
+> Thanks for bringing his up, it's a neglected and hidden corner of the
+> devices file feature that's not well developed.
+>
+> The existing solution to this problem isn't great, but should work: create
+> /etc/lvm/devices/dmeventd.devices, where dmeventd.devices contains devs
+> for any VG where dmeventd is needed.  That might be the same as
+> system.devices (you could just copy system.devices to dmeventd.devices.)
+> If you don't actually need dmeventd, then dmeventd.devices could be empty,
+> or better just disable that service.
+>
+> Without a dmeventd.devices file, dmeventd does not use any devices file
+> and looks at all PVs on the system, as you've seen.  This was a quick way
+> get around the fact that multiple devices files can be used, but dmeventd
+> needs to service all of them.  It turns out multiple devices files aren't
+> really used by anyone, as far as I can tell (at least not yet.)  The
+> default should be for dmeventd to use system.devices, I expect we can make
+> that change for the next release.
+>
+>> We used to use `global_filter` and that worked fine, but that seems to be
+>> deprecated starting in el9 in favor of system.devices. If we try to enable
+>> the filters in lvm.conf, then pvs/lvs/vgs commands complain about the
+>> filter options being used together with `use_devicesfile=1`. Note that we
+>> have PVs on LVs for ssd allocation to different VGs, so `scan_lvs=1` is
+>> enabled.  (Maybe turning off scan_lvs would "fix" dmeventd, but I can't
+>> test that because we need PVs on LVs for this deployment.)
+> I don't think scan_lvs will have any impact on this.
+>
+>> Aug 28 15:25:29 hv1.ewheeler.net dmeventd[886522]: WARNING: VG name data is used by VGs pcqIki-TjE0-iFMN-D8MH-19Er-ypSm-djfl5D and 9UEiuo-DYzj-UTLi-XYCi-KiBO-wQi2-w5QUtX.
+> It's always been difficult to know what dmeventd is doing, and I wonder
+> what it's running so frequently.
 
 
---
-Eric Wheeler
+The usage of dmeventd plugins are quite simply to trace with -fldddd.
+
+In most cases when the plugins 'triggering' condition is met - the action 
+happens - typically a call of? a basic lvm command - i.e
+
+when?? monitoring of device discovers a jump in? usage percentage?? say from? 
+65%-> 70%? we? call?? 'lvextend --use-policies'
+
+Such command can now likely by modified to? use?? --devicesfile option? - so 
+it should not need any read of devices file.
+
+However we need to? resolve all cases where we basically allow to change? VG - 
+as that would need to communitcate with dmeventd and update such command.
+
+(We already do want this enhancement anyway - we have RFE to handle? i.e. 
+vgextend logic to propagate to dmeventd)
+
+
+Zdenek
+
 
