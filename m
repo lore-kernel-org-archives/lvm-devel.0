@@ -1,45 +1,139 @@
-From: Milan Broz <mbroz@redhat.com>
-Date: Sat, 23 Jan 2010 21:58:46 +0100
-Subject: [PATCH 4/6] [RFC] Always query device by uuid only in activation calls.
-In-Reply-To: <1264280328-8728-1-git-send-email-mbroz@redhat.com>
-References: <1264280328-8728-1-git-send-email-mbroz@redhat.com>
-Message-ID: <1264280328-8728-4-git-send-email-mbroz@redhat.com>
+From: Zdeněk Kabeláč (@zdenek.kabelac) <gitlab@mg.gitlab.com>
+Date: Tue, 03 Oct 2023 00:02:12 +0000
+Subject: [Git][lvmteam/lvm2][main] 3 commits: tests: restore fsync for runner
+Message-ID: <651b5a04e94eb_2aa526c9332@gitlab-sidekiq-low-urgency-cpu-bound-v2-5cf6c75464-zxxks.mail>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
-lvm2 devices have always UUID set even if imported from lvm1 metadata.
 
-Why not use query by UUID only always?
----
- lib/activate/activate.c |    4 ++--
- 1 files changed, 2 insertions(+), 2 deletions(-)
 
-diff --git a/lib/activate/activate.c b/lib/activate/activate.c
-index 433c8cc..83d363a 100644
---- a/lib/activate/activate.c
-+++ b/lib/activate/activate.c
-@@ -453,7 +453,7 @@ static int _lv_info(struct cmd_context *cmd, const struct logical_volume *lv, in
- 	    !(name = build_dm_name(cmd->mem, lv->vg->name, lv->name, NULL)))
- 		return_0;
+Zden?k Kabel?? pushed to branch main at LVM team / lvm2
+
+
+Commits:
+13bf42b8 by Zdenek Kabelac at 2023-10-03T01:58:23+02:00
+tests: restore fsync for runner
+
+Restore fsync() call For more accurate tracking by buildbot.
+Try different rather tricky way of static_cast to use
+already opened FD instead of seperate open(),fsync(),close().
+
+It&#39;s pretty strange there is no way to enforce fsync() for
+C++ iostreams.  Flush() is actully not equal.
+
+- - - - -
+d01e9de8 by Zdenek Kabelac at 2023-10-03T02:01:29+02:00
+tests: add RT_LIBS for older g++
+
+- - - - -
+6f520916 by Zdenek Kabelac at 2023-10-03T02:01:29+02:00
+tests: give dmeventd some time to restart
+
+We need to wait for a new dmeventd as fork new daemon from bash.
+
+- - - - -
+
+
+3 changed files:
+
+- test/Makefile.in
+- test/lib/brick-shelltest.h
+- test/shell/dmeventd-restart.sh
+
+
+Changes:
+
+=====================================
+test/Makefile.in
+=====================================
+@@ -264,7 +264,7 @@ lib/should lib/invalid lib/fail: lib/not
  
--	log_debug("Getting device info for %s", name);
-+	log_debug("Getting device info for %s/%s", lv->vg->name, lv->name);
- 	if (!dev_manager_info(lv->vg->cmd->mem, name, lv, with_mknodes,
- 			      with_open_count, with_read_ahead, &dminfo,
- 			      &info->read_ahead)) {
-@@ -480,7 +480,7 @@ static int _lv_info(struct cmd_context *cmd, const struct logical_volume *lv, in
- int lv_info(struct cmd_context *cmd, const struct logical_volume *lv, struct lvinfo *info,
- 	    int with_open_count, int with_read_ahead)
- {
--	return _lv_info(cmd, lv, 0, info, with_open_count, with_read_ahead, 0);
-+	return _lv_info(cmd, lv, 0, info, with_open_count, with_read_ahead, 1);
- }
+ lib/runner: lib/runner.o .lib-dir-stamp
+ 	$(SHOW) "    [LD] $@"
+-	$(Q) $(CXX) $(CXXFLAGS) $(LDFLAGS) $(EXTRA_EXEC_LDFLAGS) $(ELDFLAGS) -o $@ $<
++	$(Q) $(CXX) $(CXXFLAGS) $(LDFLAGS) $(RT_LIBS) $(EXTRA_EXEC_LDFLAGS) $(ELDFLAGS) -o $@ $<
  
- int lv_info_by_lvid(struct cmd_context *cmd, const char *lvid_s,
+ lib/securetest: lib/dmsecuretest.o .lib-dir-stamp
+ 	$(SHOW) "    [LD] $@"
+
+
+=====================================
+test/lib/brick-shelltest.h
+=====================================
+@@ -153,6 +153,16 @@ public:
+     }
+ };
+ 
++int get_fd(std::filebuf& filebuf)
++{
++    class my_filebuf : public std::filebuf {
++    public:
++        int handle() { return _M_file.fd(); }
++    };
++
++    return static_cast<my_filebuf&>(filebuf).handle();
++}
++
+ struct dir {
+     DIR *d;
+     dir( const std::string &p ) {
+@@ -298,6 +308,7 @@ struct Journal {
+         }
+         written = status;
+         of.flush();
++        fsync( get_fd( *of.rdbuf() ) );
+         of.close();
+     }
+ 
+@@ -306,7 +317,8 @@ struct Journal {
+         for ( Status::const_iterator i = status.begin(); i != status.end(); ++i )
+             of << i->first << " "  << i->second << std::endl;
+         of.flush();
+-        of.close();
++        fsync( get_fd( *of.rdbuf() ) );
++         of.close();
+     }
+ 
+     void sync() {
+@@ -898,6 +910,7 @@ struct TestCase {
+             std::ofstream hb( options.heartbeat.c_str(), std::fstream::app );
+             hb << ".";
+             hb.flush();
++            fsync( get_fd( *hb.rdbuf() ) );
+             hb.close();
+             last_heartbeat.gettime();
+         }
+
+
+=====================================
+test/shell/dmeventd-restart.sh
+=====================================
+@@ -67,7 +67,11 @@ rm -f debug.log*
+ dmeventd -R -f -e "$PWD/test_nologin" -ldddd > debug.log_DMEVENTD_$RANDOM 2>&1 &
+ echo $! >LOCAL_DMEVENTD
+ 
+-pgrep -o dmeventd
++for i in $(seq 1 10); do
++  test "$(pgrep -o dmeventd)" = "$(< LOCAL_DMEVENTD)" && break
++  sleep .1
++done
++
+ kill -INT "$(< LOCAL_DMEVENTD)"
+ sleep 1
+ 
+
+
+
+View it on GitLab: https://gitlab.com/lvmteam/lvm2/-/compare/a540b3f189a9aaaf87222190035db4161e336964...6f520916688f0fce9f6dfde4747e45f1bf54c9ad
+
 -- 
-1.6.6
+View it on GitLab: https://gitlab.com/lvmteam/lvm2/-/compare/a540b3f189a9aaaf87222190035db4161e336964...6f520916688f0fce9f6dfde4747e45f1bf54c9ad
+You're receiving this email because of your account on gitlab.com.
 
 
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20231003/902206d8/attachment-0001.htm>
