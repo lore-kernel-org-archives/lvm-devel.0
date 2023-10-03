@@ -1,44 +1,65 @@
-From: Milan Broz <mbroz@redhat.com>
-Date: Sat, 23 Jan 2010 21:58:47 +0100
-Subject: [PATCH 5/6] Add some missing vg_revrts calls when pvmove aborts.
-In-Reply-To: <1264280328-8728-1-git-send-email-mbroz@redhat.com>
-References: <1264280328-8728-1-git-send-email-mbroz@redhat.com>
-Message-ID: <1264280328-8728-5-git-send-email-mbroz@redhat.com>
+From: Zdeněk Kabeláč (@zdenek.kabelac) <gitlab@mg.gitlab.com>
+Date: Tue, 03 Oct 2023 11:00:44 +0000
+Subject: [Git][lvmteam/lvm2][main] tests: old g++ needs explicit cast
+Message-ID: <651bf45c876f0_2aa52a869022@gitlab-sidekiq-low-urgency-cpu-bound-v2-5b59ddf494-brpsk.mail>
 List-Id: <lvm-devel.redhat.com>
 To: lvm-devel@redhat.com
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 
----
- tools/pvmove.c |    5 ++++-
- 1 files changed, 4 insertions(+), 1 deletions(-)
 
-diff --git a/tools/pvmove.c b/tools/pvmove.c
-index 47982e6..a286db1 100644
---- a/tools/pvmove.c
-+++ b/tools/pvmove.c
-@@ -303,8 +303,10 @@ static int _update_metadata(struct cmd_context *cmd, struct volume_group *vg,
- 	}
+
+Zden?k Kabel?? pushed to branch main at LVM team / lvm2
+
+
+Commits:
+0e8c631f by Zdenek Kabelac at 2023-10-03T12:59:38+02:00
+tests: old g++ needs explicit cast
+
+- - - - -
+
+
+1 changed file:
+
+- test/lib/brick-shelltest.h
+
+
+Changes:
+
+=====================================
+test/lib/brick-shelltest.h
+=====================================
+@@ -103,8 +103,8 @@ class Timespec {
+     struct timespec ts;
+     static const long _NSEC_PER_SEC = 1000000000;
+ public:
+-    Timespec( time_t _sec = 0, long _nsec = 0 ) { ts = { _sec, _nsec }; }
+-    Timespec( const struct timeval &tv ) { ts = { tv.tv_sec, tv.tv_usec * 1000 }; }
++    Timespec( time_t _sec = 0, long _nsec = 0 ) { ts = (struct timespec) { _sec, _nsec }; }
++    Timespec( const struct timeval &tv ) { ts = (struct timespec) { tv.tv_sec, tv.tv_usec * 1000 }; }
+     long sec() const { return (long)ts.tv_sec; }
+     long nsec() const { return (long)ts.tv_nsec; }
+     void gettime() {
+@@ -941,7 +941,7 @@ struct TestCase {
+                 return false;
+             }
  
- 	/* Suspend lvs_changed */
--	if (!suspend_lvs(cmd, lvs_changed))
-+	if (!suspend_lvs(cmd, lvs_changed)) {
-+		vg_revert(vg);
- 		goto_out;
-+	}
+-        struct timeval wait = { 0, 500000 /* timeout 0.5s */ };
++        struct timeval wait = (struct timeval) { 0, 500000 /* timeout 0.5s */ };
+         fd_set set;
  
- 	/* Suspend mirrors on subsequent calls */
- 	if (!first_time) {
-@@ -324,6 +326,7 @@ static int _update_metadata(struct cmd_context *cmd, struct volume_group *vg,
- 				stack;
- 		if (!resume_lvs(cmd, lvs_changed))
- 			stack;
-+		vg_revert(vg);
- 		goto out;
- 	}
- 
+         FD_ZERO( &set );
+
+
+
+View it on GitLab: https://gitlab.com/lvmteam/lvm2/-/commit/0e8c631f5e58473d7f802ccaaf3fe61cf4dc403e
+
 -- 
-1.6.6
+View it on GitLab: https://gitlab.com/lvmteam/lvm2/-/commit/0e8c631f5e58473d7f802ccaaf3fe61cf4dc403e
+You're receiving this email because of your account on gitlab.com.
 
 
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://listman.redhat.com/archives/lvm-devel/attachments/20231003/868eead9/attachment.htm>
