@@ -1,99 +1,85 @@
-Received: from mail-ej1-f47.google.com (mail-ej1-f47.google.com [209.85.218.47])
+Received: from mail-qv1-f42.google.com (mail-qv1-f42.google.com [209.85.219.42])
 	(using TLSv1.2 with cipher ECDHE-RSA-AES128-GCM-SHA256 (128/128 bits))
 	(No client certificate requested)
-	by smtp.subspace.kernel.org (Postfix) with ESMTPS id E90FE58222
-	for <lvm-devel@lists.linux.dev>; Fri, 12 Jan 2024 10:45:10 +0000 (UTC)
-Authentication-Results: smtp.subspace.kernel.org; dmarc=pass (p=none dis=none) header.from=gmail.com
-Authentication-Results: smtp.subspace.kernel.org; spf=pass smtp.mailfrom=gmail.com
-Authentication-Results: smtp.subspace.kernel.org;
-	dkim=pass (2048-bit key) header.d=gmail.com header.i=@gmail.com header.b="jeTO3Z2m"
-Received: by mail-ej1-f47.google.com with SMTP id a640c23a62f3a-a26f73732c5so744084566b.3
-        for <lvm-devel@lists.linux.dev>; Fri, 12 Jan 2024 02:45:10 -0800 (PST)
-DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed;
-        d=gmail.com; s=20230601; t=1705056309; x=1705661109; darn=lists.linux.dev;
-        h=content-transfer-encoding:in-reply-to:from:references:to
-         :content-language:subject:user-agent:mime-version:date:message-id
-         :from:to:cc:subject:date:message-id:reply-to;
-        bh=FkWArslYTYul+NvKaTbBggo6z0GZFg5qmOGj2TnA2kw=;
-        b=jeTO3Z2m6mn8cAJYg5H4rukYjEYfBGKt+XX4/5Whbj9nOMtr3I8N35aKy4i6Jab8yn
-         BDE+Pwhj84aUyUYqd5gFxn5vl0NzDHpndY1L9GVgsMcws2zDE2xi4mtpK/RKez+tc6Ir
-         vsNxxrV7QiapRL1Hp76uyX8XGxUxFuR5OKJSnzWFYgjqMJV6+6f33R5UkOjcW722of3+
-         EiNiYGR3OPf/GfwTPaY0Sr9GjtAEsEFHaxRzeT8EjUcErU/+Q/WI55pVU8QPkzcz4KQP
-         i93YVlvPEEkkuixA0Lg0ZYZzt4mobqMBUPPp013lsxErTUmoYx9ENuwuB1vUF+OzVVl/
-         4itw==
+	by smtp.subspace.kernel.org (Postfix) with ESMTPS id 54D3F14534F
+	for <lvm-devel@lists.linux.dev>; Tue, 27 Feb 2024 15:36:41 +0000 (UTC)
+Authentication-Results: smtp.subspace.kernel.org; arc=none smtp.client-ip=209.85.219.42
+ARC-Seal:i=1; a=rsa-sha256; d=subspace.kernel.org; s=arc-20240116;
+	t=1709048202; cv=none; b=dxze8Ki2C8Fpn+Tln35ppvfIXbuw+xb5YQ6jxSQaG8ERvU/kcuRzceTJmtR/wkMCPVFbebUN4HYYJH6SdPqHhO+QGz0O26uouUISVTKd5CxqmEGVgoyvppL0lP2VMJQvYX3ahEeh1vZQkJFw9SJ/J+VZc/R6INhQk3H88Ioh4M0=
+ARC-Message-Signature:i=1; a=rsa-sha256; d=subspace.kernel.org;
+	s=arc-20240116; t=1709048202; c=relaxed/simple;
+	bh=5uF36SkL6j3rjU+v75xcUHnjNsRFkrV5u2gpq2J7cJY=;
+	h=Date:From:To:Cc:Subject:Message-ID:References:MIME-Version:
+	 Content-Type:Content-Disposition:In-Reply-To; b=AOs6ypB7fiL3KDpHxTms6F4zmpzgEHooJtf9m+OGLBbTyB7iTPLL2iHA6uhCxTHtSAUurxdGTeVndFUvdoUKgPTVqZMXDynp2lWaSo/isT/T/3jfAoI27kbW+G0oqdvJ4ciRxctZsCBHIGgbHceiRqJRjNVcdQl+C+ybOFwknoo=
+ARC-Authentication-Results:i=1; smtp.subspace.kernel.org; dmarc=fail (p=none dis=none) header.from=kernel.org; spf=pass smtp.mailfrom=redhat.com; arc=none smtp.client-ip=209.85.219.42
+Authentication-Results: smtp.subspace.kernel.org; dmarc=fail (p=none dis=none) header.from=kernel.org
+Authentication-Results: smtp.subspace.kernel.org; spf=pass smtp.mailfrom=redhat.com
+Received: by mail-qv1-f42.google.com with SMTP id 6a1803df08f44-68ff93c5a15so22413716d6.1
+        for <lvm-devel@lists.linux.dev>; Tue, 27 Feb 2024 07:36:41 -0800 (PST)
 X-Google-DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed;
-        d=1e100.net; s=20230601; t=1705056309; x=1705661109;
-        h=content-transfer-encoding:in-reply-to:from:references:to
-         :content-language:subject:user-agent:mime-version:date:message-id
-         :x-gm-message-state:from:to:cc:subject:date:message-id:reply-to;
-        bh=FkWArslYTYul+NvKaTbBggo6z0GZFg5qmOGj2TnA2kw=;
-        b=pckw5HH3x+atqmqdhZjN8tNQd90gHXNOl2PC6qbLm56Bd3bTO0cR9PiSbcnRWJpOux
-         qlCDqq1IaAR/MjAE44wYDTgSxIYDOPKxxfpIXJ+zaAwMDia5WIG+qTLP05x33OOCBGYf
-         nTOrLq1JWNAZMA1+PZmKnHu4dnNrpyAgNYzUVXAx0tTFmuKFtD5LJnex8oZjMmMWNj4H
-         7JNFrquqH4l8/HyVUiL0MmDBajeRqLJrlHOaRvB07UY6WGq/YHAkgI73SRq7G66XPK5H
-         zHFpl+VUanZLWM0JrzPgNOW1zvmCLzslc1I446RIs5PXjHYbPkm5Jw27Qt/PV35CHoFT
-         YeAg==
-X-Gm-Message-State: AOJu0Yzp5mkv84+NlR53iFN5dsfI4l7y5R3RSHs1uC5I2lew+zrTQQlt
-	Dq5UqbgDCp870Df3fgMm0UPnv5Y18zjNxQ==
-X-Google-Smtp-Source: AGHT+IFYv0ryf5PPHAEsmGPTrGkE91EKlYJkGnfPp+hkaQmenx3ndhISF97kL6b+VqZFaUw5JFOl7A==
-X-Received: by 2002:a17:906:aaca:b0:a2c:ec05:9cfc with SMTP id kt10-20020a170906aaca00b00a2cec059cfcmr86053ejb.143.1705056308947;
-        Fri, 12 Jan 2024 02:45:08 -0800 (PST)
-Received: from [192.168.0.99] ([94.142.239.37])
-        by smtp.gmail.com with ESMTPSA id rn21-20020a170906d93500b00a2bbed0facesm1671360ejb.177.2024.01.12.02.45.08
-        (version=TLS1_3 cipher=TLS_AES_128_GCM_SHA256 bits=128/128);
-        Fri, 12 Jan 2024 02:45:08 -0800 (PST)
-Message-ID: <6cb99dad-259a-4b9f-9d2b-c57fc1bf23ce@gmail.com>
-Date: Fri, 12 Jan 2024 11:45:07 +0100
+        d=1e100.net; s=20230601; t=1709048200; x=1709653000;
+        h=in-reply-to:content-disposition:mime-version:references:message-id
+         :subject:cc:to:from:date:x-gm-message-state:from:to:cc:subject:date
+         :message-id:reply-to;
+        bh=m2sGMg+51MVkfuFuHYE8WK5guxAx9KsEPslVkAQ6ODY=;
+        b=UR0cbg2E+296+My01IgoLdA0i3IC0KKW6yAINw+pH4fPWXcPFuTa0k5OMZ+TDfpZ+G
+         +W0dtbIGt/iDPeSTdzsRLaaoNmsbZTV3zvYBoXPOSd4TXx3IBCeuWfmUiv/eXkmUhbC6
+         g906KbqaUD63od9wELOZ+C8vF9A2QtkTzkSuRfBoVGLUzWyqZ7IpcvwBrSDZEmXvo19k
+         CIQDDp+f/FzsHZzOsbl1liFfktzU7UAWhFQG8nBrM7lw4fIzFN8BP0H/Zd1bFckdZvUx
+         51itQspQzTdOADWLDeIY3pjLVoasxf1sYHLTU0Nd7mFmGE4onuVzmubX5LXnCMwZFLKi
+         hKKA==
+X-Forwarded-Encrypted: i=1; AJvYcCVI3Db14TnHUORsvBdVAF8x6zXfVIzD7+M6o96EsjeS8HrdrauS5PEpOeCKDxYV8ihYHLnd5s1NemZlM6O1hoRFdAZMU1kWFscO
+X-Gm-Message-State: AOJu0YwGhYWelBf5SrtnwZDaMBmQiv+THMmmitlhaOLRjMndIcA9UVYx
+	yP0UZiP7NTyOQYeAoOxLPPl6L/J//WHO32Tv/zoibYJggWMhoX9sCKyFcOOymw==
+X-Google-Smtp-Source: AGHT+IHefBd/DYeC9kDGOWZX34cDpyMowKjJqRD0RsTiq7qAUMMzIzL+c6tRbAmqftYr+t9pPcOiRw==
+X-Received: by 2002:a0c:f00f:0:b0:68f:6df2:3b60 with SMTP id z15-20020a0cf00f000000b0068f6df23b60mr2351854qvk.20.1709048200270;
+        Tue, 27 Feb 2024 07:36:40 -0800 (PST)
+Received: from localhost (pool-68-160-141-91.bstnma.fios.verizon.net. [68.160.141.91])
+        by smtp.gmail.com with ESMTPSA id og17-20020a056214429100b0068fe3170b0esm4259658qvb.11.2024.02.27.07.36.39
+        (version=TLS1_3 cipher=TLS_AES_256_GCM_SHA384 bits=256/256);
+        Tue, 27 Feb 2024 07:36:39 -0800 (PST)
+Date: Tue, 27 Feb 2024 10:36:37 -0500
+From: Mike Snitzer <snitzer@kernel.org>
+To: Christoph Hellwig <hch@lst.de>
+Cc: Jens Axboe <axboe@kernel.dk>, Mikulas Patocka <mpatocka@redhat.com>,
+	Song Liu <song@kernel.org>, Yu Kuai <yukuai3@huawei.com>,
+	dm-devel@lists.linux.dev, linux-block@vger.kernel.org,
+	linux-raid@vger.kernel.org, lvm-devel@lists.linux.dev
+Subject: Re: atomic queue limit updates for stackable devices
+Message-ID: <Zd4BhQ66dC_d7Mn0@redhat.com>
+References: <20240223161247.3998821-1-hch@lst.de>
+ <ZdjXsm9jwQlKpM87@redhat.com>
+ <ZdjYJrKCLBF8Gw8D@redhat.com>
+ <20240227151016.GC14335@lst.de>
+ <Zd38193LQCpF3-D0@redhat.com>
+ <20240227151734.GA14628@lst.de>
 Precedence: bulk
 X-Mailing-List: lvm-devel@lists.linux.dev
 List-Id: <lvm-devel.lists.linux.dev>
 List-Subscribe: <mailto:lvm-devel+subscribe@lists.linux.dev>
 List-Unsubscribe: <mailto:lvm-devel+unsubscribe@lists.linux.dev>
 MIME-Version: 1.0
-User-Agent: Mozilla Thunderbird
-Subject: Re: Reg thin pool and discard handling
-Content-Language: en-US, cs
-To: Lakshmi Narasimhan Sundararajan <lsundararajan@purestorage.com>,
- lvm-devel@lists.linux.dev
-References: <CAFe+wq3F1TCe9c6VXXiHFcA2Fys_L6+0Jv8FmDy8aH-0HfsOqw@mail.gmail.com>
-From: Zdenek Kabelac <zdenek.kabelac@gmail.com>
-In-Reply-To: <CAFe+wq3F1TCe9c6VXXiHFcA2Fys_L6+0Jv8FmDy8aH-0HfsOqw@mail.gmail.com>
-Content-Type: text/plain; charset=UTF-8; format=flowed
-Content-Transfer-Encoding: 7bit
+Content-Type: text/plain; charset=us-ascii
+Content-Disposition: inline
+In-Reply-To: <20240227151734.GA14628@lst.de>
 
-Dne 11. 01. 24 v 4:41 Lakshmi Narasimhan Sundararajan napsal(a):
-> Hi Team,
-> A very happy new year to you all.
+On Tue, Feb 27 2024 at 10:17P -0500,
+Christoph Hellwig <hch@lst.de> wrote:
+
+> On Tue, Feb 27, 2024 at 10:16:39AM -0500, Mike Snitzer wrote:
+> > That's the mainline issue a bunch of MD (and dm-raid) oriented
+> > engineers are working hard to fix, they've been discussing on
+> > linux-raid (with many iterations of proposed patches).
+> > 
+> > It regressed due to 6.8 MD changes (maybe earlier).
 > 
-> When a thin pool is created it has option to control discard behavior.
-> Typically the useful ones are either discard_passdown vs no_discard_passdown.
 > 
-> My question is as below:
-> If the thin pool is in "no_discard_passdown" and later changes to
-> "discard_passdown", would there be a way to reinitiate discard for
-> those ranges that was not passed down?
-> 
-> Typically fs sitting on top of the thin lv controls discard ranges and
-> that was already handled as "no_discard_passdown".
-> Later if say, the backing storage gets filled up, then how can one
-> re-initiate discard again to allow it to reach
-> backing storage?
-> 
+> Do you know if there is a way to skip specific tests to get a useful
+> baseline value (and to complete the run?)
 
-Hi
+I only know to sprinkle 'skip' code around to explicitly force the
+test to get skipped (e.g. in test/shell/, adding 'skip' at the top of
+each test as needed).
 
-When you run   'fstrim' operation on freshly mounted fs  it should trim
-all the areas that are empty.
-
-There is also an offline tool   'thin_trim'  - see  man thin_trim(8)
-maybe that's exactly what you are looking for ?
-
-But in this case it would need some dmsetup manipulation as
-lvm2 is not supporting ATM 'component activation' in RW mode
-(might be probably worth to add such support for cases like this - but
-we would like to track such stuff in metadata so it needs some thinking)
-
-Regards
-
-Zdenek
-
+But I've cc'd the lvm-devel mailing list in case there is an easier
+way.
