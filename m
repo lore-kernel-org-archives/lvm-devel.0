@@ -1,85 +1,98 @@
-Received: from mail-qv1-f42.google.com (mail-qv1-f42.google.com [209.85.219.42])
-	(using TLSv1.2 with cipher ECDHE-RSA-AES128-GCM-SHA256 (128/128 bits))
+Received: from smtp.kernel.org (aws-us-west-2-korg-mail-1.web.codeaurora.org [10.30.226.201])
+	(using TLSv1.2 with cipher ECDHE-RSA-AES256-GCM-SHA384 (256/256 bits))
 	(No client certificate requested)
-	by smtp.subspace.kernel.org (Postfix) with ESMTPS id 54D3F14534F
-	for <lvm-devel@lists.linux.dev>; Tue, 27 Feb 2024 15:36:41 +0000 (UTC)
-Authentication-Results: smtp.subspace.kernel.org; arc=none smtp.client-ip=209.85.219.42
+	by smtp.subspace.kernel.org (Postfix) with ESMTPS id E16AA14830F;
+	Tue, 27 Feb 2024 21:50:32 +0000 (UTC)
+Authentication-Results: smtp.subspace.kernel.org; arc=none smtp.client-ip=10.30.226.201
 ARC-Seal:i=1; a=rsa-sha256; d=subspace.kernel.org; s=arc-20240116;
-	t=1709048202; cv=none; b=dxze8Ki2C8Fpn+Tln35ppvfIXbuw+xb5YQ6jxSQaG8ERvU/kcuRzceTJmtR/wkMCPVFbebUN4HYYJH6SdPqHhO+QGz0O26uouUISVTKd5CxqmEGVgoyvppL0lP2VMJQvYX3ahEeh1vZQkJFw9SJ/J+VZc/R6INhQk3H88Ioh4M0=
+	t=1709070633; cv=none; b=A41mrCYM9/BbKNsL8d1bxLrFmKbtRZ2pYxBTPOzYrLN3PQXPqGwCuL9iB6UNiso5kbOIqH05qbJrdl7mVvkeQkqtkevKvdIPYMwsUq5HtvidgNl7D6cEhEgx0NhmgvMjVXmLjgBSggh5o2f/q+ikggbBIZkurxMr8go1Le2gnxc=
 ARC-Message-Signature:i=1; a=rsa-sha256; d=subspace.kernel.org;
-	s=arc-20240116; t=1709048202; c=relaxed/simple;
-	bh=5uF36SkL6j3rjU+v75xcUHnjNsRFkrV5u2gpq2J7cJY=;
-	h=Date:From:To:Cc:Subject:Message-ID:References:MIME-Version:
-	 Content-Type:Content-Disposition:In-Reply-To; b=AOs6ypB7fiL3KDpHxTms6F4zmpzgEHooJtf9m+OGLBbTyB7iTPLL2iHA6uhCxTHtSAUurxdGTeVndFUvdoUKgPTVqZMXDynp2lWaSo/isT/T/3jfAoI27kbW+G0oqdvJ4ciRxctZsCBHIGgbHceiRqJRjNVcdQl+C+ybOFwknoo=
-ARC-Authentication-Results:i=1; smtp.subspace.kernel.org; dmarc=fail (p=none dis=none) header.from=kernel.org; spf=pass smtp.mailfrom=redhat.com; arc=none smtp.client-ip=209.85.219.42
-Authentication-Results: smtp.subspace.kernel.org; dmarc=fail (p=none dis=none) header.from=kernel.org
-Authentication-Results: smtp.subspace.kernel.org; spf=pass smtp.mailfrom=redhat.com
-Received: by mail-qv1-f42.google.com with SMTP id 6a1803df08f44-68ff93c5a15so22413716d6.1
-        for <lvm-devel@lists.linux.dev>; Tue, 27 Feb 2024 07:36:41 -0800 (PST)
-X-Google-DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed;
-        d=1e100.net; s=20230601; t=1709048200; x=1709653000;
-        h=in-reply-to:content-disposition:mime-version:references:message-id
-         :subject:cc:to:from:date:x-gm-message-state:from:to:cc:subject:date
-         :message-id:reply-to;
-        bh=m2sGMg+51MVkfuFuHYE8WK5guxAx9KsEPslVkAQ6ODY=;
-        b=UR0cbg2E+296+My01IgoLdA0i3IC0KKW6yAINw+pH4fPWXcPFuTa0k5OMZ+TDfpZ+G
-         +W0dtbIGt/iDPeSTdzsRLaaoNmsbZTV3zvYBoXPOSd4TXx3IBCeuWfmUiv/eXkmUhbC6
-         g906KbqaUD63od9wELOZ+C8vF9A2QtkTzkSuRfBoVGLUzWyqZ7IpcvwBrSDZEmXvo19k
-         CIQDDp+f/FzsHZzOsbl1liFfktzU7UAWhFQG8nBrM7lw4fIzFN8BP0H/Zd1bFckdZvUx
-         51itQspQzTdOADWLDeIY3pjLVoasxf1sYHLTU0Nd7mFmGE4onuVzmubX5LXnCMwZFLKi
-         hKKA==
-X-Forwarded-Encrypted: i=1; AJvYcCVI3Db14TnHUORsvBdVAF8x6zXfVIzD7+M6o96EsjeS8HrdrauS5PEpOeCKDxYV8ihYHLnd5s1NemZlM6O1hoRFdAZMU1kWFscO
-X-Gm-Message-State: AOJu0YwGhYWelBf5SrtnwZDaMBmQiv+THMmmitlhaOLRjMndIcA9UVYx
-	yP0UZiP7NTyOQYeAoOxLPPl6L/J//WHO32Tv/zoibYJggWMhoX9sCKyFcOOymw==
-X-Google-Smtp-Source: AGHT+IHefBd/DYeC9kDGOWZX34cDpyMowKjJqRD0RsTiq7qAUMMzIzL+c6tRbAmqftYr+t9pPcOiRw==
-X-Received: by 2002:a0c:f00f:0:b0:68f:6df2:3b60 with SMTP id z15-20020a0cf00f000000b0068f6df23b60mr2351854qvk.20.1709048200270;
-        Tue, 27 Feb 2024 07:36:40 -0800 (PST)
-Received: from localhost (pool-68-160-141-91.bstnma.fios.verizon.net. [68.160.141.91])
-        by smtp.gmail.com with ESMTPSA id og17-20020a056214429100b0068fe3170b0esm4259658qvb.11.2024.02.27.07.36.39
-        (version=TLS1_3 cipher=TLS_AES_256_GCM_SHA384 bits=256/256);
-        Tue, 27 Feb 2024 07:36:39 -0800 (PST)
-Date: Tue, 27 Feb 2024 10:36:37 -0500
-From: Mike Snitzer <snitzer@kernel.org>
-To: Christoph Hellwig <hch@lst.de>
-Cc: Jens Axboe <axboe@kernel.dk>, Mikulas Patocka <mpatocka@redhat.com>,
-	Song Liu <song@kernel.org>, Yu Kuai <yukuai3@huawei.com>,
-	dm-devel@lists.linux.dev, linux-block@vger.kernel.org,
-	linux-raid@vger.kernel.org, lvm-devel@lists.linux.dev
-Subject: Re: atomic queue limit updates for stackable devices
-Message-ID: <Zd4BhQ66dC_d7Mn0@redhat.com>
-References: <20240223161247.3998821-1-hch@lst.de>
- <ZdjXsm9jwQlKpM87@redhat.com>
- <ZdjYJrKCLBF8Gw8D@redhat.com>
- <20240227151016.GC14335@lst.de>
- <Zd38193LQCpF3-D0@redhat.com>
- <20240227151734.GA14628@lst.de>
+	s=arc-20240116; t=1709070633; c=relaxed/simple;
+	bh=3wQ66r0HaUYRf9nPdNYetRmJANeDByL+SzkElXixSBo=;
+	h=MIME-Version:References:In-Reply-To:From:Date:Message-ID:Subject:
+	 To:Cc:Content-Type; b=doPhNuv/+oTd1uOzT1RIa/SfZAsvWNv2U1bsy+rJ1TzPNwgAstGvudkgWfdJ69/q1bbkJ2fHWKKJf//aNIZcf+6oho2X3hFqp6hsC5sVBg/fcqmknCdh1axB2n5933IDmyW4egug79j/yncoGjM+8iw/+0QlI8Ce6fKxeXA7ti4=
+ARC-Authentication-Results:i=1; smtp.subspace.kernel.org; dkim=pass (2048-bit key) header.d=kernel.org header.i=@kernel.org header.b=OdGRcBQ2; arc=none smtp.client-ip=10.30.226.201
+Authentication-Results: smtp.subspace.kernel.org;
+	dkim=pass (2048-bit key) header.d=kernel.org header.i=@kernel.org header.b="OdGRcBQ2"
+Received: by smtp.kernel.org (Postfix) with ESMTPSA id 8146EC433F1;
+	Tue, 27 Feb 2024 21:50:32 +0000 (UTC)
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/simple; d=kernel.org;
+	s=k20201202; t=1709070632;
+	bh=3wQ66r0HaUYRf9nPdNYetRmJANeDByL+SzkElXixSBo=;
+	h=References:In-Reply-To:From:Date:Subject:To:Cc:From;
+	b=OdGRcBQ2oEdmUZ9vTXjPYrcTFBlk4qAkgTpvoQQQr/ITqgdX7wqJsm+Fxg81RsNnD
+	 0KpZ84t3TBHyzpCdVM2HfmlmXq2LTSkHZGYd6PlCFAca+Wn7+JEHnVqBEfjag3GdA/
+	 gFQAUDo9TgI5j/s+2HHNxv7n7jCGMX4x8n3lXyjaJ79lQK2wbw8ONkgoHRxUldmT/y
+	 dVu4PaDfYnSEFUjM27oJotPhAEokeaUlBSgbYoZ6Wg6rJXAZQmQAXWUrrYVqqHb5rg
+	 iVav3pA1Ew9bQ4Vl+91/3jh+vMVdQh/MhJTAlrNXY0nuPvr35luePkvS09OJMrZBEh
+	 0AhbUBWqH5+yg==
+Received: by mail-lf1-f54.google.com with SMTP id 2adb3069b0e04-513181719easo305871e87.3;
+        Tue, 27 Feb 2024 13:50:32 -0800 (PST)
+X-Forwarded-Encrypted: i=1; AJvYcCVZiMRW9CUTg9+ZxQ9T1XUNPwfghkx7oJINTaB35BZRbV3RhWDznQAAKKImvYDDOQmhUbaHV6In1BWm5sy0Ee2LQxqASL0mQtTXkDr4stpaGkalPREkH0Mu1f/uUpwDdVnHP5M=
+X-Gm-Message-State: AOJu0YzM4kiLruxqoCDdlYnIh8yKTcKGjsbAnJRcpIeUXTK/aD/8W+UU
+	OWj3wQUlOYH9wxJjkjMIkAmRfScw+lnaMrnTBhGpWgOos6ER1BjHypqx8O+5Gfp9cH7w8aFM/sb
+	cjs97v8XL9eOQ+nYtKS98uJrLGB0=
+X-Google-Smtp-Source: AGHT+IGQtmhDCa3mLjVs/YPfOc6etTR6h86inDnZMXmkenFLVmQTGf8H8Ok2us2uo/Qy/4TS20k0HGc1yUTOJWyKErA=
+X-Received: by 2002:a19:f812:0:b0:513:d8b:956d with SMTP id
+ a18-20020a19f812000000b005130d8b956dmr1763250lff.24.1709070630756; Tue, 27
+ Feb 2024 13:50:30 -0800 (PST)
 Precedence: bulk
 X-Mailing-List: lvm-devel@lists.linux.dev
 List-Id: <lvm-devel.lists.linux.dev>
 List-Subscribe: <mailto:lvm-devel+subscribe@lists.linux.dev>
 List-Unsubscribe: <mailto:lvm-devel+unsubscribe@lists.linux.dev>
 MIME-Version: 1.0
-Content-Type: text/plain; charset=us-ascii
-Content-Disposition: inline
-In-Reply-To: <20240227151734.GA14628@lst.de>
+References: <20240223161247.3998821-1-hch@lst.de> <ZdjXsm9jwQlKpM87@redhat.com>
+ <ZdjYJrKCLBF8Gw8D@redhat.com> <20240227151016.GC14335@lst.de>
+ <Zd38193LQCpF3-D0@redhat.com> <20240227151734.GA14628@lst.de> <Zd4BhQ66dC_d7Mn0@redhat.com>
+In-Reply-To: <Zd4BhQ66dC_d7Mn0@redhat.com>
+From: Song Liu <song@kernel.org>
+Date: Tue, 27 Feb 2024 13:50:19 -0800
+X-Gmail-Original-Message-ID: <CAPhsuW69mM3tEBR=SgKy_SYE+NUsNO+8H6toyk+5mKcSfGMjmg@mail.gmail.com>
+Message-ID: <CAPhsuW69mM3tEBR=SgKy_SYE+NUsNO+8H6toyk+5mKcSfGMjmg@mail.gmail.com>
+Subject: Re: atomic queue limit updates for stackable devices
+To: Mike Snitzer <snitzer@kernel.org>, Benjamin Marzinski <bmarzins@redhat.com>, Xiao Ni <xni@redhat.com>, 
+	Zdenek Kabelac <zkabelac@redhat.com>
+Cc: Christoph Hellwig <hch@lst.de>, Jens Axboe <axboe@kernel.dk>, Mikulas Patocka <mpatocka@redhat.com>, 
+	Yu Kuai <yukuai3@huawei.com>, dm-devel@lists.linux.dev, linux-block@vger.kernel.org, 
+	linux-raid@vger.kernel.org, lvm-devel@lists.linux.dev
+Content-Type: text/plain; charset="UTF-8"
+Content-Transfer-Encoding: quoted-printable
 
-On Tue, Feb 27 2024 at 10:17P -0500,
-Christoph Hellwig <hch@lst.de> wrote:
+CC Benjamin, Zdenek, and Xiao, who are running the lvm tests.
 
-> On Tue, Feb 27, 2024 at 10:16:39AM -0500, Mike Snitzer wrote:
-> > That's the mainline issue a bunch of MD (and dm-raid) oriented
-> > engineers are working hard to fix, they've been discussing on
-> > linux-raid (with many iterations of proposed patches).
-> > 
-> > It regressed due to 6.8 MD changes (maybe earlier).
-> 
-> 
-> Do you know if there is a way to skip specific tests to get a useful
-> baseline value (and to complete the run?)
+On Tue, Feb 27, 2024 at 7:36=E2=80=AFAM Mike Snitzer <snitzer@kernel.org> w=
+rote:
+>
+> On Tue, Feb 27 2024 at 10:17P -0500,
+> Christoph Hellwig <hch@lst.de> wrote:
+>
+> > On Tue, Feb 27, 2024 at 10:16:39AM -0500, Mike Snitzer wrote:
+> > > That's the mainline issue a bunch of MD (and dm-raid) oriented
+> > > engineers are working hard to fix, they've been discussing on
+> > > linux-raid (with many iterations of proposed patches).
+> > >
+> > > It regressed due to 6.8 MD changes (maybe earlier).
+> >
+> >
+> > Do you know if there is a way to skip specific tests to get a useful
+> > baseline value (and to complete the run?)
+>
+> I only know to sprinkle 'skip' code around to explicitly force the
+> test to get skipped (e.g. in test/shell/, adding 'skip' at the top of
+> each test as needed).
 
-I only know to sprinkle 'skip' code around to explicitly force the
-test to get skipped (e.g. in test/shell/, adding 'skip' at the top of
-each test as needed).
+I think we can do something like:
 
-But I've cc'd the lvm-devel mailing list in case there is an easier
-way.
+make check S=3D<list of test to skip>
+
+I don't have a reliable list to skip at the moment, as some of the tests
+fail on some systems but not on others. However, per early report,
+I guess we can start with the following skip list:
+
+shell/integrity-caching.sh
+shell/lvconvert-raid-reshape-linear_to_raid6-single-type.sh
+shell/lvconvert-raid-reshape.sh
+
+Thanks,
+Song
