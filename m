@@ -1,84 +1,142 @@
-Received: from us-smtp-delivery-124.mimecast.com (us-smtp-delivery-124.mimecast.com [170.10.129.124])
+Received: from mout.gmx.net (mout.gmx.net [212.227.17.21])
 	(using TLSv1.2 with cipher ECDHE-RSA-AES256-GCM-SHA384 (256/256 bits))
 	(No client certificate requested)
-	by smtp.subspace.kernel.org (Postfix) with ESMTPS id 5138714D701
-	for <lvm-devel@lists.linux.dev>; Thu, 25 Apr 2024 17:02:51 +0000 (UTC)
-Authentication-Results: smtp.subspace.kernel.org; arc=none smtp.client-ip=170.10.129.124
+	by smtp.subspace.kernel.org (Postfix) with ESMTPS id 9DE5320322
+	for <lvm-devel@lists.linux.dev>; Sun, 11 Aug 2024 09:05:07 +0000 (UTC)
+Authentication-Results: smtp.subspace.kernel.org; arc=none smtp.client-ip=212.227.17.21
 ARC-Seal:i=1; a=rsa-sha256; d=subspace.kernel.org; s=arc-20240116;
-	t=1714064573; cv=none; b=uCBodWcScdNjba5LP3WBiM7xGf0/j6qb2BjuccwKaZEzT8ohJIRjZbjkiAEhhvwDzEhpleBCIKFAKpdXQ04DtbC7wuwihTOLYetuvHvofSIfO9iAVlqNjOXpSj3ADwBWuqBysb8WuwunYxtn/MBxkIanHX9yE2WEu4gsxWwBcoY=
+	t=1723367110; cv=none; b=bmBAf6beRgvtXQbJgDhBjGkLq1dxFRtOjTFybjfZLnLZ4b589luBfeCMmC1Tb/QFSjqX3ENRcqn9kVvAVuZHHtIVPU07CMHXfODhhbAbpTzrLVkhVxiu4vo9RBBj7Ve6UILcynS6nmYqoZkHtdcnCVIU2Zcsy+jfPfqpr0J2oIs=
 ARC-Message-Signature:i=1; a=rsa-sha256; d=subspace.kernel.org;
-	s=arc-20240116; t=1714064573; c=relaxed/simple;
-	bh=zhReG2bHmoDT3VlZHwMYy0NYKCIz2qHFbpAMF9m9L4w=;
-	h=Date:From:To:Cc:Subject:Message-ID:References:MIME-Version:
-	 In-Reply-To:Content-Type:Content-Disposition; b=vB0Bl4FFC3Tv/qF5KEUTnbDNKD0UW4YWVPO86IYYrdnpq2NrHTCY2+wV5amkXSCdremHIDTtpCzZ065EDv8XS9cl0knflCfxWaNOmY2XnSEq1X02yW+SLnbAs1lTugALG9bXgmXASc3CKKEmtUNI1GcmvaouUjPn45A4SkDT7EE=
-ARC-Authentication-Results:i=1; smtp.subspace.kernel.org; dmarc=pass (p=none dis=none) header.from=redhat.com; spf=pass smtp.mailfrom=redhat.com; dkim=pass (1024-bit key) header.d=redhat.com header.i=@redhat.com header.b=JdSr64a3; arc=none smtp.client-ip=170.10.129.124
-Authentication-Results: smtp.subspace.kernel.org; dmarc=pass (p=none dis=none) header.from=redhat.com
-Authentication-Results: smtp.subspace.kernel.org; spf=pass smtp.mailfrom=redhat.com
+	s=arc-20240116; t=1723367110; c=relaxed/simple;
+	bh=1Bzj7o+uCxAHX2Au66/aNQNeDPAPr8hltoFQDVERYq0=;
+	h=From:Date:Subject:MIME-Version:Content-Type:Message-Id:To:Cc; b=CtcbYXjKqUp+tKWndiE+d64DyuFHMh2V94zNZqjnJw9zA9/ipfkAgS7QFlIZfRTtVsMX2wGkbMEcXhuIVSVw2PHbsNhlXkHOoabqaWWU/qaC0dQ/wh6j1NZKS+6MnIqs0pu57WgKEQ9R2Tbejpa7TLlrYERlfEQRbfA8jKgwLHE=
+ARC-Authentication-Results:i=1; smtp.subspace.kernel.org; dmarc=pass (p=quarantine dis=none) header.from=gmx.net; spf=pass smtp.mailfrom=gmx.net; dkim=pass (2048-bit key) header.d=gmx.net header.i=j.neuschaefer@gmx.net header.b=ScCpvPN0; arc=none smtp.client-ip=212.227.17.21
+Authentication-Results: smtp.subspace.kernel.org; dmarc=pass (p=quarantine dis=none) header.from=gmx.net
+Authentication-Results: smtp.subspace.kernel.org; spf=pass smtp.mailfrom=gmx.net
 Authentication-Results: smtp.subspace.kernel.org;
-	dkim=pass (1024-bit key) header.d=redhat.com header.i=@redhat.com header.b="JdSr64a3"
-DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed; d=redhat.com;
-	s=mimecast20190719; t=1714064570;
-	h=from:from:reply-to:subject:subject:date:date:message-id:message-id:
-	 to:to:cc:cc:mime-version:mime-version:content-type:content-type:
-	 in-reply-to:in-reply-to:references:references;
-	bh=lp1dIn3cz5tzAksZ+xEzY314VrKjys4M0mG2Uy9gVto=;
-	b=JdSr64a385ACkc1Lb3mQ5z5+jyIdXDns4Mq0hYcooyFt9sgtgRw8inqG+RgO5cYxMIVwZz
-	ter3eWcoZzpCLvWpIKnBE83w876JMDxpoZSZaETjw+ekjl35Us6ZrRbkSlwA8sMd8JycfE
-	XFx25y0FrNZ0UtdSmrw+QO9BkG+bO9M=
-Received: from mimecast-mx02.redhat.com (mimecast-mx02.redhat.com
- [66.187.233.88]) by relay.mimecast.com with ESMTP with STARTTLS
- (version=TLSv1.3, cipher=TLS_AES_256_GCM_SHA384) id
- us-mta-241-uwXZeL7eMUG8zwfTowZg9A-1; Thu, 25 Apr 2024 13:02:46 -0400
-X-MC-Unique: uwXZeL7eMUG8zwfTowZg9A-1
-Received: from smtp.corp.redhat.com (int-mx08.intmail.prod.int.rdu2.redhat.com [10.11.54.8])
-	(using TLSv1.3 with cipher TLS_AES_256_GCM_SHA384 (256/256 bits)
-	 key-exchange X25519 server-signature RSA-PSS (2048 bits) server-digest SHA256)
-	(No client certificate requested)
-	by mimecast-mx02.redhat.com (Postfix) with ESMTPS id 924AE80253A;
-	Thu, 25 Apr 2024 17:02:46 +0000 (UTC)
-Received: from redhat.com (unknown [10.22.33.135])
-	by smtp.corp.redhat.com (Postfix) with ESMTPS id 5F6DBC15771;
-	Thu, 25 Apr 2024 17:02:46 +0000 (UTC)
-Date: Thu, 25 Apr 2024 12:02:44 -0500
-From: David Teigland <teigland@redhat.com>
-To: Winston Wen <wentao@uniontech.com>
-Cc: lvm-devel@lists.linux.dev
-Subject: Re: lvm2-monitor.servcie block boot process due to bad storage device
-Message-ID: <ZiqMtOozvoNW2h-f@redhat.com>
-References: <BA135FC1810D838F+20240423084101.40b9659c@winn-pc>
+	dkim=pass (2048-bit key) header.d=gmx.net header.i=j.neuschaefer@gmx.net header.b="ScCpvPN0"
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed; d=gmx.net;
+	s=s31663417; t=1723367093; x=1723971893; i=j.neuschaefer@gmx.net;
+	bh=PQoK75LGskjImgHPQvMqpAYAVpmyezFeIkSz//GmB+g=;
+	h=X-UI-Sender-Class:From:Date:Subject:MIME-Version:Content-Type:
+	 Content-Transfer-Encoding:Message-Id:To:Cc:cc:
+	 content-transfer-encoding:content-type:date:from:message-id:
+	 mime-version:reply-to:subject:to;
+	b=ScCpvPN0vllp5kHLS68qLVRljJ/LwHaCbg/dThlyHLqomA/ssMA9qSoc29mOtYCp
+	 LFlbu5EYepNqHFu4vWG7aJPdpLTyGRAPwU/H4zXdO62Rs50NKws66X9cnPyw41m92
+	 NqTW43A+dWvqIxlO81o48r5AnjClOn6CwLkf/5bixVIiWOK2iZRP2M0BUsS2q7C/M
+	 QgCuh5ZFAZgR6DYIEgPw8DKK5+xc9YuZu6f64q+HmJXHb+danwN5NcZpFX17Lr/0N
+	 aPoIp3UQw3o+5oQldYEnvrR85rPkaR8LjJ8NWH/RneSCYOFToSZf28d2nG3j+aIU4
+	 +M8zoLnXhqoELPC2hg==
+X-UI-Sender-Class: 724b4f7f-cbec-4199-ad4e-598c01a50d3a
+Received: from probook ([89.0.46.195]) by mail.gmx.net (mrgmx104
+ [212.227.17.168]) with ESMTPSA (Nemesis) id 1M4axq-1seiOp1kQA-003fyT; Sun, 11
+ Aug 2024 11:04:53 +0200
+From: =?utf-8?q?J=2E_Neusch=C3=A4fer?= <j.neuschaefer@gmx.net>
+Date: Sun, 11 Aug 2024 11:04:38 +0200
+Subject: [PATCH lvm2] acinclude.m4: Link when trying CCFLAGS
 Precedence: bulk
 X-Mailing-List: lvm-devel@lists.linux.dev
 List-Id: <lvm-devel.lists.linux.dev>
 List-Subscribe: <mailto:lvm-devel+subscribe@lists.linux.dev>
 List-Unsubscribe: <mailto:lvm-devel+unsubscribe@lists.linux.dev>
 MIME-Version: 1.0
-In-Reply-To: <BA135FC1810D838F+20240423084101.40b9659c@winn-pc>
-X-Scanned-By: MIMEDefang 3.4.1 on 10.11.54.8
-X-Mimecast-Spam-Score: 0
-X-Mimecast-Originator: redhat.com
-Content-Type: text/plain; charset=us-ascii
-Content-Disposition: inline
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: quoted-printable
+Message-Id: <20240811-microblaze-v1-1-2781ba343e75@gmx.net>
+X-B4-Tracking: v=1; b=H4sIAKV+uGYC/x3MTQqAIBBA4avErBMciZKuEi2sxhrwJxQiku6et
+ PwW7xXIlJgyjE2BRBdnjqEC2wbWw4SdBG/VoKTqpEYUntcUF2ceEtpabXqFQzcg1OBMZPn+ZxO
+ 4yyuY3/cDl4LOmWIAAAA=
+To: lvm-devel@lists.linux.dev
+Cc: buildroot@buildroot.org, musl@lists.openwall.com, 
+ =?utf-8?q?J=2E_Neusch=C3=A4fer?= <j.neuschaefer@gmx.net>
+X-Mailer: b4 0.13.0
+X-Developer-Signature: v=1; a=ed25519-sha256; t=1723367092; l=2401;
+ i=j.neuschaefer@gmx.net; s=20240329; h=from:subject:message-id;
+ bh=/jIoqjC9HzN9jLlhBHdisfW2C1WpRbO4792I/s/913g=;
+ b=3Zs9la8ZPyPtID4e77odGCPmIitjOeoQRKnvgzCh+GYHSl1NO6PfHOlZc14IJUctSdFx5ryBT
+ JfoK1xujQf7BRvqmI09W2XWSp+LZ9epalzwru0h+BCOtMI7kLRxzdja
+X-Developer-Key: i=j.neuschaefer@gmx.net; a=ed25519;
+ pk=NIe0bK42wNaX/C4bi6ezm7NJK0IQE+8MKBm7igFMIS4=
+X-Provags-ID: V03:K1:WOrrRbzpFtEMi6+1crbbcGv0FhIPJkq1p9+4LxfFPYtoSA9Etpa
+ tTiU7LaOYmadEx7uDoVmvJy5iOXUxCgKMe5ZreARuLtQSeNRhGMtmWYV3qRWRH/w+gJVVM3
+ lBtl1q/1XCy3uptSiiNTmVYAtjS986oMGjmxGoaFMCb2RLjM+zfcrC6Yau22zmp9OkLXmB3
+ EchULdjLJiHRDb6vth7Yw==
+X-Spam-Flag: NO
+UI-OutboundReport: notjunk:1;M01:P0:H8rBUuTISr8=;IHCswTQfM4hlCWRaYt/Kdbx//Kp
+ nv1uBpbPWEIrnTEAlmQ6eqiXZw33Qs1ug8oiwd7I053YHQ22JXVv11Rh1DT0Tu4Iqqt+Qjoig
+ 6tKnTuMy7bcCjakg4hRQc/0DqlDoPC8FZJE3oaHOV4tOpkOQ3ShTfB+n528Wcrd+GTsb3EaVf
+ J91vkpVTTdntdwGF8JpX3bup8Dd0CYuM57I9AEKWHHXSNiTaSg+iJbrQMOm81WS3C3vohVRPx
+ fQuOMVVhtmkicMWX/iM+ig9hvzM1ZzJ6IjCw55xSpPhijmkF1IDSSgV7kCsmSh3Et7A8NVLs7
+ yNSWXMBBCGwj1V1pe1G1KhRJjyLKZE7fhhet8SZvo/k68ha0UkdajaHGohpEpHUXEoqb4LtbA
+ jbz5cbwh3uUa6aRyU+UWfrr0Tk5bfVQM3IW6CH6phVIShGAeHEasUMpv513bKCwXV/whjYuK5
+ DzafK2dN3o8wAJBKmRxm4XQ479C2Ll4QJYRTjqnxNa8dAnsBZ8gzXdCGS9/JZMsbD0uXBOe0M
+ VinnHKxSDxwLnWrWnDGJOn1pxNp6VHSvzYOPfpFqQVY9Mb0i/KPFP8+VZRwWlntz496gri3fw
+ EcsxpArJ5tPtsVsDkHUKHnNmrmGHP69Y1yH8VkcW8RzfoT9wsXOoOsW73YWH2W+m6ENQSRWWf
+ icwsPxZK5Pt2QT94wbZG+rMWPJXr5o5RV1T9kynStAnCji3erwBX6NxQl21hWrU2jLNobun4B
+ fYrCWanNWTBVPj6VkKm1JFDUtLO/JRbaLaskAXlo15NGIEiC69ce3LDBN+eLDAazJumMjK4Hy
+ ngPYKzLEGPFoNs/OoNUx0fvg==
 
-On Tue, Apr 23, 2024 at 08:41:01AM +0800, Winston Wen wrote:
-> Hi,
-> 
-> If a device's IO does not respond, it will block in the path of
-> partition scanning. But at this point, it has already created the
-> part0, like /dev/sda, in devtmpfs, but the mutex of the device has been
-> held by the partition scanning code, so all processes attempting to
-> open it will enter a wait.
-> 
-> lvm scans and opens block devices under /dev/ during startup, so if
-> there are any bad devices mentioned above, lvm2-monitor.server will be
-> blocked, and because its type is oneshot, it will block the boot
-> process, even if the poor device is not using lvm.
-> 
-> May I ask if there is a way to avoid it? For example, can the
-> type of this service be changed from oneshot to simple? Or is there
-> any other better way?
+Through a build failure of LVM2 on musl-libc 1.2.5 in the Buildroot
+autobuild service[1], I noticed that musl-libc's Scrt1 for microblaze
+produces a relocation targeting the .text section, which subsequently
+leads to a crash at run-time because musl-libc does not support
+textrels[2]. Buildroot uses the "-z text" linker option to catch
+textrels early, on musl-libc.
 
-I suggest using the devices file, or a filter (depending on your lvm
-version) to prevent lvm from scanning devices other than PVs.
+The error can be reduced to the following test case:
 
-Dave
+  $ cat hello.c
+  #include <stdio.h>
+  int main(void) { puts("Hello world!"); return 0; }
+  $ host/bin/microblaze-buildroot-linux-musl-gcc hello.c -z text -pie -fPI=
+C
+  microblaze-buildroot-linux-musl/bin/ld: microblaze-buildroot-linux-musl/=
+sysroot/lib/Scrt1.o:
+    warning: relocation against `_start_c' in read-only section `.text'
+  microblaze-buildroot-linux-musl/bin/ld: read-only segment has dynamic re=
+locations
+  collect2: error: ld returned 1 exit status
+
+LVM2 uses -pie only after the AC_TRY_CCFLAG macro has determined that it
+can be used. This is where the problem begins: AC_TRY_CCFLAG only tries
+compiling, it does not try linking the resulting object file.
+
+To catch problems like this, this patch changes AC_TRY_CCFLAG to link in
+addition to compiling. By detecting correctly that -pie does not work on
+musl-libc/microblaze with -ztext, the build failure in Buildroot is fixed.
+
+[1]: http://autobuild.buildroot.net/results/dc4/dc4fc33eaeafe5d6707d26a373=
+560402533954f6/build-end.log
+[2]: https://www.openwall.com/lists/musl/2020/09/25/4
+
+Signed-off-by: J. Neusch=C3=A4fer <j.neuschaefer@gmx.net>
+=2D--
+Hi, I'm cross-posting this to the LVM2, Buildroot, and musl mailing
+lists to get potential feedback early on.
+=2D--
+ acinclude.m4 | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/acinclude.m4 b/acinclude.m4
+index 47fdd59c3..9b1d3a605 100644
+=2D-- a/acinclude.m4
++++ b/acinclude.m4
+@@ -25,7 +25,7 @@ AC_DEFUN([AC_TRY_CCFLAG],
+     ac_save_CFLAGS=3D$CFLAGS
+     CFLAGS=3D$1
+     AC_CACHE_CHECK([whether $CC accepts $1 flag], [ac_cv_flag_$2],
+-	[AC_COMPILE_IFELSE([AC_LANG_PROGRAM()],
++	[AC_LINK_IFELSE([AC_LANG_PROGRAM()],
+ 			   [AS_VAR_SET([ac_cv_flag_$2], [yes])],
+ 			   [AS_VAR_SET([ac_cv_flag_$2], [no])])])
+     CFLAGS=3D$ac_save_CFLAGS
+
+=2D--
+base-commit: 90a845a7087478a7cdc7a60d89d2e7ee1366160e
+change-id: 20240811-microblaze-8ff8a6217471
+
+Best regards,
+=2D-
+J. Neusch=C3=A4fer <j.neuschaefer@gmx.net>
 
