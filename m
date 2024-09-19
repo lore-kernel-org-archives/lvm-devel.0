@@ -1,154 +1,215 @@
-Received: from mail-wm1-f49.google.com (mail-wm1-f49.google.com [209.85.128.49])
-	(using TLSv1.2 with cipher ECDHE-RSA-AES128-GCM-SHA256 (128/128 bits))
+Received: from us-smtp-delivery-124.mimecast.com (us-smtp-delivery-124.mimecast.com [170.10.133.124])
+	(using TLSv1.2 with cipher ECDHE-RSA-AES256-GCM-SHA384 (256/256 bits))
 	(No client certificate requested)
-	by smtp.subspace.kernel.org (Postfix) with ESMTPS id BAA891CD23
-	for <lvm-devel@lists.linux.dev>; Wed, 18 Sep 2024 12:28:23 +0000 (UTC)
-Authentication-Results: smtp.subspace.kernel.org; arc=none smtp.client-ip=209.85.128.49
+	by smtp.subspace.kernel.org (Postfix) with ESMTPS id 85360199253
+	for <lvm-devel@lists.linux.dev>; Thu, 19 Sep 2024 08:00:58 +0000 (UTC)
+Authentication-Results: smtp.subspace.kernel.org; arc=none smtp.client-ip=170.10.133.124
 ARC-Seal:i=1; a=rsa-sha256; d=subspace.kernel.org; s=arc-20240116;
-	t=1726662505; cv=none; b=BsgkNdMeLTZk1WlfELNJ6hkMeN4R3OEoIdxtrZWwKBHOElST+ilwqk6Ot6gOhAYqOFsDPA8+LsU2cEsbosUdQ0+IMEVBpmU5/OxfWNTlWzouU6KS2lM50rZZ2Z+dacYYXxI2cQSvQ79QOXciMfGbdfWSuebIgck2C0omWMxmjcY=
+	t=1726732861; cv=none; b=CLg8kiHekD0aKyDZggQ9Pd6g+D3rknrYt36g1OsPxYUpe/3+Ubl0w9RWJ8gsYTsugrfFF+BZD1JP4GaTZGiOi7uTgS74HXnjTNudoCnmYkxhQy5wTY0f3/pHHhau1f62Rn8BXLmQGRW1yFbUJ5DpZgE/+/UaroN/VBgKyP3kYQY=
 ARC-Message-Signature:i=1; a=rsa-sha256; d=subspace.kernel.org;
-	s=arc-20240116; t=1726662505; c=relaxed/simple;
-	bh=X/9cSB6DVhLbXqyl0sGdbt8P6kvA94svCRV8vWt0GGo=;
-	h=Message-ID:Date:MIME-Version:Subject:To:References:From:
-	 In-Reply-To:Content-Type; b=V5B3HJKYwBs2B5i0t7Brow4qawh6haY406xqeowRhvjA7nOoA16pCgM2Y7xJiu2jNiDIWEdhsBSHwAp2PFx8kXSUUEaGVWI5yxglsor+PfarU85GoolZrlqbb8edJYOqWEOmLtUm1jTcUrS83sGUFOhkDTMO1f/rMumzGrs3fWI=
-ARC-Authentication-Results:i=1; smtp.subspace.kernel.org; dmarc=pass (p=none dis=none) header.from=gmail.com; spf=pass smtp.mailfrom=gmail.com; dkim=pass (2048-bit key) header.d=gmail.com header.i=@gmail.com header.b=AXzd6rYa; arc=none smtp.client-ip=209.85.128.49
-Authentication-Results: smtp.subspace.kernel.org; dmarc=pass (p=none dis=none) header.from=gmail.com
-Authentication-Results: smtp.subspace.kernel.org; spf=pass smtp.mailfrom=gmail.com
+	s=arc-20240116; t=1726732861; c=relaxed/simple;
+	bh=sv639kqPB3178icn6oH6pxcchpaLiDHbrbmTVUOTC/c=;
+	h=MIME-Version:References:In-Reply-To:From:Date:Message-ID:Subject:
+	 To:Cc:Content-Type; b=GR55bb3gmsM99sW7E7QUEXtE03yOR7OdkYtzih7eVrSkhnHi9GqlD7PGlORj98OHIIGzEg0opI/JQ/RWkpJ0wjpjDHMDpaPjvtswmdo/yEBIlrC29echTPO+RResBlq087AL/wfm/ZGX0y1uQXLbd+ZOycM+g2KIPBiJcXW/FOg=
+ARC-Authentication-Results:i=1; smtp.subspace.kernel.org; dmarc=pass (p=none dis=none) header.from=redhat.com; spf=pass smtp.mailfrom=redhat.com; dkim=pass (1024-bit key) header.d=redhat.com header.i=@redhat.com header.b=P5WAwWlL; arc=none smtp.client-ip=170.10.133.124
+Authentication-Results: smtp.subspace.kernel.org; dmarc=pass (p=none dis=none) header.from=redhat.com
+Authentication-Results: smtp.subspace.kernel.org; spf=pass smtp.mailfrom=redhat.com
 Authentication-Results: smtp.subspace.kernel.org;
-	dkim=pass (2048-bit key) header.d=gmail.com header.i=@gmail.com header.b="AXzd6rYa"
-Received: by mail-wm1-f49.google.com with SMTP id 5b1f17b1804b1-42cde6b5094so55267205e9.3
-        for <lvm-devel@lists.linux.dev>; Wed, 18 Sep 2024 05:28:23 -0700 (PDT)
-DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed;
-        d=gmail.com; s=20230601; t=1726662502; x=1727267302; darn=lists.linux.dev;
-        h=content-transfer-encoding:in-reply-to:from:content-language
-         :references:to:subject:user-agent:mime-version:date:message-id:from
-         :to:cc:subject:date:message-id:reply-to;
-        bh=hjL5dr/9XCZCE9MxMX4FJQ6wY6jt/BnPg8UQ1R5NHH8=;
-        b=AXzd6rYa13uaXmnwtYsKah11OA72rkFEXfalkey+K7Y+tbYGcIbhVqPhTuGSrzQqhC
-         ZNhk7m+6+2Gz4n098KVemUIqthpZV+Hr02lEpTHBoEyFYiyezX+kU6TuQ/7Tif/chQX9
-         j2OozcQTi0dcfdMKTZO+srC14jBBuVrtAXBIs4OCzD9/24BuBA7jpBYmwn30Vi1RiKJw
-         L2j5VNMjMuucyOtPidTvrHRxIuIahvR26vfm/eQDhDW3KyHxQRXcNj6MKEV8ROd9H7fn
-         myoI6IiH+KbV823Re8zxppPsuvWGbGdH1i/xMcJ8Gf2IIh/wicZD9/70bJd/ye/UoSTq
-         M2IA==
+	dkim=pass (1024-bit key) header.d=redhat.com header.i=@redhat.com header.b="P5WAwWlL"
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed; d=redhat.com;
+	s=mimecast20190719; t=1726732857;
+	h=from:from:reply-to:subject:subject:date:date:message-id:message-id:
+	 to:to:cc:cc:mime-version:mime-version:content-type:content-type:
+	 content-transfer-encoding:content-transfer-encoding:
+	 in-reply-to:in-reply-to:references:references;
+	bh=xpm20v4O8Ha2/jS5nQBaiZT7tGwGq1k62G1cOAOZzRA=;
+	b=P5WAwWlLIhnDjiOBMCqUegH/Zpcj5ikCN6j200HtuS5rDUIT1ncKP67+hyPSSiCmxUW8hl
+	ex8ITqbVCRCzYFlNG//ygBJssCVr3yWKEhF5XklR1DMq/kQ9rGD4DCeUqydyYWcD8egQ4P
+	3nQ62UmvEn02M2h9v+RkjAKxlCadqJA=
+Received: from mail-oa1-f69.google.com (mail-oa1-f69.google.com
+ [209.85.160.69]) by relay.mimecast.com with ESMTP with STARTTLS
+ (version=TLSv1.3, cipher=TLS_AES_256_GCM_SHA384) id
+ us-mta-688-IFJXPgJzMyKI93aQizefNQ-1; Thu, 19 Sep 2024 04:00:55 -0400
+X-MC-Unique: IFJXPgJzMyKI93aQizefNQ-1
+Received: by mail-oa1-f69.google.com with SMTP id 586e51a60fabf-27d0e841f08so477506fac.1
+        for <lvm-devel@lists.linux.dev>; Thu, 19 Sep 2024 01:00:55 -0700 (PDT)
 X-Google-DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed;
-        d=1e100.net; s=20230601; t=1726662502; x=1727267302;
-        h=content-transfer-encoding:in-reply-to:from:content-language
-         :references:to:subject:user-agent:mime-version:date:message-id
-         :x-gm-message-state:from:to:cc:subject:date:message-id:reply-to;
-        bh=hjL5dr/9XCZCE9MxMX4FJQ6wY6jt/BnPg8UQ1R5NHH8=;
-        b=vpTD1z3biYvOptdPqmNgxTI2owNBlFVHRGFtNG7dFVRXIiXoPISZZLlWrwS2p83sm+
-         K2fKbfA0VjtwIOVNXggpPS+eYGHsI+JM1ERL+vUuRtOzog5ATnqdLMJHDl/gTxROUUe5
-         WE5ZxhJaLFtzdqH6Q0BTMGtgdzB+fqZSym8vRmo+SVZpoHWijBJGwMZUcFNnylxo2zIo
-         g5EcnWzZPmtkO+bFrVfQ9twsLeDjxhYxl6sYN70GRRIbiUB3hJ1+jO/yyKQZxtXgE7Pz
-         4LLEOWjvWToUsbLoau+glHdRFwS3BR8osmxEOudpHY4etX2jOqNyQNAqoiQejgnSrxgq
-         LBsA==
-X-Forwarded-Encrypted: i=1; AJvYcCW+OO4T+mD31jWfYo8TF0TEHN844OnUSJT5eGzYOVreD76UR/VUj+Mxqtugf+coj8X3UCYNnriypiA=@lists.linux.dev
-X-Gm-Message-State: AOJu0Yxr+YSMWQyVyoU8xTCdRkz3h9RZFtXU63NRmDIbbfCoYItXzlsP
-	/7ueqy5iUXSaNkmeRFzjtnEkybUpzgfSsez/pbu3fjXV3yK3n5xT
-X-Google-Smtp-Source: AGHT+IFImdNOa3P7jams3fVGe8gnxqx6f4i9LAYNFR86nmEOX5NMYJA5HI/J7A8DOWOPrjD1I7emYg==
-X-Received: by 2002:a05:600c:5127:b0:426:67ad:38e3 with SMTP id 5b1f17b1804b1-42cdb531b27mr171814025e9.3.1726662501630;
-        Wed, 18 Sep 2024 05:28:21 -0700 (PDT)
-Received: from ?IPV6:2a03:a900:1000:7e9:403e:7c8b:351b:f333? ([2a03:a900:1000:7e9:403e:7c8b:351b:f333])
-        by smtp.gmail.com with ESMTPSA id ffacd0b85a97d-378e72e49bfsm12197867f8f.21.2024.09.18.05.28.20
-        (version=TLS1_3 cipher=TLS_AES_128_GCM_SHA256 bits=128/128);
-        Wed, 18 Sep 2024 05:28:21 -0700 (PDT)
-Message-ID: <a32fcb13-e0fc-439f-9f93-c7b499744d7d@gmail.com>
-Date: Wed, 18 Sep 2024 14:28:19 +0200
+        d=1e100.net; s=20230601; t=1726732855; x=1727337655;
+        h=content-transfer-encoding:cc:to:subject:message-id:date:from
+         :in-reply-to:references:mime-version:x-gm-message-state:from:to:cc
+         :subject:date:message-id:reply-to;
+        bh=xpm20v4O8Ha2/jS5nQBaiZT7tGwGq1k62G1cOAOZzRA=;
+        b=J1akyWZR0ZVTJFP15AwVSgqwWOEM6rYpPb5C4ifw7MJ9Mj/cDLLkSKG2FzVHtVQBkf
+         YCjVXSRUWKtSxiVH6bz8h0jllIUNR1F13yLcvY/0ZXVFh3t89Bl3RS5pZo3gqBkScy3l
+         ocXjwE7ZhJ4pkV8UAAMAlt1WyR7An5ZhJO9k7xXeTVS8x/ZSiH3NV1ELjPAjUrCoas0w
+         YEzObcSj1QunsHmcdWpqhpFxvH15XN/zs9AuMbDk/ktm9rDhRqjS60Qnf1SGIIWEwLcu
+         yPv7Rr0ySB5oEpquHeoU/inDe6QcAOa09w2C4TR5Qb5egySBOeb39KEo8rrbBsiklRXI
+         6pSg==
+X-Forwarded-Encrypted: i=1; AJvYcCU/J9y/p5LTDLGMfjqHH95xb5roIDf2LyywRsP4HEUd48zcmYOzEA4/cpyEX+jELCvZ9qUjaliD39o=@lists.linux.dev
+X-Gm-Message-State: AOJu0YyI1B5+K3UT8SZ9asCpENHGpwdnkbVV2q096NMVdGst1VyHIcWw
+	0k/c1/DSPS93+XZsFsUioiwHTWQtzH5WeP3OiyWejATFcTNKvhM+M/nHi0gmuchR4keaSmT/Lkl
+	1YjE8A2ckh/0VJp5WOU9oBBEPMwrssTMw7S1yvBYKMLAADgZaJfr0DyBLTmrj8wRJlNPCz2slmN
+	zt/dic+j4+q4RBXy1yzIKCKPwUDmEyHzH+aEzDFLcuFwYg
+X-Received: by 2002:a05:6871:5207:b0:277:caf7:3631 with SMTP id 586e51a60fabf-27c3f2582bamr19365734fac.5.1726732854699;
+        Thu, 19 Sep 2024 01:00:54 -0700 (PDT)
+X-Google-Smtp-Source: AGHT+IHdrzx1Eg1H+6pO1hKRh9NoIfijdOHUzg2k9/fCcr0Jq5MZcKF2ZL7m7UB9fOCDVTwnIAoI/yD2A9fN4EbC5WQ=
+X-Received: by 2002:a05:6871:5207:b0:277:caf7:3631 with SMTP id
+ 586e51a60fabf-27c3f2582bamr19365713fac.5.1726732854197; Thu, 19 Sep 2024
+ 01:00:54 -0700 (PDT)
 Precedence: bulk
 X-Mailing-List: lvm-devel@lists.linux.dev
 List-Id: <lvm-devel.lists.linux.dev>
 List-Subscribe: <mailto:lvm-devel+subscribe@lists.linux.dev>
 List-Unsubscribe: <mailto:lvm-devel+unsubscribe@lists.linux.dev>
 MIME-Version: 1.0
-User-Agent: Mozilla Thunderbird
-Subject: Re: Reg thin pool activation failure - transaction id mismatch
-To: Lakshmi Narasimhan Sundararajan <lsundararajan@purestorage.com>,
- lvm-devel@lists.linux.dev
 References: <CAFe+wq1hQ=jV9bELpm4RXw1=6vPN7hriX0gV6OetNukBEu3ayA@mail.gmail.com>
-Content-Language: en-US, cs
-From: Zdenek Kabelac <zdenek.kabelac@gmail.com>
-In-Reply-To: <CAFe+wq1hQ=jV9bELpm4RXw1=6vPN7hriX0gV6OetNukBEu3ayA@mail.gmail.com>
-Content-Type: text/plain; charset=UTF-8; format=flowed
-Content-Transfer-Encoding: 8bit
+ <CAHJKXw0uShmYGHvfpFsMGCD-NsEO6DBF8t+pnARimt3SAQfQvg@mail.gmail.com>
+In-Reply-To: <CAHJKXw0uShmYGHvfpFsMGCD-NsEO6DBF8t+pnARimt3SAQfQvg@mail.gmail.com>
+From: Ming Hung Tsai <mtsai@redhat.com>
+Date: Thu, 19 Sep 2024 16:00:43 +0800
+Message-ID: <CALjSBEtdzVEY7wtWRa_=Th0VdT73wnPK9-h0YXegoPMGFBojag@mail.gmail.com>
+Subject: Re: Reg thin pool activation failure - transaction id mismatch
+To: Lakshmi Narasimhan Sundararajan <lns.myspace@gmail.com>
+Cc: Lakshmi Narasimhan Sundararajan <lsundararajan@purestorage.com>, lvm-devel@lists.linux.dev
+X-Mimecast-Spam-Score: 0
+X-Mimecast-Originator: redhat.com
+Content-Type: text/plain; charset="UTF-8"
+Content-Transfer-Encoding: quoted-printable
 
-Dne 18. 09. 24 v 12:54 Lakshmi Narasimhan Sundararajan napsal(a):
-> Hi Team,
-> Good day all!
+On Wed, Sep 18, 2024 at 7:09=E2=80=AFPM Lakshmi Narasimhan Sundararajan
+<lns.myspace@gmail.com> wrote:
 >
-> In yet another long testing run, I see a thin pool was unable to get
-> volume group thin pool activated.
-> vgchange -ay <vgname> fails with
+> On Wed, Sep 18, 2024 at 4:25=E2=80=AFPM Lakshmi Narasimhan Sundararajan
+> <lsundararajan@purestorage.com> wrote:
+> >
+> > Hi Team,
+> > Good day all!
+> >
+> > In yet another long testing run, I see a thin pool was unable to get
+> > volume group thin pool activated.
+> > vgchange -ay <vgname> fails with
+> >
+> > ```
+> > /# vgchange -ay pwx3
+> > Thin pool pwx3-pxpool-tpool (253:25) transaction_id is 6, while expecte=
+d 24.
+> > Thin pool pwx3-pxpool-tpool (253:25) transaction_id is 6, while expecte=
+d 24.
+> > Thin pool pwx3-pxpool-tpool (253:25) transaction_id is 6, while expecte=
+d 24.
+> > Thin pool pwx3-pxpool-tpool (253:25) transaction_id is 6, while expecte=
+d 24.
+> > 3 logical volume(s) in volume group "pwx3" now active
+> > ```
+> > It had other non thin lvols in the vg that got activated successfully.
+> >
+> > I tried fixing the pool, by trying the following ``` lvconvert
+> > --repair pwx3 ``` but this fails to fix the thin pool.
 >
-> ```
-> /# vgchange -ay pwx3
-> Thin pool pwx3-pxpool-tpool (253:25) transaction_id is 6, while expected 24.
-> Thin pool pwx3-pxpool-tpool (253:25) transaction_id is 6, while expected 24.
-> Thin pool pwx3-pxpool-tpool (253:25) transaction_id is 6, while expected 24.
-> Thin pool pwx3-pxpool-tpool (253:25) transaction_id is 6, while expected 24.
-> 3 logical volume(s) in volume group "pwx3" now active
-> ```
-> It had other non thin lvols in the vg that got activated successfully.
+> type: this cmd should be "lvconvert --repair pwx3/pxpool" instead
+> pointing to the thin pool in the vg.
 >
-> I tried fixing the pool, by trying the following ``` lvconvert
-> --repair pwx3 ``` but this fails to fix the thin pool.
 >
-> There was last configuration in the lvm config backup location.
-> I fixed the transaction id and used `vgcfgrestore --force -f <patched
-> config> pwx3` and this fixed the transaction id issue and vg was now
-> successfully activated.
+> >
+> > There was last configuration in the lvm config backup location.
+> > I fixed the transaction id and used `vgcfgrestore --force -f <patched
+> > config> pwx3` and this fixed the transaction id issue and vg was now
+> > successfully activated.
+> >
+> >
+> > And my follow up questions are:
+> > 1/ what exactly is a transaction id mismatch problem?
+> > A little more detail about this problem will help me understand this be=
+tter.
+> >
+
+It's a synchronization method between userland lvm and in-kernel
+thin-pool metadata. As Zdenek explained, the id increases by one while
+you change the thin-pool layout by creating/deleting a thin volume or
+snapshot. The transaction id ensures lvm and kernel are working on the
+same page.
+
+> > 2/ Are there any known workflows that are known to create this issue?
+> > So I can be careful to avoid such workflows.
+> >
+
+Did you create or delete thin volumes while running power cycle tests?
+The transaction id might be mismatched by one If there's power loss
+just right between the kernel updating the transaction id. In older
+versions of lvm,  lvm might not catch the discrepancy in transaction
+id and then continue on queuing more undeliverable messages, leading
+to greater differences in the values. I believe those kinds of issues
+have been addressed in recent lvm versions.
+
+> > 3/ does recovery as above guarantee data in the pool? or is the pool
+> > data suspect?
+
+It is totally fine if the volume layout (e.g., number of volumes, the
+size, and thin_id) matches that of the on-disk metadata.
 
 
-Hi
-
-
-Well this sounds like you were doing something 'very unhealthy' to your 
-thin-pool - possibly 'restoring' old thin-pool metadata ??
-
-TransactionId - is basically increased with lvm2 every transaction - i.e. 
-adding/removing a 'thin LV' to the thin-pool.
-
-Difference by such a large amount means something went seriously wrong in your 
-system - is thin-pool suddenly started to expose very old 'transaction_id' - 
-like it it would have lost everything else  from that time - so likely also 
-all the mappings of thin volumes....
-
-So basically until we know what you were doing with your system - it's very 
-hard to tell want went wrong in your particular case.
-
-What we can say for sure is - that if you have use 'vgcfgrestore'  to fix your 
-'mismatching' transaction id - you just left your thin-pool problem 'hidden'  
-and it will 'bite' in the moment you will try to access your now 'lost' data.
-
+> > My environment is as below where the problem got seen:
+> > ```
+> > # uname -a
+> > Linux pwx-ocp-240-201-w6d5l-worker-0-zmtns
+> > 5.14.0-427.28.1.el9_4.x86_64 #1 SMP PREEMPT_DYNAMIC Fri Jul 19
+> > 14:40:47 EDT 2024 x86_64 x86_64 x86_64 GNU/Linux
+> > ```
+> >
+> > ```
+> > # lvm version LVM version: 2.03.23(2) (2023-11-21) Library version:
+> > 1.02.197 (2023-11-21) Driver version: 4.48.0 Configuration:
+> > ./configure --build=3Dx86_64-redhat-linux-gnu
+> > --host=3Dx86_64-redhat-linux-gnu --program-prefix=3D
+> > --disable-dependency-tracking --prefix=3D/usr --exec-prefix=3D/usr
+> > --bindir=3D/usr/bin --sbindir=3D/usr/sbin --sysconfdir=3D/etc
+> > --datadir=3D/usr/share --includedir=3D/usr/include --libdir=3D/usr/lib6=
+4
+> > --libexecdir=3D/usr/libexec --localstatedir=3D/var
+> > --sharedstatedir=3D/var/lib --mandir=3D/usr/share/man
+> > --infodir=3D/usr/share/info --with-default-dm-run-dir=3D/run
+> > --with-default-run-dir=3D/run/lvm --with-default-pid-dir=3D/run
+> > --with-default-locking-dir=3D/run/lock/lvm --with-usrlibdir=3D/usr/lib6=
+4
+> > --enable-fsadm --enable-write_install --with-user=3D --with-group=3D
+> > --with-device-uid=3D0 --with-device-gid=3D6 --with-device-mode=3D0660
+> > --enable-pkgconfig --enable-cmdlib --enable-dmeventd
+> > --enable-blkid_wiping --with-udevdir=3D/usr/lib/udev/rules.d
+> > --enable-udev_sync --with-thin=3Dinternal --with-cache=3Dinternal
+> > --enable-lvmpolld --enable-lvmlockd-dlm --enable-lvmlockd-dlmcontrol
+> > --enable-lvmlockd-sanlock --enable-dbus-service --enable-notify-dbus
+> > --enable-dmfilemapd --with-writecache=3Dinternal --with-vdo=3Dinternal
+> > --with-vdo-format=3D/usr/bin/vdoformat --with-integrity=3Dinternal
+> > --with-default-use-devices-file=3D1 --disable-silent-rules
+> > --enable-app-machineid --enable-editline --disable-readline
+> > ```
+> >
+> > ```
+> > # cat /etc/os-release
+> > NAME=3D"Red Hat Enterprise Linux CoreOS"
+> > ID=3D"rhcos"
+> > ID_LIKE=3D"rhel fedora"
+> > VERSION=3D"416.94.202407231922-0"
+> > VERSION_ID=3D"4.16"
+> > VARIANT=3D"CoreOS"
+> > VARIANT_ID=3Dcoreos
+> > PLATFORM_ID=3D"platform:el9"
+> > PRETTY_NAME=3D"Red Hat Enterprise Linux CoreOS 416.94.202407231922-0"
+> > ANSI_COLOR=3D"0;31"
+> > CPE_NAME=3D"cpe:/o:redhat:enterprise_linux:9::baseos::coreos"
+> > HOME_URL=3D"https://www.redhat.com/"
+> > DOCUMENTATION_URL=3D"https://docs.okd.io/latest/welcome/index.html"
+> > BUG_REPORT_URL=3D"https://access.redhat.com/labs/rhir/"
+> > REDHAT_BUGZILLA_PRODUCT=3D"OpenShift Container Platform"
+> > REDHAT_BUGZILLA_PRODUCT_VERSION=3D"4.16"
+> > REDHAT_SUPPORT_PRODUCT=3D"OpenShift Container Platform"
+> > REDHAT_SUPPORT_PRODUCT_VERSION=3D"4.16"
+> > OPENSHIFT_VERSION=3D"4.16"
+> > RHEL_VERSION=3D9.4
+> > OSTREE_VERSION=3D"416.94.202407231922-0"
+> > ```
+> >
+> > Best regards
+> >
 >
-> And my follow up questions are:
-> 1/ what exactly is a transaction id mismatch problem?
-> A little more detail about this problem will help me understand this better.
->
-> 2/ Are there any known workflows that are known to create this issue?
-> So I can be careful to avoid such workflows.
-
-There can be possible a mismatch by 1 -  although we try hard to catch all 
-such cases - so it should be very hard to get into such state.
-
-Your difference  by   >1  number sounds like you were doing something very 
-'unusual' to your storage that thin-pool -  you will need to expose way more 
-details here...
-
-
-> 3/ does recovery as above guarantee data in the pool? or is the pool
-> data suspect?
-
-
-Absolutely NOT.
-
-Thin-pool metadata must be recovered properly to match  lvm2 view -  and if 
-that's not possible - there is relatively lot of work to get things in correct 
-shape - it can be so complex it can be simply easier to just recover from 
-backup in such case.
-
-
-Regards
-
-Zdenek
-
 
