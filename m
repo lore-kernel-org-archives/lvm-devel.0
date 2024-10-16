@@ -1,98 +1,100 @@
-Received: from us-smtp-delivery-124.mimecast.com (us-smtp-delivery-124.mimecast.com [170.10.133.124])
+Received: from mxhk.zte.com.cn (mxhk.zte.com.cn [63.216.63.40])
 	(using TLSv1.2 with cipher ECDHE-RSA-AES256-GCM-SHA384 (256/256 bits))
 	(No client certificate requested)
-	by smtp.subspace.kernel.org (Postfix) with ESMTPS id 6875D19AD8D
-	for <lvm-devel@lists.linux.dev>; Tue,  1 Oct 2024 22:46:45 +0000 (UTC)
-Authentication-Results: smtp.subspace.kernel.org; arc=none smtp.client-ip=170.10.133.124
+	by smtp.subspace.kernel.org (Postfix) with ESMTPS id DB64A21E3BF
+	for <lvm-devel@lists.linux.dev>; Wed, 16 Oct 2024 02:16:45 +0000 (UTC)
+Authentication-Results: smtp.subspace.kernel.org; arc=none smtp.client-ip=63.216.63.40
 ARC-Seal:i=1; a=rsa-sha256; d=subspace.kernel.org; s=arc-20240116;
-	t=1727822807; cv=none; b=Efjoxb/3nx7gVdBKeVQNAnb5QdrVv5QLOG9HprVNG/EMH9wWgARc/4fgZdlPEvEBjr2hXfA8pSepBIfZnITAIZ/IvHd2nOpucM03YrY7dhJ+ea0HLZp0mJIjVUD4W2hkg3buF5y6yWJvq3rb8c5QyqlCys0yL0gX7RQg3+BL2No=
+	t=1729045008; cv=none; b=KPEIdLDIWO2QuBrZKwBewVM/8nz8rwnmG8c7xwj5mxDwSoiNQ+bKEKGH07teTBwSUjHWP6o3GpyXdHtIAZB5c4Ewtt795v/lKqL2pUzJcKoYhWf1SAPbTQ/chUP1Nzev3r0jafC+NCw9gxZQG2grq77Rd+Tk0feGS/VAu+IXUBU=
 ARC-Message-Signature:i=1; a=rsa-sha256; d=subspace.kernel.org;
-	s=arc-20240116; t=1727822807; c=relaxed/simple;
-	bh=sw4k+DmpStVrdpAvW6BvF+r0doTAI1jIjkl07MZbHok=;
-	h=From:To:Cc:Subject:Date:Message-ID:MIME-Version:Content-Type; b=N/eMo7qIlCc+yv5tZIfXv4sW7r84qvt6/hhxpolt5ixlqDrnPOtNYmq093YMd3sqy7EZ9vpWIs1pomaWQU3s3rzjLyA0LFhajZ3xpA4tvNTXO9HWgKCQO3/sIi9WPmxXWzQyAaHkV3hEDFY7eIfT6FDb1EYG7s4CxwLc/1+Y+u4=
-ARC-Authentication-Results:i=1; smtp.subspace.kernel.org; dmarc=pass (p=none dis=none) header.from=redhat.com; spf=pass smtp.mailfrom=redhat.com; dkim=pass (1024-bit key) header.d=redhat.com header.i=@redhat.com header.b=HHubkDaq; arc=none smtp.client-ip=170.10.133.124
-Authentication-Results: smtp.subspace.kernel.org; dmarc=pass (p=none dis=none) header.from=redhat.com
-Authentication-Results: smtp.subspace.kernel.org; spf=pass smtp.mailfrom=redhat.com
-Authentication-Results: smtp.subspace.kernel.org;
-	dkim=pass (1024-bit key) header.d=redhat.com header.i=@redhat.com header.b="HHubkDaq"
-DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed; d=redhat.com;
-	s=mimecast20190719; t=1727822804;
-	h=from:from:reply-to:subject:subject:date:date:message-id:message-id:
-	 to:to:cc:cc:mime-version:mime-version:content-type:content-type:
-	 content-transfer-encoding:content-transfer-encoding;
-	bh=Furj7MNHJ/GcmNyDe5XLQNaxsx7Hq8WzpsoEMmBrpJU=;
-	b=HHubkDaqvxjKoKmBsmx+OrjZXeu/PN204OZ4wOlAQmDrEWQyuIESS16alZHT8YYUATmpbp
-	Wup7zKpMEcxb5NY15MlrHkbvkoTWNSQYhC+VWfOx9K6MOyq8OVgqKU2Njye6jqVqdH1xZ7
-	i2kzue6HVqwskD3qV7tnDPWBrYJmNzk=
-Received: from mx-prod-mc-02.mail-002.prod.us-west-2.aws.redhat.com
- (ec2-54-186-198-63.us-west-2.compute.amazonaws.com [54.186.198.63]) by
- relay.mimecast.com with ESMTP with STARTTLS (version=TLSv1.3,
- cipher=TLS_AES_256_GCM_SHA384) id us-mta-538-UuJ_PWGiNL2--1zzKgHeCg-1; Tue,
- 01 Oct 2024 18:46:42 -0400
-X-MC-Unique: UuJ_PWGiNL2--1zzKgHeCg-1
-Received: from mx-prod-int-02.mail-002.prod.us-west-2.aws.redhat.com (unknown [10.30.177.15])
-	(using TLSv1.3 with cipher TLS_AES_256_GCM_SHA384 (256/256 bits)
-	 key-exchange X25519 server-signature RSA-PSS (2048 bits) server-digest SHA256)
+	s=arc-20240116; t=1729045008; c=relaxed/simple;
+	bh=f99Uhn6XqISKnV8XDWrnYmBb3cNDPI1pYsR80CllHgk=;
+	h=Date:Message-ID:Mime-Version:From:To:Cc:Subject:Content-Type; b=quT3/HZPXbglZwfIeSuEqir88LURp7Gzcg4m4jtbJ/TubKNkjY0QHcfiQ6yevUWa1aijM6gfMnOJfemjxcnBb77FMJjpTmNpeagbYDPUX6MHpmzjIygYjBfbgOuZjz0UFSskoEYx9jE/ciKjAnD+CcFb0qIB5aAhSl2LMagPxXw=
+ARC-Authentication-Results:i=1; smtp.subspace.kernel.org; dmarc=pass (p=none dis=none) header.from=zte.com.cn; spf=pass smtp.mailfrom=zte.com.cn; arc=none smtp.client-ip=63.216.63.40
+Authentication-Results: smtp.subspace.kernel.org; dmarc=pass (p=none dis=none) header.from=zte.com.cn
+Authentication-Results: smtp.subspace.kernel.org; spf=pass smtp.mailfrom=zte.com.cn
+Received: from mse-fl2.zte.com.cn (unknown [10.5.228.133])
+	(using TLSv1.2 with cipher ECDHE-RSA-AES256-GCM-SHA384 (256/256 bits))
 	(No client certificate requested)
-	by mx-prod-mc-02.mail-002.prod.us-west-2.aws.redhat.com (Postfix) with ESMTPS id 5F80E1944D22
-	for <lvm-devel@lists.linux.dev>; Tue,  1 Oct 2024 22:46:41 +0000 (UTC)
-Received: from bmarzins-01.fast.eng.rdu2.dc.redhat.com (unknown [10.6.23.12])
-	by mx-prod-int-02.mail-002.prod.us-west-2.aws.redhat.com (Postfix) with ESMTPS id E360C191BD01;
-	Tue,  1 Oct 2024 22:46:40 +0000 (UTC)
-Received: from bmarzins-01.fast.eng.rdu2.dc.redhat.com (localhost [127.0.0.1])
-	by bmarzins-01.fast.eng.rdu2.dc.redhat.com (8.17.2/8.17.1) with ESMTPS id 491MkdcA2148323
-	(version=TLSv1.3 cipher=TLS_AES_256_GCM_SHA384 bits=256 verify=NOT);
-	Tue, 1 Oct 2024 18:46:39 -0400
-Received: (from bmarzins@localhost)
-	by bmarzins-01.fast.eng.rdu2.dc.redhat.com (8.17.2/8.17.2/Submit) id 491Mkdm22148322;
-	Tue, 1 Oct 2024 18:46:39 -0400
-From: Benjamin Marzinski <bmarzins@redhat.com>
-To: lvm-devel@lists.linux.dev
-Cc: Zdenek Kabelac <zkabelac@redhat.com>,
-        Heinz Mauelshagen <heinzm@redhat.com>
-Subject: [PATCH] tests: wait for size to be updated in lvconvert-raid-reshape-size.sh
-Date: Tue,  1 Oct 2024 18:46:39 -0400
-Message-ID: <20241001224639.2148314-1-bmarzins@redhat.com>
+	by mxhk.zte.com.cn (FangMail) with ESMTPS id 4XSvjJ2Z55z8QrkZ
+	for <lvm-devel@lists.linux.dev>; Wed, 16 Oct 2024 10:16:36 +0800 (CST)
+Received: from njb2app06.zte.com.cn ([10.55.23.119])
+	by mse-fl2.zte.com.cn with SMTP id 49G2GQYb026368
+	for <lvm-devel@lists.linux.dev>; Wed, 16 Oct 2024 10:16:26 +0800 (+08)
+	(envelope-from long.yunjian@zte.com.cn)
+Received: from mapi (njy2app02[null])
+	by mapi (Zmail) with MAPI id mid201;
+	Wed, 16 Oct 2024 10:16:27 +0800 (CST)
+Date: Wed, 16 Oct 2024 10:16:27 +0800 (CST)
+X-Zmail-TransId: 2afa670f21fb0fb-6f06e
+X-Mailer: Zmail v1.0
+Message-ID: <20241016101627552OQp0AQIZhpja0akhFT2Da@zte.com.cn>
 Precedence: bulk
 X-Mailing-List: lvm-devel@lists.linux.dev
 List-Id: <lvm-devel.lists.linux.dev>
 List-Subscribe: <mailto:lvm-devel+subscribe@lists.linux.dev>
 List-Unsubscribe: <mailto:lvm-devel+unsubscribe@lists.linux.dev>
-MIME-Version: 1.0
-X-Scanned-By: MIMEDefang 3.0 on 10.30.177.15
-X-Mimecast-Spam-Score: 0
-X-Mimecast-Originator: redhat.com
-Content-Transfer-Encoding: 8bit
-Content-Type: text/plain; charset="US-ASCII"; x-default=true
+Mime-Version: 1.0
+From: <long.yunjian@zte.com.cn>
+To: <lvm-devel@lists.linux.dev>
+Cc: <xue.zhihong@zte.com.cn>, <cai.qu@zte.com.cn>, <jiang.yong5@zte.com.cn>,
+        <long.yunjian@zte.com.cn>, <xu.lifeng1@zte.com.cn>
+Subject: =?UTF-8?B?W1BBVENIXSBjbGVhbnVwOiByZW5hbWXCoGludmFsaWQgZnVuY3Rpb24gdG8gcmVhbCBmdW5jdGlvbiBpbiBhbm5vdGF0aW9u?=
+Content-Type: text/plain;
+	charset="UTF-8"
+X-MAIL:mse-fl2.zte.com.cn 49G2GQYb026368
+X-Fangmail-Anti-Spam-Filtered: true
+X-Fangmail-MID-QID: 670F2204.001/4XSvjJ2Z55z8QrkZ
 
-lvconvert-raid-reshape-size was occassionally failing because it was
-checking the size before it got updated.
+There are no fuction named print_common_options_cmd()
+and print_common_options_lvm(). So, rename them to the
+real function named print_usage_common_cmd() and
+print_usage_common_lvm().
 
-Signed-off-by: Benjamin Marzinski <bmarzins@redhat.com>
+Signed-off-by: YunJian Long
 ---
- test/shell/lvconvert-raid-reshape-size.sh | 2 ++
- 1 file changed, 2 insertions(+)
+ tools/command.c | 8 ++++----
+ 1 file changed, 4 insertions(+), 4 deletions(-)
 
-diff --git a/test/shell/lvconvert-raid-reshape-size.sh b/test/shell/lvconvert-raid-reshape-size.sh
-index ea367da18..2758eca71 100644
---- a/test/shell/lvconvert-raid-reshape-size.sh
-+++ b/test/shell/lvconvert-raid-reshape-size.sh
-@@ -158,6 +158,7 @@ function _reshape_layout
- 	if [ $wait_for_reshape -eq 1 ]
- 	then
- 		aux wait_for_sync $vg $lv $ignore_a_chars
-+		sleep 1
- 		fsck -fn "$DM_DEV_DIR/$vg/$lv"
- 	fi
- }
-@@ -289,6 +290,7 @@ function _test
- 	# Wait for sync to finish to check frow extended LV size
- 	aux wait_for_sync $vg $lv 0
- 
-+	sleep 1
- 	[ $(_check_size $vg $lv $(($data_stripes + 1))) -eq 0 ] || die "LV size should be grown"
- 	fsck -fy "$DM_DEV_DIR/$vg/$lv"
- 	udevadm settle
+diff --git a/tools/command.c b/tools/command.c
+index 114aa9b50..0ed486811 100644
+--- a/tools/command.c
++++ b/tools/command.c
+@@ -1851,7 +1851,7 @@ void print_usage(struct command *cmd, int longhelp, int desc_first)
+                        /*
+                         * Skip common lvm options in lvm_all which
+                         * are printed at the end under "Common options for lvm"
+-                        * see print_common_options_lvm()
++                        * see print_usage_common_lvm()
+                         */
+
+                        if (_is_lvm_all_opt(opt_enum))
+@@ -1863,7 +1863,7 @@ void print_usage(struct command *cmd, int longhelp, int desc_first)
+                         * cname->common_options (options common
+                         * to all variants), which are printed at
+                         * the end under "Common options for command"
+-                        * see print_common_options_cmd()
++                        * see print_usage_common_cmd()
+                         */
+
+                        if (cna && (cna->variants > 1) && cna->common_options[opt_enum])
+@@ -1891,7 +1891,7 @@ void print_usage(struct command *cmd, int longhelp, int desc_first)
+                        /*
+                         * Skip common lvm options in lvm_all which
+                         * are printed at the end under "Common options for lvm"
+-                        * see print_common_options_lvm()
++                        * see print_usage_common_lvm()
+                         */
+
+                        if (_is_lvm_all_opt(opt_enum))
+@@ -1903,7 +1903,7 @@ void print_usage(struct command *cmd, int longhelp, int desc_first)
+                         * cname->common_options (options common
+                         * to all variants), which are printed at
+                         * the end under "Common options for command"
+-                        * see print_common_options_cmd()
++                        * see print_usage_common_cmd()
+                         */
+
+                        if (cna && (cna->variants > 1) && cna->common_options[opt_enum])
 -- 
-2.43.5
-
+2.31.1
