@@ -1,262 +1,103 @@
-Received: from m16.mail.163.com (m16.mail.163.com [117.135.210.3])
-	by smtp.subspace.kernel.org (Postfix) with ESMTP id EF9071805A
-	for <lvm-devel@lists.linux.dev>; Wed, 19 Feb 2025 07:49:05 +0000 (UTC)
-Authentication-Results: smtp.subspace.kernel.org; arc=none smtp.client-ip=117.135.210.3
+Received: from mail-wm1-f53.google.com (mail-wm1-f53.google.com [209.85.128.53])
+	(using TLSv1.2 with cipher ECDHE-RSA-AES128-GCM-SHA256 (128/128 bits))
+	(No client certificate requested)
+	by smtp.subspace.kernel.org (Postfix) with ESMTPS id 9F29D1F4195
+	for <lvm-devel@lists.linux.dev>; Wed, 19 Feb 2025 15:06:50 +0000 (UTC)
+Authentication-Results: smtp.subspace.kernel.org; arc=none smtp.client-ip=209.85.128.53
 ARC-Seal:i=1; a=rsa-sha256; d=subspace.kernel.org; s=arc-20240116;
-	t=1739951350; cv=none; b=chz6cbdDAVDzsfkL1XmGplKCHdFkWQqxi0GJaat2MBX/yKILXbRKo1ok63P8QEvCWBbOrRJsa1X9mKxhJ31qGDxie0H3kKfv0OXn2+PxYJTwfjHzgc67HZWQynOgGWe6b47dRwVbdVs6ye6kCGRCfTxbWIyT0vYblz3wNkH/HYs=
+	t=1739977612; cv=none; b=t8U7EDTDtgVnQx0012sS1vzzKM52/ozAegEGaLUt/tyEIkz88MfSIfCGFPVM3td8wHH+U8N3g+mQK2LIYHU9BY1+AscrnssmccA6bbsh7WAzRGCJFHKxBp2FVp/7Fzp73McfJoZSuJfW6F/r4Urzzk3iibVNqGC93svDcgSHzZA=
 ARC-Message-Signature:i=1; a=rsa-sha256; d=subspace.kernel.org;
-	s=arc-20240116; t=1739951350; c=relaxed/simple;
-	bh=D0UxeQl7k52qT6QHjIfzukQQZv2PC6kvt0EUYj0h43o=;
-	h=Date:From:To:Subject:Content-Type:MIME-Version:Message-ID; b=fmFQyDbR3sa+/gYC1+BfZvh/hfo/VeZz3HvvmLH9kontNpiWuwmUjj+j4OU2IjN585gpYKMyp3FxHaK8DnnAW4M8RrQAtyH+NZ0x9CPf/FdvquKnHjMd+zrh40gGlIXxnOrpkpjXmcjFKXutwdcoaJWMsDkez0fMKI50oXEtYKk=
-ARC-Authentication-Results:i=1; smtp.subspace.kernel.org; dmarc=pass (p=none dis=none) header.from=163.com; spf=pass smtp.mailfrom=163.com; dkim=pass (1024-bit key) header.d=163.com header.i=@163.com header.b=Oh/5qfys; arc=none smtp.client-ip=117.135.210.3
-Authentication-Results: smtp.subspace.kernel.org; dmarc=pass (p=none dis=none) header.from=163.com
-Authentication-Results: smtp.subspace.kernel.org; spf=pass smtp.mailfrom=163.com
+	s=arc-20240116; t=1739977612; c=relaxed/simple;
+	bh=GLYVIMjhhykW8P6QX1riyMdPpVJNFMpET+n3pvLxn2E=;
+	h=Message-ID:Date:MIME-Version:Subject:To:References:From:
+	 In-Reply-To:Content-Type; b=K2+oiNVCNWNI8cu+ASFitnGl9uMZ9knKp1vZPbr2taPs6ArDFHX270v88a8iiWvZz/n/wi47npIHzzzeIFp2Vxy4kZrHKNWyU8LtwaheP5GNjhSUxfeYj81pMvgORDzNOrJJrj3ttXBMv9UvN9bBlXpFtN4YT1/nnsqUpYfzC5o=
+ARC-Authentication-Results:i=1; smtp.subspace.kernel.org; dmarc=pass (p=none dis=none) header.from=gmail.com; spf=pass smtp.mailfrom=gmail.com; dkim=pass (2048-bit key) header.d=gmail.com header.i=@gmail.com header.b=X3jf5KMQ; arc=none smtp.client-ip=209.85.128.53
+Authentication-Results: smtp.subspace.kernel.org; dmarc=pass (p=none dis=none) header.from=gmail.com
+Authentication-Results: smtp.subspace.kernel.org; spf=pass smtp.mailfrom=gmail.com
 Authentication-Results: smtp.subspace.kernel.org;
-	dkim=pass (1024-bit key) header.d=163.com header.i=@163.com header.b="Oh/5qfys"
-DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed; d=163.com;
-	s=s110527; h=Date:From:Subject:Content-Type:MIME-Version:
-	Message-ID; bh=IRRi5WWZmLV4JkhoJDQQLpxBMfyqdDKw8IS7u1T8VMc=; b=O
-	h/5qfys1PrKaChLY/D1Dk2mpZMxePSlpLxyd26JpopK2HYmp2FgdkK2JFDr87CqS
-	i8NlWtPNZPoMzelj0s2gpQawL0MknNJ0tY7zTh/maWQyEzGb1AYk4Qkvc2dlhLMO
-	u3D2hdPUC7GvtXRZT5IA6wbHEe+ZJ3gdb17LGKBkgI=
-Received: from zengjianqi163$163.com ( [123.150.8.42] ) by
- ajax-webmail-wmsvr-40-127 (Coremail) ; Wed, 19 Feb 2025 15:48:58 +0800
- (CST)
-Date: Wed, 19 Feb 2025 15:48:58 +0800 (CST)
-From: "zengjianqi163@163.co" <zengjianqi163@163.com>
-To: lvm-devel@lists.linux.dev
-Subject: Fix the issue of missing symbols in libdevmapper
-X-Priority: 3
-X-Mailer: Coremail Webmail Server Version XT5.0.14 build 20240801(9da12a7b)
- Copyright (c) 2002-2025 www.mailtech.cn 163com
-X-CM-CTRLMSGS: Y5Uek3RyYWNlS2V5PXByZV8zM2ZjZTRhZTU1MTIyMjg2ZWM0MDA3MzViNWJmM
- GE3ZQ==
-X-NTES-SC: AL_Qu2YC/Wevkso7iWYZekfmk4Qh+06WMu3sv8j3IBWO5x+jA/p0SIRcEJSL0Hb4M60LD2ImgmGUx5j8/tfRqpZW48aId+Cnkxpl3k+1fibnBUHPg==
-Content-Type: multipart/mixed; 
-	boundary="----=_Part_104205_2131083400.1739951338504"
+	dkim=pass (2048-bit key) header.d=gmail.com header.i=@gmail.com header.b="X3jf5KMQ"
+Received: by mail-wm1-f53.google.com with SMTP id 5b1f17b1804b1-43937cf2131so46289435e9.2
+        for <lvm-devel@lists.linux.dev>; Wed, 19 Feb 2025 07:06:50 -0800 (PST)
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed;
+        d=gmail.com; s=20230601; t=1739977609; x=1740582409; darn=lists.linux.dev;
+        h=content-transfer-encoding:in-reply-to:from:content-language
+         :references:to:subject:user-agent:mime-version:date:message-id:from
+         :to:cc:subject:date:message-id:reply-to;
+        bh=QX6ofGtYEgQZ8XDq+fc30VcX6i3t56cBcldCdN7gB9k=;
+        b=X3jf5KMQgHecXsAHJt7yvuM+9mGM3Kv4BfmrqwHi4qMcItCqDU0OYtrxV9Vg5zkjaf
+         fUvK+XCWtGRB3+qvZSg9IhuUe9r9dxJtJiXShY7X/OZp2RpsOP2+zKuix/Atcjuqnce1
+         Nmm8QhV0lYpVEyVyFT4ESG/pECjZ6kqKoXbqNFKdpOPxJGKg6KgK3RXXf3iKDmUxpFlx
+         41GAz2rSFneHmxvGC4bwtr7hXpcHRf7Sxa+RVAgVfqAqhIg8lK1ahNCeRHCBtcglBuhG
+         P8Ck0GDbSDTK5Qm87KaShpYEyoH8ce6Ud2qlRJjBo6NVKbrs5SjfMkXbEC3Po5EKYC+u
+         Te/g==
+X-Google-DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed;
+        d=1e100.net; s=20230601; t=1739977609; x=1740582409;
+        h=content-transfer-encoding:in-reply-to:from:content-language
+         :references:to:subject:user-agent:mime-version:date:message-id
+         :x-gm-message-state:from:to:cc:subject:date:message-id:reply-to;
+        bh=QX6ofGtYEgQZ8XDq+fc30VcX6i3t56cBcldCdN7gB9k=;
+        b=inDe1fzOiPUByoJIShPc1+mF6sOeh3vGHw8Z2r4gwUoG6ZzNc/FOmcUeCoY9GQXsYN
+         E768r+Q+xhExxsG8R9dhcsRm60XFogrTJ6VHRJXYrmDS7my7tinS7kxLZQweI05hwPKt
+         86WDS0GDm1x1Sd+Uvm2cvV0O/uHZ9Lz6wdMmsYkC1Ucbd+htgZEe7kchWSP54weW7e5b
+         ZxH1rjTIxX5UH/3dptZ7zpVqkz16iasZaHP1yM3I9w18PO3imPbtERDMlaho5MQ0S60D
+         m5bv7S5QIhkEfF0/Te0WU/b3uAn97QtGEaqFD5M9ZmUrbCx8Xd6cUP+/tvS/iXsFuZRu
+         RR+Q==
+X-Forwarded-Encrypted: i=1; AJvYcCWxxQ8nB6ZHn1mpkvAHsfPbthV3vSqn1h3ITqecLuVgmr8LtNItLQkEFEN4D788c6CGVv/2L5Nc9Bc=@lists.linux.dev
+X-Gm-Message-State: AOJu0Yzw1raeBeZ8mPV552ry8oO8WNnxHtX7UTkDdaLQeg5cZkNlKO99
+	Z98Mw1r2Y8iD84VM9KYagT0QpWqCkles2LAfNwCQ6UI6aWzvLXBCr+WUNT1o
+X-Gm-Gg: ASbGnctdR2RmvCPqTHIaPVEdpAb3wRcuyxhgrVGrv3pmP5FVKwtctFiv65yDpv0j0Pn
+	KDUJvpIS9ISB05gKRC89trMpRG2Uxx1jk110LjJOgn69iKEpOU4uX2XG41eZa+TscV2IHELL66o
+	h3DVgxnel7O3K8e0gIDTAy2N2rx6pkDIjF5djNulkSipJKWgS2k2oDlnIv/nSsuyLizXv9h33Fi
+	Rxi3SdIlr9m2N0mDl8Ubjm5wUOCr10khuqOdCUbXKYlALeewBD1mEYG0c0xNVSF2aNa+GsA3Gmf
+	4tpPD/0Gd0KUpjgV/5D3GIlrjut4ElblIlgqp+G6KDKiSWvLqtSlGLKfRUh1EGameMPisQ==
+X-Google-Smtp-Source: AGHT+IGbNluYX6P5Q9KLLPGVvgsOXNslnY8dEsV+yl/pXPi+NU7cb+hGCw5kwQLEAzFhoFymnlb6sg==
+X-Received: by 2002:a05:600c:548a:b0:439:a093:fffe with SMTP id 5b1f17b1804b1-439a09402abmr11712275e9.7.1739977608242;
+        Wed, 19 Feb 2025 07:06:48 -0800 (PST)
+Received: from ?IPV6:2a03:a900:1000:7e9:403e:7c8b:351b:f333? ([2a03:a900:1000:7e9:403e:7c8b:351b:f333])
+        by smtp.gmail.com with ESMTPSA id 5b1f17b1804b1-439948eb34esm51686345e9.38.2025.02.19.07.06.46
+        (version=TLS1_3 cipher=TLS_AES_128_GCM_SHA256 bits=128/128);
+        Wed, 19 Feb 2025 07:06:47 -0800 (PST)
+Message-ID: <c1d5760e-ee5f-40f8-825f-4c7f44a0aacf@gmail.com>
+Date: Wed, 19 Feb 2025 16:06:45 +0100
 Precedence: bulk
 X-Mailing-List: lvm-devel@lists.linux.dev
 List-Id: <lvm-devel.lists.linux.dev>
 List-Subscribe: <mailto:lvm-devel+subscribe@lists.linux.dev>
 List-Unsubscribe: <mailto:lvm-devel+unsubscribe@lists.linux.dev>
 MIME-Version: 1.0
-Message-ID: <2299fe3d.6a77.1951d2e7409.Coremail.zengjianqi163@163.com>
-X-Coremail-Locale: zh_CN
-X-CM-TRANSID:fygvCgCnDx3qjLVnzyxrAA--.59870W
-X-CM-SenderInfo: p2hqwy5ldq1xqrwtqiywtou0bp/1tbiUQz4F2e1UKIxkgACsz
-X-Coremail-Antispam: 1U5529EdanIXcx71UUUUU7vcSsGvfC2KfnxnUU==
+User-Agent: Mozilla Thunderbird
+Subject: Re: Fix the issue of missing symbols in libdevmapper
+To: "zengjianqi163@163.co" <zengjianqi163@163.com>, lvm-devel@lists.linux.dev
+References: <2299fe3d.6a77.1951d2e7409.Coremail.zengjianqi163@163.com>
+Content-Language: en-US, cs
+From: Zdenek Kabelac <zdenek.kabelac@gmail.com>
+In-Reply-To: <2299fe3d.6a77.1951d2e7409.Coremail.zengjianqi163@163.com>
+Content-Type: text/plain; charset=UTF-8; format=flowed
+Content-Transfer-Encoding: 8bit
 
-------=_Part_104205_2131083400.1739951338504
-Content-Type: multipart/alternative; 
-	boundary="----=_Part_104207_825315504.1739951338504"
+Dne 19. 02. 25 v 8:48 zengjianqi163@163.co napsal(a):
+> Hi，lvm-devel
+> 
+> I analyzed the dynamic library libdevmapper.so.1.02 and found an issue: it 
+> appears to be missing two symbols: dm_bitset_parse_list@@DM_1_02_138 and 
+> dm_tree_node_size_changed@Base.
+> 
+> Analysis of dm_bitset_parse_list@@DM_1_02_138:
+> 
+> The symbol dm_bitset_parse_list is listed in the files 
+> libdm/.exported_symbols.DM_1_02_129 and libdm/.exported_symbols.DM_1_02_138. 
+> However, in the actual source code implementation, only 
+> dm_bitset_parse_list@@DM_1_02_129 is explicitly defined.
 
-------=_Part_104207_825315504.1739951338504
-Content-Type: text/plain; charset=GBK
-Content-Transfer-Encoding: base64
+Yep - thanks for the patch.
 
-SGmjrGx2bS1kZXZlbAoKIAoKSSBhbmFseXplZCB0aGUgZHluYW1pYyBsaWJyYXJ5IGxpYmRldm1h
-cHBlci5zby4xLjAyIGFuZCBmb3VuZCBhbiBpc3N1ZTogaXQgYXBwZWFycyB0byBiZSBtaXNzaW5n
-IHR3byBzeW1ib2xzOiBkbV9iaXRzZXRfcGFyc2VfbGlzdEBARE1fMV8wMl8xMzggYW5kIGRtX3Ry
-ZWVfbm9kZV9zaXplX2NoYW5nZWRAQmFzZS4KCiAKCkFuYWx5c2lzIG9mIGRtX2JpdHNldF9wYXJz
-ZV9saXN0QEBETV8xXzAyXzEzODoKClRoZSBzeW1ib2wgZG1fYml0c2V0X3BhcnNlX2xpc3QgaXMg
-bGlzdGVkIGluIHRoZSBmaWxlcyBsaWJkbS8uZXhwb3J0ZWRfc3ltYm9scy5ETV8xXzAyXzEyOSBh
-bmQgbGliZG0vLmV4cG9ydGVkX3N5bWJvbHMuRE1fMV8wMl8xMzguIEhvd2V2ZXIsIGluIHRoZSBh
-Y3R1YWwgc291cmNlIGNvZGUgaW1wbGVtZW50YXRpb24sIG9ubHkgZG1fYml0c2V0X3BhcnNlX2xp
-c3RAQERNXzFfMDJfMTI5IGlzIGV4cGxpY2l0bHkgZGVmaW5lZC4gCgpTaW5jZSB0aGUgZGVmYXVs
-dCBpbXBsZW1lbnRhdGlvbiBpcyBub3QgZXhwbGljaXRseSBib3VuZCB0byB0aGUgc3ltYm9sIHZl
-cnNpb24gZG1fYml0c2V0X3BhcnNlX2xpc3RAQERNXzFfMDJfMTM4LCB0aGUgbGlua2VyIGZhaWxz
-IHRvIHByb3Blcmx5IGhhbmRsZSB0aGlzIHN5bWJvbCBkdXJpbmcgdGhlIGdlbmVyYXRpb24gb2Yg
-dGhlIGR5bmFtaWMgbGlicmFyeSwgcmVzdWx0aW5nIGluIGl0cyBhYnNlbmNlLgoKTW9yZW92ZXIs
-IHRoZSBtaXNzaW5nIHN5bWJvbCBjb3JyZXNwb25kcyB0byB0aGUgZGVmYXVsdCBpbXBsZW1lbnRh
-dGlvbiwgd2hpY2ggY2F1c2VzIGxpbmtpbmcgZXJyb3JzIHdoZW4gcHJvZ3JhbXMgZGVwZW5kZW50
-IG9uIGl0IGF0dGVtcHQgdG8gbGluay4KCiAKCkFuYWx5c2lzIG9mIGRtX3RyZWVfbm9kZV9zaXpl
-X2NoYW5nZWRAQmFzZToKClRoZSBzeW1ib2wgZG1fdHJlZV9ub2RlX3NpemVfY2hhbmdlZCBpcyBt
-aXNzaW5nIGZyb20gLmV4cG9ydGVkX3N5bWJvbHMuQmFzZS4gQWRkaW5nIGl0IHJlc29sdmVzIHRo
-ZSBpc3N1ZSBmb3IgZG1fdHJlZV9ub2RlX3NpemVfY2hhbmdlZEBCYXNlLCBidXQgdGhpcyByZXN1
-bHRzIGluIHRoZSBhYnNlbmNlIG9mIGRtX3RyZWVfbm9kZV9zaXplX2NoYW5nZWRAQERNXzFfMDJf
-MTEwLgoKVGhlcmVmb3JlLCBpbiB0aGUgc291cmNlIGNvZGUsIHRoZSBkZWZhdWx0IGltcGxlbWVu
-dGF0aW9uIG5lZWRzIHRvIGJlIGV4cGxpY2l0bHkgYm91bmQgdG8gdGhlIHN5bWJvbCBkbV90cmVl
-X25vZGVfc2l6ZV9jaGFuZ2VkQEBETV8xXzAyXzExMC4gCgpGcm9tIG15IGV4cGVyaWVuY2UsIHdo
-ZW4gYSBzeW1ib2wgaGFzIG11bHRpcGxlIHZlcnNpb25zLCBpdCBpcyBiZXN0IHRvIGV4cGxpY2l0
-bHkgYmluZCBlYWNoIHZlcnNpb24ncyBpbXBsZW1lbnRhdGlvbiB0byBpdHMgY29ycmVzcG9uZGlu
-ZyBzeW1ib2wgdmVyc2lvbi4gVGhpcyBhcHByb2FjaCBlZmZlY3RpdmVseSBhdm9pZHMgc2ltaWxh
-ciBpc3N1ZXMuCgogCgpUbyBhZGRyZXNzIHRoZXNlIHByb2JsZW1zLCBJIGhhdmUgY3JlYXRlZCBh
-IHBhdGNoOiBGaXgtdGhlLWlzc3VlLW9mLW1pc3Npbmctc3ltYm9scy1pbi1saWJkZXZtYXBwZXIu
-cGF0Y2ggKFNlZSB0aGUgYXR0YWNobWVudCkuCgpJIGhvcGUgdGhpcyBzb2x1dGlvbiBoZWxwcyBy
-ZXNvbHZlIHRoZSBpc3N1ZS4gT2YgY291cnNlLCBpZiB5b3UgaGF2ZSBhbnkgb3RoZXIgaWRlYXMg
-b3Igc3VnZ2VzdGlvbnMgZm9yIGltcHJvdmVtZW50LCBmZWVsIGZyZWUgdG8gZGlzY3VzcyB0aGVt
-IHdpdGggbWUgYXQgYW55IHRpbWUhCgogCgogCgotLQoKQmVzdCByZWdhcmRzIQoKSmlhbnFpIFpl
-bmc=
-------=_Part_104207_825315504.1739951338504
-Content-Type: text/html; charset=GBK
-Content-Transfer-Encoding: base64
+I'm just wondering how did you hit the issue - is this from some other 
+libdevmapper user ?
 
-PGRpdiBkYXRhLW50ZXM9Im50ZXNfbWFpbF9ib2R5X3Jvb3QiIHN0eWxlPSJsaW5lLWhlaWdodDox
-Ljc7Y29sb3I6IzAwMDAwMDtmb250LXNpemU6MTRweDtmb250LWZhbWlseTpBcmlhbCI+PHAgc3R5
-bGU9Im1hcmdpbjogMHB4OyBib3JkZXI6IDBweDsgcGFkZGluZzogMHB4OyBmb250LWZhbWlseTog
-t8LLzl9HQjIzMTI7IGZvbnQtc2l6ZTogbWVkaXVtOyI+PHNwYW4gc3R5bGU9ImZvbnQtZmFtaWx5
-OiAmcXVvdDtNaWNyb3NvZnQgWWFIZWkmcXVvdDssICZxdW90O0hlbHZldGljYSBOZXVlJnF1b3Q7
-LCAmcXVvdDtQaW5nRmFuZyBTQyZxdW90Oywgc2Fucy1zZXJpZjsiPkhpo6xsdm0tZGV2ZWw8L3Nw
-YW4+PC9wPjxwIHN0eWxlPSJtYXJnaW46IDBweDsgYm9yZGVyOiAwcHg7IHBhZGRpbmc6IDBweDsg
-Zm9udC1mYW1pbHk6ILfCy85fR0IyMzEyOyBmb250LXNpemU6IG1lZGl1bTsiPjxzcGFuIHN0eWxl
-PSJmb250LWZhbWlseTogJnF1b3Q7TWljcm9zb2Z0IFlhSGVpJnF1b3Q7LCAmcXVvdDtIZWx2ZXRp
-Y2EgTmV1ZSZxdW90OywgJnF1b3Q7UGluZ0ZhbmcgU0MmcXVvdDssIHNhbnMtc2VyaWY7Ij4mbmJz
-cDs8L3NwYW4+PC9wPjxwIHN0eWxlPSJtYXJnaW46IDBweDsgYm9yZGVyOiAwcHg7IHBhZGRpbmc6
-IDBweDsgZm9udC1mYW1pbHk6ILfCy85fR0IyMzEyOyBmb250LXNpemU6IG1lZGl1bTsiPjxzcGFu
-IHN0eWxlPSJmb250LWZhbWlseTogJnF1b3Q7TWljcm9zb2Z0IFlhSGVpJnF1b3Q7LCAmcXVvdDtI
-ZWx2ZXRpY2EgTmV1ZSZxdW90OywgJnF1b3Q7UGluZ0ZhbmcgU0MmcXVvdDssIHNhbnMtc2VyaWY7
-Ij5JIGFuYWx5emVkIHRoZSBkeW5hbWljIGxpYnJhcnkgbGliZGV2bWFwcGVyLnNvLjEuMDIgYW5k
-IGZvdW5kIGFuIGlzc3VlOiBpdCBhcHBlYXJzIHRvIGJlIG1pc3NpbmcgdHdvIHN5bWJvbHM6IGRt
-X2JpdHNldF9wYXJzZV9saXN0QEBETV8xXzAyXzEzOCBhbmQgZG1fdHJlZV9ub2RlX3NpemVfY2hh
-bmdlZEBCYXNlLjwvc3Bhbj48L3A+PHAgc3R5bGU9Im1hcmdpbjogMHB4OyBib3JkZXI6IDBweDsg
-cGFkZGluZzogMHB4OyBmb250LWZhbWlseTogt8LLzl9HQjIzMTI7IGZvbnQtc2l6ZTogbWVkaXVt
-OyI+PHNwYW4gc3R5bGU9ImZvbnQtZmFtaWx5OiAmcXVvdDtNaWNyb3NvZnQgWWFIZWkmcXVvdDss
-ICZxdW90O0hlbHZldGljYSBOZXVlJnF1b3Q7LCAmcXVvdDtQaW5nRmFuZyBTQyZxdW90Oywgc2Fu
-cy1zZXJpZjsiPiZuYnNwOzwvc3Bhbj48L3A+PHAgc3R5bGU9Im1hcmdpbjogMHB4OyBib3JkZXI6
-IDBweDsgcGFkZGluZzogMHB4OyBmb250LWZhbWlseTogt8LLzl9HQjIzMTI7IGZvbnQtc2l6ZTog
-bWVkaXVtOyI+PHNwYW4gc3R5bGU9ImZvbnQtZmFtaWx5OiAmcXVvdDtNaWNyb3NvZnQgWWFIZWkm
-cXVvdDssICZxdW90O0hlbHZldGljYSBOZXVlJnF1b3Q7LCAmcXVvdDtQaW5nRmFuZyBTQyZxdW90
-Oywgc2Fucy1zZXJpZjsiPkFuYWx5c2lzIG9mIGRtX2JpdHNldF9wYXJzZV9saXN0QEBETV8xXzAy
-XzEzODo8L3NwYW4+PC9wPjxwIHN0eWxlPSJtYXJnaW46IDBweDsgYm9yZGVyOiAwcHg7IHBhZGRp
-bmc6IDBweDsgZm9udC1mYW1pbHk6ILfCy85fR0IyMzEyOyBmb250LXNpemU6IG1lZGl1bTsiPjxz
-cGFuIHN0eWxlPSJmb250LWZhbWlseTogJnF1b3Q7TWljcm9zb2Z0IFlhSGVpJnF1b3Q7LCAmcXVv
-dDtIZWx2ZXRpY2EgTmV1ZSZxdW90OywgJnF1b3Q7UGluZ0ZhbmcgU0MmcXVvdDssIHNhbnMtc2Vy
-aWY7Ij5UaGUgc3ltYm9sIGRtX2JpdHNldF9wYXJzZV9saXN0IGlzIGxpc3RlZCBpbiB0aGUgZmls
-ZXMgbGliZG0vLmV4cG9ydGVkX3N5bWJvbHMuRE1fMV8wMl8xMjkgYW5kIGxpYmRtLy5leHBvcnRl
-ZF9zeW1ib2xzLkRNXzFfMDJfMTM4LiBIb3dldmVyLCBpbiB0aGUgYWN0dWFsIHNvdXJjZSBjb2Rl
-IGltcGxlbWVudGF0aW9uLCBvbmx5IGRtX2JpdHNldF9wYXJzZV9saXN0QEBETV8xXzAyXzEyOSBp
-cyBleHBsaWNpdGx5IGRlZmluZWQuJm5ic3A7PC9zcGFuPjwvcD48cCBzdHlsZT0ibWFyZ2luOiAw
-cHg7IGJvcmRlcjogMHB4OyBwYWRkaW5nOiAwcHg7IGZvbnQtZmFtaWx5OiC3wsvOX0dCMjMxMjsg
-Zm9udC1zaXplOiBtZWRpdW07Ij48c3BhbiBzdHlsZT0iZm9udC1mYW1pbHk6ICZxdW90O01pY3Jv
-c29mdCBZYUhlaSZxdW90OywgJnF1b3Q7SGVsdmV0aWNhIE5ldWUmcXVvdDssICZxdW90O1BpbmdG
-YW5nIFNDJnF1b3Q7LCBzYW5zLXNlcmlmOyI+U2luY2UgdGhlIGRlZmF1bHQgaW1wbGVtZW50YXRp
-b24gaXMgbm90IGV4cGxpY2l0bHkgYm91bmQgdG8gdGhlIHN5bWJvbCB2ZXJzaW9uIGRtX2JpdHNl
-dF9wYXJzZV9saXN0QEBETV8xXzAyXzEzOCwgdGhlIGxpbmtlciBmYWlscyB0byBwcm9wZXJseSBo
-YW5kbGUgdGhpcyBzeW1ib2wgZHVyaW5nIHRoZSBnZW5lcmF0aW9uIG9mIHRoZSBkeW5hbWljIGxp
-YnJhcnksIHJlc3VsdGluZyBpbiBpdHMgYWJzZW5jZS48L3NwYW4+PC9wPjxwIHN0eWxlPSJtYXJn
-aW46IDBweDsgYm9yZGVyOiAwcHg7IHBhZGRpbmc6IDBweDsgZm9udC1mYW1pbHk6ILfCy85fR0Iy
-MzEyOyBmb250LXNpemU6IG1lZGl1bTsiPjxzcGFuIHN0eWxlPSJmb250LWZhbWlseTogJnF1b3Q7
-TWljcm9zb2Z0IFlhSGVpJnF1b3Q7LCAmcXVvdDtIZWx2ZXRpY2EgTmV1ZSZxdW90OywgJnF1b3Q7
-UGluZ0ZhbmcgU0MmcXVvdDssIHNhbnMtc2VyaWY7Ij5Nb3Jlb3ZlciwgdGhlIG1pc3Npbmcgc3lt
-Ym9sIGNvcnJlc3BvbmRzIHRvIHRoZSBkZWZhdWx0IGltcGxlbWVudGF0aW9uLCB3aGljaCBjYXVz
-ZXMgbGlua2luZyBlcnJvcnMgd2hlbiBwcm9ncmFtcyBkZXBlbmRlbnQgb24gaXQgYXR0ZW1wdCB0
-byBsaW5rLjwvc3Bhbj48L3A+PHAgc3R5bGU9Im1hcmdpbjogMHB4OyBib3JkZXI6IDBweDsgcGFk
-ZGluZzogMHB4OyBmb250LWZhbWlseTogt8LLzl9HQjIzMTI7IGZvbnQtc2l6ZTogbWVkaXVtOyI+
-PHNwYW4gc3R5bGU9ImZvbnQtZmFtaWx5OiAmcXVvdDtNaWNyb3NvZnQgWWFIZWkmcXVvdDssICZx
-dW90O0hlbHZldGljYSBOZXVlJnF1b3Q7LCAmcXVvdDtQaW5nRmFuZyBTQyZxdW90Oywgc2Fucy1z
-ZXJpZjsiPiZuYnNwOzwvc3Bhbj48L3A+PHAgc3R5bGU9Im1hcmdpbjogMHB4OyBib3JkZXI6IDBw
-eDsgcGFkZGluZzogMHB4OyBmb250LWZhbWlseTogt8LLzl9HQjIzMTI7IGZvbnQtc2l6ZTogbWVk
-aXVtOyI+PHNwYW4gc3R5bGU9ImZvbnQtZmFtaWx5OiAmcXVvdDtNaWNyb3NvZnQgWWFIZWkmcXVv
-dDssICZxdW90O0hlbHZldGljYSBOZXVlJnF1b3Q7LCAmcXVvdDtQaW5nRmFuZyBTQyZxdW90Oywg
-c2Fucy1zZXJpZjsiPkFuYWx5c2lzIG9mIGRtX3RyZWVfbm9kZV9zaXplX2NoYW5nZWRAQmFzZTo8
-L3NwYW4+PC9wPjxwIHN0eWxlPSJtYXJnaW46IDBweDsgYm9yZGVyOiAwcHg7IHBhZGRpbmc6IDBw
-eDsgZm9udC1mYW1pbHk6ILfCy85fR0IyMzEyOyBmb250LXNpemU6IG1lZGl1bTsiPjxzcGFuIHN0
-eWxlPSJmb250LWZhbWlseTogJnF1b3Q7TWljcm9zb2Z0IFlhSGVpJnF1b3Q7LCAmcXVvdDtIZWx2
-ZXRpY2EgTmV1ZSZxdW90OywgJnF1b3Q7UGluZ0ZhbmcgU0MmcXVvdDssIHNhbnMtc2VyaWY7Ij5U
-aGUgc3ltYm9sIGRtX3RyZWVfbm9kZV9zaXplX2NoYW5nZWQgaXMgbWlzc2luZyBmcm9tIC5leHBv
-cnRlZF9zeW1ib2xzLkJhc2UuIEFkZGluZyBpdCByZXNvbHZlcyB0aGUgaXNzdWUgZm9yIGRtX3Ry
-ZWVfbm9kZV9zaXplX2NoYW5nZWRAQmFzZSwgYnV0IHRoaXMgcmVzdWx0cyBpbiB0aGUgYWJzZW5j
-ZSBvZiBkbV90cmVlX25vZGVfc2l6ZV9jaGFuZ2VkQEBETV8xXzAyXzExMC48L3NwYW4+PC9wPjxw
-IHN0eWxlPSJtYXJnaW46IDBweDsgYm9yZGVyOiAwcHg7IHBhZGRpbmc6IDBweDsgZm9udC1mYW1p
-bHk6ILfCy85fR0IyMzEyOyBmb250LXNpemU6IG1lZGl1bTsiPjxzcGFuIHN0eWxlPSJmb250LWZh
-bWlseTogJnF1b3Q7TWljcm9zb2Z0IFlhSGVpJnF1b3Q7LCAmcXVvdDtIZWx2ZXRpY2EgTmV1ZSZx
-dW90OywgJnF1b3Q7UGluZ0ZhbmcgU0MmcXVvdDssIHNhbnMtc2VyaWY7Ij5UaGVyZWZvcmUsIGlu
-IHRoZSBzb3VyY2UgY29kZSwgdGhlIGRlZmF1bHQgaW1wbGVtZW50YXRpb24gbmVlZHMgdG8gYmUg
-ZXhwbGljaXRseSBib3VuZCB0byB0aGUgc3ltYm9sIGRtX3RyZWVfbm9kZV9zaXplX2NoYW5nZWRA
-QERNXzFfMDJfMTEwLiZuYnNwOzwvc3Bhbj48L3A+PHAgc3R5bGU9Im1hcmdpbjogMHB4OyBib3Jk
-ZXI6IDBweDsgcGFkZGluZzogMHB4OyBmb250LWZhbWlseTogt8LLzl9HQjIzMTI7IGZvbnQtc2l6
-ZTogbWVkaXVtOyI+PHNwYW4gc3R5bGU9ImZvbnQtZmFtaWx5OiAmcXVvdDtNaWNyb3NvZnQgWWFI
-ZWkmcXVvdDssICZxdW90O0hlbHZldGljYSBOZXVlJnF1b3Q7LCAmcXVvdDtQaW5nRmFuZyBTQyZx
-dW90Oywgc2Fucy1zZXJpZjsiPkZyb20gbXkgZXhwZXJpZW5jZSwgd2hlbiBhIHN5bWJvbCBoYXMg
-bXVsdGlwbGUgdmVyc2lvbnMsIGl0IGlzIGJlc3QgdG8gZXhwbGljaXRseSBiaW5kIGVhY2ggdmVy
-c2lvbidzIGltcGxlbWVudGF0aW9uIHRvIGl0cyBjb3JyZXNwb25kaW5nIHN5bWJvbCB2ZXJzaW9u
-LiBUaGlzIGFwcHJvYWNoIGVmZmVjdGl2ZWx5IGF2b2lkcyBzaW1pbGFyIGlzc3Vlcy48L3NwYW4+
-PC9wPjxwIHN0eWxlPSJtYXJnaW46IDBweDsgYm9yZGVyOiAwcHg7IHBhZGRpbmc6IDBweDsgZm9u
-dC1mYW1pbHk6ILfCy85fR0IyMzEyOyBmb250LXNpemU6IG1lZGl1bTsiPjxzcGFuIHN0eWxlPSJm
-b250LWZhbWlseTogJnF1b3Q7TWljcm9zb2Z0IFlhSGVpJnF1b3Q7LCAmcXVvdDtIZWx2ZXRpY2Eg
-TmV1ZSZxdW90OywgJnF1b3Q7UGluZ0ZhbmcgU0MmcXVvdDssIHNhbnMtc2VyaWY7Ij4mbmJzcDs8
-L3NwYW4+PC9wPjxwIHN0eWxlPSJtYXJnaW46IDBweDsgYm9yZGVyOiAwcHg7IHBhZGRpbmc6IDBw
-eDsgZm9udC1mYW1pbHk6ILfCy85fR0IyMzEyOyBmb250LXNpemU6IG1lZGl1bTsiPjxzcGFuIHN0
-eWxlPSJmb250LWZhbWlseTogJnF1b3Q7TWljcm9zb2Z0IFlhSGVpJnF1b3Q7LCAmcXVvdDtIZWx2
-ZXRpY2EgTmV1ZSZxdW90OywgJnF1b3Q7UGluZ0ZhbmcgU0MmcXVvdDssIHNhbnMtc2VyaWY7Ij5U
-byBhZGRyZXNzIHRoZXNlIHByb2JsZW1zLCBJIGhhdmUgY3JlYXRlZCBhIHBhdGNoOiBGaXgtdGhl
-LWlzc3VlLW9mLW1pc3Npbmctc3ltYm9scy1pbi1saWJkZXZtYXBwZXIucGF0Y2ggKFNlZSB0aGUg
-YXR0YWNobWVudCkuPC9zcGFuPjwvcD48cCBzdHlsZT0ibWFyZ2luOiAwcHg7IGJvcmRlcjogMHB4
-OyBwYWRkaW5nOiAwcHg7IGZvbnQtZmFtaWx5OiC3wsvOX0dCMjMxMjsgZm9udC1zaXplOiBtZWRp
-dW07Ij48c3BhbiBzdHlsZT0iZm9udC1mYW1pbHk6ICZxdW90O01pY3Jvc29mdCBZYUhlaSZxdW90
-OywgJnF1b3Q7SGVsdmV0aWNhIE5ldWUmcXVvdDssICZxdW90O1BpbmdGYW5nIFNDJnF1b3Q7LCBz
-YW5zLXNlcmlmOyI+SSBob3BlIHRoaXMgc29sdXRpb24gaGVscHMgcmVzb2x2ZSB0aGUgaXNzdWUu
-IE9mIGNvdXJzZSwgaWYgeW91IGhhdmUgYW55IG90aGVyIGlkZWFzIG9yIHN1Z2dlc3Rpb25zIGZv
-ciBpbXByb3ZlbWVudCwgZmVlbCBmcmVlIHRvIGRpc2N1c3MgdGhlbSB3aXRoIG1lIGF0IGFueSB0
-aW1lITwvc3Bhbj48L3A+PHAgc3R5bGU9Im1hcmdpbjogMHB4OyBib3JkZXI6IDBweDsgcGFkZGlu
-ZzogMHB4OyBmb250LWZhbWlseTogt8LLzl9HQjIzMTI7IGZvbnQtc2l6ZTogbWVkaXVtOyI+PHNw
-YW4gc3R5bGU9ImZvbnQtZmFtaWx5OiAmcXVvdDtNaWNyb3NvZnQgWWFIZWkmcXVvdDssICZxdW90
-O0hlbHZldGljYSBOZXVlJnF1b3Q7LCAmcXVvdDtQaW5nRmFuZyBTQyZxdW90Oywgc2Fucy1zZXJp
-ZjsiPiZuYnNwOzwvc3Bhbj48L3A+PHAgc3R5bGU9Im1hcmdpbjogMHB4OyBib3JkZXI6IDBweDsg
-cGFkZGluZzogMHB4OyBmb250LWZhbWlseTogt8LLzl9HQjIzMTI7IGZvbnQtc2l6ZTogbWVkaXVt
-OyI+PHNwYW4gc3R5bGU9ImZvbnQtZmFtaWx5OiAmcXVvdDtNaWNyb3NvZnQgWWFIZWkmcXVvdDss
-ICZxdW90O0hlbHZldGljYSBOZXVlJnF1b3Q7LCAmcXVvdDtQaW5nRmFuZyBTQyZxdW90Oywgc2Fu
-cy1zZXJpZjsiPiZuYnNwOzwvc3Bhbj48L3A+PHAgc3R5bGU9Im1hcmdpbjogMHB4OyBib3JkZXI6
-IDBweDsgcGFkZGluZzogMHB4OyBmb250LWZhbWlseTogt8LLzl9HQjIzMTI7IGZvbnQtc2l6ZTog
-bWVkaXVtOyI+PHNwYW4gc3R5bGU9ImZvbnQtZmFtaWx5OiAmcXVvdDtNaWNyb3NvZnQgWWFIZWkm
-cXVvdDssICZxdW90O0hlbHZldGljYSBOZXVlJnF1b3Q7LCAmcXVvdDtQaW5nRmFuZyBTQyZxdW90
-Oywgc2Fucy1zZXJpZjsiPi0tPC9zcGFuPjwvcD48cCBzdHlsZT0ibWFyZ2luOiAwcHg7IGJvcmRl
-cjogMHB4OyBwYWRkaW5nOiAwcHg7IGZvbnQtZmFtaWx5OiC3wsvOX0dCMjMxMjsgZm9udC1zaXpl
-OiBtZWRpdW07Ij48c3BhbiBzdHlsZT0iZm9udC1mYW1pbHk6ICZxdW90O01pY3Jvc29mdCBZYUhl
-aSZxdW90OywgJnF1b3Q7SGVsdmV0aWNhIE5ldWUmcXVvdDssICZxdW90O1BpbmdGYW5nIFNDJnF1
-b3Q7LCBzYW5zLXNlcmlmOyI+QmVzdCByZWdhcmRzITwvc3Bhbj48L3A+PHAgc3R5bGU9Im1hcmdp
-bjogMHB4OyBib3JkZXI6IDBweDsgcGFkZGluZzogMHB4OyBmb250LWZhbWlseTogt8LLzl9HQjIz
-MTI7IGZvbnQtc2l6ZTogbWVkaXVtOyI+PHNwYW4gc3R5bGU9ImZvbnQtZmFtaWx5OiAmcXVvdDtN
-aWNyb3NvZnQgWWFIZWkmcXVvdDssICZxdW90O0hlbHZldGljYSBOZXVlJnF1b3Q7LCAmcXVvdDtQ
-aW5nRmFuZyBTQyZxdW90Oywgc2Fucy1zZXJpZjsiPkppYW5xaSBaZW5nPC9zcGFuPjwvcD48L2Rp
-dj48aW1nIHN0eWxlPSJ3aWR0aDoxcHg7aGVpZ2h0OjFweCIgc3JjPSJodHRwczovL2NvdW50Lm1h
-aWwuMTYzLmNvbS9iZWFjb24vd2VibWFpbC5naWY/dHlwZT13ZWJtYWlsX21haWx0cmFjZSZhbXA7
-Z3VpZD1wcmVfMzNmY2U0YWU1NTEyMjI4NmVjNDAwNzM1YjViZjBhN2UiPg==
-------=_Part_104207_825315504.1739951338504--
+(As lvm2 is using it's internal copy these days - so there cannot be a problem 
+with linking this symbol within lvm2.)
 
-------=_Part_104205_2131083400.1739951338504
-Content-Type: application/octet-stream; 
-	name=Fix-the-issue-of-missing-symbols-in-libdevmapper.patch
-Content-Transfer-Encoding: base64
-Content-Disposition: attachment;
- filename="Fix-the-issue-of-missing-symbols-in-libdevmapper.patch"
+Regards
 
-RnJvbSAxMGZmY2JmOWIwMGE3OTQzZTBhZjg1ZDA0MzBmNWE1ODdjMTFhM2MyIE1vbiBTZXAgMTcg
-MDA6MDA6MDAgMjAwMQpGcm9tOiBKaWFucWkgWmVuZyA8emVuZ2ppYW5xaUBreWxpbm9zLmNuPgpE
-YXRlOiBXZWQsIDE5IEZlYiAyMDI1IDE0OjQ5OjMzICswODAwClN1YmplY3Q6IFtQQVRDSF0gRml4
-IHRoZSBpc3N1ZSBvZiBtaXNzaW5nIHN5bWJvbHMgaW4gbGliZGV2bWFwcGVyLnNvLjEuMDIKCkFk
-ZCB0aGUgbWlzc2luZyBzeW1ib2xzIGRtX2JpdHNldF9wYXJzZV9saXN0QEBETV8xXzAyXzEzOAph
-bmQgZG1fdHJlZV9ub2RlX3NpemVfY2hhbmdlZEBCYXNlCnRvIHRoZSBkeW5hbWljIGxpYnJhcnkg
-bGliZGV2bWFwcGVyLnNvLjEuMDIuCgpTaWduZWQtb2ZmLWJ5OiBKaWFucWkgWmVuZyA8emVuZ2pp
-YW5xaUBreWxpbm9zLmNuPgotLS0KIGxpYmRtLy5leHBvcnRlZF9zeW1ib2xzLkJhc2UgfCAxICsK
-IGxpYmRtL2RhdGFzdHJ1Y3QvYml0c2V0LmMgICAgfCA0ICsrLS0KIGxpYmRtL2xpYmRtLWRlcHRy
-ZWUuYyAgICAgICAgfCAzICsrLQogMyBmaWxlcyBjaGFuZ2VkLCA1IGluc2VydGlvbnMoKyksIDMg
-ZGVsZXRpb25zKC0pCgpkaWZmIC0tZ2l0IGEvbGliZG0vLmV4cG9ydGVkX3N5bWJvbHMuQmFzZSBi
-L2xpYmRtLy5leHBvcnRlZF9zeW1ib2xzLkJhc2UKaW5kZXggZjYwMThlYzg0Li41ZDE2MWY5YmYg
-MTAwNjQ0Ci0tLSBhL2xpYmRtLy5leHBvcnRlZF9zeW1ib2xzLkJhc2UKKysrIGIvbGliZG0vLmV4
-cG9ydGVkX3N5bWJvbHMuQmFzZQpAQCAtMjY3LDYgKzI2Nyw3IEBAIGRtX3RyZWVfbm9kZV9zZXRf
-dGhpbl9leHRlcm5hbF9vcmlnaW4KIGRtX3RyZWVfbm9kZV9zZXRfdGhpbl9wb29sX2Rpc2NhcmQK
-IGRtX3RyZWVfbm9kZV9zZXRfdGhpbl9wb29sX2Vycm9yX2lmX25vX3NwYWNlCiBkbV90cmVlX25v
-ZGVfc2V0X3VkZXZfZmxhZ3MKK2RtX3RyZWVfbm9kZV9zaXplX2NoYW5nZWQKIGRtX3RyZWVfcHJl
-bG9hZF9jaGlsZHJlbgogZG1fdHJlZV9yZXRyeV9yZW1vdmUKIGRtX3RyZWVfc2V0X2Nvb2tpZQpk
-aWZmIC0tZ2l0IGEvbGliZG0vZGF0YXN0cnVjdC9iaXRzZXQuYyBiL2xpYmRtL2RhdGFzdHJ1Y3Qv
-Yml0c2V0LmMKaW5kZXggZTk3MWM2NzkzLi40OTMzOTUwZGMgMTAwNjQ0Ci0tLSBhL2xpYmRtL2Rh
-dGFzdHJ1Y3QvYml0c2V0LmMKKysrIGIvbGliZG0vZGF0YXN0cnVjdC9iaXRzZXQuYwpAQCAtMTQ1
-LDggKzE0NSw4IEBAIGludCBkbV9iaXRfZ2V0X2xhc3QoZG1fYml0c2V0X3QgYnMpCiAvKgogICog
-QmFzZWQgb24gdGhlIExpbnV4IGtlcm5lbCBfX2JpdG1hcF9wYXJzZWxpc3QgZnJvbSBsaWIvYml0
-bWFwLmMKICAqLwotZG1fYml0c2V0X3QgZG1fYml0c2V0X3BhcnNlX2xpc3QoY29uc3QgY2hhciAq
-c3RyLCBzdHJ1Y3QgZG1fcG9vbCAqbWVtLAotCQkJCSBzaXplX3QgbWluX251bV9iaXRzKQorRE1f
-RVhQT1JUX05FV19TWU1CT0woZG1fYml0c2V0X3QsIGRtX2JpdHNldF9wYXJzZV9saXN0LCAxXzAy
-XzEzOCkKKwkoY29uc3QgY2hhciAqc3RyLCBzdHJ1Y3QgZG1fcG9vbCAqbWVtLCBzaXplX3QgbWlu
-X251bV9iaXRzKQogewogCXVuc2lnbmVkIGEsIGI7CiAJaW50IGMsIG9sZF9jLCB0b3RhbGRpZ2l0
-cywgbmRpZ2l0czsKZGlmZiAtLWdpdCBhL2xpYmRtL2xpYmRtLWRlcHRyZWUuYyBiL2xpYmRtL2xp
-YmRtLWRlcHRyZWUuYwppbmRleCAzNGM4ZmNmMTAuLjgzYWExNzk1ZiAxMDA2NDQKLS0tIGEvbGli
-ZG0vbGliZG0tZGVwdHJlZS5jCisrKyBiL2xpYmRtL2xpYmRtLWRlcHRyZWUuYwpAQCAtNjU3LDcg
-KzY1Nyw4IEBAIHZvaWQgKmRtX3RyZWVfbm9kZV9nZXRfY29udGV4dChjb25zdCBzdHJ1Y3QgZG1f
-dHJlZV9ub2RlICpub2RlKQogCXJldHVybiBub2RlLT5jb250ZXh0OwogfQogCi1pbnQgZG1fdHJl
-ZV9ub2RlX3NpemVfY2hhbmdlZChjb25zdCBzdHJ1Y3QgZG1fdHJlZV9ub2RlICpkbm9kZSkKK0RN
-X0VYUE9SVF9ORVdfU1lNQk9MKGludCwgZG1fdHJlZV9ub2RlX3NpemVfY2hhbmdlZCwgMV8wMl8x
-MTApCisJKGNvbnN0IHN0cnVjdCBkbV90cmVlX25vZGUgKmRub2RlKQogewogCXJldHVybiBkbm9k
-ZS0+cHJvcHMuc2l6ZV9jaGFuZ2VkOwogfQotLSAKMi40My41Cgo=
-------=_Part_104205_2131083400.1739951338504--
+Zdenek
 
