@@ -1,126 +1,124 @@
-Received: from smtp-out1-06.simnet.is (smtp-out1-06.simnet.is [194.105.231.13])
+Received: from smtp-out1-03.simnet.is (smtp-out1-03.simnet.is [194.105.232.31])
 	(using TLSv1.2 with cipher ECDHE-RSA-AES256-GCM-SHA384 (256/256 bits))
 	(No client certificate requested)
-	by smtp.subspace.kernel.org (Postfix) with ESMTPS id DF81B16F0FE
-	for <lvm-devel@lists.linux.dev>; Sat, 22 Feb 2025 11:12:53 +0000 (UTC)
-Authentication-Results: smtp.subspace.kernel.org; arc=none smtp.client-ip=194.105.231.13
+	by smtp.subspace.kernel.org (Postfix) with ESMTPS id 4FD0118D
+	for <lvm-devel@lists.linux.dev>; Sun, 23 Feb 2025 00:46:38 +0000 (UTC)
+Authentication-Results: smtp.subspace.kernel.org; arc=none smtp.client-ip=194.105.232.31
 ARC-Seal:i=1; a=rsa-sha256; d=subspace.kernel.org; s=arc-20240116;
-	t=1740222779; cv=none; b=B34C4k54bZ3kqDbaI6Whcp5OG3AdvBol6xi/0dCtXjzzWkDGp98K+yxXbnWhzFzAziOZvftpFCs1vAly7PCIrF/Iws/0oDEQYeopSP5gLKFx67KcE2MCxUKsyyzDwKutRbKY5qsKY0e0p6C6pScSvTc0IieDXP0Lb1kQEx0VKyQ=
+	t=1740271603; cv=none; b=Ncpb4b7z8TQgX/WRsi07tbFmYQBF0hbxep7Hx3jN1uVaMFBI20aKFOQ824Fov/ovWpKE59jseqmn4XyK54mEDG/PMkSmicfvOiJ/hGIjS3lKvpkk32WaCUTW8XyNQeOkNwgoz+VeTEe0DP4F/4V728cXEPjDD+OxR40/1qEbcSA=
 ARC-Message-Signature:i=1; a=rsa-sha256; d=subspace.kernel.org;
-	s=arc-20240116; t=1740222779; c=relaxed/simple;
-	bh=mOHcMZgTjPMFsX0G8q1DchBw8SO3GHjG0hT1ulPFc3c=;
+	s=arc-20240116; t=1740271603; c=relaxed/simple;
+	bh=Sj1rDm/E71OULLDnVP9mmIzDcQLY/ys9xJGhyji5/F4=;
 	h=Date:From:To:Cc:Subject:Message-ID:MIME-Version:Content-Type:
-	 Content-Disposition; b=X8YU6vSEUjBPPDD9EGRSUNxEnqrBfHXjVk5Dli5+TKXMslIPU4+hoZ7Zkcn9CthocsWgCsawuw9FuHKJmcVToWQ8Uecy4DnRBIxpzDRjzFrlOTY6/aiymPERwm6D8BGic1PjS9q9vvG/NIZ0w4SPJdfhYw9JBt+JwlNRaeIi+jo=
-ARC-Authentication-Results:i=1; smtp.subspace.kernel.org; dmarc=pass (p=none dis=none) header.from=simnet.is; spf=pass smtp.mailfrom=simnet.is; dkim=pass (2048-bit key) header.d=simnet.is header.i=@simnet.is header.b=ZcrT6rpU; arc=none smtp.client-ip=194.105.231.13
+	 Content-Disposition; b=gJtDfdMo6zOg0K3N2rzKiEUm7nST7P3TsoFPf495SyJwbcU52tBggixz6j5soNhb3BQtjicS5l2FzFX0aSVhemSuElRFBrzLYsjiI/Q6kAOLZtDgyYkwEGkk+8SiKp1BgLkFzZqzotOKX0tRpiU4ug9b0TdMN8DFVOg+cyNATr4=
+ARC-Authentication-Results:i=1; smtp.subspace.kernel.org; dmarc=pass (p=none dis=none) header.from=simnet.is; spf=pass smtp.mailfrom=simnet.is; dkim=pass (2048-bit key) header.d=simnet.is header.i=@simnet.is header.b=OVDuODUE; arc=none smtp.client-ip=194.105.232.31
 Authentication-Results: smtp.subspace.kernel.org; dmarc=pass (p=none dis=none) header.from=simnet.is
 Authentication-Results: smtp.subspace.kernel.org; spf=pass smtp.mailfrom=simnet.is
 Authentication-Results: smtp.subspace.kernel.org;
-	dkim=pass (2048-bit key) header.d=simnet.is header.i=@simnet.is header.b="ZcrT6rpU"
+	dkim=pass (2048-bit key) header.d=simnet.is header.i=@simnet.is header.b="OVDuODUE"
 DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed;
   d=simnet.is; i=@simnet.is; q=dns/txt; s=sel1;
-  t=1740222774; x=1771758774;
+  t=1740271599; x=1771807599;
   h=date:from:to:cc:subject:message-id:mime-version;
-  bh=FZKPCy2MkaNzh6mtKOf7k7r1emcMIhBrFHPS0D5ixos=;
-  b=ZcrT6rpUxGxHjcEYCTfPDE0j/wgyTNR0PNx9KaoWFpK/NhvVY57BN4yp
-   /5mmrQ6RIo/0iQCWtYXCC4xFOv8s/kXZZLG4e8AhSDBQ+TpU5cIqVvtvQ
-   lxxsWfYzUf8MTfDPctm1McyfKx6R1bIS47zKaItHGEDnqTEGU4+QmQLt1
-   Doz+I3AiV7WhN0cScXs13rtP6m/S5vQ9+nIFcLLpa7CVCvehZV2tDaRAQ
-   5AD4MnH7Y4wwtpHNypOmN9Q/a98X71J9qmYOHaSnQF6KF4w3e13kylisE
-   g4wz40d4j6681GsSqXEG+ys0raAmfEmhMhqsubb8rfxqlGaY2iowBQr1l
+  bh=c734S4XxM7EKy1utff6AF7xMmVTQhDtezCrSzhOWqPU=;
+  b=OVDuODUEiBYIB3Qaf2JmDjXtYy/auOUEPQZj/GKKgbttw8yHtbX9P0Rs
+   Z88iM9bFacSlWUBfN9Rwbr4Tf7xekSc9JWUVBReGiwl6kDc/FaeKyMN9y
+   /29xeFtV8/hFGFLY12ElU3yB6dV44oJbwjfgU5Zcdzd3Js4rbtIPdJJCd
+   ZNOQlW4K4kTSK6ZC0I6JD7/p7CZLykq06n9S8argInnTiL307EBxydTms
+   lMoBxPPX2dtDxhVygJiwxGRjPcFXhpAgRD2o6JK6kAEplDVoF0UUnkCBw
+   VQeuLvAQ6xR4aG24ZsKkCNm8jg4jnoNKnO4uEm7nsASh3ELRVQQAotvCc
    A==;
-X-CSE-ConnectionGUID: nraAvAJ7Twi+RQJ6gsDmOw==
-X-CSE-MsgGUID: cSQbiN+TSGiT53BFsZPU4w==
-Authentication-Results: smtp-out-06.simnet.is; dkim=none (message not signed) header.i=none
+X-CSE-ConnectionGUID: VhrHaBaDR3S4G+qQmMqe4g==
+X-CSE-MsgGUID: zqvCG7/CSYGnlBVcm1h0Ww==
+Authentication-Results: smtp-out-03.simnet.is; dkim=none (message not signed) header.i=none
 X-SBRS: 3.3
-X-IPAS-Result: =?us-ascii?q?A2FVAAC5rLlnhVjoacJaGgEBAQEBAQEBAQEDAQEBARIBA?=
- =?us-ascii?q?QEBAgIBAQEBQIFBAwEBAQELAYIbKH2BZIgljiGBFpA0jE0UgXIHAQEBDzEPB?=
- =?us-ascii?q?AQBAQSBU4MwixIoNgcOAQIEAQEBAQMCAwEBAQEBAQEBAQEBCwEBBgEBAQEBA?=
- =?us-ascii?q?QYHAhABAQEBQA47hTVGDYUsLIErAQxSLXyDKQGCZK4lgQEzgQGDHNsYgV4Qg?=
- =?us-ascii?q?UgBhWuCYwGFa4R3PAaCDYEVMgOBBm1KB2+EBiMBRYYYBIIYF4FAggJegQyBb?=
- =?us-ascii?q?IRlVII5gReBNh0cL0aBDlGBLIFWgniBJCASg1+CWyOJOkiBIQNZLAFVEw0KC?=
- =?us-ascii?q?wcFgXEDNQwLLhUygRRDNzeCDmlJOgINAjWCHnyCK4JbgXuEQ4RHhVSCEYs3g?=
- =?us-ascii?q?yQdNgoDCxgNSBEsNxQbRG4HoAk9gzcJAQkmDzMBARUXBAw3BxMBCjZDIwoMB?=
- =?us-ascii?q?wMwAgQECwUYASETCwsykj4mATGPWIFEgyqJJZNTgT6EJYZcgzGCC5VKMyKDY?=
- =?us-ascii?q?YFXizCGOgw6iwiHQ5h9gligbRoCGRk3hGaBbgqCBSwHGggwO4JnCUkZD44HI?=
- =?us-ascii?q?wMWgQwBCIcgxEZ4PAIHCwEBAwmGS4kvKwGBUwEB?=
-IronPort-PHdr: A9a23:EU2JrRGi5VjnN52bPP43251Gfg0Y04WdBeZ0woEil6oLdbm/usy8e
- lfe4PNgkBnIRtaT5/FFjr/QtKbtESwF7I2auX8POJpLS1ceiMoQkgBhSM6IAEH2NrjrOio9G
- skqaQ==
-IronPort-Data: A9a23:HK5iL64qnHlpVgNlVR65hQxRtL/AchMFZxGqfqrLsTDasI4TYxWz/
- BJMATLpZ67UfDe3OcciNc7jsQ9Gp57leuUTQAVpr3hhRSsRp5ebWo7II0v6Y3PId8afEk4+4
- Z5AZoGdfZk9Ry7S+k38aua78SQt2KvQGLTwULbJZXl6HlFuRk/N5f4Ed8sR2+aE1vDjXF7X5
- rse2vHiBWNJstIM3gg856eYpQ9ypLKi/j8ZsFJWiZtj51OAmSEbBc8Se//hI3CkToQOFLHkG
- +udkuvppTnS8059VIqon7ylK0EDH+SIYFLS0idaAfL/3UUdqidogvtmZZLwBasvZxChxridn
- /0U68TsF2/FR5HxpdjxOvUg/0tWMqBA9aXOJT61rMOIp6GtWyCwnP9nXBo9MN0V9ut+Xz9Hq
- PJGIjpdNkHTirO7nLzhFeMz1s8tc5CyY9lF5Sw+lT2EXPgrHsGdTvmSuY5W129YaqyiZRr7T
- 5NxhW1HNUWaOXWjQ2sqNa/SvNtEp1GgemIFoQ+frKRm7TOPkwIr27HmaoeEJtKHSJpYlxvE9
- kvLrj/zav04HIXEkGLaqBpApQNucQfTAt96+GiQr6Yy6LGr7jVNTkVQDR3j/KXRZneWA7p3M
- 1YT9jclsZ88/UmqSsiVdxCjqRZohDZFMzZrO7N8sVrlJpb8uV7DWzBeFGQZMrTKiedvLdAU/
- g7Y9z/WLWQHXI29ERq16rqSpDWuDikZRUdqTTMEVwYM/+74q4g1iB/VJv47eEJipoSocd1Y6
- 2niQBkW393/v+ZSv0mI1QyvbwaXm3T8ZlVdCjM78Y6SxlgRiIaNP+RE4LVAhBpKBN7xolKp5
- BDolyUChQyn4F7keCGlGY0w8L+VC/mtNifVqEBGPcYd6DXuwUeBI49LzDRZOxI8WioEUWeBj
- E77pwJK+NpBPX6yd6hncsfpUYI0zLP8U9X+PhzWRoMfPt4oLFLBpno0Ix7At4zuuBFEfaUXM
- 5izasepC3sGT6V8pNazb7xNiuN3n3lvrY/VbZvA9h6m9/miX1GUdepeGnWVXNgEsLzR9W059
- P4Ea5vblEQDOAHkWQHM7IQWLEwiJ2U0Htb6psZWf+jFJRBpcEklFfqUzb4/dohNm6VOivyO+
- nC7R18exFfh7UArMi2Ua2t/LaHuWI5lqmIqeHR2e0ipwGRlYJ3HALojm4Ufe6Mu3fJK76FIU
- PhGQfyiXPtUZjHg5GFIBXXil7BKeBOujAOIGiOqZjkjYpJtLzAlHPe4L2MDEwFTVkKKWdsCn
- lG26u/Mabs4LzmO4e7IaemzikGwuGAHn/JjGhOSZMdSY1mq8ZMCx83NYh0ffZhkxfbrn2ryO
- +Oq7fEw/7alT2gdq4ChuEx8h931e9aS52IDd4Uh0Z64NDPB4k2oypJaXeCDcFj1DTyooPz8P
- 7oMk6qkaZXreWqmVaIhS96HKopjvrPSS0NylFs0dJk2Rw33Ue05fBFqI+Ee6vcWrlOmhedGc
- hnTqogFaOnh1DLNFV8VLUIlYIy+OQI8x1HvAQAOCByivkdfpePbOW0MZEPkoHIGc9NI3HYNm
- rxJVDg+sFfn0kJC3xfvpnw8yllg2VRZC/587MpDWdKz4ufpo3kbCaHh5ubNyMnnQ71x3oMCf
- ld4WIKqa2xg+3f/
-IronPort-HdrOrdr: A9a23:ECXGwqqtoDKPicJtdVQnD7QaV5r1eYIsimQD101hICF9WOOyso
- SHkfkB2QXv4QxhIE3I+OrvBEDkex+yyXcb2+ks1NuZLWvbURKTXftfBNLZskDd8k7Fl9K1t5
- 0QCJSWYeeYZTVHZK3BkWqF+rgbsby6GK3Dv5a7859gJzsaEp2J5W1Ce2Cm+pMcfmJ77apVLv
- ChDz181l2dRUg=
-X-Talos-CUID: =?us-ascii?q?9a23=3AFl3BXGv13EHdZ3MOcGwWUCQ06IsjaHT00l7yfHO?=
- =?us-ascii?q?nCCVTcZ/LRkS8/YR7xp8=3D?=
-X-Talos-MUID: =?us-ascii?q?9a23=3AOQ8cbg7vrCg5IWADFgVriJOfxoxj2J2kCWZOra4?=
- =?us-ascii?q?puvXZbgZeIAWlsWioF9o=3D?=
+X-IPAS-Result: =?us-ascii?q?A2EJAAApbbpnhVjoacJaGwEBAgIBAQUBARQBAQMDAQFBg?=
+ =?us-ascii?q?UAFAQEMAYJDfYFkiCWOIZFKjE0UgXIHAQEBDzETBAEBBIUDixIoNQgOAQIEA?=
+ =?us-ascii?q?QEBAQMCAwEBAQEBAQEBAQEBCwEBBgEBAQEBAQYHAhABAQEBQA47hTVGDYUsL?=
+ =?us-ascii?q?IErXy18gykBgmSuEoE0gQGDHNsYgV4QgUgBhWuCYwGFa4R3PAaCDYFHA4EGb?=
+ =?us-ascii?q?UoHb4QGI0aGGASCGBeBQIICgWqBUByEZVSFIxwvRoFfhx4gkB9IgSEDWSwBV?=
+ =?us-ascii?q?RMNCgsHBYFxAzUMCy4VMoEUQzc3gg5pSToCDQI1gh58giuCW4F5hEOERoVSg?=
+ =?us-ascii?q?hGLOYMZHTYKAwsYDUgRLDcUG0RuB6AAPYM2CT8zAQEsBAxRAQc5Qy0TAzAGB?=
+ =?us-ascii?q?AsYBQENPQYpkkEmMo9YgUSMT5NTgT6EJYZcgzGCC5VKMyKDYYFXkWoMOpJLm?=
+ =?us-ascii?q?H2CWKEiGTcrhDuBaAGCFCwHGggwO4JnCUkZD44HIwMWiDXEa3g8AgcLAQEDC?=
+ =?us-ascii?q?ZFaAQE?=
+IronPort-PHdr: A9a23:QruekBOIYrPxpuP5mwkl6ncoWUAX0o4cXyYO74Y/zrVTbuH7pNL5P
+ UnZ6OkrjUSaFYnY6vcRje3QvuigXGEb+p+OvTgEd4AETB4Kj8ga3kQgDceJBFe9LavsaCo3d
+ Pk=
+IronPort-Data: A9a23:X22AX6NWongdMj3vrR0hkMFynXyQoLVcMsEvi/8bNLSZYAhShG1co
+ T9OB3fTeL2UNj+2P4gyK5O+xf41yceBzNNlGQpq/CoxFSoUpJrID4TFIhj9NHyYI5yfEklts
+ MhEMIKeIstoECKG9xn3bem/8ics2K/YSOusBrWVZi4ZqWOIMMsEoUsLd7kR0tc00LBVej+wh
+ O8eyiGn1DWN1ztvLmsI8OTT7h9usvqaVFgw5wBnNfxHtVWPxyJOUJsUdfrudSekGdQFRLThG
+ 76YkLrjoD6Br04kBo6rz7ukfBFbS+OObVSCgydYBvX+0kISqkTevkpD2N80MC+73B3Qx40ql
+ r2hzKCNdDvFV0G0dI41XBReHjt3OetM5bDcSZTUmZfPkEfPIyDnzqVjAEw/Y9MRp+gpC2ser
+ a1IJWEAMh7Z2OjpkLm1FbA12Z55c5S1ZI9C639tkmCHAKp+HcHNSP2iCbO0pNsVrpkm8aH2P
+ ptDM1KDFSj9XiCjGmv7Kbpllbn5iyf1LmEB9AvL/fM5vDDawlR73bG3bNHfd9DST+xYzx2Sz
+ o7k1z2iW0lFbrRz6tYkHlaE3LKncfbTAdpKfFGA3qc0xgXVnipLVUF+uWKT+ZGRklS5V89UN
+ 3sa8y8vqbla3EGwR7ERZTXhyJK/lkBaAoE4/9ESslnXl/KOuVzAXgDocxYYADAYnJ5nLdAV/
+ gfhc+PBXVRHrLCTQHSBwbaYxRvaETQVN2ILeRgfRgID5dT5yKlr5v4YZo8+eEIdpoSd9QDYm
+ 1hmngBn71kgpZJjO5GAwLzyq2nESq4l4eICzl6/smqNtmuVbWM+DmCiwQCzAf1odO51QrQd1
+ ZStdgf3AO0mVPmweCKxrOolIrGzx/+vORHm2mUzMNo4zjGI4nP/ctUFiN1+DB8B3scsZz7yf
+ ArBuAZJ/phDLT7yN+lpYpmtTcUxpUTiPY20CraNNocIOMMrMl/XlM1tTRf4M2TFmkcEiqA6P
+ 5qHN8e3ZZofIf83l2ruHLhBuVMt7jIn20j8GtfQ9CWI1760WnWQELddD0TbO4jV64vf/FWEr
+ IcDXyeQ8D1ETef7YzX/+5McNhYGIHI6DJawrNZYHsaHPA8jFGw/Bvv5xbI6Z5cjm6VTi/eO8
+ nyjMnK003LhhGbbbBeLb2h5b6P+GM4l62w6JjBqPE3AN2UfjZiH0qcFV5IddJUdr9c/4r1td
+ vwgYsjcDaEaItjYwAg1YZ74pY1kUR2kgwOSIiaoCATTmbY8FmQlHfe5JmPSGDkyM8ahiScpi
+ 5ybvj43rLIdRh9+SdTXbeq1yEOg+CBH3vxzRFeOI8I7lKTQHGpCdXWZYhwfepBkxfD/Kt2yj
+ Vn+7fAw/rClnmPN2IOV7Z1oVq/weweEImJUHnPA8ZG9PjTA82yozOdoCbnUJWmDDjytpP76P
+ I25Ks0Q1tVaxD6mVKIhSt5WIV4WvYS/z1On5l04RyuSMTxH9JsxfiPdtSWwikG97uQF6VrpC
+ x7nFihyPLSNMYvlHjYsyPkNM4y+OQUvsmCKt5wdeRymjAcpp+DveRsJYHGxZNl1d+Ad3HUNm
+ rx54JZ+Bs3WokZCD+tqeQgNqT7cdCBeDf953nzYaaey4jcWJph5ScS0IkfLDFunMr2g7mFCz
+ ueouZf/
+IronPort-HdrOrdr: A9a23:EE9Xmq1DuMJ+l31SOj/gigqjBLkkLtp133Aq2lEZdPWaSL37qy
+ mLpoVj6faUskd2ZJhOo7G90cW7IU80lqQFhrX5X43SODUO0VHAROoJgOeMrQEIcBeOk9K1u5
+ 0QEJSWcOeAdWRHsQ==
+X-Talos-CUID: =?us-ascii?q?9a23=3AMN7ZAmmrFrJUQtkjUeQExCD4FDvXOUPd1lfZCUa?=
+ =?us-ascii?q?UMz1SFJLWUGaV3bppz8U7zg=3D=3D?=
+X-Talos-MUID: =?us-ascii?q?9a23=3AFa+dsQ74OJPhT19DtIHbon82xox6+rqFJx9Kuq4?=
+ =?us-ascii?q?3lM+AHxJ7Pm6d1AuoF9o=3D?=
 X-IronPort-Anti-Spam-Filtered: true
-X-IronPort-AV: E=Sophos;i="6.13,307,1732579200"; 
-   d="8'?diff'?bugs'?scan'208";a="38344119"
+X-IronPort-AV: E=Sophos;i="6.13,308,1732579200"; 
+   d="8'?diff'?bugs'?scan'208";a="38380374"
 Received: from vist-zimproxy-02.vist.is ([194.105.232.88])
-  by smtp-out-06.simnet.is with ESMTP/TLS/ECDHE-RSA-AES256-GCM-SHA384; 22 Feb 2025 11:11:41 +0000
+  by smtp-out-03.simnet.is with ESMTP/TLS/ECDHE-RSA-AES256-GCM-SHA384; 23 Feb 2025 00:45:27 +0000
 Received: from localhost (localhost [127.0.0.1])
-	by vist-zimproxy-02.vist.is (Postfix) with ESMTP id 18B1F4446310;
-	Sat, 22 Feb 2025 11:11:41 +0000 (GMT)
+	by vist-zimproxy-02.vist.is (Postfix) with ESMTP id 16F0644464B0;
+	Sun, 23 Feb 2025 00:45:27 +0000 (GMT)
 Received: from vist-zimproxy-02.vist.is ([127.0.0.1])
  by localhost (vist-zimproxy-02.vist.is [127.0.0.1]) (amavis, port 10032)
- with ESMTP id ZP-GCMp6oIoP; Sat, 22 Feb 2025 11:11:38 +0000 (GMT)
+ with ESMTP id 4NU4blXiPVLn; Sun, 23 Feb 2025 00:45:25 +0000 (GMT)
 Received: from localhost (localhost [127.0.0.1])
-	by vist-zimproxy-02.vist.is (Postfix) with ESMTP id B8C1C444632B;
-	Sat, 22 Feb 2025 11:11:38 +0000 (GMT)
+	by vist-zimproxy-02.vist.is (Postfix) with ESMTP id BCD4544464BA;
+	Sun, 23 Feb 2025 00:45:25 +0000 (GMT)
 Received: from vist-zimproxy-02.vist.is ([127.0.0.1])
  by localhost (vist-zimproxy-02.vist.is [127.0.0.1]) (amavis, port 10026)
- with ESMTP id nWyPUumQ7KWG; Sat, 22 Feb 2025 11:11:38 +0000 (GMT)
+ with ESMTP id o6ee-k1andZD; Sun, 23 Feb 2025 00:45:25 +0000 (GMT)
 Received: from kassi.invalid.is (85-220-33-163.dsl.dynamic.simnet.is [85.220.33.163])
-	by vist-zimproxy-02.vist.is (Postfix) with ESMTPS id 8CCA44446310;
-	Sat, 22 Feb 2025 11:11:38 +0000 (GMT)
+	by vist-zimproxy-02.vist.is (Postfix) with ESMTPS id 9319044464B0;
+	Sun, 23 Feb 2025 00:45:25 +0000 (GMT)
 Received: from bg by kassi.invalid.is with local (Exim 4.98)
 	(envelope-from <bg@kassi.invalid.is>)
-	id 1tlnQ1-00000000382-2ZGh;
-	Sat, 22 Feb 2025 11:11:37 +0000
-Date: Sat, 22 Feb 2025 11:11:37 +0000
+	id 1tm07Y-000000001Q9-2qOF;
+	Sun, 23 Feb 2025 00:45:24 +0000
+Date: Sun, 23 Feb 2025 00:45:24 +0000
 From: Bjarni Ingi Gislason <bjarniig@simnet.is>
 To: lvm-devel@lists.linux.dev
 Cc: Debian Bug Tracking System <submit@bugs.debian.org>
-Subject: dmsetup.8: Some remarks and a patch with editorial changes for this
+Subject: dmstats.8: Some remarks and a patch with editorial changes for this
  man page
-Message-ID: <174022250690.11933.16308959540537242873.reportbug@kassi.invalid.is>
+Message-ID: <174027127922.5406.10893049578142807374.reportbug@kassi.invalid.is>
 Precedence: bulk
 X-Mailing-List: lvm-devel@lists.linux.dev
 List-Id: <lvm-devel.lists.linux.dev>
 List-Subscribe: <mailto:lvm-devel+subscribe@lists.linux.dev>
 List-Unsubscribe: <mailto:lvm-devel+unsubscribe@lists.linux.dev>
 MIME-Version: 1.0
-Content-Type: multipart/mixed; boundary="pc6zmQobCfgffrNE"
+Content-Type: multipart/mixed; boundary="QptRmfnMJrtLjQnL"
 Content-Disposition: inline
 X-Mailer: reportbug 13.1.0
 
 
---pc6zmQobCfgffrNE
+--QptRmfnMJrtLjQnL
 Content-Type: text/plain; charset=us-ascii
 Content-Disposition: inline
 
@@ -144,33 +142,8 @@ test-[g|n]roff -mandoc -t -K utf8 -rF0 -rHY=0 -rCHECKSTYLE=10 -ww -z < "man page
 
    * What was the outcome of this action?
 
-Output from "test-groff  -mandoc -t -K utf8 -rF0 -rHY=0 -rCHECKSTYLE=10 -ww -z ":
-
-an.tmac:<stdin>:11: style: use of deprecated macro: .PD
-an.tmac:<stdin>:37: misuse, warning: .BR is for at least 2 arguments, got 1
-	Use macro '.B' for one argument or split argument.
-an.tmac:<stdin>:37: misuse, warning: .IR is for at least 2 arguments, got 1
-	Use macro '.I' for one argument or split argument.
-an.tmac:<stdin>:408: style: use of deprecated macro: .PD
-an.tmac:<stdin>:614: misuse, warning: .BR is for at least 2 arguments, got 1
-	Use macro '.B' for one argument or split argument.
-an.tmac:<stdin>:614: misuse, warning: .IR is for at least 2 arguments, got 1
-	Use macro '.I' for one argument or split argument.
-an.tmac:<stdin>:656: style: 1 leading space(s) on input line
-an.tmac:<stdin>:657: style: 1 leading space(s) on input line
-an.tmac:<stdin>:658: style: 1 leading space(s) on input line
-an.tmac:<stdin>:659: style: 1 leading space(s) on input line
-an.tmac:<stdin>:660: style: 1 leading space(s) on input line
-an.tmac:<stdin>:661: style: 1 leading space(s) on input line
-an.tmac:<stdin>:662: style: 1 leading space(s) on input line
-an.tmac:<stdin>:950: style: 1 leading space(s) on input line
-an.tmac:<stdin>:951: style: 1 leading space(s) on input line
-an.tmac:<stdin>:952: style: 1 leading space(s) on input line
-an.tmac:<stdin>:953: style: 1 leading space(s) on input line
-an.tmac:<stdin>:954: style: 1 leading space(s) on input line
-an.tmac:<stdin>:1062: style: use of deprecated macro: .PD
-an.tmac:<stdin>:1074: style: use of deprecated macro: .PD
-
+an.tmac:<stdin>:53: style: use of deprecated macro: .PD
+an.tmac:<stdin>:252: style: use of deprecated macro: .PD
 
    * What outcome did you expect instead?
 
@@ -203,45 +176,32 @@ dmsetup suggests no packages.
 
 -- no debconf information
 
---pc6zmQobCfgffrNE
+--QptRmfnMJrtLjQnL
 Content-Type: text/plain; charset=us-ascii
-Content-Disposition: attachment; filename="chk_man.err.dmsetup.8"
+Content-Disposition: attachment; filename="chk_man.err.dmstats.8"
 
-Input file is dmsetup.8
+file is dmstats.8
 
-Output from "mandoc -T lint  dmsetup.8": (shortened list)
+Output from "mandoc -T lint  dmstats.8": (shortened list)
 
-      1 input text line longer than 80 bytes: Each device is speci...
-      1 input text line longer than 80 bytes: Ensure \fI/dev/mappe...
-      1 input text line longer than 80 bytes: Ensure existing devi...
-      1 input text line longer than 80 bytes: If \fItable\fP or \f...
-      1 input text line longer than 80 bytes: Loads \fItable\fP or...
-      1 input text line longer than 80 bytes: Supports thin provis...
-      1 input text line longer than 80 bytes: The minor number of ...
-      1 input text line longer than 80 bytes: Use a backslash to e...
-      1 input text line longer than 80 bytes: Wake any processes t...
-      1 input text line longer than 80 bytes: based on the \fB\-\-...
-      1 input text line longer than 80 bytes: of the dmsetup proce...
-      2 input text line longer than 80 bytes: test-linear\-small,,...
-      1 input text line longer than 80 bytes: the \fB\-\-noflush\f...
-      1 input text line longer than 80 bytes: the command will try...
-      1 input text line longer than 80 bytes: to check this.)  If ...
-      1 skipping paragraph macro: br after sp
+      1 input text line longer than 80 bytes: Name             RgI...
+      3 input text line longer than 80 bytes: vg_hex\-lv_home     ...
+      5 skipping paragraph macro: br after br
 
 -.-.
 
-Output from "test-groff -mandoc -t -ww -z dmsetup.8": (shortened list)
+Output from "test-groff -mandoc -t -ww -z dmstats.8": (shortened list)
 
-     73 	Use macro '.B' for one argument or split argument.
-     41 	Use macro '.I' for one argument or split argument.
-     73 .BR is for at least 2 arguments, got 1
-     41 .IR is for at least 2 arguments, got 1
+     24 	Use macro '.B' for one argument or split argument.
+      9 	Use macro '.I' for one argument or split argument.
+     24 .BR is for at least 2 arguments, got 1
+      9 .IR is for at least 2 arguments, got 1
 
 -.-.
 
 Lines containing '\c' (' \c' does not make sense):
 
-423:.BI \%dmsetup\ info\ \-c\ \-\-noheadings\ \-j \ major\  \-m \ minor \c
+503:.B \-\-units \c
 
 -.-
 
@@ -249,39 +209,14 @@ Change '-' (\-) to '\(en' (en-dash) for a (numeric) range.
 GNU gnulib has recently (2023-06-18) updated its
 "build_aux/update-copyright" to recognize "\(en" in man pages.
 
-dmsetup.8:485:Character whitelist: 0\-9, A\-Z, a\-z, #+\-.:=@_. This whitelist is
-
--.-.
-
-Change (or include a "FIXME" paragraph about) misused SI (metric)
-numeric prefixes (or names) to the binary ones, like Ki (kibi), Mi
-(mebi), Gi (gibi), or Ti (tebi), if indicated.
-If the metric prefixes are correct, add the definitions or an
-explanation to avoid misunderstanding.
-
-947:will map the first chunk (16k) as follows:
+dmstats.8:470:expressed as a hyphen separated range, for example: '1\-10'.
 
 -.-.
 
 Add a (no-break, "\ " or "\~") space between a number and a unit,
 as these are not one entity.
 
-947:will map the first chunk (16k) as follows:
-
--.-.
-
-Use "\e" to print the escape character instead of "\\" (which gets
-interpreted in copy mode).
-
-487:with its hex value (two digits) prefixed by \\x.
-
--.-.
-
-Strings longer than 3/4 of a standard line length (80)
-Use "\:" to split the string at the end of an output line, for example a
-long URL (web address)
-
-1030 <name>,<uuid>,\:<minor>,<flags>,\:<table>\:[,<table>+]\:[;<name>,<uuid>,\:<minor>,<flags>,<table>\:[,<table>+]]
+1114:Create a 32M region 1G into device d0
 
 -.-.
 
@@ -291,9 +226,7 @@ Abbreviation points should be protected against being interpreted as
 an end of sentence, if they are not, and that independent of the
 current place on the line.
 
-581:Note: Same cookie should be used for same type of operations i.e. creation of
-767:Attempts to remove all device definitions i.e. reset the driver.  This also runs
-946:e.g. striped 2 32 /dev/hda1 0 /dev/hdb1 0
+511:Can also specify custom units e.g. \fB\-\-units\ 3M\fP.
 
 -.-.
 
@@ -333,161 +266,21 @@ N.B.
   Lines with only one (or two) space(s) between sentences could be split,
 so latter sentences begin on a new line.
 
-440:potential problems.  Useful when debugging scripts.
-449:Specify the number of times to repeat a report. Set this to zero
-450:continue until interrupted.  The default interval is one second.
-470:repeating reports. If \fB\-\-interval\fP is specified but \fB\-\-count\fP
-477:processing device-mapper device names and UUIDs. The names and UUIDs
-485:Character whitelist: 0\-9, A\-Z, a\-z, #+\-.:=@_. This whitelist is
-486:also supported by udev. Any character not on a whitelist is replaced
-506:Add a "DM_" prefix plus the field name to the output.  Useful with
-553:a suitable value automatically.  The \fB+\fP prefix lets you
-564:Process only items that match \fIselection\fP criteria.  If the command is
-567:\fIselection\fP and 0 otherwise. The selection criteria are defined by
-569:comparison operators. As a quick help and to see full list of column names that
-581:Note: Same cookie should be used for same type of operations i.e. creation of
-582:multiple different devices. It's not advised to combine different
-633:Use a backslash to escape the following character, for example a comma or semi-colon in a name or table. See also CONCISE FORMAT below.
-639:device. Device names on output can be customised by following \fIoptions\fP:
-691:List device names.  Optionally only list devices that have at least
-692:one target of the specified type.  Optionally execute a command for
-693:each device.  The device name is appended to the supplied command.
-720:a rename if necessary. Any character not on the whitelist will be mangled
-721:based on the \fB\-\-manglename\fP setting. Automatic rename works only for device
-723:the UUID of active devices. Any incorrect UUIDs are reported only and they
-737:Send message to target. If sector not needed use 0.
-750:Removes a device.  It will no longer be visible to dmsetup.  Open devices
-752:that fails all I/O.  \fB\-\-deferred\fP will enable deferred removal of open
-753:devices \- the device will be removed when the last user closes it. The deferred
-755:driver available in upstream kernel version 3.13.  (Use \fBdmsetup version\fP
-756:to check this.)  If an attempt to remove a device fails, perhaps because a process run
-767:Attempts to remove all device definitions i.e. reset the driver.  This also runs
-768:\fBmknodes\fP afterwards.  Use with care!  Open devices cannot be removed, but
-771:will be removed when the last user closes it.  The deferred removal feature is
-821:any is displayed.  With \fB\-\-noflush\fP, the thin target (from version 1.3.0)
-827:Suspends a device.  Any I/O that has already been mapped by the device
-828:but has not yet completed will be flushed.  Any further I/O to that
-833:the \fB\-\-noflush\fP option.  This lets outstanding I/O that has not yet reached the
-844:targets unless the \fB\-\-showkeys\fP parameter is supplied. Kernel key
-849:and the table (if present). Semi-colons separate devices. Backslashes escape
-850:any commas, semi-colons or backslashes.  See CONCISE FORMAT below.
-871:List all existing cookies. Cookies are system-wide semaphores with keys
-878:The output is a cookie value. Normally we don't need to create cookies since
-879:dmsetup creates and destroys them for each action automatically. However, we can
-881:cookie instead. We can define a cookie to use for each relevant command by using
-882:\fB\-\-udevcookie\fP option. Alternatively, we can export this value into the environment
-893:rules. If the flag has its symbolic name assigned then the output is
-896:always reported as DM_SUBSYSTEM_UDEV_FLAG<flag_position> = '1'. There are
-903:the cookie with underlying semaphore. If the cookie is not given directly,
-926:sent to the device.  If successful, this should release any devices
-946:e.g. striped 2 32 /dev/hda1 0 /dev/hdb1 0
-958:Errors any I/O that goes to this area.  Useful for testing or
-962:Returns blocks of zeroes on reads.  Any data written is discarded silently.
-976:Delays reads and/or writes to different devices.  Useful for testing.
-1044:The minor number of the device.  If empty, the kernel assigns a suitable minor number.
-1058:One line of the table. See TABLE FORMAT above.
-1088:A default mangling mode. Defaults to "\fBauto\fP"
+[List of affected lines removed]
 
 -.-.
 
-Split lines longer than 80 characters into two or more lines.
-Appropriate break points are the end of a sentence and a subordinate
-clause; after punctuation marks.
-Add "\:" to split the string for the output, "\<newline>" in the source.  
+The name of a man page is typeset in bold and the section in roman
+(see man-pages(7)).
 
-N.B.
-
-  The number of lines affected can be too large to be in a patch.
-
-
-Line 435, length 85
-
-Ensure \fI/dev/mapper\fP node exists after \fBdmsetup\ resume\fP (default with udev).
-
-Line 617, length 82
-
-If \fItable\fP or \fItable_file\fP is supplied, the table is loaded and made live.
-
-Line 629, length 113
-
-Each device is specified by a comma-separated list: name, uuid, minor number, flags, comma-separated table lines.
-
-Line 633, length 135
-
-Use a backslash to escape the following character, for example a comma or semi-colon in a name or table. See also CONCISE FORMAT below.
-
-Line 642, length 82
-
-\fBdevname\fP (map name for device-mapper devices, equal to blkdevname otherwise).
-
-Line 697, length 82
-
-\fBdevname\fP (map name for device-mapper devices, equal to blkdevname otherwise).
-
-Line 712, length 83
-
-Loads \fItable\fP or \fItable_file\fP into the inactive table slot for device_name.
-
-Line 718, length 82
-
-Ensure existing device-mapper \fIdevice_name\fP and UUID is in the correct mangled
-
-Line 721, length 81
-
-based on the \fB\-\-manglename\fP setting. Automatic rename works only for device
-
-Line 756, length 86
-
-to check this.)  If an attempt to remove a device fails, perhaps because a process run
-
-Line 833, length 85
-
-the \fB\-\-noflush\fP option.  This lets outstanding I/O that has not yet reached the
-
-Line 860, length 89
-
-Wake any processes that are waiting for udev to complete processing the specified cookie.
-
-Line 882, length 89
-
-\fB\-\-udevcookie\fP option. Alternatively, we can export this value into the environment
-
-Line 883, length 89
-
-of the dmsetup process as \fBDM_UDEV_COOKIE\fP variable and it will be used automatically
-
-Line 904, length 89
-
-the command will try to use a value defined by \fBDM_UDEV_COOKIE\fP environment variable.
-
-Line 996, length 82
-
-Supports thin provisioning of devices and also provides a better snapshot support.
-
-Line 1030, length 111
-
-<name>,<uuid>,\:<minor>,<flags>,\:<table>\:[,<table>+]\:[;<name>,<uuid>,\:<minor>,<flags>,<table>\:[,<table>+]]
-
-Line 1044, length 86
-
-The minor number of the device.  If empty, the kernel assigns a suitable minor number.
-
-Line 1067, length 93
-
-test-linear\-small,,,ro,\:0 2097152 linear /dev/loop0 0,\:2097152 2097152 linear /dev/loop1 0
-
-Line 1071, length 148
-
-test-linear\-small,,,,\:0 2097152 linear /dev/loop0 0;\:test-linear\-large,\:,,,\:0 2097152 linear /dev/loop1 0, 2097152 2097152 linear /dev/loop2 0
+798:extents). This currently includes \fBxfs(5)\fP and \fBext4(5)\fP.
+801:group, and the group alias is set to the \fBbasename(3)\fP of the
 
 -.-.
 
-Use \(en (en-dash) for a dash at the beginning (en) of a line,
-or between space characters,
-not a minus (\-) or a hyphen (-), except in the NAME section.
+Use thousand markers to make large numbers easy to read
 
-dmsetup.8:1023:\- A comma separates the fields of each device.
-dmsetup.8:1025:\- A semi-colon separates devices.
+560:is equivalent to 10000000. Latency values with a precision of less than
 
 -.-.
 
@@ -496,847 +289,559 @@ but no space character between them
 and the quotes are not for emphasis (markup),
 for example as an argument to a macro.
 
-1:.TH DMSETUP 8 "Apr 06 2006" "Linux" "MAINTENANCE COMMANDS"
+1:.TH DMSTATS 8 "Jun 23 2016" "Linux" "MAINTENANCE COMMANDS"
 
 -.-.
 
 Output from "test-groff  -mandoc -t -K utf8 -rF0 -rHY=0 -rCHECKSTYLE=10 -ww -z ":
 
-an.tmac:<stdin>:11: style: use of deprecated macro: .PD
-an.tmac:<stdin>:18: misuse, warning: .BR is for at least 2 arguments, got 1
-	Use macro '.B' for one argument or split argument.
-an.tmac:<stdin>:18: misuse, warning: .IR is for at least 2 arguments, got 1
+an.tmac:<stdin>:53: style: use of deprecated macro: .PD
+an.tmac:<stdin>:71: misuse, warning: .IR is for at least 2 arguments, got 1
 	Use macro '.I' for one argument or split argument.
-an.tmac:<stdin>:37: misuse, warning: .BR is for at least 2 arguments, got 1
+an.tmac:<stdin>:71: misuse, warning: .BR is for at least 2 arguments, got 1
 	Use macro '.B' for one argument or split argument.
-an.tmac:<stdin>:37: misuse, warning: .IR is for at least 2 arguments, got 1
+an.tmac:<stdin>:71: misuse, warning: .IR is for at least 2 arguments, got 1
 	Use macro '.I' for one argument or split argument.
-an.tmac:<stdin>:48: misuse, warning: .BR is for at least 2 arguments, got 1
+an.tmac:<stdin>:71: misuse, warning: .BR is for at least 2 arguments, got 1
 	Use macro '.B' for one argument or split argument.
-an.tmac:<stdin>:48: misuse, warning: .BR is for at least 2 arguments, got 1
-	Use macro '.B' for one argument or split argument.
-an.tmac:<stdin>:60: misuse, warning: .BR is for at least 2 arguments, got 1
-	Use macro '.B' for one argument or split argument.
-an.tmac:<stdin>:68: misuse, warning: .BR is for at least 2 arguments, got 1
-	Use macro '.B' for one argument or split argument.
-an.tmac:<stdin>:76: misuse, warning: .BR is for at least 2 arguments, got 1
-	Use macro '.B' for one argument or split argument.
-an.tmac:<stdin>:101: misuse, warning: .BR is for at least 2 arguments, got 1
-	Use macro '.B' for one argument or split argument.
-an.tmac:<stdin>:113: misuse, warning: .BR is for at least 2 arguments, got 1
-	Use macro '.B' for one argument or split argument.
-an.tmac:<stdin>:113: misuse, warning: .IR is for at least 2 arguments, got 1
+an.tmac:<stdin>:71: misuse, warning: .IR is for at least 2 arguments, got 1
 	Use macro '.I' for one argument or split argument.
+an.tmac:<stdin>:85: misuse, warning: .BR is for at least 2 arguments, got 1
+	Use macro '.B' for one argument or split argument.
+an.tmac:<stdin>:85: misuse, warning: .IR is for at least 2 arguments, got 1
+	Use macro '.I' for one argument or split argument.
+an.tmac:<stdin>:117: misuse, warning: .BR is for at least 2 arguments, got 1
+	Use macro '.B' for one argument or split argument.
+an.tmac:<stdin>:117: misuse, warning: .IR is for at least 2 arguments, got 1
+	Use macro '.I' for one argument or split argument.
+an.tmac:<stdin>:117: misuse, warning: .BR is for at least 2 arguments, got 1
+	Use macro '.B' for one argument or split argument.
 an.tmac:<stdin>:131: misuse, warning: .BR is for at least 2 arguments, got 1
-	Use macro '.B' for one argument or split argument.
-an.tmac:<stdin>:139: misuse, warning: .BR is for at least 2 arguments, got 1
 	Use macro '.B' for one argument or split argument.
 an.tmac:<stdin>:147: misuse, warning: .BR is for at least 2 arguments, got 1
 	Use macro '.B' for one argument or split argument.
-an.tmac:<stdin>:157: misuse, warning: .BR is for at least 2 arguments, got 1
+an.tmac:<stdin>:156: misuse, warning: .BR is for at least 2 arguments, got 1
 	Use macro '.B' for one argument or split argument.
-an.tmac:<stdin>:157: misuse, warning: .IR is for at least 2 arguments, got 1
+an.tmac:<stdin>:176: misuse, warning: .BR is for at least 2 arguments, got 1
+	Use macro '.B' for one argument or split argument.
+an.tmac:<stdin>:191: misuse, warning: .BR is for at least 2 arguments, got 1
+	Use macro '.B' for one argument or split argument.
+an.tmac:<stdin>:221: misuse, warning: .BR is for at least 2 arguments, got 1
+	Use macro '.B' for one argument or split argument.
+an.tmac:<stdin>:234: misuse, warning: .BR is for at least 2 arguments, got 1
+	Use macro '.B' for one argument or split argument.
+an.tmac:<stdin>:250: misuse, warning: .BR is for at least 2 arguments, got 1
+	Use macro '.B' for one argument or split argument.
+an.tmac:<stdin>:250: misuse, warning: .IR is for at least 2 arguments, got 1
 	Use macro '.I' for one argument or split argument.
-an.tmac:<stdin>:157: misuse, warning: .IR is for at least 2 arguments, got 1
+an.tmac:<stdin>:252: style: use of deprecated macro: .PD
+an.tmac:<stdin>:531: misuse, warning: .BR is for at least 2 arguments, got 1
+	Use macro '.B' for one argument or split argument.
+an.tmac:<stdin>:531: misuse, warning: .IR is for at least 2 arguments, got 1
 	Use macro '.I' for one argument or split argument.
-an.tmac:<stdin>:157: misuse, warning: .IR is for at least 2 arguments, got 1
+an.tmac:<stdin>:537: misuse, warning: .BR is for at least 2 arguments, got 1
+	Use macro '.B' for one argument or split argument.
+an.tmac:<stdin>:537: misuse, warning: .IR is for at least 2 arguments, got 1
 	Use macro '.I' for one argument or split argument.
-an.tmac:<stdin>:165: misuse, warning: .BR is for at least 2 arguments, got 1
+an.tmac:<stdin>:537: misuse, warning: .BR is for at least 2 arguments, got 1
 	Use macro '.B' for one argument or split argument.
-an.tmac:<stdin>:177: misuse, warning: .BR is for at least 2 arguments, got 1
+an.tmac:<stdin>:602: misuse, warning: .BR is for at least 2 arguments, got 1
 	Use macro '.B' for one argument or split argument.
-an.tmac:<stdin>:177: misuse, warning: .IR is for at least 2 arguments, got 1
-	Use macro '.I' for one argument or split argument.
-an.tmac:<stdin>:190: misuse, warning: .BR is for at least 2 arguments, got 1
-	Use macro '.B' for one argument or split argument.
-an.tmac:<stdin>:199: misuse, warning: .BR is for at least 2 arguments, got 1
-	Use macro '.B' for one argument or split argument.
-an.tmac:<stdin>:208: misuse, warning: .BR is for at least 2 arguments, got 1
-	Use macro '.B' for one argument or split argument.
-an.tmac:<stdin>:208: misuse, warning: .IR is for at least 2 arguments, got 1
-	Use macro '.I' for one argument or split argument.
-an.tmac:<stdin>:208: misuse, warning: .IR is for at least 2 arguments, got 1
-	Use macro '.I' for one argument or split argument.
-an.tmac:<stdin>:218: misuse, warning: .BR is for at least 2 arguments, got 1
-	Use macro '.B' for one argument or split argument.
-an.tmac:<stdin>:218: misuse, warning: .IR is for at least 2 arguments, got 1
-	Use macro '.I' for one argument or split argument.
-an.tmac:<stdin>:218: misuse, warning: .BR is for at least 2 arguments, got 1
-	Use macro '.B' for one argument or split argument.
-an.tmac:<stdin>:218: misuse, warning: .IR is for at least 2 arguments, got 1
-	Use macro '.I' for one argument or split argument.
-an.tmac:<stdin>:233: misuse, warning: .BR is for at least 2 arguments, got 1
-	Use macro '.B' for one argument or split argument.
-an.tmac:<stdin>:249: misuse, warning: .BR is for at least 2 arguments, got 1
-	Use macro '.B' for one argument or split argument.
-an.tmac:<stdin>:249: misuse, warning: .IR is for at least 2 arguments, got 1
-	Use macro '.I' for one argument or split argument.
-an.tmac:<stdin>:249: misuse, warning: .IR is for at least 2 arguments, got 1
-	Use macro '.I' for one argument or split argument.
-an.tmac:<stdin>:249: misuse, warning: .IR is for at least 2 arguments, got 1
-	Use macro '.I' for one argument or split argument.
-an.tmac:<stdin>:249: misuse, warning: .IR is for at least 2 arguments, got 1
-	Use macro '.I' for one argument or split argument.
-an.tmac:<stdin>:249: misuse, warning: .IR is for at least 2 arguments, got 1
-	Use macro '.I' for one argument or split argument.
-an.tmac:<stdin>:258: misuse, warning: .BR is for at least 2 arguments, got 1
-	Use macro '.B' for one argument or split argument.
-an.tmac:<stdin>:258: misuse, warning: .IR is for at least 2 arguments, got 1
-	Use macro '.I' for one argument or split argument.
-an.tmac:<stdin>:267: misuse, warning: .BR is for at least 2 arguments, got 1
-	Use macro '.B' for one argument or split argument.
-an.tmac:<stdin>:267: misuse, warning: .IR is for at least 2 arguments, got 1
-	Use macro '.I' for one argument or split argument.
-an.tmac:<stdin>:280: misuse, warning: .BR is for at least 2 arguments, got 1
-	Use macro '.B' for one argument or split argument.
-an.tmac:<stdin>:294: misuse, warning: .BR is for at least 2 arguments, got 1
-	Use macro '.B' for one argument or split argument.
-an.tmac:<stdin>:310: misuse, warning: .BR is for at least 2 arguments, got 1
-	Use macro '.B' for one argument or split argument.
-an.tmac:<stdin>:317: misuse, warning: .BR is for at least 2 arguments, got 1
-	Use macro '.B' for one argument or split argument.
-an.tmac:<stdin>:325: misuse, warning: .BR is for at least 2 arguments, got 1
-	Use macro '.B' for one argument or split argument.
-an.tmac:<stdin>:325: misuse, warning: .IR is for at least 2 arguments, got 1
-	Use macro '.I' for one argument or split argument.
-an.tmac:<stdin>:333: misuse, warning: .BR is for at least 2 arguments, got 1
-	Use macro '.B' for one argument or split argument.
-an.tmac:<stdin>:340: misuse, warning: .BR is for at least 2 arguments, got 1
-	Use macro '.B' for one argument or split argument.
-an.tmac:<stdin>:347: misuse, warning: .BR is for at least 2 arguments, got 1
-	Use macro '.B' for one argument or split argument.
-an.tmac:<stdin>:355: misuse, warning: .BR is for at least 2 arguments, got 1
-	Use macro '.B' for one argument or split argument.
-an.tmac:<stdin>:355: misuse, warning: .IR is for at least 2 arguments, got 1
-	Use macro '.I' for one argument or split argument.
-an.tmac:<stdin>:363: misuse, warning: .BR is for at least 2 arguments, got 1
-	Use macro '.B' for one argument or split argument.
-an.tmac:<stdin>:370: misuse, warning: .BR is for at least 2 arguments, got 1
-	Use macro '.B' for one argument or split argument.
-an.tmac:<stdin>:384: misuse, warning: .BR is for at least 2 arguments, got 1
-	Use macro '.B' for one argument or split argument.
-an.tmac:<stdin>:384: misuse, warning: .IR is for at least 2 arguments, got 1
-	Use macro '.I' for one argument or split argument.
-an.tmac:<stdin>:399: misuse, warning: .BR is for at least 2 arguments, got 1
-	Use macro '.B' for one argument or split argument.
-an.tmac:<stdin>:408: style: use of deprecated macro: .PD
-an.tmac:<stdin>:609: misuse, warning: .BR is for at least 2 arguments, got 1
-	Use macro '.B' for one argument or split argument.
-an.tmac:<stdin>:609: misuse, warning: .IR is for at least 2 arguments, got 1
-	Use macro '.I' for one argument or split argument.
-an.tmac:<stdin>:614: misuse, warning: .BR is for at least 2 arguments, got 1
-	Use macro '.B' for one argument or split argument.
-an.tmac:<stdin>:614: misuse, warning: .IR is for at least 2 arguments, got 1
-	Use macro '.I' for one argument or split argument.
-an.tmac:<stdin>:626: misuse, warning: .BR is for at least 2 arguments, got 1
-	Use macro '.B' for one argument or split argument.
-an.tmac:<stdin>:626: misuse, warning: .BR is for at least 2 arguments, got 1
-	Use macro '.B' for one argument or split argument.
-an.tmac:<stdin>:636: misuse, warning: .BR is for at least 2 arguments, got 1
+an.tmac:<stdin>:622: misuse, warning: .BR is for at least 2 arguments, got 1
 	Use macro '.B' for one argument or split argument.
 an.tmac:<stdin>:645: misuse, warning: .BR is for at least 2 arguments, got 1
 	Use macro '.B' for one argument or split argument.
 an.tmac:<stdin>:651: misuse, warning: .BR is for at least 2 arguments, got 1
 	Use macro '.B' for one argument or split argument.
-an.tmac:<stdin>:656: style: 1 leading space(s) on input line
-an.tmac:<stdin>:657: style: 1 leading space(s) on input line
-an.tmac:<stdin>:658: style: 1 leading space(s) on input line
-an.tmac:<stdin>:659: style: 1 leading space(s) on input line
-an.tmac:<stdin>:660: style: 1 leading space(s) on input line
-an.tmac:<stdin>:661: style: 1 leading space(s) on input line
-an.tmac:<stdin>:662: style: 1 leading space(s) on input line
-an.tmac:<stdin>:666: misuse, warning: .BR is for at least 2 arguments, got 1
+an.tmac:<stdin>:672: misuse, warning: .BR is for at least 2 arguments, got 1
 	Use macro '.B' for one argument or split argument.
-an.tmac:<stdin>:689: misuse, warning: .BR is for at least 2 arguments, got 1
+an.tmac:<stdin>:678: misuse, warning: .BR is for at least 2 arguments, got 1
 	Use macro '.B' for one argument or split argument.
-an.tmac:<stdin>:710: misuse, warning: .BR is for at least 2 arguments, got 1
+an.tmac:<stdin>:699: misuse, warning: .BR is for at least 2 arguments, got 1
 	Use macro '.B' for one argument or split argument.
-an.tmac:<stdin>:710: misuse, warning: .IR is for at least 2 arguments, got 1
+an.tmac:<stdin>:707: misuse, warning: .BR is for at least 2 arguments, got 1
+	Use macro '.B' for one argument or split argument.
+an.tmac:<stdin>:707: misuse, warning: .IR is for at least 2 arguments, got 1
 	Use macro '.I' for one argument or split argument.
-an.tmac:<stdin>:716: misuse, warning: .BR is for at least 2 arguments, got 1
-	Use macro '.B' for one argument or split argument.
-an.tmac:<stdin>:728: misuse, warning: .BR is for at least 2 arguments, got 1
-	Use macro '.B' for one argument or split argument.
-an.tmac:<stdin>:735: misuse, warning: .BR is for at least 2 arguments, got 1
-	Use macro '.B' for one argument or split argument.
-an.tmac:<stdin>:735: misuse, warning: .IR is for at least 2 arguments, got 1
-	Use macro '.I' for one argument or split argument.
-an.tmac:<stdin>:735: misuse, warning: .IR is for at least 2 arguments, got 1
-	Use macro '.I' for one argument or split argument.
-an.tmac:<stdin>:735: misuse, warning: .IR is for at least 2 arguments, got 1
-	Use macro '.I' for one argument or split argument.
-an.tmac:<stdin>:740: misuse, warning: .BR is for at least 2 arguments, got 1
-	Use macro '.B' for one argument or split argument.
-an.tmac:<stdin>:748: misuse, warning: .BR is for at least 2 arguments, got 1
-	Use macro '.B' for one argument or split argument.
-an.tmac:<stdin>:765: misuse, warning: .BR is for at least 2 arguments, got 1
-	Use macro '.B' for one argument or split argument.
-an.tmac:<stdin>:776: misuse, warning: .BR is for at least 2 arguments, got 1
-	Use macro '.B' for one argument or split argument.
-an.tmac:<stdin>:776: misuse, warning: .IR is for at least 2 arguments, got 1
-	Use macro '.I' for one argument or split argument.
-an.tmac:<stdin>:776: misuse, warning: .IR is for at least 2 arguments, got 1
-	Use macro '.I' for one argument or split argument.
-an.tmac:<stdin>:781: misuse, warning: .BR is for at least 2 arguments, got 1
-	Use macro '.B' for one argument or split argument.
-an.tmac:<stdin>:781: misuse, warning: .IR is for at least 2 arguments, got 1
-	Use macro '.I' for one argument or split argument.
-an.tmac:<stdin>:781: misuse, warning: .BR is for at least 2 arguments, got 1
-	Use macro '.B' for one argument or split argument.
-an.tmac:<stdin>:781: misuse, warning: .IR is for at least 2 arguments, got 1
-	Use macro '.I' for one argument or split argument.
-an.tmac:<stdin>:787: misuse, warning: .BR is for at least 2 arguments, got 1
-	Use macro '.B' for one argument or split argument.
-an.tmac:<stdin>:794: misuse, warning: .BR is for at least 2 arguments, got 1
-	Use macro '.B' for one argument or split argument.
-an.tmac:<stdin>:794: misuse, warning: .IR is for at least 2 arguments, got 1
-	Use macro '.I' for one argument or split argument.
-an.tmac:<stdin>:794: misuse, warning: .IR is for at least 2 arguments, got 1
-	Use macro '.I' for one argument or split argument.
-an.tmac:<stdin>:794: misuse, warning: .IR is for at least 2 arguments, got 1
-	Use macro '.I' for one argument or split argument.
-an.tmac:<stdin>:794: misuse, warning: .IR is for at least 2 arguments, got 1
-	Use macro '.I' for one argument or split argument.
-an.tmac:<stdin>:794: misuse, warning: .IR is for at least 2 arguments, got 1
-	Use macro '.I' for one argument or split argument.
-an.tmac:<stdin>:799: misuse, warning: .BR is for at least 2 arguments, got 1
-	Use macro '.B' for one argument or split argument.
-an.tmac:<stdin>:799: misuse, warning: .IR is for at least 2 arguments, got 1
-	Use macro '.I' for one argument or split argument.
-an.tmac:<stdin>:810: misuse, warning: .BR is for at least 2 arguments, got 1
-	Use macro '.B' for one argument or split argument.
-an.tmac:<stdin>:810: misuse, warning: .IR is for at least 2 arguments, got 1
-	Use macro '.I' for one argument or split argument.
-an.tmac:<stdin>:817: misuse, warning: .BR is for at least 2 arguments, got 1
-	Use macro '.B' for one argument or split argument.
-an.tmac:<stdin>:825: misuse, warning: .BR is for at least 2 arguments, got 1
-	Use macro '.B' for one argument or split argument.
-an.tmac:<stdin>:837: misuse, warning: .BR is for at least 2 arguments, got 1
-	Use macro '.B' for one argument or split argument.
-an.tmac:<stdin>:853: misuse, warning: .BR is for at least 2 arguments, got 1
-	Use macro '.B' for one argument or split argument.
-an.tmac:<stdin>:858: misuse, warning: .BR is for at least 2 arguments, got 1
-	Use macro '.B' for one argument or split argument.
-an.tmac:<stdin>:858: misuse, warning: .IR is for at least 2 arguments, got 1
-	Use macro '.I' for one argument or split argument.
-an.tmac:<stdin>:863: misuse, warning: .BR is for at least 2 arguments, got 1
-	Use macro '.B' for one argument or split argument.
-an.tmac:<stdin>:869: misuse, warning: .BR is for at least 2 arguments, got 1
-	Use macro '.B' for one argument or split argument.
-an.tmac:<stdin>:875: misuse, warning: .BR is for at least 2 arguments, got 1
-	Use macro '.B' for one argument or split argument.
-an.tmac:<stdin>:889: misuse, warning: .BR is for at least 2 arguments, got 1
-	Use macro '.B' for one argument or split argument.
-an.tmac:<stdin>:889: misuse, warning: .IR is for at least 2 arguments, got 1
-	Use macro '.I' for one argument or split argument.
-an.tmac:<stdin>:900: misuse, warning: .BR is for at least 2 arguments, got 1
-	Use macro '.B' for one argument or split argument.
-an.tmac:<stdin>:907: misuse, warning: .BR is for at least 2 arguments, got 1
-	Use macro '.B' for one argument or split argument.
-an.tmac:<stdin>:912: misuse, warning: .BR is for at least 2 arguments, got 1
-	Use macro '.B' for one argument or split argument.
-an.tmac:<stdin>:912: misuse, warning: .IR is for at least 2 arguments, got 1
-	Use macro '.I' for one argument or split argument.
-an.tmac:<stdin>:922: misuse, warning: .BR is for at least 2 arguments, got 1
-	Use macro '.B' for one argument or split argument.
-an.tmac:<stdin>:950: style: 1 leading space(s) on input line
-an.tmac:<stdin>:951: style: 1 leading space(s) on input line
-an.tmac:<stdin>:952: style: 1 leading space(s) on input line
-an.tmac:<stdin>:953: style: 1 leading space(s) on input line
-an.tmac:<stdin>:954: style: 1 leading space(s) on input line
-an.tmac:<stdin>:1062: style: use of deprecated macro: .PD
-an.tmac:<stdin>:1074: style: use of deprecated macro: .PD
 
 -.-.
+
+Additionally:
+
+  Fix some arguments for '.TP'.  A single-font macro does not work with
+'\c', so use a two-font macro.
+
+-.-
+
+  Use the pair ".na / .ad" to set no-adjustment (same result as '.ad l')
+and '.ad' to restore previous adjustment.
+[Replacing ".ad l" ... ".ad b"]
+
+  Set singular '.ad b' to '.ad \*(AD' as the user should have the choice to
+control the adjustment from the command line.
+
+  Add an empty string to string 'AD' with '.as AD "\"' to avoid a warning
+about an undefined string.
+
+-.-
 
 Generally:
 
 Split (sometimes) lines after a punctuation mark; before a conjunction.
 
---pc6zmQobCfgffrNE
+--QptRmfnMJrtLjQnL
 Content-Type: text/plain; charset=us-ascii
-Content-Disposition: attachment; filename="dmsetup.8.diff"
+Content-Disposition: attachment; filename="dmstats.8.diff"
 
---- dmsetup.8	2025-02-22 09:36:37.495665268 +0000
-+++ dmsetup.8.new	2025-02-22 11:03:47.574613770 +0000
+--- dmstats.8	2025-02-22 21:03:55.192613432 +0000
++++ dmstats.8.new	2025-02-23 00:39:44.791657060 +0000
 @@ -1,4 +1,4 @@
--.TH DMSETUP 8 "Apr 06 2006" "Linux" "MAINTENANCE COMMANDS"
-+.TH DMSETUP 8 "Apr 06 2006" Linux "MAINTENANCE COMMANDS"
+-.TH DMSTATS 8 "Jun 23 2016" "Linux" "MAINTENANCE COMMANDS"
++.TH DMSTATS 8 "Jun 23 2016" Linux "MAINTENANCE COMMANDS"
  .
+ .de OPT_PROGRAMS
+ .  RB [ \-\-allprograms | \-\-programid
+@@ -38,6 +38,7 @@
+ .  nop Capitalise to use multiples of 1000 (S.I.) instead of 1024.
+ ..
+ .
++.as AD "\" define the string if not defined on the command line
  .SH NAME
  .
-@@ -12,8 +12,8 @@ dmsetup \(em low level logical volume ma
- .HP 9
- .B dmsetup
+ dmstats \(em device-mapper statistics management
+@@ -54,42 +55,42 @@ dmstats \(em device-mapper statistics ma
+ .HP
+ .B dmstats
+ .de CMD_COMMAND
+-.  ad l
++.  na
+ .  nh
+-.  IR command
++.  I command
+ .  IR device_name \ |
+-.  BR \-\-major
+-.  IR major
+-.  BR \-\-minor
++.  B \-\-major
++.  I major
++.  B \-\-minor
+ .  IR minor \ |
+ .  BR \-u | \-\-uuid
+-.  IR uuid
++.  I uuid
+ .  RB [ \-v | \-\-verbose ]
+ .  hy
+-.  ad b
++.  ad
+ ..
+ .CMD_COMMAND
+ .
+ .HP
+ .B dmstats
  .de CMD_CLEAR
+-.  ad l
++.  na
+ .  nh
 -.  BR clear
 -.  IR device_name
 +.  B clear
 +.  I device_name
+ .  OPT_PROGRAMS
+ .  OPT_REGIONS
+ .  hy
+-.  ad b
++.  ad
  ..
  .CMD_CLEAR
  .
-@@ -22,8 +22,8 @@ dmsetup \(em low level logical volume ma
+ .HP
+ .B dmstats
  .de CMD_CREATE
- .  ad l
+-.  ad l
++.  na
  .  nh
 -.  BR create
--.  IR device_name
 +.  B create
-+.  I device_name
- .  RB [ \-n | \-\-notable |\: \-\-table
- .  IR table |\: table_file ]
- .  RB [ \-\-readahead
-@@ -40,8 +40,8 @@ dmsetup \(em low level logical volume ma
- .B dmsetup
- .de CMD_CREATE_CONCISE
- .  ad l
--.  BR create
--.  BR \-\-concise
-+.  B create
-+.  B \-\-concise
- .  RI [ concise_device_specification ]
- .  ad b
+ .  IR device_name ...| file_path ...| \fB\-\-alldevices
+ .  RB [ \-\-areas
+ .  IR nr_areas | \fB\-\-areasize
+@@ -104,63 +105,63 @@ dmstats \(em device-mapper statistics ma
+ .  RB [ \-\-nogroup ]
+ .  RB [ \-\-precise ]
+ .  RB [ \-\-start
+-.  IR start_sector
+-.  BR \-\-length
++.  I start_sector
++.  B \-\-length
+ .  IR length | \fB\-\-segments ]
+ .  RB [ \-\-userdata
+ .  IR user_data ]
+ .  RB [ \-\-programid
+ .  IR id ]
+ .  hy
+-.  ad b
++.  ad
  ..
-@@ -51,7 +51,7 @@ dmsetup \(em low level logical volume ma
- .B dmsetup
- .de CMD_DEPS
- .  ad l
--.  BR deps
-+.  B deps
- .  RB [ \-o
- .  IR options ]
- .  RI [ device_name ...]
-@@ -62,7 +62,7 @@ dmsetup \(em low level logical volume ma
+ .CMD_CREATE
+ .
  .HP
- .B dmsetup
+ .B dmstats
+ .de CMD_DELETE
+-.  ad l
++.  na
+ .  nh
+-.  BR delete
++.  B delete
+ .  IR device_name | \fB\-\-alldevices
+ .  OPT_PROGRAMS
+ .  OPT_REGIONS
+ .  hy
+-.  ad b
++.  ad
+ ..
+ .CMD_DELETE
+ .
+ .HP
+ .B dmstats
+ .de CMD_GROUP
+-.  ad l
++.  na
+ .  nh
+-.  BR group
++.  B group
+ .  RI [ device_name | \fB\-\-alldevices ]
+ .  RB [ \-\-alias
+ .  IR name ]
+ .  RB [ \-\-regions
+ .  IR regions ]
+ .  hy
+-.  ad b
++.  ad
+ ..
+ .CMD_GROUP
+ .HP
+ .B dmstats
  .de CMD_HELP
+-.  ad l
 -.  BR help
++.  na
 +.  B help
  .  RB [ \-c | \-C | \-\-columns ]
+-.  ad b
++.  ad
  ..
  .CMD_HELP
-@@ -70,7 +70,7 @@ dmsetup \(em low level logical volume ma
- .HP
- .B dmsetup
- .de CMD_INFO
--.  BR info
-+.  B info
- .  RI [ device_name ...]
- ..
- .CMD_INFO
-@@ -80,7 +80,7 @@ dmsetup \(em low level logical volume ma
- .de CMD_INFOLONG
- .  ad l
- .  nh
--.  BR info
-+.  B info
- .  BR \-c | \-C | \-\-columns
- .  RB [ \-\-count
- .  IR count ]
-@@ -104,8 +104,8 @@ dmsetup \(em low level logical volume ma
- .B dmsetup
- .de CMD_LOAD
- .  ad l
--.  BR load
--.  IR device_name
-+.  B load
-+.  I device_name
- .  RB [ \-\-table
- .  IR table | table_file ]
- .  ad b
-@@ -117,7 +117,7 @@ dmsetup \(em low level logical volume ma
- .de CMD_LS
- .  ad l
- .  nh
--.  BR ls
-+.  B ls
- .  RB [ \-\-target
- .  IR target_type ]
- .  RB [ \-o
-@@ -133,7 +133,7 @@ dmsetup \(em low level logical volume ma
- .HP
- .B dmsetup
- .de CMD_MANGLE
--.  BR mangle
-+.  B mangle
- .  RI [ device_name ...]
- ..
- .CMD_MANGLE
-@@ -141,7 +141,7 @@ dmsetup \(em low level logical volume ma
- .HP
- .B dmsetup
- .de CMD_MEASURE
--.  BR measure
-+.  B measure
- .  RI [ device_name ...]
- ..
- .CMD_MEASURE
-@@ -149,17 +149,17 @@ dmsetup \(em low level logical volume ma
- .HP
- .B dmsetup
- .de CMD_MESSAGE
--.  BR message
--.  IR device_name
--.  IR sector
--.  IR message
-+.  B message
-+.  I device_name
-+.  I sector
-+.  I message
- ..
- .CMD_MESSAGE
  .
  .HP
- .B dmsetup
- .de CMD_MKNODES
--.  BR mknodes
-+.  B mknodes
- .  RI [ device_name ...]
- ..
- .CMD_MKNODES
-@@ -168,8 +168,8 @@ dmsetup \(em low level logical volume ma
- .B dmsetup
- .de CMD_RELOAD
- .  ad l
--.  BR reload
--.  IR device_name
-+.  B reload
-+.  I device_name
- .  RB [ \-\-table
- .  IR table | table_file ]
- .  ad b
-@@ -180,7 +180,7 @@ dmsetup \(em low level logical volume ma
- .B dmsetup
- .de CMD_REMOVE
- .  ad l
--.  BR remove
-+.  B remove
- .  RB [ \-f | \-\-force ]
- .  RB [ \-\-retry ]
- .  RB [ \-\-deferred ]
-@@ -192,7 +192,7 @@ dmsetup \(em low level logical volume ma
- .HP
- .B dmsetup
- .de CMD_REMOVE_ALL
--.  BR remove_all
-+.  B remove_all
- .  RB [ \-f | \-\-force ]
- .  RB [ \-\-deferred ]
- ..
-@@ -201,19 +201,19 @@ dmsetup \(em low level logical volume ma
- .HP
- .B dmsetup
- .de CMD_RENAME
--.  BR rename
--.  IR device_name
--.  IR new_name
-+.  B rename
-+.  I device_name
-+.  I new_name
- ..
- .CMD_RENAME
- .
- .HP
- .B dmsetup
- .de CMD_RENAME_UUID
--.  BR rename
--.  IR device_name
--.  BR \-\-setuuid
--.  IR uuid
-+.  B rename
-+.  I device_name
-+.  B \-\-setuuid
-+.  I uuid
- ..
- .CMD_RENAME_UUID
- .
-@@ -221,7 +221,7 @@ dmsetup \(em low level logical volume ma
- .B dmsetup
- .de CMD_RESUME
- .  ad l
--.  BR resume
-+.  B resume
- .  IR device_name ...
- .  RB [ \-\-addnodeoncreate | \-\-addnodeonresume ]
- .  RB [ \-\-noflush ]
-@@ -237,12 +237,12 @@ dmsetup \(em low level logical volume ma
- .de CMD_SETGEOMETRY
- .  ad l
+ .B dmstats
+ .de CMD_LIST
+-.  ad l
++.  na
  .  nh
--.  BR setgeometry
--.  IR device_name
--.  IR cyl
--.  IR head
--.  IR sect
--.  IR start
-+.  B setgeometry
-+.  I device_name
-+.  I cyl
-+.  I head
-+.  I sect
-+.  I start
+-.  BR list
++.  B list
+ .  RI [ device_name ]
+ .  RB [ \-\-histogram ]
+ .  OPT_PROGRAMS
+@@ -171,31 +172,31 @@ dmstats \(em device-mapper statistics ma
+ .  RB [ \-\-notimesuffix ]
+ .  RB [ \-v | \-\-verbose ]
  .  hy
- .  ad b
+-.  ad b
++.  ad
  ..
-@@ -251,8 +251,8 @@ dmsetup \(em low level logical volume ma
+ .CMD_LIST
+ .
  .HP
- .B dmsetup
- .de CMD_SPLITNAME
--.  BR splitname
--.  IR device_name
-+.  B splitname
-+.  I device_name
- .  RI [ subsystem ]
- ..
- .CMD_SPLITNAME
-@@ -260,8 +260,8 @@ dmsetup \(em low level logical volume ma
- .HP
- .B dmsetup
- .de CMD_STATS
--.  BR stats
--.  IR command
-+.  B stats
-+.  I command
- .  RI [ options ]
- ..
- .CMD_STATS
-@@ -270,7 +270,7 @@ dmsetup \(em low level logical volume ma
- .B dmsetup
- .de CMD_STATUS
- .  ad l
--.  BR status
-+.  B status
- .  RB [ \-\-target
- .  IR target_type ]
- .  RB [ \-\-noflush ]
-@@ -284,7 +284,7 @@ dmsetup \(em low level logical volume ma
- .de CMD_SUSPEND
- .  ad l
+ .B dmstats
+ .de CMD_PRINT
+-.  ad l
++.  na
  .  nh
--.  BR suspend
-+.  B suspend
- .  RB [ \-\-nolockfs ]
- .  RB [ \-\-noflush ]
- .  IR device_name ...
-@@ -298,7 +298,7 @@ dmsetup \(em low level logical volume ma
- .de CMD_TABLE
- .  ad l
- .  nh
--.  BR table
-+.  B table
- .  RB [ \-\-concise ]
- .  RB [ \-\-target
- .  IR target_type ]
-@@ -312,22 +312,22 @@ dmsetup \(em low level logical volume ma
- .HP
- .B dmsetup
- .de CMD_TARGETS
--.  BR targets
-+.  B targets
- ..
- .CMD_TARGETS
- .
- .HP
- .B dmsetup
- .de CMD_UDEVCOMPLETE
--.  BR udevcomplete
--.  IR cookie
-+.  B udevcomplete
-+.  I cookie
- ..
- .CMD_UDEVCOMPLETE
- .
- .HP
- .B dmsetup
- .de CMD_UDEVCOMPLETE_ALL
--.  BR udevcomplete_all
-+.  B udevcomplete_all
- .  RI [ age_in_minutes ]
- ..
- .CMD_UDEVCOMPLETE_ALL
-@@ -335,29 +335,29 @@ dmsetup \(em low level logical volume ma
- .HP
- .B dmsetup
- .de CMD_UDEVCOOKIES
--.  BR udevcookie
-+.  B udevcookie
- ..
- .CMD_UDEVCOOKIES
- .
- .HP
- .B dmsetup
- .de CMD_UDEVCREATECOOKIE
--.  BR udevcreatecookie
-+.  B udevcreatecookie
- ..
- .CMD_UDEVCREATECOOKIE
- .
- .HP
- .B dmsetup
- .de CMD_UDEVFLAGS
--.  BR udevflags
--.  IR cookie
-+.  B udevflags
-+.  I cookie
- ..
- .CMD_UDEVFLAGS
- .
- .HP
- .B dmsetup
- .de CMD_UDEVRELEASECOOKIE
--.  BR udevreleasecookie
-+.  B udevreleasecookie
- .  RI [ cookie ]
- ..
- .CMD_UDEVRELEASECOOKIE
-@@ -365,7 +365,7 @@ dmsetup \(em low level logical volume ma
- .HP
- .B dmsetup
- .de CMD_VERSION
--.  BR version
-+.  B version
- ..
- .CMD_VERSION
- .
-@@ -374,9 +374,9 @@ dmsetup \(em low level logical volume ma
- .de CMD_WAIT
- .  ad l
- .  nh
--.  BR wait
-+.  B wait
- .  RB [ \-\-noflush ]
--.  IR device_name
-+.  I device_name
- .  RI [ event_nr ]
+-.  BR print
++.  B print
+ .  RI [ device_name ]
+ .  RB [ \-\-clear ]
+ .  OPT_PROGRAMS
+ .  OPT_REGIONS
  .  hy
- .  ad b
-@@ -388,7 +388,7 @@ dmsetup \(em low level logical volume ma
- .de CMD_WIPE_TABLE
- .  ad l
+-.  ad b
++.  ad
+ ..
+ .CMD_PRINT
+ .
+ .HP
+ .B dmstats
+ .de CMD_REPORT
+-.  ad l
++.  na
  .  nh
--.  BR wipe_table
-+.  B wipe_table
- .  IR device_name ...
- .  RB [ \-f | \-\-force ]
- .  RB [ \-\-noflush ]
-@@ -420,8 +420,7 @@ The second argument is the logical devic
- Invoking the dmsetup tool as \fBdevmap_name\fP
- (which is not normally distributed and is supported
- only for historical reasons) is equivalent to
--.BI \%dmsetup\ info\ \-c\ \-\-noheadings\ \-j \ major\  \-m \ minor \c
--\fR.
-+.BI \%dmsetup\ info\ \-c\ \-\-noheadings\ \-j \ major\  \-m \ minor\fR.
- .\" dot above here fixes \-Thtml rendering for next HP option
- .
- .SH OPTIONS
-@@ -432,7 +431,8 @@ Ensure \fI/dev/mapper\fP node exists aft
- .
- .TP
- .B \-\-addnodeonresume
--Ensure \fI/dev/mapper\fP node exists after \fBdmsetup\ resume\fP (default with udev).
-+Ensure \fI/dev/mapper\fP node exists after \fBdmsetup\ resume\fP
-+(default with udev).
- .
- .TP
- .B \-\-checks
-@@ -482,9 +482,9 @@ if already mangled, error on mixed),
- \fBhex\fP (always do the mangling) and
- \fBnone\fP (no mangling).
- Default mode is \fBauto\fP.
--Character whitelist: 0\-9, A\-Z, a\-z, #+\-.:=@_. This whitelist is
-+Character whitelist: 0\(en9, A\(enZ, a\(enz, #+\-.:=@_. This whitelist is
- also supported by udev. Any character not on a whitelist is replaced
--with its hex value (two digits) prefixed by \\x.
-+with its hex value (two digits) prefixed by \ex.
- Mangling mode could be also set through
- \fBDM_DEFAULT_NAME_MANGLING_MODE\fP
- environment variable.
-@@ -578,7 +578,7 @@ See below for more information on the ta
- .TP
- .B \-\-udevcookie \fIcookie
- Use cookie for udev synchronization.
--Note: Same cookie should be used for same type of operations i.e. creation of
-+Note: Same cookie should be used for same type of operations i.e.\& creation of
- multiple different devices. It's not advised to combine different
- operations on the single device.
- .
-@@ -614,7 +614,8 @@ Destroys the table in the inactive table
- .CMD_CREATE
- .br
- Creates a device with the given name.
--If \fItable\fP or \fItable_file\fP is supplied, the table is loaded and made live.
-+If \fItable\fP or \fItable_file\fP is supplied,
-+the table is loaded and made live.
- Otherwise a table is read from standard input unless \fB\-\-notable\fP is used.
- The optional \fIuuid\fP can be used in place of
- device_name in subsequent dmsetup commands.
-@@ -626,11 +627,14 @@ See below for more information on the ta
- .CMD_CREATE_CONCISE
- .br
- Creates one or more devices from a concise device specification.
--Each device is specified by a comma-separated list: name, uuid, minor number, flags, comma-separated table lines.
-+Each device is specified by a comma-separated list:
-+name, uuid, minor number, flags, comma-separated table lines.
- Flags defaults to read-write (rw) or may be read-only (ro).
- Uuid, minor number and flags are optional so those fields may be empty.
- A semi-colon separates specifications of different devices.
--Use a backslash to escape the following character, for example a comma or semi-colon in a name or table. See also CONCISE FORMAT below.
-+Use a backslash to escape the following character,
-+for example a comma or semi-colon in a name or table.
-+See also CONCISE FORMAT below.
- .
+-.  BR report
++.  B report
+ .  RI [ device_name ]
+ .  RB [ \-\-interval
+ .  IR seconds ]
+@@ -216,41 +217,41 @@ dmstats \(em device-mapper statistics ma
+ .  RB [ \-\-nosuffix ]
+ .  RB [ \-\-notimesuffix ]
+ .  hy
+-.  ad b
++.  ad
+ ..
+ .CMD_REPORT
  .HP
- .CMD_DEPS
-@@ -709,16 +713,19 @@ Others specify how the tree is displayed
- .BR load | \c
- .CMD_RELOAD
- .br
--Loads \fItable\fP or \fItable_file\fP into the inactive table slot for device_name.
-+Loads \fItable\fP
-+or \fItable_file\fP into the inactive table slot for device_name.
- If neither is supplied, reads a table from standard input.
+ .B dmstats
+ .de CMD_UNGROUP
+-.  ad l
++.  na
+ .  nh
+-.  BR ungroup
++.  B ungroup
+ .  RI [ device_name | \fB\-\-alldevices ]
+ .  RB [ \-\-groupid
+ .  IR id ]
+ .  hy
+-.  ad b
++.  ad
+ ..
+ .CMD_UNGROUP
+ .HP
+ .B dmstats
+ .de CMD_UPDATE_FILEMAP
+-.  ad l
++.  na
+ .  nh
+-.  BR update_filemap
+-.  IR file_path
++.  B update_filemap
++.  I file_path
+ .  RB [ \-\-groupid
+ .  IR id ]
+ .  RB [ \-\-follow
+ .  IR follow_mode ]
+ .  OPT_FOREGROUND
+ .  hy
+-.  ad b
++.  ad
+ ..
+ .CMD_UPDATE_FILEMAP
  .
- .HP
- .CMD_MANGLE
- .br
--Ensure existing device-mapper \fIdevice_name\fP and UUID is in the correct mangled
-+Ensure existing device-mapper \fIdevice_name\fP and UUID is in the
-+correct mangled
- form containing only whitelisted characters (supported by udev) and do
- a rename if necessary. Any character not on the whitelist will be mangled
--based on the \fB\-\-manglename\fP setting. Automatic rename works only for device
-+based on the \fB\-\-manglename\fP setting.
-+Automatic rename works only for device
- names and not for device UUIDs because the kernel does not allow changing
- the UUID of active devices. Any incorrect UUIDs are reported only and they
- must be manually corrected by deactivating the device first and then
-@@ -753,7 +760,8 @@ that fails all I/O.  \fB\-\-deferred\fP
- devices \- the device will be removed when the last user closes it. The deferred
- removal feature is supported since version 4.27.0 of the device-mapper
- driver available in upstream kernel version 3.13.  (Use \fBdmsetup version\fP
--to check this.)  If an attempt to remove a device fails, perhaps because a process run
-+to check this.)
-+If an attempt to remove a device fails, perhaps because a process run
- from a quick udev rule temporarily opened the device, the \fB\-\-retry\fP
- option will cause the operation to be retried for a few seconds before failing.
- Do NOT combine
-@@ -764,7 +772,8 @@ result.
- .HP
- .CMD_REMOVE_ALL
- .br
--Attempts to remove all device definitions i.e. reset the driver.  This also runs
-+Attempts to remove all device definitions i.e.\& reset the driver.
-+This also runs
- \fBmknodes\fP afterwards.  Use with care!  Open devices cannot be removed, but
- adding \fB\-\-force\fP will replace the table with one that fails all I/O.
- \fB\-\-deferred\fP will enable deferred removal of open devices \- the device
-@@ -830,7 +839,8 @@ device will be postponed for as long as
- If there's a filesystem on the device which supports the operation,
- an attempt will be made to sync it first unless \fB\-\-nolockfs\fP is specified.
- Some targets such as recent (October 2006) versions of multipath may support
--the \fB\-\-noflush\fP option.  This lets outstanding I/O that has not yet reached the
-+the \fB\-\-noflush\fP option.
-+This lets outstanding I/O that has not yet reached the
- device to remain unflushed.
- .
- .HP
-@@ -857,7 +867,8 @@ Displays the names and versions of the c
- .HP
- .CMD_UDEVCOMPLETE
- .br
--Wake any processes that are waiting for udev to complete processing the specified cookie.
-+Wake any processes
-+that are waiting for udev to complete processing the specified cookie.
- .
- .HP
- .CMD_UDEVCOMPLETE_ALL
-@@ -879,8 +890,10 @@ The output is a cookie value. Normally w
- dmsetup creates and destroys them for each action automatically. However, we can
- generate one explicitly to group several actions together and use only one
- cookie instead. We can define a cookie to use for each relevant command by using
--\fB\-\-udevcookie\fP option. Alternatively, we can export this value into the environment
--of the dmsetup process as \fBDM_UDEV_COOKIE\fP variable and it will be used automatically
-+\fB\-\-udevcookie\fP option.
-+Alternatively, we can export this value into the environment
-+of the dmsetup process as \fBDM_UDEV_COOKIE\fP variable
-+and it will be used automatically
- with all subsequent commands until it is unset.
- Invoking this command will create system-wide semaphore that needs to be cleaned
- up explicitly by calling udevreleasecookie command.
-@@ -901,7 +914,8 @@ always reported as DM_SUBSYSTEM_UDEV_FLA
- .br
- Waits for all pending udev processing bound to given cookie value and clean up
- the cookie with underlying semaphore. If the cookie is not given directly,
--the command will try to use a value defined by \fBDM_UDEV_COOKIE\fP environment variable.
-+the command will try to use a value defined by \fBDM_UDEV_COOKIE\fP
-+environment variable.
- .
- .HP
- .CMD_VERSION
-@@ -943,8 +957,8 @@ The traditional linear mapping.
- .B striped \fInum_stripes chunk_size \fR[\fIdestination start_sector\fR]...
- Creates a striped area.
- .br
--e.g. striped 2 32 /dev/hda1 0 /dev/hdb1 0
--will map the first chunk (16k) as follows:
-+e.g.\& striped 2 32 /dev/hda1 0 /dev/hdb1 0
-+will map the first chunk (16\~KiB) as follows:
- .RS
- .IP
-  LV chunk 1 \[->] hda1, chunk 1
-@@ -993,7 +1007,8 @@ Offers an interface to the kernel's soft
- Supports snapshots of devices.
- .TP
- .BR thin ", " thin\-pool
--Supports thin provisioning of devices and also provides a better snapshot support.
-+Supports thin provisioning of devices
-+and also provides a better snapshot support.
- .P
- To find out more about the various targets and their table formats and status
- lines, please read the files in the Documentation/device-mapper directory in
-@@ -1019,10 +1034,9 @@ documentation directory for the device-m
- .
- A concise representation of one of more devices.
- .sp
-+\(en A comma separates the fields of each device.
- .br
--\- A comma separates the fields of each device.
--.br
--\- A semi-colon separates devices.
-+\(en A semi-colon separates devices.
- .TP
- The representation of a device takes the form:
- .ad l
-@@ -1041,7 +1055,8 @@ The name of the device.
- The UUID of the device (or empty).
- .TP
- .B minor
--The minor number of the device.  If empty, the kernel assigns a suitable minor number.
-+The minor number of the device.
-+If empty, the kernel assigns a suitable minor number.
- .TP
- .B flags
- Supported flags are:
-@@ -1064,11 +1079,14 @@ One line of the table. See TABLE FORMAT
- .nh
- # A simple linear read-only device
- .TP
--test-linear\-small,,,ro,\:0 2097152 linear /dev/loop0 0,\:2097152 2097152 linear /dev/loop1 0
-+test-linear\-small,,,ro,\:0 2097152 linear /dev/loop0 0,\:2097152 2097152 \
-+linear /dev/loop1 0
- .P
- # Two linear devices
- .TP
--test-linear\-small,,,,\:0 2097152 linear /dev/loop0 0;\:test-linear\-large,\:,,,\:0 2097152 linear /dev/loop1 0, 2097152 2097152 linear /dev/loop2 0
-+test-linear\-small,,,,\:0 2097152 linear /dev/loop0 \
-+0;\:test-linear\-large,\:,,,\:0 2097152 linear /dev/loop1 0, 2097152 \
-+2097152 linear /dev/loop2 0
- .hy
- .ad b
  .PD
+-.ad b
++.ad \*(AD
+ .
+ .SH DESCRIPTION
+ .
+@@ -300,8 +301,9 @@ results.
+ Specify the number of statistics areas to create within a new region.
+ .
+ .TP
+-.B \-\-areasize \fIarea_size\fR[\c
++.BI \-\-areasize " area_size\fR[\c"
+ .UNITS
++.br
+ Specify the size of areas into which a new region should be divided. An
+ optional suffix selects units of:
+ .HELP_UNITS
+@@ -382,7 +384,7 @@ The daemon will not fork into the backgr
+ Specify the group to operate on.
+ .
+ .TP
+-.B \-\-bounds \fIhistogram_boundaries\c
++.BI \-\-bounds " histogram_boundaries\c"
+ .RB [ ns | us | ms | s ]
+ Specify the boundaries of a latency histogram to be tracked for the
+ region as a comma separated list of latency values. Latency values are
+@@ -404,7 +406,7 @@ repeating reports. If \fB\-\-interval\fP
+ reports will continue to repeat until interrupted.
+ .
+ .TP
+-.B \-\-length \fIlength\fR[\c
++.BI \-\-length " length\fR[\c"
+ .UNITS
+ Specify the length of a new statistics region in sectors. An optional
+ suffix selects units of:
+@@ -467,7 +469,7 @@ Specify the region to operate on.
+ .B \-\-regions \fIregion_list
+ Specify a list of regions to group. The group list is a comma-separated
+ list of region identifiers. Continuous sequences of identifiers may be
+-expressed as a hyphen separated range, for example: '1\-10'.
++expressed as a hyphen separated range, for example: '1\(en10'.
+ .
+ .TP
+ .B \-\-relative
+@@ -483,7 +485,7 @@ specifying column names and their valid
+ supported comparison operators.
+ .
+ .TP
+-.B \-\-start \fIstart\fR[\c
++.BI \-\-start " start\fR[\c"
+ .UNITS
+ Specify the start offset of a new statistics region in sectors. An
+ optional suffix selects units of:
+@@ -500,15 +502,16 @@ the \fB\-\-nogroup\fP option is given. W
+ alias may be specified using the \fB\-\-alias\fP option.
+ .
+ .TP
+-.B \-\-units \c
++.BR \-\-units " \c"
+ .RI [ units ] \c
+ .RB [ h | H | \c
+ .UNITS
++.br
+ Set the display units for report output.
+ All sizes are output in these units:
+ .RB ( h )uman-readable,
+ .HELP_UNITS
+-Can also specify custom units e.g. \fB\-\-units\ 3M\fP.
++Can also specify custom units e.g.\& \fB\-\-units\ 3M\fP.
+ .
+ .TP
+ .B \-\-userdata \fIuser_data
+@@ -556,8 +559,9 @@ configured interval duration) on the fin
+ .sp
+ Latencies are given in nanoseconds. An optional unit suffix of ns, us,
+ ms, or s may be given after each value to specify units of nanoseconds,
+-microseconds, milliseconds or seconds respectively, so for example, 10ms
+-is equivalent to 10000000. Latency values with a precision of less than
++microseconds, milliseconds or seconds respectively, so for example,
++10\~ms is equivalent to 10,000,000.
++Latency values with a precision of less than
+ one millisecond can only be used when precise timestamps are enabled: if
+ \fB\-\-precise\fP is not given and values less than one millisecond are
+ used it will be enabled automatically.
+@@ -795,7 +799,7 @@ of interest.
+ To be able to use file mapping, the file must be backed by a
+ device-mapper device, and in a file system that supports the FIEMAP
+ ioctl (and which returns data describing the physical location of
+-extents). This currently includes \fBxfs(5)\fP and \fBext4(5)\fP.
++extents). This currently includes \fBxfs\fP(5) and \fBext4\fP(5).
+ .P
+ By default the regions making up a file are placed together in a
+ group, and the group alias is set to the \fBbasename(3)\fP of the
+@@ -1111,7 +1115,7 @@ Create a whole-device region with one ar
+ .br
+ vg00/lvol1: Created new region with 1 area(s) as region ID 0
+ .P
+-Create a 32M region 1G into device d0
++Create a 32\~MB region 1\~GB into device d0
+ .br
+ #
+ .B dmstats create \-\-start 1G \-\-length 32M d0
+@@ -1120,7 +1124,6 @@ d0: Created new region with 1 area(s) as
+ .P
+ Create a whole-device region with 8 areas on every device
+ .br
+-.br
+ #
+ .B dmstats create \-\-areas 8
+ .br
+@@ -1138,20 +1141,18 @@ vg00\-lvol2: Created new region with 8 a
+ .P
+ Delete all regions on all devices
+ .br
+-.br
+ #
+ .B dmstats delete \-\-alldevices \-\-allregions
+ .P
+-Create a whole-device region with areas 10\ GiB in size on vg00/lvol1
++Create a whole-device region with areas 10\ GB in size on vg00/lvol1
+ using dmsetup
+ .br
+-.br
+ #
+ .B dmsetup stats create \-\-areasize 10G vg00/lvol1
+ .br
+ vg00\-lvol1: Created new region with 5 area(s) as region ID 1
+ .P
+-Create a 1\ GiB region with 16 areas at the start of vg00/lvol1
++Create a 1\ GB region with 16 areas at the start of vg00/lvol1
+ .br
+ #
+ .B dmstats create \-\-start 0 \-\-len 1G \-\-areas=16 vg00/lvol1
+@@ -1163,34 +1164,55 @@ List the statistics regions registered o
+ #
+ .B dmstats list vg00/lvol1
+ .br
+-Name             RgID  RStart RSize  #Areas ASize  ProgID
+-.br
+-vg00\-lvol1           0      0 61.00g      1 61.00g dmstats
+-.br
+-vg00\-lvol1           1 61.00g 19.20g      1 19.20g dmstats
+-.br
+-vg00\-lvol1           2 80.20g  2.14g      1  2.14g dmstats
++.TS
++l l l l l l l
++l n n n n n l .
++Name	RgID	RStart	RSize	#Areas	ASize	ProgID
++vg00\-lvol1	0	0	61.00g	1	61.00g	dmstats
++vg00\-lvol1	1	61.00g	19.20g	1	19.20g	dmstats
++vg00\-lvol1	2	80.20g	2.14g	1	2.14g	dmstats
++.TE
+ .P
+ Display five statistics reports for vg00/lvol1 at an interval of one second
+ .br
+-.br
+ #
+ .B dmstats report \-\-interval 1 \-\-count 5 vg00/lvol1
+ .br
+ #
+ .B dmstats report
+ .br
+-Name             RgID  ArID  AStart ASize  RRqM/s   WRqM/s   R/s   W/s    RSz/s WSz/s   AvRqSz  QSize Util%      AWait RdAWa WrAWa
+-.br
+-vg_hex\-lv_home       0     0      0 61.00g     0.00     0.00  0.00 218.00     0   1.04m   4.50k  2.97      81.70 13.62  0.00 13.62
+-.br
+-vg_hex\-lv_home       1     0 61.00g 19.20g     0.00     0.00  0.00   5.00     0 548.00k 109.50k  0.14      11.00 27.40  0.00 27.40
+-.br
+-vg_hex\-lv_home       2     0 80.20g  2.14g     0.00     0.00  0.00  14.00     0   1.15m  84.00k  0.39      18.70 27.71  0.00 27.71
++.nr ol \n(.l
++.nr oL \n(LL
++.ie n \{\
++.  ll 125m
++.  nr LL 125m
++.\}
++.el \{\
++.  ll 120m
++.  nr LL 120m
++.  nr oi \n(.i
++.  nr oo \n(.o
++.  in 0
++.  po 0
++.\}
++.TS
++l1 l1 l1 l1 l1 l1 l1 l1 l1 l1 l1 l1 l1 l1 l1 l1 l
++l1 n1 n1 n1 n1 n1 n1 n1 n1 n1 n1 n1 n1 n1 n1 n1 n.
++Name	RgID	ArID	AStart	ASize	RRqM/s	WRqM/s	R/s	W/s	RSz/s	WSz/s	AvRqSz	QSize	Util%	AWait	RdAWa	WrAWa
++vg_hex\-lv_home	0	0	0	61.00g	0.00	0.00	0.00	218.00	0	1.04m	4.50k	2.97	81.70	13.62	0.00	13.62
++vg_hex\-lv_home	1	0	61.00g	19.20g	0.00	0.00	0.00	5.00	0	548.00k	109.50k	0.14	11.00	27.40	0.00	27.40
++vg_hex\-lv_home	2	0	80.20g	2.14g	0.00	0.00	0.00	14.00	0	1.15m	84.00k	0.39	18.70	27.71	0.00	27.71
++.TE
++.br
++.ll \n(olu
++.nr LL \n(oLu
++.if t \{\
++.po \n(oou
++.in \n(oiu
++.\}
+ .P
+ Create one region for reach target contained in device vg00/lvol1
+ .br
+-.br
+ #
+ .B dmstats create \-\-segments vg00/lvol1
+ .br
+@@ -1201,7 +1223,7 @@ vg00\-lvol1: Created new region with 1 a
+ vg00\-lvol1: Created new region with 1 area(s) as region ID 2
+ .P
+ Create regions mapping each file in the directory images/ and place
+-them into separate groups, each named after the corresponding file
++them into separate groups, each named after the corresponding file.
+ .br
+ #
+ .B dmstats create \-\-filemap images/*
 
---pc6zmQobCfgffrNE
+--QptRmfnMJrtLjQnL
 Content-Type: text/plain; charset=us-ascii
 Content-Disposition: attachment; filename="general.bugs"
 
@@ -1419,4 +924,4 @@ export MAN_KEEP_STDERR=yes (or any non-empty value)
 
 -.-
 
---pc6zmQobCfgffrNE--
+--QptRmfnMJrtLjQnL--
