@@ -1,136 +1,93 @@
-Received: from mail.stoffel.org (mail.stoffel.org [172.104.24.175])
-	(using TLSv1.2 with cipher ECDHE-RSA-AES256-GCM-SHA384 (256/256 bits))
+Received: from sonic.asd.mail.yahoo.com (sonic302-3.consmr.mail.bf2.yahoo.com [74.6.135.42])
+	(using TLSv1.2 with cipher ECDHE-RSA-AES128-GCM-SHA256 (128/128 bits))
 	(No client certificate requested)
-	by smtp.subspace.kernel.org (Postfix) with ESMTPS id A316A224AF1;
-	Wed,  6 Aug 2025 21:29:15 +0000 (UTC)
-Authentication-Results: smtp.subspace.kernel.org; arc=none smtp.client-ip=172.104.24.175
+	by smtp.subspace.kernel.org (Postfix) with ESMTPS id 3872121C179
+	for <lvm-devel@lists.linux.dev>; Wed,  6 Aug 2025 23:36:38 +0000 (UTC)
+Authentication-Results: smtp.subspace.kernel.org; arc=none smtp.client-ip=74.6.135.42
 ARC-Seal:i=1; a=rsa-sha256; d=subspace.kernel.org; s=arc-20240116;
-	t=1754515758; cv=none; b=qIMAw+96BZW1+USadbQPztubu8XImLpYCiyfHVYMQ4mRKZmNNTfBtO9TbI9tocyol/i7xldWXWPxSNX7KjCDQiIIK11uJqFHskWFPhBIp+PzuyBJSDeNNHmnEiCOUOQtdEDa2FkNND0pSfAHqng39ZCujSbgStr4wacWWjS+lqw=
+	t=1754523400; cv=none; b=fP00D3moLA1FtBBubIuwbNK/o5A2bLj2TDswf3jjpbefaGRtdpLTz9rTmfika61+rirSuzo+wnCFVw4QV34GyLnQMWszzYW8yDWeSVrNIDk4B3C7kMFtJGXXYGHWiI59g3KSmpw2ZCXA4P9EFaqLcZ+99P6n/2qkYLbxcVo40ag=
 ARC-Message-Signature:i=1; a=rsa-sha256; d=subspace.kernel.org;
-	s=arc-20240116; t=1754515758; c=relaxed/simple;
-	bh=EBSqnCqqUG61AOwiw7+Kw8LYLKSGSqDg4qTyMkM9oWE=;
-	h=MIME-Version:Content-Type:Message-ID:Date:From:To:Cc:Subject:
-	 In-Reply-To:References; b=Im/8xl0iXG3Tj0rYQDDdOALL7dKRxr7D4XcFsSYSDszXb3uLaJsMFWQsvlJxBNBDFXJ8PZ5gzWabKuF/RlmcUjANf4RmDlmUvBkmd6zXn9Id11FNcMw0sKsWLzHdchvLk0hI/oKZrPCfI7HkAkddIf0sB3PXqf40xvyIFPZu0mI=
-ARC-Authentication-Results:i=1; smtp.subspace.kernel.org; dmarc=pass (p=none dis=none) header.from=stoffel.org; spf=pass smtp.mailfrom=stoffel.org; dkim=pass (2048-bit key) header.d=stoffel.org header.i=@stoffel.org header.b=OeAsBFtn; arc=none smtp.client-ip=172.104.24.175
-Authentication-Results: smtp.subspace.kernel.org; dmarc=pass (p=none dis=none) header.from=stoffel.org
-Authentication-Results: smtp.subspace.kernel.org; spf=pass smtp.mailfrom=stoffel.org
+	s=arc-20240116; t=1754523400; c=relaxed/simple;
+	bh=lhHwBd3UoN1yPVCFp6DUT1NM6EZQhdmDxaFFi0Y3EmM=;
+	h=Date:From:To:Cc:Message-ID:In-Reply-To:References:Subject:
+	 MIME-Version:Content-Type; b=JWgM6epa/08dqw2ZxYShiVZd+Cs6+WzlHZFsrB62wrVopd64dtQI1r38w8eVJEZpjScM5IL8zpY2EkgBcUlqIWKDlhUuljUwtYqp3ft05RKwT6f22LHMVWZETKZX6Kmn8WHRiYYTsmxRvFyXonDrN83k8nYZW6q4Jj1tAdno9Yc=
+ARC-Authentication-Results:i=1; smtp.subspace.kernel.org; dmarc=pass (p=reject dis=none) header.from=yahoo.com; spf=pass smtp.mailfrom=yahoo.com; dkim=pass (2048-bit key) header.d=yahoo.com header.i=@yahoo.com header.b=mDL3ofqE; arc=none smtp.client-ip=74.6.135.42
+Authentication-Results: smtp.subspace.kernel.org; dmarc=pass (p=reject dis=none) header.from=yahoo.com
+Authentication-Results: smtp.subspace.kernel.org; spf=pass smtp.mailfrom=yahoo.com
 Authentication-Results: smtp.subspace.kernel.org;
-	dkim=pass (2048-bit key) header.d=stoffel.org header.i=@stoffel.org header.b="OeAsBFtn"
-DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/simple; d=stoffel.org;
- i=@stoffel.org; q=dns/txt; s=20250308; t=1754515445; h=mime-version :
- content-type : content-transfer-encoding : message-id : date : from :
- to : cc : subject : in-reply-to : references : from;
- bh=EBSqnCqqUG61AOwiw7+Kw8LYLKSGSqDg4qTyMkM9oWE=;
- b=OeAsBFtnSkTNJ80/BW+v7H7hh6PR2Fcl7jGFRZwP1kwSMFCT/uNobhsCHSH99M6JljGM/
- rfsGI5JhGIgXEWl16ypaKXBz7IluCpE25cPPyXCujCHTG3JbRXz/UKSL8MqyOw9YPzkGv+N
- RrpsNzI2MnaF7XVD5kam7dGpmqGaKS0vB/FVJZkj9+zR3VElb4lC4431wjK7v0Qamo5eoHp
- BfzISy/LAJeyJbuy+ZEpc4nsGsglRTq3MSNgLc11EhKqs3JKUMjfFWnggFF13hV5RGJbbSC
- pDb12FiQQIUoVldk3fxH1FEgd8yTLRB1pYdg/vRurD8bMcT+vlpRWgr72pig==
-Received: from quad.stoffel.org (syn-097-095-183-072.res.spectrum.com [97.95.183.72])
-	(using TLSv1.3 with cipher TLS_AES_256_GCM_SHA384 (256/256 bits)
-	 key-exchange X25519 server-signature RSA-PSS (2048 bits) server-digest SHA256)
-	(No client certificate requested)
-	by mail.stoffel.org (Postfix) with ESMTPSA id 3E0A71E679;
-	Wed,  6 Aug 2025 17:24:05 -0400 (EDT)
-Received: by quad.stoffel.org (Postfix, from userid 1000)
-	id 7D1DBA11A3; Wed,  6 Aug 2025 17:24:04 -0400 (EDT)
+	dkim=pass (2048-bit key) header.d=yahoo.com header.i=@yahoo.com header.b="mDL3ofqE"
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed; d=yahoo.com; s=s2048; t=1754523365; bh=lhHwBd3UoN1yPVCFp6DUT1NM6EZQhdmDxaFFi0Y3EmM=; h=Date:From:To:Cc:In-Reply-To:References:Subject:From:Subject:Reply-To; b=mDL3ofqERtoTu1DO8h8oR40KYwWZQWNJrBXZyI5p+29ZKTNfb4PWHN1MUvoKz8yr4rQzRruX2E5/vV3nT5Mty7sf3WUUKp6CAhHqKvvV3NDGQ8PwkWafOsll7LYGjX4+xXYMHaedqzTGZnXEXR/RcO15KV6KaGbkO3UzLfZMAn21IFImWyK7zqMhek3VkFUssRTyK1AKtJmbafZ1oqL+MgfW3+9T+VTLaBy/LVGCIaYb1vZVver/RvuUTHzInTAZJyiEn9GeUd5I4g6wd3m85odxGWsnWEQyKRRptr6lh9mZ0Y0sVIZc1HKtAKr4Od8sVkdgpR5ETWMAF2fGNxpBKQ==
+X-SONIC-DKIM-SIGN: v=1; a=rsa-sha256; c=relaxed/relaxed; d=yahoo.com; s=s2048; t=1754523365; bh=04PBOmzrXN31i4gGMNx25dus98+82EG6QN5FPA/0sFI=; h=X-Sonic-MF:Date:From:To:Subject:From:Subject; b=MmNy2/R+7/Q+3atD1n4EuPiLhsK5tXhSSoPz8DicRE0WI2FD/R+PZM3NRdAM77Pf+A0i/Od8iSgfueqnHoK1iL/ICgjL/0GQcpl/u10/WRQONRT78+TNwa1nWCtT2jNhKsHXxNeffw32hRYeDbzezuQfTz400el7ACxUlsCo+v6oFitoNnH9rEZGJvw32hxp/Fy86Ox7kjaOPmcbi+mrwqD7IYoKAns9EJM6gl6RWuYAv8UDEqE0S7NFNyGROezxBUUXHksNEP0CF15Grnwm7j2lQd6XShZ+/IKcxzR09YTr8Ws7Pv1uJfUPofNqy/Biwcb69RN01LMqZsrl7vK6Pg==
+X-YMail-OSG: VuZ_65YVM1kmqTAuFDg4HQ0zKlYTM8CE66y_10pLMNgDpHwUVHA.Yf7mbxfkxjX
+ EseAR0xcpUxHQ0vm8FyWJ2hZo.3XHpbmpKTEtigj9QyvFB3sGZD_FEEt20wpYtEv4BeNz9xBbxsK
+ D1FGKIOyaNZ0WpCpDrfGD4F.yTWOW3hestoBeaYwBSh2dZO3hkjMUcnuLvUpb11wgxbQLhgI4SZ.
+ sqGXkM8E_ebzNZw4Cknc.UT87YV5H.CyjIzCvo_AuA912F8K6U621ddHh6MUjQVJTrlpESnew0bs
+ DjY1RZqsDyoQztJCPlhNLoDo9S0KXmvvBOpXAXjxHUv25OCLxc5LmMwb8d5yeU7Iody2_IwfIWdj
+ kQ7yJvm2a.yd6M.3LBT3f2PUTlvhcOpUwmsb1Xjl9987XTrIMY2UYgT0l3t.RfVDpeZEXaPKeCbE
+ tDBGsmgepY0opOH6OTpHpSMrHdKWR1b5HNDWqfcY4tXB8KWvOEi07AeF54HI2Q.RNziUM3zRMISp
+ waKXUxVUtKdTQ7FvObNygAC2aiXWGUrgBvuAeIrsC98V8ojgWvt1ule4eXahcA7jul8bSq7D6gXp
+ 723zGE8ZM8yRDAKxIjvmZvkF7ULF2BLRY5ldHoph2ilNhvSvco_6Se_VE8aCbuNkvtbj_IFDDRow
+ uzCNFeEdQsk4JpoRwY0iVTaSjklkka9sabUtpj4JN4wbubgb4LgOa3s3hnW.Dzor2OBKs2.xFGyU
+ LKdXbZzaQ92z9C6MliY2CdM__NsIldQnG9VSi56dvV_fuOkH4hKyiNJQ2.Vl41EtFaEMeONrQGqd
+ YYRYGYxoTh0s1jzvtXA2bm3SfTFd5wfUSacCCfhOOnTJlXQ7yv94ydyH1IB2Fb51_B8Do8rIe_E2
+ vwnRaf3sVrmfUjC2dXrPCCwjMxAFI3hp5bOIE98a64GwuzKtzGfk4_uo8YuyuD970ikrBv8XG6y4
+ sFDRF1ZE76.wNrp3rHZp4yBq2AWsi9tfiYPcQAh4iXHWhWQivtlmD7yL4JPw4cFsKR8F5JUz46Hl
+ 2N9sD6C3IHA7STJmsy.xhM7oiTYM1nV3Kj2FknmijYdNfYXKsMv.IxPs_Vqn6LukeF45njewOQ62
+ 6Wl14v1yR1Ew.daPviaruRdzRy9MaUkQ8BkVACZz6G1VS96RJ_NZ601Uc0R3OJk5OhaCHaehWyKl
+ zBMRlAyxbP8NBlz8X2esgd4sYoTknD8a0MXdOOxibirrbZY0tqwhJPGatLwG.RUOuPzTkFcBZAKZ
+ 3LbejyXjFI9H5dWqO2kzkLIS5I_aJgSM5EONsjksEsUtlPpOjTpKucKHDWsIUFaSzaYb.ZgHrvIp
+ 8sp8GypZBrFmQcd8dP7i_Y2YJHb_5F4NkxNLSksQoLuCeOMPAVGX.mcxO46pnOGJy__f_qCSopFg
+ QkTfCBcWR3L3u_pkdS_1SjL2hjaLEdY.2Xzu5rnTj.MwAn.MPNuVe6cUjxBa5mCYmwJXakTBK_DT
+ vrq_l6BILNLNhJT.UiNVP.FNCGHJnvZAVYjxq_9UXq2kiSoCJFUIzRbpYjtqsxegYuGJUe1feCul
+ iWOj3nlNsGk74m59nhNu1wFkdi804t9h.Du_YGYo6GEEH7BEyJEZ3wGvQVENv_wyJu0RNtnlfv5e
+ a2p8GZRBtDCSZOYgQNdfkPNL7BTmBC0nWWqOZHuTlSIs8tz3VYtMU6kRoIuhW2sq15QVyyMF7Far
+ 0EBC4nZqRTeje0NENrE14vJiDWCzc7BdBh670.0DQK4qlXHp8KXzI7V1J3LV31x1ro3d.pDV3809
+ CYlbo5zRPRxQQCi49S3qrmcVnN_7cVva94dWDBbqlmOY2XSTBa2b5c6sLk6jnX2meqHl62wrMjFM
+ PIr26PypOIBldAzIUrrX9LSSzc7x8tiRBgJ_OZ3Sy6finiPU9E7ToISN0KPhSQP7f3hvQT.CpItm
+ mECZezXK3qld048SqjEq3UAexSG7oMzlC3Ee3X1YGgW25RFxIV4DE9BWz69J2QkiusLznNfjOWlj
+ mt3nYZkbyfH2m07fd6XrMCvpuIL4PsHiesaGPe1XWvhoy2hPiRzqvoa2KuC.rmrH5MWI4RKqq.Ph
+ _cQsjDyFkBUjiZnDySolrQgjxRGVIrdujH24zuppuFkONleb6_Dmwb8cJs_2wNqZaTiSZVj4UUIC
+ dbyIPKMb315A0nv6EjplaD_ssGmg9GWOov4KokHLMh0iCPsswTHSJkwZcVgqM8VgqdUUNLHYWE1j
+ ZlnpAHxvRO1eLmTd0o6rP
+X-Sonic-MF: <pattonme@yahoo.com>
+X-Sonic-ID: fa62377c-4fa2-4119-a4c6-458c7adc2296
+Received: from sonic.gate.mail.ne1.yahoo.com by sonic302.consmr.mail.bf2.yahoo.com with HTTP; Wed, 6 Aug 2025 23:36:05 +0000
+Date: Wed, 6 Aug 2025 23:25:26 +0000 (UTC)
+From: matthew patton <pattonme@yahoo.com>
+To: "linux-lvm@lists.linux.dev" <linux-lvm@lists.linux.dev>
+Cc: "lvm-devel@lists.linux.dev" <lvm-devel@lists.linux.dev>
+Message-ID: <584283844.1499801.1754522726622@mail.yahoo.com>
+In-Reply-To: <26771.51188.491376.658337@quad.stoffel.home>
+References: <06d25902-7239-1fc7-ec3b-1798332c3315@redhat.com> <26771.51188.491376.658337@quad.stoffel.home>
+Subject: Re: [PATCH] fix random failures in shell/integrity.sh
 Precedence: bulk
 X-Mailing-List: lvm-devel@lists.linux.dev
 List-Id: <lvm-devel.lists.linux.dev>
 List-Subscribe: <mailto:lvm-devel+subscribe@lists.linux.dev>
 List-Unsubscribe: <mailto:lvm-devel+unsubscribe@lists.linux.dev>
 MIME-Version: 1.0
-Content-Type: text/plain; charset=us-ascii
-Content-Transfer-Encoding: 7bit
-Message-ID: <26771.51188.491376.658337@quad.stoffel.home>
-Date: Wed, 6 Aug 2025 17:24:04 -0400
-From: "John Stoffel" <john@stoffel.org>
-To: Mikulas Patocka <mpatocka@redhat.com>
-Cc: Peter Rajnoha <prajnoha@redhat.com>,
-    Zdenek Kabelac <zkabelac@redhat.com>,
-    Heinz Mauelshagen <heinzm@redhat.com>,
-    David Teigland <teigland@redhat.com>,
-    linux-lvm@lists.linux.dev,
-    lvm-devel@lists.linux.dev
-X-Clacks-Overhead: GNU Terry Pratchett
-Subject: Re: [PATCH] fix random failures in shell/integrity.sh
-In-Reply-To: <06d25902-7239-1fc7-ec3b-1798332c3315@redhat.com>
-References: <06d25902-7239-1fc7-ec3b-1798332c3315@redhat.com>
-X-Mailer: VM 8.3.x under 28.2 (x86_64-pc-linux-gnu)
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: quoted-printable
+X-Mailer: WebService/1.1.24260 YMailNorrin
 
->>>>> "Mikulas" == Mikulas Patocka <mpatocka@redhat.com> writes:
+ > The problem is that the raid1 implementation may freely choose which leg
+> to read from. If it chooses to read from the non-corrupted leg, the
+> corruption is not detected,=C2=A0
 
-> Hi
+which is why man invented ZFS. :)
 
-> The test shell/integrity.sh creates raid arrays, corrupts one of the
-> legs, then reads the array and verifies that the corruption was
-> corrected. Finally, the test tests that the number of mismatches on
-> the corrupted leg is non-zero.
+I don't know what the probability 10^-X is of silent mismatch between halve=
+s of a mirror, but it's a fatal weakness IMO of pretty much every RAID sche=
+me out there that doesn't checksum each block be it at the "disk sector" (5=
+12/4k) or "filesystem" (4k).
 
-> The problem is that the raid1 implementation may freely choose which leg 
-> to read from. If it chooses to read from the non-corrupted leg, the 
-> corruption is not detected, the number of mismatches is not incremented 
-> and the test reports this as a failure.
+Would it make sense for LVM since it's a shim between disk device and files=
+ystems to implement its own checksum scheme? Maybe do it at a "LVM page" no=
+tion of 32 disk sectors followed by a couple of extra disk sectors in which=
+ the checksum for each of the preceding 32 is strung together in one packed=
+ value? /spit-ball
 
-So wait, how is integrity supposed to work in this situation then?  In
-real life?  I understand the test is hard, maybe doing it in a loop
-three times?  Or configure the RAID1 to prefer one half over another
-is the way to make this test work?  
-
-> Fix the test by not checking the number of integrity mismatches for
-> raid1.
-
-> Signed-off-by: Mikulas Patocka <mpatocka@redhat.com>
-
-> ---
->  test/shell/integrity.sh |   14 --------------
->  1 file changed, 14 deletions(-)
-
-> Index: lvm2/test/shell/integrity.sh
-> ===================================================================
-> --- lvm2.orig/test/shell/integrity.sh	2025-07-29 19:35:54.000000000 +0200
-> +++ lvm2/test/shell/integrity.sh	2025-08-01 15:08:02.000000000 +0200
-> @@ -136,10 +136,6 @@ aux wait_recalc $vg/${lv1}_rimage_0
->  aux wait_recalc $vg/${lv1}_rimage_1
->  aux wait_recalc $vg/$lv1
->  _test_fs_with_read_repair "$dev1"
-> -lvs -o integritymismatches $vg/${lv1}_rimage_0 |tee mismatch
-> -not grep 0 mismatch
-> -lvs -o integritymismatches $vg/$lv1 |tee mismatch
-> -not grep 0 mismatch
->  lvchange -an $vg/$lv1
->  lvconvert --raidintegrity n $vg/$lv1
->  lvremove $vg/$lv1
-> @@ -153,10 +149,6 @@ aux wait_recalc $vg/${lv1}_rimage_1
->  aux wait_recalc $vg/${lv1}_rimage_2
->  aux wait_recalc $vg/$lv1
->  _test_fs_with_read_repair "$dev1" "$dev2"
-> -lvs -o integritymismatches $vg/${lv1}_rimage_0 |tee mismatch
-> -not grep 0 mismatch
-> -lvs -o integritymismatches $vg/$lv1 |tee mismatch
-> -not grep 0 mismatch
->  lvchange -an $vg/$lv1
->  lvconvert --raidintegrity n $vg/$lv1
->  lvremove $vg/$lv1
-> @@ -233,8 +225,6 @@ lvs -o integritymismatches $vg/${lv1}_ri
->  lvs -o integritymismatches $vg/${lv1}_rimage_1
->  lvs -o integritymismatches $vg/${lv1}_rimage_2
->  lvs -o integritymismatches $vg/${lv1}_rimage_3
-> -lvs -o integritymismatches $vg/$lv1 |tee mismatch
-> -not grep 0 mismatch
->  lvchange -an $vg/$lv1
->  lvconvert --raidintegrity n $vg/$lv1
->  lvremove $vg/$lv1
-> @@ -603,10 +593,6 @@ aux wait_recalc $vg/${lv1}_rimage_0
->  aux wait_recalc $vg/${lv1}_rimage_1
->  aux wait_recalc $vg/$lv1
->  _test_fs_with_read_repair "$dev1"
-> -lvs -o integritymismatches $vg/${lv1}_rimage_0 |tee mismatch
-> -not grep 0 mismatch
-> -lvs -o integritymismatches $vg/$lv1 |tee mismatch
-> -not grep 0 mismatch
->  lvchange -an $vg/$lv1
->  lvconvert --raidintegrity n $vg/$lv1
->  lvremove $vg/$lv1
-
+The *best* answer is for everyone to move to 520/528 byte sectors like seri=
+ous storage vendors did 50 years ago, but I suspect that would be harder to=
+ get past the gatekeepers than drivers written in RUST.
 
