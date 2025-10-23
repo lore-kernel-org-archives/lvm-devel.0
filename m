@@ -1,243 +1,183 @@
-Received: from mail-ej1-f45.google.com (mail-ej1-f45.google.com [209.85.218.45])
+Received: from mail-wm1-f43.google.com (mail-wm1-f43.google.com [209.85.128.43])
 	(using TLSv1.2 with cipher ECDHE-RSA-AES128-GCM-SHA256 (128/128 bits))
 	(No client certificate requested)
-	by smtp.subspace.kernel.org (Postfix) with ESMTPS id EC24D30AAD4
-	for <lvm-devel@lists.linux.dev>; Thu, 23 Oct 2025 11:29:25 +0000 (UTC)
-Authentication-Results: smtp.subspace.kernel.org; arc=none smtp.client-ip=209.85.218.45
+	by smtp.subspace.kernel.org (Postfix) with ESMTPS id 055D3238C0A
+	for <lvm-devel@lists.linux.dev>; Thu, 23 Oct 2025 20:42:10 +0000 (UTC)
+Authentication-Results: smtp.subspace.kernel.org; arc=none smtp.client-ip=209.85.128.43
 ARC-Seal:i=1; a=rsa-sha256; d=subspace.kernel.org; s=arc-20240116;
-	t=1761218968; cv=none; b=pM4udClt7jI4eoHZDlmuw3+8QcGZa0sZUjSvAeE5ij5gPShYoFamrPHYTGvYCL3cjs5TGJligpzJ0rg5LsEEyvG78UR00O6EYmLHyg9IXfN/WyQ5dAqz2G35WHoWa5dcvWuuEQHxPMOd8YW71z5Bo2/aE31jfMo2ljTE+CjF1mo=
+	t=1761252133; cv=none; b=MAxo9L+gS7rix8CNcKPFFjOVfWd6PDaDq1Kc6wMADRZa0fJuuYxJakQ/jY7WTGeFeie0Sd8m0j7fjzHrWKRNVek1n0xd9TQ3+GRMdd/v9TeKUJOdMSyBFRlcUcIEeAyVZVr3eLtw/qYaC4U4v3LEOfpohg2GNGrRrsYtzrlrTlw=
 ARC-Message-Signature:i=1; a=rsa-sha256; d=subspace.kernel.org;
-	s=arc-20240116; t=1761218968; c=relaxed/simple;
-	bh=xp/QLlNgU9yT5Z0c6lOZJJZGC+bWM5/vOMB349Lhr6s=;
-	h=From:To:Cc:Subject:Date:Message-ID:MIME-Version; b=Avm0k1ukq3si3V9Hpp2Q0AwhnqMDnwZW8jvYKWfJC9DKjqgtdAx5arIVapBV4qGUO5ZLKSKeI+kOVub4BBQsxaf159FDDDi5tf+tYEvswF9ZuheRqF0jg/Tg3/YueZVyJ2C10xyJ++lWisg9qh5RRa3Y1x29Jj+mqkfXGjcp6L0=
-ARC-Authentication-Results:i=1; smtp.subspace.kernel.org; dmarc=pass (p=none dis=none) header.from=gmail.com; spf=pass smtp.mailfrom=gmail.com; dkim=pass (2048-bit key) header.d=gmail.com header.i=@gmail.com header.b=b4GOOwsE; arc=none smtp.client-ip=209.85.218.45
+	s=arc-20240116; t=1761252133; c=relaxed/simple;
+	bh=PDOk5q4ikNsoJ7LaEKqMOSHmjcL2HrrBiXoNtKrmcuQ=;
+	h=Message-ID:Date:MIME-Version:Subject:To:Cc:References:From:
+	 In-Reply-To:Content-Type; b=TnPg5vdncUIlNt1r2yAm0qzWJUoFXzVq9bl4ltm8aWWVaF2Zy2y2NPltmdxVmckpJsBYYoj4Jce3JWwC1s0aWsVVXg2JxfPXsccc19Zk5NFgZJlJWOOMTfYnaHw2ioPxalGTGhirwrC7ZRwseqvw1i3/HSJgjUz8aV4jh0xYH1M=
+ARC-Authentication-Results:i=1; smtp.subspace.kernel.org; dmarc=pass (p=none dis=none) header.from=gmail.com; spf=pass smtp.mailfrom=gmail.com; dkim=pass (2048-bit key) header.d=gmail.com header.i=@gmail.com header.b=Hz3ZuAmi; arc=none smtp.client-ip=209.85.128.43
 Authentication-Results: smtp.subspace.kernel.org; dmarc=pass (p=none dis=none) header.from=gmail.com
 Authentication-Results: smtp.subspace.kernel.org; spf=pass smtp.mailfrom=gmail.com
 Authentication-Results: smtp.subspace.kernel.org;
-	dkim=pass (2048-bit key) header.d=gmail.com header.i=@gmail.com header.b="b4GOOwsE"
-Received: by mail-ej1-f45.google.com with SMTP id a640c23a62f3a-b5b823b4f3dso132135066b.3
-        for <lvm-devel@lists.linux.dev>; Thu, 23 Oct 2025 04:29:25 -0700 (PDT)
+	dkim=pass (2048-bit key) header.d=gmail.com header.i=@gmail.com header.b="Hz3ZuAmi"
+Received: by mail-wm1-f43.google.com with SMTP id 5b1f17b1804b1-47117e75258so9980445e9.2
+        for <lvm-devel@lists.linux.dev>; Thu, 23 Oct 2025 13:42:10 -0700 (PDT)
 DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed;
-        d=gmail.com; s=20230601; t=1761218964; x=1761823764; darn=lists.linux.dev;
-        h=content-transfer-encoding:mime-version:message-id:date:subject:cc
-         :to:from:from:to:cc:subject:date:message-id:reply-to;
-        bh=GOi8L/T/sc914HyVaQllPfco9t+JbsWkC8LrVlAzwL4=;
-        b=b4GOOwsEWBZT2dzhL4RuTjhg4W1cyorM/fa36AkGvpgEId04xONVilvM8iZE1Nlw3P
-         Pz5itUvydD1wtQDbRTNjxkkVDZKjltSWfdF5MqtEuz6i7i0RVrMETAB2EIihtZH826ZI
-         ITf1khXVe2s6npcQ+eEbz14uFH19M51iFlErwJ/evzt3GHPj6S2818U53ezHHxH235dF
-         DIGSP9ZpQQqWE8ugfMWkQXRuxVT3Y3LIq9OMB1fysLgg1/eo/DrsTYS38hCI0IOeHbI8
-         HHEYWE04dPeNrPQfwSipF3hNf0C8fCVym0LGuof7uAmf5h1AhrWNZs+ZLxQ/ptio1Pan
-         lrog==
+        d=gmail.com; s=20230601; t=1761252129; x=1761856929; darn=lists.linux.dev;
+        h=content-transfer-encoding:in-reply-to:autocrypt:from
+         :content-language:references:cc:to:subject:user-agent:mime-version
+         :date:message-id:from:to:cc:subject:date:message-id:reply-to;
+        bh=zH23/gL2/USZLjj/JPdi7ffud5niCkNtnKaJxQ+IhR4=;
+        b=Hz3ZuAmiQ9AMQDwmQPed93QJyJPlPUICj4UoV4eXG61zPC5WDJcPQW+eehQXOoDO7t
+         NE4SbusZU02NTGm01w+0zh3SDQrLOo/uTNbZVI1REY9q4WLu3MsGC47nwcI7fi0nQvR6
+         6ymqOpS0CbE6dRfQ037cZRRBGhlXDZSudKmtEsVZNr1GrOuJMWFXd1JwnpvDGLwCWVdj
+         ql/khAAJsf1eXa09BTtCwK5YxxXZyeSeGO0KlurgBAVnxn1Gxi5tDSjJPVTRxRpxJA8A
+         WHM3FmGbwnWoR3reXoKNUiA3gAxXbvkJQUOScJAtEXlOKpIyLzayfRjxqHuKzp1ibtxb
+         cYyw==
 X-Google-DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed;
-        d=1e100.net; s=20230601; t=1761218964; x=1761823764;
-        h=content-transfer-encoding:mime-version:message-id:date:subject:cc
-         :to:from:x-gm-message-state:from:to:cc:subject:date:message-id
-         :reply-to;
-        bh=GOi8L/T/sc914HyVaQllPfco9t+JbsWkC8LrVlAzwL4=;
-        b=gmlzQVZ9y6rp7DAFbik7norYpK0w+Bg1/UYhOo6+gizjCmepSSRSt9LFhxSAfaj9Bf
-         5hJW0tKZcSqwhKsEOSgPCJLFdfKijPXgFW5nGxunj5iiZg0UIyCkj0xTIrNUWohzY8Ov
-         IrMZqKdfbPnNlgDs8dBeNR3aiiLB/XXvfEC198ZUclZSLOWErWDW4zIRgKkGwQvRGenx
-         v/d9UrTsPPtmV5/IChsU+kBxOF5u/FLL5hxrGVFwfF2lbxtrmUUQzXhVS/OpEquzBj84
-         BVPeyycDUqeBIvL8QxY+/CKgl5eQI2cIxFbZ6/ZyuRqQguQIvj2OFl8MG6nNHmq0Dn65
-         CiaA==
-X-Forwarded-Encrypted: i=1; AJvYcCXAVW011tZlXBzkfmHrRKf+L5HqJ3HW/Khg0O8+PzeU+8I1cIHolLO1khaJ8miAxTbt8aQWDajTiOQ=@lists.linux.dev
-X-Gm-Message-State: AOJu0YyrqfbWRd8EeZ5bvGVdSHCjXJfKI50f+E3hwmqxtRgZNemjr+6Z
-	zflfu17AbtvenVb+NDwPfy2kLObxqE038+weYiAZuihlm3tikab4DVIT
-X-Gm-Gg: ASbGncueCm7/RPOQJ+NNECW3IzIjwRK8Ewv2buOkXloOBPbJBaevTBWM0SIohxNR51O
-	d/GmZ44hYBQZPPhZaBi1MYFgUxiGKOaeIqCzamJyq0K1P90+86ysKJEvL3+Ex5tl0bOziiJ3Ggz
-	8M8fxubBLRuxpt/V9d3JYD/PlsynSb/5XsxvnpPP4eiFrUYvwjtfcBvC83Ee44dhr+g36P8CzLu
-	lrzPBhIEkYpGTK42qZU6gtsQC7jYfAkNaGUXGNMG7bJ8/ANNbQn5XJ2JI9A0irZSbWJKr0Q/z8h
-	a5b+nC0PIn7zAmjrENuwYKwO2lvcjPeaTIRpUoqWIXf2gynlzWxPoANP2Nftxi0hkSBjOKZ1sIN
-	FddaKdxDeE5TcEQNP0wwwt4gMXc9/m6ozJqQCqn/b4RtIFZoSEWwyoRouNJijIijGUuLkvn1mKN
-	CY
-X-Google-Smtp-Source: AGHT+IGVcD+OUFGiPRHpX8Zf9AyspMjR70F5rNVEqM4+m7vN8XE7B3HIHBPjz9kYyXDPcdhsgkufaQ==
-X-Received: by 2002:a17:907:1b06:b0:b6d:2f3f:3f98 with SMTP id a640c23a62f3a-b6d2f3f4014mr685674566b.41.1761218963986;
-        Thu, 23 Oct 2025 04:29:23 -0700 (PDT)
-Received: from localhost ([212.73.77.104])
-        by smtp.gmail.com with UTF8SMTPSA id a640c23a62f3a-b6d51471ef6sm182393366b.72.2025.10.23.04.29.21
+        d=1e100.net; s=20230601; t=1761252129; x=1761856929;
+        h=content-transfer-encoding:in-reply-to:autocrypt:from
+         :content-language:references:cc:to:subject:user-agent:mime-version
+         :date:message-id:x-gm-message-state:from:to:cc:subject:date
+         :message-id:reply-to;
+        bh=zH23/gL2/USZLjj/JPdi7ffud5niCkNtnKaJxQ+IhR4=;
+        b=DrScn9NqjtzqkkFF/bDe4YkaxJ9D0uCVSPcMt2j2379JlDpSki1Snhd/eqTOlvT+Ge
+         0rH73SBR3g0b1uBAVJYUDFnEmoACYn13yItAFCaLqv6UEnjy9c9o7pMWnUXLSy0eiEjd
+         D/NMqbwuVaKmKztLxzNPcWA80Ry4bccbKQ/AqjGrc43bzT+ZtAS1ya8I6VSNOaPEADNq
+         orJOs5Itx0e8q3BfbWjJtkx3WfG6mP3rYLAFm07RiEAynDTIvb64b7auVNoIr1w9aVLL
+         SKjtgsJt/L8fIVq2odp6dO2vKCotZigGVlVYQtbhrDEZitcHas3E+zDWJ3XwH9Kzse68
+         eIrg==
+X-Forwarded-Encrypted: i=1; AJvYcCVO5r3wHJU5Qt8iU36S4NgVMhZpd7uJm3DGGz50Ik5LEL8cYF1RlZW+V531VB94qd+pvvlaobZumjw=@lists.linux.dev
+X-Gm-Message-State: AOJu0Yzybc/is/tXDJbgYakwtpttWWUkyoUHwkTfs2J0bC5DF376LQ7R
+	LZdxqcQ2U5NrMQPpH7XU6JTU6EkJJO1dzolfRxGNJp7bozSSt9gmQQPE
+X-Gm-Gg: ASbGncuvOWzIxpraMQblytDO2ANiq93I/5K10eUskp79ij9TxaJD152uu7gSi1p2C6F
+	Y5W+oLJg+gnLTCTpn8LhXOaJKcbLMAwj3lzUH/MrtTArUzu3kw3FZtOqZ+PqV4etdtcgmZCmFoy
+	Q7ooimOReodRZ0ovgla4kThMF/w5R30shL4SkdW3TEbugP2dYA4fjCPTr9L8aQ7TK7+9Ht+Uln6
+	WiHEJ0xejBkJpWes4KdT8sU9M/ORdjn0tuI0CyRgtCGeaOFgOMW+h3uGsgaLocp3g30Ykty0SV2
+	s/0HIvEIV2OxJT/kLPJswgZrlBlcB6acQz9lRwm7J4SPUAfQ//7FDxmtd/69VMSg6LaThphdwHe
+	qfZ+s4qv4HrUVUspjrJYowwUG1R7FK138fSmKWSU0rzuA5e/g0m2+ejY4+JauUj/iNi4qocbqV1
+	aQjL1BlN9DmC1oU05QMBbAKmHgEw==
+X-Google-Smtp-Source: AGHT+IHCVB+Pybief1JnxZp/9KwSmKb9+DyZ4IikoY3sTAsLQTmu8dNdfCeK9ekGtKedPfaO6daR0Q==
+X-Received: by 2002:a05:600c:46c5:b0:46e:1cc6:25f7 with SMTP id 5b1f17b1804b1-475cafacc30mr25848925e9.9.1761252129022;
+        Thu, 23 Oct 2025 13:42:09 -0700 (PDT)
+Received: from [192.168.2.12] (85-70-151-113.rcd.o2.cz. [85.70.151.113])
+        by smtp.gmail.com with ESMTPSA id 5b1f17b1804b1-475caf2f142sm56851425e9.15.2025.10.23.13.42.07
         (version=TLS1_3 cipher=TLS_AES_128_GCM_SHA256 bits=128/128);
-        Thu, 23 Oct 2025 04:29:23 -0700 (PDT)
-From: Askar Safin <safinaskar@gmail.com>
-To: linux-mm@kvack.org,
-	linux-pm@vger.kernel.org,
-	linux-block@vger.kernel.org,
-	linux-crypto@vger.kernel.org,
-	linux-lvm@lists.linux.dev,
-	lvm-devel@lists.linux.dev,
-	linux-raid@vger.kernel.org,
-	"DellClientKernel" <Dell.Client.Kernel@dell.com>,
-	dm-devel@lists.linux.dev,
-	linux-btrfs@vger.kernel.org
-Cc: Nhat Pham <nphamcs@gmail.com>,
-	Kairui Song <ryncsn@gmail.com>,
-	Pavel Machek <pavel@ucw.cz>,
-	=?UTF-8?q?Rodolfo=20Garc=C3=ADa=20Pe=C3=B1as=20=28kix=29?= <kix@kix.es>,
-	"Rafael J. Wysocki" <rafael@kernel.org>,
-	Eric Biggers <ebiggers@kernel.org>,
-	"Lennart Poettering" <mzxreary@0pointer.de>,
-	Christian Brauner <brauner@kernel.org>,
-	"Linus Torvalds" <torvalds@linux-foundation.org>
-Subject: dm bug: hibernate to swap located on dm-integrity doesn't work (how to get data redundancy for swap?)
-Date: Thu, 23 Oct 2025 14:29:13 +0300
-Message-ID: <20251023112920.133897-1-safinaskar@gmail.com>
-X-Mailer: git-send-email 2.47.3
+        Thu, 23 Oct 2025 13:42:08 -0700 (PDT)
+Message-ID: <a48a37e3-2c22-44fb-97a4-0e57dc20421a@gmail.com>
+Date: Thu, 23 Oct 2025 22:42:07 +0200
 Precedence: bulk
 X-Mailing-List: lvm-devel@lists.linux.dev
 List-Id: <lvm-devel.lists.linux.dev>
 List-Subscribe: <mailto:lvm-devel+subscribe@lists.linux.dev>
 List-Unsubscribe: <mailto:lvm-devel+unsubscribe@lists.linux.dev>
 MIME-Version: 1.0
-Content-Transfer-Encoding: 8bit
+User-Agent: Mozilla Thunderbird
+Subject: Re: dm bug: hibernate to swap located on dm-integrity doesn't work
+ (how to get data redundancy for swap?)
+To: Askar Safin <safinaskar@gmail.com>, linux-mm@kvack.org,
+ linux-pm@vger.kernel.org, linux-block@vger.kernel.org,
+ linux-crypto@vger.kernel.org, linux-lvm@lists.linux.dev,
+ lvm-devel@lists.linux.dev, linux-raid@vger.kernel.org,
+ DellClientKernel <Dell.Client.Kernel@dell.com>, dm-devel@lists.linux.dev,
+ linux-btrfs@vger.kernel.org
+Cc: Nhat Pham <nphamcs@gmail.com>, Kairui Song <ryncsn@gmail.com>,
+ Pavel Machek <pavel@ucw.cz>, =?UTF-8?B?Um9kb2xmbyBHYXJjw61hIFBlw7FhcyAoa2l4?=
+ =?UTF-8?Q?=29?= <kix@kix.es>, "Rafael J. Wysocki" <rafael@kernel.org>,
+ Eric Biggers <ebiggers@kernel.org>, Lennart Poettering
+ <mzxreary@0pointer.de>, Christian Brauner <brauner@kernel.org>,
+ Linus Torvalds <torvalds@linux-foundation.org>
+References: <20251023112920.133897-1-safinaskar@gmail.com>
+Content-Language: en-US
+From: Milan Broz <gmazyland@gmail.com>
+Autocrypt: addr=gmazyland@gmail.com; keydata=
+ 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
+In-Reply-To: <20251023112920.133897-1-safinaskar@gmail.com>
+Content-Type: text/plain; charset=UTF-8; format=flowed
+Content-Transfer-Encoding: 7bit
 
-Hi.
+Hi,
 
-Hibernate to swap located on dm-integrity doesn't work.
-Let me first describe why I need this, then I will describe a bug with steps to reproduce
-(and some speculation on cause of the bug).
+I am not sure why you cc so many people, most of lists are not relevant here.
 
-I want a personal Linux laptop fully protected from data corruption (cosmic rays, etc).
-And even if data corruption does happen, I want reliable indication of that,
-so that I know that I need to restore from backups and replace faulty hardware.
+Anyway, could you please test one thing below so the problem is better isolated?
 
-So I did this:
-- I bought a laptop with ECC memory: Dell Precision 7780. It seems to be one of
-the few laptop models in the world with ECC memory. And probably the only model
-in the world, which DOES HAVE ECC memory, but DOES NOT HAVE nvidia card
-- I set up btrfs raid-1
+On 10/23/25 1:29 PM, Askar Safin wrote:
+...
+> Also I tried to add "--integrity-no-journal" to "format" and "open".
+> It didn't work, either. (I don't remember what exactly didn't work.
+> I can do this experiment again, if needed.)
 
-So far, so good. I'm protected from both memory errors and disk errors.
+Are you sure you used --integrity-no-journal both in activation before
+hibernation and also in resume? If not, please try it.
+This flag activates direct mode and and completely avoids dm-integrity journal.
+You can verify it with "integritysetup status <device>" - it should say "journal: not active".
 
-But my swap partition stays unprotected. And yes, I need swap. I have 64 GiB of RAM,
-but this still is not enough for zillions of Chromium tabs and vscode windows.
+And if it does not work, could you try to use -integrity-recovery-mode the same
+way (both before hibernation and later in resume)? This will effectively ignore checksums
+providing no protection, but keeping dm-integrity device still in place.
+You can verify it with "integritysetup status <device>" - it should say "mode: read/write recovery".
+Is the problem still in place with this setting?
 
-And, according to btrfs docs, if I put swapfile to btrfs, it will be exempt from raid-1 guarantees.
+You can also try to decrease journal commit time with --journal-commit-time option,
+but this is not a real solution.
 
-It seems that the only solution in this case is to put swap partition on top of dm-integrity.
+...> 
+> Then I tried to do "cryptsetup" instead of "integritysetup". I created
+> swap partition so:
+> 
+> cryptsetup luksFormat --type luks2 /dev/disk/by-partuuid/c4bbc73d-7909-42ea-8d96-eab82512cbe7 /tmp/key
+> cryptsetup open --type luks2 --key-file /tmp/key /dev/disk/by-partuuid/c4bbc73d-7909-42ea-8d96-eab82512cbe7 swap
+> mkswap /dev/mapper/swap
+> swapon /dev/mapper/swap
+> 
+> And, of course, I did all necessary edits to initramfs.
+> 
+> And this time everything worked. This proves that I didn't do any mistakes in my setup
+> (i. e. I got initramfs right, etc), and this is actual bug in dm-integrity.
+> 
+> Unfortunately, LUKS created such way doesn't have any redundancy. So this is not solution for me.
 
-Note: I don't need error correcting code for my swap. I don't need a self-healing swap.
-The only thing I need is reliable error detection.
+Redundancy? You mean data integrity protection? There is no redundancy, only additional authentication tag
+(detecting integrity error but not correcting it).
 
-There is discussion on Stack Exchange on exactly the same problem:
-https://unix.stackexchange.com/questions/269098/silent-disk-errors-and-reliability-of-linux-swap .
-I think it reached the same conclusion: the only solution is dm-integrity.
+Thanks,
+Milan
 
-Also, as well as I understand, md raid is not a solution: when reading, it reads
-from one disk only, and thus doesn't detect all errors. It can detect remaining errors
-during scrub, which is too late (wrong data may be already consumed by some app).
-
-Also: I don't need encryption.
-
-(Also: there is other solution: "cryptsetup --integrity", but it uses dm-integrity anyway. We will
-get to it.)
-
-Okay, so I put swap partition to dm-integrity, and it worked!
-
-But then hibernation stopped to work.
-
-And here come steps to reproduce.
-
-Okay, so I have Dell Precision 7780. I bought it year ago, so I don't
-think my hardware is faulty. Also, I recently updated BIOS.
-
-My OS is Debian Trixie amd64. My kernel is Linux 6.12.48-1 from Debian.
-I created swap partition so:
-
-integritysetup format --integrity xxhash64 /dev/disk/by-partuuid/c4bbc73d-7909-42ea-8d96-eab82512cbe7
-integritysetup open --integrity xxhash64 /dev/disk/by-partuuid/c4bbc73d-7909-42ea-8d96-eab82512cbe7 swap
-mkswap /dev/mapper/swap
-swapon /dev/mapper/swap
-
-When I need to activate swap, I do this:
-
-integritysetup open --integrity xxhash64 /dev/disk/by-partuuid/c4bbc73d-7909-42ea-8d96-eab82512cbe7 swap
-swapon /dev/mapper/swap
-
-When I need to hibernate, I do "systemctl hibernate".
-
-And hibernate appears to work.
-
-Then, when I need to resume, I boot to my hand-crafted initramfs.
-That initramfs does this (I slightly simplified this script):
-
-==
-busybox mount -t proc proc /proc
-busybox mount -t devtmpfs devtmpfs /dev
-busybox mount -t sysfs sysfs /sys
-modprobe nvme
-modprobe dm-integrity
-modprobe xxhash64
-sleep 1
-integritysetup open --integrity xxhash64 "$LOWER_SWAP_DEV" early-swap
-sleep 1
-# The following "blkid" command should detect what is present on /dev/mapper/early-swap
-TYPE="$(blkid --match-tag TYPE --output value /dev/mapper/early-swap)"
-if [ "$TYPE" = 'swsuspend' ]; then
-  echo "got hibernation image, trying to resume"
-  echo /dev/mapper/early-swap > /sys/power/resume
-elif [ "$TYPE" = 'swap' ]; then
-  echo 'got normal swap without hibernation image'
-  integritysetup close early-swap
-  # proceed with fresh boot here
-fi
-==
-
-And this doesn't work. Hibernate works, resume doesn't. :)
-"blkid" reports swap as "swap" as opposed to "swsuspend".
-
-I suspect this is because hibernation doesn't flush dm-integrity journal.
-
-Also I tried to add "--integrity-bitmap-mode" to "format" and "open".
-Resume started to work, but when I try to shutdown resumed system,
-I get errors about corrupted dm-integrity partition. (Of course, I
-did necessary edits to initramfs script above.)
-
-Also I tried to add "--integrity-no-journal" to "format" and "open".
-It didn't work, either. (I don't remember what exactly didn't work.
-I can do this experiment again, if needed.)
-
-Then I tried to do "cryptsetup" instead of "integritysetup". I created
-swap partition so:
-
-cryptsetup luksFormat --type luks2 /dev/disk/by-partuuid/c4bbc73d-7909-42ea-8d96-eab82512cbe7 /tmp/key
-cryptsetup open --type luks2 --key-file /tmp/key /dev/disk/by-partuuid/c4bbc73d-7909-42ea-8d96-eab82512cbe7 swap
-mkswap /dev/mapper/swap
-swapon /dev/mapper/swap
-
-And, of course, I did all necessary edits to initramfs.
-
-And this time everything worked. This proves that I didn't do any mistakes in my setup
-(i. e. I got initramfs right, etc), and this is actual bug in dm-integrity.
-
-Unfortunately, LUKS created such way doesn't have any redundancy. So this is not solution for me.
-
-So I did this:
-cryptsetup luksFormat --type luks2 --integrity hmac-sha256 /dev/disk/by-partuuid/c4bbc73d-7909-42ea-8d96-eab82512cbe7 /tmp/key
-cryptsetup open --type luks2 --key-file /tmp/key /dev/disk/by-partuuid/c4bbc73d-7909-42ea-8d96-eab82512cbe7 swap
-mkswap /dev/mapper/swap
-swapon /dev/mapper/swap
-
-And this time everything stopped to work, again. I don't remember what exactly went wrong.
-As well as I remember, that "blkid" again returned "swap" instead of "swsuspend".
-I can run experiment again, if needed.
-
-The commands above use dm-integrity internally. So we clearly see: if dm-integrity is involved, then hibernation
-doesn't work.
-
-Here is a user with exactly same problem:
-https://www.reddit.com/r/archlinux/comments/atg18t/hibernation_wipes_swap_and_my_system_hangs_on_boot/ .
-I. e. "hibernation doesn't work if swap is on LUKS with integrity protection".
-
-So, please, fix this bug. Or say me how to solve my original problem (i. e. achieving full reliable error
-reporting). I'm available for testing. Send me experimental patches. I can provide more info, if needed.
-
-There is yet another potential solution: uswsusp ( https://docs.kernel.org/power/userland-swsusp.html ).
-In short, this is hibernation driven from userspace. I. e. uswsusp allows for finer control of hibernation.
-Thus, I can write my own userspace util, which will do hibernation, and execute "integritysetup close"
-after writing image. Assuming that original problem is what I think (i. e. lack of journal flush after writing of image),
-this may work. The problem is... latest commit to userspace implementation is dated 2012-09-15
-( https://git.kernel.org/pub/scm/linux/kernel/git/rafael/suspend-utils.git/ ). Do I really need to use such ancient
-technology? I didn't test this yet, I will test it in coming days. Even if it works, this will still mean that dm-integrity
-is buggy with kernel-based hibernation.
-
--- 
-Askar Safin
