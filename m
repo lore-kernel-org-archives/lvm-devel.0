@@ -1,169 +1,137 @@
-Received: from mail-ej1-f42.google.com (mail-ej1-f42.google.com [209.85.218.42])
-	(using TLSv1.2 with cipher ECDHE-RSA-AES128-GCM-SHA256 (128/128 bits))
+Received: from smtp.kernel.org (aws-us-west-2-korg-mail-1.web.codeaurora.org [10.30.226.201])
+	(using TLSv1.2 with cipher ECDHE-RSA-AES256-GCM-SHA384 (256/256 bits))
 	(No client certificate requested)
-	by smtp.subspace.kernel.org (Postfix) with ESMTPS id AA63C2EE617
-	for <lvm-devel@lists.linux.dev>; Mon, 27 Oct 2025 08:42:30 +0000 (UTC)
-Authentication-Results: smtp.subspace.kernel.org; arc=none smtp.client-ip=209.85.218.42
+	by smtp.subspace.kernel.org (Postfix) with ESMTPS id 25AF735470C
+	for <lvm-devel@lists.linux.dev>; Wed, 29 Oct 2025 13:31:17 +0000 (UTC)
+Authentication-Results: smtp.subspace.kernel.org; arc=none smtp.client-ip=10.30.226.201
 ARC-Seal:i=1; a=rsa-sha256; d=subspace.kernel.org; s=arc-20240116;
-	t=1761554552; cv=none; b=X6Mhiy6eMIVRR1J3QumZW1l4J8oF4+VIBnxBsrDfwu4GmprZeoKHEDWPT4PP3jT+ADdy2o4/R5kOiWlQAQqhEOKcsceA56lcXosY0yyIw9HBj6tIue12NI1Ap236PAnPiT0qhUbzlQyCQ+9dRBSVDvqUBqOCoJKZrRZcxd4Q4pA=
+	t=1761744679; cv=none; b=ZAGUJgVXvNx9lumlD0bTyqBldoxEfOP5cLcGxPVenPWYPH0R1Eqsk+bah3phY1+ZUjTwSXYbazb2wGFpM0bRJZVLxw7/jrddgnfPt1ALTnLziUQDmKjGmcAu5sHTJKZ37GhFb77qHjuS9B3H/1bA0uLSIEQ14OzsyTxMfX/UcY0=
 ARC-Message-Signature:i=1; a=rsa-sha256; d=subspace.kernel.org;
-	s=arc-20240116; t=1761554552; c=relaxed/simple;
-	bh=UG8pE67BLGZgv3QifxWbYYEqvT3PKB5usDKrFSSOST8=;
-	h=From:To:Cc:Subject:Date:Message-ID:In-Reply-To:References:
-	 MIME-Version; b=P4BJfC8oQM2DxJRbqPYLBPZ8C1OfGLrGR8xEW4FPqGvjGCsaL4N/YSnH9V4Cix2JHfkMRZL7/Z23YD83SxhMF5EiVUJGiutHWNXJglf2EP8g1feYvSV2j+x1EtuEuTp1MPLn47bkNXWzK/wSt7qVO9aJUvtS3B6y95HikaC50IU=
-ARC-Authentication-Results:i=1; smtp.subspace.kernel.org; dmarc=pass (p=none dis=none) header.from=gmail.com; spf=pass smtp.mailfrom=gmail.com; dkim=pass (2048-bit key) header.d=gmail.com header.i=@gmail.com header.b=XqjB7C5L; arc=none smtp.client-ip=209.85.218.42
-Authentication-Results: smtp.subspace.kernel.org; dmarc=pass (p=none dis=none) header.from=gmail.com
-Authentication-Results: smtp.subspace.kernel.org; spf=pass smtp.mailfrom=gmail.com
+	s=arc-20240116; t=1761744679; c=relaxed/simple;
+	bh=H4STyYQkAuprklyTlY2BjwuSs1iXn17miHrAUSvF+TM=;
+	h=MIME-Version:References:In-Reply-To:From:Date:Message-ID:Subject:
+	 To:Cc:Content-Type; b=AcO0MGR9QNyNGb5pEacrU57qRTF3IhsCkMeSFXMk/9GsuCnhex9J/G3rd2DzZ2qiJqmHi8SLltUZCa0Inc0EWBuRqqHt532uQyblF7tfKBEwyCMoVi0+ArgbKEuBl0m1qJjBZ6kubQ4LwmPaS7l2vkCerGC/uRT4coxXOXcSyyM=
+ARC-Authentication-Results:i=1; smtp.subspace.kernel.org; dkim=pass (2048-bit key) header.d=kernel.org header.i=@kernel.org header.b=k/YUzPJY; arc=none smtp.client-ip=10.30.226.201
 Authentication-Results: smtp.subspace.kernel.org;
-	dkim=pass (2048-bit key) header.d=gmail.com header.i=@gmail.com header.b="XqjB7C5L"
-Received: by mail-ej1-f42.google.com with SMTP id a640c23a62f3a-b50206773adso719723566b.0
-        for <lvm-devel@lists.linux.dev>; Mon, 27 Oct 2025 01:42:30 -0700 (PDT)
-DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed;
-        d=gmail.com; s=20230601; t=1761554549; x=1762159349; darn=lists.linux.dev;
-        h=content-transfer-encoding:mime-version:references:in-reply-to
-         :message-id:date:subject:cc:to:from:from:to:cc:subject:date
-         :message-id:reply-to;
-        bh=iFlBtrits7DNlZ6h+mgbiMIVvWdiVqZSUXzsme0rVO8=;
-        b=XqjB7C5LPWP8v1O/LtOb5hVcvm2qj2SwzTlChqtPtUMgZnlgH7ucavK5B+v298j23q
-         P5ylsNi50aUBQYmuNKKY6wZ4u9kIX0bcAACuu0uTZP5gNgrmWeHF9RS3SYUNiYrsV9hi
-         jw68LB5qBHL1oLTJmdGeTXAsGqQwaIu723ASZZ5/Y+ef7M0N8iGUmntdnlMsdoN3UyX+
-         v9CaEMsZkGhGjg2W1LDb5WvG5jG7tPpnO9bNs0m7vQ5pCkLT++JcW27nKLMOOcIovJ0C
-         axu2Wh/gaNpRO8t8ialftmU/opYgETRhk+vGssGoXw/vpDJiQj2phGwTey//KCNSKnFo
-         1sVg==
-X-Google-DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed;
-        d=1e100.net; s=20230601; t=1761554549; x=1762159349;
-        h=content-transfer-encoding:mime-version:references:in-reply-to
-         :message-id:date:subject:cc:to:from:x-gm-message-state:from:to:cc
-         :subject:date:message-id:reply-to;
-        bh=iFlBtrits7DNlZ6h+mgbiMIVvWdiVqZSUXzsme0rVO8=;
-        b=N+sdDboNfoTqQ40pzphk17vf7d8AwTYYjI7F6txu4S5dzcEM5lQNosx91PVMkORT6m
-         sPAImSWgJbLq58vLTXJn4QkVPBxgUqJ6yma2HzLD37wvH2ltilwLRulzENWb7FqB6wla
-         1wupst5Jy/hNXZ437YMGo0azp5/cE3INNOM1yAwnBFwpW7XEtNt5wk+ozkV0KXOQYOV5
-         DoUWanmkaqD4AkXfRCdxQaMOUR7i0JSfMybdktfG8DwX+93/SGIpWtHJv8vouVXdDHvB
-         Eu/JvWAM5fuOBGO30vsBtCSA7narJXsfCPw4oKGB7l7pSPuSfJXBxg+S1lsNB6HzKCHf
-         Ie3w==
-X-Forwarded-Encrypted: i=1; AJvYcCV6lGrPDKD90pIoUz5U1rg6IeRD6aAV/Tbc5nhgS4HsMi7VV2oFsenW1mKdM/ghZ+5yZAO7Mbg5PCQ=@lists.linux.dev
-X-Gm-Message-State: AOJu0YzMbBTD1pSqU0+mFtOSQHCGEV2sZ7fGJ/pqixTRCZiV+QEVbmIc
-	Tvnn4qgm15m/DQcisH33qjFBVZIOjvTWeSAWsd6T1lCaTdneMSfkhk4C
-X-Gm-Gg: ASbGncux3552BCcSVakRVUzmN2toNz4Y8g/iTgq0TBjRSiX2EnuM8SQ4QrJp6gHzqfL
-	TbxVxZflfJYPL0kUsRug1H6nROoTGqgCfn3k/0cbI9Om8B8DNE9dhbETl5LTvJS9I4vqbspQxmC
-	hcqBOzPH+YQxclSpb/urMB4dWnW2wvqjL+W2FXx3crkIF2qDUtfliMgh6Dqk8OoXOyuAMf/vSk8
-	OqoS0We5WreG8/wJJsJ6WOMMvHnREdfB4GXW/zpXh77bcNRCstvbu5IC3jSBnIq3/o7jy4KNmj9
-	rDWZ8zM3f7/L+rEO+oJdeO+wdxiazh6I2LQqFkFN/VErm9bn12peqDxVa9Ex/9IbGNICLSE8O2N
-	9GNPbDihkDBjjFeN3TzS6zywiLd0LJwsGyrO0DGVqxbIqeLex/yScZuYASqPyFif5PX3tb9uY7/
-	zJ
-X-Google-Smtp-Source: AGHT+IHNDWdV6nOLEUPb8BsKdy1fTa79zHhvllKqWIEzW+JrO9Bj5NMu8vYte0D/T+VD4YYNH0vo+A==
-X-Received: by 2002:a17:907:1c85:b0:b64:6cc7:6ac7 with SMTP id a640c23a62f3a-b6d6bb9083emr1215693866b.22.1761554548711;
-        Mon, 27 Oct 2025 01:42:28 -0700 (PDT)
-Received: from localhost ([212.73.77.104])
-        by smtp.gmail.com with UTF8SMTPSA id a640c23a62f3a-b6d853696aesm704277666b.30.2025.10.27.01.42.26
-        (version=TLS1_3 cipher=TLS_AES_128_GCM_SHA256 bits=128/128);
-        Mon, 27 Oct 2025 01:42:28 -0700 (PDT)
-From: Askar Safin <safinaskar@gmail.com>
-To: mpatocka@redhat.com
-Cc: Dell.Client.Kernel@dell.com,
-	brauner@kernel.org,
-	dm-devel@lists.linux.dev,
-	ebiggers@kernel.org,
-	kix@kix.es,
-	linux-block@vger.kernel.org,
-	linux-btrfs@vger.kernel.org,
-	linux-crypto@vger.kernel.org,
-	linux-lvm@lists.linux.dev,
-	linux-mm@kvack.org,
-	linux-pm@vger.kernel.org,
-	linux-raid@vger.kernel.org,
-	lvm-devel@lists.linux.dev,
-	milan@mazyland.cz,
-	mzxreary@0pointer.de,
-	nphamcs@gmail.com,
-	pavel@ucw.cz,
-	rafael@kernel.org,
-	ryncsn@gmail.com,
-	safinaskar@gmail.com,
-	torvalds@linux-foundation.org
-Subject: Re: [PATCH] pm-hibernate: flush block device cache when hibernating
-Date: Mon, 27 Oct 2025 11:42:20 +0300
-Message-ID: <20251027084220.2064289-1-safinaskar@gmail.com>
-X-Mailer: git-send-email 2.47.3
-In-Reply-To: <03e58462-5045-e12f-9af6-be2aaf19f32c@redhat.com>
-References: <03e58462-5045-e12f-9af6-be2aaf19f32c@redhat.com>
+	dkim=pass (2048-bit key) header.d=kernel.org header.i=@kernel.org header.b="k/YUzPJY"
+Received: by smtp.kernel.org (Postfix) with ESMTPSA id 6157CC2BCB2
+	for <lvm-devel@lists.linux.dev>; Wed, 29 Oct 2025 13:31:17 +0000 (UTC)
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/simple; d=kernel.org;
+	s=k20201202; t=1761744677;
+	bh=H4STyYQkAuprklyTlY2BjwuSs1iXn17miHrAUSvF+TM=;
+	h=References:In-Reply-To:From:Date:Subject:To:Cc:From;
+	b=k/YUzPJYNKtOchZEqmQ2MNC4VR8TnxopP0fpnEkTWlWsfz9tx8ThePcktS069B0t4
+	 fmcgrYYMrzyXGrbyzar22eouO9Ja3+s8CSZZsdNrDEGINsJysImL8I38EzDlt8mQKs
+	 kGJvCzZje3ZdtNXHUnKVBnXd5esJ+BfuAnzsuRoVkCrsxJMkJ9vqHst9Fve9f9trsm
+	 oLr8pwHCar8rp567vTcxlFJjsQN5QzBt06MZnNFU9uUOzjlAMY3qQrwDt5YhIfog7b
+	 eMvlTyVyC/KzAFBM5H6gHZS6w+lQLG56w53bfIXPd1o3RWZ29qIKSBnB/2IzmVVhRk
+	 uFejWm6Tr2+xQ==
+Received: by mail-ot1-f44.google.com with SMTP id 46e09a7af769-7c67d9577b3so1287972a34.2
+        for <lvm-devel@lists.linux.dev>; Wed, 29 Oct 2025 06:31:17 -0700 (PDT)
+X-Forwarded-Encrypted: i=1; AJvYcCVQpfXFCH0u0B5Cmfjrr5oyBlY+snnV6gsMUayRgcFXmqwVr6Lar78Tt/aQmAISnU29i6HEWtQG/BA=@lists.linux.dev
+X-Gm-Message-State: AOJu0Yy6qPAR+HJOf80+2wWG7rRwHOyZOy3xADykNnU9XkRyHMtmohOM
+	xey/b4ttAg7T2lzmeVHKexgp6dC8c+4Psr5Oe9HxbMlPVR+DwQFD+TpBwnR14JdDhjPKDgmx5nA
+	Ivc4ACvxvJaJulBiMAAHqdX78dyKsGbE=
+X-Google-Smtp-Source: AGHT+IEi0R7W8u+k9kuQ+Q/TOuonlY+thu2InbF4UTFVllbZ//+bkXdFiNu5AHmFd0ihQtxuffxUIcoyOHNos6JMUKo=
+X-Received: by 2002:a05:6830:82e9:b0:7c5:3afb:79db with SMTP id
+ 46e09a7af769-7c6831898admr1590559a34.35.1761744676587; Wed, 29 Oct 2025
+ 06:31:16 -0700 (PDT)
 Precedence: bulk
 X-Mailing-List: lvm-devel@lists.linux.dev
 List-Id: <lvm-devel.lists.linux.dev>
 List-Subscribe: <mailto:lvm-devel+subscribe@lists.linux.dev>
 List-Unsubscribe: <mailto:lvm-devel+unsubscribe@lists.linux.dev>
 MIME-Version: 1.0
-Content-Transfer-Encoding: 8bit
+References: <20251023112920.133897-1-safinaskar@gmail.com> <4cd2d217-f97d-4923-b852-4f8746456704@mazyland.cz>
+ <03e58462-5045-e12f-9af6-be2aaf19f32c@redhat.com>
+In-Reply-To: <03e58462-5045-e12f-9af6-be2aaf19f32c@redhat.com>
+From: "Rafael J. Wysocki" <rafael@kernel.org>
+Date: Wed, 29 Oct 2025 14:31:05 +0100
+X-Gmail-Original-Message-ID: <CAJZ5v0gcEjZPVtKrysS=ek7kHpH3afinwY-apKm3Yd4PmKDHdA@mail.gmail.com>
+X-Gm-Features: AWmQ_bnfFqqg5xNQkg3Ut6H7tX7EttVRgAcRKjLdiyhAs_brzIkV0t-kTKujKfc
+Message-ID: <CAJZ5v0gcEjZPVtKrysS=ek7kHpH3afinwY-apKm3Yd4PmKDHdA@mail.gmail.com>
+Subject: Re: [PATCH] pm-hibernate: flush block device cache when hibernating
+To: Mikulas Patocka <mpatocka@redhat.com>
+Cc: Askar Safin <safinaskar@gmail.com>, linux-mm@kvack.org, linux-pm@vger.kernel.org, 
+	linux-block@vger.kernel.org, linux-crypto@vger.kernel.org, 
+	linux-lvm@lists.linux.dev, lvm-devel@lists.linux.dev, 
+	linux-raid@vger.kernel.org, DellClientKernel <Dell.Client.Kernel@dell.com>, 
+	dm-devel@lists.linux.dev, linux-btrfs@vger.kernel.org, 
+	Nhat Pham <nphamcs@gmail.com>, Kairui Song <ryncsn@gmail.com>, Pavel Machek <pavel@ucw.cz>, 
+	=?UTF-8?Q?Rodolfo_Garc=C3=ADa_Pe=C3=B1as?= <kix@kix.es>, 
+	"Rafael J. Wysocki" <rafael@kernel.org>, Eric Biggers <ebiggers@kernel.org>, 
+	Lennart Poettering <mzxreary@0pointer.de>, Christian Brauner <brauner@kernel.org>, 
+	Linus Torvalds <torvalds@linux-foundation.org>, Milan Broz <milan@mazyland.cz>
+Content-Type: text/plain; charset="UTF-8"
+Content-Transfer-Encoding: quoted-printable
 
-Mikulas Patocka <mpatocka@redhat.com>:
+On Fri, Oct 24, 2025 at 12:23=E2=80=AFPM Mikulas Patocka <mpatocka@redhat.c=
+om> wrote:
+>
+>
+>
+> On Fri, 24 Oct 2025, Askar Safin wrote:
+>
+> > Hi.
+> >
+> > Hibernate to swap located on dm-integrity doesn't work.
+> > Let me first describe why I need this, then I will describe a bug with =
+steps
+> > to reproduce
+> > (and some speculation on cause of the bug).
+>
 > Hi
-> 
+>
 > Does this patch fix it?
-> 
+>
 > Mikulas
-> 
-> 
+>
+>
 > From: Mikulas Patocka <mpatocka@redhat.com>
-> 
-> There was reported failure that hibernation doesn't work with 
-> dm-integrity. The reason for the failure is that the hibernation code 
-> doesn't issue the FLUSH bio - the data still sits in the dm-integrity 
+>
+> There was reported failure that hibernation doesn't work with
+> dm-integrity. The reason for the failure is that the hibernation code
+> doesn't issue the FLUSH bio - the data still sits in the dm-integrity
 > cache and they are lost when poweroff happens.
+>
+> This commit fixes the suspend code so that it issues flushes before
+> writing the header and after writing the header.
 
-I tested this patch in Qemu on current master (43e9ad0c55a3). Also I
-applied Mario's patch
-https://lore.kernel.org/linux-pm/20251026033115.436448-1-superm1@kernel.org/ .
-It is needed, otherwise you get WARNING when you try to hibernate.
+Hmm, shouldn't it flush every time it does a sync write, and not just
+in these two cases?
 
-The patch doesn't work.
-
-Here is script I used for reproduction:
-https://zerobin.net/?66669be7d2404586#xWufhCq7zCoOk3LJcJCj7W4k3vYT3U4vhGutTN3p8m0= .
-It is the same script as in previous letter. I just added some
-"integritysetup status /dev/mapper/..." calls.
-
-Here are results:
-https://zerobin.net/?2331637d633d20c5#EmyhxiHLDmoZT1jBVbe/q9iJKhDEw4n+Bwr5mAcaOpM= .
-
-File names mean the same as in previous letter, i. e.:
-
-> "log-def-1" is output of first Qemu invocation (i. e. first boot) with
-> default integritysetup options. "log-def-2" is second Qemu invocation
-> (i. e. when we try to resume).
-> 
-> log-bit-{1,2} is same thing, but with "--integrity-bitmap-mode" added to
-> "integritysetup format" and "integritysetup open".
-> 
-> log-no-{1,2} is same, but with "--integrity-no-journal".
-> 
-> log-nodm-{1,2} is same, but without dm-integrity at all, i. e. we create
-> swap directly on partition.
-
-Results are somewhat better than without the patch. Without the patch
-we don't even try to resume in default mode. "blkid" simply reports
-"swap" instead of "swsuspend". With patch "blkid" reports "swsuspend", and
-so we try to resume. But then in the middle of resuming we get this:
-
-[    1.008223] PM: Image loading progress:  70%
-[    1.017478] PM: Image loading progress:  80%
-[    1.027069] PM: Image loading progress:  90%
-[    1.029653] PM: hibernation: Read 36196 kbytes in 0.49 seconds (73.86 MB/s)
-[    1.030146] PM: Error -1 resuming
-[    1.030322] PM: hibernation: Failed to load image, recovering.
-
-(See link above for full logs.)
-
-Very similar thing happens in "--integrity-no-journal" mode in the middle of
-resuming:
-
-[    0.531245] device-mapper: integrity: dm-0: Checksum failed at sector 0x6e70
-[    0.531600] PM: Error -84 resuming
-[    0.531799] PM: hibernation: Failed to load image, recovering.
-
-The patch doesn't change anything in "--integrity-bitmap-mode" mode:
-we still are able to resume, but then get integrity errors when we do
-"cat /dev/mapper/swap > /dev/null".
-
--- 
-Askar Safin
+>
+> Signed-off-by: Mikulas Patocka <mpatocka@redhat.com>
+> Reported-by: Askar Safin <safinaskar@gmail.com>
+> Link: https://lore.kernel.org/dm-devel/a48a37e3-2c22-44fb-97a4-0e57dc2042=
+1a@gmail.com/T/
+> Cc: stable@vger.kernel.org
+>
+> ---
+>  kernel/power/swap.c |    4 +++-
+>  1 file changed, 3 insertions(+), 1 deletion(-)
+>
+> Index: linux-2.6/kernel/power/swap.c
+> =3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=
+=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=
+=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D
+> --- linux-2.6.orig/kernel/power/swap.c  2025-10-13 21:42:48.000000000 +02=
+00
+> +++ linux-2.6/kernel/power/swap.c       2025-10-24 12:01:32.000000000 +02=
+00
+> @@ -320,8 +320,10 @@ static int mark_swapfiles(struct swap_ma
+>                 swsusp_header->flags =3D flags;
+>                 if (flags & SF_CRC32_MODE)
+>                         swsusp_header->crc32 =3D handle->crc32;
+> -               error =3D hib_submit_io_sync(REQ_OP_WRITE | REQ_SYNC,
+> +               error =3D hib_submit_io_sync(REQ_OP_WRITE | REQ_SYNC | RE=
+Q_PREFLUSH,
+>                                       swsusp_resume_block, swsusp_header)=
+;
+> +               if (!error)
+> +                       error =3D blkdev_issue_flush(file_bdev(hib_resume=
+_bdev_file));
+>         } else {
+>                 pr_err("Swap header not found!\n");
+>                 error =3D -ENODEV;
+>
