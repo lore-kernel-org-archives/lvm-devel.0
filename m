@@ -1,420 +1,111 @@
-Received: from us-smtp-delivery-124.mimecast.com (us-smtp-delivery-124.mimecast.com [170.10.129.124])
-	(using TLSv1.2 with cipher ECDHE-RSA-AES256-GCM-SHA384 (256/256 bits))
+Received: from mail-wm1-f54.google.com (mail-wm1-f54.google.com [209.85.128.54])
+	(using TLSv1.2 with cipher ECDHE-RSA-AES128-GCM-SHA256 (128/128 bits))
 	(No client certificate requested)
-	by smtp.subspace.kernel.org (Postfix) with ESMTPS id AD2132FD686
-	for <lvm-devel@lists.linux.dev>; Fri, 31 Oct 2025 19:36:14 +0000 (UTC)
-Authentication-Results: smtp.subspace.kernel.org; arc=none smtp.client-ip=170.10.129.124
+	by smtp.subspace.kernel.org (Postfix) with ESMTPS id 6BBBA313E38
+	for <lvm-devel@lists.linux.dev>; Mon,  3 Nov 2025 15:53:52 +0000 (UTC)
+Authentication-Results: smtp.subspace.kernel.org; arc=none smtp.client-ip=209.85.128.54
 ARC-Seal:i=1; a=rsa-sha256; d=subspace.kernel.org; s=arc-20240116;
-	t=1761939376; cv=none; b=cDYAlOPN7TireC/vO72/HCSCLASTiM6r+iHElh2tdt7BJOUYII1dViGANPCwVEVnG0WKHs68C5vfp2Bcbmw7g9Fjy339d4EsLtfuAx0GmM7MYgJYBNbiywrHb9xZL5P/Fjtk43F1mMRV7tB211h/KSKrzyk3tDrMcRc/ggdodJk=
+	t=1762185234; cv=none; b=KlKC+iNKlJPaZtSEtxqk2CLeqNc45n/jahYsJmZogqVjdbr1Chuhvw13WFphx0cNzdBMDIiHXZfYOm6HawE7yl0gKzRI+yNWZwsbOpFemFyXi99ZDl2bLwg7B189z0/7OCaHVXXVsuTG0FMhdFsPjsbINB0+IqDc+BW1jt9C7t0=
 ARC-Message-Signature:i=1; a=rsa-sha256; d=subspace.kernel.org;
-	s=arc-20240116; t=1761939376; c=relaxed/simple;
-	bh=H/9Q/SuHFGZNhRHpuuEMQwt0VedY4qpXj+Tt3Yiz6/Q=;
-	h=Date:From:To:cc:Subject:In-Reply-To:Message-ID:References:
-	 MIME-Version:Content-Type; b=IlvvTxVt4ipTOQNioRygoLUd2RaQMpXn55+4nIyoyb8Swo0gz5XbBtZxAxCU/Df13uc2L6duVsC35YQ17F4RZQ4IYa83Bj+Sde1u6Rd9R8x6ZiCaUR2koRrX3qgfEEC0BXXbkB3a+c59OhwBB8Cyufg1gJ6axycly2MVHW5SO5A=
-ARC-Authentication-Results:i=1; smtp.subspace.kernel.org; dmarc=pass (p=quarantine dis=none) header.from=redhat.com; spf=pass smtp.mailfrom=redhat.com; dkim=pass (1024-bit key) header.d=redhat.com header.i=@redhat.com header.b=AdBzOUbl; arc=none smtp.client-ip=170.10.129.124
-Authentication-Results: smtp.subspace.kernel.org; dmarc=pass (p=quarantine dis=none) header.from=redhat.com
-Authentication-Results: smtp.subspace.kernel.org; spf=pass smtp.mailfrom=redhat.com
+	s=arc-20240116; t=1762185234; c=relaxed/simple;
+	bh=qrT9BCtX5Q+ZrBSV86ofie64KLKL7GM3W7AojJFifCE=;
+	h=From:To:Cc:Subject:Date:Message-ID:In-Reply-To:References:
+	 MIME-Version; b=rtK8V6AXYQrkMfR+/0ktEQFUsuIkMFdQN4uIsQFFaxuC0aav6prGet85sDmXOm8VIPvKFxYnEsBxjmzDTBTi47m7MuBNT0r3WrE2Q1L9yvQ5MVYH5P9q3rVzyHZaR3x4Tk24HCdAN0jq58iVwwR7Q6tv7ilBDQDr3SVhZV6Vleg=
+ARC-Authentication-Results:i=1; smtp.subspace.kernel.org; dmarc=pass (p=none dis=none) header.from=gmail.com; spf=pass smtp.mailfrom=gmail.com; dkim=pass (2048-bit key) header.d=gmail.com header.i=@gmail.com header.b=kd4PVMLb; arc=none smtp.client-ip=209.85.128.54
+Authentication-Results: smtp.subspace.kernel.org; dmarc=pass (p=none dis=none) header.from=gmail.com
+Authentication-Results: smtp.subspace.kernel.org; spf=pass smtp.mailfrom=gmail.com
 Authentication-Results: smtp.subspace.kernel.org;
-	dkim=pass (1024-bit key) header.d=redhat.com header.i=@redhat.com header.b="AdBzOUbl"
-DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed; d=redhat.com;
-	s=mimecast20190719; t=1761939373;
-	h=from:from:reply-to:subject:subject:date:date:message-id:message-id:
-	 to:to:cc:cc:mime-version:mime-version:content-type:content-type:
-	 in-reply-to:in-reply-to:references:references;
-	bh=Hs8WAha7zUb9hjupyXXbSI5TRA2qjGP9C7xrWD4lf7E=;
-	b=AdBzOUbldTp20rIpXEzZKaKLqb7/IMHI8KquX9KYFqb+dIH5J+NX8DvAW+Bh7tC77GXmOe
-	N3B9HDdeChLIaOo34SFaikBo4ib6UmtpBIWUmJjQx2bxz1wxp5rZHTRieHOXGMqxJFPtc0
-	mAAitaZjf/Kw/5GZ6lCIuc5ayxtWabE=
-Received: from mx-prod-mc-08.mail-002.prod.us-west-2.aws.redhat.com
- (ec2-35-165-154-97.us-west-2.compute.amazonaws.com [35.165.154.97]) by
- relay.mimecast.com with ESMTP with STARTTLS (version=TLSv1.3,
- cipher=TLS_AES_256_GCM_SHA384) id us-mta-77-pxx5Wq6vOeu_hBgBjrPreQ-1; Fri,
- 31 Oct 2025 15:36:09 -0400
-X-MC-Unique: pxx5Wq6vOeu_hBgBjrPreQ-1
-X-Mimecast-MFC-AGG-ID: pxx5Wq6vOeu_hBgBjrPreQ_1761939367
-Received: from mx-prod-int-01.mail-002.prod.us-west-2.aws.redhat.com (mx-prod-int-01.mail-002.prod.us-west-2.aws.redhat.com [10.30.177.4])
-	(using TLSv1.3 with cipher TLS_AES_256_GCM_SHA384 (256/256 bits)
-	 key-exchange X25519 server-signature RSA-PSS (2048 bits) server-digest SHA256)
-	(No client certificate requested)
-	by mx-prod-mc-08.mail-002.prod.us-west-2.aws.redhat.com (Postfix) with ESMTPS id 9970E18002C1;
-	Fri, 31 Oct 2025 19:36:06 +0000 (UTC)
-Received: from [10.45.225.163] (unknown [10.45.225.163])
-	by mx-prod-int-01.mail-002.prod.us-west-2.aws.redhat.com (Postfix) with ESMTPS id 4C2C430001A1;
-	Fri, 31 Oct 2025 19:35:59 +0000 (UTC)
-Date: Fri, 31 Oct 2025 20:35:56 +0100 (CET)
-From: Mikulas Patocka <mpatocka@redhat.com>
-To: Askar Safin <safinaskar@gmail.com>
-cc: Dell.Client.Kernel@dell.com, brauner@kernel.org, dm-devel@lists.linux.dev, 
-    ebiggers@kernel.org, kix@kix.es, linux-block@vger.kernel.org, 
-    linux-btrfs@vger.kernel.org, linux-crypto@vger.kernel.org, 
-    linux-lvm@lists.linux.dev, linux-mm@kvack.org, linux-pm@vger.kernel.org, 
-    linux-raid@vger.kernel.org, lvm-devel@lists.linux.dev, agk@redhat.com, 
-    msnitzer@redhat.com, milan@mazyland.cz, mzxreary@0pointer.de, 
-    nphamcs@gmail.com, pavel@ucw.cz, rafael@kernel.org, ryncsn@gmail.com, 
-    torvalds@linux-foundation.org
-Subject: [RFC PATCH 2/2] swsusp: make it possible to hibernate to device
- mapper devices
-In-Reply-To: <de1f0036-84f9-2923-2c0a-620e702d850b@redhat.com>
-Message-ID: <b32d0701-4399-9c5d-ecc8-071162df97a7@redhat.com>
-References: <03e58462-5045-e12f-9af6-be2aaf19f32c@redhat.com> <20251027084220.2064289-1-safinaskar@gmail.com> <de1f0036-84f9-2923-2c0a-620e702d850b@redhat.com>
+	dkim=pass (2048-bit key) header.d=gmail.com header.i=@gmail.com header.b="kd4PVMLb"
+Received: by mail-wm1-f54.google.com with SMTP id 5b1f17b1804b1-471b80b994bso59801705e9.3
+        for <lvm-devel@lists.linux.dev>; Mon, 03 Nov 2025 07:53:52 -0800 (PST)
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed;
+        d=gmail.com; s=20230601; t=1762185231; x=1762790031; darn=lists.linux.dev;
+        h=content-transfer-encoding:mime-version:references:in-reply-to
+         :message-id:date:subject:cc:to:from:from:to:cc:subject:date
+         :message-id:reply-to;
+        bh=fLey69Q1yRBIRmkA9w/tF6nJaEmvXdViphT1MNeupw4=;
+        b=kd4PVMLbdRQpONULwEuR0i8NtQkxC8OJdP29AMh+QGV01j7kmPyLFDAUnlU/idDbmc
+         Cqvp5qKnXaFeFsHlz8mUZc0PvvoUqenkob5g4Qw1CJRI8IJhrpPkjb3y2kWCZi8bR+wU
+         /Wss9k6b5a7mr+XpVHyaVc5Tfk79g0QBL2/qm/SvEt3Hz9mIQJrc4S483uDIy+R38sbZ
+         SJ8lKC+hkL5gX8Kmp8FIyArd/n8YHaEt5iJpPiRaZBpp5XmyYWTXk1zhxQ42sjhdHyld
+         x608EVaOWFNK1+BFqoGEl/5z7Nl/STIy2JGyMYgNwq5CtjDOqQiQ92ekfKaAgrmia+n1
+         3IjQ==
+X-Google-DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed;
+        d=1e100.net; s=20230601; t=1762185231; x=1762790031;
+        h=content-transfer-encoding:mime-version:references:in-reply-to
+         :message-id:date:subject:cc:to:from:x-gm-message-state:from:to:cc
+         :subject:date:message-id:reply-to;
+        bh=fLey69Q1yRBIRmkA9w/tF6nJaEmvXdViphT1MNeupw4=;
+        b=u1QnDmaO1y/tw1KpbQiG12Z7qWJGWzK8z8sCRtsyYobpuSfqorJOgeKWMm2CQ4j+kW
+         Krh14kN27pGPXI0H+MYfHtF1s/w5KTwVhQnUupEr4tCKRt7/ygSLjxXOyEmgDjOzrHQ9
+         OFrVBXCEhDTQygq90l41Ne24pbjnpbnlsDUmuHBKDDVDqEaHEaicydw+pJYwcy5/ChxQ
+         Tm8TagosRF56Z16wwhioAPe1FyZTxxRtkVYXG0KoJAt7uT/Ktv7bMlZHp3k/EJgTU583
+         7CzqaoS/jol+4Nme6+Lugf00Sa0n5aTfqab/nwPWggJ4fMYJW5e5DuNEcpiik151LERj
+         aJUA==
+X-Forwarded-Encrypted: i=1; AJvYcCXdDHO1ipF/aPBY23s4zeVO6Dd6mps6eNbCJL3nqmuLtzzsNPD4IGVjkMqeRN2osHqeakL0KO3tclE=@lists.linux.dev
+X-Gm-Message-State: AOJu0YxkspoTo2aRVM84b4lJwpRJVcxPLxXv6j3+oGEv8Lj9CvmERl+1
+	1pR5Rp9HHeMRG95b0OYHA3NXgqEXVLspR4KwHm/pIH84OdR4VYzKe5xj
+X-Gm-Gg: ASbGncv0p5rfiboJYrJys0aGqFTPnoXGCtS4COGpZjlleXXKolnptRuB9VyBUUEkhPd
+	k+QiyubWUkAZ1jiRCHrvuJD786nyWTH0u0yWYwmC0aAY8TmUqhlpDZ+BEUlnvHw9r0TKaMUOt/+
+	Q7M8eeupEOZ+cOKToCaLy1wyYxXIk39OBZbQA4JrAXmMtsIkrWwyzFBrqh4S45kcSzOSULEldVq
+	8dt6n1fmGayB30XiPrk/x3lP/YYokOOTZpQCAuDKjpYJNbDULZWkTwyDLxJKIO9KQKsi/ifq5Tc
+	pFqiLei12w0dWw/DFnXSrv9kjIYJ9x6kEfIZFAbvhMMo7Phl8OCzc0DDjnUVe1PID0Zsh2gsOw3
+	WupsB5rFxScnrzxTW96X2Pi7V6rFPyuxZvHBBXKsTT7FCRPVnyrW+KDiSl/uI83v8rYputa8B
+X-Google-Smtp-Source: AGHT+IGy41LT8aj0/Xvj0W53yZvKvDn5c9ABQJxOklSZONmqbPHs8HNDAqrjQAZba3bO5xPU/Rodqg==
+X-Received: by 2002:a05:600c:3511:b0:470:bcc4:b07c with SMTP id 5b1f17b1804b1-477308a8f36mr118541675e9.37.1762185230454;
+        Mon, 03 Nov 2025 07:53:50 -0800 (PST)
+Received: from localhost ([212.73.77.104])
+        by smtp.gmail.com with UTF8SMTPSA id 5b1f17b1804b1-4773c48de65sm161908635e9.1.2025.11.03.07.53.48
+        (version=TLS1_3 cipher=TLS_AES_128_GCM_SHA256 bits=128/128);
+        Mon, 03 Nov 2025 07:53:50 -0800 (PST)
+From: Askar Safin <safinaskar@gmail.com>
+To: mpatocka@redhat.com
+Cc: Dell.Client.Kernel@dell.com,
+	agk@redhat.com,
+	brauner@kernel.org,
+	dm-devel@lists.linux.dev,
+	ebiggers@kernel.org,
+	kix@kix.es,
+	linux-block@vger.kernel.org,
+	linux-btrfs@vger.kernel.org,
+	linux-crypto@vger.kernel.org,
+	linux-lvm@lists.linux.dev,
+	linux-mm@kvack.org,
+	linux-pm@vger.kernel.org,
+	linux-raid@vger.kernel.org,
+	lvm-devel@lists.linux.dev,
+	milan@mazyland.cz,
+	msnitzer@redhat.com,
+	mzxreary@0pointer.de,
+	nphamcs@gmail.com,
+	pavel@ucw.cz,
+	rafael@kernel.org,
+	ryncsn@gmail.com,
+	safinaskar@gmail.com,
+	torvalds@linux-foundation.org
+Subject: Re: [PATCH 1/2] pm-hibernate: flush disk cache when suspending
+Date: Mon,  3 Nov 2025 18:53:45 +0300
+Message-ID: <20251103155345.1153213-1-safinaskar@gmail.com>
+X-Mailer: git-send-email 2.47.3
+In-Reply-To: <c44942f2-cf4d-04c2-908f-d16e2e60aae2@redhat.com>
+References: <c44942f2-cf4d-04c2-908f-d16e2e60aae2@redhat.com>
 Precedence: bulk
 X-Mailing-List: lvm-devel@lists.linux.dev
 List-Id: <lvm-devel.lists.linux.dev>
 List-Subscribe: <mailto:lvm-devel+subscribe@lists.linux.dev>
 List-Unsubscribe: <mailto:lvm-devel+unsubscribe@lists.linux.dev>
 MIME-Version: 1.0
-Content-Type: text/plain; charset=US-ASCII
-X-Scanned-By: MIMEDefang 3.4.1 on 10.30.177.4
+Content-Transfer-Encoding: 8bit
 
-Hi
+Mikulas Patocka <mpatocka@redhat.com>:
+> [PATCH 1/2] pm-hibernate: flush disk cache when suspending
+> 
+> There was reported failure that suspend doesn't work with dm-integrity.
+> The reason for the failure is that the suspend code doesn't issue the
+> FLUSH bio - the data still sits in the dm-integrity cache and they are
+> lost when poweroff happens.
 
-Askar Safin requires swap and hibernation on the dm-integrity device mapper
-target because he needs to protect his data.
+Thank you! I hope I will test this within 2 weeks.
 
-This hits two problems:
-1. The kernel doesn't send the flush bio to the hibernation device after
-   writing the image and before powering off - this is easy to fix
-2. The dm-integrity target keeps parts of the device in-memory - it keeps
-   a journal and a dm-bufio cache in memory. If we hibernate and resume,
-   the content of memory no longer matches the data on the hibernate
-   partition and that may cause spurious errors - this is hard to fix
-
-We cannot use register_pm_notifier - the problem is that device mapper
-devices may depend on each other, forming a directed acyclic graph, and
-we need to suspend them in the order of the graph. PM notifiers have no
-notion of the graph - they have priority, but mapping the priorities to
-the device dependency graph would be hard.
-
-So I added a new method "hibernate" to struct block_device_operations. If
-the method is NULL, the device doesn't need special treatment during
-hibernation. If the method is non-NULL, the method is called on the swap
-device where we are suspending - the method will clear in-memory
-structures (in the case of dm-integrity, it will flush the journal and
-invalidate the dm-bufio cache), so that when the machine is resumed, the
-driver won't use stale data. Finally, the "hibernate" method calls itself
-on subordinate devices, so that complex stack of device mapper devices is
-handled correctly.
-
-Hibernation is allowed only on targets that have DM_TARGET_HIBERNATE.
-Hibernation on other targets is rejected because it may cause data
-corruption. Previously, the kernel would allow hibernation on any DM
-device, causing potential data corruption if the in-memory metadata
-doesn't match the content of the swap device.
-
-I am submitting this patch as a request for comment - I'd like to know if
-you consider this approach correct or not. If you would like to solve the
-hibernation problem in some other way, let me know.
-
-Signed-off-by: Mikulas Patocka <mpatocka@redhat.com>
-Reported-by: Askar Safin <safinaskar@gmail.com>
-Link: https://lore.kernel.org/dm-devel/a48a37e3-2c22-44fb-97a4-0e57dc20421a@gmail.com/T/
-
----
- drivers/md/dm-crypt.c         |    2 -
- drivers/md/dm-integrity.c     |   42 ++++++++++++++++++++++++++++++++++++++-
- drivers/md/dm-linear.c        |    2 -
- drivers/md/dm-stripe.c        |    3 +-
- drivers/md/dm.c               |   45 ++++++++++++++++++++++++++++++++++++++++++
- include/linux/blkdev.h        |   12 +++++++++++
- include/linux/device-mapper.h |    6 +++++
- kernel/power/hibernate.c      |    4 +++
- kernel/power/power.h          |    2 +
- kernel/power/swap.c           |   20 ++++++++++++++++++
- 10 files changed, 134 insertions(+), 4 deletions(-)
-
-Index: linux-2.6/include/linux/blkdev.h
-===================================================================
---- linux-2.6.orig/include/linux/blkdev.h
-+++ linux-2.6/include/linux/blkdev.h
-@@ -1676,6 +1676,11 @@ struct block_device_operations {
- 	 * driver.
- 	 */
- 	int (*alternative_gpt_sector)(struct gendisk *disk, sector_t *sector);
-+
-+	/*
-+	 * This invalidates the device cache when hibernating.
-+	 */
-+	int (*hibernate)(struct gendisk *disk);
- };
- 
- #ifdef CONFIG_COMPAT
-@@ -1875,4 +1880,11 @@ static inline int bio_split_rw_at(struct
- 
- #define DEFINE_IO_COMP_BATCH(name)	struct io_comp_batch name = { }
- 
-+static inline int bdev_hibernate(struct block_device *bdev)
-+{
-+	if (!bdev->bd_disk->fops->hibernate)
-+		return 0;
-+	return bdev->bd_disk->fops->hibernate(bdev->bd_disk);
-+}
-+
- #endif /* _LINUX_BLKDEV_H */
-Index: linux-2.6/drivers/md/dm-integrity.c
-===================================================================
---- linux-2.6.orig/drivers/md/dm-integrity.c
-+++ linux-2.6/drivers/md/dm-integrity.c
-@@ -4053,6 +4053,45 @@ static void dm_integrity_io_hints(struct
- 	limits->max_integrity_segments = USHRT_MAX;
- }
- 
-+static int dm_integrity_hibernate(struct dm_target *ti)
-+{
-+	struct dm_integrity_c *ic = ti->private;
-+	int r;
-+
-+	timer_delete_sync(&ic->autocommit_timer);
-+
-+	if (ic->recalc_wq)
-+		drain_workqueue(ic->recalc_wq);		/* !!! FIXME */
-+
-+	if (ic->mode == 'B')
-+		cancel_delayed_work_sync(&ic->bitmap_flush_work);
-+
-+	queue_work(ic->commit_wq, &ic->commit_work);
-+	drain_workqueue(ic->commit_wq);
-+
-+	if (ic->mode == 'J') {
-+		queue_work(ic->writer_wq, &ic->writer_work);
-+		drain_workqueue(ic->writer_wq);
-+		dm_integrity_flush_buffers(ic, true);
-+		init_journal(ic, ic->free_section,
-+			     ic->journal_sections - ic->free_section, ic->commit_seq);
-+		if (ic->free_section) {
-+			init_journal(ic, 0, ic->free_section,
-+				     next_commit_seq(ic->commit_seq));
-+		}
-+	}
-+
-+	dm_bufio_client_reset(ic->bufio);
-+
-+	if (ic->meta_dev) {
-+		r = bdev_hibernate(ic->meta_dev->bdev);
-+		if (r)
-+			return r;
-+	}
-+
-+	return 0;
-+}
-+
- static void calculate_journal_section_size(struct dm_integrity_c *ic)
- {
- 	unsigned int sector_space = JOURNAL_SECTOR_DATA;
-@@ -5414,7 +5453,7 @@ static struct target_type integrity_targ
- 	.name			= "integrity",
- 	.version		= {1, 14, 0},
- 	.module			= THIS_MODULE,
--	.features		= DM_TARGET_SINGLETON | DM_TARGET_INTEGRITY,
-+	.features		= DM_TARGET_SINGLETON | DM_TARGET_INTEGRITY | DM_TARGET_HIBERNATE,
- 	.ctr			= dm_integrity_ctr,
- 	.dtr			= dm_integrity_dtr,
- 	.map			= dm_integrity_map,
-@@ -5424,6 +5463,7 @@ static struct target_type integrity_targ
- 	.status			= dm_integrity_status,
- 	.iterate_devices	= dm_integrity_iterate_devices,
- 	.io_hints		= dm_integrity_io_hints,
-+	.hibernate		= dm_integrity_hibernate,
- };
- 
- static int __init dm_integrity_init(void)
-Index: linux-2.6/drivers/md/dm.c
-===================================================================
---- linux-2.6.orig/drivers/md/dm.c
-+++ linux-2.6/drivers/md/dm.c
-@@ -3439,6 +3439,50 @@ out:
- 	return ret;
- }
- 
-+static int __dm_hibernate(struct dm_target *ti, struct dm_dev *dev,
-+			  sector_t start, sector_t len, void *data)
-+{
-+	return bdev_hibernate(dev->bdev);
-+}
-+
-+static int dm_blk_hibernate(struct gendisk *disk)
-+{
-+	struct mapped_device *md = disk->private_data;
-+	int srcu_idx;
-+	struct dm_table *map;
-+	int r = 0;
-+
-+	map = dm_get_live_table(md, &srcu_idx);
-+	if (unlikely(!map))
-+		goto out;
-+
-+	for (unsigned int i = 0; i < map->num_targets; i++) {
-+		struct dm_target *ti = dm_table_get_target(map, i);
-+
-+		if (!dm_target_supports_hibernate(ti->type)) {
-+			r = -EOPNOTSUPP;
-+			goto out;
-+		}
-+
-+		if (ti->type->hibernate) {
-+			r = ti->type->hibernate(ti);
-+			if (r)
-+				goto out;
-+		}
-+
-+		if (ti->type->iterate_devices) {
-+			r = ti->type->iterate_devices(ti, __dm_hibernate, NULL);
-+			if (r)
-+				goto out;
-+		}
-+	}
-+
-+out:
-+	dm_put_live_table(md, srcu_idx);
-+
-+	return r;
-+}
-+
- struct dm_pr {
- 	u64	old_key;
- 	u64	new_key;
-@@ -3768,6 +3812,7 @@ static const struct block_device_operati
- 	.getgeo = dm_blk_getgeo,
- 	.report_zones = dm_blk_report_zones,
- 	.get_unique_id = dm_blk_get_unique_id,
-+	.hibernate = dm_blk_hibernate,
- 	.pr_ops = &dm_pr_ops,
- 	.owner = THIS_MODULE
- };
-Index: linux-2.6/include/linux/device-mapper.h
-===================================================================
---- linux-2.6.orig/include/linux/device-mapper.h
-+++ linux-2.6/include/linux/device-mapper.h
-@@ -142,6 +142,8 @@ typedef int (*dm_iterate_devices_fn) (st
- typedef void (*dm_io_hints_fn) (struct dm_target *ti,
- 				struct queue_limits *limits);
- 
-+typedef int (*dm_hibernate_fn) (struct dm_target *ti);
-+
- /*
-  * Returns:
-  *    0: The target can handle the next I/O immediately.
-@@ -219,6 +221,7 @@ struct target_type {
- 	dm_busy_fn busy;
- 	dm_iterate_devices_fn iterate_devices;
- 	dm_io_hints_fn io_hints;
-+	dm_hibernate_fn hibernate;
- 	dm_dax_direct_access_fn direct_access;
- 	dm_dax_zero_page_range_fn dax_zero_page_range;
- 	dm_dax_recovery_write_fn dax_recovery_write;
-@@ -309,6 +312,9 @@ struct target_type {
- #define DM_TARGET_ATOMIC_WRITES		0x00000400
- #define dm_target_supports_atomic_writes(type) ((type)->features & DM_TARGET_ATOMIC_WRITES)
- 
-+#define DM_TARGET_HIBERNATE		0x00000800
-+#define dm_target_supports_hibernate(type) ((type)->features & DM_TARGET_HIBERNATE)
-+
- struct dm_target {
- 	struct dm_table *table;
- 	struct target_type *type;
-Index: linux-2.6/kernel/power/hibernate.c
-===================================================================
---- linux-2.6.orig/kernel/power/hibernate.c
-+++ linux-2.6/kernel/power/hibernate.c
-@@ -832,6 +832,10 @@ int hibernate(void)
- 	if (error)
- 		goto Exit;
- 
-+	error = notify_swap_device();
-+	if (error)
-+		goto Thaw;
-+
- 	lock_device_hotplug();
- 	/* Allocate memory management structures */
- 	error = create_basic_memory_bitmaps();
-Index: linux-2.6/kernel/power/power.h
-===================================================================
---- linux-2.6.orig/kernel/power/power.h
-+++ linux-2.6/kernel/power/power.h
-@@ -68,6 +68,8 @@ extern int hibernation_snapshot(int plat
- extern int hibernation_restore(int platform_mode);
- extern int hibernation_platform_enter(void);
- 
-+extern int notify_swap_device(void);
-+
- #ifdef CONFIG_STRICT_KERNEL_RWX
- /* kernel/power/snapshot.c */
- extern void enable_restore_image_protection(void);
-Index: linux-2.6/kernel/power/swap.c
-===================================================================
---- linux-2.6.orig/kernel/power/swap.c
-+++ linux-2.6/kernel/power/swap.c
-@@ -1591,6 +1591,9 @@ int swsusp_check(bool exclusive)
- 			error = hib_submit_io_sync(REQ_OP_WRITE | REQ_SYNC | REQ_FUA,
- 						swsusp_resume_block,
- 						swsusp_header);
-+
-+			/* Flush device-mapper related metadata */
-+			bdev_hibernate(file_bdev(hib_resume_bdev_file));
- 		} else {
- 			error = -EINVAL;
- 		}
-@@ -1630,6 +1633,23 @@ void swsusp_close(void)
- 	fput(hib_resume_bdev_file);
- }
- 
-+int notify_swap_device(void)
-+{
-+	int error;
-+
-+	error = swsusp_swap_check();
-+	if (error)
-+		return error;
-+
-+	error = bdev_hibernate(file_bdev(hib_resume_bdev_file));
-+	if (error)
-+		pr_err("Swap is on unsupported device\n");
-+
-+	swsusp_close();
-+
-+	return error;
-+}
-+
- /**
-  *      swsusp_unmark - Unmark swsusp signature in the resume device
-  */
-Index: linux-2.6/drivers/md/dm-crypt.c
-===================================================================
---- linux-2.6.orig/drivers/md/dm-crypt.c
-+++ linux-2.6/drivers/md/dm-crypt.c
-@@ -3770,7 +3770,7 @@ static struct target_type crypt_target =
- 	.module = THIS_MODULE,
- 	.ctr    = crypt_ctr,
- 	.dtr    = crypt_dtr,
--	.features = DM_TARGET_ZONED_HM,
-+	.features = DM_TARGET_ZONED_HM | DM_TARGET_HIBERNATE,
- 	.report_zones = crypt_report_zones,
- 	.map    = crypt_map,
- 	.status = crypt_status,
-Index: linux-2.6/drivers/md/dm-linear.c
-===================================================================
---- linux-2.6.orig/drivers/md/dm-linear.c
-+++ linux-2.6/drivers/md/dm-linear.c
-@@ -204,7 +204,7 @@ static struct target_type linear_target
- 	.version = {1, 5, 0},
- 	.features = DM_TARGET_PASSES_INTEGRITY | DM_TARGET_NOWAIT |
- 		    DM_TARGET_ZONED_HM | DM_TARGET_PASSES_CRYPTO |
--		    DM_TARGET_ATOMIC_WRITES,
-+		    DM_TARGET_ATOMIC_WRITES | DM_TARGET_HIBERNATE,
- 	.report_zones = linear_report_zones,
- 	.module = THIS_MODULE,
- 	.ctr    = linear_ctr,
-Index: linux-2.6/drivers/md/dm-stripe.c
-===================================================================
---- linux-2.6.orig/drivers/md/dm-stripe.c
-+++ linux-2.6/drivers/md/dm-stripe.c
-@@ -471,7 +471,8 @@ static struct target_type stripe_target
- 	.name   = "striped",
- 	.version = {1, 7, 0},
- 	.features = DM_TARGET_PASSES_INTEGRITY | DM_TARGET_NOWAIT |
--		    DM_TARGET_ATOMIC_WRITES | DM_TARGET_PASSES_CRYPTO,
-+		    DM_TARGET_ATOMIC_WRITES | DM_TARGET_PASSES_CRYPTO |
-+		    DM_TARGET_HIBERNATE,
- 	.module = THIS_MODULE,
- 	.ctr    = stripe_ctr,
- 	.dtr    = stripe_dtr,
-
+-- 
+Askar Safin
