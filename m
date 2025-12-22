@@ -1,125 +1,191 @@
-Received: from mail-lf1-f45.google.com (mail-lf1-f45.google.com [209.85.167.45])
+Received: from mail-wm1-f44.google.com (mail-wm1-f44.google.com [209.85.128.44])
 	(using TLSv1.2 with cipher ECDHE-RSA-AES128-GCM-SHA256 (128/128 bits))
 	(No client certificate requested)
-	by smtp.subspace.kernel.org (Postfix) with ESMTPS id 395AE3112B7
-	for <lvm-devel@lists.linux.dev>; Wed, 17 Dec 2025 23:18:46 +0000 (UTC)
-Authentication-Results: smtp.subspace.kernel.org; arc=none smtp.client-ip=209.85.167.45
+	by smtp.subspace.kernel.org (Postfix) with ESMTPS id 49D65306B05
+	for <lvm-devel@lists.linux.dev>; Mon, 22 Dec 2025 15:03:26 +0000 (UTC)
+Authentication-Results: smtp.subspace.kernel.org; arc=none smtp.client-ip=209.85.128.44
 ARC-Seal:i=1; a=rsa-sha256; d=subspace.kernel.org; s=arc-20240116;
-	t=1766013528; cv=none; b=VLReMifKl07/E2m9p8KZNie8GNc5fQnnvcnHVjbobucfkx91BI4CCqsdluTMa3tDG8N3YKWrxfp1QlkNLRs9hsmy4euyjWQmRDhHa26Ieui7dBj+w6yoBE1UJon2HP6XYX/xtuMS6OexNKQl7smCWNMkP+VazvsVYTBFf9NpjBs=
+	t=1766415808; cv=none; b=KKwXoRkMy42VR0nco+TIJUyUpsQwuw0RrxBV36c8/Lwtc57hc1WtHumhF9TzUxf1pub9n4NrhjYP81i3fOLneZaYnviZExGdzLH6O0K8D8usx4vfQbaCmNBhD3TY1CAkIoxFXhdJI4HN8aq/OKmcvDgSXI9dYgs9XU/JfHMehHI=
 ARC-Message-Signature:i=1; a=rsa-sha256; d=subspace.kernel.org;
-	s=arc-20240116; t=1766013528; c=relaxed/simple;
-	bh=C1X5R0T9A6CrUnxpIm/QVXVuRULmzTp597QRk97zyjM=;
-	h=From:To:Cc:Subject:Date:Message-ID:In-Reply-To:References:
-	 MIME-Version; b=OX2bq2e0Cn+5T4JfYY83/QUXoQU0tS86k8eY7YP5kd93XhDiLcqmAzEEYvvkn/oi5VbD0o1WxEj4zgqW3zxCzaNvklOdgH8hdlqbPOUHLNiPgnPpJQDvt62Y+UzznHFEmEfREZVPMvKBBco6pFZQh9aUpJ3cFDJXBTtG2sURikA=
-ARC-Authentication-Results:i=1; smtp.subspace.kernel.org; dmarc=pass (p=none dis=none) header.from=gmail.com; spf=pass smtp.mailfrom=gmail.com; dkim=pass (2048-bit key) header.d=gmail.com header.i=@gmail.com header.b=m712Gq8a; arc=none smtp.client-ip=209.85.167.45
+	s=arc-20240116; t=1766415808; c=relaxed/simple;
+	bh=t4rsFnGUzeD1KMwXT4iUUV1jriowknwgJrrHKVJFd1U=;
+	h=Message-ID:Date:MIME-Version:Subject:To:Cc:References:From:
+	 In-Reply-To:Content-Type; b=uf0Kf65PHVe6cv6Rz16igM0CM2Do0F14eSYfKyNN8OSR8IalK24zBJSbXcuo+RcNc6R7hHpG1HZFl+8SEnLiZ8p48fynAJ1Asu15zYc+ZToSTNG8dTHku0K3I1j0nQ6zgfuwyXEjYBpkBimdbE3oa3lNx5aHSCYNj6jHE7IhXFU=
+ARC-Authentication-Results:i=1; smtp.subspace.kernel.org; dmarc=pass (p=none dis=none) header.from=gmail.com; spf=pass smtp.mailfrom=gmail.com; dkim=pass (2048-bit key) header.d=gmail.com header.i=@gmail.com header.b=gjTsXUXV; arc=none smtp.client-ip=209.85.128.44
 Authentication-Results: smtp.subspace.kernel.org; dmarc=pass (p=none dis=none) header.from=gmail.com
 Authentication-Results: smtp.subspace.kernel.org; spf=pass smtp.mailfrom=gmail.com
 Authentication-Results: smtp.subspace.kernel.org;
-	dkim=pass (2048-bit key) header.d=gmail.com header.i=@gmail.com header.b="m712Gq8a"
-Received: by mail-lf1-f45.google.com with SMTP id 2adb3069b0e04-595910c9178so14321e87.1
-        for <lvm-devel@lists.linux.dev>; Wed, 17 Dec 2025 15:18:46 -0800 (PST)
+	dkim=pass (2048-bit key) header.d=gmail.com header.i=@gmail.com header.b="gjTsXUXV"
+Received: by mail-wm1-f44.google.com with SMTP id 5b1f17b1804b1-477ba2c1ca2so40916305e9.2
+        for <lvm-devel@lists.linux.dev>; Mon, 22 Dec 2025 07:03:26 -0800 (PST)
 DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed;
-        d=gmail.com; s=20230601; t=1766013524; x=1766618324; darn=lists.linux.dev;
-        h=content-transfer-encoding:mime-version:references:in-reply-to
-         :message-id:date:subject:cc:to:from:from:to:cc:subject:date
-         :message-id:reply-to;
-        bh=AZvc3rVI0di0d/Re6Le5Bvc+vMvJtdhpmIxMnxjb6tA=;
-        b=m712Gq8aXTeHqrdEiYNYZFwuKqU3i5ANi2LJWDCUQ3M7qvbUpL0v5Aac8cybpVRT03
-         CXXtchIa67nua+K1DRpB9VLCoMmwPelUA0Py9ZfDwRXB9AxjAxZW4aC3+V72V/Z68x1e
-         NOu3tIfRsNMPJUIF8xtp0jWKkjAjbgNSrTzdf/HktUMzKxqD50Xdc2nMS+OBhgWPLdEL
-         X/EHfhkAJxE67CEKjZZ7kMoDXF8hB9GHzoUn236ubWonYl3tXjDEFS8H2lQxufINlxz0
-         Th6ni8Eq0T9GzySne83SID3LMO4n9ftrC/WSCkzCVyPN75z7FJQT6aXvisQuoPVDQKul
-         UdQg==
+        d=gmail.com; s=20230601; t=1766415805; x=1767020605; darn=lists.linux.dev;
+        h=content-transfer-encoding:in-reply-to:autocrypt:from
+         :content-language:references:cc:to:subject:user-agent:mime-version
+         :date:message-id:from:to:cc:subject:date:message-id:reply-to;
+        bh=/BovpYoyCqPQI6cHyERY9sM0XnG6cSj0PGe1+XI7CW4=;
+        b=gjTsXUXVct/Xr3aBd4dRC+yD9bY2XGNocXIsnyU+WdRg9sGWEHw2emDmLMyeamege+
+         UedH3E0F5/AXbCRPq/Nd29dbvukiDzlxGe215CaXvTNxeT37Sloagxkf9rULI6vYQiZa
+         33I1dh85QVJxW8suXg3dEA/21yym2ZcDUAryZn8Ey4xCqRcFaYKH7hCA/4UBoO3ltmv6
+         3Mfgjp6Wv9ouySXO9tkgS3sFjY/PBz07ZBLlii/swcqy2s2zSU5uFEUWZp0nzll/TuQi
+         YhTcnHxZE37ef9V4er2mMJUmEvj8eGtpMl8hjldcWSd8RfvWTGSjMtSy8Pz8rYmCgnOM
+         gs0w==
 X-Google-DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed;
-        d=1e100.net; s=20230601; t=1766013524; x=1766618324;
-        h=content-transfer-encoding:mime-version:references:in-reply-to
-         :message-id:date:subject:cc:to:from:x-gm-gg:x-gm-message-state:from
-         :to:cc:subject:date:message-id:reply-to;
-        bh=AZvc3rVI0di0d/Re6Le5Bvc+vMvJtdhpmIxMnxjb6tA=;
-        b=nP4owpBADa7Pbg1Jgd33Yix6XcnX8eZZB3ihtWJX5aQC/eUcxJMQY1olniGoXZQpc3
-         +CDWhnjWDj4vVIZwpq097JQeoJrFO6JRgeDH2CsyXiV3jPA7AgwwC87C7iyWrnOQoD5u
-         uu8QQEj0xfydrMtLoQZNtvXliFTRbYD2uqCj3sDliNWb3o4dBOGXsha3MDQVMad6N8w8
-         l1dNEa0apoyYAnN+cEPmBxUt8TPoXYS3COrMCBpEKjR8+xfQVMXvZn2FewwjVi3XEkz4
-         tXLGbgAb+lDFcfp5KrknwsYM8YoGXkVBt9YSrlAKUvarf8o62YQRPCUXTFLqNKTgMSNR
-         xgCg==
-X-Forwarded-Encrypted: i=1; AJvYcCUbhvGSoKV2N86wc/A2+w6OFipOu25uqBEY8HkMNYrqkAEc3W9hej1YBkEwEYDJ0CiBO7LexCBCjnE=@lists.linux.dev
-X-Gm-Message-State: AOJu0YwDKHE8lam9OUs8Vq7nEOl5TG5DXJJAJFxwJlEOv7IB3td/PLcQ
-	IspzNpwhiEOpEIKy+vWQyJdsgwgfAt1sZvBjxsQR1677gX/Cxe+cnxyF
-X-Gm-Gg: AY/fxX4SRJ+z4FzjM191WIFmLIq1oJVuOpjNZaXaYspF68D53onPcFFSOKBT6r1uvC6
-	qnBjFMgR5c1gsEmknfzoX/i+8e2xF8qUcnuY/I1WhyVFJBd+VgnDgkQ4gvFseieKOx727Xs8jfC
-	lCC28B/iEPFGPSWrhEQ7WmkCS2KjdPER6DJ3Cyb90FHJJO1B3/bnQO7Vl2a7AYNVPNEHqSYPuvv
-	7Aeg50EFLniHcNc725qHCDSWFD+z0P1xtomPLxw5KaO+RVYigRTLCHabM4yR+BwukxrKm9VnDbK
-	Qvr8YMnqErckQYnJtNEa59NXDd9tgQ6rfQX91xK+lX5L7b4CLcta9Rp3s9ivG0OYefzRzG6oUp4
-	QJjwlVsSarpu+jW/5z3lQ83qogPFhAZqdep1XowllHQYpFvuciCVtZpjpg9WyEHyprR4Mvc1UeU
-	AgI+9/LmRp
-X-Google-Smtp-Source: AGHT+IFoFgIAi9PMNEfIKCxeozWxswujwd1S6MJvMAmdk00BzJYAqN7Mqo6fE4Jz6OZ88KHyEwKy2w==
-X-Received: by 2002:a05:6512:3ba2:b0:598:edd4:d68 with SMTP id 2adb3069b0e04-598faa5a3bamr5789014e87.28.1766013524025;
-        Wed, 17 Dec 2025 15:18:44 -0800 (PST)
-Received: from localhost ([194.190.17.114])
-        by smtp.gmail.com with UTF8SMTPSA id 38308e7fff4ca-381134b5011sm2807821fa.3.2025.12.17.15.18.42
+        d=1e100.net; s=20230601; t=1766415805; x=1767020605;
+        h=content-transfer-encoding:in-reply-to:autocrypt:from
+         :content-language:references:cc:to:subject:user-agent:mime-version
+         :date:message-id:x-gm-gg:x-gm-message-state:from:to:cc:subject:date
+         :message-id:reply-to;
+        bh=/BovpYoyCqPQI6cHyERY9sM0XnG6cSj0PGe1+XI7CW4=;
+        b=SK105CHFGCCrImdeD4Pv74/FSyNLRD5x9OXs7B4z3xzSgwFRUzFAryMV/j5g3h/2Za
+         puVDZz5wVN+9vqmBDaiiwNw3BijZFbDJwS+Fa2rPLHnQw0QT8Og6xZokcsBqHwAk/Qyy
+         OK/1pnqribaaMWlGj65RtvT9jB4iYeSVT7Lr88qjSG0M/MXxjBze3z5ARg1cq6JC8+bQ
+         u/EUDLdgfILEJnvlU3T0BxQp52vIrcppYj01Opj9zscGIkB/vd5WEXzPzy8Ykp1qY5D+
+         XdSduC9CHtG+ZmKBGxQXHO/uYrsT69hMjCtqhLeOBPTxoA8KrgOL/Kk0o6ED8RMs7zWL
+         fwhA==
+X-Forwarded-Encrypted: i=1; AJvYcCXy2FhEUYbybQRck1IIr/G8CgB+rW6/0F5MjNT/S5a47EqfvL00HNl479ypTfXsSYvtg9ZBd1T9jFE=@lists.linux.dev
+X-Gm-Message-State: AOJu0YzLF7zKHC4OerewqAslmqNeK/5miHVfpnfclKXLVgs4jycL9qNo
+	IgSSgKsQvorAm94kCCz3UEtjjrHGpqqz6raNSpy1dUwwvumbnrSScqhg
+X-Gm-Gg: AY/fxX6Y4h2JtoSUlkhZhw8LpDxQjZ0aRR1JfanPKXqdE0p86aV9w95ckg+NWXgrvVO
+	MeEzP/NIk2E7CplpqqsIgiUHPerMEx+mnes8f6AnRa3rsIouETHI3W5qm346zwWPj29GnskSC4B
+	/Jj30l7ixlBucxvJgacp8JGMfYfyL6TTKE/WAc7BasHgMhx870DT4zuF3rbthgNpmdccaJgarAv
+	5wqxCCB5gU3hSqv1i+0SwtfFkLF1ZbqfRV/9rwVg0Im6wCApt1FVIeUwufxyF9iM+CadjOx4JHw
+	cPOqnIYxp9JVT1ApzjtOmua0/1i1VHUV81Dqb+987tOsURYZMwKqa7kH0muXBEFuIsCqZu03ZkO
+	Fgm2yUVhjOd1p7163D0cMBEA5frdSXQeT9MJqG2pu3B2d2LcEvsBI1YB+8NIWqXp8JeycIkczJ/
+	Uo3ngU22B3pq7VrWA=
+X-Google-Smtp-Source: AGHT+IFJuusyQ+1Mz3/8tYi1eqLylmqECFtDDXhQgv1q9fY01NTCrKY3AspjaGJTpIOiZ62UGg1d9Q==
+X-Received: by 2002:a05:600c:4fce:b0:47a:935f:61a0 with SMTP id 5b1f17b1804b1-47d194c659emr102417425e9.0.1766415804486;
+        Mon, 22 Dec 2025 07:03:24 -0800 (PST)
+Received: from [192.168.1.27] ([176.74.141.242])
+        by smtp.gmail.com with ESMTPSA id ffacd0b85a97d-4325dbc522esm11740249f8f.11.2025.12.22.07.03.23
         (version=TLS1_3 cipher=TLS_AES_128_GCM_SHA256 bits=128/128);
-        Wed, 17 Dec 2025 15:18:42 -0800 (PST)
-From: Askar Safin <safinaskar@gmail.com>
-To: mpatocka@redhat.com
-Cc: Dell.Client.Kernel@dell.com,
-	dm-devel@lists.linux.dev,
-	linux-block@vger.kernel.org,
-	linux-btrfs@vger.kernel.org,
-	linux-crypto@vger.kernel.org,
-	linux-lvm@lists.linux.dev,
-	linux-mm@kvack.org,
-	linux-pm@vger.kernel.org,
-	linux-raid@vger.kernel.org,
-	lvm-devel@lists.linux.dev,
-	pavel@ucw.cz,
-	rafael@kernel.org,
-	gmazyland@gmail.com
-Subject: Re: [RFC PATCH 2/2] swsusp: make it possible to hibernate to device mapper devices
-Date: Thu, 18 Dec 2025 02:18:37 +0300
-Message-ID: <20251217231837.157443-1-safinaskar@gmail.com>
-X-Mailer: git-send-email 2.47.3
-In-Reply-To: <b32d0701-4399-9c5d-ecc8-071162df97a7@redhat.com>
-References: <b32d0701-4399-9c5d-ecc8-071162df97a7@redhat.com>
+        Mon, 22 Dec 2025 07:03:24 -0800 (PST)
+Message-ID: <86300955-72e4-42d5-892d-f49bdf14441e@gmail.com>
+Date: Mon, 22 Dec 2025 16:03:22 +0100
 Precedence: bulk
 X-Mailing-List: lvm-devel@lists.linux.dev
 List-Id: <lvm-devel.lists.linux.dev>
 List-Subscribe: <mailto:lvm-devel+subscribe@lists.linux.dev>
 List-Unsubscribe: <mailto:lvm-devel+unsubscribe@lists.linux.dev>
 MIME-Version: 1.0
-Content-Transfer-Encoding: 8bit
+User-Agent: Mozilla Thunderbird
+Subject: Re: [RFC PATCH 2/2] swsusp: make it possible to hibernate to device
+ mapper devices
+To: Askar Safin <safinaskar@gmail.com>, mpatocka@redhat.com
+Cc: Dell.Client.Kernel@dell.com, dm-devel@lists.linux.dev,
+ linux-block@vger.kernel.org, linux-btrfs@vger.kernel.org,
+ linux-crypto@vger.kernel.org, linux-lvm@lists.linux.dev, linux-mm@kvack.org,
+ linux-pm@vger.kernel.org, linux-raid@vger.kernel.org,
+ lvm-devel@lists.linux.dev, pavel@ucw.cz, rafael@kernel.org
+References: <b32d0701-4399-9c5d-ecc8-071162df97a7@redhat.com>
+ <20251217231837.157443-1-safinaskar@gmail.com>
+Content-Language: en-US
+From: Milan Broz <gmazyland@gmail.com>
+Autocrypt: addr=gmazyland@gmail.com; keydata=
+ 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
+In-Reply-To: <20251217231837.157443-1-safinaskar@gmail.com>
+Content-Type: text/plain; charset=UTF-8; format=flowed
+Content-Transfer-Encoding: 7bit
 
-Mikulas Patocka <mpatocka@redhat.com>:
-> Askar Safin requires swap and hibernation on the dm-integrity device mapper
-> target because he needs to protect his data.
+On 12/18/25 12:18 AM, Askar Safin wrote:
+> Mikulas Patocka <mpatocka@redhat.com>:
+>> Askar Safin requires swap and hibernation on the dm-integrity device mapper
+>> target because he needs to protect his data.
+> 
+> Hi, Mikulas, Milan and others.
+> 
+> I'm running swap on dm-integrity for 40 days.
+> 
+> It runs mostly without problems.
+> 
+> But yesterday my screen freezed for 4 minutes. And then continued to work
+> normally.
+> 
+> So, may I ask again a question: is swap on dm-integrity supposed to work
+> at all? (I. e. swap partition on top of dm-integrity partition on top of
+> actual disk partition.) (I'm talking about swap here, not about hibernation.)
 
-Hi, Mikulas, Milan and others.
+Hi,
 
-I'm running swap on dm-integrity for 40 days.
+I am not sure if Mikulas is available; maybe it's better to try again
+in January...
 
-It runs mostly without problems.
+Anyway, my understanding is that all device-mapper targets use mempools,
+which should ensure that they can process even under memory pressure.
 
-But yesterday my screen freezed for 4 minutes. And then continued to work
-normally.
+AFAIK, swap over a device-mapper target (any target!) with a real block device
+should be ok. The problematic part is stacking over a filesystem (through a loop)
+as Mikulas mentioned.
 
-So, may I ask again a question: is swap on dm-integrity supposed to work
-at all? (I. e. swap partition on top of dm-integrity partition on top of
-actual disk partition.) (I'm talking about swap here, not about hibernation.)
+If I interpret Mikulas' answer correctly, it is the filesystem that could
+allocate memory here, and it deadlocks because of it (as it is swap itself).
+So I believe it can happen with other DM targets too.
+(If I am mistaken, please correct me.)
 
-Mikulas Patocka said here https://lore.kernel.org/all/3f3d871a-6a86-354f-f83d-a871793a4a47@redhat.com/ :
+I wish it could work, but I do not understand kernel details anymore here.
+It seems we are still in "a little walled gardens" communication issues
+among various kernel subsystems, as one of the former maintainers said :-)
 
-> Encrypted swap file is not supposed to work. It uses the loop device that 
-> routes the requests to a filesystem and the filesystem needs to allocate 
-> memory to process requests.
+But you asked about a real block device, so it should work.
+I guess it is just another bug you see...
 
-> So, this is what happened to you - the machine runs out of memory, it 
-> needs to swap out some pages, dm-crypt encrypts the pages and generates 
-> write bios, the write bios are directed to the loop device, the loop 
-> device directs them to the filesystem, the filesystem attempts to allocate 
-> more memory => deadlock.
+Milan
+> 
+> Mikulas Patocka said here https://lore.kernel.org/all/3f3d871a-6a86-354f-f83d-a871793a4a47@redhat.com/ :
+> 
+>> Encrypted swap file is not supposed to work. It uses the loop device that
+>> routes the requests to a filesystem and the filesystem needs to allocate
+>> memory to process requests.
+> 
+>> So, this is what happened to you - the machine runs out of memory, it
+>> needs to swap out some pages, dm-crypt encrypts the pages and generates
+>> write bios, the write bios are directed to the loop device, the loop
+>> device directs them to the filesystem, the filesystem attempts to allocate
+>> more memory => deadlock.
+> 
+> Does the same apply to dm-integrity?
+> 
+> I. e. is it possible that write to dm-integrity will lead to allocation?
+> 
 
-Does the same apply to dm-integrity?
-
-I. e. is it possible that write to dm-integrity will lead to allocation?
-
--- 
-Askar Safin
