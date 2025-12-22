@@ -1,191 +1,187 @@
-Received: from mail-wm1-f44.google.com (mail-wm1-f44.google.com [209.85.128.44])
+Received: from mail-lf1-f45.google.com (mail-lf1-f45.google.com [209.85.167.45])
 	(using TLSv1.2 with cipher ECDHE-RSA-AES128-GCM-SHA256 (128/128 bits))
 	(No client certificate requested)
-	by smtp.subspace.kernel.org (Postfix) with ESMTPS id 49D65306B05
-	for <lvm-devel@lists.linux.dev>; Mon, 22 Dec 2025 15:03:26 +0000 (UTC)
-Authentication-Results: smtp.subspace.kernel.org; arc=none smtp.client-ip=209.85.128.44
+	by smtp.subspace.kernel.org (Postfix) with ESMTPS id BD3DF3491F5
+	for <lvm-devel@lists.linux.dev>; Mon, 22 Dec 2025 22:24:58 +0000 (UTC)
+Authentication-Results: smtp.subspace.kernel.org; arc=none smtp.client-ip=209.85.167.45
 ARC-Seal:i=1; a=rsa-sha256; d=subspace.kernel.org; s=arc-20240116;
-	t=1766415808; cv=none; b=KKwXoRkMy42VR0nco+TIJUyUpsQwuw0RrxBV36c8/Lwtc57hc1WtHumhF9TzUxf1pub9n4NrhjYP81i3fOLneZaYnviZExGdzLH6O0K8D8usx4vfQbaCmNBhD3TY1CAkIoxFXhdJI4HN8aq/OKmcvDgSXI9dYgs9XU/JfHMehHI=
+	t=1766442300; cv=none; b=TsB994lZS6KzB29BC363mNv7eH+xAk5vdCMuVcY0jHtLs+D0Wf29iua5CBkXBlzcVyME16dmxflWBMp7rBljjz+K/OC8rJW7uCp+iw63+4G3PqP3aPfvQpiW34yiAtrvrXobEljb4VDr6ebzYh+qIna00eOeN0PosztwVZ6kkR0=
 ARC-Message-Signature:i=1; a=rsa-sha256; d=subspace.kernel.org;
-	s=arc-20240116; t=1766415808; c=relaxed/simple;
-	bh=t4rsFnGUzeD1KMwXT4iUUV1jriowknwgJrrHKVJFd1U=;
-	h=Message-ID:Date:MIME-Version:Subject:To:Cc:References:From:
-	 In-Reply-To:Content-Type; b=uf0Kf65PHVe6cv6Rz16igM0CM2Do0F14eSYfKyNN8OSR8IalK24zBJSbXcuo+RcNc6R7hHpG1HZFl+8SEnLiZ8p48fynAJ1Asu15zYc+ZToSTNG8dTHku0K3I1j0nQ6zgfuwyXEjYBpkBimdbE3oa3lNx5aHSCYNj6jHE7IhXFU=
-ARC-Authentication-Results:i=1; smtp.subspace.kernel.org; dmarc=pass (p=none dis=none) header.from=gmail.com; spf=pass smtp.mailfrom=gmail.com; dkim=pass (2048-bit key) header.d=gmail.com header.i=@gmail.com header.b=gjTsXUXV; arc=none smtp.client-ip=209.85.128.44
+	s=arc-20240116; t=1766442300; c=relaxed/simple;
+	bh=t2mLLBvt6h8MFjkmzRQlmaA4RDpz8bVYxKkEkTxbYhU=;
+	h=From:To:Cc:Subject:Date:Message-ID:In-Reply-To:References:
+	 MIME-Version; b=AUQFs8BJDo9kdraM74tT0lnt7Jqh+NTpSn9I0rzn3q+BP/GZqBTwhG1g/s8LuEWUbKL2gG3QaecMzIL/gl2+TlFVQyPq8WWq3nUy2zQVEMcdV/PqyDuCGbvzdPkSYMeHC7lNdtq9xJckkwVp4UJNx97pY8x2jVsRDkS7xsgllP0=
+ARC-Authentication-Results:i=1; smtp.subspace.kernel.org; dmarc=pass (p=none dis=none) header.from=gmail.com; spf=pass smtp.mailfrom=gmail.com; dkim=pass (2048-bit key) header.d=gmail.com header.i=@gmail.com header.b=GUt9WjKd; arc=none smtp.client-ip=209.85.167.45
 Authentication-Results: smtp.subspace.kernel.org; dmarc=pass (p=none dis=none) header.from=gmail.com
 Authentication-Results: smtp.subspace.kernel.org; spf=pass smtp.mailfrom=gmail.com
 Authentication-Results: smtp.subspace.kernel.org;
-	dkim=pass (2048-bit key) header.d=gmail.com header.i=@gmail.com header.b="gjTsXUXV"
-Received: by mail-wm1-f44.google.com with SMTP id 5b1f17b1804b1-477ba2c1ca2so40916305e9.2
-        for <lvm-devel@lists.linux.dev>; Mon, 22 Dec 2025 07:03:26 -0800 (PST)
+	dkim=pass (2048-bit key) header.d=gmail.com header.i=@gmail.com header.b="GUt9WjKd"
+Received: by mail-lf1-f45.google.com with SMTP id 2adb3069b0e04-594330147efso5303227e87.2
+        for <lvm-devel@lists.linux.dev>; Mon, 22 Dec 2025 14:24:58 -0800 (PST)
 DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed;
-        d=gmail.com; s=20230601; t=1766415805; x=1767020605; darn=lists.linux.dev;
-        h=content-transfer-encoding:in-reply-to:autocrypt:from
-         :content-language:references:cc:to:subject:user-agent:mime-version
-         :date:message-id:from:to:cc:subject:date:message-id:reply-to;
-        bh=/BovpYoyCqPQI6cHyERY9sM0XnG6cSj0PGe1+XI7CW4=;
-        b=gjTsXUXVct/Xr3aBd4dRC+yD9bY2XGNocXIsnyU+WdRg9sGWEHw2emDmLMyeamege+
-         UedH3E0F5/AXbCRPq/Nd29dbvukiDzlxGe215CaXvTNxeT37Sloagxkf9rULI6vYQiZa
-         33I1dh85QVJxW8suXg3dEA/21yym2ZcDUAryZn8Ey4xCqRcFaYKH7hCA/4UBoO3ltmv6
-         3Mfgjp6Wv9ouySXO9tkgS3sFjY/PBz07ZBLlii/swcqy2s2zSU5uFEUWZp0nzll/TuQi
-         YhTcnHxZE37ef9V4er2mMJUmEvj8eGtpMl8hjldcWSd8RfvWTGSjMtSy8Pz8rYmCgnOM
-         gs0w==
-X-Google-DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed;
-        d=1e100.net; s=20230601; t=1766415805; x=1767020605;
-        h=content-transfer-encoding:in-reply-to:autocrypt:from
-         :content-language:references:cc:to:subject:user-agent:mime-version
-         :date:message-id:x-gm-gg:x-gm-message-state:from:to:cc:subject:date
+        d=gmail.com; s=20230601; t=1766442297; x=1767047097; darn=lists.linux.dev;
+        h=content-transfer-encoding:mime-version:references:in-reply-to
+         :message-id:date:subject:cc:to:from:from:to:cc:subject:date
          :message-id:reply-to;
-        bh=/BovpYoyCqPQI6cHyERY9sM0XnG6cSj0PGe1+XI7CW4=;
-        b=SK105CHFGCCrImdeD4Pv74/FSyNLRD5x9OXs7B4z3xzSgwFRUzFAryMV/j5g3h/2Za
-         puVDZz5wVN+9vqmBDaiiwNw3BijZFbDJwS+Fa2rPLHnQw0QT8Og6xZokcsBqHwAk/Qyy
-         OK/1pnqribaaMWlGj65RtvT9jB4iYeSVT7Lr88qjSG0M/MXxjBze3z5ARg1cq6JC8+bQ
-         u/EUDLdgfILEJnvlU3T0BxQp52vIrcppYj01Opj9zscGIkB/vd5WEXzPzy8Ykp1qY5D+
-         XdSduC9CHtG+ZmKBGxQXHO/uYrsT69hMjCtqhLeOBPTxoA8KrgOL/Kk0o6ED8RMs7zWL
-         fwhA==
-X-Forwarded-Encrypted: i=1; AJvYcCXy2FhEUYbybQRck1IIr/G8CgB+rW6/0F5MjNT/S5a47EqfvL00HNl479ypTfXsSYvtg9ZBd1T9jFE=@lists.linux.dev
-X-Gm-Message-State: AOJu0YzLF7zKHC4OerewqAslmqNeK/5miHVfpnfclKXLVgs4jycL9qNo
-	IgSSgKsQvorAm94kCCz3UEtjjrHGpqqz6raNSpy1dUwwvumbnrSScqhg
-X-Gm-Gg: AY/fxX6Y4h2JtoSUlkhZhw8LpDxQjZ0aRR1JfanPKXqdE0p86aV9w95ckg+NWXgrvVO
-	MeEzP/NIk2E7CplpqqsIgiUHPerMEx+mnes8f6AnRa3rsIouETHI3W5qm346zwWPj29GnskSC4B
-	/Jj30l7ixlBucxvJgacp8JGMfYfyL6TTKE/WAc7BasHgMhx870DT4zuF3rbthgNpmdccaJgarAv
-	5wqxCCB5gU3hSqv1i+0SwtfFkLF1ZbqfRV/9rwVg0Im6wCApt1FVIeUwufxyF9iM+CadjOx4JHw
-	cPOqnIYxp9JVT1ApzjtOmua0/1i1VHUV81Dqb+987tOsURYZMwKqa7kH0muXBEFuIsCqZu03ZkO
-	Fgm2yUVhjOd1p7163D0cMBEA5frdSXQeT9MJqG2pu3B2d2LcEvsBI1YB+8NIWqXp8JeycIkczJ/
-	Uo3ngU22B3pq7VrWA=
-X-Google-Smtp-Source: AGHT+IFJuusyQ+1Mz3/8tYi1eqLylmqECFtDDXhQgv1q9fY01NTCrKY3AspjaGJTpIOiZ62UGg1d9Q==
-X-Received: by 2002:a05:600c:4fce:b0:47a:935f:61a0 with SMTP id 5b1f17b1804b1-47d194c659emr102417425e9.0.1766415804486;
-        Mon, 22 Dec 2025 07:03:24 -0800 (PST)
-Received: from [192.168.1.27] ([176.74.141.242])
-        by smtp.gmail.com with ESMTPSA id ffacd0b85a97d-4325dbc522esm11740249f8f.11.2025.12.22.07.03.23
+        bh=sn/OAPJtWNCT0eie4rU3UF1I3TWQyxcji+TCrLJ8drY=;
+        b=GUt9WjKduVeqq1/HDaUWa8sNcXWVq9wCFyO41MUyBsohU2LvG3iQ++khvz6m8Xoh2o
+         wMJ+QUjQTysyHaIu7qKBxDU3M/EAgWHl6dtCPPTCgckfiNoVUrHUtq2Rm/eg7rQds/2o
+         vBSqWkcngsPMOcmYL/A24gGRjwIyqweBdu3z9Bctmtk+YN734VvLzU85TT6rVJ2jWhUA
+         4JtCX7sz7l2mOTM3zJiIsouWgUlVYMRZnxp/kq/oGhyUGkl0qeGe6YSQp7qjdjSVHE/e
+         shxahdwyGLHQuwog5sQT1ePj3oWqenc+VADLXJTgFS8kbxzdb2tA8OtPbm81A/GXrPs7
+         5rdg==
+X-Google-DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed;
+        d=1e100.net; s=20230601; t=1766442297; x=1767047097;
+        h=content-transfer-encoding:mime-version:references:in-reply-to
+         :message-id:date:subject:cc:to:from:x-gm-gg:x-gm-message-state:from
+         :to:cc:subject:date:message-id:reply-to;
+        bh=sn/OAPJtWNCT0eie4rU3UF1I3TWQyxcji+TCrLJ8drY=;
+        b=roIr0EriGGMpMcORJEf/3kTyl6DFa9XM1cnRg0zOKVc22IzKo7A9kPgEVN7OldTML6
+         SFUPJ1ECLWAL7L+3gIyFSqpZ6BnPGj9Hu+0oB0x85sGUemACAaLjfnMnXjdDlMto5/It
+         ja1GKgY06ScjJwqnmG3g4HYE2DgX46lh/OYmEcqfZbZUXht4mg5AxEjGeOJSCM1jVzjW
+         5cDYg6wSeTnqAE/Q0vtI5g3XY6p22kvEXz4fBHYgWmWtapkhGeh3G0jVBC+fmik6mYln
+         BHwrlHHP3WEjgCphjJfaGi4tIpzkTSXQldMZutklpwKQ0Ucf6R0jbUA7ObaEy56Lneu9
+         /5EA==
+X-Forwarded-Encrypted: i=1; AJvYcCXbCVzOglXd7foQ/vj8GZLMjJOJw7Bx720b31xUB7R0bDCx8fwbUzEmLwZQ4vTv9iZu9VKnHdxYo4Q=@lists.linux.dev
+X-Gm-Message-State: AOJu0Yy5QJ5XSmhRde76rBZiyMaNH4zlMfQyCK0vJiWmaW8OjUWBhvDT
+	8iwSHyU2+qL0LdxpKWkoUGrlzVGNsrHePd1+aFkAh9998yUnIasHjh9m
+X-Gm-Gg: AY/fxX6JSxfMgKYZj3aeDvxpdgiFGJmuqEUnltwsbEGyMXQIltK9WQi99Lk6UwXPy/K
+	FBHgrUlC4Ib5lM/ArwPE64cJF9mnE0aaah6d/G6M24UvgO9mBOIfUFQx756X5tExjLYbIs3EcJS
+	iNKV2ig409oL02dabvwBxtFSSCUrVHPUUATqyrfsvCV9+1fKbnf+dgjV/ZdNJCy2gBkIAjr1JBx
+	rYbLCnqNbcjcSSvH/fO8+np5GsHNpSahaeK9s0vRgrT7pmi148vX8xcoKurAReagJIAAsSZL1Rs
+	eDaKNvLKkA8MacsneAPYYk3BON41jSF/ENsoVpO6ijbhDb8ERSxrlFHD36CAv1EoRxCx3/DvVet
+	zt8betbdngrCAEXNcurNUS8ndUFI+JdG/2MHR457PZUq9XJA4W2deSovvC2ejBF382fRUj5YrbO
+	kREyxWpDpFe1fpqrv4T/E=
+X-Google-Smtp-Source: AGHT+IHKzpn400t05hIadcb+Wh63yw6NvPoXhFOWLmAT0LANkEjsAg/G6SFnu7Qr7y/2raDb+pTAgA==
+X-Received: by 2002:a05:6512:2388:b0:59a:115f:5b8e with SMTP id 2adb3069b0e04-59a17dd70b4mr4476616e87.45.1766442296571;
+        Mon, 22 Dec 2025 14:24:56 -0800 (PST)
+Received: from localhost ([194.190.17.114])
+        by smtp.gmail.com with UTF8SMTPSA id 2adb3069b0e04-59a1862840asm3524409e87.96.2025.12.22.14.24.54
         (version=TLS1_3 cipher=TLS_AES_128_GCM_SHA256 bits=128/128);
-        Mon, 22 Dec 2025 07:03:24 -0800 (PST)
-Message-ID: <86300955-72e4-42d5-892d-f49bdf14441e@gmail.com>
-Date: Mon, 22 Dec 2025 16:03:22 +0100
+        Mon, 22 Dec 2025 14:24:55 -0800 (PST)
+From: Askar Safin <safinaskar@gmail.com>
+To: gmazyland@gmail.com
+Cc: Dell.Client.Kernel@dell.com,
+	dm-devel@lists.linux.dev,
+	linux-block@vger.kernel.org,
+	linux-btrfs@vger.kernel.org,
+	linux-crypto@vger.kernel.org,
+	linux-lvm@lists.linux.dev,
+	linux-mm@kvack.org,
+	linux-pm@vger.kernel.org,
+	linux-raid@vger.kernel.org,
+	lvm-devel@lists.linux.dev,
+	mpatocka@redhat.com,
+	pavel@ucw.cz,
+	rafael@kernel.org
+Subject: Re: [RFC PATCH 2/2] swsusp: make it possible to hibernate to device mapper devices
+Date: Tue, 23 Dec 2025 01:24:19 +0300
+Message-ID: <20251222222419.1814906-1-safinaskar@gmail.com>
+X-Mailer: git-send-email 2.47.3
+In-Reply-To: <86300955-72e4-42d5-892d-f49bdf14441e@gmail.com>
+References: <86300955-72e4-42d5-892d-f49bdf14441e@gmail.com>
 Precedence: bulk
 X-Mailing-List: lvm-devel@lists.linux.dev
 List-Id: <lvm-devel.lists.linux.dev>
 List-Subscribe: <mailto:lvm-devel+subscribe@lists.linux.dev>
 List-Unsubscribe: <mailto:lvm-devel+unsubscribe@lists.linux.dev>
 MIME-Version: 1.0
-User-Agent: Mozilla Thunderbird
-Subject: Re: [RFC PATCH 2/2] swsusp: make it possible to hibernate to device
- mapper devices
-To: Askar Safin <safinaskar@gmail.com>, mpatocka@redhat.com
-Cc: Dell.Client.Kernel@dell.com, dm-devel@lists.linux.dev,
- linux-block@vger.kernel.org, linux-btrfs@vger.kernel.org,
- linux-crypto@vger.kernel.org, linux-lvm@lists.linux.dev, linux-mm@kvack.org,
- linux-pm@vger.kernel.org, linux-raid@vger.kernel.org,
- lvm-devel@lists.linux.dev, pavel@ucw.cz, rafael@kernel.org
-References: <b32d0701-4399-9c5d-ecc8-071162df97a7@redhat.com>
- <20251217231837.157443-1-safinaskar@gmail.com>
-Content-Language: en-US
-From: Milan Broz <gmazyland@gmail.com>
-Autocrypt: addr=gmazyland@gmail.com; keydata=
- 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
-In-Reply-To: <20251217231837.157443-1-safinaskar@gmail.com>
-Content-Type: text/plain; charset=UTF-8; format=flowed
-Content-Transfer-Encoding: 7bit
+Content-Transfer-Encoding: 8bit
 
-On 12/18/25 12:18 AM, Askar Safin wrote:
-> Mikulas Patocka <mpatocka@redhat.com>:
->> Askar Safin requires swap and hibernation on the dm-integrity device mapper
->> target because he needs to protect his data.
-> 
-> Hi, Mikulas, Milan and others.
-> 
-> I'm running swap on dm-integrity for 40 days.
-> 
-> It runs mostly without problems.
-> 
-> But yesterday my screen freezed for 4 minutes. And then continued to work
-> normally.
-> 
-> So, may I ask again a question: is swap on dm-integrity supposed to work
-> at all? (I. e. swap partition on top of dm-integrity partition on top of
-> actual disk partition.) (I'm talking about swap here, not about hibernation.)
+Milan Broz <gmazyland@gmail.com>:
+> Anyway, my understanding is that all device-mapper targets use mempools,
+> which should ensure that they can process even under memory pressure.
 
-Hi,
+Let me give you more details.
 
-I am not sure if Mikulas is available; maybe it's better to try again
-in January...
+Here is output of "free -h":
 
-Anyway, my understanding is that all device-mapper targets use mempools,
-which should ensure that they can process even under memory pressure.
+               total        used        free      shared  buff/cache   available
+Mem:            62Gi        47Gi       924Mi       2.4Gi        17Gi        14Gi
+Swap:          378Gi        95Gi       282Gi
 
-AFAIK, swap over a device-mapper target (any target!) with a real block device
-should be ok. The problematic part is stacking over a filesystem (through a loop)
-as Mikulas mentioned.
+Swap is located on dm-integrity on real partition.
 
-If I interpret Mikulas' answer correctly, it is the filesystem that could
-allocate memory here, and it deadlocks because of it (as it is swap itself).
-So I believe it can happen with other DM targets too.
-(If I am mistaken, please correct me.)
+As you can see, my data does not fit into physical memory, so swap is required
+here.
 
-I wish it could work, but I do not understand kernel details anymore here.
-It seems we are still in "a little walled gardens" communication issues
-among various kernel subsystems, as one of the former maintainers said :-)
+But swap is big, so in theory allocations should always work.
 
-But you asked about a real block device, so it should work.
-I guess it is just another bug you see...
+I have a lot of Chromium windows opened (nearly 200).
 
-Milan
-> 
-> Mikulas Patocka said here https://lore.kernel.org/all/3f3d871a-6a86-354f-f83d-a871793a4a47@redhat.com/ :
-> 
->> Encrypted swap file is not supposed to work. It uses the loop device that
->> routes the requests to a filesystem and the filesystem needs to allocate
->> memory to process requests.
-> 
->> So, this is what happened to you - the machine runs out of memory, it
->> needs to swap out some pages, dm-crypt encrypts the pages and generates
->> write bios, the write bios are directed to the loop device, the loop
->> device directs them to the filesystem, the filesystem attempts to allocate
->> more memory => deadlock.
-> 
-> Does the same apply to dm-integrity?
-> 
-> I. e. is it possible that write to dm-integrity will lead to allocation?
-> 
+My laptop is Dell Precision 7780. It is high speced expensive laptop.
+I have 64 GiB ECC physical memory, btrfs raid on two 3.5 TiB partitions.
+Everything is located on two 4 TiB NVMe SSD physical disks.
 
+Sometimes whole system freezes for several minutes when I open new memory-hungry
+Chromium tabs. In such cases I see in logs:
+
+https://zerobin.net/?383b5c32b958aca8#yXmgYidkC8pUFixwQKB+v+O3bkbis4RHduz3gji4DxI=
+
+Notice that all backtraces contain shmem_swapin_folio, so swap is involved here.
+
+Hibernation works thanks to my patch
+https://zerobin.net/?ad6142bd67df015a#68Az6yBUxHA3AXB7jY1+clSRnR745olFHAByxwPGM08= .
+
+My kernel is 6.12.48 from Debian with my local patches.
+
+Sometimes I see messages "page allocation failure" in my logs. This is very
+strange: I already explained above, that there is a plenty of space in swap.
+
+Here is output of "journalctl | grep -B 10 -A 100 'page allocation failure'":
+
+https://zerobin.net/?4170949dd9a8b25c#p5Z73TfGgpem4O4UsiWllrMCLCoHzDEw+KwJ7n8LWPA=
+
+Maybe my swap is fragmented?
+
+I that logs I notice that:
+- Allocation failures often happen immidiately after wake up from hibernation
+or suspend
+- We try to alloc page of order 4 (what this means? 2^4 pages?)
+- GFP mask is "GFP_KERNEL|__GFP_COMP" or "GFP_NOIO|__GFP_COMP". Failure to
+allocate in "GFP_NOIO|__GFP_COMP" case is somewhat understandable. But
+what about "GFP_KERNEL|__GFP_COMP"? As well as I understand, we are allowed
+to do I/O, so we can drop everything to swap. And swap is big. So why we
+fail?
+- In all backtraces "dell_smbios_call" is involved
+
+Hibernation always works, but takes a lot of time. Usually several minutes.
+When hibernating, I see in logs this:
+
+Dec 20 10:02:18 comp kernel: PM: hibernation: Allocated 26015132 kbytes in 193.21 seconds (134.64 MB/s)
+
+I. e. 3 minutes to allocate space in memory for hibernation image.
+
+And sometimes even this:
+
+Dec 11 08:34:26 comp kernel: PM: hibernation: Allocated 25942484 kbytes in 348.90 seconds (74.35 MB/s)
+
+Also sometimes I notice that in browser background for one site is replaced
+with black rectangle. So, I assume that browser failed to allocate something,
+too, but I unable to find this in logs.
+
+> Anyway, my understanding is that all device-mapper targets use mempools,
+> which should ensure that they can process even under memory pressure.
+
+This seems to be not true. I see a lot of words "alloc" in dm-integrity
+code:
+
+$ grep alloc drivers/md/dm-integrity.c
+
+And it seems that allocation happens not only in initialization,
+but also in normal operations (but I didn't looked at code carefully).
+
+Also, I see a lot of mentions of bufio in dm-integrity code.
+As well as I understand, this is some cache layer. But, as well as I understand,
+in my case there should no be any caches, everything should be written
+directly to partition.
+
+So, how to debug this next?
+
+Maybe there are some ioctls, etc, to avoid this problems or to enable
+more verbose logging?
+
+I even okay with inserting some printfs to kernel code, just send me patch.
+
+-- 
+Askar Safin
