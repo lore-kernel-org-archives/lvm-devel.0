@@ -1,93 +1,92 @@
-Authentication-Results: smtp.subspace.kernel.org; arc=none smtp.remote-ip=170.10.133.124
+Authentication-Results: smtp.subspace.kernel.org; arc=none smtp.remote-ip=209.85.221.50
 ARC-Seal: i=1; d=subspace.kernel.org; s=arc20261015; a=rsa-sha256; cv=none;
-	t=1793279563;
-	b=0ETno0zThk0I6eGSmSY+ru+1bI4Wqwjs1b2jGl0mUbyMFbR+30AYaecJ5KA8jdp7Qksr
-	 5GsdYNa+RcFHq7jFHaKiuTD/vb7gpxG2CzZGzdsdKdhAwj3Z6Tk0sYFivMRUsXkDya+08
-	 FSy4FSrR2Cm1hlkfz0SwRf/udJhfZy2Nf3b5WHMMZhofHHsOmJ6Xv1KnltExHaAspISnT
-	 p1fJ949q5oMpfi5OpY+7Kzy6cZJrT3sSQp0UpfFr4+U5bHdEfRvp2K0vEkBrsYqFAEKrA
-	 vdthIH83H7Zl9en54K0015pLT7Mt1tgRVUylgIQe/71hAz5ThD4TSKxIgQkDAqp5cLg==
+	t=1793282068;
+	b=qlgf4inrJQGconpzIttwjl/z0JzNvGjwZ3AUG4OCt3N4dFuX8BEu7owlUaYbp3YrZ1x/
+	 ko80aCRac4LKwUE3GBJOTCO2XtA5bX78RsCXW1GV9rw6tQRHrEUN30QmgoD2pyGgGBDkQ
+	 ZRBb3eCEq5RV9o4i9iLnBOlyKXZK15Yc5TjaPwaQvO/TyWbKSdlgaCGxCbZvv/wnBiNrr
+	 c0lznfZBEjCkBKUruV0MmG6NQ3kmUx3hVVv0bWaliiEdap9iH82Rlb1A7kSHhMQRwqF7P
+	 hM+9ve1Yj4vR7seYXVWF4bADvrNOgELEycCB4AIE67p7QlPCYCwzRLCUGEMeBsZXbBA==
 ARC-Message-Signature: i=1; d=subspace.kernel.org; s=arc20261015;
-	a=rsa-sha256; c=relaxed/relaxed; t=1793279563;
-	h=DMARC-Filter:DKIM-Signature:Received:X-MC-Unique:
-	 X-Mimecast-MFC-AGG-ID:Received:X-Google-DKIM-Signature:
-	 X-Forwarded-Encrypted:X-Gm-Message-State:X-Gm-Gg:X-Received:
-	 X-Received:Received:Message-ID:Date:MIME-Version:User-Agent:Subject:
-	 To:References:From:Organization:In-Reply-To:X-Mimecast-Spam-Score:
-	 X-Mimecast-MFC-PROC-ID:X-Mimecast-Originator:Content-Language:
-	 Content-Type:Content-Transfer-Encoding;
-	bh=Ljb5IArtpozqMQzldZrlGY8URpHPbrtTj+stFivb2hA=;
-	b=U8GZ89oLZVGJeybhgKX5iZAi/IxnM+eEGd10kcfcFA1HWXVF6BfJksyUQRGgI/xw7zf4
-	 2/CWRkhRjdPDOnqUhq0d/vDnRj2G25ESqjXptYkigahxMimjdnSGoAa4sbRqhKZ0/Mn88
-	 uBJK1wwmPAlv6aXOcw8WBBhmkgKuu8o4bSSq1iSd0+BnZWmMorYPVuWyEGG+OiieTYcch
-	 eQYvtCI8jsV0CnjhUuiKyXlPtPvwcwRVJeQJ/o98wH3gR/6C7JUzdf39ahIEjwIsTSLi9
-	 Wf1jw7KuuhmvXzjMi3Txl/YBwC57TAxeoYECHtLpyluSIp6UPmU3DDOtE2qf0JkcR6A==
+	a=rsa-sha256; c=relaxed/relaxed; t=1793282068;
+	h=DMARC-Filter:Received:DKIM-Signature:X-Google-DKIM-Signature:
+	 X-Gm-Message-State:X-Gm-Gg:X-Received:Received:From:To:Cc:Subject:
+	 Date:Message-Id:X-Mailer:In-Reply-To:References:MIME-Version:
+	 Content-Transfer-Encoding;
+	bh=LwV4PHfJtcp4jfAzKwMllrgZ7DDC4Dr6DDRyG0hJOyU=;
+	b=IAVApriZmwCWEM3QjDrfntzNcmeDtZ1SD9r6hC8lXCAS50m18WvhLZT4w/uUeYfu5Qta
+	 UqGVwKKFNCQqDMLrvzqHtGm4QyzMxtpYYlHaEk3koQ2e8S5v2xumLeKP8WEdfUnBZ6zLO
+	 PiiSi62Gzg5Qc91V1xRWGd3hUKzhC6KCokqLdiaPRXf4CmYC6KFdJe3V1msDNEiGiVnXR
+	 m7MpyjS+eHf239LVU0BdGd+ym+LJRQ4jphaO3eeaXhSahHgw8nWnoh6VlEo50CGUddjVc
+	 5A0GqJeSkVRgUVOAUlEgQdhJ7m+srLpnJaYF04wNbtiKJqyz0NsXzZHdWe9Y2mhXRcQ==
 ARC-Authentication-Results: i=1; smtp.subspace.kernel.org; 
-	dmarc=pass header.from=redhat.com;
-	spf=pass smtp.mailfrom=redhat.com;
-	dkim=pass header.d=redhat.com header.i=@redhat.com header.a=rsa-sha256 header.s=mimecast20190719 header.b=U26VfnBd;
-	arc=none smtp.remote-ip=170.10.133.124
-Received: from us-smtp-delivery-124.mimecast.com (us-smtp-delivery-124.mimecast.com [170.10.133.124])
-	(using TLSv1.3 with cipher TLS_AES_256_GCM_SHA384 (256/256 bits)
+	dmarc=pass header.from=gmail.com;
+	spf=pass smtp.mailfrom=gmail.com;
+	dkim=pass header.d=gmail.com header.i=@gmail.com header.a=rsa-sha256 header.s=20260707 header.b=YAKmfaan;
+	arc=none smtp.remote-ip=209.85.221.50
+Received: from mail-wr1-f50.google.com (mail-wr1-f50.google.com [209.85.221.50])
+	(using TLSv1.3 with cipher TLS_AES_128_GCM_SHA256 (128/128 bits)
 	 key-exchange X25519 server-signature ECDSA (prime256v1) server-digest SHA256)
 	(No client certificate requested)
-	by smtp.subspace.kernel.org (Postfix) with ESMTPS id 8D1AF606A323
-	for <lvm-devel@lists.linux.dev>; Thu, 29 Oct 2026 13:12:42 +0000 (UTC)
-DMARC-Filter: OpenDMARC Filter v1.4.2 smtp.subspace.kernel.org 8D1AF606A323
-Authentication-Results: smtp.subspace.kernel.org; dmarc=pass (p=quarantine dis=none) header.from=redhat.com
-Authentication-Results: smtp.subspace.kernel.org; spf=pass smtp.mailfrom=redhat.com
+	by smtp.subspace.kernel.org (Postfix) with ESMTPS id 2193E606A31A
+	for <lvm-devel@lists.linux.dev>; Thu, 29 Oct 2026 13:54:27 +0000 (UTC)
+DMARC-Filter: OpenDMARC Filter v1.4.2 smtp.subspace.kernel.org 2193E606A31A
+Authentication-Results: smtp.subspace.kernel.org; dmarc=pass (p=none dis=none) header.from=gmail.com
+Authentication-Results: smtp.subspace.kernel.org; spf=pass smtp.mailfrom=gmail.com
 Authentication-Results: smtp.subspace.kernel.org;
-	dkim=pass (1024-bit key, unprotected) header.d=redhat.com header.i=@redhat.com header.a=rsa-sha256 header.s=mimecast20190719 header.b=U26VfnBd
-DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed; d=redhat.com;
-	s=mimecast20190719; t=1793279561;
-	h=from:from:reply-to:subject:subject:date:date:message-id:message-id:
-	 to:to:cc:mime-version:mime-version:content-type:content-type:
-	 content-transfer-encoding:content-transfer-encoding:
-	 in-reply-to:in-reply-to:references:references;
-	bh=Ljb5IArtpozqMQzldZrlGY8URpHPbrtTj+stFivb2hA=;
-	b=U26VfnBd4pXAAWiiocKTYiSCjKZovnGYLsGPTOL9vPd3qscZ/2dGf1PZDwfJGvbcutwHvM
-	3LEGoQAlf/rBhRkZwP1RJtOj74FoVS2fkeiQxfD09mIZQ+l8P0EpRSmBduSw/epb/wSeW0
-	guDpFe02GnAxi/ugSvekTL1IGktYD9c=
-Received: from mail-wm1-f71.google.com (mail-wm1-f71.google.com
- [209.85.128.71]) by relay.mimecast.com with ESMTP with STARTTLS
- (version=TLSv1.3, cipher=TLS_AES_256_GCM_SHA384) id
- us-mta-58-Dj1LV8B6Mwmdwqgsf3FklQ-1; Thu, 29 Oct 2026 09:12:39 -0400
-X-MC-Unique: Dj1LV8B6Mwmdwqgsf3FklQ-1
-X-Mimecast-MFC-AGG-ID: Dj1LV8B6Mwmdwqgsf3FklQ_1793279559
-Received: by mail-wm1-f71.google.com with SMTP id 5b1f17b1804b1-4a210f93860so15333605e9.0
-        for <lvm-devel@lists.linux.dev>; Thu, 29 Oct 2026 06:12:39 -0700 (PDT)
-X-Google-DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed;
-        d=1e100.net; s=20260707; t=1793279558; x=1793884358;
-        h=content-transfer-encoding:content-type:in-reply-to:organization
-         :from:content-language:references:to:subject:user-agent:mime-version
-         :date:message-id:x-gm-gg:x-gm-message-state:from:to:cc:subject:date
+	dkim=pass (2048-bit key, unprotected) header.d=gmail.com header.i=@gmail.com header.a=rsa-sha256 header.s=20260707 header.b=YAKmfaan
+Received: by mail-wr1-f50.google.com with SMTP id ffacd0b85a97d-48bbb06f29bso228335f8f.3
+        for <lvm-devel@lists.linux.dev>; Thu, 29 Oct 2026 06:54:27 -0700 (PDT)
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed;
+        d=gmail.com; s=20260707; t=1793282066; x=1793886866; darn=lists.linux.dev;
+        h=content-transfer-encoding:mime-version:references:in-reply-to
+         :message-id:date:subject:cc:to:from:from:to:cc:subject:date
          :message-id:reply-to:content-type;
-        bh=Ljb5IArtpozqMQzldZrlGY8URpHPbrtTj+stFivb2hA=;
-        b=Z9F3kYMGnu54LfrQg52v0zvD8mXwBpYUn1pX1j8g+bM3vg+aIncykUT6UwwCcSvhoX
-         nMSqVoWct5ymUkDmN5bHiGwkdcV5xQybLqcpk204LAo457kbFUz9RmaDxQklC8giJZTq
-         kqGm0Ob8K8w+dV4MbPQEggO0XIP0FTwj7gLdWSwQyh0JBRxZEPaOvf6AG+8+WbMaoHGL
-         mmUgHzAnQ5tJkumQ2Qgz8mdGtm5kmjxXeknhtpzVqoAdSGjqYCtABq8543czCCyketQ1
-         7mU+ZWOKnNmageRBmftDiKiX/SE0CGsyVnI+xEfEOv1xEKxTzYZ9Num6yc+/lOH+22d5
-         IE6w==
-X-Forwarded-Encrypted: i=1; AKwUvBzcoHfVKQfvlk5e9f8xyfisz6vkO+zVJQcvxD0xvkEMYy0Za2K/2RKMiW5s8FNrsmrpWQAJFTPZul8=@lists.linux.dev
-X-Gm-Message-State: AFq9FYIvzLFqBzJYPSocMbI30axZgstmSFBFe0ujBwWJ2VROTq9qROgO
-	bjRZYiUpDqRN3zi+E4Hghd4lRUaFAkSP8sn5mnlvDmDySHh0rJ5y5fTyOG4Dtuhw0FL2BGVCrHY
-	CLj89zMIL4hz2yqI8nGGfbpYolW4dATgOdrmAGKq1KWjvD5p0SE2ndRBMv2HUKbrHzRfejw==
-X-Gm-Gg: AYBFou1BBw53FfgOtq6UgziC3pDFOhYuY7D+77BBj7zJqYd4/n1XhuDpFiKl6vGft8q
-	1AF09tyANaHx2e7M3pHW/mGbyDUnKnmjdkDjBjsytid19N8ASIHUwuo4MSDAeRMEd/7pflHejId
-	FfFrscxJMOphJo+AecOTAYs/9mlnDWjm8RvYwii7f1DhKXSEgeKPBUoE0dO1/e3+HLhg2m4PWJ6
-	B8xHaZpZ5UT/ZsAFeUHu2ft8TsAkyUBIb++VbklSlKhRnoVRluZ0iVjHa3DFipbP/sSTJ4o8LxE
-	4TbbRBSNAERyelhZeufoasi/Z8/NN6v1DmDKKt9lQTvmUF9i0FzRcQXs+FoSnQ6P9uY1IntqmbP
-	MzokkcdxfVi2t6UeqSf4zOc7BXG64fTiJNH9wKA==
-X-Received: by 2002:a05:600c:3e0a:b0:4a0:1c0e:b057 with SMTP id 5b1f17b1804b1-4a9640f1fbdmr127113685e9.4.1793279558550;
-        Thu, 29 Oct 2026 06:12:38 -0700 (PDT)
-X-Received: by 2002:a05:600c:3e0a:b0:4a0:1c0e:b057 with SMTP id 5b1f17b1804b1-4a9640f1fbdmr127113015e9.4.1793279558090;
-        Thu, 29 Oct 2026 06:12:38 -0700 (PDT)
-Received: from [10.43.17.4] ([213.175.46.86])
-        by smtp.gmail.com with ESMTPSA id 5b1f17b1804b1-4aa7c1302f6sm72744735e9.0.2026.10.29.06.12.36
-        (version=TLS1_3 cipher=TLS_AES_128_GCM_SHA256 bits=128/128);
-        Thu, 29 Oct 2026 06:12:36 -0700 (PDT)
-Message-ID: <e297d16a-58e9-40b2-9f1d-8baaf29e823e@redhat.com>
-Date: Thu, 29 Oct 2026 14:12:34 +0100
+        bh=LwV4PHfJtcp4jfAzKwMllrgZ7DDC4Dr6DDRyG0hJOyU=;
+        b=YAKmfaan4gXZ65lehlSg0asYt1UZ4KZWpTObJ2lAiXB1mmbvE/3aDLW/4M6YIEMEII
+         bIAbfCddkkUCnkhwMZ9y1Z4D1M1exkgjKxr3uAuIZJ3uTqI42LuiI6ySTaWj9eWB+bWP
+         6VkgB4Gkx6/BCbaH7fz+Bcn2qaOJ65BLpfl41rYb3B9x/8UBSc+Br3He+H5liQehyqAT
+         asTKUrh3+M56f3qtlQicyYD9h2MuT0kIBkh+eqW8D5slyUhgrLW2fztvyRCO9aX51Kzl
+         bp+WPlKb4uybHGvkI50MHyY+Y41BXxpVNLfAUCArM0S86qdoCfPGpDHrwq/MGhticxTl
+         NHfw==
+X-Google-DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed;
+        d=1e100.net; s=20260707; t=1793282066; x=1793886866;
+        h=content-transfer-encoding:mime-version:references:in-reply-to
+         :message-id:date:subject:cc:to:from:x-gm-gg:x-gm-message-state:from
+         :to:cc:subject:date:message-id:reply-to:content-type;
+        bh=LwV4PHfJtcp4jfAzKwMllrgZ7DDC4Dr6DDRyG0hJOyU=;
+        b=K2Wh8TekP45xXSCCIjdNV4aS5fOAHSshFuDxogLhburT7yrWkXiWPS9PR9/jYiISZ5
+         RWnEsJ09hRqwcnQTurjubH7sEfSUb98OKkeuojNtModNcZnGrfaHrusEpG2AYtfdgLkI
+         YH+4hBoW667+s0Mba8MNE3n3bWhLk4EkVTb5Z3OIkSazG3bEiwaK7md5wL++dEZmxOZh
+         8NE2hPEyDMWNXdU/i5gOkwd3hLkXOYr/wzl5JsvsaSdFFSvWcXBln7ckgtrc0lBMfvCq
+         j/lfdunU8HBRrhXKoIhHCIYNJsT5QxblmJN80qhPcLD9dpUL/oOskjvwL8S0zUmvEU5g
+         3ibQ==
+X-Gm-Message-State: AFq9FYIiJtjwncw/JbW51rCNbXtiRaswo8Ao5NpddjcsLrFNsoU5InmG
+	T0Z0S/fUkdEUtV+XqXqnO6cgktTQXi6hYBabYMIwjX6fc1PGJOPDLLaqmDVwFg==
+X-Gm-Gg: AYBFou16vzZQvgdZXu9Xu5jhDdCKIzLC0rycxX2A1NqrJd/EJiFU+TtrxyfRzbWyujN
+	FTE67GtH3V8KTZllOWQPSD8T/xiuxn2Pw2x1CxXpBnoxWYRg05hubeBMyO4Mc6on5TRqxza0M7y
+	+ULfBGUUBlUbnqKi2HiaOFOz8Si3tdB8C4ObK0D6n7s1IhwLkBtqXY6+SQcrlGaS2Jo9dIyi6pS
+	Qh+Bzsmlhrajx12/grGsWRDvHtv7x3VzcOkZCHnwAHqfHnH8rNvuydhf1GBY0KefQkDxhswAPwp
+	8uIiJ1jQdUjctZbVIne6aZ8Ad9QCI6NvYNHcxkdpMUqCnBWQF8mZ+KqNkm8WfvKOL8T88JB/FE6
+	lUPJuP3IEmSLGsJqS8jJ9vhEXFXDjPng0i0PmWCh8mDibDhLHur3qI7NONmKhl2KjA4vE9DaSny
+	ufB0IQJABrJsQfVj5RSpNm8h49W8KsQBSsIXA33cSImWMohLQcLdP3aheAB30vHUzvrxtBPDiR3
+	d0HMIFBHpQhQMZK1Ib+SmZ9//f1jE3NUS72fpHo6R4AAeDIWhMuZriwhXJLo40eb0uBOvrVgd3U
+	FHtKw4lm/d0Gya5BVAUJQ+QbrzwJLEDc68gmsIXWumsOzyfuDA==
+X-Received: by 2002:a05:6000:288a:b0:48d:f9c1:2ad4 with SMTP id ffacd0b85a97d-48e5d460118mr13343516f8f.4.1793282062814;
+        Thu, 29 Oct 2026 06:54:22 -0700 (PDT)
+Received: from L-P-ITAIH2-L-RF.rf.local ([193.169.70.108])
+        by smtp.gmail.com with ESMTPSA id ffacd0b85a97d-48e3ebd48e0sm35032983f8f.38.2026.10.29.06.54.21
+        (version=TLS1_3 cipher=TLS_AES_256_GCM_SHA384 bits=256/256);
+        Thu, 29 Oct 2026 06:54:22 -0700 (PDT)
+From: Itai Handler <itai.handler@gmail.com>
+To: Zdenek Kabelac <zkabelac@redhat.com>
+Cc: lvm-devel@lists.linux.dev,
+	David Teigland <teigland@redhat.com>
+Subject: Re: [PATCH] label: fix writes when the logical block size is not 512 or 4096
+Date: Thu, 29 Oct 2026 15:53:55 +0200
+Message-Id: <20261029135355.3690645-1-itai.handler@gmail.com>
+X-Mailer: git-send-email 2.34.1
+In-Reply-To: <e297d16a-58e9-40b2-9f1d-8baaf29e823e@redhat.com>
+References: <20261029125312.3631129-1-itai.handler@gmail.com> <e297d16a-58e9-40b2-9f1d-8baaf29e823e@redhat.com>
 X-Mailing-List: lvm-devel@lists.linux.dev
 List-Id: <lvm-devel.lists.linux.dev>
 List-Post: <mailto:lvm-devel@lists.linux.dev>
@@ -97,64 +96,108 @@ List-Unsubscribe: <mailto:lvm-devel+unsubscribe@lists.linux.dev>
 List-Owner: <mailto:lvm-devel+owner@lists.linux.dev>
 Precedence: list
 MIME-Version: 1.0
-User-Agent: Mozilla Thunderbird
-Subject: Re: [PATCH] label: fix writes when the logical block size is not 512
- or 4096
-To: Itai Handler <itai.handler@gmail.com>, lvm-devel@lists.linux.dev
-References: <20261029125312.3631129-1-itai.handler@gmail.com>
-From: Zdenek Kabelac <zkabelac@redhat.com>
-Organization: RedHat
-In-Reply-To: <20261029125312.3631129-1-itai.handler@gmail.com>
-X-Mimecast-Spam-Score: 0
-X-Mimecast-MFC-PROC-ID: _t19UDKOK3gNirY2wt61rLkDa3_vfzsFGtkbZzq_T04_1793279559
-X-Mimecast-Originator: redhat.com
-Content-Language: en-US, cs-CZ
-Content-Type: text/plain; charset=UTF-8; format=flowed
-Content-Transfer-Encoding: 7bit
+Content-Transfer-Encoding: 8bit
 
-Dne 29. 10. 26 v 13:53 Itai Handler napsal(a):
-> Since lvm2 2.03.06, LVM cannot be used on a device whose logical block
-> size, the smallest unit it can read or write, is neither 512 nor 4096
-> bytes.  pvcreate, which prepares a device for LVM, fails:
-> 
->    # truncate -s 64M disk.img
->    # losetup --sector-size 2048 --show -f disk.img
->    /dev/loop8
->    # pvcreate /dev/loop8
->      WARNING: threads io engine write device offset 0 len 4608: Invalid argument.
->      Error writing device /dev/loop8 at 4096 length 512.
->      Failed to write mda header to /dev/loop8.
->      Failed to write physical volume "/dev/loop8".
+Hi Zdenek,
 
-Hi
+On Thu, Oct 29, 2026 at 02:12:34PM +0100, Zdenek Kabelac wrote:
+> Hmm - this thread io engine is surely a new logic we are putting in.
 
-Hmm - this thread io engine is surely a new logic we are putting in.
+This is not related to the threads engine; the warning just names the
+engine in use.  On main, pvcreate fails the same way with io_engine
+set to sync or libaio, and also with releases from before the threads
+engine, such as Ubuntu's 2.03.11 and Debian's 2.03.31.  Built from the
+release tags, 2.03.05 works on 1024- and 2048-byte loop devices
+(pvcreate, vgcreate, lvcreate, vgremove), and 2.03.06 fails on the
+2048-byte one from the patch:
 
-I'd like to know more details what is the scenario we are trying to solve - 
-normally we expect devices to really have 512 or 4K writable blocks.
+  # pvcreate /dev/loop8
+    Error writing device /dev/loop8 at 4096 length 512.
+    bcache_invalidate: block (3, 0) still dirty
+    Failed to write mda header to /dev/loop8 fd -1
+    Failed to write physical volume "/dev/loop8".
 
-We have some set of patches to improve support on systems with 64K pagesize.
+The cause is 7f347698e3d0 ("Fix rounding writes up to sector size"),
+which went into 2.03.06.  Before it, writes were rounded up to the
+physical block size, which is never smaller than the logical one.
+Since then only 512 and 4096 are used, and when neither block size is
+one of them, it falls back to 512.
 
-But I'm puzzled from where do we get  1K or 2K block sizes ??
+> I'd like to know more details what is the scenario we are trying to
+> solve - normally we expect devices to really have 512 or 4K writable
+> blocks.
+>
+> We have some set of patches to improve support on systems with 64K
+> pagesize.
+>
+> But I'm puzzled from where do we get  1K or 2K block sizes ??
 
-> Fix this by rounding up to the logical block size of the device when
-> it is neither 512 nor 4096.  Writes then cover a little more of the
-> device, but the extra bytes are rewritten with the data already there,
-> just as on devices with 4096-byte blocks.  Devices with 512- or
-> 4096-byte blocks, which are almost all disks, are not affected.
+I ran into this while testing LVM on dm-crypt with sectors larger
+than 4KiB.  A dm-crypt device uses its encryption sector size as its
+logical block size.  dm-crypt has accepted sector sizes from 512 to
+4096 since Linux 4.12, and my kernel change 1acc65c30f85 ("dm-crypt:
+allow encryption sector size up to PAGE_SIZE", target version 1.30.0)
+raises the limit to the page size, so on kernels configured with
+64KiB pages it can also be 8KiB to 64KiB.  pvcreate fails on all of
+these, and while looking into why, I found that 1K and 2K fail the
+same way on any kernel.
 
-I think we want to fully hide this in blkio -  label layer should be above.
+1K and 2K block sizes are not common, but they are valid today:
 
-So I will think more about this.
+- cryptsetup has offered --sector-size for LUKS2 and plain devices
+  since 2.0.0, and accepts 1024 and 2048.  For example, pvcreate fails
+  on a LUKS2 device made with "cryptsetup luksFormat --sector-size
+  2048", and LVM on LUKS is a common setup.
 
-> 
-> Devices with other block sizes are uncommon, but easy to create: loop
+- s390 DASDs can be formatted with 1024- or 2048-byte blocks
+  (dasdfmt -b), although 4096 is the recommended size.
 
-Can you tell why do you actually need to use this blocksize - IMHO it must 
-bring some inefficiency ??
+- loop devices with --sector-size, which is the easiest way to
+  reproduce it.
 
+The 64K page size changes already in main, such as 3e91a5265
+("striped: allow stripe size smaller than page size"), were in the
+tree I tested, and do not change this.  If you have more that are not
+in main yet, I'd be glad to test them on my arm64 VM with 64KiB pages.
 
-Regards
+>> Fix this by rounding up to the logical block size of the device when
+>> it is neither 512 nor 4096.  [...]
+>
+> I think we want to fully hide this in blkio -  label layer should be
+> above.
 
-Zdenek
+Agreed, blkio does the direct I/O, so it should know the alignment it
+needs.  For example, it could get the logical block size of each fd
+it is given (BLKSSZGET) and round shortened writes up to that, so the
+label layer passes only the offset.  For devices with 512- or
+4096-byte logical blocks this rounds exactly as today, including
+those with a huge physical block size, as in
+large-physical-sector-size.sh.
 
+> So I will think more about this.
+
+Sure.  I can send a v2 along those lines, keeping the test, or test
+your version if you prefer to write it.
+
+>> Devices with other block sizes are uncommon, but easy to create: loop
+>
+> Can you tell why do you actually need to use this blocksize - IMHO it
+> must bring some inefficiency ??
+
+I agree that blocks smaller than the disk's sector, such as 2KiB on an
+SSD with 4KiB sectors, are inefficient, since a 2KiB write makes the
+disk read and rewrite a whole 4KiB sector.  I don't need those myself;
+I mention them only because they hit the same bug.
+
+What I want is the opposite: larger blocks, from 8KiB up to 64KiB,
+for dm-crypt on kernels configured with 64KiB pages.  These are whole
+multiples of the disk's sector, so they do not have that problem.
+
+Whichever size is used, the cost to LVM is small.  Only LVM's own
+writes, such as metadata updates, are rounded up to whole blocks,
+which adds less than one block to each, and they happen only when LVM
+changes something.  LV data does not go through this code, and the
+default 1MiB pe_start keeps extents aligned for any of these sizes.
+
+Thanks,
+Itai
