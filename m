@@ -1,88 +1,93 @@
-Authentication-Results: smtp.subspace.kernel.org; arc=none smtp.remote-ip=209.85.128.53
+Authentication-Results: smtp.subspace.kernel.org; arc=none smtp.remote-ip=170.10.129.124
 ARC-Seal: i=1; d=subspace.kernel.org; s=arc20261015; a=rsa-sha256; cv=none;
-	t=1793775515;
-	b=CgyPt09TMoiwTImNQypM09WhaRF53r64USeRbg2eHViOYiAetQ3xl4uFnyxa8WwMx5sc
-	 rQBc0BHL8CmCu+uxGH/ydJPYE1gSePAxLQRBi4d/ed5qmaUiYA+9pUGa1UlbA1g2osw7o
-	 6sPWMpjUUhCYGy73v+StkKBZ4rLYXiX8cYbUe7ZzdJdy0ecc7pGUX0hXrYkCOdYT0RVDe
-	 jA4cGuNiUIDjFhjuhDB6ngwEWRbvKvNZLkHD2N3VEhDZfM23tXmJvKw6nuWAbMa0xTe5o
-	 NfYiyU+kHMxgrwOs/g/8M70Ocb6AapevFbLveGx5QYlYXZtisHoQy8zSRxum3XPTw4w==
+	t=1793785018;
+	b=ph3SC2DF8JEwsd56ZRW5ej0aj0OjubXYuoVoHa3A9xKcDKypiV83HTZWCQ38TaR4ONE4
+	 X1uJdtZ8dXyvTVOJVl3mW1vlXbSX2+nUIHKBAnRGn7Rgv9J3eDNHbp+WnR0A6HrKQ73+7
+	 R5RX7y9UkeyULGhKNq7hcWy+pvzBSevyEbPJRjAUNeyT22vz4Anddm3JYh2NjUTYItfFa
+	 aD4KVytPL+xc09NfZIKh6civd8i3+FA2fXDlNcuLoFUtZh/M7UGtQuyELbw8d+bcaGnZ3
+	 MsSQf0AVYZR9kW63V/g0Vp9+7ehGsrkxMKnKqvcMFa61rDe5a9ELNpALpHukMFjAf/w==
 ARC-Message-Signature: i=1; d=subspace.kernel.org; s=arc20261015;
-	a=rsa-sha256; c=relaxed/relaxed; t=1793775515;
-	h=DMARC-Filter:Received:DKIM-Signature:X-Google-DKIM-Signature:
-	 X-Gm-Message-State:X-Gm-Gg:X-Received:Received:From:To:Cc:Subject:
-	 Date:Message-Id:X-Mailer:MIME-Version:Content-Transfer-Encoding;
-	bh=BFRvPVSc1LZp5SKDoUpfS+8ZPAoKGw3IAgY0pZnS8hY=;
-	b=rix2qSWtmUN7+9aftIkEeYzBTqTc5Wi+r+DnqdprNMKcpNlfaVCsIP6OIj79tCF7Z+oL
-	 wibwFVWDGrwS7+zkddLZG9eH7leMKl0u/TvK5UyclRldU+YUM+3r+WoQj/mQPmMShZ2Hd
-	 EdYdW+3z72gYF3YS0dI7mQgfp4MbyWDeMFYOwy4E6xdSHmogKFvWukXUuyjEULR2JEijq
-	 BcAfCP9l/mhnjKhQmnr1zFcR6LA0KhPST9l94OrS+OOkxwLK5mAgFKUNFelo8Hyr87m+e
-	 uccqwBGTcxQc4pdh5Ont9TTBcN8pVsXfbjAiWnttadWwx4W0N+Xeizj2bdkre2GD8yw==
+	a=rsa-sha256; c=relaxed/relaxed; t=1793785018;
+	h=DMARC-Filter:DKIM-Signature:Received:X-MC-Unique:
+	 X-Mimecast-MFC-AGG-ID:Received:X-Google-DKIM-Signature:
+	 X-Forwarded-Encrypted:X-Gm-Message-State:X-Gm-Gg:X-Received:
+	 X-Received:Received:Message-ID:Date:MIME-Version:User-Agent:Subject:
+	 To:References:From:Organization:In-Reply-To:X-Mimecast-Spam-Score:
+	 X-Mimecast-MFC-PROC-ID:X-Mimecast-Originator:Content-Language:
+	 Content-Type:Content-Transfer-Encoding;
+	bh=3u3CaEbxfnWx9Q5ijhi+ZhfGrmGDTVHxkoFt21rV79A=;
+	b=C1RG+ONBDPF0Cc3sBlrHpKl2vxVUHdMlG069Rlo+fzlRaU5vPOSmw3dQArpGy3PTK59c
+	 ogy5JIjTBG98DiZ8gzLM1exGeJ6YjKrtIKgootj/ZPRBgC3FUargQ80jQDaCI2IXbq58d
+	 zQr06DbVKiFJNKvamzcqNP/zjF7LwmJVC1X99AeZyJN5QIwkvoVZsQqK0qWW3HrX0zmPl
+	 Xhj768Sb+6nnfdYxA0BMMTnv6V8Jkl6u344tYVgAsqYjnYV3jZQNCEWftLGCB/Qu51DNQ
+	 BhGftCjXygtZDFDfQnekcgDO6rrz6oFv4/ZcWbDmbt7DF4W4J/1nAWJUzAcbKhKDIGQ==
 ARC-Authentication-Results: i=1; smtp.subspace.kernel.org; 
-	dmarc=pass header.from=gmail.com;
-	spf=pass smtp.mailfrom=gmail.com;
-	dkim=pass header.d=gmail.com header.i=@gmail.com header.a=rsa-sha256 header.s=20260707 header.b=SnrPmUbM;
-	arc=none smtp.remote-ip=209.85.128.53
-Received: from mail-wm1-f53.google.com (mail-wm1-f53.google.com [209.85.128.53])
-	(using TLSv1.3 with cipher TLS_AES_128_GCM_SHA256 (128/128 bits)
+	dmarc=pass header.from=redhat.com;
+	spf=pass smtp.mailfrom=redhat.com;
+	dkim=pass header.d=redhat.com header.i=@redhat.com header.a=rsa-sha256 header.s=mimecast20190719 header.b=ZAGFh3dV;
+	arc=none smtp.remote-ip=170.10.129.124
+Received: from us-smtp-delivery-124.mimecast.com (us-smtp-delivery-124.mimecast.com [170.10.129.124])
+	(using TLSv1.3 with cipher TLS_AES_256_GCM_SHA384 (256/256 bits)
 	 key-exchange X25519 server-signature ECDSA (prime256v1) server-digest SHA256)
 	(No client certificate requested)
-	by smtp.subspace.kernel.org (Postfix) with ESMTPS id 05F42606A326
-	for <lvm-devel@lists.linux.dev>; Wed,  4 Nov 2026 06:58:34 +0000 (UTC)
-DMARC-Filter: OpenDMARC Filter v1.4.2 smtp.subspace.kernel.org 05F42606A326
-Authentication-Results: smtp.subspace.kernel.org; dmarc=pass (p=none dis=none) header.from=gmail.com
-Authentication-Results: smtp.subspace.kernel.org; spf=pass smtp.mailfrom=gmail.com
+	by smtp.subspace.kernel.org (Postfix) with ESMTPS id D5BBC606A31B
+	for <lvm-devel@lists.linux.dev>; Wed,  4 Nov 2026 09:36:57 +0000 (UTC)
+DMARC-Filter: OpenDMARC Filter v1.4.2 smtp.subspace.kernel.org D5BBC606A31B
+Authentication-Results: smtp.subspace.kernel.org; dmarc=pass (p=quarantine dis=none) header.from=redhat.com
+Authentication-Results: smtp.subspace.kernel.org; spf=pass smtp.mailfrom=redhat.com
 Authentication-Results: smtp.subspace.kernel.org;
-	dkim=pass (2048-bit key, unprotected) header.d=gmail.com header.i=@gmail.com header.a=rsa-sha256 header.s=20260707 header.b=SnrPmUbM
-Received: by mail-wm1-f53.google.com with SMTP id 5b1f17b1804b1-4a68f888a41so598925e9.0
-        for <lvm-devel@lists.linux.dev>; Tue, 03 Nov 2026 22:58:34 -0800 (PST)
-DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed;
-        d=gmail.com; s=20260707; t=1793775513; x=1794380313; darn=lists.linux.dev;
-        h=content-transfer-encoding:mime-version:message-id:date:subject:cc
-         :to:from:from:to:cc:subject:date:message-id:reply-to:content-type;
-        bh=BFRvPVSc1LZp5SKDoUpfS+8ZPAoKGw3IAgY0pZnS8hY=;
-        b=SnrPmUbMXUmDNTGRQO7VKdQz51a552Y1BFOYDG8Xdx+o1AHE6ss1WuClDwRGdD5Omw
-         O2qyzmzWHkDinUUXzk5tNwvOVvE4OZ1z6UWHhXWkUXhF2qT30GXFodkIiMnz8pcOTTfM
-         05g4h2mPVP5xwCeHPh1T/y0uaIv8RgRYaRNPL2L1AQfjN5qw7H5kHDLDsSExGjgP8Xw+
-         7jXG/7jpbhIk5gWGU0qEeaYTlKhL4NTLdxJR8V2ZPtIdzE8eC2FPa9czi22sDk9Ovr2Y
-         VDQ/XrhVZy03OK6enDBFvAowVsg2ZQXC835kYVwR1q7aphOW2GQ0WOujJ3m579JJdjrA
-         PXcw==
+	dkim=pass (1024-bit key, unprotected) header.d=redhat.com header.i=@redhat.com header.a=rsa-sha256 header.s=mimecast20190719 header.b=ZAGFh3dV
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed; d=redhat.com;
+	s=mimecast20190719; t=1793785016;
+	h=from:from:reply-to:subject:subject:date:date:message-id:message-id:
+	 to:to:cc:mime-version:mime-version:content-type:content-type:
+	 content-transfer-encoding:content-transfer-encoding:
+	 in-reply-to:in-reply-to:references:references;
+	bh=3u3CaEbxfnWx9Q5ijhi+ZhfGrmGDTVHxkoFt21rV79A=;
+	b=ZAGFh3dVUTokSZI6exsjgmcy5KQWowniX5q8EgeyM9uzqqrKEEgKzCdjjUqF74kDCyweE3
+	jNdvNVgZ7PQt61GpFtafxvBkgQ7PRGggFCl770ZZuSlTgl+8+xHhV6rJCQb4V+SS13dUQ/
+	JD9yoD0QP2Zzy9Xcc1d/bkixprIdy+0=
+Received: from mail-wm1-f70.google.com (mail-wm1-f70.google.com
+ [209.85.128.70]) by relay.mimecast.com with ESMTP with STARTTLS
+ (version=TLSv1.3, cipher=TLS_AES_256_GCM_SHA384) id
+ us-mta-117-yNTM5NBhO4q4jK3ZA_r4FA-1; Wed, 04 Nov 2026 04:36:55 -0500
+X-MC-Unique: yNTM5NBhO4q4jK3ZA_r4FA-1
+X-Mimecast-MFC-AGG-ID: yNTM5NBhO4q4jK3ZA_r4FA_1793785014
+Received: by mail-wm1-f70.google.com with SMTP id 5b1f17b1804b1-4a35e1d2dddso5394535e9.0
+        for <lvm-devel@lists.linux.dev>; Wed, 04 Nov 2026 01:36:55 -0800 (PST)
 X-Google-DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed;
-        d=1e100.net; s=20260707; t=1793775513; x=1794380313;
-        h=content-transfer-encoding:mime-version:message-id:date:subject:cc
-         :to:from:x-gm-gg:x-gm-message-state:from:to:cc:subject:date
+        d=1e100.net; s=20260707; t=1793785014; x=1794389814;
+        h=content-transfer-encoding:content-type:in-reply-to:organization
+         :from:content-language:references:to:subject:user-agent:mime-version
+         :date:message-id:x-gm-gg:x-gm-message-state:from:to:cc:subject:date
          :message-id:reply-to:content-type;
-        bh=BFRvPVSc1LZp5SKDoUpfS+8ZPAoKGw3IAgY0pZnS8hY=;
-        b=jL7dKbFLEHBnio55CfI55cdmWOjwl+kCVFbgCuIuGorTYMH3oc3LOhMo3LRbL98qis
-         NZWo2GokXveVd+wvYjibVRGIMPtKIBIg3xzvXCax66GTcCsMFlwjFj3HC/WbLAkp1JdV
-         CWiSOlJOUBN3sJ+TP/qBSFvAvdT6WqgPgnUq1wP0vLJr58C2K/9L3kc1HIl/Rpr9z0nT
-         S82DdT+W5DzhwHKm2QISVZ43Li5QE+WOjJ0mhMUa20ii6Dn+ezyCRMQD4B0uiLcmbWlG
-         z7Su1tC6HqSHty4jeLk5Np1VQ5GR5RZGgppoEHpynQWfGXD0KmCGjbsRnWlIy/mN9VH5
-         LK0g==
-X-Gm-Message-State: APuU4Z9UN5D5CbKB7HuPrMcXolHCxyaKb/ScDoASYWu+KbupaWnLmviY
-	nl2rrSKeA8gQ/eTSewkMytRrnynilkVdduLtVveLGDd/qHR2cCiCzUvAZuIyoQ==
-X-Gm-Gg: AYBFou3t3DiZVkdmjhH1A9k/FP6ES/e7oRvcneIFQOd+A3GO4cCNbC4zwe1MssZsPS5
-	fKQymV6DDAvoiIUF96LVxWDlv67xx2xhPifbL3l3IL7aSjxEcDZKcyaMbvXIVJ9IeCDZgMI2wFx
-	tw9b4nfZbiixij9L4tuVFv49rhVQ/TkIprhs9kuCDPLHG70unVXtEmXLK+McpPTenLhZEBlUOf5
-	clMdAAaUHBGBtSmCBgLNz/aro0ndrUyU1+d0rfOA7KsUdYSL7wH5DiZduz6bvTAZV8n0MF6FlEb
-	kor805cYJ1w6u8Q/BDP5NA9gQtNy1Glg7p54KdpdUQTeBl+ylw0ksgceyYtc8b3aBEiZcuCmJri
-	NPaEgWGRoBz1VoQM6brawXPfZdHolLqk2pK8jVOdWg1RfZXgkpuGKixR1bCM0ut/T+eDJ5xQhX6
-	P1hHnr4uSn6rvVMtz2kPA392jChTFTGDOauYwPdfnjgxeQIrJDUS/aoVsup2QHzi/EgZm+qQm6j
-	rVzyozKBsWAeUs+T48J2GdVn8HDHgBTSsfDyJCbQdgyOQTP+To6O9JyxFOGB2XwfOgmG/WrFX7n
-	g7pk7XEC8hZQsdMHX2Mw9wWNGYlPhUV1RsQqOucdOk3CchFa7Q==
-X-Received: by 2002:a05:600d:6505:20b0:4b2:3c81:103 with SMTP id 5b1f17b1804b1-4b23c8106abmr104162305e9.2.1793775513067;
-        Tue, 03 Nov 2026 22:58:33 -0800 (PST)
-Received: from L-P-ITAIH2-L-RF.rf.local ([193.169.70.108])
-        by smtp.gmail.com with ESMTPSA id 5b1f17b1804b1-4b433ebd278sm29676805e9.3.2026.11.03.22.58.32
-        (version=TLS1_3 cipher=TLS_AES_256_GCM_SHA384 bits=256/256);
-        Tue, 03 Nov 2026 22:58:32 -0800 (PST)
-From: Itai Handler <itai.handler@gmail.com>
-To: lvm-devel@lists.linux.dev
-Cc: David Teigland <teigland@redhat.com>,
-	Zdenek Kabelac <zkabelac@redhat.com>
-Subject: [PATCH v2] blkio: fix writes when the logical block size is not 512 or 4096
-Date: Wed,  4 Nov 2026 08:58:17 +0200
-Message-Id: <20261104065817.1306582-1-itai.handler@gmail.com>
-X-Mailer: git-send-email 2.34.1
+        bh=3u3CaEbxfnWx9Q5ijhi+ZhfGrmGDTVHxkoFt21rV79A=;
+        b=K+cycM+dcvMPHZYlMyDlYVbQ2+GiCV58Q8XVlzLInslVyGbc7QEigVsN4yt322NpDa
+         Zn+rhGn9JTTMTC0D+S8QpmmyTjRbNw9AcDgacOe5+Z21Pg7LADPoJZ0Vx64lLY7qS+d6
+         K2Oaqh96W12SyunoV38JxdDrVjhOfMQMMCUpO92P677lGz0oI4L38/2aHYPb5VqYupKw
+         INGAuoPW6Q8aeP1CWoJzjm8yGxOY4kOALyWiRDJnbd7CTkGI+AZZEeX50lhmKqNdtDs0
+         QwmcSSyGvLGEeg8iDhdIRr1y9HxKbtljYvp2Acf+HtW42gwFPkvhkdb8rJsZLyMftVAG
+         D9qw==
+X-Forwarded-Encrypted: i=1; AKwUvBw35SNSZbEVPfHOKewXOGyiJj01wxayySTHUKCMnWoZeWZKzEgrAEauFRYvqIqRZhVI5ItQQu0VOtE=@lists.linux.dev
+X-Gm-Message-State: APuU4Z/5bF40nTj42DYcls10U6mksMHmja5dzAAV6g7QlC08HiD3Yfik
+	YMMWJgUAZSrlRTAlKS4divND0oJ6jEFeRR3dGR4NELACaUr2euswpkuDY9K9GyFicCrq6Gsu7+k
+	GJNqgB82w4VRnYP+hSd8X8qCXVYWUh9x/rqFPfBcsZjsYGLCF9JiRrp9D8bqtPQ==
+X-Gm-Gg: AYBFou1+7dHsuzM7y3GO2UKGwoz1YXuFfjV+U+GUq+wqU4qivNdhV2n1bYZAMBSK3yd
+	5l4SeXBUfl/1uZLuDEAPCdilg96+6/HlhInKpwDMkdF0fjv7FesUZI4gd9aa4NjOnaaKKEvhpVZ
+	Q/BQcYav821x5l2Cl5odl3HIDoJxmKWEahZ6bWeMFMvxgOP/Och/EXea9COAgJP+ZM3511vjJNH
+	ey7P4T0K2xyG+Zbstk00bg6/krjT3haBiM7C/X964Ylzr/5ToWa//mLaitVUathEFeR4QCEK7fr
+	5um34Qe4xkGdtKwf5fJgX1fuAviS+MvDv/iNr5TSeoTatYhyq4P4qhW0wBG4rii/iY7n7f8rpmt
+	Zh5fj+9EGcia2uif1rQA4WhfrlRi2lGk=
+X-Received: by 2002:a05:600c:3b87:b0:4a2:150f:1607 with SMTP id 5b1f17b1804b1-4ac1709ad56mr373127845e9.13.1793785014319;
+        Wed, 04 Nov 2026 01:36:54 -0800 (PST)
+X-Received: by 2002:a05:600c:3b87:b0:4a2:150f:1607 with SMTP id 5b1f17b1804b1-4ac1709ad56mr373127495e9.13.1793785013872;
+        Wed, 04 Nov 2026 01:36:53 -0800 (PST)
+Received: from [10.43.17.4] ([213.175.46.86])
+        by smtp.gmail.com with ESMTPSA id 5b1f17b1804b1-4b2ab00ff3dsm231892425e9.14.2026.11.04.01.36.53
+        (version=TLS1_3 cipher=TLS_AES_128_GCM_SHA256 bits=128/128);
+        Wed, 04 Nov 2026 01:36:53 -0800 (PST)
+Message-ID: <713023c3-32a4-426e-bc2e-2b93b3f2a97d@redhat.com>
+Date: Wed, 4 Nov 2026 10:36:53 +0100
 X-Mailing-List: lvm-devel@lists.linux.dev
 List-Id: <lvm-devel.lists.linux.dev>
 List-Post: <mailto:lvm-devel@lists.linux.dev>
@@ -92,412 +97,36 @@ List-Unsubscribe: <mailto:lvm-devel+unsubscribe@lists.linux.dev>
 List-Owner: <mailto:lvm-devel+owner@lists.linux.dev>
 Precedence: list
 MIME-Version: 1.0
-Content-Transfer-Encoding: 8bit
+User-Agent: Mozilla Thunderbird
+Subject: Re: [PATCH] test: skip metadata-write-rounding with pages larger than
+ 4KiB
+To: Itai Handler <itai.handler@gmail.com>, lvm-devel@lists.linux.dev
+References: <20261104065729.1305748-1-itai.handler@gmail.com>
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Organization: RedHat
+In-Reply-To: <20261104065729.1305748-1-itai.handler@gmail.com>
+X-Mimecast-Spam-Score: 0
+X-Mimecast-MFC-PROC-ID: zL4JONqvkCZQlVPOxZrMwCDtTwQUjb3fHVQGKp_4tnw_1793785014
+X-Mimecast-Originator: redhat.com
+Content-Language: en-US, cs-CZ
+Content-Type: text/plain; charset=UTF-8; format=flowed
+Content-Transfer-Encoding: 7bit
 
-Since lvm2 2.03.06, pvcreate fails on devices where neither the logical
-nor the physical block size is 512 or 4096 bytes, such as a loop device
-with 2048-byte sectors:
+Dne 04. 11. 26 v 7:57 Itai Handler napsal(a):
+> On kernels configured with 64KiB pages, pvcreate in the test fails:
+> 
+>    Metadata area size too small: 66560 bytes. It must be at least 524288 bytes.
+> 
+> The metadata area starts at the page size and is at least 8 pages long,
+> so it can end one logical block after 64KiB, as the test needs, only
+> with 4KiB pages.  Skip the test with larger pages.
+> 
+Hi
 
-  # truncate -s 64M disk.img
-  # losetup --sector-size 2048 --show -f disk.img
-  /dev/loop8
-  # pvcreate /dev/loop8
-    WARNING: threads io engine write device offset 0 len 4608: Invalid argument.
-    Error writing device /dev/loop8 at 4096 length 512.
-    Failed to write mda header to /dev/loop8.
-    Failed to write physical volume "/dev/loop8".
+Here I've my local repo with longer list of test fixes for 64K pages - this 
+will be pushed to origin once it will be polished.
 
-LVM rounds its metadata writes up to whole blocks, as direct I/O
-requires, but on such devices it rounds up to 512 bytes.  Above, it
-writes 4608 bytes, 2.25 blocks of 2048 bytes, and the kernel rejects
-the write.
+Regards
 
-Move the rounding into blkio, which does the direct I/O, and round up
-to the logical block size of the device being written, read with
-BLKSSZGET.  As explained in 669e2f2b6ccf ("label: don't round writes
-past the logical block size"), the added bytes cannot belong to an
-active LV.  On devices with a logical or physical block size of 512 or
-4096, that is almost all disks, LVM already rounds up to the logical
-block size, so they are not affected.
-
-Such devices are uncommon but easy to create: loop devices with
---sector-size 1024 or 2048, and dm-crypt with 1024- or 2048-byte
-sectors on disks with 512-byte physical sectors.
-
-With this change, LVM can also use logical blocks larger than 4KiB,
-where the kernel supports them.  Loop devices accept them on recent
-kernels, and dm-crypt accepts sectors up to the page size since target
-version 1.30.0, added by Linux commit 1acc65c30f85 ("dm-crypt: allow
-encryption sector size up to PAGE_SIZE").  For example, on a kernel
-configured with 64KiB pages, a dm-crypt device can have 64KiB sectors;
-without this change, the kernel rejects LVM's writes to it and pvcreate
-fails.
-
-Fixes: 7f347698e3d0 ("Fix rounding writes up to sector size")
-Assisted-by: LLM
----
-v2:
-- Round up in blkio, as Zdenek suggested: blkio reads the logical
-  block size of the device it writes (BLKSSZGET), and
-  dev_set_last_byte() only passes where the write must end.
-- Rebased on main, which has since fixed the 1K/2K logical, 4K
-  physical case separately (669e2f2b6).
-- metadata-write-rounding.sh also covers 2048-byte logical blocks with
-  8192-byte physical blocks.
-- logical-block-size.sh removes its LV and loop device if it fails.
-
-v1: https://lore.kernel.org/lvm-devel/20261029125312.3631129-1-itai.handler@gmail.com/
-
-Tested on main 7ea850a14 in QEMU, with Linux 7.3 on x86_64, where loop
-accepts sector sizes up to 64KiB, and with dm-crypt 1.30.0 (Linux 7.4
-merge window, 65ba8f34ec88) on arm64 with 64KiB pages:
-- logical-block-size passes with 1KiB to 64KiB loop devices, and
-  metadata-write-rounding with all three cases on x86_64.  Without the
-  blkio change both fail, and pvcreate fails as shown above, with 64KiB
-  pages at offset 65536.
-- The unit tests, allow-mixed-block-sizes, large-physical-sector-size,
-  mda-rollback, metadata-balance, pe-align, pvcreate-metadata0,
-  pvcreate-operation and topology-support still pass on x86_64.  On
-  arm64, pe-align fails on main too, as it expects 4KiB pages, and so
-  do pvcreate-metadata0 and topology-support, which need dm-snapshot,
-  missing from that kernel.
-- On dm-crypt with sector sizes from 1KiB up to the page size,
-  pvcreate with two metadata areas, vgcreate, lvcreate, lvextend and
-  reactivation work.  Debian's lvm2 2.03.31 fails pvcreate on each,
-  and main fails it with 64KiB sectors.
-
-With pages larger than 4KiB, metadata-write-rounding fails in pvcreate,
-on main too.  "test: skip metadata-write-rounding with pages larger
-than 4KiB", sent just before this patch, skips it.  This patch applies
-with or without it.
-
- WHATS_NEW                             |  1 +
- lib/blkio/blkio.c                     | 46 ++++++++++++-----
- lib/blkio/blkio.h                     |  6 ++-
- lib/label/label.c                     | 37 +-------------
- test/shell/logical-block-size.sh      | 73 +++++++++++++++++++++++++++
- test/shell/metadata-write-rounding.sh | 15 +++---
- test/unit/blkio_t.c                   |  2 +-
- 7 files changed, 124 insertions(+), 56 deletions(-)
- create mode 100644 test/shell/logical-block-size.sh
-
-diff --git a/WHATS_NEW b/WHATS_NEW
-index fff0fcfde..65a3d57ec 100644
---- a/WHATS_NEW
-+++ b/WHATS_NEW
-@@ -1,5 +1,6 @@
- Version 2.03.45 - 
- ==================
-+  Fix failing writes on devices whose block sizes are neither 512 nor 4096.
-   Fix vgcfgbackup segfault for a VG name ending in .tmp.
-   Fix pvscan --allpvs crash when a PV has no device.
-   Fix a stack overflow checking config definition paths with long names.
-diff --git a/lib/blkio/blkio.c b/lib/blkio/blkio.c
-index a84e00269..c9b86805d 100644
---- a/lib/blkio/blkio.c
-+++ b/lib/blkio/blkio.c
-@@ -17,7 +17,9 @@
- #include "lib/datastruct/radix-tree.h"
- 
- #include <errno.h>
-+#include <sys/ioctl.h>
- #include <sys/types.h>
-+#include <linux/fs.h>
- #include <stdbool.h>
- #include <stdlib.h>
- #include <stdint.h>
-@@ -92,7 +94,6 @@ struct blkio {
- 	 */
- 	int last_byte_di;
- 	uint64_t last_byte_offset;
--	size_t last_byte_sector_size;
- 
- 	/*
- 	 * Lists that categorize the blocks.
-@@ -345,6 +346,20 @@ static uint64_t _round_up_to_sector(uint64_t nr_bytes, sector_t sector_size)
- 	return remainder ? nr_bytes + (sector_size - remainder) : nr_bytes;
- }
- 
-+/*
-+ * The logical block size of the device open on fd, the smallest unit it
-+ * can read or write, or SECTOR_SIZE if it cannot be read.
-+ */
-+static size_t _logical_block_size(int fd)
-+{
-+	int lbs;
-+
-+	if (ioctl(fd, BLKSSZGET, &lbs) || lbs < SECTOR_SIZE)
-+		return SECTOR_SIZE;
-+
-+	return (size_t) lbs;
-+}
-+
- struct clamped_write_range {
- 	bool valid;
- 	sector_t end;
-@@ -355,7 +370,7 @@ static struct clamped_write_range _clamp_write_range(struct blkio *bio, int di,
- 						     const struct blkio_io *io)
- {
- 	struct blkio_byte_range bytes = io->range;
--	size_t limit_nbytes, rounded_nbytes, block_nbytes;
-+	size_t limit_nbytes, rounded_nbytes, block_nbytes, sector_size;
- 	struct clamped_write_range range = {
- 		.valid = true,
- 		.end = (io->range.offset + io->range.len) >> SECTOR_SHIFT,
-@@ -384,23 +399,32 @@ static struct clamped_write_range _clamp_write_range(struct blkio *bio, int di,
- 	 * If the blkio block offset+len goes beyond where lvm is
- 	 * intending to write, then reduce the len being written
- 	 * (which is the blkio block size) so we don't write past
--	 * the limit set by lvm.  A partial sector is never written,
--	 * so the reduced len is rounded up to a whole sector when
--	 * that does not take it past the end of the block, which is
--	 * possible because the block size is a multiple of it.
-+	 * the limit set by lvm.  Direct I/O must cover whole logical
-+	 * blocks of the device, so the reduced len is rounded up to a
-+	 * multiple of the logical block size when that does not take
-+	 * it past the end of the blkio block, which is possible because
-+	 * the blkio block size is a multiple of it.
-+	 *
-+	 * Rounding up to the logical block size, and no further, is
-+	 * safe.  LV extents do not overlap the area lvm writes, so an
-+	 * extent holding any of the added bytes would start among them,
-+	 * at an offset that is not a multiple of the logical block size.
-+	 * device-mapper refuses to map such an extent, so no active LV
-+	 * can write there, and writing back what was read there changes
-+	 * nothing.
- 	 */
- 	limit_nbytes = bio->last_byte_offset - bytes.offset;
- 	block_nbytes = bytes.len;
-+	sector_size = _logical_block_size(io->fd);
- 
--	rounded_nbytes = _round_up_to_sector(limit_nbytes,
--					     bio->last_byte_sector_size);
-+	rounded_nbytes = _round_up_to_sector(limit_nbytes, sector_size);
- 	if (rounded_nbytes > block_nbytes) {
- 		log_warn("WARNING: Skip extending write at %llu len %llu limit %llu extra %llu sector_size %llu.",
- 			 (unsigned long long)bytes.offset,
- 			 (unsigned long long)block_nbytes,
- 			 (unsigned long long)limit_nbytes,
- 			 (unsigned long long)(rounded_nbytes - limit_nbytes),
--			 (unsigned long long)bio->last_byte_sector_size);
-+			 (unsigned long long)sector_size);
- 		rounded_nbytes = limit_nbytes;
- 	}
- 
-@@ -1315,11 +1339,10 @@ bool blkio_abort_di(struct blkio *bio, int di)
- 
- /*----------------------------------------------------------------*/
- 
--void blkio_set_last_byte(struct blkio *bio, int di, uint64_t offset, size_t sector_size)
-+void blkio_set_last_byte(struct blkio *bio, int di, uint64_t offset)
- {
- 	bio->last_byte_di = di;
- 	bio->last_byte_offset = offset;
--	bio->last_byte_sector_size = sector_size ? sector_size : SECTOR_SIZE;
- }
- 
- void blkio_unset_last_byte(struct blkio *bio, int di)
-@@ -1327,7 +1350,6 @@ void blkio_unset_last_byte(struct blkio *bio, int di)
- 	if (bio->last_byte_di == di) {
- 		bio->last_byte_di = 0;
- 		bio->last_byte_offset = 0;
--		bio->last_byte_sector_size = 0;
- 	}
- }
- 
-diff --git a/lib/blkio/blkio.h b/lib/blkio/blkio.h
-index 7ca2a1e54..b7227443a 100644
---- a/lib/blkio/blkio.h
-+++ b/lib/blkio/blkio.h
-@@ -80,7 +80,11 @@ bool blkio_zero_bytes(struct blkio *bio, int di, uint64_t start, size_t len);
- bool blkio_set_bytes(struct blkio *bio, int di, uint64_t start, size_t len, uint8_t val);
- bool blkio_invalidate_bytes(struct blkio *bio, int di, uint64_t start, size_t len);
- 
--void blkio_set_last_byte(struct blkio *bio, int di, uint64_t offset, size_t sector_size);
-+/*
-+ * Writes to di stop at offset, rounded up to the logical block size of
-+ * the device.
-+ */
-+void blkio_set_last_byte(struct blkio *bio, int di, uint64_t offset);
- void blkio_unset_last_byte(struct blkio *bio, int di);
- 
- /*----------------------------------------------------------------*/
-diff --git a/lib/label/label.c b/lib/label/label.c
-index 68698bf4d..e07c8a000 100644
---- a/lib/label/label.c
-+++ b/lib/label/label.c
-@@ -2060,42 +2060,7 @@ fail:
- 
- void dev_set_last_byte(struct device *dev, uint64_t offset)
- {
--	unsigned int physical_block_size = 0;
--	unsigned int logical_block_size = 0;
--	unsigned int bs;
--
--	if (!dev_get_direct_block_sizes(dev, &physical_block_size, &logical_block_size)) {
--		stack;
--		return; /* FIXME: error path ? */
--	}
--
--	if ((physical_block_size == 512) && (logical_block_size == 512))
--		bs = 512;
--	else if ((physical_block_size == 4096) && (logical_block_size == 4096))
--		bs = 4096;
--	else if ((physical_block_size == 512) || (logical_block_size == 512)) {
--		log_debug("Set last byte mixed block sizes physical %u logical %u using 512",
--			  physical_block_size, logical_block_size);
--		bs = 512;
--	} else if ((physical_block_size == 4096) || (logical_block_size == 4096)) {
--		/*
--		 * Use the logical block size, not 4096.  With 1024 or 2048
--		 * byte logical blocks, the first PE can start at an offset
--		 * that is not a multiple of 4096, and rounding up to 4096
--		 * would overwrite its start with data read earlier.
--		 * device-mapper maps PEs only at multiples of the logical
--		 * block size, so rounding up to that never reaches a PE in use.
--		 */
--		bs = logical_block_size ? logical_block_size : 4096;
--		log_debug("Set last byte mixed block sizes physical %u logical %u using %u",
--			  physical_block_size, logical_block_size, bs);
--	} else {
--		log_debug("Set last byte mixed block sizes physical %u logical %u using 512",
--			  physical_block_size, logical_block_size);
--		bs = 512;
--	}
--
--	blkio_set_last_byte(scan_blkio, dev->blkio_di, offset, bs);
-+	blkio_set_last_byte(scan_blkio, dev->blkio_di, offset);
- }
- 
- void dev_unset_last_byte(struct device *dev)
-diff --git a/test/shell/logical-block-size.sh b/test/shell/logical-block-size.sh
-new file mode 100644
-index 000000000..cf51f19d2
---- /dev/null
-+++ b/test/shell/logical-block-size.sh
-@@ -0,0 +1,73 @@
-+#!/usr/bin/env bash
-+
-+# Copyright (C) 2026 Itai Handler. All rights reserved.
-+#
-+# This copyrighted material is made available to anyone wishing to use,
-+# modify, copy, or redistribute it subject to the terms and conditions
-+# of the GNU General Public License v.2.
-+#
-+# You should have received a copy of the GNU General Public License
-+# along with this program; if not, write to the Free Software Foundation,
-+# Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
-+
-+# Use a PV with a logical block size other than 512 and 4096: a loop
-+# device with --sector-size 1024 or 2048, or larger where the kernel
-+# allows it.  dm-crypt with such a sector_size behaves the same.  Direct
-+# I/O fails unless writes cover whole logical blocks, on the PV and on
-+# LVs that inherit its size.
-+
-+
-+. lib/inittest --skip-with-lvmpolld --skip-with-lvmlockd
-+
-+losetup -h | grep sector-size || skip
-+
-+cleanup_loop_and_teardown()
-+{
-+	# Remove the LV even if its VG cannot be read, so the loop is not busy.
-+	aux teardown_devs_prefixed "$PREFIX"
-+	test -n "${LOOP-}" && should losetup -d "$LOOP"
-+	rm -f loopa
-+	aux teardown
-+}
-+
-+trap 'cleanup_loop_and_teardown' EXIT
-+
-+# A multiple of every tested block size but not of the 128KiB I/O block,
-+# so the metadata area at the end of the device ends in a partial block.
-+dd if=/dev/zero of=loopa bs=64k count=0 seek=513 2>/dev/null
-+LOOP=$(losetup -f --show loopa) || skip "Cannot find free loop device"
-+
-+# prepare devX mapping so it works for real & fake dev dir
-+m=${LOOP##*loop}
-+dev1="$DM_DEV_DIR/loop$m"
-+test -e "$dev1" || mknod "$dev1" b 7 "$m"
-+
-+aux extend_filter "a|$dev1|"
-+aux extend_devices "$dev1"
-+
-+tested=
-+for bs in 1024 2048 8192 16384 32768 65536 ; do
-+	# The kernel rejects sizes above its limit (page size or 64KiB).
-+	for i in {1..5} ; do
-+		losetup --sector-size "$bs" "$LOOP" && break
-+		sleep .1
-+	done
-+	test "$(blockdev --getss "$LOOP")" -eq "$bs" || continue
-+
-+	pvcreate --pvmetadatacopies 2 "$dev1"
-+	vgcreate $vg "$dev1"
-+	# Zeroes the first 4KiB of the LV.
-+	lvcreate -l2 -n $lv1 $vg
-+	check sysfs "$DM_DEV_DIR/$vg/$lv1" queue/logical_block_size "$bs"
-+	lvextend -l+1 $vg/$lv1
-+	vgchange -an $vg
-+	vgchange -ay $vg
-+	check lv_field $vg/$lv1 seg_size_pe "3"
-+	vgremove -ff $vg
-+	pvremove "$dev1"
-+
-+	tested="$tested $bs"
-+done
-+
-+test -n "$tested" || skip "No logical block size other than 512 or 4096"
-+echo "Tested logical block sizes:$tested"
-diff --git a/test/shell/metadata-write-rounding.sh b/test/shell/metadata-write-rounding.sh
-index 7bc2da2eb..d22cc3abb 100644
---- a/test/shell/metadata-write-rounding.sh
-+++ b/test/shell/metadata-write-rounding.sh
-@@ -12,8 +12,9 @@
- 
- # lvm writes a metadata update back from data it read earlier, up to the
- # end of the metadata area, rounded up to whole blocks for direct I/O.
--# With 1024- or 2048-byte logical and 4096-byte physical blocks, the
--# first PE can start at an offset that is not a multiple of 4096.  Check
-+# With logical blocks smaller than physical ones, such as 1024- or
-+# 2048-byte logical and 4096-byte physical blocks, the first PE can start
-+# at an offset that is not a multiple of the physical block size.  Check
- # that a metadata update does not undo a write to an LV on that PE, made
- # while the command waits for confirmation.
- 
-@@ -22,11 +23,13 @@
- 
- mkfifo fifo
- 
--for bs in 1024 2048 ; do
--	aux prepare_scsi_debug_dev 64 sector_size=$bs \
--		physblk_exp=$(( bs == 1024 ? 2 : 1 )) || skip
-+# Logical block size and physical block exponent: 1024/4096, 2048/4096
-+# and 2048/8192.
-+for sizes in "1024 2" "2048 1" "2048 2" ; do
-+	read -r bs exp <<< "$sizes"
-+	aux prepare_scsi_debug_dev 64 sector_size=$bs physblk_exp=$exp || skip
- 	check sysfs "$(< SCSI_DEBUG_DEV)" queue/logical_block_size $bs
--	check sysfs "$(< SCSI_DEBUG_DEV)" queue/physical_block_size 4096
-+	check sysfs "$(< SCSI_DEBUG_DEV)" queue/physical_block_size $(( bs << exp ))
- 	aux prepare_pvs 1 60
- 	get_devs
- 
-diff --git a/test/unit/blkio_t.c b/test/unit/blkio_t.c
-index afd9e3ae0..245ce8e2b 100644
---- a/test/unit/blkio_t.c
-+++ b/test/unit/blkio_t.c
-@@ -1071,7 +1071,7 @@ static void test_rejected_write_preserves_pending(void *context)
- 
- 	T_ASSERT(blkio_get(f->bio, 0, 1, GF_ZERO, &b));
- 	blkio_put(b);
--	blkio_set_last_byte(f->bio, 0, 512, 512);
-+	blkio_set_last_byte(f->bio, 0, 512);
- 	T_ASSERT(!blkio_flush(f->bio));
- 
- 	/* Removing the limit must let the same dirty block be retried. */
-
-base-commit: 7ea850a1419522cc0c8096d718551015465322d2
--- 
-2.34.1
+Zdenek
 
