@@ -1,93 +1,46 @@
-Authentication-Results: smtp.subspace.kernel.org; arc=none smtp.remote-ip=170.10.129.124
+Authentication-Results: smtp.subspace.kernel.org; arc=none smtp.remote-ip=160.101.131.9
 ARC-Seal: i=1; d=subspace.kernel.org; s=arc20261015; a=rsa-sha256; cv=none;
-	t=1793785018;
-	b=ph3SC2DF8JEwsd56ZRW5ej0aj0OjubXYuoVoHa3A9xKcDKypiV83HTZWCQ38TaR4ONE4
-	 X1uJdtZ8dXyvTVOJVl3mW1vlXbSX2+nUIHKBAnRGn7Rgv9J3eDNHbp+WnR0A6HrKQ73+7
-	 R5RX7y9UkeyULGhKNq7hcWy+pvzBSevyEbPJRjAUNeyT22vz4Anddm3JYh2NjUTYItfFa
-	 aD4KVytPL+xc09NfZIKh6civd8i3+FA2fXDlNcuLoFUtZh/M7UGtQuyELbw8d+bcaGnZ3
-	 MsSQf0AVYZR9kW63V/g0Vp9+7ehGsrkxMKnKqvcMFa61rDe5a9ELNpALpHukMFjAf/w==
+	t=1794935289;
+	b=kXeEgOcjba1OgcXa7MNwbdPnKu4hPZr3MS6MB1ydwU0218OQYoxPJU8biOYAvL6v1cMe
+	 fyxxdTb7ACBajAFBX/xiW4HZ5Dhd1JR52FcA9eGcXMTV455sug17OV6ZYErOFbZymFjs4
+	 zS/aLSUviCbg1N30r2HgbX1UNyl6NS9a+6O6uaS6vB+x6p2PMg3rmSD7HxRhqHZwLX58x
+	 c55NkE8ZOCroRjxS3AQYx4XrUINPsXJOlfwv8FbwCAb9CN3dnRtyQb3ERgb1Zdj8+Q9B9
+	 jjLbE9I11rVwXscCMxmGU1KYWYmaEc0+DzD8oAJTAXZQVaHUSwS3BsPxwndMHSUwHHg==
 ARC-Message-Signature: i=1; d=subspace.kernel.org; s=arc20261015;
-	a=rsa-sha256; c=relaxed/relaxed; t=1793785018;
-	h=DMARC-Filter:DKIM-Signature:Received:X-MC-Unique:
-	 X-Mimecast-MFC-AGG-ID:Received:X-Google-DKIM-Signature:
-	 X-Forwarded-Encrypted:X-Gm-Message-State:X-Gm-Gg:X-Received:
-	 X-Received:Received:Message-ID:Date:MIME-Version:User-Agent:Subject:
-	 To:References:From:Organization:In-Reply-To:X-Mimecast-Spam-Score:
-	 X-Mimecast-MFC-PROC-ID:X-Mimecast-Originator:Content-Language:
-	 Content-Type:Content-Transfer-Encoding;
-	bh=3u3CaEbxfnWx9Q5ijhi+ZhfGrmGDTVHxkoFt21rV79A=;
-	b=C1RG+ONBDPF0Cc3sBlrHpKl2vxVUHdMlG069Rlo+fzlRaU5vPOSmw3dQArpGy3PTK59c
-	 ogy5JIjTBG98DiZ8gzLM1exGeJ6YjKrtIKgootj/ZPRBgC3FUargQ80jQDaCI2IXbq58d
-	 zQr06DbVKiFJNKvamzcqNP/zjF7LwmJVC1X99AeZyJN5QIwkvoVZsQqK0qWW3HrX0zmPl
-	 Xhj768Sb+6nnfdYxA0BMMTnv6V8Jkl6u344tYVgAsqYjnYV3jZQNCEWftLGCB/Qu51DNQ
-	 BhGftCjXygtZDFDfQnekcgDO6rrz6oFv4/ZcWbDmbt7DF4W4J/1nAWJUzAcbKhKDIGQ==
+	a=rsa-sha256; c=relaxed/relaxed; t=1794935289;
+	h=DMARC-Filter:Received:From:To:Cc:Subject:Date:Message-ID:X-Mailer:
+	 MIME-Version:Content-Transfer-Encoding;
+	bh=clkDYxOYUV2//VWBBf9hv6Fna6Pdo8oCqJNBvtGuZeg=;
+	b=r2VYDP0+evIs8mevWsiT3CCpHoRl+NaffQAywpeRbQUkXd3aW83AIQ0xnQ9ZIznE1Ks3
+	 gbMh0Btu/yQ0LX6iBd7YvPWaGhj7N68zn8oT22RdAhQahWAPny0tTlUXq+o6A+sIYicNM
+	 q0cS+1T7ChHclUPWW2Xf86wNc0K2gmbMUsoncFyrIWiurDflnMmu2bhVNrm0xu6CH0ETG
+	 G6HFf3b8lb1EXxpwiTCVy3YghWrdhIlhwyg/18ZFSSXqUGUgPWTt+FHGA8Svh83v1392L
+	 oOIqBcEL5/8d94iDR3fchnABFTV+tb+W9yqjoFNY3cOobVAkSdrCkcVDwMgk/CCdT8Q==
 ARC-Authentication-Results: i=1; smtp.subspace.kernel.org; 
-	dmarc=pass header.from=redhat.com;
-	spf=pass smtp.mailfrom=redhat.com;
-	dkim=pass header.d=redhat.com header.i=@redhat.com header.a=rsa-sha256 header.s=mimecast20190719 header.b=ZAGFh3dV;
-	arc=none smtp.remote-ip=170.10.129.124
-Received: from us-smtp-delivery-124.mimecast.com (us-smtp-delivery-124.mimecast.com [170.10.129.124])
+	dmarc=pass header.from=citrix.com;
+	spf=pass smtp.mailfrom=citrix.com;
+	arc=none smtp.remote-ip=160.101.131.9
+Received: from na1pdmzitismtp02.tibco.com (unknown [160.101.131.9])
 	(using TLSv1.3 with cipher TLS_AES_256_GCM_SHA384 (256/256 bits)
 	 key-exchange X25519 server-signature ECDSA (prime256v1) server-digest SHA256)
 	(No client certificate requested)
-	by smtp.subspace.kernel.org (Postfix) with ESMTPS id D5BBC606A31B
-	for <lvm-devel@lists.linux.dev>; Wed,  4 Nov 2026 09:36:57 +0000 (UTC)
-DMARC-Filter: OpenDMARC Filter v1.4.2 smtp.subspace.kernel.org D5BBC606A31B
-Authentication-Results: smtp.subspace.kernel.org; dmarc=pass (p=quarantine dis=none) header.from=redhat.com
-Authentication-Results: smtp.subspace.kernel.org; spf=pass smtp.mailfrom=redhat.com
-Authentication-Results: smtp.subspace.kernel.org;
-	dkim=pass (1024-bit key, unprotected) header.d=redhat.com header.i=@redhat.com header.a=rsa-sha256 header.s=mimecast20190719 header.b=ZAGFh3dV
-DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed; d=redhat.com;
-	s=mimecast20190719; t=1793785016;
-	h=from:from:reply-to:subject:subject:date:date:message-id:message-id:
-	 to:to:cc:mime-version:mime-version:content-type:content-type:
-	 content-transfer-encoding:content-transfer-encoding:
-	 in-reply-to:in-reply-to:references:references;
-	bh=3u3CaEbxfnWx9Q5ijhi+ZhfGrmGDTVHxkoFt21rV79A=;
-	b=ZAGFh3dVUTokSZI6exsjgmcy5KQWowniX5q8EgeyM9uzqqrKEEgKzCdjjUqF74kDCyweE3
-	jNdvNVgZ7PQt61GpFtafxvBkgQ7PRGggFCl770ZZuSlTgl+8+xHhV6rJCQb4V+SS13dUQ/
-	JD9yoD0QP2Zzy9Xcc1d/bkixprIdy+0=
-Received: from mail-wm1-f70.google.com (mail-wm1-f70.google.com
- [209.85.128.70]) by relay.mimecast.com with ESMTP with STARTTLS
- (version=TLSv1.3, cipher=TLS_AES_256_GCM_SHA384) id
- us-mta-117-yNTM5NBhO4q4jK3ZA_r4FA-1; Wed, 04 Nov 2026 04:36:55 -0500
-X-MC-Unique: yNTM5NBhO4q4jK3ZA_r4FA-1
-X-Mimecast-MFC-AGG-ID: yNTM5NBhO4q4jK3ZA_r4FA_1793785014
-Received: by mail-wm1-f70.google.com with SMTP id 5b1f17b1804b1-4a35e1d2dddso5394535e9.0
-        for <lvm-devel@lists.linux.dev>; Wed, 04 Nov 2026 01:36:55 -0800 (PST)
-X-Google-DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed;
-        d=1e100.net; s=20260707; t=1793785014; x=1794389814;
-        h=content-transfer-encoding:content-type:in-reply-to:organization
-         :from:content-language:references:to:subject:user-agent:mime-version
-         :date:message-id:x-gm-gg:x-gm-message-state:from:to:cc:subject:date
-         :message-id:reply-to:content-type;
-        bh=3u3CaEbxfnWx9Q5ijhi+ZhfGrmGDTVHxkoFt21rV79A=;
-        b=K+cycM+dcvMPHZYlMyDlYVbQ2+GiCV58Q8XVlzLInslVyGbc7QEigVsN4yt322NpDa
-         Zn+rhGn9JTTMTC0D+S8QpmmyTjRbNw9AcDgacOe5+Z21Pg7LADPoJZ0Vx64lLY7qS+d6
-         K2Oaqh96W12SyunoV38JxdDrVjhOfMQMMCUpO92P677lGz0oI4L38/2aHYPb5VqYupKw
-         INGAuoPW6Q8aeP1CWoJzjm8yGxOY4kOALyWiRDJnbd7CTkGI+AZZEeX50lhmKqNdtDs0
-         QwmcSSyGvLGEeg8iDhdIRr1y9HxKbtljYvp2Acf+HtW42gwFPkvhkdb8rJsZLyMftVAG
-         D9qw==
-X-Forwarded-Encrypted: i=1; AKwUvBw35SNSZbEVPfHOKewXOGyiJj01wxayySTHUKCMnWoZeWZKzEgrAEauFRYvqIqRZhVI5ItQQu0VOtE=@lists.linux.dev
-X-Gm-Message-State: APuU4Z/5bF40nTj42DYcls10U6mksMHmja5dzAAV6g7QlC08HiD3Yfik
-	YMMWJgUAZSrlRTAlKS4divND0oJ6jEFeRR3dGR4NELACaUr2euswpkuDY9K9GyFicCrq6Gsu7+k
-	GJNqgB82w4VRnYP+hSd8X8qCXVYWUh9x/rqFPfBcsZjsYGLCF9JiRrp9D8bqtPQ==
-X-Gm-Gg: AYBFou1+7dHsuzM7y3GO2UKGwoz1YXuFfjV+U+GUq+wqU4qivNdhV2n1bYZAMBSK3yd
-	5l4SeXBUfl/1uZLuDEAPCdilg96+6/HlhInKpwDMkdF0fjv7FesUZI4gd9aa4NjOnaaKKEvhpVZ
-	Q/BQcYav821x5l2Cl5odl3HIDoJxmKWEahZ6bWeMFMvxgOP/Och/EXea9COAgJP+ZM3511vjJNH
-	ey7P4T0K2xyG+Zbstk00bg6/krjT3haBiM7C/X964Ylzr/5ToWa//mLaitVUathEFeR4QCEK7fr
-	5um34Qe4xkGdtKwf5fJgX1fuAviS+MvDv/iNr5TSeoTatYhyq4P4qhW0wBG4rii/iY7n7f8rpmt
-	Zh5fj+9EGcia2uif1rQA4WhfrlRi2lGk=
-X-Received: by 2002:a05:600c:3b87:b0:4a2:150f:1607 with SMTP id 5b1f17b1804b1-4ac1709ad56mr373127845e9.13.1793785014319;
-        Wed, 04 Nov 2026 01:36:54 -0800 (PST)
-X-Received: by 2002:a05:600c:3b87:b0:4a2:150f:1607 with SMTP id 5b1f17b1804b1-4ac1709ad56mr373127495e9.13.1793785013872;
-        Wed, 04 Nov 2026 01:36:53 -0800 (PST)
-Received: from [10.43.17.4] ([213.175.46.86])
-        by smtp.gmail.com with ESMTPSA id 5b1f17b1804b1-4b2ab00ff3dsm231892425e9.14.2026.11.04.01.36.53
-        (version=TLS1_3 cipher=TLS_AES_128_GCM_SHA256 bits=128/128);
-        Wed, 04 Nov 2026 01:36:53 -0800 (PST)
-Message-ID: <713023c3-32a4-426e-bc2e-2b93b3f2a97d@redhat.com>
-Date: Wed, 4 Nov 2026 10:36:53 +0100
+	by smtp.subspace.kernel.org (Postfix) with ESMTPS id 4B02C606A32C
+	for <lvm-devel@lists.linux.dev>; Tue, 17 Nov 2026 17:08:08 +0000 (UTC)
+DMARC-Filter: OpenDMARC Filter v1.4.2 smtp.subspace.kernel.org 4B02C606A32C
+Authentication-Results: smtp.subspace.kernel.org; dmarc=pass (p=reject dis=none) header.from=citrix.com
+Authentication-Results: smtp.subspace.kernel.org; spf=pass smtp.mailfrom=citrix.com
+Received: from mewpvdipd1070.citrite.net (unknown [10.113.40.46])
+	by na1pdmzitismtp02.tibco.com (Postfix) with ESMTP id 1F20884BB383;
+	Tue, 17 Nov 2026 12:06:36 -0500 (EST)
+From: Mark Syms <mark.syms@citrix.com>
+To: lvm-devel@lists.linux.dev
+Cc: zkabelac@redhat.com,
+	teigland@redhat.com,
+	Mark Syms <mark.syms@citrix.com>
+Subject: [PATCH] activate: skip multipath devices with no active path that queue I/O
+Date: Tue, 17 Nov 2026 17:08:00 +0000
+Message-ID: <20261117170800.1199104-1-mark.syms@citrix.com>
+X-Mailer: git-send-email 2.56.0
 X-Mailing-List: lvm-devel@lists.linux.dev
 List-Id: <lvm-devel.lists.linux.dev>
 List-Post: <mailto:lvm-devel@lists.linux.dev>
@@ -97,36 +50,158 @@ List-Unsubscribe: <mailto:lvm-devel+unsubscribe@lists.linux.dev>
 List-Owner: <mailto:lvm-devel+owner@lists.linux.dev>
 Precedence: list
 MIME-Version: 1.0
-User-Agent: Mozilla Thunderbird
-Subject: Re: [PATCH] test: skip metadata-write-rounding with pages larger than
- 4KiB
-To: Itai Handler <itai.handler@gmail.com>, lvm-devel@lists.linux.dev
-References: <20261104065729.1305748-1-itai.handler@gmail.com>
-From: Zdenek Kabelac <zkabelac@redhat.com>
-Organization: RedHat
-In-Reply-To: <20261104065729.1305748-1-itai.handler@gmail.com>
-X-Mimecast-Spam-Score: 0
-X-Mimecast-MFC-PROC-ID: zL4JONqvkCZQlVPOxZrMwCDtTwQUjb3fHVQGKp_4tnw_1793785014
-X-Mimecast-Originator: redhat.com
-Content-Language: en-US, cs-CZ
-Content-Type: text/plain; charset=UTF-8; format=flowed
-Content-Transfer-Encoding: 7bit
+Content-Transfer-Encoding: 8bit
 
-Dne 04. 11. 26 v 7:57 Itai Handler napsal(a):
-> On kernels configured with 64KiB pages, pvcreate in the test fails:
-> 
->    Metadata area size too small: 66560 bytes. It must be at least 524288 bytes.
-> 
-> The metadata area starts at the page size and is at least 8 pages long,
-> so it can end one logical block after 64KiB, as the test needs, only
-> with 4KiB pages.  Skip the test with larger pages.
-> 
-Hi
+Reading a multipath device that has lost every path while its table
+still has queue_if_no_path blocks until a path returns. When the LUN
+has been unmapped or removed on the array, that is never, and every
+command that scans devices hangs in D state on it, whichever VG it was
+run for. Nothing in the scan avoided such a device: dm_device_is_usable()
+carried a FIXME for exactly this case.
 
-Here I've my local repo with longer list of test fixes for 64K pages - this 
-will be pushed to origin once it will be polished.
+Seen in production with a NetApp LUN unmapped while still in use, under
+the shipped "no_path_retry queue" config: every vgs/lvs on every host
+that saw the LUN hung, along with everything that serialised behind them.
 
-Regards
+Treat such a device as unusable, alongside the existing check for
+mirrors that would block. The status gives each path's state; the table
+says whether the device queues. Both come from device-mapper ioctls, so
+the check does no I/O to the device itself. A device whose paths have
+all been removed is treated the same way.
 
-Zdenek
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Signed-off-by: Mark Syms <mark.syms@citrix.com>
+---
+Tested on XenServer 8, whose lvm2 is 2.02.180-based, with the same
+change in device_is_usable(): with every path to a NetApp FC LUN failed
+under no_path_retry queue, an lvs of an unrelated VG with no device
+restriction completed in about a second, where without the change it
+blocked until the map stopped queueing (17 minutes in that run). It builds cleanly
+on main; I have not added a test/shell case, as faking a dead queueing
+multipath map needs real dm-multipath paths.
+
+ WHATS_NEW                  |  1 +
+ lib/activate/activate.h    |  1 +
+ lib/activate/dev_manager.c | 62 +++++++++++++++++++++++++++++++++++++-
+ 3 files changed, 63 insertions(+), 1 deletion(-)
+
+diff --git a/WHATS_NEW b/WHATS_NEW
+index 095ecff..c511d05 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.03.45 - 
+ ==================
++  Skip multipath devices that queue I/O with no active path when scanning.
+   Warn that extending a RAID LV before dm-raid 1.15.0 needs a resync.
+   Refuse extending a RAID LV that is degraded or rebuilding a leg.
+   Add configure --with-default-io-engine=ENGINE setting.
+diff --git a/lib/activate/activate.h b/lib/activate/activate.h
+index ef2e1b2..0049fec 100644
+--- a/lib/activate/activate.h
++++ b/lib/activate/activate.h
+@@ -280,6 +280,7 @@ void fs_unlock(void);
+ #define TARGET_NAME_ERROR_OLD "erro"	/* Truncated in older kernels */
+ #define TARGET_NAME_LINEAR "linear"
+ #define TARGET_NAME_MIRROR "mirror"
++#define TARGET_NAME_MULTIPATH "multipath"
+ #define TARGET_NAME_RAID "raid"
+ #define TARGET_NAME_SNAPSHOT "snapshot"
+ #define TARGET_NAME_SNAPSHOT_MERGE "snapshot-merge"
+diff --git a/lib/activate/dev_manager.c b/lib/activate/dev_manager.c
+index ad3fb10..e0f63bb 100644
+--- a/lib/activate/dev_manager.c
++++ b/lib/activate/dev_manager.c
+@@ -843,6 +843,57 @@ static int _is_usable_uuid(const struct device *dev, const char *name, const cha
+ 	return 1;
+ }
+ 
++/* Path entries in multipath status are "<major>:<minor> <A|F> ..." */
++static int _multipath_has_active_path(const char *status)
++{
++	unsigned major, minor;
++	char state;
++	const char *p = status;
++
++	while (p && *p) {
++		if (sscanf(p, "%u:%u %c", &major, &minor, &state) == 3 && state == 'A')
++			return 1;
++		if ((p = strchr(p, ' ')))
++			p++;
++	}
++
++	return 0;
++}
++
++/*
++ * Reading a multipath device with no active path that queues I/O blocks
++ * until a path returns, which for a LUN removed from the array is never.
++ */
++static int _ignore_pathless_queueing_multipath(struct device *dev,
++					       const char *status)
++{
++	struct dm_task *dmt;
++	uint64_t s, l;
++	char *target_type = NULL, *params;
++	void *next = NULL;
++	int queueing = 0;
++
++	if (_multipath_has_active_path(status))
++		return 0;
++
++	if (!(dmt = _setup_task_run(DM_DEVICE_TABLE, NULL, NULL, NULL, NULL,
++				    MAJOR(dev->dev), MINOR(dev->dev), 0, 1, 0)))
++		return_0;
++
++	do {
++		next = dm_get_next_target(dmt, next, &s, &l,
++					  &target_type, &params);
++		if (target_type && params &&
++		    !strcmp(target_type, TARGET_NAME_MULTIPATH) &&
++		    strstr(params, "queue_if_no_path"))
++			queueing = 1;
++	} while (next);
++
++	dm_task_destroy(dmt);
++
++	return queueing;
++}
++
+ /*
+  * dm_device_is_usable
+  * @dev
+@@ -856,6 +907,7 @@ static int _is_usable_uuid(const struct device *dev, const char *name, const cha
+  *        b) it is a snapshot origin
+  *     4) an error target
+  *     5) the LV name is a reserved name.
++ *     6) a multipath device with no active path that queues I/O
+  *
+  * Returns: 1 if usable, 0 otherwise
+  */
+@@ -902,7 +954,6 @@ int dm_device_is_usable(struct cmd_context *cmd, struct device *dev, struct dev_
+ 	    !_is_usable_uuid(dev, name, uuid, check.check_reserved, check.check_lv, is_lv))
+ 		goto out;
+ 
+-	/* FIXME Also check for mpath no paths */
+ 	do {
+ 		next = dm_get_next_target(dmt, next, &start, &length,
+ 					  &target_type, &params);
+@@ -910,6 +961,15 @@ int dm_device_is_usable(struct cmd_context *cmd, struct device *dev, struct dev_
+ 		if (!target_type)
+ 			continue;
+ 
++		if (check.check_blocked && params &&
++		    !strcmp(target_type, TARGET_NAME_MULTIPATH) &&
++		    _ignore_pathless_queueing_multipath(dev, params)) {
++			log_debug_activation("%s: Multipath device %s has no active path "
++					     "and queues I/O, not usable.",
++					     dev_name(dev), name);
++			goto out;
++		}
++
+ 		if (check.check_blocked && !strcmp(target_type, TARGET_NAME_MIRROR)) {
+ 			if (ignore_lvm_mirrors()) {
+ 				log_debug_activation("%s: Scanning mirror devices is disabled.", dev_name(dev));
+-- 
+2.56.0
 
